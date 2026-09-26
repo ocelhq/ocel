@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -68,8 +69,8 @@ func TestSettleGivesUpAfterItsLastAttempt(t *testing.T) {
 	settle, slept := waiting(resolve, 3)
 
 	probe, err := settle.await(context.Background(), "app.acme.com", func(string) {})
-	var refusal Refusal
-	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal naming the wait", err)
 	}
 	if probe.OK {
@@ -88,8 +89,8 @@ func TestSettleStopsWhenAnotherEdgeAnswers(t *testing.T) {
 	settle, _ := waiting(&answering{kind: "direct"}, 2)
 
 	probe, err := settle.await(context.Background(), "app.acme.com", func(string) {})
-	var refusal Refusal
-	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
 	}
 	if probe.Edge != "direct" {
@@ -153,12 +154,12 @@ func TestTheSettleRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 	settle.kind = "box"
 
 	probe, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal Refusal
-	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() over a hostname a different edge answers = %v, want a not-ready refusal rather than a settle that reads as done", err)
 	}
-	if !strings.Contains(refusal.Message, "cloudfront") || !strings.Contains(refusal.Message, "box") {
-		t.Errorf("await() refused with %q, want it to name the edge answering and the one this project deploys to", refusal.Message)
+	if !strings.Contains(refused.Message, "cloudfront") || !strings.Contains(refused.Message, "box") {
+		t.Errorf("await() refused with %q, want it to name the edge answering and the one this project deploys to", refused.Message)
 	}
 	if probe.OK || probe.Edge != "cloudfront" {
 		t.Errorf("await() = %+v, want the probe to record the edge that actually answered", probe)
@@ -207,7 +208,7 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 	}, settleBudget)
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}
@@ -308,13 +309,13 @@ func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T)
 	settle, _ := waiting(stopped{cause: cause}, 2)
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal Refusal
-	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
 	}
-	if !strings.Contains(refusal.Message, cause) {
+	if !strings.Contains(refused.Message, cause) {
 		t.Errorf("await() refused with %q, and it never says what stopped the probe: a firewalled port and a certificate that has not been issued yet read identically after a full minute of waiting",
-			refusal.Message)
+			refused.Message)
 	}
 }
 
@@ -335,15 +336,15 @@ func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *t
 	settle, _ := waiting(outlasting{cause: cause}, 2)
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal Refusal
-	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
 	}
-	if !strings.Contains(refusal.Message, cause) {
-		t.Errorf("await() refused with %q, and the window it outlasted crowds out what stopped the probe", refusal.Message)
+	if !strings.Contains(refused.Message, cause) {
+		t.Errorf("await() refused with %q, and the window it outlasted crowds out what stopped the probe", refused.Message)
 	}
-	if !strings.Contains(refusal.Message, "no answer within 1s") {
-		t.Errorf("await() refused with %q, want it to name the window the last attempt outlasted", refusal.Message)
+	if !strings.Contains(refused.Message, "no answer within 1s") {
+		t.Errorf("await() refused with %q, want it to name the window the last attempt outlasted", refused.Message)
 	}
 }
 
@@ -353,7 +354,7 @@ func TestALivenessThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	settle, _ := waiting(&answering{kind: "relay", after: 99}, 2)
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}
@@ -371,7 +372,7 @@ func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughItsLiveness(t *testing.T
 	settle.kind = "box"
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}

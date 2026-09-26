@@ -55,14 +55,14 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 		AppBoundaryARN: "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		OriginSecret:   fixtureSecret,
 		Slug:           "shop",
-		Class:          providerkit.ClassProduction,
+		Class:          edge.ClassProduction,
 		VarsTable:      "ocel-vars",
 		VarsTableARN:   "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-vars",
 		VarsKeyARN:     "arn:aws:kms:us-east-1:123456789012:key/abcd",
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
 	plan := providerkit.StackPlan{
-		Ref:    providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Ref:    providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind:   providerkit.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
 		Images: providerkit.ImagePlan{Pushes: []providerkit.ImagePush{{App: "web", ImageRef: containerImage}}},
@@ -463,7 +463,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if len(policies) != 1 {
 		t.Fatalf("the task role carries %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
 	}
-	own, _ := valuePartition("shop", string(providerkit.ClassProduction))
+	own, _ := valuePartition("shop", string(edge.ClassProduction))
 	for _, want := range []string{"kms:Decrypt", cfg.VarsKeyARN, "dynamodb:Query", cfg.VarsTableARN, own} {
 		if !strings.Contains(policies[0], want) {
 			t.Errorf("policy = %s, want it to carry %q: the read is fenced to this project's partition and the class key", policies[0], want)

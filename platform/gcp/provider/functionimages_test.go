@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func basedOn(t *testing.T, config v1.Config) (*Provider, *string) {
@@ -111,8 +112,8 @@ func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("FunctionBase(deno) built an image on a base nothing names")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
-		t.Errorf("FunctionBase(deno) code = %v, want %v", code, providerkit.CodeInvalid)
+	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("FunctionBase(deno) code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "deno") {
 		t.Errorf("FunctionBase(deno) = %v, want the runtime named", err)
@@ -126,8 +127,8 @@ func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsCarriedFor(t *testing.
 	if err == nil {
 		t.Fatal("FunctionBase(next) built an image, and Next on Cloud Run is not something this provider serves")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
-		t.Errorf("FunctionBase(next) code = %v, want %v", code, providerkit.CodeInvalid)
+	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("FunctionBase(next) code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), providerkit.FrameworkNext) {
 		t.Errorf("FunctionBase(next) = %v, want the runtime named", err)
@@ -142,8 +143,8 @@ func TestAFunctionBuiltForArm64IsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("FunctionBase() built an arm64 function, and Cloud Run runs x86_64 alone")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
-		t.Errorf("code = %v, want %v", code, providerkit.CodeInvalid)
+	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	for _, said := range []string{providerkit.ArchARM64, providerkit.ArchX8664} {
 		if !strings.Contains(err.Error(), said) {

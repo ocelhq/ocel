@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const alias = "ocel-live"
@@ -205,9 +206,9 @@ func TestLiveALoginWithoutPasswordlessSudoIsRefused(t *testing.T) {
 	if !strings.Contains(err.Error(), "sudo") {
 		t.Errorf("Preflight() = %v, want a refusal naming sudo", err)
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeDenied {
-		t.Errorf("Preflight() = %v, want a %s refusal", err, providerkit.CodeDenied)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Errorf("Preflight() = %v, want a %s refusal", err, refusal.CodeDenied)
 	}
 }
 

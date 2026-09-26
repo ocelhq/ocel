@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -74,14 +76,14 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t *testing.T) {
 	t.Parallel()
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err := standing(t).Edges().Open(edge.Kind("firebase"))
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 	for _, said := range []string{string(alb.Kind), "$18"} {
-		if !strings.Contains(refusal.Message, said) {
-			t.Errorf("the refusal reads %q, want it to name %q so the reader knows what to name instead and what it costs", refusal.Message, said)
+		if !strings.Contains(refused.Message, said) {
+			t.Errorf("the refusal reads %q, want it to name %q so the reader knows what to name instead and what it costs", refused.Message, said)
 		}
 	}
 }
@@ -93,17 +95,17 @@ func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *t
 	if slices.Contains(p.Facts().Edges, cloudflare.Kind) {
 		t.Errorf("Facts().Edges = %v, and an edge this provider builds no program for is one every deploy through it is refused on", p.Facts().Edges)
 	}
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err := p.Bootstrap(cloudflare.Kind)
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent standing anything up", cloudflare.Kind, err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent standing anything up", cloudflare.Kind, err, refusal.CodeInvalid)
 	}
 	for _, said := range []string{"program", string(direct.Kind), string(alb.Kind)} {
-		if !strings.Contains(refusal.Message, said) {
-			t.Errorf("the refusal reads %q, want it to say %q: the reader learns why it is refused and what to name instead", refusal.Message, said)
+		if !strings.Contains(refused.Message, said) {
+			t.Errorf("the refusal reads %q, want it to say %q: the reader learns why it is refused and what to name instead", refused.Message, said)
 		}
 	}
-	if _, err := p.Edges().Open(cloudflare.Kind); !errors.As(err, &refusal) {
+	if _, err := p.Edges().Open(cloudflare.Kind); !errors.As(err, &refused) {
 		t.Errorf("Open(%q) = %v, want the same refusal on the deploy path", cloudflare.Kind, err)
 	}
 }
@@ -160,7 +162,7 @@ func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
 	ctx := context.Background()
 	p := standing(t)
 	classless := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "bundle.zip"}
-	storeless := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
+	storeless := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
 
 	for name, refused := range map[string]error{
 		"Put with no class":  p.Artifacts().Put(ctx, classless, bytes.NewReader(nil)),
@@ -170,9 +172,9 @@ func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
 		"Has with no store":  errorOf(p.Artifacts().Has(ctx, storeless)),
 		"Open with no store": errorOf(p.Artifacts().Open(ctx, storeless)),
 	} {
-		var refusal providerkit.Refusal
-		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeInvalid {
-			t.Errorf("%s = %v, want an %s refusal", name, refused, providerkit.CodeInvalid)
+		var rejection refusal.Refusal
+		if !errors.As(refused, &rejection) || rejection.Code != refusal.CodeInvalid {
+			t.Errorf("%s = %v, want an %s refusal", name, refused, refusal.CodeInvalid)
 		}
 	}
 }
@@ -184,13 +186,13 @@ func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
 	p := standing(t)
 
 	for name, refused := range map[string]error{
-		"Seal": errorOf(p.Cipher().Seal(ctx, providerkit.SealScope{}, nil)),
-		"Open": errorOf(p.Cipher().Open(ctx, providerkit.SealScope{}, nil)),
+		"Seal": errorOf(p.Cipher().Seal(ctx, records.SealScope{}, nil)),
+		"Open": errorOf(p.Cipher().Open(ctx, records.SealScope{}, nil)),
 	} {
-		var refusal providerkit.Refusal
-		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		var rejection refusal.Refusal
+		if !errors.As(refused, &rejection) || rejection.Code != refusal.CodeInvalid {
 			t.Errorf("%s() at a coordinate naming no class = %v, want an %s refusal: each class is sealed under a key of its own, so a classless value names no key",
-				name, refused, providerkit.CodeInvalid)
+				name, refused, refusal.CodeInvalid)
 		}
 	}
 }
@@ -266,9 +268,9 @@ func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 func TestACredentialTierNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err := standing(t).Credentials().Permissions(providerkit.CredentialTier("root"))
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 }

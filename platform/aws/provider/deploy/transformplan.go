@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
@@ -128,11 +129,11 @@ type execution struct {
 
 func executionFor(framework providerkit.Framework) (execution, error) {
 	if framework.Name != "" && !providerkit.KnownFramework(framework.Name) {
-		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no framework named %q", framework.Name)
+		return execution{}, refusal.Refuse(refusal.CodeInvalid, "this provider has no framework named %q", framework.Name)
 	}
 	arch := providerkit.Architecture(framework.Arch)
 	if arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {
-		return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return execution{}, refusal.Refuse(refusal.CodeInvalid,
 			"this provider runs functions on %s and %s, and %q asks for %s",
 			providerkit.ArchX8664, providerkit.ArchARM64, framework.Name, framework.Arch)
 	}

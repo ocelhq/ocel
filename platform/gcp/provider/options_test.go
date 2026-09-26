@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -29,25 +30,25 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 		name    string
 		options providerkit.Options
 		names   string
-		code    providerkit.Code
+		code    refusal.Code
 	}{
 		{
 			name:    "an option no provider accepts",
 			options: providerkit.Options{"project": "acme-prod", "region": "europe-west1", "keyFile": "/tmp/sa.json"},
 			names:   "keyFile",
-			code:    providerkit.CodeUnknownOption,
+			code:    refusal.CodeUnknownOption,
 		},
 		{
 			name:    "no region",
 			options: providerkit.Options{"project": "acme-prod"},
 			names:   "region",
-			code:    providerkit.CodeInvalid,
+			code:    refusal.CodeInvalid,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var refusal providerkit.Refusal
+			var refusal refusal.Refusal
 			p, err := gcp.New(context.Background(), providerkit.Settings{Options: tc.options})
 			if !errors.As(err, &refusal) || refusal.Code != tc.code {
 				t.Fatalf("New() = %v, %v, want a %q refusal", p, err, tc.code)

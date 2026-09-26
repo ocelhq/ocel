@@ -75,7 +75,7 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, providerkit.TierDeploy).Document
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, grant := range host.Grants(class) {
 			for _, want := range []string{grant.Name, grant.Detail} {
 				if !strings.Contains(document, want) {
@@ -90,7 +90,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, providerkit.TierDeploy).Document
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
 				continue
@@ -102,7 +102,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	}
 }
 
-func describedGroup(t *testing.T, class providerkit.Class) string {
+func describedGroup(t *testing.T, class edge.Class) string {
 	t.Helper()
 	for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
 		if item.Kind != "linux:user" {
@@ -122,7 +122,7 @@ func describedGroup(t *testing.T, class providerkit.Class) string {
 func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	group := describedGroup(t, class)
 
 	var claim host.Grant
@@ -149,7 +149,7 @@ func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.
 	t.Parallel()
 
 	document := rendered(t, providerkit.TierDeploy).Document
-	for _, item := range host.Items(providerkit.ClassProduction, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(edge.ClassProduction, nil, host.ArchAMD64, host.Front{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
 		}
@@ -165,7 +165,7 @@ func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T)
 	t.Parallel()
 
 	document := rendered(t, providerkit.TierDeploy).Document
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if !strings.Contains(document, host.SealKeyPath(class)) {
 			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never holds:\n%s",
 				host.SealKeyPath(class), document)

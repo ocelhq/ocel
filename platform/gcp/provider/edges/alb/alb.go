@@ -9,6 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -18,7 +20,7 @@ const Kind edge.Kind = "alb"
 const BaselineCost = "about $18 a month plus Premium-tier egress"
 
 type Deps struct {
-	Records providerkit.RecordStore
+	Records records.Store
 	Stacks  Stacks
 	Routes  Routes
 	Entries Entries
@@ -53,7 +55,7 @@ func (e *Edge) Hooks() edge.Hooks {
 
 func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	if class == "" {
-		return edge.BootstrapOutput{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge stands one load balancer up per class, and this bootstrap names none", Kind)
 	}
 	front, err := e.raise(ctx, class, edge.DiscardProgress())
@@ -128,7 +130,7 @@ func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
 		return err
 	}
 	if len(bound) > 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s front of class %s still serves %s, and Google will not delete a certificate map that holds entries: "+
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, class, strings.Join(bound, ", "))
@@ -154,7 +156,7 @@ func Surface(slug string, class edge.Class) string {
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack carries none", Kind)
 	}
 	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: spec.Class})
@@ -163,7 +165,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	}
 	front := frontOf(outputs)
 	if !front.standing() {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer stands for class %s: the %q edge fronts every project in a class from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this class first",
 			Kind, spec.Class, Kind, BaselineCost)
 	}
@@ -188,7 +190,7 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (e *Edge) claim(class edge.Class, hostname string) providerkit.RecordName {
+func (e *Edge) claim(class edge.Class, hostname string) records.Name {
 	return append(providerkit.EdgeStacksRecord(class), string(Kind), "domains", hostname)
 }
 
@@ -204,7 +206,7 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		return edge.PreviewEntryOwner, nil
 	}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		record, err := providerkit.ReadOrEmpty(ctx, e.deps.Records, e.claim(class, hostname))
+		record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.claim(class, hostname))
 		if err != nil {
 			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
@@ -280,7 +282,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func ledgerFor(records providerkit.RecordStore, class edge.Class, slug string) *kitledger.Ledger {
+func ledgerFor(records records.Store, class edge.Class, slug string) *kitledger.Ledger {
 	return kitledger.New(records, class, slug)
 }
 

@@ -1,23 +1,27 @@
 package providerkit
 
-import "context"
+import (
+	"context"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
 
 type Bootstrap interface {
 	Catalogue() []Feature
 
-	Describe(ctx context.Context, class Class) (BootstrapReading, error)
+	Describe(ctx context.Context, class edge.Class) (BootstrapReading, error)
 
 	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
-	Apply(ctx context.Context, req BootstrapRequest, progress Progress) error
+	Apply(ctx context.Context, req BootstrapRequest, progress edge.Progress) error
 
-	PlanRemove(ctx context.Context, class Class) (Plan, error)
+	PlanRemove(ctx context.Context, class edge.Class) (Plan, error)
 
-	Remove(ctx context.Context, class Class, progress Progress) error
+	Remove(ctx context.Context, class edge.Class, progress edge.Progress) error
 }
 
 type BootstrapReading struct {
-	Class   Class
+	Class   edge.Class
 	Present bool
 	Stacks  []BootstrapStack
 
@@ -51,7 +55,7 @@ const (
 )
 
 type BootstrapRequest struct {
-	Class Class
+	Class edge.Class
 
 	Features []string
 

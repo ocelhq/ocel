@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -17,11 +17,11 @@ const (
 
 var workloadKeyRoles = []string{workloadOpeningRole}
 
-func workloadMember(c *clients, class providerkit.Class) string {
+func workloadMember(c *clients, class edge.Class) string {
 	return "serviceAccount:" + c.WorkloadAccountEmail(class)
 }
 
-func (b bootstrap) grantReads(ctx context.Context, class providerkit.Class) error {
+func (b bootstrap) grantReads(ctx context.Context, class edge.Class) error {
 	member := workloadMember(b.clients, class)
 	condition := databaseCondition(b.clients.project, b.clients.Namespace())
 	if err := b.clients.bindProjectRole(ctx, member, workloadRecordsRole, condition, true); err != nil {
@@ -33,7 +33,7 @@ func (b bootstrap) grantReads(ctx context.Context, class providerkit.Class) erro
 	return nil
 }
 
-func (b bootstrap) forgetReads(ctx context.Context, class providerkit.Class) error {
+func (b bootstrap) forgetReads(ctx context.Context, class edge.Class) error {
 	member := workloadMember(b.clients, class)
 	condition := databaseCondition(b.clients.project, b.clients.Namespace())
 	return everyStep(
@@ -45,7 +45,7 @@ func (b bootstrap) forgetReads(ctx context.Context, class providerkit.Class) err
 	)
 }
 
-func (b bootstrap) readsHeld(ctx context.Context, class providerkit.Class) (bool, error) {
+func (b bootstrap) readsHeld(ctx context.Context, class edge.Class) (bool, error) {
 	member := workloadMember(b.clients, class)
 	records, err := b.clients.projectRoleHeld(ctx, member, workloadRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()))
 	if err != nil || !records {

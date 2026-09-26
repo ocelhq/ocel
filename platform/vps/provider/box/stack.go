@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -110,7 +111,7 @@ func (s *stack) holding(ctx context.Context, pointer, promotionID string) error 
 	if holder == promotionID {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeBusy,
+	return refusal.Refuse(refusal.CodeBusy,
 		"promotion %s no longer holds %s, which now names %s: another deploy moved it while this one gated, and this deploy stopped rather than flip the box onto a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
 		promotionID, named(pointer), holderOr(holder))
 }
@@ -129,7 +130,7 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 		return standing{}, false, err
 	}
 	if !found {
-		return standing{}, false, providerkit.Refuse(providerkit.CodeInvalid,
+		return standing{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: no deployment record for %s/%s\nRe-run the deploy that built it",
 			promotion.PromotionID, app, identity)
 	}
@@ -137,7 +138,7 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 		return standing{}, false, nil
 	}
 	if record.Image == "" || record.HealthPath == "" {
-		return standing{}, false, providerkit.Refuse(providerkit.CodeInvalid,
+		return standing{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
 			promotion.PromotionID, app, identity, record.Physical, record.Image, record.HealthPath)
 	}
@@ -146,7 +147,7 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 		return standing{}, false, err
 	}
 	if !held {
-		return standing{}, false, providerkit.Refuse(providerkit.CodeNotReady,
+		return standing{}, false, refusal.Refuse(refusal.CodeNotReady,
 			"promote %s: this box no longer holds %s for %s/%s; %s is unchanged\nDeploy again",
 			promotion.PromotionID, record.Image, app, identity, app)
 	}
@@ -203,7 +204,7 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 		hostnames = append(hostnames, site.Host(pointer, switchboard.StoreLabel))
 	}
 	if err := site.LabelProblem(hostnames); err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s claims no preview hostname on this box: %s", s.surface(), err)
 	}
 	claims := make([]host.HostClaim, 0, len(hostnames))
@@ -237,7 +238,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, progress edge
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
+		return refusal.Refuse(refusal.CodeInvalid, "this binding names no hostname for %s to claim", s.surface())
 	}
 	address, err := s.e.machine.Address(ctx)
 	if err != nil {

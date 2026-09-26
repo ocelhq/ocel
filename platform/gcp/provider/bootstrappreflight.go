@@ -10,6 +10,7 @@ import (
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -130,7 +131,7 @@ func (b bootstrap) servicesOn(ctx context.Context, features []string) error {
 	if len(off) == 0 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"project %s has %s switched off, and ocel stands up resources rather than switching on the services that hold them.\n"+
 			"Run `gcloud services enable %s --project %s`, then try again",
 		b.clients.project, strings.Join(off, ", "), strings.Join(off, " "), b.clients.project)
@@ -156,7 +157,7 @@ func (b bootstrap) permitted(ctx context.Context, features []string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeDenied,
+	return refusal.Refuse(refusal.CodeDenied,
 		"this credential may not do what a bootstrap of project %s does: it lacks %s.\n"+
 			"Granting %s covers every one of them, but the permissions are what is checked",
 		b.clients.project, strings.Join(missing, ", "), strings.Join(rolesCovering(features), ", "))
@@ -182,7 +183,7 @@ func (b bootstrap) regionServed(ctx context.Context, read survey) error {
 		return nil
 	}
 	slices.Sort(served)
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"option %q names %s, and the one region a bootstrap is given holds this project's database as well as its buckets and keys: "+
 			"Firestore does not serve %s.\nName one Firestore serves: %s",
 		"region", read.Region, read.Region, strings.Join(served, ", "))

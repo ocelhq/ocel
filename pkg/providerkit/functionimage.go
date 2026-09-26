@@ -13,6 +13,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const FunctionImageRoot = "/ocel/app"
@@ -102,7 +103,7 @@ func functionCommand(framework Framework, staged FunctionConfig) ([]string, erro
 	case BootsThroughRuntime(framework):
 		return []string{"node", NodeRuntimePath}, nil
 	default:
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %s function staged at %s names no command to run, and only a node function boots through a runtime this image could run in its place",
 			framework.Name, staged.ID)
 	}
@@ -177,7 +178,7 @@ func refuseStrayOverlay(rel string) error {
 			return nil
 		}
 	}
-	return Refuse(CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"a function's image was handed %s to carry, and it lands at %s, outside both %s, which holds the function's own tree, and %s, which holds the runtime it boots through: an image ocel builds writes nowhere else in the base it is built on",
 		rel, full, FunctionImageRoot, NodeRuntimeRoot)
 }

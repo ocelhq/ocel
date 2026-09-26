@@ -8,7 +8,7 @@ import (
 
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -34,8 +34,8 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	}
 
 	err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Identity}}, "", edge.DiscardProgress())
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Promote(p2) = %v, want the busy refusal a moved pointer earns", err)
 	}
 	if got := routeOn(t, w, stack, boundHost); got.Release != first.Identity {

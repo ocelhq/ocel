@@ -18,6 +18,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -148,7 +149,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 		}
 	}
 	if len(held) == 0 {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"neither the %s nor the %s class of %s is bootstrapped with a key variables are sealed under, so the connector would read nothing: bootstrap this account and run ocel connector add again",
 			bootstrap.ClassProduction, bootstrap.ClassPreview, ns)
 	}
@@ -197,7 +198,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 		return Standing{}, err
 	}
 	if standing.URL == "" {
-		return Standing{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return Standing{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s stands and published no function url, so the console has nothing to dial", StackName(ns))
 	}
 	return standing, nil
@@ -249,7 +250,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 	if stack != nil {
 		bucket := cfn.OutputsOf(stack)[outputBucket]
 		if bucket == "" {
-			return "", providerkit.Refuse(providerkit.CodeInvalid,
+			return "", refusal.Refuse(refusal.CodeInvalid,
 				"%s stands and names no bucket to stage the connector's code in: delete that stack and run this again",
 				StackName(ns))
 		}
@@ -267,7 +268,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 		return "", err
 	}
 	if opened[outputBucket] == "" {
-		return "", providerkit.Refuse(providerkit.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"%s opened and named no bucket to stage the connector's code in", StackName(ns))
 	}
 	return opened[outputBucket], nil
@@ -283,7 +284,7 @@ func tagsFor(ns bootstrap.Namespace, template string, writer providerkit.Written
 
 func zipped(binary []byte) (payloads.Payload, error) {
 	if len(binary) == 0 {
-		return payloads.Payload{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return payloads.Payload{}, refusal.Refuse(refusal.CodeInvalid,
 			"this install carries no connector binary to put on a function")
 	}
 	var held bytes.Buffer
@@ -321,15 +322,15 @@ func codeTemplate() string {
 
 func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release, keys []string) (string, error) {
 	if len(release.Config) == 0 {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install carries no connector config, so nothing would name the console the function trusts")
 	}
 	if len(keys) == 0 {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install names no key variables are sealed under, so the connector would reach every key in the account")
 	}
 	if release.PublicKey == "" {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install names no public key for the connector, and the console verifies every heartbeat against one")
 	}
 	wake, err := json.Marshal(Wake{Ocel: WakeHeartbeat})

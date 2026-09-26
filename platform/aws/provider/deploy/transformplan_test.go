@@ -10,7 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type publishedReader struct {
@@ -45,14 +47,14 @@ func (r *publishedReader) Named(_ context.Context, binding string) (providerkit.
 			return held, nil
 		}
 	}
-	return providerkit.Binding{}, providerkit.Refuse(providerkit.CodeInvalid, "nothing published %s", binding)
+	return providerkit.Binding{}, refusal.Refuse(refusal.CodeInvalid, "nothing published %s", binding)
 }
 
 func planUnderTransform() providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
-			Class:   providerkit.ClassProduction,
+			Class:   edge.ClassProduction,
 			Name:    naming.AppStack("production", "api", naming.NewRelease("dep1", "fp1")),
 		},
 		Kind: providerkit.StackApp,
@@ -122,7 +124,7 @@ func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
 	if pass.seen.Provider != transformProvider {
 		t.Errorf("the transform was told provider %q, want %q", pass.seen.Provider, transformProvider)
 	}
-	if pass.seen.Env != "production" || pass.seen.EnvClass != string(providerkit.ClassProduction) {
+	if pass.seen.Env != "production" || pass.seen.EnvClass != string(edge.ClassProduction) {
 		t.Errorf("the transform was told env %q class %q, want the plan's own coordinate", pass.seen.Env, pass.seen.EnvClass)
 	}
 }

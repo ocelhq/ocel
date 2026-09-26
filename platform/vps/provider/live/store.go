@@ -14,7 +14,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -30,11 +32,11 @@ const (
 	sealTag      = 16
 )
 
-func RecordsDir(root string, class providerkit.Class) string {
+func RecordsDir(root string, class edge.Class) string {
 	return filepath.Join(root, string(class), "records")
 }
 
-func KeyPath(root string, class providerkit.Class) string {
+func KeyPath(root string, class edge.Class) string {
 	return filepath.Join(root, string(class), sealKeyFile)
 }
 
@@ -42,32 +44,32 @@ var errReadOnly = errors.New("the box's records are read-only here")
 
 type Records struct{ Root string }
 
-func (r Records) Read(_ context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+func (r Records) Read(_ context.Context, name records.Name) (records.Record, error) {
 	class, encoded, err := Located(name)
 	if err != nil {
-		return providerkit.Record{}, err
+		return records.Record{}, err
 	}
 	raw, err := os.ReadFile(filepath.Join(RecordsDir(r.Root, class), encoded+recordSuffix))
 	if errors.Is(err, fs.ErrNotExist) {
-		return providerkit.Record{}, providerkit.ErrNoRecord
+		return records.Record{}, records.ErrNotFound
 	}
 	if err != nil {
-		return providerkit.Record{}, err
+		return records.Record{}, err
 	}
 	revision, body, err := row(string(raw))
 	if err != nil {
-		return providerkit.Record{}, fmt.Errorf("%s: %w", name, err)
+		return records.Record{}, fmt.Errorf("%s: %w", name, err)
 	}
-	return providerkit.Record{Name: name, Bytes: body, Revision: revision}, nil
+	return records.Record{Name: name, Bytes: body, Revision: revision}, nil
 }
 
-func (r Records) List(_ context.Context, under providerkit.RecordName) ([]providerkit.Record, error) {
+func (r Records) List(_ context.Context, under records.Name) ([]records.Record, error) {
 	class, encoded, err := Located(under)
 	if err != nil {
 		return nil, err
 	}
 	dir := RecordsDir(r.Root, class)
-	var held []providerkit.Record
+	var held []records.Record
 	err = filepath.WalkDir(filepath.Join(dir, encoded), func(path string, entry fs.DirEntry, err error) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
@@ -94,7 +96,7 @@ func (r Records) List(_ context.Context, under providerkit.RecordName) ([]provid
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		held = append(held, providerkit.Record{Name: name, Bytes: body, Revision: revision})
+		held = append(held, records.Record{Name: name, Bytes: body, Revision: revision})
 		return nil
 	})
 	if err != nil {
@@ -103,19 +105,19 @@ func (r Records) List(_ context.Context, under providerkit.RecordName) ([]provid
 	return held, nil
 }
 
-func (Records) Write(context.Context, providerkit.Record) (providerkit.Revision, error) {
+func (Records) Write(context.Context, records.Record) (records.Revision, error) {
 	return "", errReadOnly
 }
 
-func (Records) WritePair(context.Context, providerkit.Record, providerkit.Record) error {
+func (Records) WritePair(context.Context, records.Record, records.Record) error {
 	return errReadOnly
 }
 
-func (Records) Remove(context.Context, providerkit.RecordName, providerkit.Revision) error {
+func (Records) Remove(context.Context, records.Name, records.Revision) error {
 	return errReadOnly
 }
 
-func row(raw string) (providerkit.Revision, []byte, error) {
+func row(raw string) (records.Revision, []byte, error) {
 	revision, encoded, split := strings.Cut(strings.TrimRight(raw, "\n"), "\n")
 	if !split || revision == "" {
 		return "", nil, errors.New("the record on disk carries no revision line")
@@ -124,16 +126,16 @@ func row(raw string) (providerkit.Revision, []byte, error) {
 	if err != nil {
 		return "", nil, errors.New("the record on disk is not in ocel's format")
 	}
-	return providerkit.Revision(revision), body, nil
+	return records.Revision(revision), body, nil
 }
 
 type Cipher struct{ Root string }
 
-func (Cipher) Seal(context.Context, providerkit.SealScope, []byte) ([]byte, error) {
+func (Cipher) Seal(context.Context, records.SealScope, []byte) ([]byte, error) {
 	return nil, errors.New("the box seals values only through its helper")
 }
 
-func (s Cipher) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(_ context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	if at.Class == "" {
 		return nil, fmt.Errorf("%s names no class", at.Name)
 	}
@@ -144,7 +146,7 @@ func (s Cipher) Open(_ context.Context, at providerkit.SealScope, sealed []byte)
 	return Open(key, at, sealed)
 }
 
-func Open(key []byte, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func Open(key []byte, at records.SealScope, sealed []byte) ([]byte, error) {
 	if len(key) != sealKeyBytes {
 		return nil, fmt.Errorf("the seal key is %d bytes, want %d", len(key), sealKeyBytes)
 	}
@@ -166,10 +168,10 @@ func Open(key []byte, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func Located(name providerkit.RecordName) (providerkit.Class, string, error) {
+func Located(name records.Name) (edge.Class, string, error) {
 	class, named := providerkit.ClassOf(name)
 	if !named {
-		return "", "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", "", refusal.Refuse(refusal.CodeInvalid,
 			"%s names no class", name)
 	}
 	encoded, err := EncodeName(name)
@@ -179,11 +181,11 @@ func Located(name providerkit.RecordName) (providerkit.Class, string, error) {
 	return class, encoded, nil
 }
 
-func EncodeName(name providerkit.RecordName) (string, error) {
+func EncodeName(name records.Name) (string, error) {
 	segments := make([]string, 0, len(name))
 	for _, segment := range name {
 		if segment == "" {
-			return "", providerkit.Refuse(providerkit.CodeInvalid,
+			return "", refusal.Refuse(refusal.CodeInvalid,
 				"%s has an empty segment", name)
 		}
 		segments = append(segments, encodeSegment(segment))
@@ -212,8 +214,8 @@ func plain(c byte) bool {
 	}
 }
 
-func DecodeName(encoded string) (providerkit.RecordName, error) {
-	var name providerkit.RecordName
+func DecodeName(encoded string) (records.Name, error) {
+	var name records.Name
 	for _, segment := range strings.Split(encoded, "/") {
 		decoded, err := decodeSegment(segment)
 		if err != nil {
@@ -232,12 +234,12 @@ func decodeSegment(segment string) (string, error) {
 			continue
 		}
 		if i+2 >= len(segment) {
-			return "", providerkit.Refuse(providerkit.CodeDenied,
+			return "", refusal.Refuse(refusal.CodeDenied,
 				"the records helper returned %q, which ocel did not write", segment)
 		}
 		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
 		if err != nil {
-			return "", providerkit.Refuse(providerkit.CodeDenied,
+			return "", refusal.Refuse(refusal.CodeDenied,
 				"the records helper returned %q, which ocel did not write", segment)
 		}
 		written.WriteByte(byte(value))
@@ -247,6 +249,6 @@ func decodeSegment(segment string) (string, error) {
 }
 
 var (
-	_ ports.RecordStore = Records{}
-	_ ports.Cipher      = Cipher{}
+	_ records.Store  = Records{}
+	_ records.Cipher = Cipher{}
 )

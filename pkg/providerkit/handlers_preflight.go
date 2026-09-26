@@ -8,6 +8,8 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -67,7 +69,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		if req.GetCheckHosts() {
 			resp.HostChecks = h.hostChecks(ctx, provider, class, req.GetHostCheckDomains())
 		}
-		if class == ClassPreview {
+		if class == edge.ClassPreview {
 			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)
 			if err != nil {
 				return nil, RefusalError(err)
@@ -128,7 +130,7 @@ func (h *handlers) edgeIdentity(
 	return nil
 }
 
-func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
+func (h *handlers) domainClaims(ctx context.Context, provider Provider, class edge.Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
 	if len(req.GetDomains()) == 0 {
 		return nil, nil
 	}
@@ -163,7 +165,7 @@ func (h *handlers) domainClaims(ctx context.Context, provider Provider, class Cl
 	return claims, nil
 }
 
-func boundHere(ctx context.Context, records RecordStore, class Class, slug string) ([]string, error) {
+func boundHere(ctx context.Context, records records.Store, class edge.Class, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
@@ -174,7 +176,7 @@ func boundHere(ctx context.Context, records RecordStore, class Class, slug strin
 	return state.Edge.Bound, nil
 }
 
-func slugsBesides(ctx context.Context, gate Gate, class Class, slug string) ([]string, error) {
+func slugsBesides(ctx context.Context, gate Gate, class edge.Class, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
@@ -192,15 +194,15 @@ func slugsBesides(ctx context.Context, gate Gate, class Class, slug string) ([]s
 	return slugs, nil
 }
 
-func siblingOf(class Class) Class {
-	if class == ClassPreview {
-		return ClassProduction
+func siblingOf(class edge.Class) edge.Class {
+	if class == edge.ClassPreview {
+		return edge.ClassProduction
 	}
-	return ClassPreview
+	return edge.ClassPreview
 }
 
-func tierOf(class Class) environmentv1.Tier {
-	if class == ClassPreview {
+func tierOf(class edge.Class) environmentv1.Tier {
+	if class == edge.ClassPreview {
 		return environmentv1.Tier_TIER_PREVIEW
 	}
 	return environmentv1.Tier_TIER_PRODUCTION
@@ -224,15 +226,15 @@ func IdentityProto(vendor Vendor, id Identity) *contractv1.Identity {
 	return out
 }
 
-var credentialTrouble = map[Code]string{
-	CodeDenied:   "could not authenticate",
-	CodeNotReady: "could not reach",
-	CodeInvalid:  "misconfigured",
+var credentialTrouble = map[refusal.Code]string{
+	refusal.CodeDenied:   "could not authenticate",
+	refusal.CodeNotReady: "could not reach",
+	refusal.CodeInvalid:  "misconfigured",
 }
 
 func CredentialProblemProto(vendor Vendor, err error) *contractv1.CredentialProblem {
 	problem := &contractv1.CredentialProblem{Provider: string(vendor)}
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if errors.As(err, &refusal) {
 		if trouble, named := credentialTrouble[refusal.Code]; named {
 			problem.Message, problem.Hint = trouble, refusal.Message

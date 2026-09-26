@@ -25,7 +25,7 @@ func setWorkerBundle(t *testing.T) {
 	t.Setenv(edge.EnvWorkerBundles, string(raw))
 }
 
-func programmed(slug string, class providerkit.Class) EdgeProgram {
+func programmed(slug string, class edge.Class) EdgeProgram {
 	return EdgeProgram{
 		Class:     class,
 		Kind:      cloudflare.Kind,
@@ -52,7 +52,7 @@ func programmed(slug string, class providerkit.Class) EdgeProgram {
 func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 	setWorkerBundle(t)
 
-	entry := programmed("", providerkit.ClassPreview)
+	entry := programmed("", edge.ClassPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 
 	built, err := entry.Build()
@@ -101,7 +101,7 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	setWorkerBundle(t)
 
-	entry := programmed("", providerkit.ClassPreview)
+	entry := programmed("", edge.ClassPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.StoreScriptName = ""
 
@@ -109,7 +109,7 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	if err == nil {
 		t.Fatal("Build succeeded, want a preview entry with no deployments-store worker refused")
 	}
-	if !strings.Contains(err.Error(), providerkit.BootstrapCommand(providerkit.ClassPreview)) {
+	if !strings.Contains(err.Error(), providerkit.BootstrapCommand(edge.ClassPreview)) {
 		t.Errorf("error = %q, want it to name the bootstrap that provisions the store", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 func TestEdgeProgramForAPreviewProject(t *testing.T) {
 	setWorkerBundle(t)
 
-	project := programmed("proj", providerkit.ClassPreview)
+	project := programmed("proj", edge.ClassPreview)
 	project.PreviewBaseDomain = "preview.acme.com"
 	project.Apps = []string{"web", "admin"}
 
@@ -155,7 +155,7 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	setWorkerBundle(t)
 
-	project := programmed("proj", providerkit.ClassPreview)
+	project := programmed("proj", edge.ClassPreview)
 	project.Apps = []string{"web", "admin"}
 
 	built, err := project.Build()
@@ -180,7 +180,7 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 func TestEdgeProgramForAProductionProject(t *testing.T) {
 	setWorkerBundle(t)
 
-	built, err := programmed("proj", providerkit.ClassProduction).Build()
+	built, err := programmed("proj", edge.ClassProduction).Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

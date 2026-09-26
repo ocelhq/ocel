@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (r *deployRun) admitBindings(ctx context.Context, progress Progress) error {
+func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -62,19 +64,19 @@ func proxied(kind BindingType) bool {
 func ReadableAs(binding Binding, declaredName string, declared BindingType, proxied func(BindingType) bool) error {
 	switch {
 	case binding.Type == BindingCustom:
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s.%s to %q, and the record published under that name is a custom one: "+
 				"a custom binding is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
 				"Drop it from `bindings` and read it from a transform as `bindings.custom.%s.<property>`",
 			declared, declaredName, binding.Name, binding.Name)
 	case binding.Type != declared:
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` declares %s as a %s and binds it to %q, and the record published under that name is a %s. "+
 				"Every app that uses %s would fail at its first cold start, so this deploy stops here. "+
 				"Declare it as what was published, or republish %q as a %s",
 			declaredName, declared, binding.Name, binding.Type, declaredName, binding.Name, declared)
 	case binding.Source != "" && proxied(declared) && !binding.Endpointed():
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s to the %s record %q published by %s, and the record names no store for ocel's %s client to reach it in. "+
 				"Bind it inline instead, with the store's endpoint and a key pair, or publish a record that carries them",
 			declaredName, declared, binding.Name, binding.Source, declared)
@@ -103,12 +105,12 @@ func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []
 	} else {
 		fmt.Fprintf(&b, "\n\nPublished to %s: %s.", coordinate, strings.Join(published, ", "))
 	}
-	return Refuse(CodeNotReady, "%s", b.String())
+	return refusal.Refuse(refusal.CodeNotReady, "%s", b.String())
 }
 
 func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map[string][]string {
 	found := map[string][]string{}
-	for _, class := range []Class{ClassProduction, ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if class == r.plan.Class {
 			continue
 		}
@@ -125,7 +127,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 	return found
 }
 
-func (r *deployRun) warnShadowed(progress Progress, resources []Resource, published map[string]Binding) {
+func (r *deployRun) warnShadowed(progress edge.Progress, resources []Resource, published map[string]Binding) {
 	for _, resource := range resources {
 		if resource.Binding != "" {
 			continue

@@ -101,7 +101,7 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 
 	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	names, err := store.PublishedNames(ctx, values.Scope{Project: "shop", Class: providerkit.ClassProduction}, providerkit.ProductionEnv)
+	names, err := store.PublishedNames(ctx, values.Scope{Project: "shop", Class: edge.ClassProduction}, providerkit.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,10 +154,10 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
 	t.Helper()
 	client, provider := contractServed(t, "1.0.0")
-	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    providerkit.ClassProduction,
+			Class:    edge.ClassProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
@@ -241,10 +241,10 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    providerkit.ClassProduction,
+			Class:    edge.ClassProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
@@ -317,7 +317,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	}
 
 	admin := naming.AppStack(providerkit.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
-	if err := providerkit.WriteStack(ctx, provider.Records(), providerkit.ClassProduction, "shop", admin, providerkit.RecordedStack{App: "admin"}); err != nil {
+	if err := providerkit.WriteStack(ctx, provider.Records(), edge.ClassProduction, "shop", admin, providerkit.RecordedStack{App: "admin"}); err != nil {
 		t.Fatalf("WriteStack() error = %v", err)
 	}
 

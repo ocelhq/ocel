@@ -12,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -19,7 +22,7 @@ import (
 func TestARecordNameSurvivesTheNameAFileOnTheHostAnswersTo(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []providerkit.RecordName{
+	for _, name := range []records.Name{
 		{"conformance", "production", "TestOne/sub", "leaf"},
 		{"values", "shop", "production", "/apps/web", "DATABASE_URL"},
 		{"ledger", "production/shop", ".hidden", ".."},
@@ -44,7 +47,7 @@ func TestARecordNameSurvivesTheNameAFileOnTheHostAnswersTo(t *testing.T) {
 func TestARecordNameWithAnEmptySegmentIsRefused(t *testing.T) {
 	t.Parallel()
 
-	if _, err := live.EncodeName(providerkit.RecordName{"conformance", "", "leaf"}); err == nil {
+	if _, err := live.EncodeName(records.Name{"conformance", "", "leaf"}); err == nil {
 		t.Fatal("EncodeName() of a name with an empty segment succeeded, and no file on a host answers to it")
 	}
 }
@@ -147,7 +150,7 @@ func helperDir(t *testing.T) string {
 	return root
 }
 
-func records(t *testing.T, root string) string {
+func recordsDir(t *testing.T, root string) string {
 	t.Helper()
 	return filepath.Join(root, helperClass, "records")
 }
@@ -240,7 +243,7 @@ func TestARecordThatNamesNoRevisionIsNotOverwritten(t *testing.T) {
 	name := "conformance/production/truncated"
 	helperWrite(t, dir, name, "", "one")
 
-	f := filepath.Join(records(t, dir), name+".rec")
+	f := filepath.Join(recordsDir(t, dir), name+".rec")
 	if err := os.Truncate(f, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +259,7 @@ func TestARecordIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
 	name := "conformance/production/values/DATABASE_URL"
 	helperWrite(t, dir, name, "", "postgres://example")
 
-	f := filepath.Join(records(t, dir), name+".rec")
+	f := filepath.Join(recordsDir(t, dir), name+".rec")
 	held, err := os.Stat(f)
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +285,7 @@ func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 	dir := helperDir(t)
 	helperWrite(t, dir, "conformance/production/tree/b/one", "", "one")
 
-	shut := filepath.Join(records(t, dir), "conformance/production/tree/b")
+	shut := filepath.Join(recordsDir(t, dir), "conformance/production/tree/b")
 	if err := os.Chmod(shut, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +302,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 
 	b := machine(nil)
 	b.facts = session.Facts{Systemd: true}
-	b.floor = providerkit.Refuse(providerkit.CodeDenied,
+	b.floor = refusal.Refuse(refusal.CodeDenied,
 		"%s can neither act as root nor run sudo without a password", deployUser)
 	b.answer = func(command string) (session.Result, bool) {
 		switch {
@@ -311,7 +314,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		return session.Result{}, false
 	}
 
-	held, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(providerkit.ClassProduction, "shop"))
+	held, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(edge.ClassProduction, "shop"))
 	if err != nil {
 		t.Fatalf("Read() as the login every deploy runs as = %v", err)
 	}
@@ -338,7 +341,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 
 	b := machine(nil)
 	b.facts = session.Facts{Systemd: true}
-	b.floor = providerkit.Refuse(providerkit.CodeDenied,
+	b.floor = refusal.Refuse(refusal.CodeDenied,
 		"%s can neither act as root nor run sudo without a password", deployUser)
 	b.answer = func(command string) (session.Result, bool) {
 		switch {
@@ -350,7 +353,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		return session.Result{}, false
 	}
 
-	_, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(providerkit.ClassProduction, "shop"))
+	_, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(edge.ClassProduction, "shop"))
 	if err == nil {
 		t.Fatal("a record tier this login could neither read nor elevate to read answered a row")
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 //go:generate pnpm --dir ../.. exec turbo run build --filter=@pkg/transform-runner
@@ -70,7 +70,7 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 		return nil, fmt.Errorf("decode transform result: %w", err)
 	}
 	if answer.Refusal != "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "transforms rejected this deploy: %s", answer.Refusal)
+		return nil, refusal.Refuse(refusal.CodeInvalid, "transforms rejected this deploy: %s", answer.Refusal)
 	}
 	if answer.Result == nil {
 		return nil, fmt.Errorf("the transform runner answered with neither a result nor a refusal")
@@ -189,7 +189,7 @@ func (p NodePass) runNode(ctx context.Context, bundle string, payload []byte) ([
 		return nil, fmt.Errorf("the transform runner exited without answering: %s", said)
 	}
 	if strings.Contains(said, "ERR_MODULE_NOT_FOUND") {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"a transform module imports a package this project has not installed, so node could not load it. %s\n%s",
 			p.Uninstalled, said)
 	}

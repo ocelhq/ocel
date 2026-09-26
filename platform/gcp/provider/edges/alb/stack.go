@@ -10,8 +10,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -107,10 +108,10 @@ func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", Kind)
+		return refusal.Refuse(refusal.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", Kind)
 	}
 	if base, wild := strings.CutPrefix(binding.Hostname, "*."); wild {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"this project declares %s as its own preview domain, and the %q edge cannot serve one: it resolves a preview by handing the "+
 				"hostname's first label to Cloud Run as a service name, and a project's own wildcard leaves the project out of that label, "+
 				"so two projects previewing the same branch would name one service and one would answer for the other.\n"+
@@ -119,7 +120,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 			edge.PreviewWildcard(base), Kind, edge.PreviewWildcard(base))
 	}
 	if !s.held.Front.standing() {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer stands for class %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this class first",
 			Kind, s.state.Class, binding.Hostname)
 	}
@@ -229,7 +230,7 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Class, hostname)
-	record, err := providerkit.ReadOrEmpty(ctx, s.e.deps.Records, name)
+	record, err := records.ReadOrEmpty(ctx, s.e.deps.Records, name)
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
@@ -250,7 +251,7 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	}
 	record.Bytes = encoded
 	_, err = s.e.deps.Records.Write(ctx, record)
-	if errors.Is(err, providerkit.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return false, s.claimedMeanwhile(ctx, hostname, name)
 	}
 	if err != nil {
@@ -259,10 +260,10 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	return true, nil
 }
 
-func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name providerkit.RecordName) error {
-	record, err := providerkit.ReadOrEmpty(ctx, s.e.deps.Records, name)
+func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name records.Name) error {
+	record, err := records.ReadOrEmpty(ctx, s.e.deps.Records, name)
 	if err != nil || len(record.Bytes) == 0 {
-		return providerkit.Refuse(providerkit.CodeBusy,
+		return refusal.Refuse(refusal.CodeBusy,
 			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
 	}
 	var held claim
@@ -273,13 +274,13 @@ func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name prov
 }
 
 func claimedBy(hostname, owner string) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is served by %s on the %s edge, and one hostname is routed to one project: release it there with `ocel domain remove` first",
 		hostname, owner, Kind)
 }
 
 func (s *stack) disown(ctx context.Context, hostname string) error {
-	if err := providerkit.Forget(ctx, s.e.deps.Records, s.e.claim(s.state.Class, hostname)); err != nil {
+	if err := records.Forget(ctx, s.e.deps.Records, s.e.claim(s.state.Class, hostname)); err != nil {
 		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, Kind, err)
 	}
 	return nil

@@ -14,18 +14,18 @@ import (
 )
 
 type Stacks interface {
-	Plan(ctx context.Context, plan StackPlan, progress Progress) (Plan, error)
+	Plan(ctx context.Context, plan StackPlan, progress edge.Progress) (Plan, error)
 
-	Provision(ctx context.Context, plan StackPlan, progress Progress) (StackResult, error)
+	Provision(ctx context.Context, plan StackPlan, progress edge.Progress) (StackResult, error)
 
-	PlanDestroy(ctx context.Context, ref StackRef, progress Progress) (Plan, error)
+	PlanDestroy(ctx context.Context, ref StackRef, progress edge.Progress) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, progress Progress) error
+	Destroy(ctx context.Context, ref StackRef, progress edge.Progress) error
 }
 
 type StackRef struct {
 	Project string
-	Class   Class
+	Class   edge.Class
 	Name    naming.StackName
 }
 

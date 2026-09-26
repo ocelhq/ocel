@@ -9,17 +9,18 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type stores struct {
-	records providerkit.RecordStore
-	sealer  providerkit.Cipher
+	records records.Store
+	sealer  records.Cipher
 }
 
 func fakeStores() stores {
@@ -86,7 +87,7 @@ func manifestOf(keys ...string) vars.Manifest {
 func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) {
 	t.Parallel()
 	held := fakeStores()
-	scope := values.Scope{Project: "shop", Class: providerkit.ClassProduction}
+	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
 	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://live")
 	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
 
@@ -102,7 +103,7 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) 
 func TestAPreviewReadsItsEnvironmentsValueOverTheClassWideOne(t *testing.T) {
 	t.Parallel()
 	held := fakeStores()
-	scope := values.Scope{Project: "shop", Class: providerkit.ClassPreview}
+	scope := values.Scope{Project: "shop", Class: edge.ClassPreview}
 	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "MARK"}}, "class-wide")
 	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
 
@@ -129,7 +130,7 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 	t.Parallel()
 	held := fakeStores()
-	scope := values.Scope{Project: "shop", Class: providerkit.ClassProduction}
+	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
 	held.publish(t, scope, "", "db--main", &bindingsv1.Binding{
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}},
@@ -178,7 +179,7 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
 	seeded := stores{records: ports.Records{Clients: clients}, sealer: ports.Cipher{Clients: clients}}
-	scope := values.Scope{Project: "shop", Class: providerkit.ClassProduction}
+	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
 	seeded.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 
 	manifest := manifestOf("DATABASE_URL")

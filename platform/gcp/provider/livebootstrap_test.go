@@ -18,6 +18,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -52,7 +54,7 @@ func bootstrapOf(t *testing.T, p *gcp.Provider) providerkit.Bootstrap {
 	return bootstrap
 }
 
-func bootstrapped(t *testing.T, p *gcp.Provider, class providerkit.Class) providerkit.Bootstrap {
+func bootstrapped(t *testing.T, p *gcp.Provider, class edge.Class) providerkit.Bootstrap {
 	t.Helper()
 
 	servicesEnabled(t)
@@ -78,8 +80,8 @@ func TestLiveBootstrapper(t *testing.T) {
 
 func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassProduction
-	bootstrapped(t, p, providerkit.ClassPreview)
+	class := edge.ClassProduction
+	bootstrapped(t, p, edge.ClassPreview)
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -104,7 +106,7 @@ func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
 
 func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItStoodUp(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
 
 	plan, err := bootstrap.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
@@ -131,7 +133,7 @@ func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItStoodUp(t *testing.T) {
 func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 
 	plan, err := bootstrapOf(t, p).Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
 	if err != nil {
@@ -177,7 +179,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	if !emulated() {
 		t.Skip("a second namespace stands up a second key ring, and Google never deletes one, so this runs against the emulator only")
 	}
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	here := bootstrapped(t, p, class)
 
 	t.Setenv(providerkit.NamespaceEnvVar, names(t, p).Namespace().String()+"-beside")
@@ -236,13 +238,13 @@ func TestLiveAPlanIsRefusedWhileAnApiTheStackNeedsIsOff(t *testing.T) {
 	p := live(t)
 	servicesDisabled(t, "cloudkms.googleapis.com")
 
-	var refusal providerkit.Refusal
-	_, err := bootstrapOf(t, p).Plan(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("Plan() with an API off = %v, want a %s refusal: enabling it is a precondition, not a row in the stack", err, providerkit.CodeNotReady)
+	var refused refusal.Refusal
+	_, err := bootstrapOf(t, p).Plan(context.Background(), providerkit.BootstrapRequest{Class: edge.ClassProduction})
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Plan() with an API off = %v, want a %s refusal: enabling it is a precondition, not a row in the stack", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "cloudkms.googleapis.com") {
-		t.Errorf("Plan() refused with %q, want it to name the API that is off", refusal.Message)
+	if !strings.Contains(refused.Message, "cloudkms.googleapis.com") {
+		t.Errorf("Plan() refused with %q, want it to name the API that is off", refused.Message)
 	}
 }
 
@@ -271,7 +273,7 @@ func servicesDisabled(t *testing.T, api string) {
 func TestLiveAnApplyThatNeverFinishedReadsAsUnfinishedAndAReApplyFinishesIt(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapOf(t, p)
 
 	ctx := context.Background()
@@ -306,7 +308,7 @@ func TestLiveAnApplyThatNeverFinishedReadsAsUnfinishedAndAReApplyFinishesIt(t *t
 	}
 }
 
-func interrupt(t *testing.T, p *gcp.Provider, class providerkit.Class) {
+func interrupt(t *testing.T, p *gcp.Provider, class edge.Class) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -327,7 +329,7 @@ func interrupt(t *testing.T, p *gcp.Provider, class providerkit.Class) {
 
 func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -346,13 +348,13 @@ func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	err = bootstrap.Remove(ctx, class, nil)
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("Remove() with a stack still in the state bucket = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Remove() with a stack still in the state bucket = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "shop") {
-		t.Errorf("Remove() refused with %q, want it to name the stack still standing", refusal.Message)
+	if !strings.Contains(refused.Message, "shop") {
+		t.Errorf("Remove() refused with %q, want it to name the stack still standing", refused.Message)
 	}
 	if err := object.Delete(ctx); err != nil {
 		t.Fatal(err)
@@ -362,10 +364,10 @@ func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
-	bootstrapped(t, p, providerkit.ClassProduction)
-	bootstrap := bootstrapped(t, p, providerkit.ClassPreview)
+	bootstrapped(t, p, edge.ClassProduction)
+	bootstrap := bootstrapped(t, p, edge.ClassPreview)
 
-	removal, err := bootstrap.PlanRemove(context.Background(), providerkit.ClassPreview)
+	removal, err := bootstrap.PlanRemove(context.Background(), edge.ClassPreview)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -380,7 +382,7 @@ func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
 		t.Errorf("PlanRemove() shows the key ring as %q (%q), want it kept with a reason: Google never deletes a key ring", ring.Action, ring.Reason)
 	}
 	database := kept["firestore:database/"+liveNames(t).Database()]
-	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(providerkit.ClassProduction)) {
+	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
 		t.Errorf("PlanRemove() shows the database as %q (%q), want it kept with a reason naming the sibling class still standing",
 			database.Action, database.Reason)
 	}
@@ -388,7 +390,7 @@ func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
 
 func TestLiveThePassphraseIsMintedOnceAndNotWrittenOverAgain(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -404,7 +406,7 @@ func TestLiveThePassphraseIsMintedOnceAndNotWrittenOverAgain(t *testing.T) {
 	}
 }
 
-func passphraseHeld(t *testing.T, class providerkit.Class) []byte {
+func passphraseHeld(t *testing.T, class edge.Class) []byte {
 	t.Helper()
 
 	ctx := context.Background()
@@ -434,7 +436,7 @@ func onRealGoogleCloud(t *testing.T) {
 func TestProjectTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
-	bootstrapped(t, p, providerkit.ClassProduction)
+	bootstrapped(t, p, edge.ClassProduction)
 
 	ctx := context.Background()
 	service, err := firestoreadmin.NewService(ctx)
@@ -459,14 +461,14 @@ func TestProjectARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *test
 	onRealGoogleCloud(t)
 
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "no-such-region1"})
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err := bootstrapOf(t, elsewhere).Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Plan() in a region Firestore does not serve = %v, want an %s refusal", err, providerkit.CodeInvalid)
+		providerkit.BootstrapRequest{Class: edge.ClassProduction})
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Plan() in a region Firestore does not serve = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refusal.Message, liveRegion()) {
-		t.Errorf("Plan() refused with %q, want it to list the regions Firestore does serve", refusal.Message)
+	if !strings.Contains(refused.Message, liveRegion()) {
+		t.Errorf("Plan() refused with %q, want it to list the regions Firestore does serve", refused.Message)
 	}
 }
 
@@ -476,11 +478,11 @@ func (w watcher) Say(message string) { w.said(message) }
 
 func (watcher) Detail(string) {}
 
-func (watcher) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (watcher) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -519,7 +521,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 func TestLiveARemovalUnderWayReadsAsUnfinishedRatherThanDone(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapOf(t, p)
 
 	ctx := context.Background()
@@ -553,7 +555,7 @@ func TestLiveARemovalUnderWayReadsAsUnfinishedRatherThanDone(t *testing.T) {
 
 func TestLiveAnApplyRefusesRatherThanWriteOverAnotherRunsStamp(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -566,17 +568,17 @@ func TestLiveAnApplyRefusesRatherThanWriteOverAnotherRunsStamp(t *testing.T) {
 		stamped(t, class, `{"schema":1,"state":"applying","writer":"the-other-run","digest":"elsewhere"}`)
 	}}
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, watch)
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Fatalf("Apply() over a stamp another run wrote = %v, want a %s refusal", err, providerkit.CodeBusy)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("Apply() over a stamp another run wrote = %v, want a %s refusal", err, refusal.CodeBusy)
 	}
-	if !strings.Contains(refusal.Message, "the-other-run") {
-		t.Errorf("Apply() refused with %q, want it to name the run it collided with", refusal.Message)
+	if !strings.Contains(refused.Message, "the-other-run") {
+		t.Errorf("Apply() refused with %q, want it to name the run it collided with", refused.Message)
 	}
 }
 
-func stamped(t *testing.T, class providerkit.Class, body string) {
+func stamped(t *testing.T, class edge.Class, body string) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -597,7 +599,7 @@ func stamped(t *testing.T, class providerkit.Class, body string) {
 
 func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -669,7 +671,7 @@ func protectionLifted(t *testing.T) {
 func TestProjectADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -718,19 +720,19 @@ func elsewhereRegion() string {
 func TestProjectADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, p, class)
 
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: elsewhereRegion()})
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	err := bootstrapOf(t, elsewhere).Apply(context.Background(),
 		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil)
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Apply() against a database Firestore holds in another region = %v, want an %s refusal: the conflict is not a success",
-			err, providerkit.CodeInvalid)
+			err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refusal.Message, liveRegion()) {
-		t.Errorf("Apply() refused with %q, want it to name the region the database actually stands in", refusal.Message)
+	if !strings.Contains(refused.Message, liveRegion()) {
+		t.Errorf("Apply() refused with %q, want it to name the region the database actually stands in", refused.Message)
 	}
 }
 
@@ -747,7 +749,7 @@ func rowsOf(t *testing.T, plan providerkit.Plan) map[string]providerkit.Change {
 
 func TestLiveTheArtifactBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
 
 	plan, err := bootstrap.PlanRemove(context.Background(), class)
@@ -768,8 +770,8 @@ func TestLiveTheArtifactBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.
 
 func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassPreview
-	bootstrapped(t, p, providerkit.ClassProduction)
+	class := edge.ClassPreview
+	bootstrapped(t, p, edge.ClassProduction)
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -778,7 +780,7 @@ func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) 
 		t.Fatalf("Plan() = %v", err)
 	}
 	database := rowsOf(t, plan)["firestore:database/"+liveNames(t).Database()]
-	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(providerkit.ClassProduction)) {
+	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
 		t.Errorf("Plan() shows the database as %q (%q), want it kept for a reason naming the sibling class that shares it, as the removal plan does",
 			database.Action, database.Reason)
 	}
@@ -795,7 +797,7 @@ func accounts(t *testing.T) *iam.Service {
 
 func TestLiveTheRuntimeAccountStandsWithTheGrantADeployNeeds(t *testing.T) {
 	p := live(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, p, class)
 
 	ctx := context.Background()
@@ -824,7 +826,7 @@ func TestLiveTheRuntimeAccountStandsWithTheGrantADeployNeeds(t *testing.T) {
 func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 
 	ctx := context.Background()
 	bootstrap := bootstrapOf(t, p)

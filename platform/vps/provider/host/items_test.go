@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -17,23 +19,23 @@ const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
 	}
 	for name, want := range map[string]string{
-		classRoot:                               rootOwner,
-		ClassDir(providerkit.ClassProduction):   rootOwner,
-		helperRoot:                              rootOwner,
-		recordsHelper:                           rootOwner,
-		releasesHelper:                          rootOwner,
-		stateRoot:                               deployUser,
-		releasesRoot:                            deployUser,
-		sshDir:                                  deployUser,
-		authorizedKeys:                          deployUser,
-		StateDir(providerkit.ClassProduction):   deployUser,
-		RecordsDir(providerkit.ClassProduction): deployUser,
+		classRoot:                        rootOwner,
+		ClassDir(edge.ClassProduction):   rootOwner,
+		helperRoot:                       rootOwner,
+		recordsHelper:                    rootOwner,
+		releasesHelper:                   rootOwner,
+		stateRoot:                        deployUser,
+		releasesRoot:                     deployUser,
+		sshDir:                           deployUser,
+		authorizedKeys:                   deployUser,
+		StateDir(edge.ClassProduction):   deployUser,
+		RecordsDir(edge.ClassProduction): deployUser,
 	} {
 		if owners[name] != want {
 			t.Errorf("%s is written to %q, want %q: a path with two owners is a path with none", name, owners[name], want)
@@ -48,7 +50,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 	if held == stateRoot || held == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", held)
 	}
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == held })
 	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), live.RoutingTable) })
 	if made < 0 || table < 0 || made > table {
@@ -64,7 +66,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
@@ -81,7 +83,7 @@ func TestTheDeployKeysAreTheOnesTheItemCarries(t *testing.T) {
 
 	keys := []byte(aKey + "\n")
 	var written Item
-	for _, item := range Items(providerkit.ClassProduction, keys, ArchAMD64, Front{}) {
+	for _, item := range Items(edge.ClassProduction, keys, ArchAMD64, Front{}) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -130,7 +132,7 @@ func TestKeysNamedByAPathThatHoldsNoneAreRefused(t *testing.T) {
 func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	fresh := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: map[string]string{}}), principal().ID())
 	if fresh.Action != providerkit.ActionCreate {
@@ -151,7 +153,7 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T
 func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
 	for _, change := range planned(moved) {
@@ -171,7 +173,7 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	held := digests(Items(production, keys, ArchAMD64, Front{}))
 
@@ -196,7 +198,7 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
@@ -221,7 +223,7 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	half := map[string]string{}
 	for _, item := range ClassItems(production) {
 		half[item.ID()] = item.Digest()
@@ -299,12 +301,12 @@ func TestAKeyPathRelativeToNothingIsRefusedRatherThanGuessedAt(t *testing.T) {
 	t.Parallel()
 
 	_, err := (Keys{Path: "deploy.pub"}).named()
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("a relative key path = %v, want a refusal that says ocel is told no directory to resolve it against", err)
 	}
-	if !strings.Contains(refusal.Error(), "~/") {
-		t.Errorf("the refusal reads %q, and it never says what to spell instead", refusal.Error())
+	if !strings.Contains(refused.Error(), "~/") {
+		t.Errorf("the refusal reads %q, and it never says what to spell instead", refused.Error())
 	}
 }
 
@@ -371,11 +373,11 @@ func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.
 	for name, script := range map[string]string{
 		"a path the survey stats": survey([]Item{dir(pointed, 0o750, stateOwner, "")}),
 		"the seal key's own probe": sealSurvey(Item{
-			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Class: providerkit.ClassProduction,
+			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Class: edge.ClassProduction,
 		}),
 	} {
 		_, _, err := readSurvey(sh(t, root, script))
-		var refused providerkit.Refusal
+		var refused refusal.Refusal
 		if !errors.As(err, &refused) {
 			t.Fatalf("%s over a symlink = %v, want a refusal the CLI can render", name, err)
 		}

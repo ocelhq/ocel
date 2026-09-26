@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) forget() {
@@ -16,7 +17,7 @@ type settling struct {
 	settled func()
 }
 
-func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
 	}
@@ -24,7 +25,7 @@ func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, p
 	return nil
 }
 
-func (s settling) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+func (s settling) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
 	if err := s.Bootstrap.Remove(ctx, class, progress); err != nil {
 		return err
 	}

@@ -114,7 +114,7 @@ func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, c
 	return health, nil
 }
 
-func (p certificates) Discard(_ context.Context, cert providerkit.Certificate, _ providerkit.Progress) error {
+func (p certificates) Discard(_ context.Context, cert providerkit.Certificate, _ edge.Progress) error {
 	p.mu.Lock()
 	refusal := p.discardHeld
 	p.mu.Unlock()

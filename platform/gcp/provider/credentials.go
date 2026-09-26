@@ -11,6 +11,7 @@ import (
 	"golang.org/x/oauth2/google"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -90,7 +91,7 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 		identity.Principal = principal
 	}
 	if c.Projects == nil {
-		return providerkit.Identity{}, providerkit.Refuse(providerkit.CodeDenied,
+		return providerkit.Identity{}, refusal.Refuse(refusal.CodeDenied,
 			"nothing here can ask whether this credential reaches project %s, and a credential nothing vouched for deploys nothing", project)
 	}
 	if err := c.Projects.Reaches(ctx, project); err != nil {
@@ -100,7 +101,7 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 }
 
 func unauthenticated() error {
-	return providerkit.Refuse(providerkit.CodeDenied, "%s", credentialHint)
+	return refusal.Refuse(refusal.CodeDenied, "%s", credentialHint)
 }
 
 func (c Credentials) principal(ctx context.Context, token string) (string, error) {
@@ -119,7 +120,7 @@ func principalNamed(ctx context.Context, endpoint, token string) (string, error)
 		return principal, nil
 	}
 	if unreachable(status) {
-		return "", providerkit.Refuse(providerkit.CodeBusy,
+		return "", refusal.Refuse(refusal.CodeBusy,
 			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", askAttempts)
 	}
 	return "", unauthenticated()
@@ -160,7 +161,7 @@ func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.Credenti
 			Document: strings.Join(rolesFor(tier), "\n"),
 		}, nil
 	default:
-		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")
 	}
 }

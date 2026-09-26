@@ -1,10 +1,14 @@
 package providerkit
 
-import "context"
+import (
+	"context"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+)
 
 type Vars struct {
-	Records      RecordStore
-	Cipher       Cipher
+	Records      records.Store
+	Cipher       records.Cipher
 	VerifyGrants func(ctx context.Context, binding Binding) error
 }
 

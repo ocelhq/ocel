@@ -73,7 +73,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a claimed priority tore down %v, want nothing: the deploy recovers rather than abandons", torn)
 	}
-	if _, present, err := providerkit.ReadStack(context.Background(), cfg.Records, providerkit.ClassProduction, SubstrateSlug, substrateRef(providerkit.ClassProduction).Name); err != nil || !present {
+	if _, present, err := providerkit.ReadStack(context.Background(), cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || !present {
 		t.Errorf("the substrate is not recorded (present %v, err %v) after the deploy that recovered", present, err)
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -23,37 +25,37 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 
 			names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
-				"artifact bucket":   names.Bucket(providerkit.ClassProduction),
-				"state bucket":      names.StateBucket(providerkit.ClassPreview),
+				"artifact bucket":   names.Bucket(edge.ClassProduction),
+				"state bucket":      names.StateBucket(edge.ClassPreview),
 				"record database":   names.Database(),
 				"key ring":          names.KeyRing(),
-				"passphrase secret": names.PassphraseSecret(providerkit.ClassProduction),
-				"image repository":  names.Repository(providerkit.ClassProduction),
-				"runtime account":   names.WorkloadAccount(providerkit.ClassProduction),
+				"passphrase secret": names.PassphraseSecret(edge.ClassProduction),
+				"image repository":  names.Repository(edge.ClassProduction),
+				"runtime account":   names.WorkloadAccount(edge.ClassProduction),
 			} {
 				if !strings.HasPrefix(got, tc.stem) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
 				}
 			}
-			if got, want := names.Bucket(providerkit.ClassProduction), tc.stem+"-acme-prod-production"; got != want {
+			if got, want := names.Bucket(edge.ClassProduction), tc.stem+"-acme-prod-production"; got != want {
 				t.Errorf("Bucket() = %q, want %q", got, want)
 			}
-			if got, want := names.StateBucket(providerkit.ClassPreview), tc.stem+"-acme-prod-preview-state"; got != want {
+			if got, want := names.StateBucket(edge.ClassPreview), tc.stem+"-acme-prod-preview-state"; got != want {
 				t.Errorf("StateBucket() = %q, want %q", got, want)
 			}
-			if got, want := names.PassphraseSecret(providerkit.ClassProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
+			if got, want := names.PassphraseSecret(edge.ClassProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
 				t.Errorf("PassphraseSecret() = %q, want %q", got, want)
 			}
-			if got, want := names.Repository(providerkit.ClassPreview), tc.stem+"-acme-prod-preview"; got != want {
+			if got, want := names.Repository(edge.ClassPreview), tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("Repository() = %q, want %q", got, want)
 			}
-			if got, want := names.RepositoryPath("europe-west1", providerkit.ClassPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
+			if got, want := names.RepositoryPath("europe-west1", edge.ClassPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.WorkloadAccount(providerkit.ClassProduction), tc.stem+"-production"; got != want {
+			if got, want := names.WorkloadAccount(edge.ClassProduction), tc.stem+"-production"; got != want {
 				t.Errorf("WorkloadAccount() = %q, want %q", got, want)
 			}
-			if got, want := names.WorkloadAccountEmail(providerkit.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
+			if got, want := names.WorkloadAccountEmail(edge.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
 				t.Errorf("WorkloadAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
@@ -104,13 +106,13 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(providerkit.NamespaceEnvVar, tc.namespace)
 
-			var refusal providerkit.Refusal
+			var refused refusal.Refusal
 			p, err := gcp.NewProvider(gcp.Options{Project: tc.project, Region: "europe-west1"})
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-				t.Fatalf("NewProvider() under namespace %q = %v, %v, want an %s refusal", tc.namespace, p, err, providerkit.CodeInvalid)
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+				t.Fatalf("NewProvider() under namespace %q = %v, %v, want an %s refusal", tc.namespace, p, err, refusal.CodeInvalid)
 			}
-			if !strings.Contains(refusal.Message, tc.names) {
-				t.Errorf("NewProvider() refused with %q, want it to name %q", refusal.Message, tc.names)
+			if !strings.Contains(refused.Message, tc.names) {
+				t.Errorf("NewProvider() refused with %q, want it to name %q", refused.Message, tc.names)
 			}
 		})
 	}

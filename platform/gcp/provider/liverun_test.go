@@ -21,6 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -261,7 +262,7 @@ func serverlessPlanOn(app, image string, framework providerkit.Framework, values
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "live",
-			Class:   providerkit.ClassPreview,
+			Class:   edge.ClassPreview,
 			Name:    naming.AppStack(providerkit.ProductionEnv, app, liveRelease),
 		},
 		Kind: providerkit.StackApp,

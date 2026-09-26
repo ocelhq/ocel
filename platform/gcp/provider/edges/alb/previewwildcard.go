@@ -8,6 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -16,12 +18,12 @@ type previewEntry struct {
 	Certificate string `json:"certificate,omitempty"`
 }
 
-func (e *Edge) previewRecord() providerkit.RecordName {
+func (e *Edge) previewRecord() records.Name {
 	return append(providerkit.EdgeStacksRecord(edge.ClassPreview), string(Kind), "preview-wildcard")
 }
 
 func (e *Edge) heldPreview(ctx context.Context) (previewEntry, error) {
-	record, err := providerkit.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
+	record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
 	if err != nil {
 		return previewEntry{}, fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
@@ -36,7 +38,7 @@ func (e *Edge) heldPreview(ctx context.Context) (previewEntry, error) {
 }
 
 func (e *Edge) rememberPreview(ctx context.Context, entry previewEntry) error {
-	record, err := providerkit.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
+	record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
 	if err != nil {
 		return fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
@@ -52,11 +54,11 @@ func (e *Edge) rememberPreview(ctx context.Context, entry previewEntry) error {
 func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge answers every preview from one wildcard host rule, and this reconcile names no base domain", Kind)
 	}
 	if spec.Certificate == "" {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge terminates TLS for %s at the load balancer, so its certificate map needs the wildcard certificate, and this reconcile carries none",
 			Kind, wildcard)
 	}
@@ -84,7 +86,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 		return err
 	}
 	if len(served) > 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s still serves the previews of %s on the %s front of class %s, and releasing the host rule would leave every one of them "+
 				"answering a 404 from the load balancer: take those previews down with `ocel destroy preview` in each project first",
 			wildcard, strings.Join(served, ", "), Kind, edge.ClassPreview)
@@ -104,7 +106,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 			return err
 		}
 	}
-	if err := providerkit.Forget(ctx, e.deps.Records, e.previewRecord()); err != nil {
+	if err := records.Forget(ctx, e.deps.Records, e.previewRecord()); err != nil {
 		return fmt.Errorf("release which wildcard the %s edge served previews on: %w", Kind, err)
 	}
 	return nil

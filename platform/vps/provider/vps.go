@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -20,7 +22,7 @@ type Provider struct {
 	options Options
 	project string
 	host    *host.Host
-	records providerkit.RecordStore
+	records records.Store
 	cipher  *host.Cipher
 
 	transform transformkit.Pass
@@ -41,10 +43,10 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 		return nil, err
 	}
 	if strings.TrimSpace(decoded.SSH.Alias) == "" && strings.TrimSpace(decoded.SSH.Host) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names no machine: give it an ssh_config alias or an object with a host", "ssh")
+		return nil, refusal.Refuse(refusal.CodeInvalid, "option %q names no machine: give it an ssh_config alias or an object with a host", "ssh")
 	}
 	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
+		return nil, refusal.Refuse(refusal.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
 	}
 	if err := decoded.Proxy.usable(decoded.Certificates); err != nil {
 		return nil, err
@@ -107,9 +109,9 @@ func (p *Provider) Stacks() providerkit.Stacks {
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return providerkit.NoArtifacts{} }
 
-func (p *Provider) Records() providerkit.RecordStore { return p.records }
+func (p *Provider) Records() records.Store { return p.records }
 
-func (p *Provider) Cipher() providerkit.Cipher { return p.cipher }
+func (p *Provider) Cipher() records.Cipher { return p.cipher }
 
 func (p *Provider) Credentials() providerkit.Credentials { return credentials{p} }
 

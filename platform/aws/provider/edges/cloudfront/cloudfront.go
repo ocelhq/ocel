@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -252,7 +253,7 @@ func (p *cloudFront) Teardown(ctx context.Context, class edge.Class) error {
 	if len(standing) == 0 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge still fronts %d project(s) of class %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
 		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
 }

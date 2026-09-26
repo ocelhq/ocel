@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -65,7 +65,7 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 }
 
 func unrenderable(err error) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s holds what ocel cannot render into %s: %v",
 		live.RoutingTable, ProxyConfig, err)
 }

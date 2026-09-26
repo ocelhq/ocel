@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -20,9 +21,9 @@ const (
 
 type splitTables struct{}
 
-func (splitTables) Table(context.Context, kit.Class) (string, error) { return fakeStateTable, nil }
+func (splitTables) Table(context.Context, edge.Class) (string, error) { return fakeStateTable, nil }
 
-func (splitTables) ValuesTable(context.Context, kit.Class) (string, error) {
+func (splitTables) ValuesTable(context.Context, edge.Class) (string, error) {
 	return fakeVarsTable, nil
 }
 
@@ -46,10 +47,10 @@ func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 }
 
 func TestDeployStateStaysInTheStateTable(t *testing.T) {
-	records, ddb := newSplitRecords()
+	store, ddb := newSplitRecords()
 
-	if _, err := records.Write(context.Background(), kit.Record{
-		Name:  kit.RecordName{kit.RootStacks, string(edge.ClassProduction), "shop"},
+	if _, err := store.Write(context.Background(), records.Record{
+		Name:  records.Name{records.RootStacks, string(edge.ClassProduction), "shop"},
 		Bytes: []byte("{}"),
 	}); err != nil {
 		t.Fatalf("Write err = %v", err)
@@ -62,18 +63,18 @@ func TestDeployStateStaysInTheStateTable(t *testing.T) {
 
 type keylessBootstrap struct{}
 
-func (keylessBootstrap) Key(context.Context, kit.Class) (string, error) { return "", nil }
+func (keylessBootstrap) Key(context.Context, edge.Class) (string, error) { return "", nil }
 
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 	sealer := awsports.Cipher{Keys: keylessBootstrap{}}
-	at := kit.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+	at := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal when this bootstrap made no key")
 	}
-	var refusal kit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != kit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Seal err = %v, want a CodeNotReady refusal", err)
 	}
 	if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {
@@ -83,14 +84,14 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	sealer := awsports.Cipher{}
-	at := kit.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+	at := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal where nothing holds a key at all")
 	}
-	var refusal kit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != kit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Seal err = %v, want a CodeNotReady refusal", err)
 	}
 	if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {

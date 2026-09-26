@@ -18,49 +18,51 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type memRecords struct {
 	mu   sync.Mutex
-	held map[string]providerkit.Record
+	held map[string]records.Record
 }
 
-func (m *memRecords) Read(_ context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+func (m *memRecords) Read(_ context.Context, name records.Name) (records.Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	held, ok := m.held[name.String()]
 	if !ok {
-		return providerkit.Record{}, providerkit.ErrNoRecord
+		return records.Record{}, records.ErrNotFound
 	}
 	return held, nil
 }
 
-func (m *memRecords) Write(_ context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (m *memRecords) Write(_ context.Context, record records.Record) (records.Revision, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.put(record)
 }
 
-func (m *memRecords) put(record providerkit.Record) (providerkit.Revision, error) {
+func (m *memRecords) put(record records.Record) (records.Revision, error) {
 	if m.held == nil {
-		m.held = map[string]providerkit.Record{}
+		m.held = map[string]records.Record{}
 	}
 	if held, ok := m.held[record.Name.String()]; ok && held.Revision != record.Revision {
-		return "", providerkit.ErrStale
+		return "", records.ErrStale
 	}
 	minted := make([]byte, 16)
 	if _, err := rand.Read(minted); err != nil {
 		return "", err
 	}
-	record.Revision = providerkit.Revision(hex.EncodeToString(minted))
+	record.Revision = records.Revision(hex.EncodeToString(minted))
 	m.held[record.Name.String()] = record
 	return record.Revision, nil
 }
 
-func (m *memRecords) WritePair(_ context.Context, first, second providerkit.Record) error {
+func (m *memRecords) WritePair(_ context.Context, first, second records.Record) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, err := m.put(first); err != nil {
@@ -70,17 +72,17 @@ func (m *memRecords) WritePair(_ context.Context, first, second providerkit.Reco
 	return err
 }
 
-func (m *memRecords) Remove(_ context.Context, name providerkit.RecordName, _ providerkit.Revision) error {
+func (m *memRecords) Remove(_ context.Context, name records.Name, _ records.Revision) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.held, name.String())
 	return nil
 }
 
-func (m *memRecords) List(_ context.Context, under providerkit.RecordName) ([]providerkit.Record, error) {
+func (m *memRecords) List(_ context.Context, under records.Name) ([]records.Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var out []providerkit.Record
+	var out []records.Record
 	for _, record := range m.held {
 		if _, beneath := record.Name.Under(under); beneath {
 			out = append(out, record)
@@ -91,7 +93,7 @@ func (m *memRecords) List(_ context.Context, under providerkit.RecordName) ([]pr
 
 type goSealer struct{ key []byte }
 
-func (s goSealer) Seal(_ context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
+func (s goSealer) Seal(_ context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
 		return nil, err
@@ -107,7 +109,7 @@ func (s goSealer) Seal(_ context.Context, at providerkit.SealScope, plaintext []
 	return append(nonce, gcm.Seal(nil, nonce, plaintext, at.AAD())...), nil
 }
 
-func (s goSealer) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (s goSealer) Open(_ context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	return vars.Open(s.key, at, sealed)
 }
 
@@ -126,7 +128,7 @@ func aBox(t *testing.T, root string) *box {
 		t.Fatal(err)
 	}
 	b := &box{classRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, sealer: goSealer{key: key}}
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.classRoot, class)), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -237,7 +239,7 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	}
 }
 
-var shop = values.Scope{Project: "shop", Class: providerkit.ClassProduction}
+var shop = values.Scope{Project: "shop", Class: edge.ClassProduction}
 
 func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t *testing.T) {
 	t.Parallel()
@@ -245,7 +247,7 @@ func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t
 	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
 	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}, Environment: "pr-7"}, "postgres://pr-7")
 	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "SESSION", Folder: "/web"}}, "s3cret")
-	b.set(t, values.Scope{Project: "other", Class: providerkit.ClassProduction}, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://other")
+	b.set(t, values.Scope{Project: "other", Class: edge.ClassProduction}, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://other")
 	b.dump(t)
 
 	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
@@ -300,7 +302,7 @@ func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
 	b := aBox(t, t.TempDir())
 	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
 	b.dump(t)
-	if err := os.Remove(vars.KeyPath(b.classRoot, providerkit.ClassProduction)); err != nil {
+	if err := os.Remove(vars.KeyPath(b.classRoot, edge.ClassProduction)); err != nil {
 		t.Fatal(err)
 	}
 	_, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
@@ -312,8 +314,8 @@ func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
 func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	at := providerkit.SealScope{
-		Project: "shop", Class: providerkit.ClassProduction, Env: "shop-prod",
+	at := records.SealScope{
+		Project: "shop", Class: edge.ClassProduction, Env: "shop-prod",
 		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
 	}
 	sealed, err := b.sealer.Seal(context.Background(), at, []byte("s3cr3t"))
@@ -346,8 +348,8 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	elsewhere := providerkit.SealScope{
-		Project: "other", Class: providerkit.ClassProduction, Env: "other-prod",
+	elsewhere := records.SealScope{
+		Project: "other", Class: edge.ClassProduction, Env: "other-prod",
 		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
 	}
 	sealed, err := b.sealer.Seal(context.Background(), elsewhere, []byte("s3cr3t"))

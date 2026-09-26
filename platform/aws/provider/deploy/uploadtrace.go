@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -186,13 +187,13 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 	}
 }
 
-func say(progress providerkit.Progress, line string) {
+func say(progress edge.Progress, line string) {
 	if progress != nil {
 		progress.Say(line)
 	}
 }
 
-func emitUploadBatch(progress providerkit.Progress, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
+func emitUploadBatch(progress edge.Progress, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
 	if progress == nil || stats == nil {
 		return
 	}

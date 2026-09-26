@@ -56,7 +56,7 @@ func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Prov
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	if err := providerkit.WriteStack(ctx, records, providerkit.ClassProduction, "shop",
+	if err := providerkit.WriteStack(ctx, records, edge.ClassProduction, "shop",
 		naming.InfraStack(bucket.Ref.Name.Env), providerkit.RecordedStack{
 			Kind: providerkit.StackInfra, Bindings: []providerkit.Binding{binding},
 		}); err != nil {

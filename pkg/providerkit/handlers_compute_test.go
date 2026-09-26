@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const containerTestImage = "ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -134,7 +135,7 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +166,7 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 		t.Fatalf("Deploy() of a container app = %q", result.GetError())
 	}
 
-	held := ledger.New(provider.Records(), providerkit.ClassProduction, "shop")
+	held := ledger.New(provider.Records(), edge.ClassProduction, "shop")
 	record, found, err := held.Record(context.Background(), "web", containerTestImage)
 	if err != nil {
 		t.Fatal(err)

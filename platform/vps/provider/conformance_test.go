@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -34,13 +35,13 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 		t.Fatalf("Open(cloudflare) = %v, %v, want a writer", writer, err)
 	}
 
-	var refusal providerkit.Refusal
+	var rejection refusal.Refusal
 	opened, err := registry.Open("route53", "app.com", "")
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 		t.Fatalf("Open(route53) = %v, %v, want an invalid refusal", opened, err)
 	}
-	if !strings.Contains(refusal.Message, "cloudflare") {
-		t.Errorf("Open(route53) refusal = %q, want it to name the writers this provider has", refusal.Message)
+	if !strings.Contains(rejection.Message, "cloudflare") {
+		t.Errorf("Open(route53) refusal = %q, want it to name the writers this provider has", rejection.Message)
 	}
 }
 
@@ -59,13 +60,13 @@ func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
 		t.Errorf("Facts().DefaultEdge = %q, want %q: a deploy that names no edge reaches the box's own proxy", got, boxedge.Kind)
 	}
 
-	var refusal providerkit.Refusal
+	var rejection refusal.Refusal
 	opened, err := registry.Open("cloudflare")
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 		t.Fatalf("Open(cloudflare) = %v, %v, want an invalid refusal", opened, err)
 	}
-	if !strings.Contains(refusal.Message, "cloudflare") || !strings.Contains(refusal.Message, string(boxedge.Kind)) {
-		t.Errorf("Open(cloudflare) refused with %q, want it to name the edge asked for and the one this provider serves", refusal.Message)
+	if !strings.Contains(rejection.Message, "cloudflare") || !strings.Contains(rejection.Message, string(boxedge.Kind)) {
+		t.Errorf("Open(cloudflare) refused with %q, want it to name the edge asked for and the one this provider serves", rejection.Message)
 	}
 }
 
@@ -124,14 +125,14 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	plan := providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
-			Class:   providerkit.ClassProduction,
+			Class:   edge.ClassProduction,
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}
 
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if _, err := release.Plan(ctx, plan, nil); !errors.As(err, &refusal) {
 		t.Errorf("Plan() of a resource this provider serves none of = %v, want a refusal", err)
 	}

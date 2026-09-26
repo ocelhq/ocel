@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -31,8 +32,8 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 			t.Errorf("the sweep runs %q, which names no %s (%s)", command, what, wanted)
 		}
 	}
-	if !strings.HasPrefix(EnvFile(providerkit.ClassProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(providerkit.ClassProduction, "x"), stateRoot+"/"), "/") != 1 {
-		t.Errorf("the env file stands at %s, which is not the depth the sweep reads", EnvFile(providerkit.ClassProduction, "x"))
+	if !strings.HasPrefix(EnvFile(edge.ClassProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(edge.ClassProduction, "x"), stateRoot+"/"), "/") != 1 {
+		t.Errorf("the env file stands at %s, which is not the depth the sweep reads", EnvFile(edge.ClassProduction, "x"))
 	}
 }
 

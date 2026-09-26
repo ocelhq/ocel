@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func siblingAppRoot(t *testing.T, apps ...string) string {
@@ -44,7 +45,7 @@ func (r *recordingProgress) Detail(message string) {
 	r.said = append(r.said, message)
 }
 
-func (r *recordingProgress) Span(name string, _, _ time.Time, err error, _ ...providerkit.Attr) {
+func (r *recordingProgress) Span(name string, _, _ time.Time, err error, _ ...edge.Attr) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err != nil {
@@ -63,7 +64,7 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 	t.Helper()
 	coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: coord.Stack()},
+		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: coord.Stack()},
 		Kind: providerkit.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{

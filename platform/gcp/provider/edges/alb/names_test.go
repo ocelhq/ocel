@@ -3,16 +3,16 @@ package alb
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestAWildcardAndTheDomainUnderneathItGetNamesOfTheirOwn(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	for _, named := range []struct {
 		what string
-		name func(string, providerkit.Class, string) string
+		name func(string, edge.Class, string) string
 	}{
 		{"backend service", backendName},
 		{"certificate map entry", entryName},
@@ -31,10 +31,10 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 	t.Parallel()
 
 	hostname := "checkout-eu-west-staging.a-very-long-customer-subdomain.example.com"
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	for _, named := range []struct {
 		what string
-		name func(string, providerkit.Class, string) string
+		name func(string, edge.Class, string) string
 	}{
 		{"backend service", backendName},
 		{"certificate map entry", entryName},

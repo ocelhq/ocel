@@ -68,7 +68,7 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 		t.Fatalf("ServingFactsFor: %v", err)
 	}
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: providerkit.StackApp,
 		Edge: cfg.Edge,
 		App: &providerkit.AppPlan{

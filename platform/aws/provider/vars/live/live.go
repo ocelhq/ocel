@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const FilePath = constants.ProjectStateDirName + "/variables.live.json"
@@ -40,7 +41,7 @@ func Render(m Manifest) ([]byte, error) {
 	}
 	if m.KeyARN == "" {
 		return nil, fmt.Errorf("the live-value manifest names %d keys but the %s bootstrap holds no key to read them through.\nRun `%s` to add one, then deploy again",
-			len(m.Keys)+len(m.Bindings), m.Class, providerkit.BootstrapVarsKeyCommand(providerkit.Class(m.Class)))
+			len(m.Keys)+len(m.Bindings), m.Class, providerkit.BootstrapVarsKeyCommand(edge.Class(m.Class)))
 	}
 	return json.Marshal(m)
 }

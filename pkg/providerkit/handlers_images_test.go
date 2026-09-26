@@ -77,19 +77,19 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 
 type muteStacks struct{}
 
-func (muteStacks) Plan(context.Context, providerkit.StackPlan, providerkit.Progress) (providerkit.Plan, error) {
+func (muteStacks) Plan(context.Context, providerkit.StackPlan, edge.Progress) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (muteStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
+func (muteStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ edge.Progress) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (muteStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.StackResult, error) {
+func (muteStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.StackResult, error) {
 	return providerkit.StackResult{Containers: fake.StoodUpContainers(plan)}, nil
 }
 
-func (muteStacks) Destroy(context.Context, providerkit.StackRef, providerkit.Progress) error {
+func (muteStacks) Destroy(context.Context, providerkit.StackRef, edge.Progress) error {
 	return nil
 }
 
@@ -293,7 +293,7 @@ func (s refusingStore) Has(context.Context, providerkit.ImagePush) (bool, error)
 	return false, nil
 }
 
-func (s refusingStore) Push(context.Context, providerkit.ImagePush, providerkit.Progress) error {
+func (s refusingStore) Push(context.Context, providerkit.ImagePush, edge.Progress) error {
 	return errors.New("the stream stopped short")
 }
 
@@ -592,7 +592,7 @@ func TestTheStagedRecordNamesTheContainerTheReleaseStoodUp(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -67,8 +67,8 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 	t.Run("a project the credential cannot see", func(t *testing.T) {
 		t.Parallel()
 
-		denied := providerkit.Refuse(providerkit.CodeDenied, "this credential cannot see project acme-prod")
-		var refusal providerkit.Refusal
+		denied := refusal.Refuse(refusal.CodeDenied, "this credential cannot see project acme-prod")
+		var refused refusal.Refusal
 		_, err := gcp.Credentials{
 			Project:      gcp.Named("acme-prod"),
 			Region:       "europe-west1",
@@ -76,7 +76,7 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 			TokenInfoURL: server.URL,
 			Projects:     &reachedProject{err: denied},
 		}.Whoami(context.Background())
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeDenied {
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 			t.Fatalf("Whoami() = %v, want a denied refusal: a token that names a person still deploys nothing into a project it cannot read", err)
 		}
 	})
@@ -145,11 +145,11 @@ func TestAnEmulatorEndpointBeyondLoopbackIsRefusedRatherThanAddressedWithoutCred
 		t.Run(endpoint, func(t *testing.T) {
 			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
-			var refusal providerkit.Refusal
+			var refused refusal.Refusal
 			_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Fatalf("NewProvider() with %s naming %q = %v, want an %s refusal: every client at that endpoint is built with no authentication at all",
-					"OCEL_FLOCI_GCP_ENDPOINT", endpoint, err, providerkit.CodeInvalid)
+					"OCEL_FLOCI_GCP_ENDPOINT", endpoint, err, refusal.CodeInvalid)
 			}
 		})
 	}

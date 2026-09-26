@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -16,9 +18,9 @@ import (
 const FrontRecordPath = live.StateRoot + "/proxy.json"
 
 type frontRecord struct {
-	Proxy   *Front            `json:"proxy"`
-	Project string            `json:"project,omitempty"`
-	Class   providerkit.Class `json:"class"`
+	Proxy   *Front     `json:"proxy"`
+	Project string     `json:"project,omitempty"`
+	Class   edge.Class `json:"class"`
 }
 
 func (f Front) recorded() *Front {
@@ -164,7 +166,7 @@ func (f Front) agrees(held Front, setter string) error {
 	if held.adopted() {
 		remedy = "add `\"proxy\": " + held.spelled() + "`"
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"this box routes through %s (set by %s); %s\nOne proxy fronts a box, and moving a box to another is not supported yet",
 		held.named(), setter, remedy)
 }
@@ -184,9 +186,9 @@ func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, err
 	}
 	var record frontRecord
 	if err := json.Unmarshal([]byte(said), &record); err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s on %s is not a record this ocel can read: %v\nRemove it and run `%s`",
-			FrontRecordPath, h.named(), err, providerkit.BootstrapCommand(providerkit.ClassProduction))
+			FrontRecordPath, h.named(), err, providerkit.BootstrapCommand(edge.ClassProduction))
 	}
 	return &record, nil
 }
@@ -197,9 +199,9 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 		return err
 	}
 	if record == nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
-			FrontRecordPath, h.named(), providerkit.BootstrapCommand(providerkit.ClassProduction))
+			FrontRecordPath, h.named(), providerkit.BootstrapCommand(edge.ClassProduction))
 	}
 	return h.proxyOption.agrees(record.front(), record.setter())
 }

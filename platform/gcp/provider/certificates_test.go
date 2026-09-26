@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -116,7 +117,7 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 	server := newCertServer()
 	server.failure = "the authorization record does not resolve"
 
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	_, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",

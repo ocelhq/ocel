@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -235,12 +236,12 @@ func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 		{Name: naming.AppStack("pr-7", "web", release)},
 	}
 
-	infra, apps, pointers := classifyStacks(entries, ClassProduction)
+	infra, apps, pointers := classifyStacks(entries, edge.ClassProduction)
 	if len(infra) != 1 || len(apps) != 1 || len(pointers) != 1 {
 		t.Fatalf("production carries %v / %v / %v, want only the production stacks", infra, apps, pointers)
 	}
 
-	infra, apps, pointers = classifyStacks(entries, ClassPreview)
+	infra, apps, pointers = classifyStacks(entries, edge.ClassPreview)
 	if len(infra) != 1 || len(apps) != 1 {
 		t.Fatalf("preview carries %v / %v, want the staging infra and the pr-7 app", infra, apps)
 	}
@@ -263,12 +264,12 @@ func TestBuildDeployPlanRefusesAnAppNameNoHostnameCanCarry(t *testing.T) {
 	if err == nil {
 		t.Fatal("buildDeployPlan() accepted an app named \"Web\", so the store would record a name the edge lowercases out of every hostname")
 	}
-	var refusal Refusal
-	if !errors.As(err, &refusal) || refusal.Code != CodeInvalid {
-		t.Fatalf("buildDeployPlan() = %v, want a %s refusal", err, CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("buildDeployPlan() = %v, want a %s refusal", err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refusal.Message, "Web") {
-		t.Errorf("buildDeployPlan() = %q, want the refusal to name the app it will not carry", refusal.Message)
+	if !strings.Contains(refused.Message, "Web") {
+		t.Errorf("buildDeployPlan() = %q, want the refusal to name the app it will not carry", refused.Message)
 	}
 }
 

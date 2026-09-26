@@ -26,6 +26,8 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -71,7 +73,7 @@ func newDeployStages(plan DeployPlan) deployStages {
 		s.Roster = append(s.Roster, app)
 	}
 	s.Roster = append(s.Roster, s.Edge)
-	if plan.Class != ClassPreview {
+	if plan.Class != edge.ClassPreview {
 		s.Roster = append(s.Roster, s.Hostnames)
 	}
 	s.Roster = append(s.Roster, s.Promotion)
@@ -208,7 +210,7 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if err := r.tracked.unit(r.stages.Environment, func(env *unitRun) error {
-		return env.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress Progress) error {
+		return env.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			return r.admission(ctx, progress)
 		})
 	}); err != nil {
@@ -226,7 +228,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	return r.promote(ctx)
 }
 
-func (r *deployRun) admission(ctx context.Context, progress Progress) error {
+func (r *deployRun) admission(ctx context.Context, progress edge.Progress) error {
 	if err := r.admit(ctx, progress); err != nil {
 		return err
 	}
@@ -247,14 +249,14 @@ func (r *deployRun) admission(ctx context.Context, progress Progress) error {
 	return r.preflight(ctx, progress)
 }
 
-func (r *deployRun) admit(ctx context.Context, progress Progress) error {
+func (r *deployRun) admit(ctx context.Context, progress edge.Progress) error {
 	_, err := r.gate.Admit(ctx, r.plan.Class, r.features, !r.dry, progress)
 	return err
 }
 
 func (r *deployRun) admitDomains(ctx context.Context) error {
 	hosts := r.hostnames()
-	if r.plan.Class == ClassPreview {
+	if r.plan.Class == edge.ClassPreview {
 		wildcard, err := readWildcard(ctx, r.provider.Records())
 		if err != nil {
 			return err
@@ -272,7 +274,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 			r.previewOn = wildcard.BaseDomain
 			return nil
 		}
-		return Refuse(CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this project declares no domains.preview wildcard and no global preview domain is in use, so a preview deploy has nowhere to serve: "+
 				"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
 	}
@@ -280,7 +282,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 		if r.front.Facts().AddressesItself {
 			return nil
 		}
-		return Refuse(CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"no domains.production declared on the project or any app, so this deploy has nowhere to serve: declare one, and the deploy that reads it settles it")
 	}
 	configured, err := r.configuredHosts()
@@ -299,7 +301,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
 	name := ProjectRecord(r.plan.Class, r.plan.Slug)
-	held, err := ReadOrEmpty(ctx, r.provider.Records(), name)
+	held, err := records.ReadOrEmpty(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -321,7 +323,7 @@ const (
 )
 
 func (r *deployRun) world() hostingWorld {
-	if r.plan.Class != ClassPreview {
+	if r.plan.Class != edge.ClassPreview {
 		return hostingProduction
 	}
 	if r.wildcard.BaseDomain != "" && len(r.hostnames()) == 0 {
@@ -332,7 +334,7 @@ func (r *deployRun) world() hostingWorld {
 
 func (r *deployRun) raiseEdge(ctx context.Context) error {
 	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress Progress) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			if r.dry {
 				progress.Say(fmt.Sprintf("Reading the %s edge", r.front.Kind()))
 				r.draft.edge = r.drawEdge()
@@ -390,7 +392,7 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 		return nil
 	}
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress Progress) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			settling := &hostnames{stackSession: r.stackSession}
 			for _, host := range r.configured {
 				serving := r.state.Host(host.Hostname).Serving()
@@ -432,12 +434,12 @@ func (r *deployRun) previewBase() (string, error) {
 	for _, host := range r.hostnames() {
 		resolved, wildcard := strings.CutPrefix(host, "*.")
 		if !wildcard {
-			return "", Refuse(CodeInvalid,
+			return "", refusal.Refuse(refusal.CodeInvalid,
 				"this project declares the preview domain %q, which is not a `*.` wildcard: every preview is served on its own subdomain of it, so declare %q instead",
 				host, edge.PreviewWildcard(host))
 		}
 		if base != "" && resolved != base {
-			return "", Refuse(CodeInvalid,
+			return "", refusal.Refuse(refusal.CodeInvalid,
 				"this project declares more than one preview domain (%q and %q): a preview domain is claimed by the whole project, "+
 					"which serves every app from one wildcard, so declare a single project-level domains.preview",
 				edge.PreviewWildcard(base), host)
@@ -518,7 +520,7 @@ func (r *deployRun) previewLabel(slot int) string {
 }
 
 func (r *deployRun) servedHostnames() [][]string {
-	if r.plan.Class == ClassPreview {
+	if r.plan.Class == edge.ClassPreview {
 		served := make([][]string, len(r.plan.Apps))
 		site, names := r.previewSite(), r.appNames()
 		for slot := range served {
@@ -539,7 +541,7 @@ func (r *deployRun) servedHostnames() [][]string {
 func (r *deployRun) checkpoint(ctx context.Context) error {
 	r.state.Kind = r.front.Kind()
 	r.state.Edge = r.stack.State()
-	if r.plan.Class == ClassPreview {
+	if r.plan.Class == edge.ClassPreview {
 		r.state.Edge.GlobalPreview = r.globalPreview()
 	}
 	return r.store.write(ctx, r.state)
@@ -562,7 +564,7 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) preflight(ctx context.Context, progress Progress) error {
+func (r *deployRun) preflight(ctx context.Context, progress edge.Progress) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -572,7 +574,7 @@ func (r *deployRun) preflight(ctx context.Context, progress Progress) error {
 		return err
 	}
 	if err := RefuseUnreachableBindings(r.provider.Facts().Vendor, r.provider.Facts().Bindings, proxied, resources, grants); err != nil {
-		return Refuse(CodeInvalid, "%s", err)
+		return refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
 	if err := r.refuseContainerValues(ctx); err != nil {
 		return err
@@ -682,7 +684,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 		return err
 	}
 	return r.tracked.unit(r.stages.Infra, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress Progress) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
 				return err
 			}
@@ -729,7 +731,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) error {
 	return r.tracked.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress Progress) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
 			}
@@ -844,7 +846,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 	if !state.Present {
 		return nil
 	}
-	return Refuse(CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s is already standing and this project has no record of it: ocel deploys over what it stood up itself, never over what it finds. "+
 			"Remove it, or deploy this project under another name",
 		stack)
@@ -963,7 +965,7 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Binding) (AppValues,
 		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
 			held.Plain[variable.GetKey()] = variable.GetValue()
 		default:
-			return AppValues{}, Refuse(CodeInvalid,
+			return AppValues{}, refusal.Refuse(refusal.CodeInvalid,
 				"%s declares %s with class %s, which this deploy cannot deliver to a function; declare it as `plain`, `sensitive` or `secret`",
 				entry.App, variable.GetKey(), variable.GetClass())
 		}
@@ -1014,7 +1016,7 @@ func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
 	return ""
 }
 
-func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Function, progress Progress) error {
+func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Function, progress edge.Progress) error {
 	embedCode := r.provider.Hooks().EmbedCode
 	if embedCode == nil {
 		return nil
@@ -1031,7 +1033,7 @@ func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Funct
 	return nil
 }
 
-func (r *deployRun) warm(ctx context.Context, functions []Function, progress Progress) error {
+func (r *deployRun) warm(ctx context.Context, functions []Function, progress edge.Progress) error {
 	warmFunctions := r.provider.Hooks().WarmFunctions
 	if warmFunctions == nil || len(functions) == 0 {
 		return nil
@@ -1137,7 +1139,7 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	}
 	bundle, err := os.ReadFile(filepath.Join(AppArtifactRoot(ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s was released with an edge bundle at %s but its build left no %s for the edge to load; rebuild the app",
 			entry.App, result.EdgeBundleKey, edge.AppBundleFile)
 	}
@@ -1184,7 +1186,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Flip:        &flip,
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_FINALIZING, func(progress Progress) error {
+		return u.phase(progressv1.Phase_PHASE_FINALIZING, func(progress edge.Progress) error {
 			progress.Say("Promoting the deployment")
 			if err := r.stack.Promote(ctx, promotion, r.plan.Pointer, progress); err != nil {
 				return err
@@ -1192,7 +1194,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.checkpoint(ctx); err != nil {
 				return err
 			}
-			if r.plan.Class != ClassPreview {
+			if r.plan.Class != edge.ClassPreview {
 				return nil
 			}
 			return recordEnvironmentMeta(ctx, r.provider.Records(),
@@ -1460,7 +1462,7 @@ func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []I
 		return ImagePlan{}, nil
 	}
 	if r.images == nil {
-		return ImagePlan{}, Refuse(CodeInvalid,
+		return ImagePlan{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs as a container, and this provider is served by pulling its image from a registry rather than being handed one: "+
 				"nothing names a registry, so the image has nowhere to go and the machine has nowhere to pull it from.\n"+
 				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",

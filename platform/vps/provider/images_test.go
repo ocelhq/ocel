@@ -22,6 +22,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -306,8 +307,8 @@ func TestAnImageNothingWrappedIsRefusedRatherThanReadOutOfTheLocalDaemon(t *test
 	push := aPush(t)
 	push.Built = nil
 	err := store.Push(context.Background(), push, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var rejection refusal.Refusal
+	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 		t.Fatalf("Push() of an unwrapped image = %v, want a refusal: what the local daemon holds runs nothing in front of the app", err)
 	}
 	if *reads != 0 || len(machine.commands()) != 0 {

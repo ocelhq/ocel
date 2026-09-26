@@ -6,7 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -146,10 +147,10 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
 		}
 	}
 	if len(missing) > 0 {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and it cannot be stood again without %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.name, h.named(), strings.Join(missing, ", "), providerkit.ClassProduction)
+			board.name, h.named(), strings.Join(missing, ", "), edge.ClassProduction)
 	}
 	if board.config == "" {
 		return unread("the switchboard binary's sha256", strings.TrimSpace(said))
@@ -160,10 +161,10 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
 		return err
 	}
 	if result.Code != 0 {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and standing it again failed: %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.name, h.named(), spoken(result), providerkit.ClassProduction)
+			board.name, h.named(), spoken(result), edge.ClassProduction)
 	}
 	return nil
 }

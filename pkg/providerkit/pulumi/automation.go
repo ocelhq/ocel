@@ -22,6 +22,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -49,11 +51,11 @@ type Access struct {
 }
 
 type Engine interface {
-	Preview(ctx context.Context, setup Setup, op Op, progress providerkit.Progress) ([]providerkit.Change, error)
+	Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]providerkit.Change, error)
 
-	Up(ctx context.Context, setup Setup, progress providerkit.Progress) (auto.OutputMap, error)
+	Up(ctx context.Context, setup Setup, progress edge.Progress) (auto.OutputMap, error)
 
-	Destroy(ctx context.Context, setup Setup, progress providerkit.Progress) error
+	Destroy(ctx context.Context, setup Setup, progress edge.Progress) error
 
 	Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error)
 }
@@ -124,13 +126,13 @@ func (a *Automation) workspace(plan providerkit.StackPlan, op Op) (Setup, error)
 	access := a.config.Access
 	switch {
 	case access.BackendURL == "":
-		return Setup{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider names no state backend, and an engine run has nowhere to keep %s's state", plan.Ref.Name)
 	case access.Passphrase == "":
-		return Setup{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider names no state passphrase, and %s's state would be written unsealed", plan.Ref.Name)
 	case a.config.Program == nil:
-		return Setup{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
 			"this automation carries no program, so there is nothing for the engine to run over %s", plan.Ref.Name)
 	}
 
@@ -203,7 +205,7 @@ func (a *Automation) Stack(ctx context.Context, plan providerkit.StackPlan) (aut
 	return a.config.Configure(ctx, plan)
 }
 
-func (a *Automation) setup(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (Setup, error) {
+func (a *Automation) setup(ctx context.Context, plan providerkit.StackPlan, op Op, progress edge.Progress) (Setup, error) {
 	setup, err := a.workspace(plan, op)
 	if err != nil {
 		return Setup{}, err
@@ -228,15 +230,15 @@ func (a *Automation) engine() Engine {
 	return autoEngine{}
 }
 
-func (a *Automation) Preview(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (a *Automation) Preview(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
 	return a.preview(ctx, plan, OpProvision, progress)
 }
 
-func (a *Automation) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+func (a *Automation) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (providerkit.Plan, error) {
 	return a.preview(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
 }
 
-func (a *Automation) preview(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (providerkit.Plan, error) {
+func (a *Automation) preview(ctx context.Context, plan providerkit.StackPlan, op Op, progress edge.Progress) (providerkit.Plan, error) {
 	setup, err := a.setup(ctx, plan, op, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -307,7 +309,7 @@ func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
 	}
 }
 
-func (a *Automation) Run(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (a *Automation) Run(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
 	setup, err := a.setup(ctx, plan, OpProvision, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -322,7 +324,7 @@ func (a *Automation) Run(ctx context.Context, plan providerkit.StackPlan, progre
 	return a.config.Decode(ctx, plan, outputs)
 }
 
-func (a *Automation) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (a *Automation) Destroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
 	if err != nil {
 		return err
@@ -333,7 +335,7 @@ func (a *Automation) Destroy(ctx context.Context, ref providerkit.StackRef, prog
 	return nil
 }
 
-func (a *Automation) Outputs(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (auto.OutputMap, error) {
+func (a *Automation) Outputs(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (auto.OutputMap, error) {
 	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpProvision, progress)
 	if err != nil {
 		return nil, err
@@ -347,7 +349,7 @@ func busy(err error, setup Setup) error {
 	if err == nil || !strings.Contains(err.Error(), lockedMessage) {
 		return err
 	}
-	return providerkit.Refuse(providerkit.CodeBusy,
+	return refusal.Refuse(refusal.CodeBusy,
 		"%s is locked by a run that is either still working or was killed."+
 			"\n\nconfirm no deploy or teardown is running against this stack, then release it with:"+
 			"\n  PULUMI_BACKEND_URL=%s PULUMI_CONFIG_PASSPHRASE=<the account passphrase> pulumi cancel --stack %s"+
@@ -357,7 +359,7 @@ func busy(err error, setup Setup) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress providerkit.Progress) ([]providerkit.Change, error) {
+func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]providerkit.Change, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -414,7 +416,7 @@ func awaitRows(drained <-chan []providerkit.Change, grace time.Duration) ([]prov
 	}
 }
 
-func (autoEngine) Up(ctx context.Context, setup Setup, progress providerkit.Progress) (auto.OutputMap, error) {
+func (autoEngine) Up(ctx context.Context, setup Setup, progress edge.Progress) (auto.OutputMap, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -453,7 +455,7 @@ func (autoEngine) Up(ctx context.Context, setup Setup, progress providerkit.Prog
 	return res.Outputs, nil
 }
 
-func (autoEngine) Destroy(ctx context.Context, setup Setup, progress providerkit.Progress) error {
+func (autoEngine) Destroy(ctx context.Context, setup Setup, progress edge.Progress) error {
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		if progress != nil {

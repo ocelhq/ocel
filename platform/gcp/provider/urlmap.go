@@ -10,14 +10,14 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
 
 func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string) error {
 	if urlMap == "" || hostname == "" || backend == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"route %q through url map %q onto backend %q: a host rule names all three", hostname, urlMap, backend)
 	}
 	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(clients *clients, held *compute.UrlMap) bool {
@@ -27,7 +27,7 @@ func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string) 
 
 func (p *Provider) Hold(ctx context.Context, urlMap, hostname string) error {
 	if urlMap == "" || hostname == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"hold %q on url map %q until its app releases: a host rule names both", hostname, urlMap)
 	}
 	return p.rewrite(ctx, urlMap, "answer "+hostname+" with a 404 until its app has released", func(_ *clients, held *compute.UrlMap) bool {
@@ -178,7 +178,7 @@ func (p *Provider) settle(
 		return err
 	}
 	if settled.Error != nil && len(settled.Error.Errors) > 0 {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"Compute Engine refused to %s: %s", doing, settled.Error.Errors[0].Message)
 	}
 	return nil

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestRefuseTransformsNamesTheVendorAndEveryModuleListed(t *testing.T) {
@@ -46,15 +48,15 @@ func TestDecodeRefusesAnUnknownOption(t *testing.T) {
 	t.Parallel()
 
 	_, err := Decode[awsish]("aws", Options{"region": "eu-west-1", "regoin": "typo"})
-	var refusal Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
 	}
-	if refusal.Code != CodeUnknownOption {
-		t.Errorf("Refusal.Code = %q, want %q", refusal.Code, CodeUnknownOption)
+	if refused.Code != refusal.CodeUnknownOption {
+		t.Errorf("Refusal.Code = %q, want %q", refused.Code, refusal.CodeUnknownOption)
 	}
-	if !strings.Contains(refusal.Message, "regoin") {
-		t.Errorf("Refusal.Message = %q, want it to name the option the CLI should print", refusal.Message)
+	if !strings.Contains(refused.Message, "regoin") {
+		t.Errorf("Refusal.Message = %q, want it to name the option the CLI should print", refused.Message)
 	}
 }
 
@@ -69,7 +71,7 @@ func TestDecodeRefusesANestedUnknownOptionByItsPath(t *testing.T) {
 	}
 
 	_, err := Decode[nested]("vps", Options{"ssh": map[string]any{"hostt": "example.com"}})
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
 	}
@@ -82,7 +84,7 @@ func TestDecodeRefusesAnOptionOfTheWrongType(t *testing.T) {
 	t.Parallel()
 
 	_, err := Decode[awsish]("aws", Options{"region": 42})
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
 	}

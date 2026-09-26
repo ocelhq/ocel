@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var pulumiTokens = map[string]string{
@@ -38,7 +39,7 @@ func shapeRequest(t *testing.T) providerkit.ShapeRequest {
 	return providerkit.ShapeRequest{
 		Plan: providerkit.DeployPlan{
 			Slug:  "shop",
-			Class: providerkit.ClassProduction,
+			Class: edge.ClassProduction,
 			Env:   "prod",
 			Infra: naming.InfraStack("prod"),
 			Apps: []providerkit.AppEntry{
@@ -129,7 +130,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 	run("container", containerWork.run)
-	run("substrate", (&substrateWork{class: providerkit.ClassProduction, boundary: containerCfg.AppBoundaryARN}).run)
+	run("substrate", (&substrateWork{class: edge.ClassProduction, boundary: containerCfg.AppBoundaryARN}).run)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err

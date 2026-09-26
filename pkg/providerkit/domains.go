@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -199,7 +200,7 @@ func productionHost(raw string) (string, error) {
 	case host == "":
 		return "", nil
 	case strings.ContainsAny(host, "/:*"), !strings.Contains(host, "."):
-		return "", Refuse(CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%q is not a production hostname: pass a name like app.acme.com — a wildcard belongs to domains.preview", raw)
 	}
 	return host, nil
@@ -209,13 +210,13 @@ func previewBaseDomain(raw string) (string, error) {
 	base := strings.TrimSuffix(strings.TrimSpace(strings.ToLower(raw)), ".")
 	switch {
 	case base == "":
-		return "", Refuse(CodeInvalid, "a domain is required, e.g. `ocel domain use --preview preview.acme.com`")
+		return "", refusal.Refuse(refusal.CodeInvalid, "a domain is required, e.g. `ocel domain use --preview preview.acme.com`")
 	case strings.HasPrefix(base, "*."):
-		return "", Refuse(CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"give the domain itself, not the wildcard: every preview is served on its own subdomain of it, so pass %q",
 			strings.TrimPrefix(base, "*."))
 	case strings.ContainsAny(base, "/:*"), !strings.Contains(base, "."):
-		return "", Refuse(CodeInvalid, "%q is not a domain name: pass a hostname like preview.acme.com", raw)
+		return "", refusal.Refuse(refusal.CodeInvalid, "%q is not a domain name: pass a hostname like preview.acme.com", raw)
 	}
 	return base, nil
 }

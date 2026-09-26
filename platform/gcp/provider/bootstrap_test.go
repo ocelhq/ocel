@@ -9,7 +9,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestTheRepositoryPrunesOnlyUntaggedImagesOlderThanAWeek(t *testing.T) {
@@ -103,10 +103,10 @@ func TestARepositoryThatDriftedFromWhatTheBootstrapNamesIsMended(t *testing.T) {
 func TestARepositoryOfAnotherFormatIsRefusedRatherThanMended(t *testing.T) {
 	t.Parallel()
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err := repositoryStanding("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("repositoryStanding() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("repositoryStanding() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, refusal.CodeInvalid)
 	}
 }
 

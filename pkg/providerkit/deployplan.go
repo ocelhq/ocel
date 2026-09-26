@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -14,7 +15,7 @@ const EveryPreview = ""
 
 type DeployPlan struct {
 	Slug    string
-	Class   Class
+	Class   edge.Class
 	Env     string
 	Label   string
 	Pointer string
@@ -55,7 +56,7 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 	}
 	slug := manifest.GetSlug()
 	if slug == "" {
-		return DeployPlan{}, Refuse(CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
+		return DeployPlan{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
 	}
 
 	plan := DeployPlan{
@@ -107,28 +108,28 @@ func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.Manife
 		app := container.GetApp()
 		kind, declared := compute[app]
 		if !declared {
-			return nil, Refuse(CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"a container names the app %q, which this manifest does not declare", app)
 		}
 		if kind != string(ComputeContainer) {
-			return nil, Refuse(CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"a container names the app %q, which this manifest says runs on %q compute", app, kind)
 		}
 		if _, twice := containers[app]; twice {
-			return nil, Refuse(CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %q carries two containers, and an app is served by one process", app)
 		}
 		containers[app] = container
 	}
 	for app, kind := range compute {
 		if kind == string(ComputeContainer) && containers[app].GetImage() == "" {
-			return nil, Refuse(CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %q runs on container compute and this manifest carries no image for it", app)
 		}
 	}
 	for _, fn := range manifest.GetFunctions() {
 		if _, served := containers[fn.GetApp()]; served {
-			return nil, Refuse(CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %q runs on container compute and this manifest packs function %s into it as well, so two things would answer the same request",
 				fn.GetApp(), fn.GetLogicalName())
 		}
@@ -140,11 +141,11 @@ func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]st
 	for _, fn := range manifest.GetFunctions() {
 		app := fn.GetApp()
 		if app == "" {
-			return Refuse(CodeInvalid,
+			return refusal.Refuse(refusal.CodeInvalid,
 				"function %s names no app, and a function ships inside the app that declares it", fn.GetLogicalName())
 		}
 		if _, ours := declared[app]; !ours {
-			return Refuse(CodeInvalid,
+			return refusal.Refuse(refusal.CodeInvalid,
 				"function %s names the app %q, which this manifest does not declare", fn.GetLogicalName(), app)
 		}
 	}
@@ -154,14 +155,14 @@ func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]st
 func appEntry(app *contractv1.ManifestApp, env string) (AppEntry, error) {
 	name := app.GetName()
 	if name == "" {
-		return AppEntry{}, Refuse(CodeInvalid, "this manifest carries an app with no name, and a stack is named after the app it serves")
+		return AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "this manifest carries an app with no name, and a stack is named after the app it serves")
 	}
 	if name == naming.InfraApp {
-		return AppEntry{}, Refuse(CodeInvalid,
+		return AppEntry{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %q uses the name reserved for the environment's infra stack; rename the app", name)
 	}
 	if err := naming.Validate("app name", name); err != nil {
-		return AppEntry{}, Refuse(CodeInvalid, "%s", err.Error())
+		return AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
 	}
 	identity, err := NewBuild(app.GetDeploymentId(), env, FingerprintVariables(app.GetVariables()))
 	if err != nil {
@@ -175,8 +176,8 @@ func appEntry(app *contractv1.ManifestApp, env string) (AppEntry, error) {
 	}, nil
 }
 
-func pointerFor(class Class, env string) string {
-	if class == ClassProduction {
+func pointerFor(class edge.Class, env string) string {
+	if class == edge.ClassProduction {
 		return edge.DefaultPointer
 	}
 	return env
@@ -195,7 +196,7 @@ func envScope(env *environmentv1.Environment) (string, error) {
 }
 
 func (p DeployPlan) bindingEnvironment() string {
-	if p.Class == ClassProduction {
+	if p.Class == edge.ClassProduction {
 		return ""
 	}
 	return p.Env
@@ -253,7 +254,7 @@ func ReclaimTargets(slug, env string, removed, surviving, servingHere []string) 
 			if containerRelease(key) {
 				continue
 			}
-			return nil, Refuse(CodeInvalid, "malformed removed record key %q, want %q", key, recordKeyPrefix+"app/identity")
+			return nil, refusal.Refuse(refusal.CodeInvalid, "malformed removed record key %q, want %q", key, recordKeyPrefix+"app/identity")
 		}
 		release := identity.Release()
 		targets = append(targets, ReclaimTarget{
@@ -324,10 +325,10 @@ func releasesOf(keys []string) map[appRelease]bool {
 	return served
 }
 
-func classifyStacks(entries []StackEntry, class Class) (infra, apps []naming.StackName, pointers []string) {
+func classifyStacks(entries []StackEntry, class edge.Class) (infra, apps []naming.StackName, pointers []string) {
 	for _, entry := range entries {
 		production := entry.Name.Env == ProductionEnv
-		if production != (class == ClassProduction) {
+		if production != (class == edge.ClassProduction) {
 			continue
 		}
 		if !slices.Contains(pointers, entry.Name.Env) {

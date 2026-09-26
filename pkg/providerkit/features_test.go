@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 var testCatalogue = []Feature{
@@ -53,13 +55,13 @@ func TestFeatureClosure(t *testing.T) {
 		t.Parallel()
 
 		_, err := featureClosure(testCatalogue, []string{"quantum-edge"})
-		var refusal Refusal
-		if !errors.As(err, &refusal) || refusal.Code != CodeInvalid {
-			t.Fatalf("featureClosure() = %v, want a %s refusal", err, CodeInvalid)
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+			t.Fatalf("featureClosure() = %v, want a %s refusal", err, refusal.CodeInvalid)
 		}
 		for _, want := range []string{"quantum-edge", "isr", "image-optimization", "cloudflare-edge"} {
-			if !strings.Contains(refusal.Message, want) {
-				t.Errorf("refusal %q does not name %q", refusal.Message, want)
+			if !strings.Contains(refused.Message, want) {
+				t.Errorf("refusal %q does not name %q", refused.Message, want)
 			}
 		}
 	})

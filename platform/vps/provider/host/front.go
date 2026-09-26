@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -69,7 +69,7 @@ func destination(front proxy.Proxy) string {
 type unservedFront struct{ named string }
 
 func (u unservedFront) refused() error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is not supported yet as the proxy fronting this box; route to ocel yourself with `\"proxy\": \"manual\"`", u.named)
 }
 

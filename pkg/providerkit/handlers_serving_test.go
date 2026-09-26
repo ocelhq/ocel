@@ -110,7 +110,7 @@ type recordingStacks struct {
 	drawn []providerkit.StackPlan
 }
 
-func (r *recordingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *recordingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
 	r.mu.Lock()
 	r.drawn = append(r.drawn, plan)
 	r.mu.Unlock()

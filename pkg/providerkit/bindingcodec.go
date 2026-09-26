@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
@@ -41,7 +42,7 @@ func BindingPair(owner string, binding *bindingsv1.Binding) (values.Pair, error)
 		return values.Pair{}, fmt.Errorf("render binding %s: %w", binding.GetName(), err)
 	}
 	if len(value) > values.MaxValueBytes {
-		return values.Pair{}, Refuse(CodeInvalid, "binding %s is too large: %d bytes, limit %d", binding.GetName(), len(value), values.MaxValueBytes)
+		return values.Pair{}, refusal.Refuse(refusal.CodeInvalid, "binding %s is too large: %d bytes, limit %d", binding.GetName(), len(value), values.MaxValueBytes)
 	}
 	record, err := EncodeBinding(redacted(binding))
 	if err != nil {

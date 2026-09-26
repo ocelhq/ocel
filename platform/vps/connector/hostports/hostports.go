@@ -10,13 +10,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 type Records struct{}
 
-func (Records) Holds(_ context.Context, class providerkit.Class) (bool, error) {
+func (Records) Holds(_ context.Context, class edge.Class) (bool, error) {
 	if _, err := os.Stat(host.RecordsHelper); err != nil {
 		return false, nil
 	}
@@ -24,19 +26,19 @@ func (Records) Holds(_ context.Context, class providerkit.Class) (bool, error) {
 	return err == nil && held.IsDir(), nil
 }
 
-func (Records) Records(ctx context.Context, class providerkit.Class, stdin io.Reader, argv ...string) (string, error) {
+func (Records) Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error) {
 	stdout, stderr, code, err := ran(ctx, stdin, host.RecordsHelper, append([]string{string(class)}, argv...)...)
 	switch {
 	case err != nil:
-		return "", providerkit.Refuse(providerkit.CodeDenied, "run the records helper on this host: %s", err)
+		return "", refusal.Refuse(refusal.CodeDenied, "run the records helper on this host: %s", err)
 	case code == 0:
 		return stdout, nil
 	case code == host.ExitNoRecord:
-		return "", providerkit.ErrNoRecord
+		return "", records.ErrNotFound
 	case code == host.ExitStale:
-		return "", providerkit.ErrStale
+		return "", records.ErrStale
 	default:
-		return "", providerkit.Refuse(providerkit.CodeDenied, "records %s on this host: %s", argv[0], terse(stderr, code))
+		return "", refusal.Refuse(refusal.CodeDenied, "records %s on this host: %s", argv[0], terse(stderr, code))
 	}
 }
 
@@ -46,11 +48,11 @@ func (Cipher) Seal(ctx context.Context, what string, argv []string, stdin io.Rea
 	stdout, stderr, code, err := ran(ctx, stdin, "sudo", append([]string{"-n"}, argv...)...)
 	switch {
 	case err != nil:
-		return "", providerkit.Refuse(providerkit.CodeDenied, "run the seal helper on this host: %s", err)
+		return "", refusal.Refuse(refusal.CodeDenied, "run the seal helper on this host: %s", err)
 	case code == 0:
 		return stdout, nil
 	default:
-		return "", providerkit.Refuse(providerkit.CodeDenied, "%s on this host: %s", what, terse(stderr, code))
+		return "", refusal.Refuse(refusal.CodeDenied, "%s on this host: %s", what, terse(stderr, code))
 	}
 }
 

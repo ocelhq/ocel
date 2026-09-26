@@ -13,7 +13,9 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -28,17 +30,17 @@ const (
 )
 
 var partitionSegments = map[string]int{
-	kit.RootValues:       3,
-	kit.RootValueRefs:    3,
-	kit.RootStacks:       3,
-	kit.RootEnvironments: 3,
-	kit.RootConformance:  3,
-	kit.RootLedger:       2,
-	kit.RootEdgeStacks:   2,
-	kit.RootSchema:       1,
-	kit.RootProjects:     2,
-	kit.RootBootstrap:    2,
-	kit.RootWildcard:     2,
+	records.RootValues:       3,
+	records.RootValueRefs:    3,
+	records.RootStacks:       3,
+	records.RootEnvironments: 3,
+	records.RootConformance:  3,
+	records.RootLedger:       2,
+	records.RootEdgeStacks:   2,
+	records.RootSchema:       1,
+	records.RootProjects:     2,
+	records.RootBootstrap:    2,
+	records.RootWildcard:     2,
 }
 
 type DynamoAPI interface {
@@ -55,24 +57,24 @@ type Records struct {
 }
 
 type Tables interface {
-	Table(ctx context.Context, class kit.Class) (string, error)
-	ValuesTable(ctx context.Context, class kit.Class) (string, error)
+	Table(ctx context.Context, class edge.Class) (string, error)
+	ValuesTable(ctx context.Context, class edge.Class) (string, error)
 }
 
 type Table string
 
-func (t Table) Table(context.Context, kit.Class) (string, error) { return string(t), nil }
+func (t Table) Table(context.Context, edge.Class) (string, error) { return string(t), nil }
 
-func (t Table) ValuesTable(context.Context, kit.Class) (string, error) { return string(t), nil }
+func (t Table) ValuesTable(context.Context, edge.Class) (string, error) { return string(t), nil }
 
-func holdsValues(name kit.RecordName) bool {
-	return len(name) > 0 && (name[0] == kit.RootValues || name[0] == kit.RootValueRefs)
+func holdsValues(name records.Name) bool {
+	return len(name) > 0 && (name[0] == records.RootValues || name[0] == records.RootValueRefs)
 }
 
-func (r Records) table(ctx context.Context, name kit.RecordName) (string, error) {
+func (r Records) table(ctx context.Context, name records.Name) (string, error) {
 	class, named := providerkit.ClassOf(name)
 	if !named {
-		return "", kit.Refuse(kit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s names no class, and this account keeps each class's records in the bootstrap that owns them", name)
 	}
 	if r.Tables == nil {
@@ -84,14 +86,14 @@ func (r Records) table(ctx context.Context, name kit.RecordName) (string, error)
 	return r.Tables.Table(ctx, class)
 }
 
-func Partition(name kit.RecordName) (string, error) {
+func Partition(name records.Name) (string, error) {
 	pk, _, err := keyOf(name)
 	return pk, err
 }
 
-func unbootstrapped(name kit.RecordName) error {
+func unbootstrapped(name records.Name) error {
 	class, _ := providerkit.ClassOf(name)
-	return kit.Refuse(kit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", providerkit.BootstrapCommand(class))
 }
 
@@ -100,17 +102,17 @@ func tableGone(err error) bool {
 	return errors.As(err, &missing)
 }
 
-func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, error) {
+func (r Records) Read(ctx context.Context, name records.Name) (records.Record, error) {
 	table, err := r.table(ctx, name)
 	if err != nil {
-		return kit.Record{}, err
+		return records.Record{}, err
 	}
 	if table == "" {
-		return kit.Record{}, kit.ErrNoRecord
+		return records.Record{}, records.ErrNotFound
 	}
 	pk, sk, err := keyOf(name)
 	if err != nil {
-		return kit.Record{}, err
+		return records.Record{}, err
 	}
 	out, err := r.Dynamo.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(table),
@@ -119,17 +121,17 @@ func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, err
 	})
 	if err != nil {
 		if tableGone(err) {
-			return kit.Record{}, kit.ErrNoRecord
+			return records.Record{}, records.ErrNotFound
 		}
-		return kit.Record{}, fmt.Errorf("read %s: %w", name, err)
+		return records.Record{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	if len(out.Item) == 0 {
-		return kit.Record{}, kit.ErrNoRecord
+		return records.Record{}, records.ErrNotFound
 	}
 	return recordOf(name, out.Item), nil
 }
 
-func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, error) {
+func (r Records) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	table, err := r.table(ctx, record.Name)
 	if err != nil {
 		return "", err
@@ -151,14 +153,14 @@ func (r Records) Write(ctx context.Context, record kit.Record) (kit.Revision, er
 	}); err != nil {
 		var failed *ddbtypes.ConditionalCheckFailedException
 		if errors.As(err, &failed) {
-			return "", kit.ErrStale
+			return "", records.ErrStale
 		}
 		return "", fmt.Errorf("write %s: %w", record.Name, err)
 	}
 	return written.revision, nil
 }
 
-func (r Records) WritePair(ctx context.Context, first, second kit.Record) error {
+func (r Records) WritePair(ctx context.Context, first, second records.Record) error {
 	table, err := r.table(ctx, first.Name)
 	if err != nil {
 		return err
@@ -171,12 +173,12 @@ func (r Records) WritePair(ctx context.Context, first, second kit.Record) error 
 		return err
 	}
 	if beside != table {
-		return kit.Refuse(kit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s and %s are kept in different tables, and one write cannot span both", first.Name, second.Name)
 	}
 
 	writes := make([]ddbtypes.TransactWriteItem, 0, 2)
-	for _, record := range []kit.Record{first, second} {
+	for _, record := range []records.Record{first, second} {
 		written, err := writingOf(record)
 		if err != nil {
 			return err
@@ -193,7 +195,7 @@ func (r Records) WritePair(ctx context.Context, first, second kit.Record) error 
 	if _, err := r.Dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes}); err != nil {
 		var cancelled *ddbtypes.TransactionCanceledException
 		if errors.As(err, &cancelled) && conditionFailed(cancelled) {
-			return kit.ErrStale
+			return records.ErrStale
 		}
 		return fmt.Errorf("write %s beside %s: %w", first.Name, second.Name, err)
 	}
@@ -214,10 +216,10 @@ type writing struct {
 	condition string
 	names     map[string]string
 	values    map[string]ddbtypes.AttributeValue
-	revision  kit.Revision
+	revision  records.Revision
 }
 
-func writingOf(record kit.Record) (writing, error) {
+func writingOf(record records.Record) (writing, error) {
 	pk, sk, err := keyOf(record.Name)
 	if err != nil {
 		return writing{}, err
@@ -248,13 +250,13 @@ func writingOf(record kit.Record) (writing, error) {
 	return written, nil
 }
 
-func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.Revision) error {
+func (r Records) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
 	table, err := r.table(ctx, name)
 	if err != nil {
 		return err
 	}
 	if table == "" {
-		return kit.ErrNoRecord
+		return records.ErrNotFound
 	}
 	pk, sk, err := keyOf(name)
 	if err != nil {
@@ -272,19 +274,19 @@ func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.R
 		return nil
 	}
 	if tableGone(err) {
-		return kit.ErrNoRecord
+		return records.ErrNotFound
 	}
 	var failed *ddbtypes.ConditionalCheckFailedException
 	if errors.As(err, &failed) {
 		if len(failed.Item) == 0 {
-			return kit.ErrNoRecord
+			return records.ErrNotFound
 		}
-		return kit.ErrStale
+		return records.ErrStale
 	}
 	return fmt.Errorf("remove %s: %w", name, err)
 }
 
-func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, error) {
+func (r Records) List(ctx context.Context, under records.Name) ([]records.Record, error) {
 	table, err := r.table(ctx, under)
 	if err != nil {
 		return nil, err
@@ -306,7 +308,7 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 		values[":prefix"] = &ddbtypes.AttributeValueMemberS{Value: prefix}
 	}
 
-	var out []kit.Record
+	var out []records.Record
 	var start map[string]ddbtypes.AttributeValue
 	for {
 		page, err := r.Dynamo.Query(ctx, &dynamodb.QueryInput{
@@ -337,7 +339,7 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 	}
 }
 
-func prefixOf(under kit.RecordName) (string, string, error) {
+func prefixOf(under records.Name) (string, string, error) {
 	pk, sk, depth, err := keyed(under)
 	if err != nil {
 		return "", "", err
@@ -348,18 +350,18 @@ func prefixOf(under kit.RecordName) (string, string, error) {
 	return pk, sk, nil
 }
 
-func keyOf(name kit.RecordName) (string, string, error) {
+func keyOf(name records.Name) (string, string, error) {
 	pk, sk, _, err := keyed(name)
 	return pk, sk, err
 }
 
-func keyed(name kit.RecordName) (string, string, int, error) {
+func keyed(name records.Name) (string, string, int, error) {
 	if len(name) == 0 {
 		return "", "", 0, fmt.Errorf("a record name with no segments names nothing")
 	}
 	depth, partitioned := partitionSegments[name[0]]
 	if !partitioned {
-		return "", "", 0, kit.Refuse(kit.CodeInvalid,
+		return "", "", 0, refusal.Refuse(refusal.CodeInvalid,
 			"%s is rooted at %q, and this account partitions no records under that root", name, name[0])
 	}
 	if len(name) < depth {
@@ -370,7 +372,7 @@ func keyed(name kit.RecordName) (string, string, int, error) {
 	return join(name[:depth]), join(name[depth:]) + segmentSeparator, depth, nil
 }
 
-func nameOf(item map[string]ddbtypes.AttributeValue) (kit.RecordName, bool) {
+func nameOf(item map[string]ddbtypes.AttributeValue) (records.Name, bool) {
 	pk, sk := stringAttribute(item, partitionAttribute), stringAttribute(item, sortAttribute)
 	if pk == "" || !strings.HasSuffix(sk, segmentSeparator) {
 		return nil, false
@@ -382,8 +384,8 @@ func nameOf(item map[string]ddbtypes.AttributeValue) (kit.RecordName, bool) {
 	return name, true
 }
 
-func recordOf(name kit.RecordName, item map[string]ddbtypes.AttributeValue) kit.Record {
-	record := kit.Record{Name: name, Revision: kit.Revision(stringAttribute(item, revisionAttribute))}
+func recordOf(name records.Name, item map[string]ddbtypes.AttributeValue) records.Record {
+	record := records.Record{Name: name, Revision: records.Revision(stringAttribute(item, revisionAttribute))}
 	if body, ok := item[bodyAttribute].(*ddbtypes.AttributeValueMemberB); ok {
 		record.Bytes = body.Value
 	}
@@ -398,9 +400,9 @@ func join(segments []string) string {
 	return strings.Join(escaped, segmentSeparator)
 }
 
-func split(key string) kit.RecordName {
+func split(key string) records.Name {
 	segments := strings.Split(key, segmentSeparator)
-	out := make(kit.RecordName, 0, len(segments))
+	out := make(records.Name, 0, len(segments))
 	for _, segment := range segments {
 		out = append(out, unescape(segment))
 	}
@@ -430,10 +432,10 @@ func stringAttribute(item map[string]ddbtypes.AttributeValue, name string) strin
 	return value.Value
 }
 
-func mintRevision() (kit.Revision, error) {
+func mintRevision() (records.Revision, error) {
 	token := make([]byte, 16)
 	if _, err := rand.Read(token); err != nil {
 		return "", fmt.Errorf("mint a revision token: %w", err)
 	}
-	return kit.Revision(hex.EncodeToString(token)), nil
+	return records.Revision(hex.EncodeToString(token)), nil
 }

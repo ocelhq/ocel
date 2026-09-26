@@ -11,6 +11,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type checkingProvider struct {
@@ -113,8 +114,8 @@ func TestPreflightHandsTheStandingPortEveryHostnameItWasAskedAbout(t *testing.T)
 		t.Fatalf("the host check was asked %d times, want once per preflight", len(provider.asked))
 	}
 	asked := provider.asked[0]
-	if asked.Class != providerkit.ClassProduction {
-		t.Errorf("the host check was asked about %s, want %s", asked.Class, providerkit.ClassProduction)
+	if asked.Class != edge.ClassProduction {
+		t.Errorf("the host check was asked about %s, want %s", asked.Class, edge.ClassProduction)
 	}
 	if want := []string{"shop.example.com", "www.example.com"}; !slices.Equal(asked.Hostnames, want) {
 		t.Errorf("the host check was handed %v, want %v: the handler used to discard the requested hostnames", asked.Hostnames, want)

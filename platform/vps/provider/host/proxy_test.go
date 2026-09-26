@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -152,7 +153,7 @@ func TestAHostWithNoEngineCarriesNoProxyAtAll(t *testing.T) {
 func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	whole := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
 	for _, change := range planned(whole) {
@@ -435,7 +436,7 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCalledDrift(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	deployed := digests(Items(class, keys, ArchAMD64, Front{}))
 	for _, seeded := range []Item{routingTableItem(), proxyConfigItem()} {
@@ -560,7 +561,7 @@ func held(t *testing.T, path string) string {
 func TestTheDeployLoginIsToldItOwnsTheRoutingTable(t *testing.T) {
 	t.Parallel()
 
-	owned := slices.ContainsFunc(grants(providerkit.ClassProduction, ArchAMD64), func(grant Grant) bool {
+	owned := slices.ContainsFunc(grants(edge.ClassProduction, ArchAMD64), func(grant Grant) bool {
 		return grant.Name == "owns "+live.RoutingTable
 	})
 	if !owned {
@@ -633,7 +634,7 @@ func TestABootstrapOverABoxHoldingOnlyItsTableKeepsEveryRoute(t *testing.T) {
 func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64, Front{})
 	observed := digests(items)
@@ -663,7 +664,7 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64, Front{})
 	observed := digests(items)
@@ -725,7 +726,7 @@ func TestHealNeverWritesOverTheConfigTheProxyIsServingFrom(t *testing.T) {
 func TestAnUnattendedApplyWritesOcelsOwnProxyBackWithoutAsking(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	observed := digests(Items(class, keys, ArchAMD64, Front{}))
 	observed[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner, contentSum([]byte("state=exited\n")))
@@ -740,7 +741,7 @@ func TestAnUnattendedApplyWritesOcelsOwnProxyBackWithoutAsking(t *testing.T) {
 func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
@@ -819,8 +820,8 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		"a pin root nothing was ever pinned under": false,
 		"a pin root holding the pair you placed":   true,
 	} {
-		class := providerkit.ClassProduction
-		stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+		class := edge.ClassProduction
+		stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 		stood.answer = func(command string) (session.Result, bool) {
 			if !strings.HasPrefix(command, "rmdir "+quoted(caddy.PinsDir)+" ") {
 				return session.Result{}, false
@@ -893,7 +894,7 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 func TestNothingButWhatOcelWroteIsEverOcelsToTake(t *testing.T) {
 	t.Parallel()
 
-	stood := machine(map[providerkit.Class][]Item{providerkit.ClassProduction: bootstrapped(t, providerkit.ClassProduction)})
+	stood := machine(map[edge.Class][]Item{edge.ClassProduction: bootstrapped(t, edge.ClassProduction)})
 	for _, kind := range []string{KindEngine, KindUnit} {
 		_, err := stood.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: providerkit.ActionDelete})
 		if err == nil {
@@ -964,8 +965,8 @@ func TestTheHelperCarriesNoDependenceOnWhatTheProxyImageHappensToShip(t *testing
 func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	stood.facts.Arch = "riscv64"
 
 	if _, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class); err != nil {
@@ -979,7 +980,7 @@ func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 func TestWhatTheDeployLoginHoldsIsTheSameWhicheverArchitectureTheBoxRuns(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	if !slices.Equal(grants(class, ArchAMD64), grants(class, ArchARM64)) {
 		t.Error("`ocel permissions deploy` prints one thing on an amd64 box and another on an arm64 one, and what a login holds does not depend on what the box runs")
 	}
@@ -1102,7 +1103,7 @@ func TestAProxyThatNeverComesUpFailsTheWriteWithWhatTheEngineSaysAboutIt(t *test
 func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	for at, item := range stood.stands[class] {
 		if item.Kind == KindEngine {
@@ -1184,7 +1185,7 @@ func TestTheProxyIsNeverStartedAgainstABindSourceDockerWouldInvent(t *testing.T)
 func TestAProxyStandingAsWrittenButNotRunningIsPlannedBackAndNeverCalledSettled(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
@@ -1304,7 +1305,7 @@ func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
 func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusingTheBox(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	table, config := string(mustWrite(t, routed())), olderRendering(t, routed())
 	stood := settledHolding(t, class, &table, &config)
 	boot := NewBootstrap(stood.host(), testVendor, "shop")

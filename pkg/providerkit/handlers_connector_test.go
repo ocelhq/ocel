@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type connectorHost struct {
@@ -33,7 +34,7 @@ func (h *connectorHost) Target(context.Context) (providerkit.ConnectorTarget, er
 	}, nil
 }
 
-func (h *connectorHost) Install(_ context.Context, install providerkit.ConnectorInstall, progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
+func (h *connectorHost) Install(_ context.Context, install providerkit.ConnectorInstall, progress edge.Progress) (providerkit.ConnectorAddress, error) {
 	h.install = install
 	progress.Say("wrote the connector")
 	compute := install.Compute
@@ -47,7 +48,7 @@ func (h *connectorHost) Install(_ context.Context, install providerkit.Connector
 	}, nil
 }
 
-func (h *connectorHost) Remove(context.Context, providerkit.Progress) error {
+func (h *connectorHost) Remove(context.Context, edge.Progress) error {
 	h.removed = true
 	return nil
 }

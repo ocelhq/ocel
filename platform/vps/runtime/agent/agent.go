@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -309,7 +310,7 @@ func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]
 	reader := values.View{
 		Records:     vars.Records{Root: s.StateRoot},
 		Cipher:      vars.Cipher{Root: s.ClassRoot},
-		Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},
+		Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 		Environment: manifest.Environment,
 	}
 	cells := make([]values.Cell, 0, len(manifest.Keys))

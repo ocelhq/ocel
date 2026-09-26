@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -26,7 +28,7 @@ func NewBootstrap(h *Host, vendor providerkit.Vendor, project string) Bootstrap 
 
 func (b Bootstrap) Catalogue() []providerkit.Feature { return nil }
 
-func (b Bootstrap) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
+func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
 	read, err := b.host.Observe(ctx, class)
 	if err != nil {
 		return providerkit.BootstrapReading{}, err
@@ -147,7 +149,7 @@ func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest
 	return b.read(ctx, req.Class)
 }
 
-func (b Bootstrap) read(ctx context.Context, class providerkit.Class) (Reading, error) {
+func (b Bootstrap) read(ctx context.Context, class edge.Class) (Reading, error) {
 	read, err := b.host.Read(ctx, class)
 	if err != nil {
 		return Reading{}, err
@@ -155,7 +157,7 @@ func (b Bootstrap) read(ctx context.Context, class providerkit.Class) (Reading, 
 	return b.recorded(ctx, read)
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -208,7 +210,7 @@ func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 		return err
 	}
 	if minted.Seal.Fingerprint == "" {
-		return providerkit.Refuse(providerkit.CodeDenied,
+		return refusal.Refuse(refusal.CodeDenied,
 			"%s has no seal key",
 			req.Class)
 	}
@@ -242,7 +244,7 @@ func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
 
-func (b Bootstrap) heal(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	read, err := b.host.Own(ctx, req.Class)
 	if err != nil {
 		return err
@@ -273,12 +275,12 @@ func healing(read Reading, unattended bool) ([]Item, []string, error) {
 func healable(read Reading) ([]Item, []string, error) {
 	command := providerkit.BootstrapCommand(read.Class)
 	if !read.Present {
-		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, nil, refusal.Refuse(refusal.CodeDenied,
 			"the %s class is not bootstrapped on this host\nRun `%s`",
 			read.Class, command)
 	}
 	if read.unfinished() {
-		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, nil, refusal.Refuse(refusal.CodeDenied,
 			"%s records an unfinished apply\nRun `%s` to finish it",
 			StampPath(read.Class), command)
 	}
@@ -302,7 +304,7 @@ func healable(read Reading) ([]Item, []string, error) {
 		denied = append(denied, item.ID())
 	}
 	if len(denied) > 0 {
-		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, nil, refusal.Refuse(refusal.CodeDenied,
 			"heal cannot write %s\nRun `%s` as the login that bootstrapped this host",
 			strings.Join(denied, ", "), command)
 	}
@@ -355,7 +357,7 @@ func refuseReplacements(standing Reading, items []Item) error {
 	if len(over) == 0 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s would be overwritten\nRe-run with --yes to overwrite",
 		strings.Join(over, ", "))
 }
@@ -372,12 +374,12 @@ func (r Reading) adopting() error {
 		}
 		standing = "no key at all"
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s records seal key %s, but %s holds %s\nRestore the recorded key, or `ocel destroy` the class",
 		StampPath(r.Class), recorded, SealKeyPath(r.Class), standing)
 }
 
-func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, progress providerkit.Progress) error {
+func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, progress edge.Progress) error {
 	return b.writing(ctx, standing, items, progress, func(ctx context.Context, item Item) error {
 		if item.Kind == KindEngine {
 			return b.host.installEngine(ctx, progress)
@@ -386,7 +388,7 @@ func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, pr
 	})
 }
 
-func (b Bootstrap) writing(ctx context.Context, standing Reading, items []Item, progress providerkit.Progress,
+func (b Bootstrap) writing(ctx context.Context, standing Reading, items []Item, progress edge.Progress,
 	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if standing.current(item) {
@@ -401,13 +403,13 @@ func (b Bootstrap) writing(ctx context.Context, standing Reading, items []Item, 
 	return nil
 }
 
-func say(progress providerkit.Progress, message string) {
+func say(progress edge.Progress, message string) {
 	if progress != nil {
 		progress.Say(message)
 	}
 }
 
-func (b Bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
 	removals, err := b.removals(ctx, class)
 	if err != nil || len(removals) == 0 {
 		return providerkit.Plan{}, err
@@ -434,7 +436,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (pro
 	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, []providerkit.ChangeGroup{group})}, nil
 }
 
-func (b Bootstrap) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
 	defer b.host.forgetTiers()
 	forget, err := b.host.forgetting(ctx)
 	if err != nil {
@@ -512,7 +514,7 @@ func (r removal) command() string {
 	}
 }
 
-func (b Bootstrap) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
+func (b Bootstrap) removals(ctx context.Context, class edge.Class) ([]removal, error) {
 	read, err := b.host.Survey(ctx, class)
 	if err != nil {
 		return nil, err
@@ -537,9 +539,9 @@ const (
 
 type appsStanding struct{ containers, networks, volumes bool }
 
-func classSelector(class providerkit.Class) string { return LabelClass + "=" + string(class) }
+func classSelector(class edge.Class) string { return LabelClass + "=" + string(class) }
 
-func appsProbe(class providerkit.Class) string {
+func appsProbe(class edge.Class) string {
 	filter := quoted("label=" + classSelector(class))
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1; then\n" +
 		"if [ -n \"$(docker ps --all --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo containers; fi\n" +
@@ -548,7 +550,7 @@ func appsProbe(class providerkit.Class) string {
 		"fi"
 }
 
-func (h *Host) appsStanding(ctx context.Context, class providerkit.Class) (appsStanding, error) {
+func (h *Host) appsStanding(ctx context.Context, class edge.Class) (appsStanding, error) {
 	said, err := h.run(ctx, "ask what "+string(class)+" still runs", appsProbe(class), nil)
 	if err != nil {
 		return appsStanding{}, err
@@ -560,7 +562,7 @@ func (h *Host) appsStanding(ctx context.Context, class providerkit.Class) (appsS
 	}, nil
 }
 
-func appsRemoving(class providerkit.Class, apps appsStanding) []removal {
+func appsRemoving(class edge.Class, apps appsStanding) []removal {
 	var taken []removal
 	if apps.containers {
 		taken = append(taken, taking(KindApps, classSelector(class),
@@ -625,9 +627,9 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	return standing
 }
 
-func other(class providerkit.Class) providerkit.Class {
-	if class == providerkit.ClassProduction {
-		return providerkit.ClassPreview
+func other(class edge.Class) edge.Class {
+	if class == edge.ClassProduction {
+		return edge.ClassPreview
 	}
-	return providerkit.ClassProduction
+	return edge.ClassProduction
 }

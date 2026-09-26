@@ -9,8 +9,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
@@ -25,8 +27,8 @@ func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPla
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
-func warnPreviewOpen(plan providerkit.StackPlan, service string, progress providerkit.Progress) {
-	if plan.Ref.Class != providerkit.ClassPreview || factsOf(plan.Edge).ShieldsOrigin {
+func warnPreviewOpen(plan providerkit.StackPlan, service string, progress edge.Progress) {
+	if plan.Ref.Class != edge.ClassPreview || factsOf(plan.Edge).ShieldsOrigin {
 		return
 	}
 	kind := direct.Kind
@@ -36,7 +38,7 @@ func warnPreviewOpen(plan providerkit.StackPlan, service string, progress provid
 	say(progress, service+" "+fmt.Sprintf(previewOpenWarning, kind))
 }
 
-func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.Function, error) {
+func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) ([]providerkit.Function, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -56,7 +58,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			return nil, err
 		}
 		if strings.TrimSpace(spec.Image) == "" {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"function %s carries no image, and a function on Cloud Run is the container a registry coordinate names", spec.Name)
 		}
 		service, err := serviceFor(names, plan, app, spec.Name)
@@ -92,7 +94,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 	return standing, nil
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, functions []providerkit.Function, progress providerkit.Progress) error {
+func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, functions []providerkit.Function, progress edge.Progress) error {
 	for _, function := range functions {
 		if function.Physical == "" {
 			continue
@@ -104,17 +106,17 @@ func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, 
 	return nil
 }
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) ([]providerkit.AppContainer, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
 	}
 	if strings.TrimSpace(app.Image) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s carries no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
 	}
 	names, err := p.Names(ctx)
@@ -152,7 +154,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, progress edge.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
@@ -191,7 +193,7 @@ func (p *Provider) runtimeEnv(names Names, plan providerkit.StackPlan) (map[stri
 }
 
 func liveEnvironment(ref providerkit.StackRef) string {
-	if ref.Class == providerkit.ClassProduction {
+	if ref.Class == edge.ClassProduction {
 		return ""
 	}
 	return ref.Name.Env
@@ -228,7 +230,7 @@ func carried(what string, delivered, own map[string]string) (map[string]string, 
 	maps.Copy(values, delivered)
 	for _, name := range slices.Sorted(maps.Keys(own)) {
 		if _, taken := values[name]; taken {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"%s carries %s in the environment its own spec names, and the deploy already resolved a value for %s: "+
 					"a revision holds one entry per name, so the spec's would silently take the place of what the deploy delivered "+
 					"and the app would read a value nothing in it declared. Rename one of them",

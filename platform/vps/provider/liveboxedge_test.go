@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -113,7 +112,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	if state := vm.state(t, two.physical); state != "exited" {
 		t.Errorf("the container the rollback rolled off reads as %q, want it stopped and standing", state)
 	}
-	if held := windowOf(t, vm, "rollback", liveApp, providerkit.ClassProduction); len(held) == 0 || held[0] != fixtureAt("one") {
+	if held := windowOf(t, vm, "rollback", liveApp, edge.ClassProduction); len(held) == 0 || held[0] != fixtureAt("one") {
 		t.Errorf("the box's release window reads %v, want %s at its head: rolling back is what this box most recently served, and a window the rollback does not re-head has the release it restored swept off by the next deploy's reconcile while the ledger still offers it", held, fixtureAt("one"))
 	}
 }
@@ -195,7 +194,7 @@ var liveSlug atomic.Int64
 
 func TestLiveTheBoxEdgeAnswersTheEdgeContractsLedgerAndDomainObligationsAgainstARealMachine(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 	p := vm.deploying(t)
 	defer closing(t, p)
 

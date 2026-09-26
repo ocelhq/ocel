@@ -35,7 +35,7 @@ func substrateOutputs() auto.OutputMap {
 func TestTheSubstrateProgramStandsUpOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	work := &substrateWork{class: providerkit.ClassProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: substrateTags(providerkit.ClassProduction)}
+	work := &substrateWork{class: edge.ClassProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: substrateTags(edge.ClassProduction)}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the substrate program: %v", err)
@@ -125,10 +125,10 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	ran := engine.stacks()
-	if len(ran) != 2 || ran[0] != substrateRef(providerkit.ClassProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
+	if len(ran) != 2 || ran[0] != substrateRef(edge.ClassProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
 		t.Fatalf("the first container deploy ran %v, want the substrate stack before the app stack", ran)
 	}
-	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, providerkit.ClassProduction)
+	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction)
 	if err != nil || !recorded {
 		t.Fatalf("the front is recorded %v (%v), want the edge able to read which VPC origin reaches the class's containers", recorded, err)
 	}
@@ -137,7 +137,7 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	}
 
 	blog := plan
-	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	blog.Ref = providerkit.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	if _, err := stacks.Provision(ctx, blog, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(blog) = %v", err)
 	}
@@ -155,13 +155,13 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 		t.Fatalf("Destroy(blog) = %v", err)
 	}
 	destroyed := engine.torn()
-	if len(destroyed) != 3 || destroyed[2] != substrateRef(providerkit.ClassProduction).Name.String() {
+	if len(destroyed) != 3 || destroyed[2] != substrateRef(edge.ClassProduction).Name.String() {
 		t.Fatalf("destroying the last container stack tore down %v, want the substrate to go with it: nothing idle-billing survives the last container", destroyed)
 	}
-	if _, present, err := providerkit.ReadStack(ctx, cfg.Records, providerkit.ClassProduction, SubstrateSlug, substrateRef(providerkit.ClassProduction).Name); err != nil || present {
+	if _, present, err := providerkit.ReadStack(ctx, cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || present {
 		t.Errorf("the substrate is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
-	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, providerkit.ClassProduction); err != nil || recorded {
+	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction); err != nil || recorded {
 		t.Errorf("the front is still recorded (%v, err %v) after the substrate went; a later promote would declare an origin that no longer exists", recorded, err)
 	}
 }
@@ -181,14 +181,14 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if _, err := stacks.Provision(ctx, plan, edge.DiscardProgress()); err == nil {
 		t.Fatal("Provision succeeded with no container output, so a deploy would record a container with no origin")
 	}
-	remaining, err := cfg.Records.List(ctx, consumersRecord(providerkit.ClassProduction))
+	remaining, err := cfg.Records.List(ctx, consumersRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(remaining) != 0 {
 		t.Errorf("a failed deploy left %d consumer records, so the substrate could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 2 || torn[0] != plan.Ref.Name.String() || torn[1] != substrateRef(providerkit.ClassProduction).Name.String() {
+	if torn := engine.torn(); len(torn) != 2 || torn[0] != plan.Ref.Name.String() || torn[1] != substrateRef(edge.ClassProduction).Name.String() {
 		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the substrate it had just stood up: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
 	}
 

@@ -12,6 +12,7 @@ import (
 	"net/http"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func isrWriteSecret(seed, isrPrefix string) string {
@@ -25,7 +26,7 @@ func isrWriteSecretHash(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func checkISRWriterAgrees(class providerkit.Class, stores ObjectStores, w ISRWriterAccess) error {
+func checkISRWriterAgrees(class edge.Class, stores ObjectStores, w ISRWriterAccess) error {
 	adopted, writer := isrEntriesAdopted(stores), isrWriterConfigured(w)
 	switch {
 	case adopted && !writer:

@@ -6,15 +6,16 @@ import (
 	connect "connectrpc.com/connect"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-var refusalCodes = map[Code]connect.Code{
-	CodeInvalid:  connect.CodeInvalidArgument,
-	CodeNotReady: connect.CodeFailedPrecondition,
-	CodeDenied:   connect.CodePermissionDenied,
-	CodeBusy:     connect.CodeAborted,
+var refusalCodes = map[refusal.Code]connect.Code{
+	refusal.CodeInvalid:  connect.CodeInvalidArgument,
+	refusal.CodeNotReady: connect.CodeFailedPrecondition,
+	refusal.CodeDenied:   connect.CodePermissionDenied,
+	refusal.CodeBusy:     connect.CodeAborted,
 
-	CodeUnknownOption: connect.CodeInvalidArgument,
+	refusal.CodeUnknownOption: connect.CodeInvalidArgument,
 }
 
 func RefusalError(err error) error {
@@ -25,7 +26,7 @@ func RefusalError(err error) error {
 	if errors.As(err, &trust) {
 		return hostTrustError(trust)
 	}
-	var refusal Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		var already *connect.Error
 		if errors.As(err, &already) {
@@ -44,17 +45,17 @@ func RefusalError(err error) error {
 	return wire
 }
 
-var wireRefusalCodes = map[Code]contractv1.RefusalCode{
-	CodeInvalid:  contractv1.RefusalCode_REFUSAL_CODE_INVALID,
-	CodeNotReady: contractv1.RefusalCode_REFUSAL_CODE_NOT_READY,
-	CodeDenied:   contractv1.RefusalCode_REFUSAL_CODE_DENIED,
-	CodeBusy:     contractv1.RefusalCode_REFUSAL_CODE_BUSY,
+var wireRefusalCodes = map[refusal.Code]contractv1.RefusalCode{
+	refusal.CodeInvalid:  contractv1.RefusalCode_REFUSAL_CODE_INVALID,
+	refusal.CodeNotReady: contractv1.RefusalCode_REFUSAL_CODE_NOT_READY,
+	refusal.CodeDenied:   contractv1.RefusalCode_REFUSAL_CODE_DENIED,
+	refusal.CodeBusy:     contractv1.RefusalCode_REFUSAL_CODE_BUSY,
 
-	CodeUnknownOption: contractv1.RefusalCode_REFUSAL_CODE_UNKNOWN_OPTION,
+	refusal.CodeUnknownOption: contractv1.RefusalCode_REFUSAL_CODE_UNKNOWN_OPTION,
 }
 
-func RefusedCode(err error) (Code, bool) {
-	var refusal Refusal
+func RefusedCode(err error) (refusal.Code, bool) {
+	var refusal refusal.Refusal
 	if errors.As(err, &refusal) {
 		return refusal.Code, true
 	}

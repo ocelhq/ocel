@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestParseNamespaceDefaultsToOcel(t *testing.T) {
@@ -71,12 +72,12 @@ func TestNamespaceFromEnvReadsTheVariableEveryProviderShares(t *testing.T) {
 func TestNamespaceFromEnvRefusesNamingTheVariable(t *testing.T) {
 	t.Setenv(providerkit.NamespaceEnvVar, "Not A Namespace")
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err := providerkit.NamespaceFromEnv()
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("NamespaceFromEnv() = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("NamespaceFromEnv() = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refusal.Message, providerkit.NamespaceEnvVar) {
-		t.Errorf("NamespaceFromEnv() refused with %q, want it to name %s", refusal.Message, providerkit.NamespaceEnvVar)
+	if !strings.Contains(refused.Message, providerkit.NamespaceEnvVar) {
+		t.Errorf("NamespaceFromEnv() refused with %q, want it to name %s", refused.Message, providerkit.NamespaceEnvVar)
 	}
 }

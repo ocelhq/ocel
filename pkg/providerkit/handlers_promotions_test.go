@@ -23,12 +23,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func seedPromotions(t *testing.T, provider *fake.Provider, class providerkit.Class, slug, pointer string, ids ...string) *ledger.Ledger {
+func seedPromotions(t *testing.T, provider *fake.Provider, class edge.Class, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
 	held := ledger.New(provider.Records(), class, slug)
 	if err := held.EnsureSchema(context.Background()); err != nil {
@@ -50,8 +51,8 @@ func buildIdentity(seq int) string {
 func seedEnvironment(t *testing.T, provider *fake.Provider, slug string, stacks ...naming.StackName) {
 	t.Helper()
 	for _, stack := range stacks {
-		name := providerkit.StackRecord(providerkit.ClassPreview, slug, stack)
-		held, err := providerkit.ReadOrEmpty(context.Background(), provider.Records(), name)
+		name := providerkit.StackRecord(edge.ClassPreview, slug, stack)
+		held, err := records.ReadOrEmpty(context.Background(), provider.Records(), name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,8 +66,8 @@ func seedEnvironment(t *testing.T, provider *fake.Provider, slug string, stacks 
 func TestListPromotionsReadsTheLedgerThroughTheEdgeStack(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
-	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1", "p2")
+	deployed(t, provider, edge.ClassProduction, "shop")
+	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
 
 	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})
 	if err != nil {
@@ -96,8 +97,8 @@ func TestListPromotionsIsEmptyForAProjectThatHasNeverDeployed(t *testing.T) {
 func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
-	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1", "p2")
+	deployed(t, provider, edge.ClassProduction, "shop")
+	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
 
 	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
@@ -144,7 +145,7 @@ func (c *capturingLedger) flipped() (edge.Progress, bool) {
 	return c.progress, c.heard
 }
 
-func capturing(t *testing.T, provider *fake.Provider, class providerkit.Class, slug, marker string) *capturingLedger {
+func capturing(t *testing.T, provider *fake.Provider, class edge.Class, slug, marker string) *capturingLedger {
 	t.Helper()
 	held := &capturingLedger{Ledger: ledger.New(provider.Records(), class, slug), marker: marker}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return held })
@@ -155,7 +156,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	const marker = "the flip said this through the reporter it was handed"
-	held := capturing(t, provider, providerkit.ClassProduction, "shop", marker)
+	held := capturing(t, provider, edge.ClassProduction, "shop", marker)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -195,9 +196,9 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
-	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1", "p2")
-	held := capturing(t, provider, providerkit.ClassProduction, "shop",
+	deployed(t, provider, edge.ClassProduction, "shop")
+	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
+	held := capturing(t, provider, edge.ClassProduction, "shop",
 		"the flip said this into a rollback that streams nothing")
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
@@ -215,8 +216,8 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 func TestRollbackRefusesAPromotionTheHistoryDoesNotHold(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
-	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1")
+	deployed(t, provider, edge.ClassProduction, "shop")
+	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1")
 
 	_, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p9"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
@@ -227,11 +228,11 @@ func TestRollbackRefusesAPromotionTheHistoryDoesNotHold(t *testing.T) {
 func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
-	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1", "p2")
+	deployed(t, provider, edge.ClassProduction, "shop")
+	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
 
-	pointer := providerkit.RecordName{"ledger", ledger.Scope(providerkit.ClassProduction, "shop"), "pointers", edge.DefaultPointer}
-	jostled := &jostle{RecordStore: provider.Records(), at: pointer}
+	pointer := records.Name{"ledger", ledger.Scope(edge.ClassProduction, "shop"), "pointers", edge.DefaultPointer}
+	jostled := &jostle{Store: provider.Records(), at: pointer}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
 		return ledger.New(jostled, state.Class, state.Slug)
 	})
@@ -250,29 +251,29 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 }
 
 type jostle struct {
-	providerkit.RecordStore
-	at   providerkit.RecordName
+	records.Store
+	at   records.Name
 	once sync.Once
 }
 
-func (j *jostle) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (j *jostle) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if record.Name.String() == j.at.String() {
 		j.once.Do(func() {
-			held, err := providerkit.ReadOrEmpty(ctx, j.RecordStore, j.at)
+			held, err := records.ReadOrEmpty(ctx, j.Store, j.at)
 			if err != nil {
 				return
 			}
 			held.Bytes = append(slices.Clone(held.Bytes), ' ')
-			_, _ = j.RecordStore.Write(ctx, held)
+			_, _ = j.Store.Write(ctx, held)
 		})
 	}
-	return j.RecordStore.Write(ctx, record)
+	return j.Store.Write(ctx, record)
 }
 
 func TestAnEdgeCarryingItsOwnLedgerStillWorks(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
+	deployed(t, provider, edge.ClassProduction, "shop")
 
 	own := &memoryLedger{}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return own })
@@ -329,8 +330,8 @@ func (*memoryLedger) Destroy(context.Context) error { return nil }
 func TestRemoveStalePromotionsKeepsTheNewestN(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassProduction, "shop")
-	seedPromotions(t, provider, providerkit.ClassProduction, "shop", "", "p1", "p2", "p3")
+	deployed(t, provider, edge.ClassProduction, "shop")
+	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2", "p3")
 
 	stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
 		Slug:        "shop",
@@ -394,11 +395,11 @@ func TestListEnvironmentsCarriesWhatTheDeployRecordedAboutEachPreview(t *testing
 	)
 	before := time.Now().Unix()
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
+		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", "staging", ""); err != nil {
+		edge.ClassPreview, "shop", "staging", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -433,13 +434,13 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	_, provider := contractServed(t, "1.0.0")
 	ctx := context.Background()
 	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
+		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	first := readEnvironmentMeta(t, provider, "shop", "pr-7")
 
 	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", ""); err != nil {
+		edge.ClassPreview, "shop", "pr-7", ""); err != nil {
 		t.Fatal(err)
 	}
 	second := readEnvironmentMeta(t, provider, "shop", "pr-7")
@@ -455,7 +456,7 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 
 func environmentRecordBytes(t *testing.T, provider *fake.Provider, slug, env string) []byte {
 	t.Helper()
-	held, err := provider.Records().Read(context.Background(), providerkit.EnvironmentRecord(providerkit.ClassPreview, slug, env))
+	held, err := provider.Records().Read(context.Background(), providerkit.EnvironmentRecord(edge.ClassPreview, slug, env))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,11 +475,11 @@ func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string
 func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassPreview, "shop")
-	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
+	deployed(t, provider, edge.ClassPreview, "shop")
+	seedPromotions(t, provider, edge.ClassPreview, "shop", "pr-7", "p1")
 
 	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	scope := values.Scope{Project: "shop", Class: providerkit.ClassPreview}
+	scope := values.Scope{Project: "shop", Class: edge.ClassPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
 		pair, err := providerkit.BindingPair(owner, binding)
 		if err != nil {
@@ -530,12 +531,12 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassPreview, "shop")
-	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1", "p2")
+	deployed(t, provider, edge.ClassPreview, "shop")
+	seedPromotions(t, provider, edge.ClassPreview, "shop", "pr-7", "p1", "p2")
 	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
 	seedEnvironment(t, provider, "shop", outlived, naming.InfraStack("pr-7"))
 	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
+		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -557,15 +558,15 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 		t.Fatalf("RemoveEnvironment() = %q, want the pointer dropped", result.GetError())
 	}
 
-	history, err := ledger.New(provider.Records(), providerkit.ClassPreview, "shop").History(context.Background(), "pr-7")
+	history, err := ledger.New(provider.Records(), edge.ClassPreview, "shop").History(context.Background(), "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(history) != 0 {
 		t.Errorf("pr-7 still holds %v, want its promotions gone with the pointer", history)
 	}
-	name := providerkit.EnvironmentRecord(providerkit.ClassPreview, "shop", "pr-7")
-	if _, err := provider.Records().Read(context.Background(), name); !errors.Is(err, providerkit.ErrNoRecord) {
+	name := providerkit.EnvironmentRecord(edge.ClassPreview, "shop", "pr-7")
+	if _, err := provider.Records().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
 
@@ -610,22 +611,22 @@ type sweeper struct {
 	forgotten  []string
 }
 
-func (s *sweeper) ProvisionContainers(context.Context, providerkit.StackPlan, providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (s *sweeper) ProvisionContainers(context.Context, providerkit.StackPlan, edge.Progress) ([]providerkit.AppContainer, error) {
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, providerkit.Progress) error {
+func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, edge.Progress) error {
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ providerkit.Progress) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ edge.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+imageRef)
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Progress) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ edge.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)
@@ -650,7 +651,7 @@ func seedContainerStack(t *testing.T, provider *fake.Provider, slug, pointer, ap
 
 	release := releaseOf(t, buildIdentity(1))
 	name := naming.AppStack(pointer, app, release)
-	if err := providerkit.WriteStack(context.Background(), provider.Records(), providerkit.ClassPreview, slug, name, providerkit.RecordedStack{
+	if err := providerkit.WriteStack(context.Background(), provider.Records(), edge.ClassPreview, slug, name, providerkit.RecordedStack{
 		Kind:       providerkit.StackApp,
 		App:        app,
 		Release:    release.String(),
@@ -685,7 +686,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	swept := &sweeper{}
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"}).ResourceStacks(swept.hooks())
 	client := servedProvider(t, "1.0.0", provider)
-	deployed(t, provider, providerkit.ClassPreview, "shop")
+	deployed(t, provider, edge.ClassPreview, "shop")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); !result.GetSuccess() {
@@ -696,7 +697,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 		t.Errorf("the teardown reconciled %v, want %v: this preview's ledger names none of its releases any more, and the sweep is otherwise a deploy's final act — a box that is never deployed to again holds this image forever", swept.swept(), want)
 	}
 	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", stack); err != nil || standing {
+		edge.ClassPreview, "shop", stack); err != nil || standing {
 		t.Errorf("%s still stands after its preview came down (%v): a teardown that reads only what the ledger last named reports success over every container it left running", stack, err)
 	}
 }
@@ -705,13 +706,13 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassPreview, "shop")
+	deployed(t, provider, edge.ClassPreview, "shop")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	records, held := provider.Records().(*fake.Records)
 	if !held {
 		t.Fatalf("this test drives the record store's removal refusal and the provider holds a %T", provider.Records())
 	}
-	records.RefuseRemoval(providerkit.StackRecord(providerkit.ClassPreview, "shop", stack),
+	records.RefuseRemoval(providerkit.StackRecord(edge.ClassPreview, "shop", stack),
 		errors.New("the record store answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
@@ -733,7 +734,7 @@ func TestAPreviewTeardownTakesItsAppStacksDownBeforeTheInfraTheyStandOn(t *testi
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassPreview, "shop")
+	deployed(t, provider, edge.ClassPreview, "shop")
 	app := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	infra := naming.InfraStack("pr-7")
 	seedEnvironment(t, provider, "shop", infra)
@@ -757,8 +758,8 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T)
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassPreview, "shop")
-	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
+	deployed(t, provider, edge.ClassPreview, "shop")
+	seedPromotions(t, provider, edge.ClassPreview, "shop", "pr-7", "p1")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	provider.FakeStacks().RefuseNextDestroy(errors.New("the box answered nothing"))
 
@@ -770,7 +771,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T)
 	}
 
 	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
-		providerkit.ClassPreview, "shop", stack); err != nil || standing {
+		edge.ClassPreview, "shop", stack); err != nil || standing {
 		t.Errorf("%s still stands after a second teardown that reported success (%v): the first run emptied the ledger before it fell over, so a reclaim driven off the ledger's diff has nothing left to name and every container of this preview keeps running", stack, err)
 	}
 }
@@ -778,7 +779,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T)
 func TestRemoveEnvironmentRefusesProduction(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, providerkit.ClassPreview, "shop")
+	deployed(t, provider, edge.ClassPreview, "shop")
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug:        "shop",

@@ -11,6 +11,7 @@ import (
 
 	connect "connectrpc.com/connect"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 type HostTrustReason string
@@ -124,7 +125,7 @@ func (t HostTrust) Offer() string {
 }
 
 type HostTrustRefusal struct {
-	Refusal
+	refusal.Refusal
 	Trust HostTrust
 }
 
@@ -132,7 +133,7 @@ func (r HostTrustRefusal) Unwrap() error { return r.Refusal }
 
 func RefuseHostTrust(trust HostTrust) error {
 	return HostTrustRefusal{
-		Refusal: Refusal{Code: CodeDenied, Message: trust.Message()},
+		Refusal: refusal.Refusal{Code: refusal.CodeDenied, Message: trust.Message()},
 		Trust:   trust,
 	}
 }

@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const adminPath = "/rustfs/admin/v3/"
@@ -23,7 +24,7 @@ const (
 
 func StoreSecretHeld(secret string) error {
 	if len(secret) < StoreSecretMin || len(secret) > StoreSecretMax {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"a store account secret is %d characters; the store takes %d to %d",
 			len(secret), StoreSecretMin, StoreSecretMax)
 	}
@@ -32,7 +33,7 @@ func StoreSecretHeld(secret string) error {
 
 type StoreAccount struct {
 	Store    string
-	Class    providerkit.Class
+	Class    edge.Class
 	Endpoint string
 	Region   string
 
@@ -179,7 +180,7 @@ func (h *Host) RevokeStoreAccount(ctx context.Context, account StoreAccount) err
 		return fmt.Errorf("sign %s: %w", call.what, err)
 	}
 	if _, err := h.ran(ctx, call.what, script, fedBody(call.body), elevation); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"could not %s on %s: %v", call.what, h.named(), err)
 	}
 	return nil
@@ -192,7 +193,7 @@ func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) erro
 	}
 	calls, err := account.calls()
 	if err != nil {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"cannot encode store account %s: %v", account.AccessKeyID, err)
 	}
 	now := time.Now().UTC()
@@ -202,7 +203,7 @@ func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) erro
 			return fmt.Errorf("sign %s: %w", call.what, err)
 		}
 		if _, err := h.ran(ctx, call.what, script, fedBody(call.body), elevation); err != nil {
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}
 	}

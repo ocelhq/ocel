@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 type Namespace string
@@ -32,7 +33,7 @@ func ParseNamespace(given string) (Namespace, error) {
 func NamespaceFromEnv() (Namespace, error) {
 	ns, err := ParseNamespace(os.Getenv(NamespaceEnvVar))
 	if err != nil {
-		return "", Refuse(CodeInvalid, "%s: %s", NamespaceEnvVar, err.Error())
+		return "", refusal.Refuse(refusal.CodeInvalid, "%s: %s", NamespaceEnvVar, err.Error())
 	}
 	return ns, nil
 }

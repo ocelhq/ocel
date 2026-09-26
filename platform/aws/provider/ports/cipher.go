@@ -8,7 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type CryptoAPI interface {
@@ -22,20 +24,20 @@ type Cipher struct {
 }
 
 type Keys interface {
-	Key(ctx context.Context, class kit.Class) (string, error)
+	Key(ctx context.Context, class edge.Class) (string, error)
 }
 
 type Key string
 
-func (k Key) Key(context.Context, kit.Class) (string, error) { return string(k), nil }
+func (k Key) Key(context.Context, edge.Class) (string, error) { return string(k), nil }
 
-func (s Cipher) key(ctx context.Context, at kit.SealScope) (string, error) {
+func (s Cipher) key(ctx context.Context, at records.SealScope) (string, error) {
 	if at.Class == "" {
-		return "", kit.Refuse(kit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"a value names no class, and this account seals each class's values under the key its own bootstrap made")
 	}
 	if s.Keys == nil {
-		return "", kit.Refuse(kit.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account holds a key to seal a %s value under.\nRun `%s`, then try again",
 			at.Class, providerkit.BootstrapVarsKeyCommand(at.Class))
 	}
@@ -44,14 +46,14 @@ func (s Cipher) key(ctx context.Context, at kit.SealScope) (string, error) {
 		return "", err
 	}
 	if key == "" {
-		return "", kit.Refuse(kit.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the %s bootstrap holds no key to seal a value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
 			at.Class, providerkit.BootstrapVarsKeyCommand(at.Class))
 	}
 	return key, nil
 }
 
-func (s Cipher) Seal(ctx context.Context, at kit.SealScope, plaintext []byte) ([]byte, error) {
+func (s Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
 	bound, err := encryptionContext(at)
 	if err != nil {
 		return nil, err
@@ -71,7 +73,7 @@ func (s Cipher) Seal(ctx context.Context, at kit.SealScope, plaintext []byte) ([
 	return out.CiphertextBlob, nil
 }
 
-func (s Cipher) Open(ctx context.Context, at kit.SealScope, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	bound, err := encryptionContext(at)
 	if err != nil {
 		return nil, err
@@ -91,7 +93,7 @@ func (s Cipher) Open(ctx context.Context, at kit.SealScope, sealed []byte) ([]by
 	return out.Plaintext, nil
 }
 
-func encryptionContext(at kit.SealScope) (map[string]string, error) {
+func encryptionContext(at records.SealScope) (map[string]string, error) {
 	bound := map[string]string{
 		"project":     at.Project,
 		"class":       string(at.Class),
@@ -101,7 +103,7 @@ func encryptionContext(at kit.SealScope) (map[string]string, error) {
 	}
 	for name, value := range bound {
 		if value == "" {
-			return nil, kit.Refuse(kit.CodeInvalid, "a value's coordinate names no %s, and the coordinate is what a sealed value is bound to", name)
+			return nil, refusal.Refuse(refusal.CodeInvalid, "a value's coordinate names no %s, and the coordinate is what a sealed value is bound to", name)
 		}
 	}
 	if at.Binding != "" {

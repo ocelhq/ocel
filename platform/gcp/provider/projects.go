@@ -8,7 +8,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/googleapi"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -38,16 +38,16 @@ func (r resourceManager) Reaches(ctx context.Context, project string) error {
 func unreachableProject(project string, err error) error {
 	var answered *googleapi.Error
 	if !errors.As(err, &answered) {
-		return providerkit.Refuse(providerkit.CodeBusy,
+		return refusal.Refuse(refusal.CodeBusy,
 			"Google's project endpoint answered neither yes nor no about %s, and this credential may well be good", project)
 	}
 	switch answered.Code {
 	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
-		return providerkit.Refuse(providerkit.CodeDenied,
+		return refusal.Refuse(refusal.CodeDenied,
 			"this credential cannot read project %s: either it does not exist or nothing has granted this principal `resourcemanager.projects.get` on it",
 			project)
 	default:
-		return providerkit.Refuse(providerkit.CodeBusy,
+		return refusal.Refuse(refusal.CodeBusy,
 			"Google's project endpoint answered %d about %s, and this credential may well be good", answered.Code, project)
 	}
 }

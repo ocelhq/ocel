@@ -2,6 +2,8 @@ package gcp
 
 import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -11,7 +13,7 @@ import (
 
 type edges struct {
 	namespace providerkit.Namespace
-	records   providerkit.RecordStore
+	records   records.Store
 	pins      pin.Pins
 	stacks    alb.Stacks
 	routes    alb.Routes
@@ -37,13 +39,13 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 			Region:  e.region,
 		}), nil
 	case cloudflare.Kind:
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge yet: that edge answers every request from a worker it runs, "+
 				"and nothing here builds the program that worker would run, so a bootstrap of it would stand resources no deploy could use.\n"+
 				"Front them with %s, which answers on the url Cloud Run gives each service, or with %s, which stands one load balancer up per bootstrap class at %s",
 			kind, direct.Kind, alb.Kind, alb.BaselineCost)
 	}
-	return nil, providerkit.Refuse(providerkit.CodeInvalid,
+	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge; it fronts them with %s, which answers on the url Cloud Run gives each service, "+
 			"and with %s, which stands one load balancer up per bootstrap class at %s",
 		kind, direct.Kind, alb.Kind, alb.BaselineCost)

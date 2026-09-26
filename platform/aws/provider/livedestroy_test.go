@@ -9,11 +9,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	a := live(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	boot := a.emptied(t, class)
 	ctx := context.Background()
 
@@ -99,11 +100,11 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 
 func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(t *testing.T) {
 	a := live(t)
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	boot := a.emptied(t, production, preview)
 	ctx := context.Background()
 
-	for _, class := range []providerkit.Class{production, preview} {
+	for _, class := range []edge.Class{production, preview} {
 		if err := boot.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}

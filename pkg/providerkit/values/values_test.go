@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func fixture() (values.Store, values.Scope) {
 	return values.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
-		values.Scope{Project: "shop", Class: ports.ClassProduction}
+		values.Scope{Project: "shop", Class: edge.ClassProduction}
 }
 
 func at(key string) values.Coordinate {
@@ -143,7 +144,7 @@ func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
 func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -161,7 +162,7 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 		t.Fatalf("the reference's metadata names %v, want the target it points at", revealed.Target)
 	}
 
-	deeper := values.Scope{Project: "web", Class: ports.ClassProduction}
+	deeper := values.Scope{Project: "web", Class: edge.ClassProduction}
 	_, err = store.SetReference(ctx, deeper, at("DATABASE_URL"), values.Target{Project: "shop", Cell: values.Cell{Key: "DATABASE_URL"}})
 	if !errors.Is(err, values.ErrWouldDeepen) {
 		t.Fatalf("a reference to a reference = %v, want ErrWouldDeepen", err)
@@ -171,8 +172,8 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
-	consumer := values.Scope{Project: "web", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
 		t.Fatal(err)
@@ -196,7 +197,7 @@ func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 func TestSettingAValueOverAReferenceIsRefused(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
 		t.Fatal(err)
@@ -218,7 +219,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 	}
 	target := values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}
 	for _, project := range []string{"web", "worker"} {
-		consumer := values.Scope{Project: project, Class: ports.ClassProduction}
+		consumer := values.Scope{Project: project, Class: edge.ClassProduction}
 		if _, err := store.SetReference(ctx, consumer, at("KEY"), target); err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +233,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 		t.Fatalf("References() = %+v, want them sorted", found)
 	}
 
-	consumer := values.Scope{Project: "web", Class: ports.ClassProduction}
+	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
 	if _, err := store.Delete(ctx, consumer, at("KEY"), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +259,7 @@ func TestRevealAnswersOnlyTheCellsThatHoldValues(t *testing.T) {
 func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -287,7 +288,7 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	consumer := values.Scope{Project: "web", Class: ports.ClassProduction}
+	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
 		t.Fatal(err)
@@ -304,7 +305,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 		t.Fatalf("References() after the consuming project was purged = %+v, %v, want nothing reading it", found, err)
 	}
 
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
 	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +324,7 @@ func TestPurgeTakesEveryRecordAProjectHolds(t *testing.T) {
 	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatal(err)
 	}
-	consumer := values.Scope{Project: "web", Class: ports.ClassProduction}
+	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
 	if _, err := store.SetReference(ctx, consumer, at("KEY"), values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +468,7 @@ func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -513,31 +514,31 @@ func TestTheClassWideEnvironmentIsReserved(t *testing.T) {
 }
 
 type counted struct {
-	ports.RecordStore
-	ports.Cipher
+	records.Store
+	records.Cipher
 	mu     sync.Mutex
 	reads  int
 	lists  int
 	opened int
-	under  []ports.RecordName
+	under  []records.Name
 }
 
-func (c *counted) Read(ctx context.Context, name ports.RecordName) (ports.Record, error) {
+func (c *counted) Read(ctx context.Context, name records.Name) (records.Record, error) {
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
-	return c.RecordStore.Read(ctx, name)
+	return c.Store.Read(ctx, name)
 }
 
-func (c *counted) List(ctx context.Context, under ports.RecordName) ([]ports.Record, error) {
+func (c *counted) List(ctx context.Context, under records.Name) ([]records.Record, error) {
 	c.mu.Lock()
 	c.lists++
 	c.under = append(c.under, under)
 	c.mu.Unlock()
-	return c.RecordStore.List(ctx, under)
+	return c.Store.List(ctx, under)
 }
 
-func (c *counted) Open(ctx context.Context, at ports.SealScope, sealed []byte) ([]byte, error) {
+func (c *counted) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	c.mu.Lock()
 	c.opened++
 	c.mu.Unlock()
@@ -547,7 +548,7 @@ func (c *counted) Open(ctx context.Context, at ports.SealScope, sealed []byte) (
 func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: ports.ClassProduction}
+	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -564,7 +565,7 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 		}
 	}
 
-	watched := &counted{RecordStore: store.Records, Cipher: store.Cipher}
+	watched := &counted{Store: store.Records, Cipher: store.Cipher}
 	store.Records, store.Cipher = watched, watched
 	found, err := store.Reveal(ctx, scope, []values.Coordinate{
 		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
@@ -595,7 +596,7 @@ func TestResolvingABatchOfBindingsReadsEachEnvironmentOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	watched := &counted{RecordStore: store.Records, Cipher: store.Cipher}
+	watched := &counted{Store: store.Records, Cipher: store.Cipher}
 	store.Records, store.Cipher = watched, watched
 	resolved, err := store.ResolveBindings(ctx, scope, "", []string{"db", "cache", "queue"})
 	if err != nil || len(resolved) != 3 {
@@ -624,7 +625,7 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	watched := &counted{RecordStore: store.Records, Cipher: store.Cipher}
+	watched := &counted{Store: store.Records, Cipher: store.Cipher}
 	store.Records, store.Cipher = watched, watched
 	resolved, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
 	if err != nil || string(resolved.Value) != `"pr-7 db"` {

@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type registryImages struct {
@@ -295,7 +296,7 @@ func registryScheme(server string) string {
 	return "https"
 }
 
-func (r registryImages) Push(ctx context.Context, push ImagePush, progress Progress) error {
+func (r registryImages) Push(ctx context.Context, push ImagePush, progress edge.Progress) error {
 	if push.Built != nil {
 		return r.write(ctx, push)
 	}
@@ -352,7 +353,7 @@ func (r registryImages) write(ctx context.Context, push ImagePush) error {
 	return nil
 }
 
-func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress Progress) (again bool, after time.Duration, err error) {
+func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress edge.Progress) (again bool, after time.Duration, err error) {
 	endpoint := "http://docker/images/" + named + "/push?" + url.Values{"tag": {tag}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
@@ -416,7 +417,7 @@ type registryRefusal struct {
 
 func (e registryRefusal) Error() string { return "the registry refused the push: " + e.said }
 
-func drainPush(body io.Reader, progress Progress) error {
+func drainPush(body io.Reader, progress edge.Progress) error {
 	decoder := json.NewDecoder(body)
 	for {
 		var line struct {

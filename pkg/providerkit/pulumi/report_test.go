@@ -11,12 +11,13 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recordedSpan struct {
 	name  string
 	err   error
-	attrs []providerkit.Attr
+	attrs []edge.Attr
 }
 
 type fakeProgress struct {
@@ -29,7 +30,7 @@ func (r *fakeProgress) Say(message string) { r.said = append(r.said, message) }
 
 func (r *fakeProgress) Detail(message string) { r.details = append(r.details, message) }
 
-func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...providerkit.Attr) {
+func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...edge.Attr) {
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
 }
 

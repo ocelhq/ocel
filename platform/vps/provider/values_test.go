@@ -10,7 +10,9 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -35,7 +37,7 @@ func everyValue() []string {
 	return []string{standingSensitive, standingPlain}
 }
 
-func envFileWritten(t *testing.T, machine *box, class providerkit.Class, physical string) string {
+func envFileWritten(t *testing.T, machine *box, class edge.Class, physical string) string {
 	t.Helper()
 	path := host.EnvFile(class, physical)
 	machine.mu.Lock()
@@ -57,7 +59,7 @@ func TestTheValuesAnAppIsHandedReachItThroughAFileAndNoOtherWay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, providerkit.ClassProduction, standing[0].Physical)
+	file := envFileWritten(t, machine, edge.ClassProduction, standing[0].Physical)
 	for _, value := range everyValue() {
 		if !strings.Contains(file, value) {
 			t.Errorf("the env file reads %q and does not carry every value the deploy delivered", file)
@@ -78,7 +80,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, providerkit.ClassProduction, standing[0].Physical)
+	file := envFileWritten(t, machine, edge.ClassProduction, standing[0].Physical)
 	if strings.Contains(file, "DATABASE_URL=") || strings.Contains(file, "SESSION_SECRET=") || strings.Contains(file, "OCEL_RESOURCE_POSTGRES_main=") {
 		t.Errorf("the env file reads %q and carries a secret or a binding record, which the runtime reads live off the box instead", file)
 	}
@@ -117,12 +119,12 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 	machine := &box{}
 	plan := aStack(t, valuedApp())
-	plan.Ref.Class = providerkit.ClassPreview
+	plan.Ref.Class = edge.ClassPreview
 	standing, err := over(machine).ProvisionContainers(context.Background(), plan, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, providerkit.ClassPreview, standing[0].Physical)
+	file := envFileWritten(t, machine, edge.ClassPreview, standing[0].Physical)
 	if !strings.Contains(file, `"class":"preview"`) || !strings.Contains(file, `"environment":"`+plan.Ref.Name.Env+`"`) {
 		t.Errorf("the env file reads %q, want a manifest naming the preview class and the stack's environment so its own value shadows the class-wide one", file)
 	}
@@ -156,7 +158,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if file := envFileWritten(t, machine, providerkit.ClassProduction, standing[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
+	if file := envFileWritten(t, machine, edge.ClassProduction, standing[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
 		t.Errorf("an app declaring no value is handed %q, want the health path alone", file)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -172,8 +174,8 @@ func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.
 		app := anApp()
 		app.Values = providerkit.AppValues{Delivered: map[string]string{owned: "x"}}
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid || !strings.Contains(err.Error(), owned) {
+		var rejection refusal.Refusal
+		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), owned) {
 			t.Errorf("a value delivered as %s was stood up: %v", owned, err)
 		}
 	}

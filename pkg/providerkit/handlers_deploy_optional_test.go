@@ -10,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type occupied struct{ *fake.Provider }
@@ -70,7 +72,7 @@ func (e *embedding) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (e *embedding) EmbedCode(_ context.Context, function string, ref providerkit.ArtifactRef, _ providerkit.Progress) error {
+func (e *embedding) EmbedCode(_ context.Context, function string, ref providerkit.ArtifactRef, _ edge.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.embedded = append(e.embedded, function+" "+ref.Key)
@@ -90,7 +92,7 @@ func (w *warming) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (w *warming) WarmFunctions(_ context.Context, targets []string, _ providerkit.Progress) error {
+func (w *warming) WarmFunctions(_ context.Context, targets []string, _ edge.Progress) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.warmed = append(w.warmed, targets...)
@@ -215,7 +217,7 @@ func TestPreflightSeesWhichResourcesEachAppUses(t *testing.T) {
 func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 	builtProject(t)
 	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
-	provider.RefusePreflight(providerkit.Refuse(providerkit.CodeInvalid, "this account holds no room for what the manifest asks for"))
+	provider.RefusePreflight(refusal.Refuse(refusal.CodeInvalid, "this account holds no room for what the manifest asks for"))
 	client := servedBy(t, provider)
 
 	stream, err := client.Deploy(context.Background(), deployRequest())

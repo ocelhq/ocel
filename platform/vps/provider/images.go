@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -37,7 +38,7 @@ func (p pulled) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 	return p.host.HoldsImage(ctx, push.ImageRef)
 }
 
-func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
+func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, progress edge.Progress) error {
 	held, err := p.from.Has(ctx, push)
 	if err != nil {
 		return err

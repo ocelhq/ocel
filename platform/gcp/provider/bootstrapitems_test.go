@@ -3,13 +3,13 @@ package gcp
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestTheItemDigestTellsTwoNamespacesApart(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	here := Names{namespace: "ocel", project: "acme-prod"}
 	beside := Names{namespace: "beside", project: "acme-prod"}
 
@@ -32,7 +32,7 @@ func kindsOf(items []item) map[Kind]string {
 func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
 	standing := kindsOf(bootstrapItems(names, class, false))
@@ -48,7 +48,7 @@ func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 func TestTheRuntimeAccountStandsWhereverTheBootstrapDoes(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
 	for _, emulated := range []bool{false, true} {

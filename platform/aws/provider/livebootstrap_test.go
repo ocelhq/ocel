@@ -8,11 +8,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) {
 	a := live(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	boot := a.emptied(t, class)
 	ctx := context.Background()
 
@@ -127,7 +128,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 
 func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.T) {
 	a := live(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	boot := a.emptied(t, class)
 	ctx := context.Background()
 

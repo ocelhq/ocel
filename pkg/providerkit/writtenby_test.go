@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestWrittenByVersion(t *testing.T) {
@@ -233,9 +235,9 @@ func TestCompatibilityExplain(t *testing.T) {
 		t.Parallel()
 
 		for _, c := range []compatibility{needsBootstrapInit, needsBootstrapUpgrade, needsCLIUpgrade} {
-			var refusal Refusal
-			if err := c.explain(4, 6, "ocel bootstrap production"); !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
-				t.Errorf("%v.explain() = %v, want a %s refusal", c, err, CodeNotReady)
+			var refused refusal.Refusal
+			if err := c.explain(4, 6, "ocel bootstrap production"); !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+				t.Errorf("%v.explain() = %v, want a %s refusal", c, err, refusal.CodeNotReady)
 			}
 		}
 	})

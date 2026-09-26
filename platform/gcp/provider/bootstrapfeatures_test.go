@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -107,19 +108,19 @@ func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing
 	b := bootstrap{}
 	catalogue := b.Catalogue()
 	read, err := b.described(context.Background(),
-		survey{Names: Names{namespace: "ocel", project: "acme-prod"}, Class: providerkit.ClassProduction, Project: "acme-prod"})
+		survey{Names: Names{namespace: "ocel", project: "acme-prod"}, Class: edge.ClassProduction, Project: "acme-prod"})
 	if err != nil {
 		t.Fatalf("described = %v", err)
 	}
 
 	fronted := providerkit.DeriveGroups(read, catalogue, providerkit.BootstrapRequest{
-		Class: providerkit.ClassProduction, Features: []string{albFeature},
+		Class: edge.ClassProduction, Features: []string{albFeature},
 	})
 	if !slices.ContainsFunc(fronted, func(g providerkit.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("an %q plan holds %v, want a group for %q so the reader sees what it costs before it stands", alb.Kind, fronted, albFeature)
 	}
 
-	plain := providerkit.DeriveGroups(read, catalogue, providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
+	plain := providerkit.DeriveGroups(read, catalogue, providerkit.BootstrapRequest{Class: edge.ClassProduction})
 	if slices.ContainsFunc(plain, func(g providerkit.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("a plan that asked for no edge holds %v, and a load balancer nothing named would stand and bill", plain)
 	}

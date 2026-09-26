@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -53,7 +54,7 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 
 func publishers(said string) []string { return strings.Fields(said) }
 
-func (h *Host) CheckSwitchboard(ctx context.Context, class providerkit.Class) providerkit.HostCheck {
+func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) providerkit.HostCheck {
 	board := switchboardStanding(nil, h.proxyOption)
 	check := providerkit.HostCheck{Subject: board.name, Verdict: providerkit.HostFail,
 		Fix: "run `" + providerkit.BootstrapCommand(class) + "` to stand it again"}

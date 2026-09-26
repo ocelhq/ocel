@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -20,7 +22,7 @@ func TestEveryAppContainerJoinsANetworkNamedForItsClassAndProjectAndNeverTheProx
 
 	production := valued()
 	preview := valued()
-	preview.Class = providerkit.ClassPreview
+	preview.Class = edge.ClassPreview
 	other := valued()
 	other.Project = "blog"
 
@@ -94,8 +96,8 @@ func TestAnEngineOutOfSubnetsIsRefusedWithTheDaemonSettingThatGivesItMore(t *tes
 		return proxied(command)
 	}
 	err := stand.host().StandUp(context.Background(), spec)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("StandUp() on an engine with no subnet left = %v, want a not-ready refusal", err)
 	}
 	for _, wanted := range []string{"default-address-pools", "/etc/docker/daemon.json", AppNetwork(spec.Class, spec.Project)} {
@@ -121,7 +123,7 @@ func dockerStubbing(t *testing.T, script string) string {
 func TestAProjectsNetworkIsForgottenOnlyOnceNothingButTheProxyIsOnIt(t *testing.T) {
 	t.Parallel()
 
-	class, project := providerkit.ClassProduction, "shop"
+	class, project := edge.ClassProduction, "shop"
 	for members, want := range map[string]string{
 		SwitchboardContainer + "\n":                "",
 		SwitchboardContainer + "\nshop-web-1111\n": networkHeld,
@@ -154,8 +156,8 @@ func TestAProjectsNetworkIsForgottenOnlyOnceNothingButTheProxyIsOnIt(t *testing.
 func TestAClassDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemFirst(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	stood.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, quoted("label="+classSelector(class))) && strings.Contains(command, "echo containers") {
 			return session.Result{Stdout: "containers\nnetworks\n"}, true
@@ -194,8 +196,8 @@ func TestAClassDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemF
 func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)

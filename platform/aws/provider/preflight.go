@@ -9,8 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
@@ -99,7 +101,7 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.Dep
 	return nil
 }
 
-func saying(progress providerkit.Progress) func(string) {
+func saying(progress edge.Progress) func(string) {
 	if progress == nil {
 		return nil
 	}
@@ -114,7 +116,7 @@ func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {
 		if app.Compute() != providerkit.ComputeContainer {
 			continue
 		}
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s runs as a container, and the %q edge reaches a release's entry function rather than an origin that demands the class's secret, so it has no way to reach one: front this project with %q, or give %s `compute: \"serverless\"`",
 			app.App, pre.Edge, edges.DefaultKind, app.App)
 	}
@@ -126,7 +128,7 @@ func refusePublicBuckets(pre providerkit.DeployPreflight) error {
 		if resource.Bucket == nil || !resource.Bucket.Public {
 			continue
 		}
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"bucket %s asks to be public, and this provider stands its buckets up with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
 			resource.Name, resource.Name)
 	}

@@ -3,12 +3,12 @@ package values
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
 type View struct {
-	Records     ports.RecordStore
-	Cipher      ports.Cipher
+	Records     records.Store
+	Cipher      records.Cipher
 	Scope       Scope
 	Environment string
 }

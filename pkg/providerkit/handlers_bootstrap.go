@@ -14,15 +14,16 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func classOf(tier environmentv1.Tier) (Class, error) {
+func classOf(tier environmentv1.Tier) (edge.Class, error) {
 	switch tier {
 	case environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_UNSPECIFIED:
-		return ClassProduction, nil
+		return edge.ClassProduction, nil
 	case environmentv1.Tier_TIER_PREVIEW:
-		return ClassPreview, nil
+		return edge.ClassPreview, nil
 	default:
 		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"there is no %s bootstrap; a bootstrap is either production or preview",
@@ -78,7 +79,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return okResult(), nil
 		}
 		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING,
-			func(_ *eventStream, progress Progress) error {
+			func(_ *eventStream, progress edge.Progress) error {
 				return gate.Apply(ctx, plan, class, intent, progress)
 			})
 		if err != nil {
@@ -219,7 +220,7 @@ func invertActions(held map[ChangeAction]planv1.Change_Action) map[planv1.Change
 func changeAction(drawn planv1.Change_Action) (ChangeAction, error) {
 	action, known := changeActions[drawn]
 	if !known {
-		return "", Refuse(CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this plan names %s, an action this provider cannot carry out; draw the plan again and consent to what it shows now",
 			drawn)
 	}
@@ -307,7 +308,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		return err
 	}
 
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
 		shown, err := PlanOf(req.GetConsented())
 		if err != nil {
 			return err

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -20,7 +21,7 @@ func aStack(t *testing.T, app providerkit.AppPlan) providerkit.StackPlan {
 		t.Fatal(err)
 	}
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: providerkit.StackApp,
 		App:  &app,
 	}

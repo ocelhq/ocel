@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -60,7 +61,7 @@ func (b bootstrap) eachFront(features []string, visit func(providerkit.Feature, 
 		return nil
 	}
 	if b.fronts == nil {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s stands an edge's front up, and this bootstrap was opened with no edge registry to open it through", wanted[0].Name)
 	}
 	for _, feature := range wanted {
@@ -77,7 +78,7 @@ func (b bootstrap) eachFront(features []string, visit func(providerkit.Feature, 
 	return nil
 }
 
-func (b bootstrap) raiseFronts(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (b bootstrap) raiseFronts(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	return b.eachFront(req.Features, func(feature providerkit.Feature, front edge.Edge) error {
 		say(progress, "standing the front of the "+string(front.Kind())+" edge up for "+string(req.Class)+": "+feature.Summary)
 		_, err := front.Bootstrap(ctx, req.Class)
@@ -99,7 +100,7 @@ func (b bootstrap) dropFronts(
 	ctx context.Context,
 	read survey,
 	req providerkit.BootstrapRequest,
-	progress providerkit.Progress,
+	progress edge.Progress,
 ) error {
 	dropping := droppedFeatures(read.Stamp.Features, req)
 	if err := b.frontsFree(ctx, req.Class, dropping); err != nil {
@@ -111,13 +112,13 @@ func (b bootstrap) dropFronts(
 	})
 }
 
-func (b bootstrap) tearFronts(ctx context.Context, class providerkit.Class, features []string) error {
+func (b bootstrap) tearFronts(ctx context.Context, class edge.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
 		return front.Teardown(ctx, class)
 	})
 }
 
-func (b bootstrap) frontStands(ctx context.Context, class providerkit.Class, feature string) (bool, error) {
+func (b bootstrap) frontStands(ctx context.Context, class edge.Class, feature string) (bool, error) {
 	standing := true
 	err := b.eachFront([]string{feature}, func(_ providerkit.Feature, front edge.Edge) error {
 		stands := front.Hooks().CheckBootstrapStands
@@ -134,7 +135,7 @@ func (b bootstrap) frontStands(ctx context.Context, class providerkit.Class, fea
 	return standing, err
 }
 
-func (b bootstrap) frontsFree(ctx context.Context, class providerkit.Class, features []string) error {
+func (b bootstrap) frontsFree(ctx context.Context, class edge.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
 		boundHostnames := front.Hooks().ListBoundHostnames
 		if boundHostnames == nil {
@@ -144,7 +145,7 @@ func (b bootstrap) frontsFree(ctx context.Context, class providerkit.Class, feat
 		if err != nil || len(bound) == 0 {
 			return err
 		}
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is still served by the %s front of class %s, and the front owns the certificate map those hostnames are entries in, "+
 				"which Google will not delete while it holds any.\nRelease them with `ocel domain remove` in the projects that bound them, then remove this bootstrap",
 			strings.Join(bound, ", "), front.Kind(), class)

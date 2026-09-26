@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Grant struct {
@@ -12,9 +12,9 @@ type Grant struct {
 	Detail string
 }
 
-func Grants(class providerkit.Class) []Grant { return grants(class, ArchAMD64) }
+func Grants(class edge.Class) []Grant { return grants(class, ArchAMD64) }
 
-func grants(class providerkit.Class, arch string) []Grant {
+func grants(class edge.Class, arch string) []Grant {
 	items := Items(class, nil, arch, Front{})
 	held := deployLogin()
 
@@ -78,7 +78,7 @@ func grants(class providerkit.Class, arch string) []Grant {
 	return grants
 }
 
-func sealing(items []Item, class providerkit.Class, held login) []Grant {
+func sealing(items []Item, class edge.Class, held login) []Grant {
 	fragment := written(items, KindFile, sudoersSeal(class))
 	key := written(items, KindSealKey, SealKeyPath(class))
 	if fragment.Name == "" || key.Name == "" {

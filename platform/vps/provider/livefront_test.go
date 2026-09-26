@@ -233,7 +233,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) behind %s = %v", class, front, err)
 		}
@@ -251,7 +251,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
 	if err := d.PreflightDeploy(ctx, providerkit.DeployPreflight{Plan: providerkit.DeployPlan{
-		Slug: frontedSlug, Class: providerkit.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
+		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
 	}
@@ -304,7 +304,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		meanwhile(vm)
 	}
 
-	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: providerkit.ClassProduction})
+	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}
@@ -318,7 +318,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		t.Errorf("Destroy() = %v", err)
 	}
 	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
-	for _, class := range []providerkit.Class{providerkit.ClassPreview, providerkit.ClassProduction} {
+	for _, class := range []edge.Class{edge.ClassPreview, edge.ClassProduction} {
 		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Fatalf("Remove(%s) behind %s = %v", class, front, err)
 		}

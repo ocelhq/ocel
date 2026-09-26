@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const EnvVar = "OCEL_LIVE_MANIFEST"
@@ -56,10 +58,10 @@ type Manifest struct {
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
 
-func (m Manifest) StoreCoordinate() providerkit.SealScope {
-	return providerkit.SealScope{
+func (m Manifest) StoreCoordinate() records.SealScope {
+	return records.SealScope{
 		Project: m.Slug,
-		Class:   providerkit.Class(m.Class),
+		Class:   edge.Class(m.Class),
 		Env:     m.Store.Env,
 		Folder:  StoreSecretFolder,
 		Binding: StoreSecretBinding,
@@ -74,11 +76,11 @@ func Render(m Manifest) ([]byte, error) {
 	if m.Slug == "" {
 		return nil, fmt.Errorf("the live-value manifest names %d keys but no project slug", len(m.Keys)+len(m.Bindings))
 	}
-	switch providerkit.Class(m.Class) {
-	case providerkit.ClassProduction, providerkit.ClassPreview:
+	switch edge.Class(m.Class) {
+	case edge.ClassProduction, edge.ClassPreview:
 	default:
 		return nil, fmt.Errorf("the live-value manifest names class %q, want %s or %s",
-			m.Class, providerkit.ClassProduction, providerkit.ClassPreview)
+			m.Class, edge.ClassProduction, edge.ClassPreview)
 	}
 	return json.Marshal(m)
 }

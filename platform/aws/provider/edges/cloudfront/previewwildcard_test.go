@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -344,7 +344,7 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 	}
 
 	err := e.DestroyPreviewWildcard(context.Background(), previewBase)
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("DestroyPreviewWildcard = %v, want a refusal: %s still routes every preview on %s through this one distribution", err, other, previewBase)
 	}

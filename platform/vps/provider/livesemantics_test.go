@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -31,7 +33,7 @@ func (k *killer) Say(message string) {
 
 func (k *killer) Detail(string) {}
 
-func (k *killer) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (k *killer) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 type sayings []string
 
@@ -39,12 +41,12 @@ func (s *sayings) Say(message string) { *s = append(*s, message) }
 
 func (s *sayings) Detail(string) {}
 
-func (s *sayings) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (s *sayings) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
-func refused(t *testing.T, err error, code providerkit.Code) providerkit.Refusal {
+func refused(t *testing.T, err error, code refusal.Code) refusal.Refusal {
 	t.Helper()
 
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("error = %v, want a refusal the CLI can render", err)
 	}
@@ -63,7 +65,7 @@ type planning interface {
 	Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error)
 }
 
-func stillMoving(t *testing.T, planner planning, class providerkit.Class, held any) string {
+func stillMoving(t *testing.T, planner planning, class edge.Class, held any) string {
 	t.Helper()
 
 	plan, err := planner.Plan(context.Background(),
@@ -93,7 +95,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	p := vm.provider(t)
 	defer closing(t, p)
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +133,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 
 	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true}, nil); err == nil {
 		t.Error("heal finished an apply it did not start")
-	} else if refusal := refused(t, err, providerkit.CodeDenied); !strings.Contains(refusal.Message, host.StampPath(class)) {
+	} else if refusal := refused(t, err, refusal.CodeDenied); !strings.Contains(refusal.Message, host.StampPath(class)) {
 		t.Errorf("heal over a half-applied host says %q, want it to name the stamp that says so", refusal.Message)
 	}
 
@@ -183,7 +185,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	p := vm.provider(t)
 	defer closing(t, p)
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -224,7 +226,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 		t.Fatal(err)
 	}
 	unattended.Reading = moved.Reading
-	refusal := refused(t, bootstrap.Apply(ctx, unattended, nil), providerkit.CodeNotReady)
+	refusal := refused(t, bootstrap.Apply(ctx, unattended, nil), refusal.CodeNotReady)
 	if !strings.Contains(refusal.Message, recordsHelper) {
 		t.Errorf("the refusal says %q, want it to name %s as what it would write over", refusal.Message, recordsHelper)
 	}
@@ -242,7 +244,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 
 func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing.T) {
 	vm := liveMachine(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	p := bootstrapped(t, vm, class)
 	ctx := context.Background()
 	bootstrap, err := p.Bootstrap("")
@@ -261,7 +263,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 
 	vm.ssh(t, "sudo chmod 700 "+recordsDir)
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	refusal := refused(t, bootstrap.Apply(ctx, healing, nil), providerkit.CodeDenied)
+	refusal := refused(t, bootstrap.Apply(ctx, healing, nil), refusal.CodeDenied)
 	if !strings.Contains(refusal.Message, helperDir) {
 		t.Errorf("heal over a mixed set says %q, want it to name %s as what heal may not write", refusal.Message, helperDir)
 	}
@@ -281,7 +283,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 
 func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *testing.T) {
 	vm := liveMachine(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	p := bootstrapped(t, vm, class)
 	ctx := context.Background()
 	bootstrap, err := p.Bootstrap("")
@@ -294,7 +296,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 
 	refusal := refused(t, bootstrap.Apply(ctx,
 		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}, nil),
-		providerkit.CodeDenied)
+		refusal.CodeDenied)
 	if !strings.Contains(refusal.Message, recordsDir) || !strings.Contains(refusal.Message, "/etc") {
 		t.Errorf("heal over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", refusal.Message)
 	}
@@ -305,7 +307,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 
 func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.T) {
 	vm := liveMachine(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, vm, class)
 
 	bootstrap, err := vm.deploying(t).Bootstrap("")
@@ -326,7 +328,7 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
 	defer vm.ssh(t, "sudo chmod 755 "+helperDir)
-	refusal := refused(t, bootstrap.Apply(ctx, healing, nil), providerkit.CodeDenied)
+	refusal := refused(t, bootstrap.Apply(ctx, healing, nil), refusal.CodeDenied)
 	if !strings.Contains(refusal.Message, helperDir) {
 		t.Errorf("heal as %s over a mixed set says %q, want %s named as what that login may not write", deployLogin, refusal.Message, helperDir)
 	}

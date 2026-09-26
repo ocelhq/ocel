@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const EnvVar = "OCEL_LIVE_MANIFEST"
@@ -39,11 +39,11 @@ func Render(m Manifest) ([]byte, error) {
 			return nil, fmt.Errorf("the live-value manifest names %d keys but no %s", len(m.Keys)+len(m.Bindings), component.name)
 		}
 	}
-	switch providerkit.Class(m.Class) {
-	case providerkit.ClassProduction, providerkit.ClassPreview:
+	switch edge.Class(m.Class) {
+	case edge.ClassProduction, edge.ClassPreview:
 	default:
 		return nil, fmt.Errorf("the live-value manifest names class %q, and a value is sealed under the key of %s or %s",
-			m.Class, providerkit.ClassProduction, providerkit.ClassPreview)
+			m.Class, edge.ClassProduction, edge.ClassPreview)
 	}
 	return json.Marshal(m)
 }

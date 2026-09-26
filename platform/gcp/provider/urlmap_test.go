@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/api/compute/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const classRoutes = "ocel-alb-production-routes"
@@ -132,8 +132,8 @@ func TestRoutingRefusesAHostRuleThatNamesNoBackend(t *testing.T) {
 
 	p, _ := routing(t, emptyMap())
 	err := p.Route(context.Background(), classRoutes, "shop.example.com", "")
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Route with no backend = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Route with no backend = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -93,8 +94,8 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(applied[0].Features, want) {
 		t.Errorf("Apply() was asked for %v, want %v", applied[0].Features, want)
 	}
-	if applied[0].Class != providerkit.ClassProduction {
-		t.Errorf("Apply() ran against %s, want %s", applied[0].Class, providerkit.ClassProduction)
+	if applied[0].Class != edge.ClassProduction {
+		t.Errorf("Apply() ran against %s, want %s", applied[0].Class, edge.ClassProduction)
 	}
 	if !applied[0].Unattended {
 		t.Error("Apply() ran attended where nothing accepted replacements")
@@ -148,7 +149,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		AutoHeal: &healing,
 	})
 
-	held, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(providerkit.ClassProduction))
+	held, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
@@ -157,7 +158,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("the bootstrap record holds %q, %v, want auto_heal on", held.Bytes, err)
 	}
 
-	written, err := providerkit.RecordSchema(ctx, provider.Records(), providerkit.ClassProduction)
+	written, err := providerkit.RecordSchema(ctx, provider.Records(), edge.ClassProduction)
 	if err != nil || written != providerkit.RecordSchemaVersion {
 		t.Fatalf("RecordSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, providerkit.RecordSchemaVersion)
 	}
@@ -272,8 +273,8 @@ func recordProject(t *testing.T, provider *fake.Provider, slug string, features 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Records().Write(context.Background(), providerkit.Record{
-		Name:  providerkit.ProjectRecord(providerkit.ClassProduction, slug),
+	if _, err := provider.Records().Write(context.Background(), records.Record{
+		Name:  providerkit.ProjectRecord(edge.ClassProduction, slug),
 		Bytes: body,
 	}); err != nil {
 		t.Fatal(err)
@@ -403,7 +404,7 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
 	req := &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
@@ -451,7 +452,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 
 	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
 	scope := &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION}
 	consented, err := client.PlanRemoveBootstrap(ctx, scope)
@@ -459,7 +460,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
 
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	scope.Consented = consented
 	stream, err := client.RemoveBootstrap(ctx, scope)
@@ -488,7 +489,7 @@ func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	if plan == nil {
 		t.Fatal("Bootstrap() streamed no plan, and the only thing consented to is the plan")
 	}
-	if plan.GetSubject() != string(providerkit.ClassProduction) {
+	if plan.GetSubject() != string(edge.ClassProduction) {
 		t.Errorf("plan subject = %q, want the class it applies to", plan.GetSubject())
 	}
 	if plan.GetEdgeKind() != string(fake.KindRelay) {
@@ -652,7 +653,7 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
-	if plan.GetSubject() != string(providerkit.ClassPreview) {
+	if plan.GetSubject() != string(edge.ClassPreview) {
 		t.Errorf("subject = %q, want the class the CLI asks the user to type back", plan.GetSubject())
 	}
 	if len(plan.GetGroups()) != 3 {
@@ -728,7 +729,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	if planned.GetBootstrap().GetPresent() {
 		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
 	}
-	if _, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(providerkit.ClassProduction)); !errors.Is(err, providerkit.ErrNoRecord) {
+	if _, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(edge.ClassProduction)); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -25,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const artifactRootDirName = constants.ProjectStateDirName + "/output"
@@ -114,7 +116,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	return cfg, nil
 }
 
-func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) error {
+func (p *Provider) standing(held bootstrap.Deployed, class edge.Class) error {
 	command := providerkit.BootstrapCommand(class)
 	for _, missing := range []struct {
 		held string
@@ -127,7 +129,7 @@ func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) er
 		{held.VarsTable, "variable store"},
 	} {
 		if missing.held == "" {
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"account bootstrap is present but its %s is missing (a partial rollback?); re-run `%s`", missing.what, command)
 		}
 	}

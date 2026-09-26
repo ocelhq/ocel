@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -115,7 +116,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -282,7 +283,7 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -331,7 +332,7 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -377,7 +378,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)

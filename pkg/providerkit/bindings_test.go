@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -39,7 +40,7 @@ func declaredAs(kind bindingsv1.BindingType) resourcesv1.ResourceType {
 	return resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED
 }
 
-func publishRecord(t *testing.T, provider *fake.Provider, class providerkit.Class, owner string, binding *bindingsv1.Binding) {
+func publishRecord(t *testing.T, provider *fake.Provider, class edge.Class, owner string, binding *bindingsv1.Binding) {
 	t.Helper()
 	pair, err := providerkit.BindingPair(owner, binding)
 	if err != nil {
@@ -113,9 +114,9 @@ func TestDeployRefusesABindingNothingPublished(t *testing.T) {
 
 	t.Run("points at the class the record was published to instead", func(t *testing.T) {
 		message := refusedDeploy(t, bindingRequest("orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES), func(p *fake.Provider) {
-			publishRecord(t, p, providerkit.ClassPreview, "terraform", postgresRecord("orders", "terraform"))
+			publishRecord(t, p, edge.ClassPreview, "terraform", postgresRecord("orders", "terraform"))
 		})
-		if !strings.Contains(message, string(providerkit.ClassPreview)) {
+		if !strings.Contains(message, string(edge.ClassPreview)) {
 			t.Errorf("refusal = %q, want it to name the class publishing the record", message)
 		}
 	})
@@ -124,7 +125,7 @@ func TestDeployRefusesABindingNothingPublished(t *testing.T) {
 func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 	t.Run("a shape the app would cold-start against", func(t *testing.T) {
 		message := refusedDeploy(t, bindingRequest("orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES), func(p *fake.Provider) {
-			publishRecord(t, p, providerkit.ClassProduction, "terraform", bucketRecord("orders", "terraform"))
+			publishRecord(t, p, edge.ClassProduction, "terraform", bucketRecord("orders", "terraform"))
 		})
 		if !strings.Contains(message, "cold start") {
 			t.Errorf("refusal = %q, want the shape mismatch refused", message)
@@ -133,7 +134,7 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 
 	t.Run("a bucket ocel's client did not provision", func(t *testing.T) {
 		message := refusedDeploy(t, bindingRequest("uploads", bindingsv1.BindingType_BINDING_TYPE_BUCKET), func(p *fake.Provider) {
-			publishRecord(t, p, providerkit.ClassProduction, "terraform", bucketRecord("uploads", "terraform"))
+			publishRecord(t, p, edge.ClassProduction, "terraform", bucketRecord("uploads", "terraform"))
 		})
 		if !strings.Contains(message, "terraform") {
 			t.Errorf("refusal = %q, want it to name the publisher ocel cannot serve for", message)
@@ -143,7 +144,7 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 	t.Run("a postgres record a publisher of yours owns is admitted", func(t *testing.T) {
 		builtProject(t)
 		client, provider := deployServed(t)
-		publishRecord(t, provider, providerkit.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
+		publishRecord(t, provider, edge.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
 
 		result, _ := deploy(t, client, bindingRequest("orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES))
 		if !result.GetSuccess() {
@@ -199,7 +200,7 @@ func TestDeployBindsByTheExternalName(t *testing.T) {
 	t.Run("a record published under a name the app never declares is admitted", func(t *testing.T) {
 		builtProject(t)
 		client, provider := deployServed(t)
-		publishRecord(t, provider, providerkit.ClassProduction, "terraform", postgresRecord("sst-pg-orders", "terraform"))
+		publishRecord(t, provider, edge.ClassProduction, "terraform", postgresRecord("sst-pg-orders", "terraform"))
 
 		result, _ := deploy(t, client, externalBindingRequest("orders", "sst-pg-orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES))
 		if !result.GetSuccess() {
@@ -209,7 +210,7 @@ func TestDeployBindsByTheExternalName(t *testing.T) {
 
 	t.Run("the declared name alone does not satisfy a binding", func(t *testing.T) {
 		message := refusedDeploy(t, externalBindingRequest("orders", "sst-pg-orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES), func(p *fake.Provider) {
-			publishRecord(t, p, providerkit.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
+			publishRecord(t, p, edge.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
 		})
 		if !strings.Contains(message, "sst-pg-orders") {
 			t.Errorf("refusal = %q, want it to name the external name it looked for", message)
@@ -244,7 +245,7 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 		t.Helper()
 		builtProject(t)
 		client, provider := deployServed(t)
-		publishRecord(t, provider, providerkit.ClassProduction, "terraform", record)
+		publishRecord(t, provider, edge.ClassProduction, "terraform", record)
 		req := externalBindingRequest(record.GetName(), "", kind)
 		req.Manifest.Resources[0].LogicalName = "db--" + record.GetName()
 		result, events := deploy(t, client, req)

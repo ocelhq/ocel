@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
 const (
@@ -33,8 +33,8 @@ var (
 )
 
 type Store struct {
-	Records ports.RecordStore
-	Cipher  ports.Cipher
+	Records records.Store
+	Cipher  records.Cipher
 	Now     func() time.Time
 }
 
@@ -104,7 +104,7 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 	return s.commit(ctx, scope, at, held, current, expected, cell{Sealed: sealed, Size: int64(len(plaintext))})
 }
 
-func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, held ports.Record, current cell, expected *int64, next cell) (Metadata, error) {
+func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, held records.Record, current cell, expected *int64, next cell) (Metadata, error) {
 	if expected != nil && *expected != current.live() {
 		return Metadata{}, ErrStaleVersion
 	}
@@ -118,7 +118,7 @@ func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, held port
 	}
 	held.Bytes = encoded
 	if _, err := s.Records.Write(ctx, held); err != nil {
-		if errors.Is(err, ports.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			return Metadata{}, ErrStaleVersion
 		}
 		return Metadata{}, fmt.Errorf("write %s: %w", at.Key, err)
@@ -134,16 +134,16 @@ func (s Store) remember(ctx context.Context, scope Scope, at Coordinate, written
 	if err != nil {
 		return fmt.Errorf("encode version %d of %s: %w", written.Version, at, err)
 	}
-	held, err := ports.ReadOrEmpty(ctx, s.Records, versionName(scope, at, written.Version))
+	held, err := records.ReadOrEmpty(ctx, s.Records, versionName(scope, at, written.Version))
 	if err != nil {
 		return err
 	}
 	held.Bytes = entry
-	if _, err := s.Records.Write(ctx, held); err != nil && !errors.Is(err, ports.ErrStale) {
+	if _, err := s.Records.Write(ctx, held); err != nil && !errors.Is(err, records.ErrStale) {
 		return fmt.Errorf("record version %d of %s: %w", written.Version, at, err)
 	}
 	if pruned := written.Version - historyWindow; pruned > 0 {
-		if err := ports.Forget(ctx, s.Records, versionName(scope, at, pruned)); err != nil {
+		if err := records.Forget(ctx, s.Records, versionName(scope, at, pruned)); err != nil {
 			return fmt.Errorf("drop version %d of %s: %w", pruned, at, err)
 		}
 	}
@@ -390,7 +390,7 @@ func (s Store) Delete(ctx context.Context, scope Scope, at Coordinate, expected 
 	}
 	held.Bytes = encoded
 	if _, err := s.Records.Write(ctx, held); err != nil {
-		if errors.Is(err, ports.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			return false, ErrStaleVersion
 		}
 		return false, fmt.Errorf("delete %s: %w", at.Key, err)
@@ -434,7 +434,7 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 		return 0, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
 	for _, record := range held {
-		if err := ports.Forget(ctx, s.Records, record.Name); err != nil {
+		if err := records.Forget(ctx, s.Records, record.Name); err != nil {
 			return 0, fmt.Errorf("remove %s's stored values: %w", scope.Project, err)
 		}
 	}
@@ -443,24 +443,24 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 		return 0, fmt.Errorf("read what references %s: %w", scope.Project, err)
 	}
 	for _, record := range refs {
-		if err := ports.Forget(ctx, s.Records, record.Name); err != nil {
+		if err := records.Forget(ctx, s.Records, record.Name); err != nil {
 			return 0, fmt.Errorf("remove what references %s: %w", scope.Project, err)
 		}
 	}
 	return len(held), nil
 }
 
-func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (ports.Record, cell, error) {
-	held, err := ports.ReadOrEmpty(ctx, s.Records, cellName(scope, at))
+func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (records.Record, cell, error) {
+	held, err := records.ReadOrEmpty(ctx, s.Records, cellName(scope, at))
 	if err != nil {
-		return ports.Record{}, cell{}, fmt.Errorf("read %s: %w", at, err)
+		return records.Record{}, cell{}, fmt.Errorf("read %s: %w", at, err)
 	}
 	if len(held.Bytes) == 0 {
 		return held, cell{}, nil
 	}
 	var stored cell
 	if err := json.Unmarshal(held.Bytes, &stored); err != nil {
-		return ports.Record{}, cell{}, fmt.Errorf("read %s: %w", at, err)
+		return records.Record{}, cell{}, fmt.Errorf("read %s: %w", at, err)
 	}
 	return held, stored, nil
 }
@@ -475,9 +475,9 @@ func metadataOf(at Coordinate, held cell) Metadata {
 	}
 }
 
-func coordinateOf(scope Scope, at Coordinate) ports.SealScope {
+func coordinateOf(scope Scope, at Coordinate) records.SealScope {
 	at = at.canonical()
-	return ports.SealScope{
+	return records.SealScope{
 		Project: scope.Project,
 		Class:   scope.Class,
 		Env:     at.Environment,

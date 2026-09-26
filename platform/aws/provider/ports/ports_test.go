@@ -11,7 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -64,9 +65,9 @@ func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
 }
 
 func TestARecordNameShorterThanItsPartitionIsRefused(t *testing.T) {
-	records, _ := newRecords(t)
+	store, _ := newRecords(t)
 
-	if _, err := records.List(context.Background(), kit.RecordName{"values", "shop"}); err == nil {
+	if _, err := store.List(context.Background(), records.Name{"values", "shop"}); err == nil {
 		t.Fatal("List() under half a value partition succeeded, and answering it would have to walk the whole table")
 	}
 }
@@ -95,7 +96,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 	sealer, crypto := newSealer()
 
-	at := kit.SealScope{
+	at := records.SealScope{
 		Project: "shop",
 		Class:   edge.ClassProduction,
 		Env:     "staging",
@@ -124,7 +125,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 func TestABindingSealsUnderItsOwnName(t *testing.T) {
 	sealer, crypto := newSealer()
 
-	at := kit.SealScope{
+	at := records.SealScope{
 		Project: "shop",
 		Class:   edge.ClassPreview,
 		Env:     "*",
@@ -143,7 +144,7 @@ func TestABindingSealsUnderItsOwnName(t *testing.T) {
 func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 	sealer, _ := newSealer()
 
-	for name, at := range map[string]kit.SealScope{
+	for name, at := range map[string]records.SealScope{
 		"no project":     {Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "K"},
 		"no class":       {Project: "shop", Env: "*", Folder: "/", Name: "K"},
 		"no environment": {Project: "shop", Class: edge.ClassProduction, Folder: "/", Name: "K"},
@@ -158,7 +159,7 @@ func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 	}
 }
 
-func mustSealer() kit.Cipher {
+func mustSealer() records.Cipher {
 	sealer, _ := newSealer()
 	return sealer
 }
@@ -166,27 +167,27 @@ func mustSealer() kit.Cipher {
 func TestAnAccountWithNoBootstrapHoldsNoRecords(t *testing.T) {
 	t.Parallel()
 
-	records := awsports.Records{Dynamo: newFakeDynamo()}
-	name := kit.RecordName{"bootstrap", "production"}
+	store := awsports.Records{Dynamo: newFakeDynamo()}
+	name := records.Name{"bootstrap", "production"}
 
-	if _, err := records.Read(context.Background(), name); !errors.Is(err, kit.ErrNoRecord) {
-		t.Errorf("Read() with no bootstrap standing = %v, want ErrNoRecord", err)
+	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Read() with no bootstrap standing = %v, want ErrNotFound", err)
 	}
-	held, err := records.List(context.Background(), kit.RecordName{"projects", "production"})
+	held, err := store.List(context.Background(), records.Name{"projects", "production"})
 	if err != nil || len(held) != 0 {
 		t.Errorf("List() with no bootstrap standing = %v, %v, want nothing", held, err)
 	}
-	if err := records.Remove(context.Background(), name, "whatever"); !errors.Is(err, kit.ErrNoRecord) {
-		t.Errorf("Remove() with no bootstrap standing = %v, want ErrNoRecord", err)
+	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Remove() with no bootstrap standing = %v, want ErrNotFound", err)
 	}
 
-	_, err = records.Write(context.Background(), kit.Record{Name: name, Bytes: []byte("{}")})
-	var refusal kit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != kit.CodeNotReady {
-		t.Fatalf("Write() with no bootstrap standing = %v, want a %s refusal rather than a silent no-op", err, kit.CodeNotReady)
+	_, err = store.Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Write() with no bootstrap standing = %v, want a %s refusal rather than a silent no-op", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "ocel bootstrap") {
-		t.Errorf("Write() refusal = %q, want it to name what creates the bootstrap", refusal.Message)
+	if !strings.Contains(refused.Message, "ocel bootstrap") {
+		t.Errorf("Write() refusal = %q, want it to name what creates the bootstrap", refused.Message)
 	}
 }
 
@@ -195,32 +196,32 @@ func TestATableDeletedMidTeardownHoldsNoRecords(t *testing.T) {
 
 	dynamo := newFakeDynamo()
 	dynamo.gone = true
-	records := awsports.Records{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
-	name := kit.RecordName{"bootstrap", "production"}
+	store := awsports.Records{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
+	name := records.Name{"bootstrap", "production"}
 
-	if _, err := records.Read(context.Background(), name); !errors.Is(err, kit.ErrNoRecord) {
-		t.Errorf("Read() against a deleted table = %v, want ErrNoRecord", err)
+	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Read() against a deleted table = %v, want ErrNotFound", err)
 	}
-	held, err := records.List(context.Background(), kit.RecordName{"projects", "production"})
+	held, err := store.List(context.Background(), records.Name{"projects", "production"})
 	if err != nil || len(held) != 0 {
 		t.Errorf("List() against a deleted table = %v, %v, want nothing", held, err)
 	}
-	if err := records.Remove(context.Background(), name, "whatever"); !errors.Is(err, kit.ErrNoRecord) {
-		t.Errorf("Remove() against a deleted table = %v, want ErrNoRecord", err)
+	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Remove() against a deleted table = %v, want ErrNotFound", err)
 	}
-	if _, err := records.Write(context.Background(), kit.Record{Name: name, Bytes: []byte("{}")}); err == nil {
+	if _, err := store.Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")}); err == nil {
 		t.Error("Write() against a deleted table = nil, want the failure surfaced")
 	}
 }
 
 func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
-	for _, name := range []kit.RecordName{
-		providerkit.ProjectsRecord(providerkit.ClassProduction),
-		providerkit.BootstrapRecord(providerkit.ClassProduction),
-		providerkit.WildcardRecord(providerkit.ClassPreview),
-		providerkit.EdgeStacksRecord(providerkit.ClassPreview),
-		providerkit.StacksRecord(providerkit.ClassProduction, "shop"),
-		providerkit.EnvironmentsRecord(providerkit.ClassPreview, "shop"),
+	for _, name := range []records.Name{
+		providerkit.ProjectsRecord(edge.ClassProduction),
+		providerkit.BootstrapRecord(edge.ClassProduction),
+		providerkit.WildcardRecord(edge.ClassPreview),
+		providerkit.EdgeStacksRecord(edge.ClassPreview),
+		providerkit.StacksRecord(edge.ClassProduction, "shop"),
+		providerkit.EnvironmentsRecord(edge.ClassPreview, "shop"),
 	} {
 		partition, err := awsports.Partition(name)
 		if err != nil {
@@ -233,24 +234,24 @@ func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 }
 
 func TestTheSchemaRecordSitsOnTheSameKeyEveryLayoutWrote(t *testing.T) {
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		partition, err := awsports.Partition(providerkit.SchemaRecord(class))
 		if err != nil {
 			t.Fatalf("Partition(%s) err = %v", providerkit.SchemaRecord(class), err)
 		}
-		if partition != kit.RootSchema {
+		if partition != records.RootSchema {
 			t.Errorf("the %s schema record partitions on %q, want %q: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records",
-				class, partition, kit.RootSchema)
+				class, partition, records.RootSchema)
 		}
 	}
 }
 
 func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
-	shop, err := awsports.Partition(providerkit.StackRecord(providerkit.ClassProduction, "shop", naming.InfraStack("shop")))
+	shop, err := awsports.Partition(providerkit.StackRecord(edge.ClassProduction, "shop", naming.InfraStack("shop")))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
-	web, err := awsports.Partition(providerkit.StackRecord(providerkit.ClassProduction, "web", naming.InfraStack("web")))
+	web, err := awsports.Partition(providerkit.StackRecord(edge.ClassProduction, "web", naming.InfraStack("web")))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}

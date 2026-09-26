@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const staticAssetsDir = "static"
@@ -167,13 +168,13 @@ func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) 
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, progress providerkit.Progress) error {
+		push: func(ctx context.Context, progress edge.Progress) error {
 			return pushStaticAssets(ctx, app, uploads, progress)
 		},
 	}, nil
 }
 
-func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, progress providerkit.Progress) error {
+func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, progress edge.Progress) error {
 	say(progress, "Uploading "+app+"'s static assets")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)

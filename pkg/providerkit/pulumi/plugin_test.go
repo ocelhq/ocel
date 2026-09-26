@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type pushCounter struct{ created atomic.Int64 }
@@ -76,7 +77,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 
 	ref := providerkit.StackRef{
 		Project: "probe",
-		Class:   providerkit.ClassPreview,
+		Class:   edge.ClassPreview,
 		Name:    naming.InfraStack("probe"),
 	}
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}

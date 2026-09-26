@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -22,7 +23,7 @@ func NewDNS() *DNS { return &DNS{writers: map[string]*DNSRecords{}} }
 
 func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
 	if kind != KindZone {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the reference provider writes no dns %q; it writes %s", kind, KindZone)
 	}
 	d.mu.Lock()

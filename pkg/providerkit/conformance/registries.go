@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -115,11 +116,11 @@ func RunDNS(t *testing.T, facts providerkit.Facts, dns providerkit.DNS) {
 
 func requireInvalid(t *testing.T, err error, call string) {
 	t.Helper()
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("%s() refused with %v, want a Refusal carrying %s so the CLI can name the choices", call, err, providerkit.CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("%s() refused with %v, want a Refusal carrying %s so the CLI can name the choices", call, err, refusal.CodeInvalid)
 	}
-	if refusal.Message == "" {
+	if refused.Message == "" {
 		t.Errorf("%s() refused with no message, so the CLI has nothing to tell the user", call)
 	}
 }

@@ -837,7 +837,7 @@ func lines(rendered string) []string {
 	return strings.Split(trimmed, "\n")
 }
 
-func (j journey) window(t *testing.T, class providerkit.Class) []string {
+func (j journey) window(t *testing.T, class edge.Class) []string {
 	t.Helper()
 	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(class))))
 }
@@ -884,7 +884,7 @@ func firstLineOf(rendered, fragment string) string {
 
 func (j journey) promotionOf(t *testing.T, ref string) string {
 	t.Helper()
-	held, err := kitledger.New(j.box(t).Records(), providerkit.ClassProduction, lifecycleSlug).
+	held, err := kitledger.New(j.box(t).Records(), edge.ClassProduction, lifecycleSlug).
 		History(context.Background(), edge.DefaultPointer)
 	if err != nil {
 		t.Fatalf("read the promotions this box holds for %s: %v", lifecycleSlug, err)
@@ -946,7 +946,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.resolving(t, lifecycleHostname, edge.ProbeHostname("*."+lifecyclePreviewBase),
 		lifecyclePreview+"."+lifecyclePreviewBase, "unclaimed."+lifecyclePreviewBase)
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	fresh := run.must(t, "doctor")
 	if !owedABootstrap.MatchString(fresh) {
 		t.Fatalf("`ocel doctor` on a machine nothing has written to said:\n%s", fresh)

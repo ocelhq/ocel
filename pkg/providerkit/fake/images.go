@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Images struct {
@@ -60,7 +61,7 @@ func (i *Images) Has(_ context.Context, push providerkit.ImagePush) (bool, error
 	return i.held[push.ImageRef], nil
 }
 
-func (i *Images) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Progress) error {
+func (i *Images) Push(_ context.Context, push providerkit.ImagePush, _ edge.Progress) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.failed != nil {

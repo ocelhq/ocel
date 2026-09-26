@@ -1,6 +1,10 @@
 package providerkit
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+)
 
 func RefuseGrowth(shown, fresh Plan) error {
 	rows := map[string]ChangeAction{}
@@ -24,7 +28,7 @@ func RefuseGrowth(shown, fresh Plan) error {
 	if len(grown) == 0 {
 		return nil
 	}
-	return Refuse(CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s stood as the plan was drawn and no longer does, so this apply would do work nobody consented to.\n"+
 			"Draw the plan again and consent to what it shows now",
 		strings.Join(grown, ", "))

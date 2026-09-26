@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -124,7 +125,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	}
 	if s.timeout > 0 {
 		if s.timeout > maxRequestTimeout {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"%s asks for a request to run for %s, and Cloud Run cuts one off at %s: "+
 					"ask for less, or move work that outlives a request off the request",
 				s.service, s.timeout, maxRequestTimeout)
@@ -170,7 +171,7 @@ type release struct {
 	revision string
 }
 
-func (p *Provider) stand(ctx context.Context, s serving, progress providerkit.Progress) (release, error) {
+func (p *Provider) stand(ctx context.Context, s serving, progress edge.Progress) (release, error) {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return release{}, err
@@ -229,7 +230,7 @@ func (p *Provider) stand(ctx context.Context, s serving, progress providerkit.Pr
 
 func (p *Provider) Pin(ctx context.Context, service, revision string) error {
 	if revision == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
 	}
 	clients, err := p.stood(ctx)
@@ -249,7 +250,7 @@ func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, err
 	return func(held *run.GoogleCloudRunV2Service) (string, error) {
 		revision := revisionName(held.LatestReadyRevision)
 		if revision == "" {
-			return "", providerkit.Refuse(providerkit.CodeNotReady,
+			return "", refusal.Refuse(refusal.CodeNotReady,
 				"%s stood up no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
 				service)
 		}
@@ -363,13 +364,13 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 		return err
 	}
 	if settled.Error != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"Cloud Run refused the release: %s", settled.Error.Message)
 	}
 	return nil
 }
 
-func (p *Provider) tearDown(ctx context.Context, service string, progress providerkit.Progress) error {
+func (p *Provider) tearDown(ctx context.Context, service string, progress edge.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err

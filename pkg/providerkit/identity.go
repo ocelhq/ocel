@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -28,10 +29,10 @@ type Build struct {
 
 func NewBuild(deploymentID, environment, values string) (Build, error) {
 	if err := naming.ValidateDeploymentID(deploymentID); err != nil {
-		return Build{}, Refuse(CodeInvalid, "deployment identity: %s", err.Error())
+		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity: %s", err.Error())
 	}
 	if environment == "" {
-		return Build{}, Refuse(CodeInvalid, "deployment identity for %q requires an environment name", deploymentID)
+		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity for %q requires an environment name", deploymentID)
 	}
 	h := sha256.New()
 	writeLenPrefixed(h, []byte(environment))

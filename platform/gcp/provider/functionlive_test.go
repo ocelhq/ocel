@@ -8,10 +8,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func functionPlanDeclaring(class providerkit.Class, env string, values providerkit.AppValues) providerkit.StackPlan {
+func functionPlanDeclaring(class edge.Class, env string, values providerkit.AppValues) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
@@ -48,7 +49,7 @@ func functionRevisionEnv(t *testing.T, server *runServer, plan providerkit.Stack
 
 func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(providerkit.ClassProduction, "production", providerkit.AppValues{
+	p, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
 		Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
@@ -82,7 +83,7 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 
 func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(providerkit.ClassPreview, "pr-7", providerkit.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassPreview, "pr-7", providerkit.AppValues{
 		Secrets: []providerkit.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -97,7 +98,7 @@ func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(providerkit.ClassProduction, "production", providerkit.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 

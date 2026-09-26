@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -64,7 +65,7 @@ func fronting(t *testing.T) (bootstrap, *frontRegistry) {
 func surveyed(features ...string) survey {
 	return survey{
 		Names:   Names{namespace: "ocel", project: "acme-prod"},
-		Class:   providerkit.ClassProduction,
+		Class:   edge.ClassProduction,
 		Project: "acme-prod",
 		Present: true,
 		Stamp:   stamp{State: stateComplete, Features: features},
@@ -119,7 +120,7 @@ func TestABootstrapThatNamedNoEdgeFeatureTakesNoFrontDown(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	if err := b.tearFronts(context.Background(), providerkit.ClassProduction, nil); err != nil {
+	if err := b.tearFronts(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("tearFronts = %v", err)
 	}
 	if len(registry.opened) != 0 {
@@ -132,10 +133,10 @@ func TestABootstrapThatStoodTheLoadBalancerUpTakesItDownAgain(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	if err := b.tearFronts(context.Background(), providerkit.ClassProduction, []string{albFeature}); err != nil {
+	if err := b.tearFronts(context.Background(), edge.ClassProduction, []string{albFeature}); err != nil {
 		t.Fatalf("tearFronts = %v", err)
 	}
-	if !slices.Contains(registry.front.torn, providerkit.ClassProduction) {
+	if !slices.Contains(registry.front.torn, edge.ClassProduction) {
 		t.Errorf("the removal tore down %v, want the production front: a forwarding rule left standing keeps billing", registry.front.torn)
 	}
 }
@@ -144,11 +145,11 @@ func TestRemovingTheFeatureTakesTheLoadBalancerDownRatherThanJustForgettingIt(t 
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
-	if !slices.Contains(registry.front.torn, providerkit.ClassProduction) {
+	if !slices.Contains(registry.front.torn, edge.ClassProduction) {
 		t.Errorf("removing %q tore down %v, and un-stamping a feature whose address, forwarding rule and maps are still standing bills "+
 			"for a front nothing will ever take down again", albFeature, registry.front.torn)
 	}
@@ -158,8 +159,8 @@ func TestAFeatureWhoseFrontRefusedToComeDownStaysStamped(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	registry.front.refusal = providerkit.Refuse(providerkit.CodeInvalid, "shop.example.com is still bound")
-	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+	registry.front.refusal = refusal.Refuse(refusal.CodeInvalid, "shop.example.com is still bound")
+	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 
 	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err == nil {
 		t.Fatal("dropFronts = nil though the front refused, and the apply would go on to un-stamp a feature that is still standing")
@@ -174,9 +175,9 @@ func TestRemovingTheFeatureIsRefusedWhileAHostnameIsStillBoundToItsFront(t *test
 
 	b, registry := fronting(t)
 	registry.front.bound = []string{"shop.example.com"}
-	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "shop.example.com") {
 		t.Fatalf("dropFronts with a hostname still bound = %v, want a refusal naming it", err)
@@ -191,7 +192,7 @@ func TestAFeatureNothingStoodUpIsNotTornDownOnRemoval(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 	if err := b.dropFronts(context.Background(), surveyed(), req, nil); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
@@ -204,7 +205,7 @@ func TestTheFrontsABootstrapRaisesComeFromWhatItsFeaturesDeclareTheyNeed(t *test
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Features: []string{albFeature}}
+	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Features: []string{albFeature}}
 	if err := b.raiseFronts(context.Background(), req, nil); err != nil {
 		t.Fatalf("raiseFronts = %v", err)
 	}
@@ -221,14 +222,14 @@ func TestAFrontThatReportsNothingStandsAndHoldsNoHostname(t *testing.T) {
 	registry.front.silent = true
 	registry.front.bound = []string{"shop.example.com"}
 
-	stands, err := b.frontStands(context.Background(), providerkit.ClassProduction, albFeature)
+	stands, err := b.frontStands(context.Background(), edge.ClassProduction, albFeature)
 	if err != nil {
 		t.Fatalf("frontStands = %v", err)
 	}
 	if !stands {
 		t.Error("a front that reports nothing about its bootstrap is taken for gone, so the stamp alone can no longer say the feature stands")
 	}
-	if err := b.frontsFree(context.Background(), providerkit.ClassProduction, []string{albFeature}); err != nil {
+	if err := b.frontsFree(context.Background(), edge.ClassProduction, []string{albFeature}); err != nil {
 		t.Errorf("frontsFree = %v, want nothing held by a front that names no bound hostname", err)
 	}
 }

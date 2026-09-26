@@ -9,6 +9,7 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func desiredOf(t *testing.T, s serving) *run.GoogleCloudRunV2Service {
@@ -135,8 +136,8 @@ func TestATimeoutLongerThanARequestMayRunIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("serviceOf() asked for a timeout longer than Cloud Run allows, and Cloud Run would refuse the release with its own words")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
-		t.Errorf("serviceOf() code = %v, want %v", code, providerkit.CodeInvalid)
+	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("serviceOf() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "ocel-shop-prod-fn") {
 		t.Errorf("serviceOf() = %v, want the service that asked for it named", err)

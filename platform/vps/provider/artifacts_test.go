@@ -10,6 +10,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
@@ -45,13 +47,13 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	plan := providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
-			Class:   providerkit.ClassProduction,
+			Class:   edge.ClassProduction,
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind: providerkit.StackInfra,
 		Uploads: []providerkit.Upload{{
 			Name: "web",
-			Ref:  providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+			Ref:  providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
 			Path: path,
 		}},
 	}
@@ -68,13 +70,13 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 		t.Fatalf("the artifact row's action is %q, want %q: a store holding nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, providerkit.ActionCreate)
 	}
 
-	var refusal providerkit.Refusal
+	var rejection refusal.Refusal
 	err = providerkit.ShipUploads(ctx, store, plan.Uploads, nil)
-	if !errors.As(err, &refusal) {
+	if !errors.As(err, &rejection) {
 		t.Fatalf("ShipUploads() after the plan showed the row = %v, want a loud refusal rather than a write that vanishes", err)
 	}
-	if refusal.Code != providerkit.CodeInvalid {
-		t.Errorf("ShipUploads() refused with %q, want %q", refusal.Code, providerkit.CodeInvalid)
+	if rejection.Code != refusal.CodeInvalid {
+		t.Errorf("ShipUploads() refused with %q, want %q", rejection.Code, refusal.CodeInvalid)
 	}
 }
 

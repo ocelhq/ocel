@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestTheCoordinateIsTheTargetPlusTheAppRepositoryAndTheDigestTag(t *testing.T) {
@@ -135,6 +136,6 @@ func (keptSecret) Has(context.Context, providerkit.ImagePush) (bool, error) { re
 
 func (keptSecret) Destination() string { return "the kept registry" }
 
-func (keptSecret) Push(context.Context, providerkit.ImagePush, providerkit.Progress) error {
+func (keptSecret) Push(context.Context, providerkit.ImagePush, edge.Progress) error {
 	return nil
 }

@@ -5,7 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -23,10 +24,10 @@ type Machine interface {
 	Address(ctx context.Context) (string, error)
 	HoldsImage(ctx context.Context, imageRef string) (bool, error)
 	StandUp(ctx context.Context, spec host.Container) error
-	ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error
-	Promote(ctx context.Context, class providerkit.Class, project, app, imageRef string) error
+	ForgetNetwork(ctx context.Context, class edge.Class, project string) error
+	Promote(ctx context.Context, class edge.Class, project, app, imageRef string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
-	Release(ctx context.Context, rel host.Release, progress providerkit.Progress) error
+	Release(ctx context.Context, rel host.Release, progress edge.Progress) error
 	UnroutePointer(ctx context.Context, owner, pointer string) error
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
@@ -41,18 +42,18 @@ type Machine interface {
 	RemovePreviewEntry(ctx context.Context, base string) error
 }
 
-type Origins func(ctx context.Context, project string, class providerkit.Class) error
+type Origins func(ctx context.Context, project string, class edge.Class) error
 
 type Edge struct {
 	machine Machine
 	origins Origins
-	records providerkit.RecordStore
+	records records.Store
 	scope   string
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, records providerkit.RecordStore, scope string) *Edge {
+func New(machine Machine, origins Origins, records records.Store, scope string) *Edge {
 	return &Edge{machine: machine, origins: origins, records: records, scope: scope}
 }
 
@@ -79,7 +80,7 @@ func Surface(slug string, class edge.Class) string {
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge needs a project slug; this stack has none", Kind)
 	}
 	next := prior

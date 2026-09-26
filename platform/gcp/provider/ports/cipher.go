@@ -9,20 +9,23 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Cipher struct {
 	Clients *Clients
 }
 
-func (s Cipher) key(at providerkit.SealScope) (string, error) {
+func (s Cipher) key(at records.SealScope) (string, error) {
 	if at.Class == "" {
 		return "", Classless("a value")
 	}
 	return s.Clients.KeyPath(string(at.Class)), nil
 }
 
-func (s Cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
+func (s Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
@@ -42,7 +45,7 @@ func (s Cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []
 	return sealed.GetCiphertext(), nil
 }
 
-func (s Cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
@@ -62,9 +65,9 @@ func (s Cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byt
 	return opened.GetPlaintext(), nil
 }
 
-func (s Cipher) keyless(class providerkit.Class, doing string, err error) error {
+func (s Cipher) keyless(class edge.Class, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this project holds no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
 			class, s.Clients.KeyRing(), class, providerkit.BootstrapVarsKeyCommand(class))
 	}

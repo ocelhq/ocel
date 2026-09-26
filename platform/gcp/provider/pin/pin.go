@@ -7,8 +7,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -32,12 +32,12 @@ func Promote(
 			return err
 		}
 		if !held {
-			return providerkit.Refuse(providerkit.CodeInvalid,
+			return refusal.Refuse(refusal.CodeInvalid,
 				"promotion %s names build %s of %s, and this project's ledger staged no record for it, so nothing says which revision that build stood up",
 				promotion.PromotionID, identity, app)
 		}
 		if len(record.Revisions) == 0 {
-			return providerkit.Refuse(providerkit.CodeInvalid,
+			return refusal.Refuse(refusal.CodeInvalid,
 				"build %s of %s recorded no revision, and a promotion on Cloud Run is a traffic pin onto the revision the build stood up: "+
 					"re-deploy %s so its release records one, then promote that",
 				identity, app, app)

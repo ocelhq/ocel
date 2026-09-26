@@ -9,7 +9,7 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -28,7 +28,7 @@ type Config struct {
 	Secrets       SecretsAPI
 
 	Tags    TagClock
-	Records providerkit.RecordStore
+	Records records.Store
 	Rules   RulesAPI
 
 	RequiredFeatures []string
@@ -39,7 +39,7 @@ type Config struct {
 	VarsTableARN   string
 	VarsKeyARN     string
 	AppBoundaryARN string
-	Class          providerkit.Class
+	Class          edge.Class
 	VarsReferenced map[values.Coordinate]string
 
 	RuntimeLayers map[string]string

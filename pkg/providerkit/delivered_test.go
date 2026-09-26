@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, key, value string) *contractv1.DeployRequest {
@@ -27,7 +28,7 @@ func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, k
 func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 	t.Helper()
 	store := values.Store{Records: p.Records(), Cipher: p.Cipher()}
-	scope := values.Scope{Project: "shop", Class: providerkit.ClassProduction}
+	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
 	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: key}}, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s): %v", key, err)
 	}

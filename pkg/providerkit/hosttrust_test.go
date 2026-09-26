@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func unknownHostKey() providerkit.HostTrust {
@@ -73,9 +74,9 @@ func TestATrustRefusalIsDeniedAndReadsBackWhole(t *testing.T) {
 	for _, trust := range []providerkit.HostTrust{unknownHostKey(), changedHostKey()} {
 		t.Run(string(trust.Reason), func(t *testing.T) {
 			err := providerkit.RefuseHostTrust(trust)
-			var refusal providerkit.Refusal
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeDenied {
-				t.Fatalf("RefuseHostTrust() = %v, want a %s refusal", err, providerkit.CodeDenied)
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+				t.Fatalf("RefuseHostTrust() = %v, want a %s refusal", err, refusal.CodeDenied)
 			}
 			read, ok := providerkit.HostTrustOf(err)
 			if !ok {
@@ -112,8 +113,8 @@ func TestAnOrdinaryRefusalCarriesNoTrustDecision(t *testing.T) {
 	t.Parallel()
 
 	for _, err := range []error{
-		providerkit.Refuse(providerkit.CodeDenied, "no"),
-		providerkit.RefusalError(providerkit.Refuse(providerkit.CodeDenied, "no")),
+		refusal.Refuse(refusal.CodeDenied, "no"),
+		providerkit.RefusalError(refusal.Refuse(refusal.CodeDenied, "no")),
 		fmt.Errorf("wrapped: %w", errors.New("no")),
 	} {
 		if _, ok := providerkit.HostTrustOf(err); ok {

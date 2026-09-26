@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -136,7 +137,7 @@ func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.
 	})
 	if err != nil {
 		if absent(err) {
-			return "", providerkit.Refuse(providerkit.CodeNotReady,
+			return "", refusal.Refuse(refusal.CodeNotReady,
 				"the %s edge keeps the state of the load balancer it stands up sealed under the %s secret, and this project holds none for class %s: run `ocel bootstrap` for this class first",
 				alb.Kind, secret, class)
 		}

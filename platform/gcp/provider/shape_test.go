@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
@@ -38,7 +39,7 @@ func TestEveryBootstrapItemHasAShape(t *testing.T) {
 	t.Parallel()
 
 	names := Names{namespace: "ocel", project: "acme-prod"}
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, item := range bootstrapItems(names, class, false) {
 			if _, shaped := itemTypes[item.Kind]; !shaped {
 				t.Errorf("%s stands up a %s the shape has no name for", class, item.ID())

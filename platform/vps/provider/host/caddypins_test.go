@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -95,7 +95,7 @@ func TestAPinTheProxyCouldNotOpenIsRefusedRatherThanRendered(t *testing.T) {
 	} {
 		state := routed()
 		state.Pins = []Pin{pin}
-		var refusal providerkit.Refusal
+		var refusal refusal.Refusal
 		if _, err := RenderProxyConfig(caddy.Builtin{}, state); !errors.As(err, &refusal) {
 			t.Errorf("RenderProxyConfig(caddy.Builtin{}, ) over %s at %q = %v, want a refusal naming %s: anything the proxy cannot open takes every reshape on this box with it",
 				what, pin.Path, err, caddy.PinsDir)
@@ -117,7 +117,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		"a file that is no certificate at all":                  []byte("-----BEGIN EC PRIVATE KEY-----\nMHcCAQE=\n-----END EC PRIVATE KEY-----\n"),
 	} {
 		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): held})
-		var refusal providerkit.Refusal
+		var refusal refusal.Refusal
 		if !errors.As(err, &refusal) {
 			t.Errorf("a claim on a box carrying %s = %v, want ocel's own refusal naming %s: the pin reaches the proxy on every reshape, so an unverified one turns a typo into a caddy error on somebody else's deploy",
 				what, err, at)

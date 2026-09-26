@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -49,7 +50,7 @@ func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*
 	for _, item := range bootstrapItems(names, req.Plan.Class, false) {
 		typ, priced := itemTypes[item.Kind]
 		if !priced {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid, "bootstrap item %s has no shape", item.ID())
+			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
 		}
 		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
 	}

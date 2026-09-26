@@ -13,10 +13,12 @@ import (
 	"testing"
 	"time"
 
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -54,7 +56,7 @@ func (w *watched) at(fragment string) int {
 	return slices.IndexFunc(w.lines, func(line string) bool { return strings.Contains(line, fragment) })
 }
 
-func (w *watched) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (w *watched) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func aRelease() Release {
 	return Release{
@@ -188,7 +190,7 @@ func benched(t *testing.T, gate, cutover session.Result) *flipped {
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func released(t *testing.T, rel Release, gate, cutover session.Result, progress providerkit.Progress) (*flipped, error) {
+func released(t *testing.T, rel Release, gate, cutover session.Result, progress edge.Progress) (*flipped, error) {
 	t.Helper()
 	stood := benched(t, gate, cutover)
 	return stood, stood.host().Release(context.Background(), rel, progress)
@@ -386,9 +388,9 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndFlipsNothing(t *testing.T) {
 		return proxied(command)
 	}
 	err := stood.host().Release(context.Background(), aRelease(), nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Fatalf("a write refused on every attempt failed with %v, want %s: another writer holds the box, and the deploy is told to run again", err, providerkit.CodeBusy)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("a write refused on every attempt failed with %v, want %s: another writer holds the box, and the deploy is told to run again", err, refusal.CodeBusy)
 	}
 	if !unserved(err) {
 		t.Errorf("a write that never landed refused with %v, which does not say the previous release still serves", err)
@@ -470,7 +472,7 @@ func TestEveryWayTheGateOrTheFlipCanFailReachesTheSameEndState(t *testing.T) {
 			if err == nil {
 				t.Fatalf("%s released successfully", what)
 			}
-			var refusal providerkit.Refusal
+			var refusal refusal.Refusal
 			if !errors.As(err, &refusal) {
 				t.Errorf("%s failed with %T, want a refusal the cli renders", what, err)
 			}
@@ -535,7 +537,7 @@ func TestAFlipThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) 
 	if err == nil {
 		t.Fatal("a flip that never came back released successfully")
 	}
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Errorf("a flip that never came back failed with %T, want the refusal every other failure renders", err)
 	}
@@ -585,8 +587,8 @@ func TestAReleaseCarryingNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing
 			if err == nil {
 				t.Fatalf("a release carrying %s released successfully", what)
 			}
-			var refusal providerkit.Refusal
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Errorf("a release carrying %s failed with %v, want the seam to name what is missing rather than the helper's usage error", what, err)
 			}
 			if !strings.Contains(err.Error(), healthKey) || !strings.Contains(err.Error(), "api") {
@@ -991,7 +993,7 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 	if err == nil {
 		t.Fatal("the stop after the flip was refused and the release reported success")
 	}
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("a failure after the flip failed with %T (%v), want the refusal every other failure renders: a bare machine error reads as a failed release while the new one is in fact serving", err, err)
 	}
@@ -1188,7 +1190,7 @@ func strandedByWrite(t *testing.T, landed bool, back session.Result) (*flipped, 
 	if err == nil {
 		t.Fatal("a release whose flip configuration was never written released successfully")
 	}
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Errorf("a flip configuration that could not be written failed with %T, want the refusal every other failure renders", err)
 	}
@@ -1392,7 +1394,7 @@ func TestARetireeThatWouldNotStopSaysTheFlipTookAndStillStopsEveryOther(t *testi
 	if unserved(err) {
 		t.Errorf("a release whose retiree would not stop after the flip refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", err)
 	}
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Errorf("a release whose retiree would not stop after the flip failed with %T, want the refusal every other failure renders", err)
 	}
@@ -1521,7 +1523,7 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 	stood := benchedOn(t, before, session.Result{}, session.Result{})
 	rel := aRelease()
 	rel.Holding = func(context.Context) error {
-		return providerkit.Refuse(providerkit.CodeBusy, "promotion p2 no longer holds production: p3 took it")
+		return refusal.Refuse(refusal.CodeBusy, "promotion p2 no longer holds production: p3 took it")
 	}
 
 	err := stood.host().Release(context.Background(), rel, nil)

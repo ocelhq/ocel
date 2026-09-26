@@ -23,7 +23,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -80,7 +79,7 @@ func run(addr, region, config, keyParameter string) error {
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
 		now:       time.Now,
-		read:      map[kit.Class]readDeployment{},
+		read:      map[edge.Class]readDeployment{},
 	}
 
 	spec := connectorkit.Spec{
@@ -167,7 +166,7 @@ type deployments struct {
 	now       func() time.Time
 
 	mu   sync.Mutex
-	read map[kit.Class]readDeployment
+	read map[edge.Class]readDeployment
 }
 
 type readDeployment struct {
@@ -175,7 +174,7 @@ type readDeployment struct {
 	at   time.Time
 }
 
-func (d *deployments) resolve(ctx context.Context, class kit.Class) (bootstrap.Deployed, error) {
+func (d *deployments) resolve(ctx context.Context, class edge.Class) (bootstrap.Deployed, error) {
 	d.mu.Lock()
 	memo, known := d.read[class]
 	d.mu.Unlock()
@@ -192,17 +191,17 @@ func (d *deployments) resolve(ctx context.Context, class kit.Class) (bootstrap.D
 	return held, nil
 }
 
-func (d *deployments) Table(ctx context.Context, class kit.Class) (string, error) {
+func (d *deployments) Table(ctx context.Context, class edge.Class) (string, error) {
 	held, err := d.resolve(ctx, class)
 	return held.StateTable, err
 }
 
-func (d *deployments) ValuesTable(ctx context.Context, class kit.Class) (string, error) {
+func (d *deployments) ValuesTable(ctx context.Context, class edge.Class) (string, error) {
 	held, err := d.resolve(ctx, class)
 	return held.VarsTable, err
 }
 
-func (d *deployments) Key(ctx context.Context, class kit.Class) (string, error) {
+func (d *deployments) Key(ctx context.Context, class edge.Class) (string, error) {
 	held, err := d.resolve(ctx, class)
 	return held.VarsKeyARN, err
 }

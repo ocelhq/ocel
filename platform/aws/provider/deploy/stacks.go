@@ -18,12 +18,13 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Scope struct {
-	Class providerkit.Class
+	Class edge.Class
 	Slug  string
 	Env   string
 	Edge  edge.Kind
@@ -178,7 +179,7 @@ func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 		return r.infra(pctx, plan, work)
 	}
 	if plan.Kind != providerkit.StackInfra {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s stands up an app and this plan carries none", plan.Ref.Name)
 	}
 	return r.infra(pctx, plan, &infraWork{})
@@ -216,7 +217,7 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 			args.PatchedCORS = transformed.opensCORS(resource.Name)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
-			return providerkit.Refuse(providerkit.CodeInvalid,
+			return refusal.Refuse(refusal.CodeInvalid,
 				"this provider stands up no %s; it stands up %s and %s", resource.Type, providerkit.BindingPostgres, providerkit.BindingBucket)
 		}
 		if err != nil {
@@ -343,7 +344,7 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 	return &HandoverError{Bindings: handed, Stack: plan.Ref.Name.String()}
 }
 
-func (r *Stacks) PackApp(ctx context.Context, packing providerkit.AppPacking, _ providerkit.Progress) (providerkit.AppPack, error) {
+func (r *Stacks) PackApp(ctx context.Context, packing providerkit.AppPacking, _ edge.Progress) (providerkit.AppPack, error) {
 	held, err := r.at(ctx, packing.Ref, packing.Edge)
 	if err != nil {
 		return providerkit.AppPack{}, err
@@ -355,7 +356,7 @@ func (r *Stacks) PackApp(ctx context.Context, packing providerkit.AppPacking, _ 
 	return providerkit.AppPack{Overlay: bundle.overlay(), Packed: bundle}, nil
 }
 
-func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -363,7 +364,7 @@ func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress 
 	return held.plan(ctx, plan, progress)
 }
 
-func (r *Stacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *Stacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (providerkit.Plan, error) {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -371,7 +372,7 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, prog
 	return held.automation.PreviewDestroy(ctx, ref, progress)
 }
 
-func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -379,7 +380,7 @@ func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, prog
 	return held.provision(ctx, plan, progress)
 }
 
-func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
 	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
 	if runsContainer(plan) {
 		return r.provisionContainer(ctx, plan, progress)
@@ -405,7 +406,7 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, pro
 	return result, nil
 }
 
-func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
 	if runsContainer(plan) {
 		return r.planContainer(ctx, plan, progress)
 	}
@@ -438,7 +439,7 @@ func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (prov
 		return plan, nil, nil
 	}
 	if len(plan.Images.Pushes) > 0 {
-		return providerkit.StackPlan{}, nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return providerkit.StackPlan{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs on serverless compute, which runs functions rather than an image, and this release pushes %d", plan.Ref.Name, len(plan.Images.Pushes))
 	}
 	transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
@@ -466,7 +467,7 @@ func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (prov
 	return plan, work, nil
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (r *Stacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
@@ -490,7 +491,7 @@ func (r *Stacks) Inspect(ctx context.Context, ref providerkit.StackRef) (provide
 	return providerkit.StackState{Present: len(outputs) > 0}, nil
 }
 
-func (r *Stacks) Outputs(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (auto.OutputMap, error) {
+func (r *Stacks) Outputs(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (auto.OutputMap, error) {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return nil, err

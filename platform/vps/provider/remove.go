@@ -4,10 +4,11 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-func (p *Provider) RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error {
+func (p *Provider) RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress edge.Progress) error {
 	switch binding.Type {
 	case providerkit.BindingPostgres:
 		name := host.ResourceName(ref.Name.String(), binding.Name, postgresKind)

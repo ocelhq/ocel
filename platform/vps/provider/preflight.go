@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -42,7 +43,7 @@ func refusing(found []error) error {
 		if err == nil {
 			continue
 		}
-		var refusal providerkit.Refusal
+		var refusal refusal.Refusal
 		if !errors.As(err, &refusal) {
 			return err
 		}
@@ -52,9 +53,9 @@ func refusing(found []error) error {
 	case 0:
 		return nil
 	case 1:
-		return providerkit.Refuse(providerkit.CodeNotReady, "%s", said[0])
+		return refusal.Refuse(refusal.CodeNotReady, "%s", said[0])
 	default:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this box is not ready for a deploy:\n\n%s", strings.Join(said, "\n\n"))
 	}
 }

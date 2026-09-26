@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -60,18 +60,18 @@ func Covering(pins []Pin, hostname string) string {
 
 func PreviewBaseUsable(base string) error {
 	if base == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the preview entry on this box has no base domain")
 	}
 	if err := switchboard.PreviewBaseUsable(base); err != nil {
-		return providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
+		return refusal.Refuse(refusal.CodeInvalid, "%v", err)
 	}
 	return nil
 }
 
 func Claiming(claims []HostClaim, taken HostClaim) ([]HostClaim, error) {
 	if at := slices.IndexFunc(claims, func(claim HostClaim) bool { return claim.Hostname == taken.Hostname }); at >= 0 && claims[at].Owner != taken.Owner {
-		return nil, providerkit.Refuse(providerkit.CodeBusy,
+		return nil, refusal.Refuse(refusal.CodeBusy,
 			"%s is claimed on this box by %s\nUnbind it there before %s binds it",
 			taken.Hostname, claims[at].Owner, taken.Owner)
 	}
@@ -97,7 +97,7 @@ func RenderProxyConfig(front proxy.Proxy, state RoutingTable) ([]byte, error) {
 	}
 	rendered, err := front.Render(proxySpec(state))
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
+		return nil, refusal.Refuse(refusal.CodeInvalid, "%v", err)
 	}
 	return rendered, nil
 }
@@ -123,7 +123,7 @@ func validTable(state RoutingTable) error {
 		return err
 	}
 	if _, err := switchboard.Read(written); err != nil {
-		return providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
+		return refusal.Refuse(refusal.CodeInvalid, "%v", err)
 	}
 	for _, pin := range state.Pins {
 		if err := validPin(pin); err != nil {
@@ -135,7 +135,7 @@ func validTable(state RoutingTable) error {
 
 func validPin(pin Pin) error {
 	if _, pinned := caddy.Pinned(pin.Path); pin.Hostname == "" || !pinned {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"pinned certificate for %q is at %q, not under %s/",
 			pin.Hostname, pin.Path, caddy.PinsDir)
 	}

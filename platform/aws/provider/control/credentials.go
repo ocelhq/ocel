@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -42,7 +43,7 @@ func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
 func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	out, err := c.STS.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return providerkit.Identity{}, providerkit.Refuse(providerkit.CodeDenied, "%s: %v", credentialHint, err)
+		return providerkit.Identity{}, refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
 	}
 	arn := aws.ToString(out.Arn)
 	return providerkit.Identity{
@@ -64,7 +65,7 @@ func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.Credenti
 	case providerkit.TierDeploy:
 		document, err = bootstrap.DeployCredentialPermissions(c.Namespace)
 	default:
-		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")
 	}
 	if err != nil {

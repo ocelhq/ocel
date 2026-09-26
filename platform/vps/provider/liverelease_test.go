@@ -35,7 +35,7 @@ type release struct {
 func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	t.Helper()
 	vm := liveMachine(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 	fixtures(t, vm)
 	p := vm.deploying(t)
 	t.Cleanup(func() {
@@ -58,7 +58,7 @@ func livePlan(t *testing.T, tag string) providerkit.StackPlan {
 	}
 	sum := sha256.Sum256([]byte(tag))
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
 			App:             liveApp,
@@ -82,7 +82,7 @@ func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 	return release{physical: standing[0].Physical, address: standing[0].Physical + ":" + providerkit.InjectedPortText}
 }
 
-func releasing(p *vps.Provider, held release, drain time.Duration, progress providerkit.Progress) error {
+func releasing(p *vps.Provider, held release, drain time.Duration, progress edge.Progress) error {
 	return p.Host().Release(context.Background(), host.Release{
 		Apps: []host.AppRelease{{
 			RouteKey:   host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},

@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func detailWriter(progress providerkit.Progress) *lineLog {
+func detailWriter(progress edge.Progress) *lineLog {
 	if progress == nil {
 		return nil
 	}

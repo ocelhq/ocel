@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -25,7 +26,7 @@ type said struct{ lines []string }
 func (s *said) Say(message string)    { s.lines = append(s.lines, message) }
 func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
 
-func (s *said) Span(name string, _, _ time.Time, err error, attrs ...providerkit.Attr) {
+func (s *said) Span(name string, _, _ time.Time, err error, attrs ...edge.Attr) {
 	s.lines = append(s.lines, name)
 	if err != nil {
 		s.lines = append(s.lines, err.Error())
@@ -78,7 +79,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -166,12 +167,12 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	defer closing(t, p)
 
 	ctx := context.Background()
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, class := range []providerkit.Class{production, preview} {
+	for _, class := range []edge.Class{production, preview} {
 		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}
@@ -181,7 +182,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
 		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
-	sealGrant := func(class providerkit.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
+	sealGrant := func(class edge.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
 
 	first, err := bootstrap.PlanRemove(ctx, production)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -27,8 +28,8 @@ func TestPermissionsMayBeUnwrittenSoLongAsTheProviderSaysSo(t *testing.T) {
 		held bool
 	}{
 		"a document":              {err: nil, held: true},
-		"none written yet":        {err: providerkit.Refuse(providerkit.CodeNotReady, "no permissions document yet"), held: true},
-		"a tier it will not name": {err: providerkit.Refuse(providerkit.CodeInvalid, "no such tier"), held: false},
+		"none written yet":        {err: refusal.Refuse(refusal.CodeNotReady, "no permissions document yet"), held: true},
+		"a tier it will not name": {err: refusal.Refuse(refusal.CodeInvalid, "no such tier"), held: false},
 		"something broken":        {err: errors.New("the document would not render"), held: false},
 	} {
 		t.Run(name, func(t *testing.T) {

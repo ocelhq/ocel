@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -207,7 +208,7 @@ func standingOver(machine *scripted) []providerkit.HostCheck {
 	p.Resolving(stubResolver(map[string][]string{"box.invalid": {boxAddress}}))
 	p.Reaching(func(context.Context, string) error { return nil })
 	checks, err := p.CheckHost(context.Background(), providerkit.HostCheckRequest{
-		Class: providerkit.ClassProduction,
+		Class: edge.ClassProduction,
 	})
 	if err != nil {
 		panic(err)
@@ -372,7 +373,7 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 		func(context.Context) (host.Conn, error) { return addressless{boxSaying(nil)}, nil },
 	)
 	checks, err := p.CheckHost(context.Background(), providerkit.HostCheckRequest{
-		Class:     providerkit.ClassProduction,
+		Class:     edge.ClassProduction,
 		Hostnames: []string{"shop.example.com"},
 	})
 	if err != nil {

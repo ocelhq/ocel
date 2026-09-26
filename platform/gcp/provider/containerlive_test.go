@@ -9,11 +9,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-func containerPlanDeclaring(class providerkit.Class, env string, values providerkit.AppValues) providerkit.StackPlan {
+func containerPlanDeclaring(class edge.Class, env string, values providerkit.AppValues) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
@@ -46,7 +47,7 @@ func revisionEnv(t *testing.T, server *runServer, plan providerkit.StackPlan) (*
 
 func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(providerkit.ClassProduction, "production", providerkit.AppValues{
+	p, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
 		Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
@@ -80,7 +81,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *te
 
 func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(providerkit.ClassPreview, "pr-7", providerkit.AppValues{
+	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassPreview, "pr-7", providerkit.AppValues{
 		Secrets: []providerkit.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -95,7 +96,7 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAContainerWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(providerkit.ClassProduction, "production", providerkit.AppValues{
+	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 

@@ -12,6 +12,7 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const Namespace = "ocel"
@@ -84,7 +85,7 @@ func (i images) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 	return i.pushed.Has(ctx, push)
 }
 
-func (i images) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
+func (i images) Push(ctx context.Context, push providerkit.ImagePush, progress edge.Progress) error {
 	repository, err := repositoryOf(i.target, push.ImageRef)
 	if err != nil {
 		return err

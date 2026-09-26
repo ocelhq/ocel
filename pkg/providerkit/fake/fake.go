@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -116,9 +117,9 @@ func (p *Provider) Stacks() providerkit.Stacks {
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
 
-func (p *Provider) Records() providerkit.RecordStore { return p.records }
+func (p *Provider) Records() records.Store { return p.records }
 
-func (p *Provider) Cipher() providerkit.Cipher { return p.cipher }
+func (p *Provider) Cipher() records.Cipher { return p.cipher }
 
 func (p *Provider) Credentials() providerkit.Credentials { return p.creds }
 

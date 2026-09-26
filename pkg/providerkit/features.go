@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func FeatureLevels(catalogue []Feature, names []string) ([][]string, error) {
@@ -139,7 +141,7 @@ func refuseBothWays(ensure, removing []string) error {
 	if len(both) == 0 {
 		return nil
 	}
-	return Refuse(CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"this run asks to stand %s up and to take it down at once; a feature is either ensured or removed, never both",
 		strings.Join(both, ", "))
 }
@@ -188,9 +190,9 @@ func unknownFeature(catalogue []Feature, name, from string) error {
 		offered = "no bootstrap features at all"
 	}
 	if from != "" {
-		return Refuse(CodeInvalid, "%s depends on %q, which this provider does not offer; it offers %s", from, name, offered)
+		return refusal.Refuse(refusal.CodeInvalid, "%s depends on %q, which this provider does not offer; it offers %s", from, name, offered)
 	}
-	return Refuse(CodeInvalid, "this provider has no bootstrap feature named %q; it offers %s", name, offered)
+	return refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap feature named %q; it offers %s", name, offered)
 }
 
 func keys(set map[string]bool) []string {

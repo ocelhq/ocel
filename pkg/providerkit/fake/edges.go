@@ -10,6 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -34,7 +36,7 @@ type Edges struct {
 	edges map[edge.Kind]*Edge
 }
 
-func NewEdges(records providerkit.RecordStore) *Edges {
+func NewEdges(records records.Store) *Edges {
 	registry := &Edges{edges: map[edge.Kind]*Edge{}}
 	for _, kind := range []edge.Kind{KindRelay, KindDirect} {
 		registry.order = append(registry.order, kind)
@@ -54,7 +56,7 @@ func (e *Edges) Open(kind edge.Kind) (edge.Edge, error) {
 	defer e.mu.Unlock()
 	front, served := e.edges[kind]
 	if !served {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the reference provider serves no edge %q; it serves %s", kind, kindList(e.order))
 	}
 	return front, nil
@@ -108,7 +110,7 @@ func kindList(kinds []edge.Kind) string {
 type Edge struct {
 	mu       sync.Mutex
 	kind     edge.Kind
-	records  providerkit.RecordStore
+	records  records.Store
 	ledgers  func(edge.StackState) Ledger
 	owners   map[string]string
 	wildcard string
@@ -164,7 +166,7 @@ func (e *Edge) Serving(certificate string) bool {
 	return certificate != "" && slices.Contains(slices.Collect(maps.Values(e.serving)), certificate)
 }
 
-func newEdge(kind edge.Kind, records providerkit.RecordStore) *Edge {
+func newEdge(kind edge.Kind, records records.Store) *Edge {
 	return &Edge{kind: kind, records: records, owners: map[string]string{}, serving: map[string]string{}}
 }
 

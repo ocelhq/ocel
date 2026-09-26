@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -109,16 +110,16 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var refusal providerkit.Refusal
+			var refused refusal.Refusal
 			identity, err := tc.held.Whoami(context.Background())
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeDenied {
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 				t.Fatalf("Whoami() = %+v, %v, want a denied refusal", identity, err)
 			}
-			if !strings.Contains(refusal.Message, "gcloud auth application-default login") {
-				t.Errorf("Whoami() refused with %q, want it to name the command that fixes it", refusal.Message)
+			if !strings.Contains(refused.Message, "gcloud auth application-default login") {
+				t.Errorf("Whoami() refused with %q, want it to name the command that fixes it", refused.Message)
 			}
-			if strings.Contains(refusal.Message, "GOOGLE_APPLICATION_CREDENTIALS") {
-				t.Errorf("Whoami() refused with %q, and a key file is not a way this provider authenticates", refusal.Message)
+			if strings.Contains(refused.Message, "GOOGLE_APPLICATION_CREDENTIALS") {
+				t.Errorf("Whoami() refused with %q, and a key file is not a way this provider authenticates", refused.Message)
 			}
 		})
 	}
@@ -208,14 +209,14 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			var refusal providerkit.Refusal
+			var refused refusal.Refusal
 			_, err := gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
 				Tokens:       heldToken{token: heldAccessToken},
 				TokenInfoURL: server.URL,
 			}.Whoami(context.Background())
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-				t.Fatalf("Whoami() = %v, want a %s refusal: the credential is good, the endpoint is not", err, providerkit.CodeBusy)
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+				t.Fatalf("Whoami() = %v, want a %s refusal: the credential is good, the endpoint is not", err, refusal.CodeBusy)
 			}
 			want := int32(1)
 			if answer.retried {
@@ -231,8 +232,8 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 func TestPermissionsRefuseTheTierThatIsNoTier(t *testing.T) {
 	t.Parallel()
 
-	var refusal providerkit.Refusal
-	if _, err := (gcp.Credentials{}).Permissions("neither"); !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if _, err := (gcp.Credentials{}).Permissions("neither"); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(neither) = %v, want an invalid refusal", err)
 	}
 }

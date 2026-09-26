@@ -10,26 +10,28 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestRecordsWriteIsACompareAndSet(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	records := fake.NewRecords()
-	name := providerkit.RecordName{"edgestacks", "production", "shop"}
+	store := fake.NewRecords()
+	name := records.Name{"edgestacks", "production", "shop"}
 
-	first, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("one")})
+	first, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")})
 	if err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 
-	if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("two")}); !errors.Is(err, providerkit.ErrStale) {
+	if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("two")}); !errors.Is(err, records.ErrStale) {
 		t.Fatalf("Write() over an existing record without its revision = %v, want ErrStale", err)
 	}
 
-	second, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("two"), Revision: first})
+	second, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("two"), Revision: first})
 	if err != nil {
 		t.Fatalf("Write() at the revision it was read at: error = %v", err)
 	}
@@ -37,7 +39,7 @@ func TestRecordsWriteIsACompareAndSet(t *testing.T) {
 		t.Error("Write() reused the revision, so a lost update would go unnoticed")
 	}
 
-	if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("three"), Revision: first}); !errors.Is(err, providerkit.ErrStale) {
+	if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("three"), Revision: first}); !errors.Is(err, records.ErrStale) {
 		t.Fatalf("Write() at a revision that moved = %v, want ErrStale", err)
 	}
 }
@@ -45,13 +47,13 @@ func TestRecordsWriteIsACompareAndSet(t *testing.T) {
 func TestRecordsWriteRefusesARevisionForARecordThatIsNotThere(t *testing.T) {
 	t.Parallel()
 
-	records := fake.NewRecords()
-	_, err := records.Write(context.Background(), providerkit.Record{
-		Name:     providerkit.RecordName{"schema"},
+	store := fake.NewRecords()
+	_, err := store.Write(context.Background(), records.Record{
+		Name:     records.Name{"schema"},
 		Bytes:    []byte("{}"),
 		Revision: "1",
 	})
-	if !errors.Is(err, providerkit.ErrStale) {
+	if !errors.Is(err, records.ErrStale) {
 		t.Fatalf("Write() = %v, want ErrStale", err)
 	}
 }
@@ -60,18 +62,18 @@ func TestRecordsReadAndRemove(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	records := fake.NewRecords()
-	name := providerkit.RecordName{"schema"}
+	store := fake.NewRecords()
+	name := records.Name{"schema"}
 
-	if _, err := records.Read(ctx, name); !errors.Is(err, providerkit.ErrNoRecord) {
-		t.Fatalf("Read() of an absent record = %v, want ErrNoRecord", err)
+	if _, err := store.Read(ctx, name); !errors.Is(err, records.ErrNotFound) {
+		t.Fatalf("Read() of an absent record = %v, want ErrNotFound", err)
 	}
 
-	revision, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("{}")})
+	revision, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("{}")})
 	if err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
-	read, err := records.Read(ctx, name)
+	read, err := store.Read(ctx, name)
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
@@ -79,14 +81,14 @@ func TestRecordsReadAndRemove(t *testing.T) {
 		t.Errorf("Read() = %+v, want the bytes written at revision %q", read, revision)
 	}
 
-	if err := records.Remove(ctx, name, "not-the-revision"); !errors.Is(err, providerkit.ErrStale) {
+	if err := store.Remove(ctx, name, "not-the-revision"); !errors.Is(err, records.ErrStale) {
 		t.Fatalf("Remove() at the wrong revision = %v, want ErrStale", err)
 	}
-	if err := records.Remove(ctx, name, revision); err != nil {
+	if err := store.Remove(ctx, name, revision); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
-	if _, err := records.Read(ctx, name); !errors.Is(err, providerkit.ErrNoRecord) {
-		t.Fatalf("Read() after Remove = %v, want ErrNoRecord", err)
+	if _, err := store.Read(ctx, name); !errors.Is(err, records.ErrNotFound) {
+		t.Fatalf("Read() after Remove = %v, want ErrNotFound", err)
 	}
 }
 
@@ -94,17 +96,17 @@ func TestRecordsListIsScopedToThePrefix(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	records := fake.NewRecords()
+	store := fake.NewRecords()
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := records.Write(ctx, providerkit.Record{Name: providerkit.RecordName{"projects", slug}}); err != nil {
+		if _, err := store.Write(ctx, records.Record{Name: records.Name{"projects", slug}}); err != nil {
 			t.Fatalf("Write() error = %v", err)
 		}
 	}
-	if _, err := records.Write(ctx, providerkit.Record{Name: providerkit.RecordName{"schema"}}); err != nil {
+	if _, err := store.Write(ctx, records.Record{Name: records.Name{"schema"}}); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 
-	found, err := records.List(ctx, providerkit.RecordName{"projects"})
+	found, err := store.List(ctx, records.Name{"projects"})
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -121,7 +123,7 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 
 	ctx := context.Background()
 	cipher := fake.NewCipher()
-	at := providerkit.SealScope{Project: "shop", Class: providerkit.ClassProduction, Env: "production", Name: "DATABASE_URL"}
+	at := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "production", Name: "DATABASE_URL"}
 
 	sealed, err := cipher.Seal(ctx, at, []byte("postgres://"))
 	if err != nil {
@@ -151,8 +153,8 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 
 	ctx := context.Background()
 	artifacts := fake.NewArtifacts()
-	kept := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "other/app.zip"}
-	removed := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreAssets, Key: "releases/r1/app.zip"}
+	kept := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "other/app.zip"}
+	removed := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreAssets, Key: "releases/r1/app.zip"}
 
 	for _, ref := range []providerkit.ArtifactRef{kept, removed} {
 		if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("body"))); err != nil {
@@ -160,7 +162,7 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 		}
 	}
 
-	if err := artifacts.RemovePrefix(ctx, providerkit.ClassProduction, "releases/", nil); err != nil {
+	if err := artifacts.RemovePrefix(ctx, edge.ClassProduction, "releases/", nil); err != nil {
 		t.Fatalf("RemovePrefix() error = %v", err)
 	}
 	if _, err := artifacts.Open(ctx, removed); err == nil {
@@ -189,7 +191,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	stacks := resources.Stacks(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
 	ref := providerkit.StackRef{
 		Project: "shop",
-		Class:   providerkit.ClassProduction,
+		Class:   edge.ClassProduction,
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 

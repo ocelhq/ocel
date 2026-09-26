@@ -36,13 +36,13 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: providerkit.ClassProduction, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply(%s) behind %s = %v", providerkit.ClassProduction, front, err)
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: edge.ClassProduction, WrittenBy: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) behind %s = %v", edge.ClassProduction, front, err)
 	}
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
-		if err := bootstrap.Remove(ctx, providerkit.ClassProduction, nil); err != nil {
-			t.Errorf("Remove(%s) = %v", providerkit.ClassProduction, err)
+		if err := bootstrap.Remove(ctx, edge.ClassProduction, nil); err != nil {
+			t.Errorf("Remove(%s) = %v", edge.ClassProduction, err)
 		}
 	})
 
@@ -73,7 +73,7 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 	}
 
 	if err := d.PreflightDeploy(ctx, providerkit.DeployPreflight{Plan: providerkit.DeployPlan{
-		Slug: frontedSlug, Class: providerkit.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
+		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network stood again from what bootstrap left", err)
 	}
@@ -89,7 +89,7 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 		t.Errorf("%s answered %q for %s after a deploy onto the restored switchboard, want two", front, served, frontedHostname)
 	}
 
-	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: providerkit.ClassProduction})
+	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}

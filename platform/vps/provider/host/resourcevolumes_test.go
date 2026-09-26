@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func TestAClassDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 	t.Parallel()
 
-	empty := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: map[string]string{}}
-	beside := Reading{Arch: ArchAMD64, Class: providerkit.ClassPreview, Observed: map[string]string{}}
+	empty := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{}}
+	beside := Reading{Arch: ArchAMD64, Class: edge.ClassPreview, Observed: map[string]string{}}
 	taken := removing(empty, beside, appsStanding{containers: true, volumes: true})
 
 	containers, volumes := -1, -1
@@ -41,7 +41,7 @@ func TestAClassDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 func TestAClassProbeAsksForVolumesUnderItsOwnLabel(t *testing.T) {
 	t.Parallel()
 
-	probe := appsProbe(providerkit.ClassPreview)
+	probe := appsProbe(edge.ClassPreview)
 	if !strings.Contains(probe, "docker volume ls") || !strings.Contains(probe, "label=ocel.class=preview") {
 		t.Errorf("the probe reads %q and never learns whether preview kept a volume", probe)
 	}
@@ -50,8 +50,8 @@ func TestAClassProbeAsksForVolumesUnderItsOwnLabel(t *testing.T) {
 func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThem(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	stood.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "echo volumes") {
 			return session.Result{Stdout: "containers\nvolumes\n"}, true

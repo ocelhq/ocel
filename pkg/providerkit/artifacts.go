@@ -18,6 +18,7 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -28,13 +29,13 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemovePrefix(ctx context.Context, class Class, prefix string, progress Progress) error
+	RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error
 }
 
 type ArtifactRef struct {
-	Class  Class  `json:"class,omitempty"`
-	Bucket string `json:"bucket,omitempty"`
-	Key    string `json:"key,omitempty"`
+	Class  edge.Class `json:"class,omitempty"`
+	Bucket string     `json:"bucket,omitempty"`
+	Key    string     `json:"key,omitempty"`
 }
 
 const (
@@ -73,7 +74,7 @@ func takeUploadSlot() func() {
 	return func() { <-uploadSlots }
 }
 
-func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, progress Progress) error {
+func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, progress edge.Progress) error {
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	for _, upload := range uploads {
@@ -85,7 +86,7 @@ func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, pro
 	return group.Wait()
 }
 
-func ship(ctx context.Context, store ArtifactStore, upload Upload, progress Progress) error {
+func ship(ctx context.Context, store ArtifactStore, upload Upload, progress edge.Progress) error {
 	held, err := store.Has(ctx, upload.Ref)
 	if err != nil {
 		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
@@ -120,7 +121,7 @@ type AppPack struct {
 	Packed any
 }
 
-func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, progress Progress) (AppPack, error) {
+func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, progress edge.Progress) (AppPack, error) {
 	packApp := r.provider.Hooks().PackApp
 	if packApp == nil {
 		return AppPack{}, nil
@@ -207,7 +208,7 @@ func routeOf(fn *contractv1.ManifestFunction) string {
 
 func stagedDir(root string, fn *contractv1.ManifestFunction) (string, error) {
 	if fn.GetArtifactPath() == "" {
-		return "", Refuse(CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"function %s names no build artifact, so there is nothing to ship", fn.GetLogicalName())
 	}
 	return filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath())), nil
@@ -401,8 +402,8 @@ func copyInto(entry io.Writer, path string) error {
 	return err
 }
 
-func environmentTier(class Class) environmentv1.Tier {
-	if class == ClassPreview {
+func environmentTier(class edge.Class) environmentv1.Tier {
+	if class == edge.ClassPreview {
 		return environmentv1.Tier_TIER_PREVIEW
 	}
 	return environmentv1.Tier_TIER_PRODUCTION

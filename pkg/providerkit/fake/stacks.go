@@ -46,15 +46,15 @@ func (r *Stacks) Plans() []providerkit.StackPlan {
 	return slices.Clone(r.plans)
 }
 
-func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
 }
 
-func (r *Stacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
+func (r *Stacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ edge.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
-func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
 	if err := ctx.Err(); err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -108,7 +108,7 @@ func (r *Stacks) RefuseNextDestroy(err error) {
 	r.refusal = err
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (r *Stacks) Destroy(_ context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -202,22 +202,22 @@ func propertiesFor(t providerkit.BindingType, name string) map[string]string {
 	return properties
 }
 
-func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.Function, error) {
+func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.Function, error) {
 	return StoodUpFunctions(plan), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Progress) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ edge.Progress) error {
 	for _, function := range functions {
 		p.stacks.tookDown(function.Name)
 	}
 	return nil
 }
 
-func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.AppContainer, error) {
 	return StoodUpContainers(plan), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Progress) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ edge.Progress) error {
 	for _, container := range containers {
 		p.stacks.tookDown(container.Name)
 	}

@@ -12,6 +12,8 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -25,7 +27,7 @@ type projectRemoval struct {
 	settle   settlement
 
 	slug    string
-	class   Class
+	class   edge.Class
 	scope   string
 	infra   []naming.StackName
 	apps    []naming.StackName
@@ -38,7 +40,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 		return nil, err
 	}
 	if req.GetSlug() == "" {
-		return nil, Refuse(CodeInvalid, "this call names no project, and a removal plan is drawn for one")
+		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and a removal plan is drawn for one")
 	}
 	class, err := classOf(req.GetEnvironment().GetTier())
 	if err != nil {
@@ -189,7 +191,7 @@ func certificateGroup(cert Certificate) *planv1.ChangeGroup {
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
 		removal, err := h.openRemoval(ctx, req)
 		if err != nil {
 			return err
@@ -220,7 +222,7 @@ func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
 	return RefuseGrowth(shown, drawn)
 }
 
-func (r *projectRemoval) run(ctx context.Context, progress Progress) error {
+func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error {
 	var errs []error
 
 	if err := r.unbind(ctx, progress); err != nil {
@@ -255,7 +257,7 @@ func (r *projectRemoval) run(ctx context.Context, progress Progress) error {
 	return r.forget(ctx, progress)
 }
 
-func (r *projectRemoval) unbind(ctx context.Context, progress Progress) error {
+func (r *projectRemoval) unbind(ctx context.Context, progress edge.Progress) error {
 	if r.stack == nil || r.stack.State().Empty() {
 		return nil
 	}
@@ -276,13 +278,13 @@ func (r *projectRemoval) unbind(ctx context.Context, progress Progress) error {
 }
 
 func (r *projectRemoval) pointers() []string {
-	if r.class == ClassProduction {
+	if r.class == edge.ClassProduction {
 		return []string{edge.DefaultPointer}
 	}
 	return r.pointer
 }
 
-func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress Progress) error {
+func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress edge.Progress) error {
 	progress.Say("Destroying " + stack.String())
 	ref := StackRef{Project: r.slug, Class: r.class, Name: stack}
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
@@ -291,7 +293,7 @@ func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, pr
 	return ForgetStack(ctx, r.provider.Records(), r.class, r.slug, stack)
 }
 
-func (r *projectRemoval) tearDownEdge(ctx context.Context, progress Progress) error {
+func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progress) error {
 	if r.stack == nil || r.stack.State().Empty() {
 		return nil
 	}
@@ -303,14 +305,14 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress Progress) er
 	return r.store.write(ctx, r.state)
 }
 
-func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress Progress) error {
+func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress edge.Progress) error {
 	if err := r.settle.release(ctx, written, progress.Say); err != nil {
 		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
 	}
 	return nil
 }
 
-func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certificate, progress Progress) error {
+func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certificate, progress edge.Progress) error {
 	var errs []error
 	for _, cert := range held {
 		if err := retireCertificate(ctx, r.provider, r.settle, cert, Certificate{}, progress); err != nil {
@@ -320,7 +322,7 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certifi
 	return errors.Join(errs...)
 }
 
-func (r *projectRemoval) purgeValues(ctx context.Context, progress Progress) error {
+func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress) error {
 	progress.Say("Removing the project's stored variable values")
 	store := values.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
 	if _, err := store.Purge(ctx, values.Scope{Project: r.slug, Class: r.class}); err != nil {
@@ -329,7 +331,7 @@ func (r *projectRemoval) purgeValues(ctx context.Context, progress Progress) err
 	return nil
 }
 
-func (r *projectRemoval) purgeObjects(ctx context.Context, progress Progress) error {
+func (r *projectRemoval) purgeObjects(ctx context.Context, progress edge.Progress) error {
 	var errs []error
 	for _, env := range r.environments() {
 		prefix := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: env}.StoragePrefix()
@@ -342,7 +344,7 @@ func (r *projectRemoval) purgeObjects(ctx context.Context, progress Progress) er
 
 func (r *projectRemoval) environments() []string {
 	envs := slices.Clone(r.pointer)
-	if r.class == ClassProduction && !slices.Contains(envs, ProductionEnv) {
+	if r.class == edge.ClassProduction && !slices.Contains(envs, ProductionEnv) {
 		envs = append(envs, ProductionEnv)
 	}
 	if r.scope != EveryPreview && !slices.Contains(envs, r.scope) {
@@ -352,7 +354,7 @@ func (r *projectRemoval) environments() []string {
 	return envs
 }
 
-func (r *projectRemoval) forget(ctx context.Context, progress Progress) error {
+func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) error {
 	remaining, err := ReadStacks(ctx, r.provider.Records(), r.class, r.slug)
 	if err != nil {
 		return err
@@ -361,19 +363,19 @@ func (r *projectRemoval) forget(ctx context.Context, progress Progress) error {
 		return nil
 	}
 	progress.Say("Forgetting the project")
-	if err := Forget(ctx, r.provider.Records(), EdgeStackRecord(r.class, r.slug)); err != nil {
+	if err := records.Forget(ctx, r.provider.Records(), EdgeStackRecord(r.class, r.slug)); err != nil {
 		return err
 	}
-	return Forget(ctx, r.provider.Records(), ProjectRecord(r.class, r.slug))
+	return records.Forget(ctx, r.provider.Records(), ProjectRecord(r.class, r.slug))
 }
 
 func reclaim(
 	ctx context.Context,
 	provider Provider,
 	slug string,
-	class Class,
+	class edge.Class,
 	targets []ReclaimTarget,
-	progress Progress,
+	progress edge.Progress,
 ) error {
 	var errs []error
 	for _, target := range targets {

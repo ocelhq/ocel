@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var containerRuntimeBytes = []byte("the ocel container runtime")
@@ -228,7 +229,7 @@ func (s *stubStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
 
 func (s *stubStore) Destination() string { return "the stub registry" }
 
-func (s *stubStore) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Progress) error {
+func (s *stubStore) Push(_ context.Context, push providerkit.ImagePush, _ edge.Progress) error {
 	s.pushed = append(s.pushed, push)
 	return nil
 }
