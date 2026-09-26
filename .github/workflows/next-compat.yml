@@ -23,7 +23,7 @@ env:
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   BUN_VERSION: "1.4.0"
-  # FIXME: must match pinnedPulumiVersion in platform/aws/provider/pulumiruntime/runtime.go —
+  # FIXME: must match PinnedVersion in pkg/providerkit/pulumi/runtime.go —
   # nothing checks that it does, and a mismatch silently warms the wrong directory.
   PULUMI_VERSION: "3.146.0"
 
