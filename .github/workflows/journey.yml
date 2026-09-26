@@ -871,7 +871,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        front: [nginx, nginx-container]
+        front: [nginx, nginx-container, nginx-network]
     concurrency:
       group: ${{ needs.binary.outputs.real == 'true' && format('real-vps-{0}', matrix.front) || format('journey-vps-{0}-{1}', matrix.front, github.event.pull_request.number) }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}

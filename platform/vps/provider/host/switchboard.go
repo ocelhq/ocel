@@ -35,6 +35,9 @@ func switchboardStanding(binary []byte, front Front) boxContainer {
 	if front.adopted() {
 		relaying = []string{"--relay-network", ProxyNetwork}
 	}
+	for _, joined := range front.joined() {
+		relaying = append(relaying, "--relay-network", joined.name)
+	}
 	return boundToPlace(boxContainer{
 		name:  SwitchboardContainer,
 		image: SwitchboardImage,
@@ -44,8 +47,9 @@ func switchboardStanding(binary []byte, front Front) boxContainer {
 			"--admit", switchboard.AdmitSocket,
 			"--table", live.RoutingTable,
 		}, relaying...),
-		ports:  front.published(),
-		config: contentSum(binary),
+		ports:    front.published(),
+		networks: front.joined(),
+		config:   contentSum(binary),
 		binds: []string{
 			SwitchboardDir + ":" + switchboardMount + ":ro",
 			live.RoutingDir + ":" + live.RoutingDir + ":ro",

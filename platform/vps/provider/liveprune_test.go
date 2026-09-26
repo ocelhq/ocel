@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -19,7 +20,8 @@ func TestLiveASwitchboardAPruneTookWithItsNetworkIsStoodAgainByTheNextDeployAndS
 	vm.fronted(t, front, "*.localhost")
 
 	ctx := context.Background()
-	p := vm.provider(t, routingByHand)
+	proxy := frontProxy(t, front)
+	p := vm.provider(t, func(o *vps.Options) { o.Proxy = proxy })
 	defer closing(t, p)
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
@@ -36,7 +38,7 @@ func TestLiveASwitchboardAPruneTookWithItsNetworkIsStoodAgainByTheNextDeployAndS
 	})
 
 	fixtures(t, vm)
-	d := vm.deployingBehind(t)
+	d := vm.deployingBehind(t, proxy)
 	opened, err := d.Edges().Open(boxedge.Kind)
 	if err != nil {
 		t.Fatal(err)

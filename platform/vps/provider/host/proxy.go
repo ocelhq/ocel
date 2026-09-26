@@ -271,6 +271,7 @@ type boxContainer struct {
 	joins    bool
 	migrates bool
 	restored bool
+	networks []userNetwork
 }
 
 func frontProxy() boxContainer {
@@ -325,6 +326,9 @@ func (s boxContainer) factsOver(binds []string) []byte {
 	if s.migrates {
 		stated = append(stated, migrateFact+migrateHeld)
 	}
+	for _, joined := range s.networks {
+		stated = append(stated, joinedFact(joined)+networkJoined)
+	}
 	for _, bind := range binds {
 		stated = append(stated, "bind="+bind)
 	}
@@ -368,8 +372,11 @@ func (s boxContainer) run(sysctls ...string) []string {
 		"--name", s.name,
 		"--restart", containerRestart,
 		"--network", ProxyNetwork,
-		"--label", containerCmdLabel + "=" + strings.Join(s.command, " "),
 	}
+	for _, joined := range s.networks {
+		argv = append(argv, "--network", joined.name)
+	}
+	argv = append(argv, "--label", containerCmdLabel+"="+strings.Join(s.command, " "))
 	if s.config != "" {
 		argv = append(argv, "--label", configLabel+"="+s.config)
 	}
@@ -395,6 +402,7 @@ func (s boxContainer) run(sysctls ...string) []string {
 
 func (s boxContainer) writing(attempts int) string {
 	written := "set -e\n" +
+		s.networksStanding() +
 		bindsStanding(s.files) +
 		imageHeld(s.image, containerPulls) +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
@@ -414,6 +422,21 @@ func (s boxContainer) started() string {
 		words(s.run(migrateSysctl+"=1")) + " >/dev/null\n" +
 		"else\n" + run + "fi\n"
 }
+
+func (s boxContainer) networksStanding() string {
+	var standing string
+	for _, joined := range s.networks {
+		missing := fmt.Sprintf("option %q names the docker network %s, which this box does not have: start the proxy that creates it, or create it with docker network create %s",
+			joined.option, joined.name, joined.name)
+		standing += "if ! docker network inspect " + quoted(joined.name) + " >/dev/null 2>&1; then\n" +
+			"printf '%s\\n' " + quoted(missing) + " >&2\n" +
+			"exit 1\n" +
+			"fi\n"
+	}
+	return standing
+}
+
+func joinedFact(joined userNetwork) string { return "network:" + joined.name + "=" }
 
 func rejoining(name string) string {
 	return "for net in $(docker network ls --quiet --filter " + quoted("label="+LabelClass) + "); do\n" +
@@ -469,6 +492,9 @@ func networkProbe() string {
 
 func (s boxContainer) probe() string {
 	template, normalized := ContainerFactTemplate, ""
+	for _, joined := range s.networks {
+		template += "\n" + joinedFact(joined) + `{{if index .NetworkSettings.Networks "` + joined.name + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}`
+	}
 	if s.migrates {
 		template += "\n" + migrateFact + `{{if eq (index .HostConfig.Sysctls "` + migrateSysctl + `") "1"}}` + migrateHeld + `{{else}}` + migrateUnset + `{{end}}`
 		normalized = "if [ ! -e " + quoted(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + "*}" + migrateFact + migrateHeld + "\"; fi\n"

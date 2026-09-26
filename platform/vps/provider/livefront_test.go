@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -153,30 +154,71 @@ func counting(body string, from float64) func([]answered) int {
 	}
 }
 
-func routingByHand(o *vps.Options) { o.Proxy = &vps.Proxy{Manual: &vps.Manual{}} }
+func frontProxy(t *testing.T, front string) *vps.Proxy {
+	t.Helper()
+	var carried struct {
+		Proxy *vps.Proxy `json:"proxy"`
+	}
+	if err := json.Unmarshal(frontScript(t, front, "front.json"), &carried); err != nil || carried.Proxy == nil {
+		t.Fatalf("the %s front's front.json names no proxy its projects carry: %v", front, err)
+	}
+	return carried.Proxy
+}
 
-func (vm machine) deployingBehind(t *testing.T) *vps.Provider {
+func (vm machine) deployingBehind(t *testing.T, proxy *vps.Proxy) *vps.Provider {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{
 		SSH:   vps.Target{Host: vm.addr, User: deployLogin, IdentityFile: vm.key, Config: vm.config},
-		Proxy: &vps.Proxy{Manual: &vps.Manual{}},
+		Proxy: proxy,
 	})
 	t.Cleanup(func() { closing(t, p) })
 	return p
 }
 
+func frontNetworks(t *testing.T, vm machine, container string) []string {
+	t.Helper()
+	return strings.Fields(vm.inspects(t, "container", container, "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}"))
+}
+
 func TestLiveOcelServesBehindAnNginxItNeverWritesTo(t *testing.T) {
-	servesBehind(t, "nginx")
+	servesBehind(t, "nginx", nil)
 }
 
 func TestLiveOcelServesBehindAnNginxInAContainerOnItsNetwork(t *testing.T) {
-	vm := servesBehind(t, "nginx-container")
-	if networks := vm.inspects(t, "container", "ocel-front-nginx", "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}"); !slices.Contains(strings.Fields(networks), host.ProxyNetwork) {
+	vm := servesBehind(t, "nginx-container", nil)
+	if networks := frontNetworks(t, vm, "ocel-front-nginx"); !slices.Contains(networks, host.ProxyNetwork) {
 		t.Errorf("the front container sits on %q after ocel came and went, want it still on %s: ocel never moves a proxy it does not run", networks, host.ProxyNetwork)
 	}
 }
 
-func servesBehind(t *testing.T, front string) machine {
+func TestLiveOcelServesBehindAProxyOnItsOwnNetworkAcrossTheProxysRecreation(t *testing.T) {
+	const container, network = "ocel-front-nginx-network", "ocel-front"
+	servesBehind(t, "nginx-network", func(vm machine) {
+		if networks := frontNetworks(t, vm, container); !slices.Equal(networks, []string{network}) {
+			t.Fatalf("the front container sits on %q, want %s alone: this front proves ocel reaches a proxy on the proxy's own network", networks, network)
+		}
+		if networks := frontNetworks(t, vm, host.SwitchboardContainer); !slices.Contains(networks, network) {
+			t.Fatalf("%s sits on %q, want it on %s, the network option proxy.manual.network names", host.SwitchboardContainer, networks, network)
+		}
+		before := vm.inspects(t, "container", container, "{{.Id}}")
+		vm.feeds(t, "sudo sh -s -- "+quote("*.localhost")+" "+quote("*."+frontedPreview), frontScript(t, "nginx-network", "up.sh"))
+		if after := vm.inspects(t, "container", container, "{{.Id}}"); after == before {
+			t.Fatalf("%s is still the container it was, want it recreated the way a host tool recreates its proxy", container)
+		}
+		if networks := frontNetworks(t, vm, container); !slices.Equal(networks, []string{network}) {
+			t.Errorf("the recreated front container sits on %q, want %s alone", networks, network)
+		}
+		deadline := time.Now().Add(loadWait)
+		for served := vm.throughTheFront(t, frontedHostname, "/"); served != "two"; served = vm.throughTheFront(t, frontedHostname, "/") {
+			if time.Now().After(deadline) {
+				t.Fatalf("the recreated front answered %q for %s within %s, want the release it served before: the switchboard sits on the proxy's network, so recreating the proxy costs nothing", served, frontedHostname, loadWait)
+			}
+			time.Sleep(time.Second)
+		}
+	})
+}
+
+func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machine {
 	t.Helper()
 	vm := liveMachine(t)
 	vm.purges(t)
@@ -184,7 +226,8 @@ func servesBehind(t *testing.T, front string) machine {
 	vm.fronted(t, front, "*.localhost", "*."+frontedPreview)
 
 	ctx := context.Background()
-	p := vm.provider(t, routingByHand)
+	proxy := frontProxy(t, front)
+	p := vm.provider(t, func(o *vps.Options) { o.Proxy = proxy })
 	defer closing(t, p)
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
@@ -201,12 +244,12 @@ func servesBehind(t *testing.T, front string) machine {
 	if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
 		t.Errorf("the switchboard publishes %s, want 127.0.0.1:8480 for a proxy on the box to reach", published)
 	}
-	if record := vm.ssh(t, "sudo cat "+quote(host.FrontRecordPath)); !strings.Contains(record, `"manual":{"port":8480}`) {
+	if record := vm.ssh(t, "sudo cat "+quote(host.FrontRecordPath)); !strings.Contains(record, `"manual":{"port":8480`) {
 		t.Errorf("%s reads %s, want the manual proxy recorded", host.FrontRecordPath, record)
 	}
 
 	fixtures(t, vm)
-	d := vm.deployingBehind(t)
+	d := vm.deployingBehind(t, proxy)
 	if err := d.PreflightDeploy(ctx, providerkit.DeployPreflight{Plan: providerkit.DeployPlan{
 		Slug: frontedSlug, Class: providerkit.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
@@ -257,6 +300,9 @@ func servesBehind(t *testing.T, front string) machine {
 	}
 
 	servesAPreviewBehind(t, vm, d, opened, front)
+	if meanwhile != nil {
+		meanwhile(vm)
+	}
 
 	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: providerkit.ClassProduction})
 	if err != nil {
