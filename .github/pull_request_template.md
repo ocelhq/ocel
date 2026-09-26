@@ -1,19 +1,11 @@
-## Why
-
-Closes #
+## Why (link the issue)
 
 ## What changes
 
-## What users see
+## What users see (or "nothing")
 
-Nothing.
+## Contract paths touched (yes or no)
 
-## Contract paths touched
+## Verification (the commands you ran)
 
-No.
-
-## Verification
-
-## Changelog entry
-
-n/a during alpha.
+## Changelog entry (none before the first release)
