@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const (
@@ -30,7 +30,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err != nil || !entry.Mode().IsRegular() {
 		return fmt.Errorf("app %q is built with python and %s holds no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
 	}
-	platform, runs := providerkit.PythonPlatformTag(c.Framework.Arch)
+	platform, runs := arch.PythonPlatformTag(c.Framework.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be vendored for %q, which names no architecture wheels are built for", c.App, c.Framework.Arch)
 	}
@@ -96,7 +96,7 @@ func pipArgs(target, requirements, platform string) []string {
 		"-r", requirements,
 		"--only-binary=:all:",
 		"--platform", platform,
-		"--python-version", providerkit.PythonVersion,
+		"--python-version", arch.PythonVersion,
 		"--implementation", "cp",
 		"--no-compile",
 	}

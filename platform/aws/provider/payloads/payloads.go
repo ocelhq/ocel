@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/aws-payloads
@@ -38,10 +38,10 @@ var (
 	tagInvalidator  = load("tag-invalidator.zip")
 )
 
-func RuntimeLayer(arch string) (Payload, error) {
-	goarch, builds := providerkit.GoArch(arch)
+func RuntimeLayer(architecture string) (Payload, error) {
+	goarch, builds := arch.GoArch(architecture)
 	if !builds {
-		return Payload{}, fmt.Errorf("this provider carries no runtime built for %q", arch)
+		return Payload{}, fmt.Errorf("this provider carries no runtime built for %q", architecture)
 	}
 	return runtimeLayers[goarch], nil
 }

@@ -18,6 +18,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -110,17 +111,17 @@ func TestExecutionFor(t *testing.T) {
 	t.Run("every runtime lands on a managed runtime its language runs on, on the architecture it named", func(t *testing.T) {
 		t.Parallel()
 		for _, name := range append([]string{""}, providerkit.Frameworks()...) {
-			for arch, want := range map[string]string{
-				"":                    providerkit.ArchX8664,
-				providerkit.ArchX8664: providerkit.ArchX8664,
-				providerkit.ArchARM64: providerkit.ArchARM64,
+			for declared, want := range map[string]string{
+				"":         arch.X8664,
+				arch.X8664: arch.X8664,
+				arch.ARM64: arch.ARM64,
 			} {
-				got, err := executionFor(providerkit.Framework{Name: name, Arch: arch})
+				got, err := executionFor(providerkit.Framework{Name: name, Arch: declared})
 				if err != nil {
-					t.Fatalf("executionFor(%q, %q): %v", name, arch, err)
+					t.Fatalf("executionFor(%q, %q): %v", name, declared, err)
 				}
 				if got != (execution{Runtime: managedRuntime(name), Arch: want}) {
-					t.Errorf("executionFor(%q, %q) = %+v, want %q on %s", name, arch, got, managedRuntime(name), want)
+					t.Errorf("executionFor(%q, %q) = %+v, want %q on %s", name, declared, got, managedRuntime(name), want)
 				}
 			}
 		}
@@ -159,7 +160,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 			return err
 		}
 		args, err := translateFunctionSpec(providerkit.FrameworkGo, providerkit.FunctionSpec{
-			Framework: providerkit.Framework{Name: providerkit.FrameworkGo, Arch: providerkit.ArchARM64},
+			Framework: providerkit.Framework{Name: providerkit.FrameworkGo, Arch: arch.ARM64},
 			Handler:   "web",
 		})
 		if err != nil {
@@ -171,7 +172,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 			Functions: []appFunction{{Logical: "fn--api--users", RouteID: "/users"}},
 			Args:      func(appFunction) functionArgs { return args },
 			Layers: map[string]string{
-				providerkit.ArchARM64: testRuntimeLayerARN(providerkit.ArchARM64),
+				arch.ARM64: testRuntimeLayerARN(arch.ARM64),
 			},
 			Artifacts: map[string]artifactRef{"fn--api--users": {Bucket: "artifacts", Key: "fn.zip"}},
 			RoleArn:   role.Arn,
@@ -183,10 +184,10 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	}
 
 	inputs := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
-	if got := stringsAt(inputs, "architectures"); !slices.Equal(got, []string{providerkit.ArchARM64}) {
-		t.Errorf("architectures = %v, want [%s] — the runtime and the app's own binary are built for one machine", got, providerkit.ArchARM64)
+	if got := stringsAt(inputs, "architectures"); !slices.Equal(got, []string{arch.ARM64}) {
+		t.Errorf("architectures = %v, want [%s] — the runtime and the app's own binary are built for one machine", got, arch.ARM64)
 	}
-	if got, want := stringsAt(inputs, "layers"), testRuntimeLayerARN(providerkit.ArchARM64); len(got) != 1 || got[0] != want {
+	if got, want := stringsAt(inputs, "layers"), testRuntimeLayerARN(arch.ARM64); len(got) != 1 || got[0] != want {
 		t.Errorf("the function's layers = %v, want [%s]: the arm64 runtime the account's bootstrap published", got, want)
 	}
 	if got, ok := inputs[resource.PropertyKey("runtime")]; !ok || got.StringValue() != providedFunctionRuntime {
@@ -237,7 +238,7 @@ func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 	t.Parallel()
 
 	args, err := translateFunctionSpec(providerkit.FrameworkRust, providerkit.FunctionSpec{
-		Framework: providerkit.Framework{Name: providerkit.FrameworkRust, Arch: providerkit.ArchARM64},
+		Framework: providerkit.Framework{Name: providerkit.FrameworkRust, Arch: arch.ARM64},
 		Handler:   "web",
 	})
 	if err != nil {
@@ -246,8 +247,8 @@ func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 	if args.Runtime != "provided.al2023" {
 		t.Errorf("runtime = %q, want provided.al2023: a rust binary needs no managed language runtime", args.Runtime)
 	}
-	if args.Arch != providerkit.ArchARM64 {
-		t.Errorf("arch = %q, want %q", args.Arch, providerkit.ArchARM64)
+	if args.Arch != arch.ARM64 {
+		t.Errorf("arch = %q, want %q", args.Arch, arch.ARM64)
 	}
 	if got := lambdaHandler(args); got != "bootstrap" {
 		t.Errorf("handler = %q, want bootstrap", got)
@@ -358,7 +359,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 					Functions: []appFunction{{Logical: "fn--api--web", RouteID: "/"}},
 					Args:      func(appFunction) functionArgs { return args },
 					Layers: map[string]string{
-						providerkit.ArchX8664: testRuntimeLayerARN(providerkit.ArchX8664),
+						arch.X8664: testRuntimeLayerARN(arch.X8664),
 					},
 					Artifacts: map[string]artifactRef{"fn--api--web": {Bucket: "artifacts", Key: "fn.zip"}},
 					RoleArn:   role.Arn,
@@ -415,8 +416,8 @@ func TestFunctionDefaults(t *testing.T) {
 
 func testRuntimeLayers() map[string]string {
 	return map[string]string{
-		providerkit.ArchX8664: testRuntimeLayerARN(providerkit.ArchX8664),
-		providerkit.ArchARM64: testRuntimeLayerARN(providerkit.ArchARM64),
+		arch.X8664: testRuntimeLayerARN(arch.X8664),
+		arch.ARM64: testRuntimeLayerARN(arch.ARM64),
 	}
 }
 
@@ -456,7 +457,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 		t.Errorf("the release stack publishes %v, want the layers the account's bootstrap already holds", published)
 	}
 	layers := stringsAt(rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90"), "layers")
-	if want := testRuntimeLayerARN(providerkit.ArchX8664); len(layers) != 1 || layers[0] != want {
+	if want := testRuntimeLayerARN(arch.X8664); len(layers) != 1 || layers[0] != want {
 		t.Errorf("the function's layers = %v, want [%s]: the version ARN the bootstrap published", layers, want)
 	}
 }

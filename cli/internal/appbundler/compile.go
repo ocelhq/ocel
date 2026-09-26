@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const goModuleFile = "go.mod"
@@ -53,7 +54,7 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	if err != nil || !module.Mode().IsRegular() {
 		return fmt.Errorf("app %q is built with go and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
 	}
-	arch, runs := providerkit.GoArch(c.Framework.Arch)
+	goarch, runs := arch.GoArch(c.Framework.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Framework.Arch)
 	}
@@ -66,12 +67,12 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	binary := filepath.Join(c.FuncDir, c.App)
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
 	cmd.Dir = c.pkg()
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+arch)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+goarch)
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), arch, err, said.String())
+		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), goarch, err, said.String())
 	}
 	c.report("compiling", said.String())
 	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)

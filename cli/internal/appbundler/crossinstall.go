@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const (
@@ -211,13 +211,13 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		wanted[name] = versions[0]
 	}
 	names := strings.Join(slices.Sorted(maps.Keys(wanted)), ", ")
-	cpu, known := providerkit.NodePackageCPU(p.arch)
+	cpu, known := arch.NodePackageCPU(p.arch)
 	if !known {
 		return fmt.Errorf("app %q depends on %s, which ship one package per platform, and declares architecture %q, which has no npm cpu", app, names, p.arch)
 	}
 	if _, err := exec.LookPath(npmCommand); err != nil {
 		return fmt.Errorf("app %q depends on %s, which ship one package per platform, and no %s is on PATH to install them for %s/%s: %w",
-			app, names, npmCommand, providerkit.NodePackageOS, cpu, err)
+			app, names, npmCommand, arch.NodePackageOS, cpu, err)
 	}
 
 	staging, err := os.MkdirTemp("", "ocel-platform-install-")
@@ -239,12 +239,12 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 	cmd.Stdout = &said
 	cmd.Stderr = &said
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("install %s for app %q on %s/%s (%w):\n%s", names, app, providerkit.NodePackageOS, cpu, err, said.String())
+		return fmt.Errorf("install %s for app %q on %s/%s (%w):\n%s", names, app, arch.NodePackageOS, cpu, err, said.String())
 	}
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {
 		if !installedForTarget(filepath.Join(staging, nodeModulesDirName), name, cpu) {
 			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
-				name, app, providerkit.NodePackageOS, cpu, providerkit.NodePackageLibc, said.String())
+				name, app, arch.NodePackageOS, cpu, arch.NodePackageLibc, said.String())
 		}
 	}
 	staged := filepath.Join(staging, nodeModulesDirName)
@@ -285,11 +285,11 @@ func installedForTarget(nodeModules, name, cpu string) bool {
 }
 
 func namesVariantFor(dep, cpu string) bool {
-	return regexp.MustCompile(`(?:^|[/-])` + providerkit.NodePackageOS + `-` + regexp.QuoteMeta(cpu) + `(?:-|$)`).MatchString(dep)
+	return regexp.MustCompile(`(?:^|[/-])` + arch.NodePackageOS + `-` + regexp.QuoteMeta(cpu) + `(?:-|$)`).MatchString(dep)
 }
 
 func (m manifest) runsOn(cpu string) bool {
-	return allows(m.OS, providerkit.NodePackageOS) && allows(m.CPU, cpu) && allows(m.Libc, providerkit.NodePackageLibc)
+	return allows(m.OS, arch.NodePackageOS) && allows(m.CPU, cpu) && allows(m.Libc, arch.NodePackageLibc)
 }
 
 func allows(declared []string, value string) bool {
@@ -324,9 +324,9 @@ func holdsAny(dir string, names ...string) bool {
 func npmInstallArgs(cpu string) []string {
 	return []string{
 		"install",
-		"--os=" + providerkit.NodePackageOS,
+		"--os=" + arch.NodePackageOS,
 		"--cpu=" + cpu,
-		"--libc=" + providerkit.NodePackageLibc,
+		"--libc=" + arch.NodePackageLibc,
 		"--ignore-scripts",
 		"--no-bin-links",
 		"--no-package-lock",

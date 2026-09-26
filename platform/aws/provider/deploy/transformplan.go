@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 )
@@ -131,13 +132,13 @@ func executionFor(framework providerkit.Framework) (execution, error) {
 	if framework.Name != "" && !providerkit.KnownFramework(framework.Name) {
 		return execution{}, refusal.Refuse(refusal.CodeInvalid, "this provider has no framework named %q", framework.Name)
 	}
-	arch := providerkit.Architecture(framework.Arch)
-	if arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {
+	architecture := arch.Architecture(framework.Arch)
+	if architecture != arch.X8664 && architecture != arch.ARM64 {
 		return execution{}, refusal.Refuse(refusal.CodeInvalid,
 			"this provider runs functions on %s and %s, and %q asks for %s",
-			providerkit.ArchX8664, providerkit.ArchARM64, framework.Name, framework.Arch)
+			arch.X8664, arch.ARM64, framework.Name, framework.Arch)
 	}
-	return execution{Runtime: managedRuntime(framework.Name), Arch: arch}, nil
+	return execution{Runtime: managedRuntime(framework.Name), Arch: architecture}, nil
 }
 
 func managedRuntime(name string) string {

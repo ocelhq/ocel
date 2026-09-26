@@ -13,6 +13,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -71,7 +72,7 @@ func TestPreflightNamesTheArchitectureContainerImagesAreBuiltFor(t *testing.T) {
 		Slug:         "shop",
 		Containers: []*contractv1.ContainerApp{
 			{App: "web"},
-			{App: "worker", Arch: providerkit.ArchX8664},
+			{App: "worker", Arch: arch.X8664},
 		},
 	})
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
@@ -57,7 +57,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
-		Framework:    manifestbuilder.Framework{Name: "rust", Arch: providerkit.ArchX8664},
+		Framework:    manifestbuilder.Framework{Name: "rust", Arch: arch.X8664},
 		Handler:      "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

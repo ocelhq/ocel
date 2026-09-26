@@ -12,7 +12,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const cargoManifestFile = "Cargo.toml"
@@ -24,7 +24,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	if err != nil || !manifest.Mode().IsRegular() {
 		return fmt.Errorf("app %q is built with rust and %s holds no %s: an app is compiled from the crate rooted in its own directory", c.App, c.Source, cargoManifestFile)
 	}
-	target, runs := providerkit.RustTarget(c.Framework.Arch)
+	target, runs := arch.RustTarget(c.Framework.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture rust builds for", c.App, c.Framework.Arch)
 	}

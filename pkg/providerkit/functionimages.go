@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -99,19 +100,19 @@ func (r *deployRun) imageFunction(
 }
 
 func (r *deployRun) wrapFunction(ctx context.Context, name string, framework Framework, image v1.Image) (v1.Image, error) {
-	arch, known := GoArch(framework.Arch)
+	goarch, known := arch.GoArch(framework.Arch)
 	if !known {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s is built for %s, and this provider carries a container runtime for %s and %s alone",
-			name, framework.Arch, ArchX8664, ArchARM64)
+			name, framework.Arch, arch.X8664, arch.ARM64)
 	}
-	body, err := r.provider.Runtime().Binary(ctx, arch)
+	body, err := r.provider.Runtime().Binary(ctx, goarch)
 	if err != nil {
 		return nil, fmt.Errorf("read the runtime %s's function boots through: %w", name, err)
 	}
 	if len(body) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this provider carries no container runtime built for %s, and %s is built for it", arch, name)
+			"this provider carries no container runtime built for %s, and %s is built for it", goarch, name)
 	}
 	wrapped, err := WrapContainer(image, body)
 	if err != nil {

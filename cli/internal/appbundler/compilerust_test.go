@@ -11,17 +11,18 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const rustCrateManifest = "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"
 
-func needsRustTarget(t *testing.T, arch string) {
+func needsRustTarget(t *testing.T, architecture string) {
 	t.Helper()
 	if _, err := exec.LookPath("cargo"); err != nil {
 		t.Skip("cargo is not on PATH")
 	}
-	target, _ := providerkit.RustTarget(arch)
+	target, _ := arch.RustTarget(architecture)
 	libdir, err := exec.Command("rustc", "--print", "target-libdir", "--target", target).Output()
 	if err != nil {
 		t.Skipf("rustc cannot name a library directory for %s: %v", target, err)
@@ -59,18 +60,18 @@ func compileRust(t *testing.T, source, arch string) (string, string, error) {
 func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T) {
 	t.Parallel()
 
-	for _, arch := range []struct {
+	for _, platform := range []struct {
 		named   string
 		machine elf.Machine
 	}{
-		{providerkit.ArchX8664, elf.EM_X86_64},
-		{providerkit.ArchARM64, elf.EM_AARCH64},
+		{arch.X8664, elf.EM_X86_64},
+		{arch.ARM64, elf.EM_AARCH64},
 	} {
-		t.Run(arch.named, func(t *testing.T) {
+		t.Run(platform.named, func(t *testing.T) {
 			t.Parallel()
-			needsRustTarget(t, arch.named)
+			needsRustTarget(t, platform.named)
 
-			_, funcDir, err := compileRust(t, rustCrate(t), arch.named)
+			_, funcDir, err := compileRust(t, rustCrate(t), platform.named)
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
@@ -89,8 +90,8 @@ func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T
 				t.Fatalf("the binary is no linux executable: %v", err)
 			}
 			defer read.Close()
-			if read.Machine != arch.machine {
-				t.Errorf("the binary is built for %v, want %v — the function runs on the architecture the app named", read.Machine, arch.machine)
+			if read.Machine != platform.machine {
+				t.Errorf("the binary is built for %v, want %v — the function runs on the architecture the app named", read.Machine, platform.machine)
 			}
 			for _, program := range read.Progs {
 				if program.Type == elf.PT_INTERP {
@@ -159,20 +160,20 @@ func cCrate(t *testing.T) string {
 }
 
 func TestCompileLinksTheCACrateBuildsForTheTargetIntoTheStaticBinary(t *testing.T) {
-	for _, arch := range []struct {
+	for _, platform := range []struct {
 		named   string
 		machine elf.Machine
 		goarch  string
 	}{
-		{providerkit.ArchX8664, elf.EM_X86_64, "amd64"},
-		{providerkit.ArchARM64, elf.EM_AARCH64, "arm64"},
+		{arch.X8664, elf.EM_X86_64, "amd64"},
+		{arch.ARM64, elf.EM_AARCH64, "arm64"},
 	} {
-		t.Run(arch.named, func(t *testing.T) {
-			needsRustTarget(t, arch.named)
-			target, _ := providerkit.RustTarget(arch.named)
+		t.Run(platform.named, func(t *testing.T) {
+			needsRustTarget(t, platform.named)
+			target, _ := arch.RustTarget(platform.named)
 			t.Setenv("CC_"+strings.ReplaceAll(target, "-", "_"), muslCompilerFor(t, target))
 
-			_, funcDir, err := compileRust(t, cCrate(t), arch.named)
+			_, funcDir, err := compileRust(t, cCrate(t), platform.named)
 			if err != nil {
 				t.Fatalf("compile: %v — a crate that compiles C is built with the toolchain the docs name, and ocel links what it produces", err)
 			}
@@ -183,15 +184,15 @@ func TestCompileLinksTheCACrateBuildsForTheTargetIntoTheStaticBinary(t *testing.
 				t.Fatalf("the binary is no linux executable: %v", err)
 			}
 			defer read.Close()
-			if read.Machine != arch.machine {
-				t.Errorf("the binary is built for %v, want %v", read.Machine, arch.machine)
+			if read.Machine != platform.machine {
+				t.Errorf("the binary is built for %v, want %v", read.Machine, platform.machine)
 			}
 			for _, program := range read.Progs {
 				if program.Type == elf.PT_INTERP {
 					t.Errorf("the binary asks for a dynamic loader: the C it links is static musl, and a function's host carries no libc")
 				}
 			}
-			if runtime.GOARCH != arch.goarch {
+			if runtime.GOARCH != platform.goarch {
 				return
 			}
 			said, err := exec.Command(binary).Output()
@@ -207,9 +208,9 @@ func TestCompileLinksTheCACrateBuildsForTheTargetIntoTheStaticBinary(t *testing.
 
 func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
-	appDir, funcDir, err := compileRust(t, rustCrate(t), providerkit.ArchX8664)
+	appDir, funcDir, err := compileRust(t, rustCrate(t), arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -241,7 +242,7 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 
 func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatHoldsIt(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	workspace := t.TempDir()
 	writeTree(t, workspace, map[string]string{
@@ -252,7 +253,7 @@ func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatHoldsIt(t *testing.
 		"apps/worker/src/main.rs": "fn main() { undefined_call() }\n",
 	})
 
-	_, funcDir, err := compileRust(t, filepath.Join(workspace, "apps", "web"), providerkit.ArchX8664)
+	_, funcDir, err := compileRust(t, filepath.Join(workspace, "apps", "web"), arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v — only the app's own crate is built, and a sibling that does not compile is no concern of it", err)
 	}
@@ -263,12 +264,12 @@ func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatHoldsIt(t *testing.
 
 func TestCompileRefusesARustAppDirectoryHoldingNoCrate(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	source := t.TempDir()
 	writeTree(t, source, map[string]string{"src/main.rs": "fn main() {}\n"})
 
-	_, _, err := compileRust(t, source, providerkit.ArchX8664)
+	_, _, err := compileRust(t, source, arch.X8664)
 	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), "Cargo.toml") {
 		t.Fatalf("err = %v, want a refusal naming %s and Cargo.toml", err, source)
 	}
@@ -276,7 +277,7 @@ func TestCompileRefusesARustAppDirectoryHoldingNoCrate(t *testing.T) {
 
 func TestCompileRefusesACrateThatBuildsNoOneBinary(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	for name, files := range map[string]map[string]string{
 		"no binary": {
@@ -294,7 +295,7 @@ func TestCompileRefusesACrateThatBuildsNoOneBinary(t *testing.T) {
 			source := t.TempDir()
 			writeTree(t, source, files)
 
-			_, _, err := compileRust(t, source, providerkit.ArchX8664)
+			_, _, err := compileRust(t, source, arch.X8664)
 			if err == nil || !strings.Contains(err.Error(), `"web"`) || !strings.Contains(err.Error(), "server") {
 				t.Fatalf("err = %v, want a refusal naming the app and the crate, which must build exactly one binary to serve", err)
 			}
@@ -333,12 +334,12 @@ func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
 
 func TestCompileReportsWhatCargoSaidWhenTheCrateDoesNotBuild(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	source := rustCrate(t)
 	writeTree(t, source, map[string]string{"src/main.rs": "fn main() { undefined_call() }\n"})
 
-	_, _, err := compileRust(t, source, providerkit.ArchX8664)
+	_, _, err := compileRust(t, source, arch.X8664)
 	if err == nil || !strings.Contains(err.Error(), "undefined_call") {
 		t.Fatalf("err = %v, want cargo's own account of what did not build", err)
 	}
@@ -346,7 +347,7 @@ func TestCompileReportsWhatCargoSaidWhenTheCrateDoesNotBuild(t *testing.T) {
 
 func TestCompileLinksWithTheLinkerACargoConfigNamesForTheTarget(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	for name, config := range map[string]string{
 		".cargo/config.toml":    "[target.x86_64-unknown-linux-musl]\nlinker = \"ocel-configured-linker\"\n",
@@ -362,7 +363,7 @@ func TestCompileLinksWithTheLinkerACargoConfigNamesForTheTarget(t *testing.T) {
 			})
 			writeTree(t, source, map[string]string{name: config})
 
-			_, _, err := compileRust(t, source, providerkit.ArchX8664)
+			_, _, err := compileRust(t, source, arch.X8664)
 			if err == nil || !strings.Contains(err.Error(), "ocel-configured-linker") {
 				t.Fatalf("err = %v, want cargo to have reached for the linker the config names rather than one ocel chose over it", err)
 			}
@@ -371,13 +372,13 @@ func TestCompileLinksWithTheLinkerACargoConfigNamesForTheTarget(t *testing.T) {
 }
 
 func TestCompileLinksWithTheLinkerCargoHomeNamesForTheTarget(t *testing.T) {
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	home := t.TempDir()
 	writeTree(t, home, map[string]string{"config.toml": "[target.x86_64-unknown-linux-musl]\nlinker = \"ocel-configured-linker\"\n"})
 	t.Setenv("CARGO_HOME", home)
 
-	_, _, err := compileRust(t, rustCrate(t), providerkit.ArchX8664)
+	_, _, err := compileRust(t, rustCrate(t), arch.X8664)
 	if err == nil || !strings.Contains(err.Error(), "ocel-configured-linker") {
 		t.Fatalf("err = %v, want cargo to have reached for the linker CARGO_HOME's config names", err)
 	}
@@ -385,12 +386,12 @@ func TestCompileLinksWithTheLinkerCargoHomeNamesForTheTarget(t *testing.T) {
 
 func TestCompileLinksARustBinaryWhenTheCargoConfigNamesALinkerOnlyForAnotherTarget(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	source := rustCrate(t)
 	writeTree(t, source, map[string]string{".cargo/config.toml": "[target.aarch64-unknown-linux-musl]\nlinker = \"ocel-configured-linker\"\n"})
 
-	_, funcDir, err := compileRust(t, source, providerkit.ArchX8664)
+	_, funcDir, err := compileRust(t, source, arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -401,14 +402,14 @@ func TestCompileLinksARustBinaryWhenTheCargoConfigNamesALinkerOnlyForAnotherTarg
 
 func TestCompileBuildsACrateReachedThroughASymlink(t *testing.T) {
 	t.Parallel()
-	needsRustTarget(t, providerkit.ArchX8664)
+	needsRustTarget(t, arch.X8664)
 
 	link := filepath.Join(t.TempDir(), "web")
 	if err := os.Symlink(rustCrate(t), link); err != nil {
 		t.Fatal(err)
 	}
 
-	_, funcDir, err := compileRust(t, link, providerkit.ArchX8664)
+	_, funcDir, err := compileRust(t, link, arch.X8664)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}

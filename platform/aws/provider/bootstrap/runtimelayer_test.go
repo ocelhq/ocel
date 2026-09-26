@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -193,13 +193,13 @@ func TestReadRuntimeLayers(t *testing.T) {
 		stacks := newFakeCFN()
 		stacks.seed(coreStackName, "Outputs:\n")
 		stacks.seed(runtimeStack(ClassProduction), "Outputs:\n  "+
-			runtimeLayerOutputKey(providerkit.ArchX8664, strings.Repeat("a", 64))+":\n    Value: !Ref RuntimeLayerX8664\n")
+			runtimeLayerOutputKey(arch.X8664, strings.Repeat("a", 64))+":\n    Value: !Ref RuntimeLayerX8664\n")
 
 		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if arn, held := deployed.RuntimeLayers[providerkit.ArchX8664]; held {
+		if arn, held := deployed.RuntimeLayers[arch.X8664]; held {
 			t.Errorf("read %q as this build's runtime, and it carries another build's", arn)
 		}
 	})
@@ -235,7 +235,7 @@ func runtimeLayerDigestFor(t *testing.T, class, bucket string) string {
 
 func staleRuntimeBody() string {
 	return "AWSTemplateFormatVersion: '2010-09-09'\nOutputs:\n  " +
-		runtimeLayerOutputKey(providerkit.ArchX8664, strings.Repeat("b", 64)) +
+		runtimeLayerOutputKey(arch.X8664, strings.Repeat("b", 64)) +
 		":\n    Value: !Ref RuntimeLayerX8664\n"
 }
 

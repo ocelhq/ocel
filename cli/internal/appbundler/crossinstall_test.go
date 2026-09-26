@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 type fakeNpm struct {
@@ -69,12 +69,12 @@ func linuxInstall(t *testing.T, cpu, libc string) string {
 }
 
 func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitecture(t *testing.T) {
-	for arch, cpu := range map[string]string{providerkit.ArchX8664: "x64", providerkit.ArchARM64: "arm64"} {
-		t.Run(arch, func(t *testing.T) {
+	for architecture, cpu := range map[string]string{arch.X8664: "x64", arch.ARM64: "arm64"} {
+		t.Run(architecture, func(t *testing.T) {
 			npm := installFakeNpm(t, linuxInstall(t, cpu, "glibc"))
 			l := newLayout(t, platformSplitApp())
 			target := l.target("server.js")
-			target.Framework.Arch = arch
+			target.Framework.Arch = architecture
 
 			if err := Bundle(context.Background(), target); err != nil {
 				t.Fatalf("Bundle: %v", err)
