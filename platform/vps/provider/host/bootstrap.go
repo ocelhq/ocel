@@ -97,6 +97,8 @@ func planned(read Reading) []providerkit.Change {
 		switch {
 		case read.rerendering && item.Kind == KindProxyConfig:
 			change.Action, change.Reason = providerkit.ActionUpdate, "rendered again from "+live.RoutingTable
+		case item.Kind == KindEngine && read.current(item):
+			change.Action, change.Reason, change.Slow = providerkit.ActionAdopt, adoptedEngine(read.Engine.Version), false
 		case read.current(item):
 			change.Action, change.Reason = providerkit.ActionKeep, reasonStanding
 		case read.standing(item.Kind, item.Name):

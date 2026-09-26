@@ -157,7 +157,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("a re-run over a fully bootstrapped machine plans %q for the stack, want nothing left to do", settled.Action)
 	}
 	for _, change := range settled.Changes {
-		if change.Action != providerkit.ActionKeep {
+		if change.Action.Writes() {
 			t.Errorf("a re-run plans %q for %s, and bootstrap is a statement of state rather than a stack of side effects.\n%s",
 				change.Action, change.Name, vm.proxySaid(t))
 		}
@@ -179,8 +179,8 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
 	}
 	waking := onlyGroup(t, restarting)
-	if kept := planFor(waking, engineName); kept.Action != providerkit.ActionKeep {
-		t.Errorf("an idle daemon plans %q for %s, want the engine kept: presence is never remediated by a second install", kept.Action, engineName)
+	if kept := planFor(waking, engineName); kept.Action != providerkit.ActionAdopt {
+		t.Errorf("an idle daemon plans %q for %s, want the engine adopted: presence is never remediated by a second install", kept.Action, engineName)
 	}
 	if unit := planFor(waking, unitName); unit.Action != providerkit.ActionUpdate {
 		t.Errorf("an idle daemon plans %q for %s, want the unit enabled", unit.Action, unitName)
@@ -189,7 +189,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		if change.Kind == host.KindNetwork || change.Kind == host.KindContainer || change.Name == unitName {
 			continue
 		}
-		if change.Action != providerkit.ActionKeep {
+		if change.Action.Writes() {
 			t.Errorf("stopping the daemon re-planned %s as %q, and nothing but the unit and what the daemon answers for moved", change.Name, change.Action)
 		}
 	}

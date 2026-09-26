@@ -232,7 +232,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Fatal(err)
 	}
 	for _, change := range onlyGroup(t, again).Changes {
-		if change.Action != providerkit.ActionKeep {
+		if change.Action.Writes() {
 			t.Errorf("a re-run over a box whose proxy serves plans %q for %s, and a proxy reinstalled on every run is one nobody dares re-run.\n%s",
 				change.Action, change.Name, vm.proxySaid(t))
 		}
@@ -259,7 +259,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Errorf("a box whose proxy was removed plans %q for it, want it written back", back.Action)
 	}
 	for _, change := range group.Changes {
-		if change.Name != caddy.Container && change.Action != providerkit.ActionKeep {
+		if change.Name != caddy.Container && change.Action.Writes() {
 			t.Errorf("removing the proxy re-planned %s as %q, and nothing but the container moved", change.Name, change.Action)
 		}
 	}

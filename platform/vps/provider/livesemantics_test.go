@@ -74,7 +74,7 @@ func stillMoving(t *testing.T, planner planning, class providerkit.Class, held a
 	var moving []string
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
-			if change.Action != providerkit.ActionKeep {
+			if change.Action.Writes() {
 				moving = append(moving, change.Kind+" "+change.Name+" plans as "+string(change.Action))
 			}
 		}

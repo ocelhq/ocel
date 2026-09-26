@@ -142,7 +142,7 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T
 		t.Errorf("a host whose principal stands as ocel writes it plans %q, want it kept", kept.Action)
 	}
 	for _, change := range planned(standing) {
-		if change.Action != providerkit.ActionKeep {
+		if change.Action.Writes() {
 			t.Errorf("%s plans %q over a host that stands as ocel wrote it", change.Name, change.Action)
 		}
 	}
@@ -156,8 +156,11 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
 	for _, change := range planned(moved) {
 		want := providerkit.ActionKeep
-		if change.Name == authorizedKeys {
+		switch change.Name {
+		case authorizedKeys:
 			want = providerkit.ActionUpdate
+		case dockerEngine:
+			want = providerkit.ActionAdopt
 		}
 		if change.Action != want {
 			t.Errorf("%s plans %q after the deploy key moved, want %q", change.Name, change.Action, want)

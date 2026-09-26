@@ -150,7 +150,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Errorf("a second Plan() over a bootstrapped machine plans %q, want %q", repeat.Action, providerkit.ActionKeep)
 	}
 	for _, change := range repeat.Changes {
-		if change.Action != providerkit.ActionKeep {
+		if change.Action.Writes() {
 			t.Errorf("a second Plan() shows %s as %q, want it kept", change.Name, change.Action)
 		}
 	}

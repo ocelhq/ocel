@@ -213,6 +213,9 @@ func surveyed(items []Item) string {
 			rendered.WriteString("\t2026-01-01T00:00:00Z")
 		}
 		rendered.WriteString("\n")
+		if item.ID() == engineItem().ID() {
+			fmt.Fprintf(&rendered, "%s\t%s\t0\t%s\t%s\n", kindEngineHeld, dockerEngine, engineStandard, "28.3.1")
+		}
 	}
 	return rendered.String()
 }
