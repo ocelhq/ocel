@@ -9,8 +9,8 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -75,8 +75,8 @@ var deployRoles = []string{
 	"roles/run.admin",
 }
 
-func rolesFor(tier provider.CredentialTier) []string {
-	if tier != provider.TierBootstrap {
+func rolesFor(tier edge.CredentialTier) []string {
+	if tier != edge.TierBootstrap {
 		return deployRoles
 	}
 	granted := slices.Clone(deployRoles)

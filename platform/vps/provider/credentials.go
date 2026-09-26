@@ -69,11 +69,11 @@ func named(details []provider.PrincipalDetail) []provider.PrincipalDetail {
 	return out
 }
 
-func (c credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
+func (c credentials) Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
 	switch tier {
-	case provider.TierBootstrap:
+	case edge.TierBootstrap:
 		return edge.CredentialDocument{Document: bootstrapDocument(c.login())}, nil
-	case provider.TierDeploy:
+	case edge.TierDeploy:
 		return edge.CredentialDocument{Document: deployDocument()}, nil
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,

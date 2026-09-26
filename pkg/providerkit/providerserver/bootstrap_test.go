@@ -556,8 +556,8 @@ func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
 	client, _ := contractServed(t, "1.2.3")
 
 	for tier, want := range map[contractv1.CredentialTier]string{
-		contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP: string(provider.TierBootstrap),
-		contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:    string(provider.TierDeploy),
+		contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP: string(edge.TierBootstrap),
+		contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:    string(edge.TierDeploy),
 	} {
 		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Tier: tier})
 		if err != nil {

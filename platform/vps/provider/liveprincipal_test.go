@@ -111,7 +111,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 		}
 	}()
 
-	bootstrapDoc, err := p.Credentials().Permissions(provider.TierBootstrap)
+	bootstrapDoc, err := p.Credentials().Permissions(edge.TierBootstrap)
 	if err != nil {
 		t.Fatalf("Permissions(bootstrap) = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 		t.Errorf("Whoami() = %v, and this machine meets every requirement the bootstrap document prints", err)
 	}
 
-	deployDoc, err := p.Credentials().Permissions(provider.TierDeploy)
+	deployDoc, err := p.Credentials().Permissions(edge.TierDeploy)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
