@@ -62,6 +62,7 @@ func (vm machine) dialling(login, fed, command string, extra ...string) (string,
 func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
+	vm.forgetsTheDeployLogin(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
