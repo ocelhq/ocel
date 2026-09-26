@@ -174,7 +174,7 @@ func (s dnsCutover) await(ctx context.Context, hostname string, say func(string)
 		case bounded.Err() != nil:
 			return stackrecords.ServeProbe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
 		case errors.Is(err, context.DeadlineExceeded):
-			serving, outlasted = "", fmt.Sprintf("the last attempt got no answer within %s", s.window)
+			serving, outlasted = "", fmt.Sprintf("it got no answer within %s", s.window)
 		default:
 			return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, err
 		}

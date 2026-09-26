@@ -343,7 +343,7 @@ func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *t
 	if !strings.Contains(refused.Message, cause) {
 		t.Errorf("await() refused with %q, and the window it outlasted crowds out what stopped the probe", refused.Message)
 	}
-	if !strings.Contains(refused.Message, "no answer within 1s") {
+	if !strings.Contains(refused.Message, "ended in: "+cause+", and it got no answer within 1s") {
 		t.Errorf("await() refused with %q, want it to name the window the last attempt outlasted", refused.Message)
 	}
 }
