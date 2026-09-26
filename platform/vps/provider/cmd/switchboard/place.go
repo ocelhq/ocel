@@ -20,31 +20,39 @@ const (
 	placedMode    = 0o644
 )
 
-func placeable(argv []string) (string, error) {
+func placeable(path string) error {
 	dir := os.Getenv(switchboard.PlaceEnv)
 	if dir == "" {
-		return "", fmt.Errorf("no directory is mounted to place files in: %s is unset", switchboard.PlaceEnv)
+		return fmt.Errorf("no directory is mounted to place files in: %s is unset", switchboard.PlaceEnv)
 	}
-	path := argv[0]
 	name := filepath.Base(path)
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Dir(path) != filepath.Clean(dir) || strings.HasPrefix(name, ".") {
-		return "", fmt.Errorf("%s is not a file directly in %s, the one directory mounted to place files in", path, dir)
+		return fmt.Errorf("%s is not a file directly in %s, the one directory mounted to place files in", path, dir)
 	}
-	return path, nil
+	return nil
 }
 
-func place(argv []string, in io.Reader, errs io.Writer) int {
+func confined(argv []string, errs io.Writer, act func(path string) error) int {
 	if len(argv) != 1 {
 		return usage(errs)
 	}
-	path, err := placeable(argv)
-	if err != nil {
+	path := argv[0]
+	if err := placeable(path); err != nil {
 		return refuse(errs, err)
 	}
-	if err := staged(path, in); err != nil {
-		return refuse(errs, fmt.Errorf("place %s: %w", path, err))
+	if err := act(path); err != nil {
+		return refuse(errs, err)
 	}
 	return 0
+}
+
+func place(argv []string, in io.Reader, errs io.Writer) int {
+	return confined(argv, errs, func(path string) error {
+		if err := staged(path, in); err != nil {
+			return fmt.Errorf("place %s: %w", path, err)
+		}
+		return nil
+	})
 }
 
 func staged(path string, in io.Reader) error {
@@ -74,38 +82,28 @@ func synced(dir string) error {
 }
 
 func unplace(argv []string, errs io.Writer) int {
-	if len(argv) != 1 {
-		return usage(errs)
-	}
-	path, err := placeable(argv)
-	if err != nil {
-		return refuse(errs, err)
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return refuse(errs, fmt.Errorf("unplace %s: %w", path, err))
-	}
-	if err := synced(filepath.Dir(path)); err != nil {
-		return refuse(errs, fmt.Errorf("unplace %s: %w", path, err))
-	}
-	return 0
+	return confined(argv, errs, func(path string) error {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("unplace %s: %w", path, err)
+		}
+		if err := synced(filepath.Dir(path)); err != nil {
+			return fmt.Errorf("unplace %s: %w", path, err)
+		}
+		return nil
+	})
 }
 
-func placed(argv []string, out, errs io.Writer) int {
-	if len(argv) != 1 {
-		return usage(errs)
-	}
-	path, err := placeable(argv)
-	if err != nil {
-		return refuse(errs, err)
-	}
-	sum, err := regularSum(path)
-	if err != nil {
-		return refuse(errs, fmt.Errorf("read %s: %w", path, err))
-	}
-	if sum != "" {
-		fmt.Fprintln(out, sum)
-	}
-	return 0
+func digest(argv []string, out, errs io.Writer) int {
+	return confined(argv, errs, func(path string) error {
+		sum, err := regularSum(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if sum != "" {
+			fmt.Fprintln(out, sum)
+		}
+		return nil
+	})
 }
 
 func regularSum(path string) (string, error) {
