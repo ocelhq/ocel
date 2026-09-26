@@ -109,7 +109,7 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 	case proxyNotServingYet:
 		return nil, nil
 	default:
-		return nil, h.refuse("read what this box serves for "+hostname, result)
+		return nil, h.refuse("read what this box serves for "+hostname, result, "")
 	}
 }
 
@@ -129,7 +129,7 @@ func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) 
 	case proxyNotServingYet:
 		return Answer{Unreached: spoken(result)}, nil
 	default:
-		return Answer{}, h.refuse("probe "+hostname+" on this box's own https port", result)
+		return Answer{}, h.refuse("probe "+hostname+" on this box's own https port", result, "")
 	}
 }
 

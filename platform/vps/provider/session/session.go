@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -33,16 +34,16 @@ type Session struct {
 func Open(ctx context.Context, target Target) (*Session, error) {
 	dest, err := resolve(ctx, target)
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"ssh cannot make sense of %q: %s", target.Destination(), terse(err))
 	}
 	keys, err := offered(ctx, dest)
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s port %d did not answer within %s: %s", dest.Address, dest.Port, reach, terse(err))
 	}
 	if len(keys) == 0 {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s port %d offered no ssh host key", dest.Address, dest.Port)
 	}
 	anchor, trust := classify(dest, keys, recorded(ctx, dest))
@@ -74,7 +75,8 @@ func (s *Session) Run(ctx context.Context, command string) (string, error) {
 		return "", err
 	}
 	if result.Code != 0 {
-		return "", s.refused(result.problem(command).Error())
+		return "", providerkit.Refuse(providerkit.CodeNotReady,
+			"%s over ssh: %s", s.dest.Principal(), terse(result.problem(command)))
 	}
 	return result.Stdout, nil
 }
@@ -90,23 +92,18 @@ func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (
 			return Result{}, providerkit.RefuseHostTrust(*trust)
 		}
 	}
-	return Result{}, s.refused(failure{err: err, stderr: stderr}.Error())
-}
-
-func (s *Session) refused(said string) error {
-	return providerkit.Refuse(Refusing(said), "%s over ssh: %s", s.dest.Principal(), terse(errors.New(said)))
-}
-
-var denials = []string{"permission denied", "password is required", "not in the sudoers", "operation not permitted"}
-
-func Refusing(said string) providerkit.Code {
-	lowered := strings.ToLower(said)
-	for _, denial := range denials {
-		if strings.Contains(lowered, denial) {
-			return providerkit.CodeDenied
-		}
+	unreached := providerkit.CodeNotReady
+	if loginRefused(stderr) {
+		unreached = providerkit.CodeDenied
 	}
-	return providerkit.CodeNotReady
+	return Result{}, providerkit.Refuse(unreached,
+		"%s over ssh: %s", s.dest.Principal(), terse(failure{err: err, stderr: stderr}))
+}
+
+var loginRefusals = []string{"Permission denied (", "Too many authentication failures"}
+
+func loginRefused(stderr string) bool {
+	return slices.ContainsFunc(loginRefusals, func(refusal string) bool { return strings.Contains(stderr, refusal) })
 }
 
 func (r Result) problem(command string) error {
