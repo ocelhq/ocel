@@ -231,7 +231,7 @@ func TestAStreamedResponseReachesTheClientAsEachEventIsFlushedRatherThanWhenItEn
 		t.Fatal(err)
 	}
 	request.Host = "shop.example.com"
-	response, err := http.DefaultClient.Do(request)
+	response, err := boardClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,14 +289,14 @@ func TestTheConnectorPathReachesTheConnectorOverItsSocketWithThePrefixStripped(t
 	t.Cleanup(func() { _ = board.Close() })
 	at := served.Addr().String()
 
-	said := ask(t, http.DefaultClient, at, "box.example.com", switchboard.ConnectorPath+"/connector.v1.Box/Describe")
+	said := ask(t, boardClient, at, "box.example.com", switchboard.ConnectorPath+"/connector.v1.Box/Describe")
 	if said.body != "connector" || said.header.Get("X-Served-Path") != "/connector.v1.Box/Describe" {
 		t.Errorf("the connector path answered %q asking for %q, want the connector asked for the procedure without the prefix", said.body, said.header.Get("X-Served-Path"))
 	}
 	if said.header.Get("X-Served-Host") != "box.example.com" || said.header.Get(edge.HeaderEdge) != switchboard.EdgeName {
 		t.Errorf("the connector was asked for host %q and answered naming %q, want box.example.com and %s", said.header.Get("X-Served-Host"), said.header.Get(edge.HeaderEdge), switchboard.EdgeName)
 	}
-	if said := ask(t, http.DefaultClient, at, "box.example.com", "/"); said.body != "web" {
+	if said := ask(t, boardClient, at, "box.example.com", "/"); said.body != "web" {
 		t.Errorf("the connector's hostname answered %q off the connector path, want the app that claims it", said.body)
 	}
 }
