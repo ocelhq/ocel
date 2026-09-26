@@ -3,6 +3,7 @@ package provider
 import (
 	"strings"
 
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -103,4 +104,41 @@ func KeepOrCreate(stands bool) ChangeAction {
 		return ActionKeep
 	}
 	return ActionCreate
+}
+
+var actionProtos = map[ChangeAction]planv1.Change_Action{
+	"":                      planv1.Change_ACTION_UNSPECIFIED,
+	ActionCreate:            planv1.Change_ACTION_CREATE,
+	ActionUpdate:            planv1.Change_ACTION_UPDATE,
+	ActionReplace:           planv1.Change_ACTION_REPLACE,
+	ActionDelete:            planv1.Change_ACTION_DELETE,
+	ActionDisableThenDelete: planv1.Change_ACTION_DISABLE_THEN_DELETE,
+	ActionKeep:              planv1.Change_ACTION_KEEP,
+	ActionAdopt:             planv1.Change_ACTION_ADOPT,
+}
+
+var protoActions = invertActions(actionProtos)
+
+func invertActions(actions map[ChangeAction]planv1.Change_Action) map[planv1.Change_Action]ChangeAction {
+	inverted := make(map[planv1.Change_Action]ChangeAction, len(actions))
+	for action, drawn := range actions {
+		inverted[drawn] = action
+	}
+	return inverted
+}
+
+func ActionProto(action ChangeAction) planv1.Change_Action { return actionProtos[action] }
+
+func ActionFromProto(drawn planv1.Change_Action) (ChangeAction, bool) {
+	action, known := protoActions[drawn]
+	return action, known
+}
+
+func RollUpProto(changes []*planv1.Change) planv1.Change_Action {
+	actions := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		actions = append(actions, Change{Action: protoActions[change.GetAction()]})
+	}
+	action, _ := RollUp(actions)
+	return ActionProto(action)
 }

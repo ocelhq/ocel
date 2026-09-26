@@ -149,7 +149,7 @@ func GroupProto(group provider.ChangeGroup) *planv1.ChangeGroup {
 		Kind:    group.Kind,
 		Name:    group.Name,
 		Feature: group.Feature,
-		Action:  planAction(group.Action),
+		Action:  provider.ActionProto(group.Action),
 		Reason:  group.Reason,
 		Slow:    group.Slow,
 	}
@@ -157,7 +157,7 @@ func GroupProto(group provider.ChangeGroup) *planv1.ChangeGroup {
 		rendered.Changes = append(rendered.Changes, &planv1.Change{
 			Kind:   change.Kind,
 			Name:   change.Name,
-			Action: planAction(change.Action),
+			Action: provider.ActionProto(change.Action),
 			Reason: change.Reason,
 			Slow:   change.Slow,
 		})
@@ -197,46 +197,14 @@ func PlanOf(shown *planv1.ChangePlan) (provider.Plan, error) {
 	return plan, nil
 }
 
-var planActions = map[provider.ChangeAction]planv1.Change_Action{
-	"":                               planv1.Change_ACTION_UNSPECIFIED,
-	provider.ActionCreate:            planv1.Change_ACTION_CREATE,
-	provider.ActionUpdate:            planv1.Change_ACTION_UPDATE,
-	provider.ActionReplace:           planv1.Change_ACTION_REPLACE,
-	provider.ActionDelete:            planv1.Change_ACTION_DELETE,
-	provider.ActionDisableThenDelete: planv1.Change_ACTION_DISABLE_THEN_DELETE,
-	provider.ActionKeep:              planv1.Change_ACTION_KEEP,
-	provider.ActionAdopt:             planv1.Change_ACTION_ADOPT,
-}
-
-var changeActions = invertActions(planActions)
-
-func invertActions(held map[provider.ChangeAction]planv1.Change_Action) map[planv1.Change_Action]provider.ChangeAction {
-	inverted := make(map[planv1.Change_Action]provider.ChangeAction, len(held))
-	for action, drawn := range held {
-		inverted[drawn] = action
-	}
-	return inverted
-}
-
 func changeAction(drawn planv1.Change_Action) (provider.ChangeAction, error) {
-	action, known := changeActions[drawn]
+	action, known := provider.ActionFromProto(drawn)
 	if !known {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this plan names %s, an action this provider cannot carry out; draw the plan again and consent to what it shows now",
 			drawn)
 	}
 	return action, nil
-}
-
-func planAction(action provider.ChangeAction) planv1.Change_Action { return planActions[action] }
-
-func RollUpProto(changes []*planv1.Change) planv1.Change_Action {
-	held := make([]provider.Change, 0, len(changes))
-	for _, change := range changes {
-		held = append(held, provider.Change{Action: changeActions[change.GetAction()]})
-	}
-	action, _ := provider.RollUp(held)
-	return planAction(action)
 }
 
 func BootstrapStatusProto(standing BootstrapStatus, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {

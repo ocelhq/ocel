@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -110,9 +110,9 @@ func acted(group *planv1.ChangeGroup, acting []*planv1.Change) *planv1.ChangeGro
 	}
 	switch group.GetAction() {
 	case planv1.Change_ACTION_KEEP:
-		shown.Action, shown.Reason = providerserver.RollUpProto(group.GetChanges()), ""
+		shown.Action, shown.Reason = provider.RollUpProto(group.GetChanges()), ""
 	case planv1.Change_ACTION_UNSPECIFIED:
-		shown.Action = providerserver.RollUpProto(group.GetChanges())
+		shown.Action = provider.RollUpProto(group.GetChanges())
 	}
 	return shown
 }
