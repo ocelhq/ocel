@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

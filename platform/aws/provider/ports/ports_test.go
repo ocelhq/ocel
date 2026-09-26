@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

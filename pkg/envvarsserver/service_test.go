@@ -18,8 +18,8 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

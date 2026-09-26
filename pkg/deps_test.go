@@ -23,6 +23,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/proto",
 	"github.com/ocelhq/ocel/pkg/records",
 	"github.com/ocelhq/ocel/pkg/refusal",
+	"github.com/ocelhq/ocel/pkg/stackrecords",
 	"github.com/ocelhq/ocel/platform/edge/contract",
 }
 

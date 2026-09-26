@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
