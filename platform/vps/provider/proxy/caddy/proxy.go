@@ -15,13 +15,7 @@ import (
 var _ proxy.Proxy = Builtin{}
 
 func (Builtin) Guarantees() proxy.Guarantees {
-	return proxy.Guarantees{
-		OwnsPorts:              true,
-		IssuesCertificates:     true,
-		HonoursPins:            true,
-		ReportsRateLimits:      true,
-		ServesPreviewWildcards: true,
-	}
+	return proxy.Guarantees{OwnsPorts: true}
 }
 
 func (Builtin) Render(spec proxy.Spec) ([]byte, error) { return render(spec) }

@@ -22,11 +22,7 @@ const (
 )
 
 type Guarantees struct {
-	OwnsPorts              bool
-	IssuesCertificates     bool
-	HonoursPins            bool
-	ReportsRateLimits      bool
-	ServesPreviewWildcards bool
+	OwnsPorts bool
 }
 
 type Spec struct {
