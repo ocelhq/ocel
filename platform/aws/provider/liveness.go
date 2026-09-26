@@ -6,7 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
-func emulatedFront(cfg aws.Config) *url.URL {
+func emulatedProbeAddress(cfg aws.Config) *url.URL {
 	if cfg.BaseEndpoint == nil {
 		return nil
 	}

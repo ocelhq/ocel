@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -34,7 +35,7 @@ type Provider struct {
 
 	stacks *deploy.Stacks
 
-	providerkit.NetLiveness
+	liveness.Net
 }
 
 func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
@@ -55,7 +56,7 @@ func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provid
 
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
-	p.Front = emulatedFront(cfg)
+	p.ProbeAddress = emulatedProbeAddress(cfg)
 	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})
 	return p
 }
@@ -126,4 +127,4 @@ func (p *Provider) Connector() providerkit.Connector { return connector{p} }
 
 func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
 
-func (p *Provider) Liveness() providerkit.Liveness { return &p.NetLiveness }
+func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }

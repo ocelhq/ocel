@@ -149,8 +149,8 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing: no header is readable off a handshake the client refused", kind)
 	}
-	if cause := p.Unreached("shop.example.com"); !strings.Contains(cause, "x509") {
-		t.Errorf("Unreached() = %q, want the chain the client refused: the settle gives up after a full minute with nothing for the operator to act on", cause)
+	if cause := p.LastProbeFailure("shop.example.com"); !strings.Contains(cause, "x509") {
+		t.Errorf("LastProbeFailure() = %q, want the chain the client refused: the settle gives up after a full minute with nothing for the operator to act on", cause)
 	}
 }
 
@@ -181,14 +181,14 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if p.Unreached("shop.example.com") == "" {
+	if p.LastProbeFailure("shop.example.com") == "" {
 		t.Fatal("a hostname the probe never reached carries no cause, and this test states nothing about clearing one")
 	}
 	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if cause := p.Unreached("shop.example.com"); cause != "" {
-		t.Errorf("Unreached() = %q for a hostname that answered, and a stale cause is read out on whatever the settle gives up on next", cause)
+	if cause := p.LastProbeFailure("shop.example.com"); cause != "" {
+		t.Errorf("LastProbeFailure() = %q for a hostname that answered, and a stale cause is read out on whatever the settle gives up on next", cause)
 	}
 }
 
@@ -314,8 +314,8 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing", kind)
 	}
-	if cause := p.Unreached("web.localhost"); !strings.Contains(cause, "fallback.localhost") {
-		t.Errorf("Unreached() = %q, want what stopped the probe on the box", cause)
+	if cause := p.LastProbeFailure("web.localhost"); !strings.Contains(cause, "fallback.localhost") {
+		t.Errorf("LastProbeFailure() = %q, want what stopped the probe on the box", cause)
 	}
 }
 
