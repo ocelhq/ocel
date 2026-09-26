@@ -26,7 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

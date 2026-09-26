@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
-	"github.com/ocelhq/ocel/pkg/runtimekit/bindingproxy"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 )
 
 type silentBuckets struct {

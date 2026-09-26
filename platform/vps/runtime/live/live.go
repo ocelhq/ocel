@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 

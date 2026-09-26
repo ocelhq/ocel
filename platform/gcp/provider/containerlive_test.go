@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"

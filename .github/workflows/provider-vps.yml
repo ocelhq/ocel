@@ -19,7 +19,7 @@ on:
       - "pkg/provider/**"
       - "pkg/records/**"
       - "pkg/refusal/**"
-      - "pkg/runtimekit/**"
+      - "pkg/runtime/**"
       - "pkg/target/**"
       - "pkg/transform/**"
       - "pkg/go.mod"

@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
 type Records interface {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 

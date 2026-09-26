@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
 type sink struct {

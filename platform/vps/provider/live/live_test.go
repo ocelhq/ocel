@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/records"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

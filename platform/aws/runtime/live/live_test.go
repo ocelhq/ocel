@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envvars"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
