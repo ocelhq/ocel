@@ -419,10 +419,10 @@ fn switched_on(declared: &Declared, key: &str, cells: &[VariableCell], folder: &
         .variables
         .iter()
         .filter(|member| member.group == Some(key))
-        .any(|member| stored_at(member, cells, folder))
+        .any(|member| has_cell(member, cells, folder))
 }
 
-fn stored_at(variable: &DeclaredVariable, cells: &[VariableCell], folder: &str) -> bool {
+fn has_cell(variable: &DeclaredVariable, cells: &[VariableCell], folder: &str) -> bool {
     let at = |where_: &str| {
         cells
             .iter()

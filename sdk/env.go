@@ -522,7 +522,7 @@ func validate(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv
 
 		if v.required() {
 			for _, folder := range requiredFolders(v) {
-				if g := decl.group(v.group); g != nil && !g.required && !groupStored(decl, *g, cells, folder) {
+				if g := decl.group(v.group); g != nil && !g.required && !switchedOn(decl, *g, cells, folder) {
 					continue
 				}
 				if !slices.ContainsFunc(stored, func(c *resourcesv1.VariableCell) bool { return c.GetFolder() == folder }) {
@@ -543,16 +543,16 @@ func validate(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv
 	return problems
 }
 
-func groupStored(decl declaration, g group, cells []*resourcesv1.VariableCell, folder string) bool {
+func switchedOn(decl declaration, g group, cells []*resourcesv1.VariableCell, folder string) bool {
 	for _, member := range g.members {
-		if storedAt(decl.vars[member], cells, folder) {
+		if hasCell(decl.vars[member], cells, folder) {
 			return true
 		}
 	}
 	return false
 }
 
-func storedAt(v variable, cells []*resourcesv1.VariableCell, folder string) bool {
+func hasCell(v variable, cells []*resourcesv1.VariableCell, folder string) bool {
 	at := func(where string) bool {
 		return slices.ContainsFunc(cells, func(c *resourcesv1.VariableCell) bool {
 			return c.GetKey() == v.key && c.GetFolder() == where
