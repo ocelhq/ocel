@@ -10,7 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -86,7 +86,7 @@ func RunCost(t *testing.T, client contractv1connect.ProviderServiceClient, rates
 	})
 
 	estimates := map[costv1.Profile]*costv1.Estimate{}
-	for _, profile := range costkit.Profiles() {
+	for _, profile := range pricing.Profiles() {
 		est, err := rates.Price(ctx, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
 		if connect.CodeOf(err) == connect.CodeUnimplemented {
 			t.Fatal("this provider shapes a deploy and prices nothing, so a scan would list resources with no number beside them")
@@ -98,13 +98,13 @@ func RunCost(t *testing.T, client contractv1connect.ProviderServiceClient, rates
 	}
 
 	t.Run("every shaped resource is priced or declared free", func(t *testing.T) {
-		estimateIsConsistent(t, set, estimates[costkit.DefaultProfile])
+		estimateIsConsistent(t, set, estimates[pricing.DefaultProfile])
 	})
 	t.Run("a heavier profile never costs less", func(t *testing.T) {
 		profilesAreMonotone(t, estimates)
 	})
 	t.Run("an unknown property is never priced as zero", func(t *testing.T) {
-		unknownIsNeverZero(t, rates, set, estimates[costkit.DefaultProfile])
+		unknownIsNeverZero(t, rates, set, estimates[pricing.DefaultProfile])
 	})
 }
 
@@ -158,7 +158,7 @@ func shapeIsConsistent(t *testing.T, set *costv1.ResourceSet, vendor string) {
 
 func estimateIsConsistent(t *testing.T, set *costv1.ResourceSet, est *costv1.Estimate) {
 	t.Helper()
-	if est.GetCurrency() == "" || est.GetRatesVersion() == "" || est.GetProfile() != costkit.DefaultProfile {
+	if est.GetCurrency() == "" || est.GetRatesVersion() == "" || est.GetProfile() != pricing.DefaultProfile {
 		t.Errorf("estimate header = %s %q %s", est.GetCurrency(), est.GetRatesVersion(), est.GetProfile())
 	}
 	if len(est.GetResources()) != len(set.GetResources()) {

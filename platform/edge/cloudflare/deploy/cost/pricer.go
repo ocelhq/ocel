@@ -6,7 +6,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
 const (
@@ -20,9 +20,9 @@ const (
 //go:embed rates.json
 var rates []byte
 
-var Card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+var Card = sync.OnceValues(func() (*pricing.Card, error) { return pricing.Load(rates) })
 
-var Rates = costkit.EdgeRates{Card: Card, Table: Table}
+var Rates = pricing.EdgeRates{Card: Card, Table: Table}
 
 const (
 	usageRequests     = "monthly_requests"
@@ -41,46 +41,46 @@ const (
 )
 
 var (
-	requestsBand   = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
-	cpuBand        = costkit.Band{Light: 5, Moderate: 5, Heavy: 10}
-	storageBand    = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
-	classABand     = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
-	classBBand     = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
-	objectCalls    = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
-	objectTimeBand = costkit.Band{Light: 50, Moderate: 50, Heavy: 100}
-	rowsReadBand   = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
-	rowsWriteBand  = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
-	objectStorage  = costkit.Band{Light: 0.1, Moderate: 1, Heavy: 10}
+	requestsBand   = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+	cpuBand        = pricing.Band{Light: 5, Moderate: 5, Heavy: 10}
+	storageBand    = pricing.Band{Light: 1, Moderate: 10, Heavy: 100}
+	classABand     = pricing.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
+	classBBand     = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+	objectCalls    = pricing.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
+	objectTimeBand = pricing.Band{Light: 50, Moderate: 50, Heavy: 100}
+	rowsReadBand   = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+	rowsWriteBand  = pricing.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
+	objectStorage  = pricing.Band{Light: 0.1, Moderate: 1, Heavy: 10}
 	thousand       = decimal.NewFromInt(1000)
 )
 
-var Table = costkit.Table{
+var Table = pricing.Table{
 	TypeAccountSubscription: subscription,
 	TypeWorkersScript:       workersScript,
 	TypeR2Bucket:            r2Bucket,
 }
 
-func subscription(r *costkit.Subject) {
-	r.Add(costkit.Component{Name: "Workers paid plan", Unit: "months", Rate: "cloudflare/workers/paid-plan", Quantity: decimal.NewFromInt(1)})
+func subscription(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Workers paid plan", Unit: "months", Rate: "cloudflare/workers/paid-plan", Quantity: decimal.NewFromInt(1)})
 }
 
-func workersScript(r *costkit.Subject) {
-	r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "cloudflare/workers/requests", Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true})
-	r.Add(costkit.Component{Name: "CPU time", Unit: "CPU-milliseconds", Rate: "cloudflare/workers/cpu-time", Quantity: r.Usage(usageRequests, requestsBand).Mul(r.Usage(usageCPUTime, cpuBand)), UsageBased: true})
+func workersScript(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Requests", Unit: "requests", Rate: "cloudflare/workers/requests", Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true})
+	r.Add(pricing.Component{Name: "CPU time", Unit: "CPU-milliseconds", Rate: "cloudflare/workers/cpu-time", Quantity: r.Usage(usageRequests, requestsBand).Mul(r.Usage(usageCPUTime, cpuBand)), UsageBased: true})
 	if len(r.List(durableObjects)) == 0 {
 		return
 	}
 	needs := []string{durableObjects}
-	r.Add(costkit.Component{Name: "Durable Object requests", Unit: "requests", Rate: "cloudflare/durable-objects/requests", Quantity: r.Usage(usageObjectCalls, objectCalls), UsageBased: true, Needs: needs})
+	r.Add(pricing.Component{Name: "Durable Object requests", Unit: "requests", Rate: "cloudflare/durable-objects/requests", Quantity: r.Usage(usageObjectCalls, objectCalls), UsageBased: true, Needs: needs})
 	seconds := r.Usage(usageObjectCalls, objectCalls).Mul(r.Usage(usageObjectTime, objectTimeBand)).Div(thousand)
-	r.Add(costkit.Component{Name: "Durable Object duration", Unit: "GB-seconds", Rate: "cloudflare/durable-objects/duration", Quantity: seconds.Mul(decimal.NewFromFloat(durableObjectGB)), UsageBased: true, Needs: needs})
-	r.Add(costkit.Component{Name: "Rows read", Unit: "rows", Rate: "cloudflare/durable-objects/rows-read", Quantity: r.Usage(usageRowsRead, rowsReadBand), UsageBased: true, Needs: needs})
-	r.Add(costkit.Component{Name: "Rows written", Unit: "rows", Rate: "cloudflare/durable-objects/rows-written", Quantity: r.Usage(usageRowsWritten, rowsWriteBand), UsageBased: true, Needs: needs})
-	r.Add(costkit.Component{Name: "Stored data", Unit: "GB-month", Rate: "cloudflare/durable-objects/storage", Quantity: r.Usage(usageObjectStored, objectStorage), UsageBased: true, Needs: needs})
+	r.Add(pricing.Component{Name: "Durable Object duration", Unit: "GB-seconds", Rate: "cloudflare/durable-objects/duration", Quantity: seconds.Mul(decimal.NewFromFloat(durableObjectGB)), UsageBased: true, Needs: needs})
+	r.Add(pricing.Component{Name: "Rows read", Unit: "rows", Rate: "cloudflare/durable-objects/rows-read", Quantity: r.Usage(usageRowsRead, rowsReadBand), UsageBased: true, Needs: needs})
+	r.Add(pricing.Component{Name: "Rows written", Unit: "rows", Rate: "cloudflare/durable-objects/rows-written", Quantity: r.Usage(usageRowsWritten, rowsWriteBand), UsageBased: true, Needs: needs})
+	r.Add(pricing.Component{Name: "Stored data", Unit: "GB-month", Rate: "cloudflare/durable-objects/storage", Quantity: r.Usage(usageObjectStored, objectStorage), UsageBased: true, Needs: needs})
 }
 
-func r2Bucket(r *costkit.Subject) {
-	r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "cloudflare/r2/storage", Quantity: r.Usage(usageStorage, storageBand), UsageBased: true})
-	r.Add(costkit.Component{Name: "Class A operations", Unit: "operations", Rate: "cloudflare/r2/class-a", Quantity: r.Usage(usageClassA, classABand), UsageBased: true})
-	r.Add(costkit.Component{Name: "Class B operations", Unit: "operations", Rate: "cloudflare/r2/class-b", Quantity: r.Usage(usageClassB, classBBand), UsageBased: true})
+func r2Bucket(r *pricing.Subject) {
+	r.Add(pricing.Component{Name: "Storage", Unit: "GB-month", Rate: "cloudflare/r2/storage", Quantity: r.Usage(usageStorage, storageBand), UsageBased: true})
+	r.Add(pricing.Component{Name: "Class A operations", Unit: "operations", Rate: "cloudflare/r2/class-a", Quantity: r.Usage(usageClassA, classABand), UsageBased: true})
+	r.Add(pricing.Component{Name: "Class B operations", Unit: "operations", Rate: "cloudflare/r2/class-b", Quantity: r.Usage(usageClassB, classBBand), UsageBased: true})
 }

@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -78,29 +78,29 @@ const rates = `{
   ]
 }`
 
-var requestsBand = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+var requestsBand = pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
 
-var storageBand = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
+var storageBand = pricing.Band{Light: 1, Moderate: 10, Heavy: 100}
 
-var table = costkit.Table{
-	TypeFunction: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "fake/requests", Quantity: r.Usage("monthly_requests", requestsBand), UsageBased: true})
+var table = pricing.Table{
+	TypeFunction: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Requests", Unit: "requests", Rate: "fake/requests", Quantity: r.Usage("monthly_requests", requestsBand), UsageBased: true})
 	},
-	TypeContainer: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Container", Unit: "hours", Rate: "fake/container-hours", Quantity: costkit.MonthlyHours})
+	TypeContainer: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Container", Unit: "hours", Rate: "fake/container-hours", Quantity: pricing.MonthlyHours})
 	},
-	TypePostgres: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Database", Unit: "hours", Rate: "fake/postgres-hours", Quantity: costkit.MonthlyHours})
+	TypePostgres: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Database", Unit: "hours", Rate: "fake/postgres-hours", Quantity: pricing.MonthlyHours})
 	},
-	TypeBucket: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "fake/storage", Quantity: r.Usage("storage_gb", storageBand), UsageBased: true})
+	TypeBucket: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Storage", Unit: "GB-month", Rate: "fake/storage", Quantity: r.Usage("storage_gb", storageBand), UsageBased: true})
 	},
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	card, err := costkit.Load([]byte(rates))
+	card, err := pricing.Load([]byte(rates))
 	if err != nil {
 		return nil, err
 	}
-	return costkit.Estimate(card, table, req)
+	return pricing.Estimate(card, table, req)
 }

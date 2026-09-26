@@ -1,4 +1,4 @@
-package costkit
+package pricing
 
 import (
 	"errors"
@@ -50,9 +50,9 @@ type Component struct {
 	Needs      []string
 }
 
-type Pricing func(*Subject)
+type Formula func(*Subject)
 
-type Table map[string]Pricing
+type Table map[string]Formula
 
 type Subject struct {
 	Resource *costv1.Resource
@@ -276,7 +276,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	account := &tally{card: card, spent: map[rateKey]decimal.Decimal{}}
 	priced := map[string]bool{}
 	for _, resource := range set.GetResources() {
-		pricing, known := table[resource.GetType()]
+		formula, known := table[resource.GetType()]
 		if !known {
 			est.Coverage.Unsupported++
 			est.Coverage.UnsupportedTypes[resource.GetType()]++
@@ -292,7 +292,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 			profile:   profile,
 			overrides: overridesFor(req.GetUsage(), resource.GetId()),
 		}
-		pricing(subject)
+		formula(subject)
 		if err := subject.faulted(); err != nil {
 			return nil, err
 		}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -16,10 +16,10 @@ import (
 const tfDataTransfer = "aws_data_transfer"
 
 func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
-	tree := &costkit.Tree{}
-	project := tree.Scope("", costkit.ScopeProject, req.Deploy.Slug)
-	shared := tree.Scope(project, costkit.ScopeShared, string(req.Deploy.Class))
-	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Deploy.Env)
+	tree := &pricing.Tree{}
+	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)
+	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Class))
+	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	var options []bootstrap.ShapeOption
 	if p.options.VarsKey != "" {
@@ -46,18 +46,18 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	if err != nil {
 		return nil, err
 	}
-	site := costkit.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: p.aws.Region}
+	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: p.aws.Region}
 	for _, app := range req.Deploy.Apps {
-		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
+		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
 	shape, err := edges.Shape(front.Kind(), p.namespace, site)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddEdge(costkit.EdgeScopes{Shared: shared, Environment: environment}, shape)
+	tree.AddEdge(pricing.EdgeScopes{Shared: shared, Environment: environment}, shape)
 	if !shape.BillsEgress {
 		for _, app := range req.Deploy.Apps {
-			tree.Add(tree.Scope(environment, costkit.ScopeApp, app.App), string(Vendor), tfDataTransfer, app.App, p.aws.Region, map[string]any{})
+			tree.Add(tree.Scope(environment, pricing.ScopeApp, app.App), string(Vendor), tfDataTransfer, app.App, p.aws.Region, map[string]any{})
 		}
 	}
 	return tree.Set(provider.CostSource)

@@ -1,40 +1,40 @@
 package cloudflare
 
 import (
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const entryWorker = "entry"
 
-func Shape(namespace string, site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func Shape(namespace string, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 	store, err := storeScriptNameFor(namespace, site.Class)
 	if err != nil {
-		return costkit.EdgeShape{}, err
+		return pricing.EdgeShape{}, err
 	}
 	writer, err := isrWriterScriptNameFor(namespace, site.Class)
 	if err != nil {
-		return costkit.EdgeShape{}, err
+		return pricing.EdgeShape{}, err
 	}
 	cache, err := cacheStoreNameFor(namespace, site.Class)
 	if err != nil {
-		return costkit.EdgeShape{}, err
+		return pricing.EdgeShape{}, err
 	}
-	shape := costkit.EdgeShape{
+	shape := pricing.EdgeShape{
 		Vendor: cost.Vendor,
-		Shared: []costkit.Shaped{
+		Shared: []pricing.Shaped{
 			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
 			{Name: cache, Type: cost.TypeR2Bucket, Properties: map[string]any{"storage_class": "Standard"}},
 			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(deploymentsStoreWorker)},
 			{Name: writer, Type: cost.TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
 		},
-		Environment: []costkit.Shaped{
+		Environment: []pricing.Shaped{
 			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}},
 		},
 	}
 	if site.Class == edge.ClassPreview {
-		shape.Shared = append(shape.Shared, costkit.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}})
+		shape.Shared = append(shape.Shared, pricing.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}})
 	}
 	return shape, nil
 }

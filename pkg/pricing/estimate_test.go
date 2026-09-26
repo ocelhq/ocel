@@ -1,4 +1,4 @@
-package costkit_test
+package pricing_test
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
@@ -34,48 +34,48 @@ const card = `{
   ]
 }`
 
-var widgets = costkit.Table{
-	"test_widget": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours})
-		r.Add(costkit.Component{Name: "Requests", Unit: "1M requests", Rate: "widget/requests", UsageBased: true,
-			Quantity: r.Usage("monthly_requests", costkit.Band{Light: 1, Moderate: 3, Heavy: 30})})
-		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
-			Quantity: r.Usage("storage_gb", costkit.Band{Light: 1, Moderate: 10, Heavy: 100})})
+var widgets = pricing.Table{
+	"test_widget": func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Base", Unit: "hour", Rate: "widget/hours", Quantity: pricing.MonthlyHours})
+		r.Add(pricing.Component{Name: "Requests", Unit: "1M requests", Rate: "widget/requests", UsageBased: true,
+			Quantity: r.Usage("monthly_requests", pricing.Band{Light: 1, Moderate: 3, Heavy: 30})})
+		r.Add(pricing.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
+			Quantity: r.Usage("storage_gb", pricing.Band{Light: 1, Moderate: 10, Heavy: 100})})
 	},
-	"test_gadget": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours)})
+	"test_gadget": func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(pricing.MonthlyHours)})
 	},
-	"test_reader": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Reads", Unit: "reads", Rate: "widget/reads", UsageBased: true,
-			Quantity: r.Usage("monthly_reads", costkit.Band{Light: 60, Moderate: 60, Heavy: 600})})
+	"test_reader": func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Reads", Unit: "reads", Rate: "widget/reads", UsageBased: true,
+			Quantity: r.Usage("monthly_reads", pricing.Band{Light: 60, Moderate: 60, Heavy: 600})})
 	},
-	"test_tagged": func(r *costkit.Subject) {
+	"test_tagged": func(r *pricing.Subject) {
 		rate := "widget/hours"
 		if tags := r.List("tags"); len(tags) > 0 && tags[0] == "premium" {
 			rate = "gadget/hours"
 		}
-		r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: rate, Quantity: costkit.MonthlyHours})
+		r.Add(pricing.Component{Name: "Base", Unit: "hour", Rate: rate, Quantity: pricing.MonthlyHours})
 	},
-	"test_nested": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
-			Quantity: r.Usage("standard.storage_gb", costkit.Band{Light: 1, Moderate: 10, Heavy: 100})})
+	"test_nested": func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
+			Quantity: r.Usage("standard.storage_gb", pricing.Band{Light: 1, Moderate: 10, Heavy: 100})})
 	},
-	"test_trinket": func(r *costkit.Subject) { r.Free() },
-	"test_pair": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours)})
-		r.Add(costkit.Component{Name: "Count", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("count").Mul(costkit.MonthlyHours)})
+	"test_trinket": func(r *pricing.Subject) { r.Free() },
+	"test_pair": func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(pricing.MonthlyHours)})
+		r.Add(pricing.Component{Name: "Count", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("count").Mul(pricing.MonthlyHours)})
 	},
-	"test_twice": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours)})
-		r.Add(costkit.Component{Name: "Double", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours).Mul(decimal.NewFromInt(2))})
+	"test_twice": func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(pricing.MonthlyHours)})
+		r.Add(pricing.Component{Name: "Double", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(pricing.MonthlyHours).Mul(decimal.NewFromInt(2))})
 	},
-	"test_gated": func(r *costkit.Subject) {
+	"test_gated": func(r *pricing.Subject) {
 		if r.Bool("premium") {
-			r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: "gadget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
+			r.Add(pricing.Component{Name: "Base", Unit: "hour", Rate: "gadget/hours", Quantity: pricing.MonthlyHours, Needs: []string{"premium"}})
 			return
 		}
-		r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
-		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", Quantity: decimal.NewFromInt(1), Needs: []string{"premium"}})
+		r.Add(pricing.Component{Name: "Base", Unit: "hour", Rate: "widget/hours", Quantity: pricing.MonthlyHours, Needs: []string{"premium"}})
+		r.Add(pricing.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", Quantity: decimal.NewFromInt(1), Needs: []string{"premium"}})
 	},
 }
 
@@ -103,11 +103,11 @@ func set() *costv1.ResourceSet {
 
 func estimate(t *testing.T, req *costv1.PriceRequest) *costv1.Estimate {
 	t.Helper()
-	loaded, err := costkit.Load([]byte(card))
+	loaded, err := pricing.Load([]byte(card))
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := costkit.Estimate(loaded, widgets, req)
+	got, err := pricing.Estimate(loaded, widgets, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,25 +247,25 @@ func TestAnUnknownPropertyNeverPricesToZero(t *testing.T) {
 }
 
 func TestACardRefusesARateWithoutProvenance(t *testing.T) {
-	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","steps":[{"price":"1"}]}]}`))
+	_, err := pricing.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","steps":[{"price":"1"}]}]}`))
 	if err == nil || !strings.Contains(err.Error(), "a") {
 		t.Fatalf("Load() error = %v, want one naming rate a", err)
 	}
 }
 
 func TestMergedCardsAndTablesPriceEachVendorsOwn(t *testing.T) {
-	primary, _ := costkit.Load([]byte(card))
-	other, _ := costkit.Load([]byte(`{"version":"v2","currency":"USD","rates":[
+	primary, _ := pricing.Load([]byte(card))
+	other, _ := pricing.Load([]byte(`{"version":"v2","currency":"USD","rates":[
 		{"id":"gizmo/each","unit":"each","steps":[{"price":"2"}],"source":"https://example.test","verified":"2026-09-01"},
 		{"id":"widget/hours","unit":"hour","steps":[{"price":"99"}],"source":"https://example.test","verified":"2026-09-01"}]}`))
-	table := costkit.Tables(widgets, costkit.Table{
-		"test_gizmo": func(r *costkit.Subject) {
-			r.Add(costkit.Component{Name: "Each", Unit: "each", Rate: "gizmo/each", Quantity: decimal.NewFromInt(3)})
+	table := pricing.Tables(widgets, pricing.Table{
+		"test_gizmo": func(r *pricing.Subject) {
+			r.Add(pricing.Component{Name: "Each", Unit: "each", Rate: "gizmo/each", Quantity: decimal.NewFromInt(3)})
 		},
 	})
 	s := set()
 	s.Resources = append(s.Resources, resource("z", "p/e", "test_gizmo", "eu-west-1", map[string]any{}))
-	est, err := costkit.Estimate(costkit.Merge(primary, other), table, &costv1.PriceRequest{Resources: s})
+	est, err := pricing.Estimate(pricing.Merge(primary, other), table, &costv1.PriceRequest{Resources: s})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,11 +306,11 @@ func TestAnAccountAllowanceSaysOnceThatItIsAssumedUnspent(t *testing.T) {
 	}
 	est := estimate(t, &costv1.PriceRequest{Resources: s})
 
-	if strings.Join(est.GetNotes(), "|") != costkit.AllowanceAssumed {
+	if strings.Join(est.GetNotes(), "|") != pricing.AllowanceAssumed {
 		t.Errorf("notes = %v, want the unspent-allowance assumption once", est.GetNotes())
 	}
 
-	if notes := estimate(t, &costv1.PriceRequest{Resources: set()}).GetNotes(); slices.Contains(notes, costkit.AllowanceAssumed) {
+	if notes := estimate(t, &costv1.PriceRequest{Resources: set()}).GetNotes(); slices.Contains(notes, pricing.AllowanceAssumed) {
 		t.Errorf("notes = %v, want no account assumption where only a per-resource allowance applied", notes)
 	}
 }
@@ -352,11 +352,11 @@ func TestAnUnknownTaintsOnlyTheComponentsThatReadIt(t *testing.T) {
 }
 
 func TestACardRefusesAFreeFirstTierWithoutAnAllowanceScope(t *testing.T) {
-	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","steps":[{"price":"0"},{"start":"5","price":"1"}],"source":"s","verified":"v"}]}`))
+	_, err := pricing.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","steps":[{"price":"0"},{"start":"5","price":"1"}],"source":"s","verified":"v"}]}`))
 	if err == nil || !strings.Contains(err.Error(), "allowance") {
 		t.Fatalf("Load() error = %v, want a refusal asking whose allowance it is", err)
 	}
-	_, err = costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","allowance":"account","steps":[{"price":"1"}],"source":"s","verified":"v"}]}`))
+	_, err = pricing.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","allowance":"account","steps":[{"price":"1"}],"source":"s","verified":"v"}]}`))
 	if err == nil {
 		t.Fatal("Load() accepted an allowance on a rate whose first tier is not free")
 	}
@@ -421,11 +421,11 @@ func TestAUsageFileValueThatIsNotAFiniteNonNegativeNumberIsRefused(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			loaded, _ := costkit.Load([]byte(card))
-			_, err = costkit.Estimate(loaded, widgets, &costv1.PriceRequest{Resources: set(), Usage: &costv1.Usage{
+			loaded, _ := pricing.Load([]byte(card))
+			_, err = pricing.Estimate(loaded, widgets, &costv1.PriceRequest{Resources: set(), Usage: &costv1.Usage{
 				Resources: map[string]*structpb.Struct{"w": override},
 			}})
-			var usage *costkit.UsageError
+			var usage *pricing.UsageError
 			if !errors.As(err, &usage) || !strings.Contains(err.Error(), "w") || !strings.Contains(err.Error(), "storage_gb") {
 				t.Fatalf("Estimate() error = %v, want a usage refusal naming resource w and key storage_gb", err)
 			}
@@ -433,7 +433,7 @@ func TestAUsageFileValueThatIsNotAFiniteNonNegativeNumberIsRefused(t *testing.T)
 	}
 }
 
-func TestAUsageFileKeyThePricerNeverReadsIsRefused(t *testing.T) {
+func TestAUsageFileKeyNoFormulaReadsIsRefused(t *testing.T) {
 	for name, tc := range map[string]struct {
 		resource string
 		override map[string]any
@@ -453,11 +453,11 @@ func TestAUsageFileKeyThePricerNeverReadsIsRefused(t *testing.T) {
 			}
 			s := set()
 			s.Resources = append(s.Resources, resource("n", "p/e", "test_nested", "eu-west-1", map[string]any{}))
-			loaded, _ := costkit.Load([]byte(card))
-			_, err = costkit.Estimate(loaded, widgets, &costv1.PriceRequest{Resources: s, Usage: &costv1.Usage{
+			loaded, _ := pricing.Load([]byte(card))
+			_, err = pricing.Estimate(loaded, widgets, &costv1.PriceRequest{Resources: s, Usage: &costv1.Usage{
 				Resources: map[string]*structpb.Struct{tc.resource: override},
 			}})
-			var usage *costkit.UsageError
+			var usage *pricing.UsageError
 			if !errors.As(err, &usage) || !strings.Contains(err.Error(), tc.resource) || !strings.Contains(err.Error(), tc.key) {
 				t.Fatalf("Estimate() error = %v, want a usage refusal naming resource %s and key %s", err, tc.resource, tc.key)
 			}
@@ -466,8 +466,8 @@ func TestAUsageFileKeyThePricerNeverReadsIsRefused(t *testing.T) {
 }
 
 func TestATreeReportsAPropertyItCannotRepresent(t *testing.T) {
-	tree := &costkit.Tree{}
-	scope := tree.Scope("", costkit.ScopeProject, "shop")
+	tree := &pricing.Tree{}
+	scope := tree.Scope("", pricing.ScopeProject, "shop")
 	tree.Add(scope, "test", "test_widget", "w", "eu-west-1", map[string]any{"bad": make(chan int)})
 	if _, err := tree.Set("ocel"); err == nil || !strings.Contains(err.Error(), "test_widget:w") {
 		t.Fatalf("Set() error = %v, want one naming the resource", err)

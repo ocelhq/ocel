@@ -3,7 +3,7 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -41,11 +41,11 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	if err != nil {
 		return nil, err
 	}
-	tree := &costkit.Tree{}
+	tree := &pricing.Tree{}
 	region := p.options.Region
-	project := tree.Scope("", costkit.ScopeProject, req.Deploy.Slug)
-	shared := tree.Scope(project, costkit.ScopeShared, string(req.Deploy.Class))
-	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Deploy.Env)
+	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)
+	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Class))
+	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	for _, item := range bootstrapItems(names, req.Deploy.Class, false) {
 		typ, priced := itemTypes[item.Kind]
@@ -60,9 +60,9 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
-	site := costkit.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: region}
+	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: region}
 	for _, app := range req.Deploy.Apps {
-		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
+		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
 	shape, err := edgeShape(front.Kind(), site)
 	if err != nil {
@@ -72,7 +72,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
 
 	for _, app := range req.Deploy.Apps {
-		scope := tree.Scope(environment, costkit.ScopeApp, app.App)
+		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
 			if err != nil {
@@ -132,9 +132,9 @@ func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*c
 	return cost.Price(req)
 }
 
-func edgeShape(kind edge.Kind, site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func edgeShape(kind edge.Kind, site pricing.EdgeSite) (pricing.EdgeShape, error) {
 	if kind != alb.Kind {
-		return costkit.EdgeShape{}, nil
+		return pricing.EdgeShape{}, nil
 	}
 	return alb.Shape(site)
 }

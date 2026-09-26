@@ -3,7 +3,7 @@ package clitest
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -37,20 +37,20 @@ const costRates = `{
   ]
 }`
 
-var costTable = costkit.Table{
-	typeFunction: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "fake/requests", UsageBased: true,
-			Quantity: r.Usage("monthly_requests", costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000})})
+var costTable = pricing.Table{
+	typeFunction: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Requests", Unit: "requests", Rate: "fake/requests", UsageBased: true,
+			Quantity: r.Usage("monthly_requests", pricing.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000})})
 	},
-	typeContainer: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Container", Unit: "hours", Rate: "fake/container-hours", Quantity: costkit.MonthlyHours})
+	typeContainer: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Container", Unit: "hours", Rate: "fake/container-hours", Quantity: pricing.MonthlyHours})
 	},
-	typePostgres: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Database", Unit: "hours", Rate: "fake/postgres-hours", Quantity: costkit.MonthlyHours})
+	typePostgres: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Database", Unit: "hours", Rate: "fake/postgres-hours", Quantity: pricing.MonthlyHours})
 	},
-	typeBucket: func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "fake/storage", UsageBased: true,
-			Quantity: r.Usage("storage_gb", costkit.Band{Light: 1, Moderate: 10, Heavy: 100})})
+	typeBucket: func(r *pricing.Subject) {
+		r.Add(pricing.Component{Name: "Storage", Unit: "GB-month", Rate: "fake/storage", UsageBased: true,
+			Quantity: r.Usage("storage_gb", pricing.Band{Light: 1, Moderate: 10, Heavy: 100})})
 	},
 }
 
@@ -60,9 +60,9 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
 		env = req.GetEnvironment().GetIdentity()
 	}
-	tree := &costkit.Tree{}
-	project := tree.Scope("", costkit.ScopeProject, manifest.GetSlug())
-	environment := tree.Scope(project, costkit.ScopeEnvironment, env)
+	tree := &pricing.Tree{}
+	project := tree.Scope("", pricing.ScopeProject, manifest.GetSlug())
+	environment := tree.Scope(project, pricing.ScopeEnvironment, env)
 	for _, resource := range manifest.GetResources() {
 		if typ, shaped := costTypes[resource.GetResource().GetType()]; shaped && resource.GetBinding() == "" {
 			tree.Add(environment, costVendor, typ, resource.GetLogicalName(), costRegion, map[string]any{"name": resource.GetLogicalName()})
@@ -73,7 +73,7 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 		functions[fn.GetApp()] = append(functions[fn.GetApp()], fn.GetLogicalName())
 	}
 	for _, app := range manifest.GetApps() {
-		scope := tree.Scope(environment, costkit.ScopeApp, app.GetName())
+		scope := tree.Scope(environment, pricing.ScopeApp, app.GetName())
 		if app.GetCompute() == string(provider.ComputeContainer) {
 			tree.Add(scope, costVendor, typeContainer, app.GetName(), costRegion, map[string]any{"name": app.GetName()})
 			continue
@@ -90,9 +90,9 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 }
 
 func (s *deployFakeProviderServer) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	card, err := costkit.Load([]byte(costRates))
+	card, err := pricing.Load([]byte(costRates))
 	if err != nil {
 		return nil, err
 	}
-	return costkit.Estimate(card, costTable, req)
+	return pricing.Estimate(card, costTable, req)
 }

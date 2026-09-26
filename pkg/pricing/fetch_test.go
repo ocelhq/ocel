@@ -1,4 +1,4 @@
-package costkit_test
+package pricing_test
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
-func retrying(client *http.Client, waited *[]time.Duration) costkit.Client {
-	return costkit.Client{
+func retrying(client *http.Client, waited *[]time.Duration) pricing.Client {
+	return pricing.Client{
 		HTTP: client, Attempts: 4, Base: time.Second, Ceiling: 5 * time.Second,
 		Sleep: func(_ context.Context, wait time.Duration) error {
 			*waited = append(*waited, wait)

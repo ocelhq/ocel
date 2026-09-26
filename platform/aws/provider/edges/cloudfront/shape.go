@@ -1,7 +1,7 @@
 package cloudfront
 
 import (
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -12,19 +12,19 @@ const (
 	previewWildcardShape = "preview-wildcard"
 )
 
-func Shape(site costkit.EdgeSite) (costkit.EdgeShape, error) {
-	shape := costkit.EdgeShape{
+func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
+	shape := pricing.EdgeShape{
 		Vendor:      costVendor,
 		Region:      site.Region,
 		BillsEgress: true,
-		Environment: []costkit.Shaped{distribution(site.Slug)},
+		Environment: []pricing.Shaped{distribution(site.Slug)},
 	}
 	if site.Class == edge.ClassPreview {
-		shape.Shared = []costkit.Shaped{distribution(previewWildcardShape)}
+		shape.Shared = []pricing.Shaped{distribution(previewWildcardShape)}
 	}
 	return shape, nil
 }
 
-func distribution(name string) costkit.Shaped {
-	return costkit.Shaped{Name: name, Type: tfDistribution, Properties: map[string]any{"price_class": priceClass}}
+func distribution(name string) pricing.Shaped {
+	return pricing.Shaped{Name: name, Type: tfDistribution, Properties: map[string]any{"price_class": priceClass}}
 }
