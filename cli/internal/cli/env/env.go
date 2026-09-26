@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -88,15 +88,15 @@ func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context
 
 type envSeal struct{ stdin io.Reader }
 
-func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stderr io.Writer, drive func(*providerclient.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
 	return drivenEnvProvider(ctx, deps, cwd, opts, nil, stderr, drive)
 }
 
-func withEnvProviderSealing(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+func withEnvProviderSealing(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stderr io.Writer, drive func(*providerclient.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
 	return drivenEnvProvider(ctx, deps, cwd, opts, &envSeal{stdin: stdin}, stderr, drive)
 }
 
-func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, sealing *envSeal, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, sealing *envSeal, stderr io.Writer, drive func(*providerclient.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts 
 		hint = "ocel bootstrap preview"
 	}
 
-	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		rep := runui.Plain(deps.Presentation(stderr), stderr)
 		standing, err := preflight.Run(ctx, rep, runner, cfg, envTier(opts), "", nil, nil, hint)
 		if err != nil {
@@ -125,7 +125,7 @@ func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts 
 	})
 }
 
-func offerVarsKey(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, rep runui.Reporter, stdin io.Reader, stderr io.Writer) error {
+func offerVarsKey(ctx context.Context, deps cmddeps.Deps, runner *providerclient.Runner, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, rep runui.Reporter, stdin io.Reader, stderr io.Writer) error {
 	front := edgewire.Selection(cfg)
 	offered, err := bootstrap.Offers(ctx, runner, envTier(opts), front, providerkit.FeatureVarsKey)
 	if err != nil || !offered {
@@ -151,7 +151,7 @@ func envAddress(key string, opts envOptions) envgate.Address {
 	return envgate.Address{Cell: envgate.Cell{Key: key, Folder: opts.folder}, Environment: opts.environment}
 }
 
-func envValues(runner *provider.Runner, slug string, opts envOptions) envwire.Values {
+func envValues(runner *providerclient.Runner, slug string, opts envOptions) envwire.Values {
 	return envwire.Values{Runner: runner, Slug: slug, Tier: envTier(opts)}
 }
 
@@ -180,7 +180,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	if len(pairs) > 0 {
 		key = pairs[0].key
 	}
-	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -217,7 +217,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	})
 }
 
-func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, runner *provider.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
+func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, runner *providerclient.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	prepared, err := deploycollector.Prepare(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -255,7 +255,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 	if opts.dev {
 		return runEnvLsDev(ctx, deps, cwd, opts, stdout, stderr)
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, deps, cfg, runner, "", opts, stderr)
 		if err != nil {
 			return err
@@ -292,7 +292,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 	if opts.dev {
 		return runEnvGetDev(ctx, deps, cwd, key, opts, stdout, stderr)
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		definitions, _, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -357,7 +357,7 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 	if opts.dev {
 		return runEnvRmDev(ctx, deps, cwd, key, opts, stdout, stderr)
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -436,7 +436,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		definitions, _, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -463,7 +463,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 }
 
 func runEnvRefs(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -481,7 +481,7 @@ func runEnvRefs(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts en
 }
 
 func runEnvHistory(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err

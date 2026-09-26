@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -144,7 +144,7 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	return run(ctx, cwd)
 }
 
-func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config) error) error {
+func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stderr io.Writer, drive func(*providerclient.Runner, *projectconfig.Config) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 		hint = "ocel bootstrap preview"
 	}
 
-	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		if err := preflight.Credentials(ctx, runui.Plain(deps.Presentation(stderr), stderr), runner, cfg, opts.tier(), hint); err != nil {
 			return err
 		}
@@ -175,7 +175,7 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 	if owner == naming.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
-	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -217,7 +217,7 @@ func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opt
 	if naming.IsInlineRecord(name) {
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
-	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -244,7 +244,7 @@ func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opt
 }
 
 func runBindingsLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout, stderr io.Writer) error {
-	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
@@ -266,7 +266,7 @@ func runBindingsLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bind
 }
 
 func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout, stderr io.Writer) error {
-	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err

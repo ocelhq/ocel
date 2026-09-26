@@ -10,7 +10,7 @@ import (
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -61,7 +61,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 
 func fingerprinted(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout io.Writer) (string, error) {
 	var fingerprint string
-	err := provider.Drive(ctx, cfg, stdout, stdout, deps.HostTrust, func(runner *provider.Runner) error {
+	err := providerclient.Drive(ctx, cfg, stdout, stdout, deps.HostTrust, func(runner *providerclient.Runner) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err

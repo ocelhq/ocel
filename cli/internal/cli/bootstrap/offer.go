@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -113,7 +113,7 @@ func (p Plan) Advise(tier environmentv1.Tier, rep runui.Reporter) error {
 	return nil
 }
 
-func Offers(ctx context.Context, runner *provider.Runner, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
+func Offers(ctx context.Context, runner *providerclient.Runner, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return false, err
@@ -144,11 +144,11 @@ func PlanOnly(status *contractv1.BootstrapStatus, feature string) Plan {
 	return plan
 }
 
-func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
+func Offer(ctx context.Context, runner *providerclient.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
 	return OfferPlan(ctx, runner, PlanFor(status), tier, front, rep, interactive, out, in)
 }
 
-func OfferPlan(ctx context.Context, runner *provider.Runner, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
+func OfferPlan(ctx context.Context, runner *providerclient.Runner, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
 	if plan.Empty() {
 		return nil
 	}
@@ -164,7 +164,7 @@ func OfferPlan(ctx context.Context, runner *provider.Runner, plan Plan, tier env
 	if !proceed {
 		return plan.Advise(tier, rep)
 	}
-	return provider.Stream(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,
+	return providerclient.Stream(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,
 		func(ev *progressv1.OperationEvent) { reportEvent(rep, ev) })
 }
 
@@ -183,7 +183,7 @@ func reportEvent(rep runui.Reporter, ev *progressv1.OperationEvent) {
 	}
 }
 
-func Ready(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
+func Ready(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
 	resp, err := preflight.Run(ctx, rep, runner, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
 	if err != nil {
 		return err

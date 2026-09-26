@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
@@ -47,7 +47,7 @@ type varsUISessions struct {
 func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
 	sessions := &varsUISessions{}
 	prev := deps.ServeVarsUI
-	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 		session, err := prev(ctx, cfg, runner, preview, gate, recovery)
 		if err == nil {
 			sessions.mu.Lock()

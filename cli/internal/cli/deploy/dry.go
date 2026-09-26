@@ -3,7 +3,7 @@ package deploy
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -13,9 +13,9 @@ import (
 
 const dryFlagUsage = "Build, then print every change this would make to your account and stop without applying any of it"
 
-func showDeployPlan(ctx context.Context, runner *provider.Runner, ui *runui.Session, req *contractv1.DeployRequest, headline string) error {
+func showDeployPlan(ctx context.Context, runner *providerclient.Runner, ui *runui.Session, req *contractv1.DeployRequest, headline string) error {
 	var plan *planv1.ChangePlan
-	err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy,
+	err := providerclient.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy,
 		func(ev *progressv1.OperationEvent) {
 			if shown := ev.GetPlan(); shown != nil {
 				plan = shown

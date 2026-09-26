@@ -19,7 +19,7 @@ import (
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
@@ -209,7 +209,7 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 	linked(t, root, srv.URL)
 
 	held := clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
-	if err := os.Truncate(held, provider.MaxMessageBytes+1); err != nil {
+	if err := os.Truncate(held, providerclient.MaxMessageBytes+1); err != nil {
 		t.Fatalf("grow the connector past the ceiling: %v", err)
 	}
 

@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -34,7 +34,7 @@ type fakeBody struct {
 	ran bool
 }
 
-func (b *fakeBody) run(_ context.Context, _ *provider.Runner, ui *runui.Session) error {
+func (b *fakeBody) run(_ context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 	b.ran = true
 	ui.Diagnostic("the body spoke")
 	return nil
@@ -142,8 +142,8 @@ func TestADryRunDrivesTheProviderThroughTheDriveThatWritesNothing(t *testing.T) 
 			spec.Dry = tt.dry
 
 			var drove string
-			driving := func(name string) func(context.Context, *projectconfig.Config, io.Writer, io.Writer, provider.Trust, func(*provider.Runner) error) error {
-				return func(_ context.Context, _ *projectconfig.Config, _, _ io.Writer, _ provider.Trust, fn func(*provider.Runner) error) error {
+			driving := func(name string) func(context.Context, *projectconfig.Config, io.Writer, io.Writer, providerclient.Trust, func(*providerclient.Runner) error) error {
+				return func(_ context.Context, _ *projectconfig.Config, _, _ io.Writer, _ providerclient.Trust, fn func(*providerclient.Runner) error) error {
 					drove = name
 					return fn(nil)
 				}
@@ -192,7 +192,7 @@ type guardedBody struct {
 	granted bool
 }
 
-func (b *guardedBody) run(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+func (b *guardedBody) run(ctx context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 	granted, err := ui.Guard(ctx, `Tear down the named preview "staging"?`)
 	b.granted = granted
 	return err
@@ -223,7 +223,7 @@ type dryBody struct {
 	dry     bool
 }
 
-func (b *dryBody) run(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+func (b *dryBody) run(ctx context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 	b.dry = ui.Dry()
 	granted, err := ui.Guard(ctx, `Tear down the named preview "staging"?`)
 	b.granted = granted
@@ -317,7 +317,7 @@ type consentingBody struct {
 	granted bool
 }
 
-func (b *consentingBody) run(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+func (b *consentingBody) run(ctx context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 	granted, err := ui.ConsentByName(ctx, "project name", "acme")
 	b.granted = granted
 	return err
@@ -395,7 +395,7 @@ type askingBody struct {
 	asking bool
 }
 
-func (b *askingBody) run(_ context.Context, _ *provider.Runner, ui *runui.Session) error {
+func (b *askingBody) run(_ context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 	b.asking = ui.Asking()
 	return nil
 }
@@ -432,7 +432,7 @@ func TestCtrlCFlushesTheBlockTheRunWasInsideOf(t *testing.T) {
 	spec := specFor(t, &out)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	err := runui.Run(ctx, spec, func(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+	err := runui.Run(ctx, spec, func(ctx context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 		ui.Building()
 		if _, err := io.WriteString(ui.BuildWriter(), "Packages: +812\n▲ Next.js 15.4.2\n"); err != nil {
 			return err
@@ -476,7 +476,7 @@ type planningBody struct {
 	granted   bool
 }
 
-func (b *planningBody) run(ctx context.Context, _ *provider.Runner, ui *runui.Session) error {
+func (b *planningBody) run(ctx context.Context, _ *providerclient.Runner, ui *runui.Session) error {
 	b.consented = ui.Plan("Proposed changes to the production bootstrap", b.drawn)
 	granted, err := ui.Consent(ctx, "Apply these changes?")
 	b.granted = granted

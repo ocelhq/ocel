@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
@@ -32,11 +32,11 @@ type Deps struct {
 	OpenBrowser         func(url string) error
 	ProbePostgres       inlinebinding.PostgresProbe
 	ProbeBucket         inlinebinding.BucketProbe
-	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
+	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
 	CurrentGitBranch    func(dir string) (string, error)
 	DiscoverPRNumber    func() string
 	RunPackageManager   func(ctx context.Context, dir string, argv []string, output io.Writer) error
-	HostTrust           provider.Trust
+	HostTrust           providerclient.Trust
 	StdinIsTerminal     func(r io.Reader) bool
 	ConfigPath          func() string
 	Presentation        func(w io.Writer) runui.Presentation

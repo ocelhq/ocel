@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/cli/node"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -23,7 +23,7 @@ const RootApp = "this project's app"
 
 const RootFramework = providerkit.FrameworkNode
 
-func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
@@ -59,7 +59,7 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 	})
 }
 
-func NamedEnvironments(ctx context.Context, runner *provider.Runner, slug string) ([]string, error) {
+func NamedEnvironments(ctx context.Context, runner *providerclient.Runner, slug string) ([]string, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func Apps(cfg *projectconfig.Config) []envgate.App {
 }
 
 type Values struct {
-	Runner *provider.Runner
+	Runner *providerclient.Runner
 	Slug   string
 	Tier   environmentv1.Tier
 }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
+func Run(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
 	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, frameworks)
 	if err != nil {
 		return nil, err
@@ -31,12 +31,12 @@ func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *
 	return resp, nil
 }
 
-func Announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier) error {
+func Announce(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier) error {
 	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Frameworks(cfg))
 	return err
 }
 
-func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
+func announce(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, 
 	return resp, nil
 }
 
-func Credentials(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {
+func Credentials(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {
 	_, err := Run(ctx, rep, runner, cfg, required, "", nil, nil, bootstrapHint)
 	return err
 }

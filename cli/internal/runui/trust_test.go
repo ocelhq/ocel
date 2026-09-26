@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
@@ -26,7 +26,7 @@ func TestTheTrustIsTheProcessTerminalNotTheProvidersLogStream(t *testing.T) {
 	t.Cleanup(func() { run.Close() })
 
 	var terminal bytes.Buffer
-	host := provider.Trust{Ask: terminalAsker{}, Out: &terminal}
+	host := providerclient.Trust{Ask: terminalAsker{}, Out: &terminal}
 	ui := New(io.Discard, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { ui.Close() })
 
@@ -89,7 +89,7 @@ func TestTheSpinnerAStreamHandsOutStandsTheLiveViewDown(t *testing.T) {
 	t.Cleanup(spinner.Stop)
 	waitForFrame(t, &terminal)
 
-	resume := TrustFor(provider.Trust{}, spinner).Suspend()
+	resume := TrustFor(providerclient.Trust{}, spinner).Suspend()
 	terminal.Reset()
 	time.Sleep(5 * frameRate)
 	if drawn := terminal.String(); drawn != "" {

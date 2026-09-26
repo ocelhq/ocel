@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -166,7 +166,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	spec.Dry = opts.Dry
 	spec.Unattended = "pass --yes"
 
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := preflight.Announce(ctx, ui, runner, cfg, tier); err != nil {
 			return err
 		}
@@ -232,7 +232,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		var plan *planv1.ChangePlan
 		spinner := ui.Spin("Planning changes")
-		err = provider.Stream(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
+		err = providerclient.Stream(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
 			func(ev *progressv1.OperationEvent) {
 				if shown := ev.GetPlan(); shown != nil {
 					plan = shown
@@ -296,7 +296,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		req.AcceptReplacements = rendered
 		req.Force = req.Force || len(going) > 0
 
-		if err := provider.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
+		if err := providerclient.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Bootstrapped")

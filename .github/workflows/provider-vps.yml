@@ -7,7 +7,7 @@ on:
       - "platform/vps/**"
       - "pkg/providerkit/**"
       - "platform/edge/contract/**"
-      - "cli/internal/provider/**"
+      - "cli/internal/providerclient/**"
       - "cli/internal/prompt/**"
       - "cli/internal/cli/bootstrap/**"
       - "cli/internal/cli/preflight/**"

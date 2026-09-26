@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
 var lockCmd = &cobra.Command{
@@ -32,7 +32,7 @@ var lockCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := provider.Pin(ctx, cfg.Dir); err != nil {
+		if err := providerclient.Pin(ctx, cfg.Dir); err != nil {
 			return err
 		}
 

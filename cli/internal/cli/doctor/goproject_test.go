@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
 func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
@@ -33,7 +33,7 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	}
 	clitest.InstallProvider(t, "aws", func(dest string) error { return os.Symlink(testBinary, dest) })
 
-	t.Setenv(provider.ReadyTimeoutEnvVar, "5s")
+	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 	t.Setenv(clitest.FakeProviderEnvVar, "1")
 	t.Setenv("OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK", filepath.Join(t.TempDir(), "deploy-provider.sock"))
 	t.Setenv(clitest.FakeIDProviderEnvVar, "aws")

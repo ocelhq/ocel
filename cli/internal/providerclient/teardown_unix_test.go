@@ -1,6 +1,6 @@
 //go:build unix
 
-package provider
+package providerclient
 
 import (
 	"bytes"
