@@ -1,3 +1,4 @@
 {
-  "proxy": "manual"
+  "proxy": "manual",
+  "holder": "container ocel-front-nginx publishes :80 and :443"
 }
