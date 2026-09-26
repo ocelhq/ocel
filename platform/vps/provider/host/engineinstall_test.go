@@ -156,52 +156,49 @@ echo 'E: Some index files failed to download.' >&2`)
 	}
 }
 
-func TestEveryInstallAttemptIsBoundedAndSaysSoWhenTheBoundIsHit(t *testing.T) {
+func TestNoInstallAttemptRunsUnderAKillThatWouldInterruptDpkg(t *testing.T) {
 	t.Parallel()
 
-	dir, attempts, _ := installer(t, 99)
-	bounded := filepath.Join(dir, "bounded")
-	executable(t, filepath.Join(dir, "timeout"), "#!/bin/sh\nprintf '%s\\n' \"$1\" >>"+quoted(bounded)+"\nexit 124\n")
-	said, err := installing(t, dir)
-	if err == nil {
-		t.Fatalf("the engine step succeeded with every attempt timed out:\n%s", said)
-	}
-	read, err := os.ReadFile(bounded)
-	if err != nil {
-		t.Fatalf("no attempt ran under timeout, so an apt stall hangs the apply for as long as the mirror does: %v", err)
-	}
-	bounds := strings.Fields(string(read))
-	if len(bounds) != engineInstallTries {
-		t.Errorf("%d of %d attempts ran under timeout", len(bounds), engineInstallTries)
-	}
-	for _, bound := range bounds {
-		if bound != strconv.Itoa(engineAttemptSeconds) {
-			t.Errorf("an attempt was bounded at %q, want %d seconds", bound, engineAttemptSeconds)
-		}
-	}
-	if ran, _ := os.ReadFile(attempts); len(ran) != 0 {
-		t.Errorf("the install script ran %d times past a timeout that never let it start", len(ran))
-	}
-	if want := "timing out after " + strconv.Itoa(engineAttemptSeconds) + "s"; !strings.Contains(said, want) {
-		t.Errorf("the refusal reads\n%s\nwant it to say %q: a stall reads as a failure of whatever ran last", said, want)
-	}
-}
-
-func TestTheInstallBoundsHowLongAptWaitsOnAMirror(t *testing.T) {
-	t.Parallel()
-
-	configured := filepath.Join(t.TempDir(), "apt.conf")
-	dir, _, _ := installerSaying(t, 0, `cat "$APT_CONFIG" >`+quoted(configured))
+	dir, attempts, _ := installer(t, 0)
+	killed := filepath.Join(dir, "killed")
+	executable(t, filepath.Join(dir, "timeout"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>"+quoted(killed)+"\nexit 124\n")
 	if said, err := installing(t, dir); err != nil {
 		t.Fatalf("the engine step = %v:\n%s", err, said)
 	}
-	read, err := os.ReadFile(configured)
-	if err != nil {
-		t.Fatalf("the install script ran with no apt config it could read: %v", err)
+	if ran, err := os.ReadFile(killed); err == nil {
+		t.Errorf("an attempt ran under `timeout %s`, which signals the whole process group: a kill that lands while dpkg unpacks leaves dpkg interrupted and docker half-installed on the box", strings.TrimSpace(string(ran)))
 	}
-	for _, want := range []string{`Acquire::http::Timeout "30";`, `Acquire::https::Timeout "30";`} {
-		if !strings.Contains(string(read), want) {
-			t.Errorf("the install script ran with an apt config of\n%s\nwant %s in it: apt's own timeout is two minutes a fetch, and a mirror answering Ign stalls it for twenty", read, want)
+	if ran, _ := os.ReadFile(attempts); len(ran) != 1 {
+		t.Errorf("the install script ran %d times, want once", len(ran))
+	}
+}
+
+func TestTheInstallBoundsEveryWaitItCanStallOn(t *testing.T) {
+	t.Parallel()
+
+	configured := filepath.Join(t.TempDir(), "apt.conf")
+	fetching := filepath.Join(t.TempDir(), "curlrc")
+	dir, _, _ := installerSaying(t, 0, `cat "$APT_CONFIG" >`+quoted(configured)+`
+cat "$CURL_HOME/.curlrc" >`+quoted(fetching))
+	if said, err := installing(t, dir); err != nil {
+		t.Fatalf("the engine step = %v:\n%s", err, said)
+	}
+	for file, wants := range map[string][]string{
+		configured: {
+			`Acquire::http::Timeout "30";`,
+			`Acquire::https::Timeout "30";`,
+			`DPkg::Lock::Timeout "300";`,
+		},
+		fetching: {"connect-timeout = 30", "max-time = 120"},
+	} {
+		read, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("the install script ran with nothing it could read at %s: %v", file, err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(string(read), want) {
+				t.Errorf("the install script ran with\n%s\nwant %s in it: apt waits two minutes a fetch by default and forever on a held dpkg lock, and curl waits forever on a stalled transfer", read, want)
+			}
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,6 +24,8 @@ type engine struct {
 	dockerd   string
 	snap      bool
 	rootless  bool
+	outside   bool
+	extras    bool
 }
 
 func serving() engine {
@@ -50,8 +53,14 @@ exit 0`)
 	if held.snap {
 		write("snap", `[ "$1" = list ] && [ "$2" = docker ]`)
 	}
-	if held.rootless {
-		write("pgrep", `[ "$1" = -x ] && [ "$2" = rootlesskit ]`)
+	write("pgrep", `[ "$1" = -x ] || exit 1
+case "$2" in
+rootlesskit) `+strconv.FormatBool(held.rootless)+` ;;
+dockerd) `+strconv.FormatBool(held.outside)+` ;;
+*) exit 1 ;;
+esac`)
+	if held.extras {
+		write("dockerd-rootless.sh", "exit 0")
 	}
 	known := "exit 1"
 	if held.unit {
@@ -140,12 +149,14 @@ func TestTheReadNamesWhatKindOfDockerTheHostCarries(t *testing.T) {
 		held engine
 		want string
 	}{
-		"docker's own packages":            {serving(), engineStandard},
-		"a masked docker.service":          {engine{installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"}, engineMasked},
-		"the snap package":                 {engine{installed: true, snap: true, dockerd: "27.2.0"}, engineSnap},
-		"a rootless daemon":                {engine{installed: true, rootless: true, dockerd: "28.3.1"}, engineRootless},
-		"a binary nothing on systemd runs": {engine{installed: true, dockerd: "28.3.1"}, engineUnserved},
-		"no docker at all":                 {engine{}, ""},
+		"docker's own packages":          {serving(), engineStandard},
+		"a masked docker.service":        {engine{installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"}, engineMasked},
+		"the snap package":               {engine{installed: true, snap: true, dockerd: "27.2.0"}, engineSnap},
+		"a rootless daemon":              {engine{installed: true, rootless: true, dockerd: "28.3.1"}, engineRootless},
+		"a daemon systemd does not run":  {engine{installed: true, outside: true, dockerd: "28.3.1"}, engineUnserved},
+		"a binary no daemon runs behind": {engine{installed: true, dockerd: "28.3.1"}, ""},
+		"docker's rootless extras, idle": {engine{installed: true, extras: true, dockerd: "28.3.1"}, ""},
+		"no docker at all":               {engine{}, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -190,10 +201,10 @@ func TestAHostThatRunsNoContainersIsProbedAsHavingNeither(t *testing.T) {
 	}
 }
 
-func TestADockerBinaryWithNoUnitBehindItStandsWithoutServingAndIsRefusedRatherThanInstalledOver(t *testing.T) {
+func TestADaemonSystemdDoesNotRunIsRefusedRatherThanInstalledOver(t *testing.T) {
 	t.Parallel()
 
-	held := engine{installed: true, dockerd: "28.3.1"}
+	held := engine{installed: true, outside: true, dockerd: "28.3.1"}
 	observed := probed(t, held)
 	if _, stood := observed[unitItem().ID()]; stood {
 		t.Errorf("the probe read %s on a host whose docker binary carries no unit file", unitItem().ID())
@@ -207,7 +218,32 @@ func TestADockerBinaryWithNoUnitBehindItStandsWithoutServingAndIsRefusedRatherTh
 	}
 	refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady)
 	if !strings.Contains(refused.Message, dockerUnit) || !strings.Contains(refused.Message, "ocel bootstrap production") {
-		t.Errorf("a docker binary no %s runs is refused with %q, want it to name the unit ocel needs and the bootstrap to run after", dockerUnit, refused.Message)
+		t.Errorf("a docker daemon no %s runs is refused with %q, want it to name the unit ocel needs and the bootstrap to run after", dockerUnit, refused.Message)
+	}
+}
+
+func TestAnInstallLeftHalfDoneIsInstalledAgainRatherThanRefused(t *testing.T) {
+	t.Parallel()
+
+	for name, held := range map[string]engine{
+		"docker's cli with no daemon":             {installed: true, dockerd: "28.3.1"},
+		"docker's rootless extras with no daemon": {installed: true, extras: true, dockerd: "28.3.1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
+			if err := read.runnableEngine("ada@ocelbox"); err != nil {
+				t.Fatalf("runnableEngine() = %v, and an install interrupted before docker.service landed could never be finished by ocel", err)
+			}
+			if engine := planFor(planned(read), engineItem().ID()); engine.Action != providerkit.ActionUpdate {
+				t.Errorf("the engine plans %q, want the install shown again as a change over what stands", engine.Action)
+			}
+			refused := refuseReplacements(read, EngineItems())
+			if refused == nil || !strings.Contains(refused.Error(), engineItem().ID()) {
+				t.Errorf("an unattended apply over a half-done install = %v, want it refused: rebuilding an engine is what nobody there can consent to", refused)
+			}
+		})
 	}
 }
 
@@ -439,8 +475,8 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 			"docker on ada@ocelbox is the snap package, which ocel does not run on\nReplace it with docker 28.0 or later from docker's own packages; its containers do not carry over"},
 		"a rootless daemon": {Engine{Kind: engineRootless, Version: "28.3.1"},
 			"docker on ada@ocelbox runs rootless, and ocel needs the system daemon behind docker.service\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
-		"a binary nothing on systemd runs": {Engine{Kind: engineUnserved, Version: "28.3.1"},
-			"docker on ada@ocelbox is not run by docker.service, the system daemon ocel needs\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
+		"a daemon systemd does not run": {Engine{Kind: engineUnserved, Version: "28.3.1"},
+			"a docker daemon on ada@ocelbox runs outside docker.service, the system daemon ocel needs\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
 		"a masked docker.service": {Engine{Kind: engineMasked, Version: "28.3.1"},
 			"docker.service on ada@ocelbox is masked\nRun `systemctl unmask docker.service` and run `ocel bootstrap production`"},
 		"an engine whose version cannot be read": {Engine{Kind: engineStandard},
