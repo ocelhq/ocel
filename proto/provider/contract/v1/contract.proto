@@ -550,7 +550,7 @@ message HostCheck {
   enum Verdict {
     VERDICT_UNSPECIFIED = 0;
     VERDICT_PASS = 1;
-    VERDICT_OWED = 2;
+    VERDICT_NEEDS_ACTION = 2;
     VERDICT_FAIL = 3;
   }
 

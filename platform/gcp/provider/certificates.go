@@ -50,7 +50,7 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 		return provider.Certificate{}, err
 	}
 	name := clients.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
-	held := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Owed: req.Current.Owed}
+	held := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Manual: req.Current.Manual}
 
 	authorization, err := p.authorized(ctx, clients, req)
 	if err != nil {

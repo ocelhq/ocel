@@ -54,7 +54,7 @@ type edgeSession struct {
 	stack    edge.EdgeStack
 	store    edgeStateStore
 	state    stackrecords.EdgeState
-	settle   settlement
+	cutover  dnsCutover
 }
 
 func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (edge.Edge, error) {
@@ -109,12 +109,12 @@ func (h *handlers) openEdgeSession(ctx context.Context, class edge.Class, slug s
 		return nil, err
 	}
 	session := &edgeSession{provider: provider, front: front, stack: stack, store: store, state: state}
-	session.installSettler(writer, sel.GetDns().GetZone())
+	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
 }
 
-func (s *edgeSession) installSettler(writer edge.DNSRecords, zone string) {
-	s.settle = newSettlement(s.front, writer, zone, s.provider.Liveness())
+func (s *edgeSession) installDNSCutover(writer edge.DNSRecords, zone string) {
+	s.cutover = newDNSCutover(s.front, writer, zone, s.provider.Liveness())
 }
 
 func (s *edgeSession) checkpoint(ctx context.Context) error {

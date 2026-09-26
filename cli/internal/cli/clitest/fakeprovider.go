@@ -1070,8 +1070,8 @@ func fakeHostChecks(domains []string) []*contractv1.HostCheck {
 	for _, host := range domains {
 		checks = append(checks, &contractv1.HostCheck{
 			Subject: host,
-			Verdict: contractv1.HostCheck_VERDICT_OWED,
-			Finding: host + " does not resolve; the record pointing it at 203.0.113.10 is owed",
+			Verdict: contractv1.HostCheck_VERDICT_NEEDS_ACTION,
+			Finding: host + " does not resolve; add a record at your DNS provider pointing it at 203.0.113.10",
 			Fix:     "add the record `ocel domain add` printed",
 		})
 	}

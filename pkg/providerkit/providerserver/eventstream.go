@@ -180,10 +180,10 @@ func degradedEvent(need edge.Need, detail string) *progressv1.OperationEvent {
 	}
 }
 
-func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *progressv1.OperationEvent {
-	owed := make([]*progressv1.DnsRecord, 0, len(records))
+func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...string) *progressv1.OperationEvent {
+	manual := make([]*progressv1.DnsRecord, 0, len(records))
 	for _, rec := range records {
-		owed = append(owed, &progressv1.DnsRecord{
+		manual = append(manual, &progressv1.DnsRecord{
 			Name:    rec.Name,
 			Type:    string(rec.Type),
 			Value:   rec.Value,
@@ -193,7 +193,7 @@ func dnsOwedEvent(headline string, records []edge.Record, notes ...string) *prog
 	return &progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_DnsOwed{DnsOwed: &progressv1.DnsOwedEvent{
 			Headline: headline,
-			Records:  owed,
+			Records:  manual,
 			Notes:    notes,
 		}},
 	}

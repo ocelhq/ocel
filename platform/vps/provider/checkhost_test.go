@@ -76,39 +76,39 @@ func TestAHostnameThatResolvesSomewhereElseNamesBothAnswers(t *testing.T) {
 	}
 }
 
-func TestAHostnameThatDoesNotResolveIsOwedRatherThanBroken(t *testing.T) {
+func TestAHostnameThatDoesNotResolveNeedsAManualRecordRatherThanBeingBroken(t *testing.T) {
 	t.Parallel()
 
 	check := vps.DNSVerdict(context.Background(), stubResolver(hereOnly()), "shop.example.com", boxAddress)
 
-	if check.Verdict != provider.HostOwed {
-		t.Fatalf("verdict = %v (%q), want it owed: instructions-only dns makes records-owed the state between `ocel domain add` and a human editing their zone", check.Verdict, check.Finding)
+	if check.Verdict != provider.HostNeedsAction {
+		t.Fatalf("verdict = %v (%q), want it needing action: instructions-only dns makes a manual record the state between `ocel domain add` and a human editing their zone", check.Verdict, check.Finding)
 	}
-	if !strings.Contains(check.Finding, "owed") {
-		t.Errorf("finding = %q, want it named as owed rather than as broken", check.Finding)
+	if !strings.Contains(check.Finding, "add a record") {
+		t.Errorf("finding = %q, want it to say what record to add rather than call it broken", check.Finding)
 	}
 	if check.Fix == "" {
-		t.Error("a hostname whose record is owed carries no fix, and the fix is the whole point of saying so")
+		t.Error("a hostname whose record is still to be added carries no fix, and the fix is the whole point of saying so")
 	}
 }
 
-func TestAHostnameThatResolvesOnlyToLoopbackIsOwedRatherThanPointedElsewhere(t *testing.T) {
+func TestAHostnameThatResolvesOnlyToLoopbackNeedsAManualRecordRatherThanBeingPointedElsewhere(t *testing.T) {
 	t.Parallel()
 
 	answers := hereOnly()
 	answers["shop.localhost"] = []string{"::1", "127.0.0.1"}
 	check := vps.DNSVerdict(context.Background(), stubResolver(answers), "shop.localhost", boxAddress)
 
-	if check.Verdict != provider.HostOwed {
-		t.Fatalf("verdict = %v (%q), want it owed: a loopback answer is the one every machine gives for itself, so it points nowhere else and no zone holds a record to correct", check.Verdict, check.Finding)
+	if check.Verdict != provider.HostNeedsAction {
+		t.Fatalf("verdict = %v (%q), want it needing action: a loopback answer is the one every machine gives for itself, so it points nowhere else and no zone holds a record to correct", check.Verdict, check.Finding)
 	}
-	for _, want := range []string{"127.0.0.1", "::1", boxAddress, "owed"} {
+	for _, want := range []string{"127.0.0.1", "::1", boxAddress, "add a record"} {
 		if !strings.Contains(check.Finding, want) {
 			t.Errorf("finding = %q, want %q named", check.Finding, want)
 		}
 	}
 	if check.Fix == "" {
-		t.Error("a hostname whose record is owed carries no fix, and the fix is the whole point of saying so")
+		t.Error("a hostname whose record is still to be added carries no fix, and the fix is the whole point of saying so")
 	}
 }
 
@@ -139,7 +139,7 @@ func TestAResolverThatFellOverIsNotReadAsARecordNobodyWrote(t *testing.T) {
 	}
 	check := vps.DNSVerdict(context.Background(), look, "shop.example.com", boxAddress)
 
-	if check.Verdict == provider.HostOwed {
+	if check.Verdict == provider.HostNeedsAction {
 		t.Fatalf("a resolver that fell over was read as a record nobody wrote: %q", check.Finding)
 	}
 	if !strings.Contains(check.Finding, "server misbehaving") {

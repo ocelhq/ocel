@@ -17,7 +17,7 @@ func discardCertificate(ctx context.Context, p provider.Provider, cert provider.
 	return p.Certificates().Discard(ctx, cert, progress)
 }
 
-func retireCertificate(ctx context.Context, p provider.Provider, settle settlement, cert, holding provider.Certificate, progress edge.Progress) error {
+func retireCertificate(ctx context.Context, p provider.Provider, cutover dnsCutover, cert, holding provider.Certificate, progress edge.Progress) error {
 	if !cert.Issued() || cert.ID == holding.ID {
 		return nil
 	}
@@ -27,61 +27,61 @@ func retireCertificate(ctx context.Context, p provider.Provider, settle settleme
 	if err := discardCertificate(ctx, p, cert, progress); err != nil {
 		return err
 	}
-	return settle.release(ctx, edge.Unwritten(cert.Written, holding.Written), progress.Say)
+	return cutover.release(ctx, edge.Unwritten(cert.Written, holding.Written), progress.Say)
 }
 
-type certification struct {
-	provider provider.Provider
-	settle   settlement
-	settled  *stackrecords.Settled
-	persist  func(context.Context) error
-	uses     func(string) bool
-	notes    []string
+type hostCertificates struct {
+	provider  provider.Provider
+	cutover   dnsCutover
+	hostState *stackrecords.HostnameState
+	persist   func(context.Context) error
+	uses      func(string) bool
+	notes     []string
 }
 
-func (c certification) certify(ctx context.Context, hostname string, progress edge.Progress) error {
+func (c hostCertificates) certify(ctx context.Context, hostname string, progress edge.Progress) error {
 	cert, err := c.provider.Certificates().Issue(ctx, provider.CertificateRequest{
-		Kind:     c.settle.kind,
+		Kind:     c.cutover.kind,
 		Hostname: hostname,
-		Current:  c.settled.Certificate,
+		Current:  c.hostState.Certificate,
 		Progress: progress,
 		Prove: func(ctx context.Context, cert provider.Certificate, records []edge.Record) (provider.Certificate, error) {
-			written, werr := c.settle.write(ctx, records, proveHeadline(hostname), progress.Say,
+			written, werr := c.cutover.write(ctx, records, proveHeadline(hostname), progress.Say,
 				append([]string{proveNote}, c.notes...)...)
-			cert.Written, cert.Owed = written.Written, written.Owed
-			return cert, errors.Join(werr, c.hold(ctx, cert))
+			cert.Written, cert.Manual = written.Written, written.Manual
+			return cert, errors.Join(werr, c.adoptCertificate(ctx, cert))
 		},
 	})
 	if !cert.Issued() {
 		return err
 	}
-	return errors.Join(err, c.hold(ctx, cert))
+	return errors.Join(err, c.adoptCertificate(ctx, cert))
 }
 
-func (c certification) hold(ctx context.Context, cert provider.Certificate) error {
-	prior := c.settled.Certificate
-	c.settled.Certificate = cert
-	c.settled.Supersede(prior)
+func (c hostCertificates) adoptCertificate(ctx context.Context, cert provider.Certificate) error {
+	prior := c.hostState.Certificate
+	c.hostState.Certificate = cert
+	c.hostState.Supersede(prior)
 	return c.persist(ctx)
 }
 
-func (c certification) discardSuperseded(ctx context.Context, progress edge.Progress) error {
-	if len(c.settled.Superseded) == 0 {
+func (c hostCertificates) discardSuperseded(ctx context.Context, progress edge.Progress) error {
+	if len(c.hostState.Superseded) == 0 {
 		return nil
 	}
-	holding := c.settled.Certificate
+	holding := c.hostState.Certificate
 	var kept []provider.Certificate
 	var errs []error
-	for _, cert := range c.settled.Superseded {
+	for _, cert := range c.hostState.Superseded {
 		if c.uses != nil && c.uses(cert.ID) {
 			continue
 		}
-		if err := retireCertificate(ctx, c.provider, c.settle, cert, holding, progress); err != nil {
+		if err := retireCertificate(ctx, c.provider, c.cutover, cert, holding, progress); err != nil {
 			errs = append(errs, err)
 			kept = append(kept, cert)
 		}
 	}
-	c.settled.Superseded = kept
+	c.hostState.Superseded = kept
 	return errors.Join(append(errs, c.persist(ctx))...)
 }
 

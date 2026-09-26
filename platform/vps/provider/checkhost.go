@@ -104,8 +104,8 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 	found, err := look(ctx, hostname)
 	switch {
 	case notResolved(err):
-		check.Verdict = provider.HostOwed
-		check.Finding = fmt.Sprintf("%s does not resolve; the record pointing it at %s is owed", hostname, address)
+		check.Verdict = provider.HostNeedsAction
+		check.Finding = fmt.Sprintf("%s does not resolve; add a record at your DNS provider pointing it at %s", hostname, address)
 		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	case err != nil:
@@ -113,8 +113,8 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 		check.Finding = fmt.Sprintf("resolve %s: %v", hostname, err)
 		return check
 	case len(found) == 0:
-		check.Verdict = provider.HostOwed
-		check.Finding = fmt.Sprintf("%s does not resolve; the record pointing it at %s is owed", hostname, address)
+		check.Verdict = provider.HostNeedsAction
+		check.Finding = fmt.Sprintf("%s does not resolve; add a record at your DNS provider pointing it at %s", hostname, address)
 		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	case pointsHere(found, here):
@@ -122,8 +122,8 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 		check.Finding = fmt.Sprintf("%s resolves to %s, which is this box", hostname, spell(found))
 		return check
 	case loopbackOnly(found):
-		check.Verdict = provider.HostOwed
-		check.Finding = fmt.Sprintf("%s resolves to loopback %s; the record pointing it at %s is owed",
+		check.Verdict = provider.HostNeedsAction
+		check.Finding = fmt.Sprintf("%s resolves to loopback %s; add a record at your DNS provider pointing it at %s",
 			hostname, spell(found), address)
 		check.Fix = "add the record `ocel domain add` printed"
 		return check

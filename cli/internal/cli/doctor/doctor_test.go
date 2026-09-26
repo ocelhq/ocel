@@ -461,7 +461,7 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	}
 	for _, want := range []string{
 		"  ✓ something listens on port 80",
-		"  ⚠ shop.example.com does not resolve; the record pointing it at 203.0.113.10 is owed",
+		"  ⚠ shop.example.com does not resolve; add a record at your DNS provider pointing it at 203.0.113.10",
 		"    → add the record `ocel domain add` printed",
 		"  ⚠ *.preview.example.com does not resolve",
 		"*.preview.example.com — expires 2100-01-01T00:00:00Z, you placed it on this box and you renew it",

@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	settleBudget   = time.Minute
-	attendedBudget = 15 * time.Minute
-	attemptWindow  = 20 * time.Second
-	settleWait     = 5 * time.Second
+	cutoverBudget      = time.Minute
+	manualRecordBudget = 15 * time.Minute
+	attemptWindow      = 20 * time.Second
+	cutoverWait        = 5 * time.Second
 )
 
-type settlement struct {
+type dnsCutover struct {
 	kind     edge.Kind
 	unbound  bool
 	dns      edge.DNSRecords
@@ -32,41 +32,41 @@ type settlement struct {
 	wait     time.Duration
 	sleep    func(context.Context, time.Duration) error
 	now      func() time.Time
-	owed     owedPolicy
+	manual   manualRecordPolicy
 }
 
-type owedPolicy struct {
-	ask        func(headline string, records []edge.Record, notes ...string)
-	unattended bool
+type manualRecordPolicy struct {
+	report func(headline string, records []edge.Record, notes ...string)
+	fail   bool
 }
 
-func attended(sender *eventStream) owedPolicy {
-	return owedPolicy{ask: func(headline string, records []edge.Record, notes ...string) {
-		sender.send(dnsOwedEvent(headline, records, notes...))
+func reportManualRecords(sender *eventStream) manualRecordPolicy {
+	return manualRecordPolicy{report: func(headline string, records []edge.Record, notes ...string) {
+		sender.send(dnsManualRecordsEvent(headline, records, notes...))
 	}}
 }
 
-func (s *settlement) attend(sender *eventStream) {
-	s.owed = attended(sender)
-	s.budget = attendedBudget
+func (s *dnsCutover) waitForManualRecords(sender *eventStream) {
+	s.manual = reportManualRecords(sender)
+	s.budget = manualRecordBudget
 }
 
-func unattended(sender *eventStream) owedPolicy {
-	policy := attended(sender)
-	policy.unattended = true
+func failOnManualRecords(sender *eventStream) manualRecordPolicy {
+	policy := reportManualRecords(sender)
+	policy.fail = true
 	return policy
 }
 
-func newSettlement(front edge.Edge, dns edge.DNSRecords, zone string, liveness provider.Liveness) settlement {
-	return settlement{
+func newDNSCutover(front edge.Edge, dns edge.DNSRecords, zone string, liveness provider.Liveness) dnsCutover {
+	return dnsCutover{
 		kind:     front.Kind(),
 		unbound:  front.Facts().ServesUnbound,
 		dns:      dns,
 		zone:     zone,
 		liveness: liveness,
-		budget:   settleBudget,
+		budget:   cutoverBudget,
 		window:   attemptWindow,
-		wait:     settleWait,
+		wait:     cutoverWait,
 		sleep:    sleep,
 		now:      time.Now,
 	}
@@ -83,7 +83,7 @@ func sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (s settlement) recordsFor(state edge.StackState, hostname string) ([]edge.Record, error) {
+func (s dnsCutover) recordsFor(state edge.StackState, hostname string) ([]edge.Record, error) {
 	target := edge.TargetOf(s.kind, s.unbound, state)
 	if !edge.Pointable(target, state.Bound, hostname) {
 		return nil, nil
@@ -93,15 +93,15 @@ func (s settlement) recordsFor(state edge.StackState, hostname string) ([]edge.R
 
 type recordSet struct {
 	Written []edge.Record
-	Owed    []edge.Record
+	Manual  []edge.Record
 }
 
 const instructionsOnly = "This project has no DNS writer configured, so ocel wrote none of them and changed nothing at your DNS provider."
 
-func (s settlement) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (recordSet, error) {
-	var settled recordSet
+func (s dnsCutover) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (recordSet, error) {
+	var result recordSet
 	if len(records) == 0 {
-		return settled, nil
+		return result, nil
 	}
 	for _, rec := range records {
 		if note := rec.ApexNote(s.zone); note != "" {
@@ -109,44 +109,44 @@ func (s settlement) write(ctx context.Context, records []edge.Record, headline s
 		}
 	}
 	if s.dns == nil {
-		settled.Owed = records
-		if s.owed.ask != nil {
-			s.owed.ask(headline, records, append(slices.Clone(notes), instructionsOnly)...)
+		result.Manual = records
+		if s.manual.report != nil {
+			s.manual.report(headline, records, append(slices.Clone(notes), instructionsOnly)...)
 		}
-		return settled, s.waiting(headline, settled.Owed)
+		return result, s.waiting(headline, result.Manual)
 	}
 	for _, rec := range records {
 		say("Writing " + rec.String())
 	}
 	written, err := s.dns.Ensure(ctx, records, say)
-	settled.Written, settled.Owed = written, edge.Unwritten(records, written)
-	if err != nil || len(settled.Owed) == 0 {
-		return settled, err
+	result.Written, result.Manual = written, edge.Unwritten(records, written)
+	if err != nil || len(result.Manual) == 0 {
+		return result, err
 	}
-	if s.owed.unattended && s.owed.ask != nil {
-		s.owed.ask(headline, settled.Owed, notes...)
+	if s.manual.fail && s.manual.report != nil {
+		s.manual.report(headline, result.Manual, notes...)
 	}
-	return settled, s.waiting(headline, settled.Owed)
+	return result, s.waiting(headline, result.Manual)
 }
 
-type owedRecords struct {
+type manualRecordsPending struct {
 	headline string
 	records  []edge.Record
 }
 
-func (o owedRecords) Error() string {
-	return fmt.Sprintf("%s — ocel did not write %s; once that is in place, `ocel domain add` waits for it and settles the rest",
-		o.headline, strings.Join(recordLines(o.records), ", "))
+func (m manualRecordsPending) Error() string {
+	return fmt.Sprintf("%s — ocel did not write %s; once that is in place, `ocel domain add` waits for it and finishes attaching the hostname",
+		m.headline, strings.Join(recordLines(m.records), ", "))
 }
 
-func (s settlement) waiting(headline string, owed []edge.Record) error {
-	if !s.owed.unattended || len(owed) == 0 {
+func (s dnsCutover) waiting(headline string, manual []edge.Record) error {
+	if !s.manual.fail || len(manual) == 0 {
 		return nil
 	}
-	return provider.Pending(owedRecords{headline: headline, records: owed})
+	return provider.Pending(manualRecordsPending{headline: headline, records: manual})
 }
 
-func (s settlement) release(ctx context.Context, written []edge.Record, say func(string)) error {
+func (s dnsCutover) release(ctx context.Context, written []edge.Record, say func(string)) error {
 	if s.dns == nil || len(written) == 0 {
 		return nil
 	}
@@ -156,7 +156,7 @@ func (s settlement) release(ctx context.Context, written []edge.Record, say func
 	return s.dns.Delete(ctx, written)
 }
 
-func (s settlement) await(ctx context.Context, hostname string, say func(string)) (stackrecords.Probe, error) {
+func (s dnsCutover) await(ctx context.Context, hostname string, say func(string)) (stackrecords.ServeProbe, error) {
 	began := s.now()
 	deadline := began.Add(s.budget)
 	bounded, stop := context.WithTimeout(ctx, s.budget)
@@ -170,16 +170,16 @@ func (s settlement) await(ctx context.Context, hostname string, say func(string)
 		case err == nil:
 			outlasted = ""
 		case ctx.Err() != nil:
-			return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+			return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, ctx.Err()
 		case bounded.Err() != nil:
-			return stackrecords.Probe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
+			return stackrecords.ServeProbe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
 		case errors.Is(err, context.DeadlineExceeded):
 			serving, outlasted = "", fmt.Sprintf("the last attempt got no answer within %s", s.window)
 		default:
-			return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, err
+			return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, err
 		}
 		if serving == s.kind {
-			return stackrecords.Probe{At: s.now().Unix(), OK: true, Edge: serving}, nil
+			return stackrecords.ServeProbe{At: s.now().Unix(), OK: true, Edge: serving}, nil
 		}
 		if !s.now().Add(s.wait).Before(deadline) {
 			break
@@ -187,21 +187,21 @@ func (s settlement) await(ctx context.Context, hostname string, say func(string)
 		say(fmt.Sprintf("Waiting for %s to answer as the %s edge", hostname, s.kind))
 		if err := s.sleep(bounded, s.wait); err != nil {
 			if ctx.Err() != nil {
-				return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+				return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, ctx.Err()
 			}
 			break
 		}
 	}
-	return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
+	return stackrecords.ServeProbe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
 }
 
-func (s settlement) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
+func (s dnsCutover) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
 	asking, stop := context.WithTimeout(ctx, s.window)
 	defer stop()
 	return s.liveness.ServingEdge(asking, s.kind, hostname)
 }
 
-func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
+func (s dnsCutover) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
 		cause := s.unreached(hostname)
@@ -217,7 +217,7 @@ func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Ti
 		hostname, serving, s.kind, waited))
 }
 
-func (s settlement) unreached(hostname string) string {
+func (s dnsCutover) unreached(hostname string) string {
 	cause := s.liveness.LastProbeFailure(hostname)
 	if cause == "" {
 		return ""

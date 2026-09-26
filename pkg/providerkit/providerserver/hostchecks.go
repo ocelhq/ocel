@@ -27,8 +27,8 @@ func HostChecksProto(checks []provider.HostCheck) []*contractv1.HostCheck {
 
 func verdictProto(verdict provider.HostVerdict) contractv1.HostCheck_Verdict {
 	switch verdict {
-	case provider.HostOwed:
-		return contractv1.HostCheck_VERDICT_OWED
+	case provider.HostNeedsAction:
+		return contractv1.HostCheck_VERDICT_NEEDS_ACTION
 	case provider.HostFail:
 		return contractv1.HostCheck_VERDICT_FAIL
 	default:

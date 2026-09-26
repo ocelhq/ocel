@@ -10,7 +10,7 @@ type Certificate struct {
 	ID        string        `json:"id,omitempty"`
 	Requested bool          `json:"requested,omitempty"`
 	Written   []edge.Record `json:"written,omitempty"`
-	Owed      []edge.Record `json:"owed,omitempty"`
+	Manual    []edge.Record `json:"owed,omitempty"`
 }
 
 func (c Certificate) Issued() bool { return c.ID != "" }

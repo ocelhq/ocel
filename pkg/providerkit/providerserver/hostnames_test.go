@@ -100,12 +100,12 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 	if !slices.Contains(state.Edge.Bound, "app.acme.com") {
 		t.Errorf("the recorded edge state binds %v, want app.acme.com among them", state.Edge.Bound)
 	}
-	settled := state.Host("app.acme.com")
-	if !settled.Probe.OK || settled.Probe.Edge != fake.KindRelay {
-		t.Errorf("recorded probe = %+v, want it answered by the %s edge", settled.Probe, fake.KindRelay)
+	hostState := state.Host("app.acme.com")
+	if !hostState.Probe.OK || hostState.Probe.Edge != fake.KindRelay {
+		t.Errorf("recorded probe = %+v, want it answered by the %s edge", hostState.Probe, fake.KindRelay)
 	}
-	if len(settled.Written) == 0 {
-		t.Error("the settlement records no written DNS record, though a writer was selected")
+	if len(hostState.Written) == 0 {
+		t.Error("the hostname state records no written DNS record, though a writer was selected")
 	}
 	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 1 {
 		t.Errorf("the zone holds %v, want the one record pointing app.acme.com at the edge", written)
@@ -160,7 +160,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	}
 	held := readStack(t, provider, edge.ClassProduction, "shop")
 	if len(held.Edge.Bound) != 0 || len(held.Hosts) != 0 {
-		t.Errorf("the refused add left the edge binding %v and the state settling %v, want nothing changed: `ocel deploy` settles the hostname when it promotes",
+		t.Errorf("the refused add left the edge binding %v and the state settling %v, want nothing changed: `ocel deploy` attaches the hostname when it promotes",
 			held.Edge.Bound, held.Hostnames())
 	}
 	if bound := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(); len(bound) != 0 {
@@ -187,24 +187,24 @@ func TestAddHostnameOwesTheRecordsWhenNoWriterIsSelected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddHostname() error = %v", err)
 	}
-	var owed, notes []string
+	var manual, notes []string
 	defer stream.Close()
 	for stream.Receive() {
 		if event := stream.Msg().GetDnsOwed(); event != nil {
 			for _, record := range event.GetRecords() {
-				owed = append(owed, record.GetName())
+				manual = append(manual, record.GetName())
 			}
 			notes = append(notes, event.GetNotes()...)
 		}
 	}
-	if !slices.Contains(owed, "app.acme.com") {
-		t.Errorf("the run owed %v, want app.acme.com asked of the operator", owed)
+	if !slices.Contains(manual, "app.acme.com") {
+		t.Errorf("the run asked for manual records %v, want app.acme.com asked of the operator", manual)
 	}
 	if !slices.ContainsFunc(notes, func(note string) bool { return strings.Contains(note, "wrote none of them") }) {
-		t.Errorf("the owed records came with %v, want a note saying ocel wrote none of them: instructions-only DNS is the normal state and the text may never leave the operator guessing whether something was automated", notes)
+		t.Errorf("the manual records came with %v, want a note saying ocel wrote none of them: instructions-only DNS is the normal state and the text may never leave the operator guessing whether something was automated", notes)
 	}
-	if settled := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com"); len(settled.Owed) == 0 {
-		t.Error("the settlement owes no record, so nothing tells the operator what to write")
+	if hostState := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com"); len(hostState.Manual) == 0 {
+		t.Error("the hostname state records no manual record, so nothing tells the operator what to write")
 	}
 }
 
@@ -335,7 +335,7 @@ func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 		t.Errorf("the recorded edge state still binds %v", state.Edge.Bound)
 	}
 	if len(state.Hosts) != 0 {
-		t.Errorf("the settlement still holds %v", state.Hostnames())
+		t.Errorf("the hostname state still holds %v", state.Hostnames())
 	}
 	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
 		t.Errorf("the zone still holds %v, want the records ocel wrote taken back", written)
@@ -386,7 +386,7 @@ func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T
 		t.Errorf("RemoveHostname() said %v, want the edge's warning passed on", said)
 	}
 	if state := readStack(t, provider, edge.ClassProduction, "shop"); len(state.Hosts) != 0 {
-		t.Errorf("the settlement still holds %v", state.Hostnames())
+		t.Errorf("the hostname state still holds %v", state.Hostnames())
 	}
 }
 
@@ -429,8 +429,8 @@ func TestAddHostnameBindsTheCertificateItsProviderSettles(t *testing.T) {
 	if len(bindings) != 1 || bindings[0].Certificate != "cert-for-app" {
 		t.Errorf("the edge was bound with %+v, want the certificate the provider settled", bindings)
 	}
-	if settled := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com"); settled.Certificate.ID != "cert-for-app" {
-		t.Errorf("recorded certificate = %q, want the one the provider settled", settled.Certificate.ID)
+	if hostState := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com"); hostState.Certificate.ID != "cert-for-app" {
+		t.Errorf("recorded certificate = %q, want the one the provider settled", hostState.Certificate.ID)
 	}
 }
 
@@ -488,12 +488,12 @@ func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
 		t.Fatalf("AddHostname() = %q, want the certificate issued and the hostname settled", result.GetError())
 	}
 
-	settled := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com")
-	if !settled.Certificate.Requested || settled.Certificate.ID != "issued-for-app.acme.com" {
-		t.Errorf("recorded certificate = %+v, want the one ocel requested", settled.Certificate)
+	hostState := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com")
+	if !hostState.Certificate.Requested || hostState.Certificate.ID != "issued-for-app.acme.com" {
+		t.Errorf("recorded certificate = %+v, want the one ocel requested", hostState.Certificate)
 	}
-	if !slices.Contains(settled.Certificate.Written, validationRecord) {
-		t.Errorf("the certificate records %v as written, want the validation record among them", settled.Certificate.Written)
+	if !slices.Contains(hostState.Certificate.Written, validationRecord) {
+		t.Errorf("the certificate records %v as written, want the validation record among them", hostState.Certificate.Written)
 	}
 	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 2 {
 		t.Errorf("the zone holds %v, want the validation record beside the one pointing at the edge", written)
@@ -506,7 +506,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
 	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Endpoint: "https://shop.fake.invalid"},
-		Hosts: map[string]stackrecords.Settled{
+		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {Certificate: provider.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
@@ -582,9 +582,9 @@ func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *
 	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-app.acme.com") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
-	settled := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com")
-	if len(settled.Superseded) != 0 {
-		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", settled.Superseded)
+	hostState := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com")
+	if len(hostState.Superseded) != 0 {
+		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", hostState.Superseded)
 	}
 	if held := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(held, validationRecord) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
@@ -607,13 +607,13 @@ func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPe
 		t.Fatal("AddHostname() settled the hostname, want it told to come back to a certificate still validating")
 	}
 
-	settled := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com")
-	if len(settled.Superseded) != 1 || settled.Superseded[0].ID != "issued-for-app.acme.com" {
-		t.Fatalf("the record carries %+v superseded, want the certificate the pending one replaced still reachable", settled.Superseded)
+	hostState := readStack(t, provider, edge.ClassProduction, "shop").Host("app.acme.com")
+	if len(hostState.Superseded) != 1 || hostState.Superseded[0].ID != "issued-for-app.acme.com" {
+		t.Fatalf("the record carries %+v superseded, want the certificate the pending one replaced still reachable", hostState.Superseded)
 	}
-	if !slices.Contains(settled.Superseded[0].Written, validationRecord) {
+	if !slices.Contains(hostState.Superseded[0].Written, validationRecord) {
 		t.Errorf("the superseded certificate records %v as written, want its validation record still reachable",
-			settled.Superseded[0].Written)
+			hostState.Superseded[0].Written)
 	}
 
 	provider.StallAfterProving(nil)
@@ -636,10 +636,10 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]stackrecords.Settled{
+		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "cert-of-yesterday"},
-				Probe:       stackrecords.Probe{OK: true, Edge: fake.KindRelay},
+				Probe:       stackrecords.ServeProbe{OK: true, Edge: fake.KindRelay},
 			},
 		},
 	})
@@ -675,10 +675,10 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]stackrecords.Settled{
+		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "pending-cert", Requested: true},
-				Probe:       stackrecords.Probe{OK: true, Edge: fake.KindRelay},
+				Probe:       stackrecords.ServeProbe{OK: true, Edge: fake.KindRelay},
 			},
 		},
 	})
@@ -723,8 +723,8 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 			Bound:    []string{"app.acme.com"},
 			Fronts:   map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
 		},
-		Hosts: map[string]stackrecords.Settled{
-			"app.acme.com": {Probe: stackrecords.Probe{At: 1755500000, OK: true, Edge: fake.KindRelay}},
+		Hosts: map[string]stackrecords.HostnameState{
+			"app.acme.com": {Probe: stackrecords.ServeProbe{At: 1755500000, OK: true, Edge: fake.KindRelay}},
 		},
 	})
 

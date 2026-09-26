@@ -42,14 +42,14 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	return &wildcards{provider: provider, records: records, held: held, sel: sel}, nil
 }
 
-func (w *wildcards) settlement(front edge.Edge) (settlement, error) {
+func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 	writer, err := dnsFor(w.provider, front, w.sel)
 	if err != nil {
-		return settlement{}, err
+		return dnsCutover{}, err
 	}
-	s := newSettlement(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
+	s := newDNSCutover(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
 	if w.audience != nil {
-		s.attend(w.audience)
+		s.waitForManualRecords(w.audience)
 	}
 	return s, nil
 }
@@ -92,7 +92,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
-	settle, err := w.settlement(front)
+	cutover, err := w.dnsCutover(front)
 	if err != nil {
 		return err
 	}
@@ -103,10 +103,10 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		Scope:      front.Facts().CredentialScope,
 		GrammarMin: edge.PreviewGrammarMin,
 		GrammarMax: edge.PreviewGrammarMax,
-		Settled:    w.held.Settled,
+		Host:       w.held.Host,
 	}
 
-	certifying := w.certification(settle, fmt.Sprintf(
+	certifying := w.hostCertificates(cutover, fmt.Sprintf(
 		"If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
 	if err := certifying.certify(ctx, wildcard, progress); err != nil {
 		return err
@@ -122,7 +122,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain:  base,
-		Certificate: w.held.Settled.Certificate.ID,
+		Certificate: w.held.Host.Certificate.ID,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
 		Warn:        progress.Detail,
@@ -144,10 +144,10 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if err != nil {
 		return err
 	}
-	written, werr := settle.write(ctx, records,
+	written, werr := cutover.write(ctx, records,
 		fmt.Sprintf("Point %s at the %s edge", wildcard, front.Kind()), progress.Say,
 		fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
-	w.held.Settled.Written, w.held.Settled.Owed = written.Written, written.Owed
+	w.held.Host.Written, w.held.Host.Manual = written.Written, written.Manual
 	if err := w.save(ctx); err != nil {
 		return errors.Join(werr, err)
 	}
@@ -155,8 +155,8 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return werr
 	}
 
-	probe, aerr := settle.await(ctx, wildcard, progress.Say)
-	w.held.Settled.Probe = probe
+	probe, aerr := cutover.await(ctx, wildcard, progress.Say)
+	w.held.Host.Probe = probe
 	if err := w.save(ctx); err != nil {
 		return errors.Join(aerr, err)
 	}
@@ -167,13 +167,13 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	return nil
 }
 
-func (w *wildcards) certification(settle settlement, notes ...string) certification {
-	return certification{
-		provider: w.provider,
-		settle:   settle,
-		settled:  &w.held.Settled,
-		persist:  w.save,
-		notes:    notes,
+func (w *wildcards) hostCertificates(cutover dnsCutover, notes ...string) hostCertificates {
+	return hostCertificates{
+		provider:  w.provider,
+		cutover:   cutover,
+		hostState: &w.held.Host,
+		persist:   w.save,
+		notes:     notes,
 	}
 }
 
@@ -183,7 +183,7 @@ func (w *wildcards) claimable(front edge.Edge, base string) error {
 			"this preview bootstrap already serves previews on %q: release it with `ocel domain release --preview` first, then use %q — every project on %q loses its preview hostnames the moment the bootstrap changes domain, so that is two deliberate commands",
 			w.held.BaseDomain, base, w.held.BaseDomain)
 	}
-	holder, held := w.held.Holder()
+	holder, held := w.held.OwningEdge()
 	if !held || holder == front.Kind() {
 		return nil
 	}
@@ -204,12 +204,12 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	health, err := w.provider.Certificates().Inspect(ctx, w.held.Edge, w.held.Hostname(), w.held.Settled.Certificate)
+	health, err := w.provider.Certificates().Inspect(ctx, w.held.Edge, w.held.Hostname(), w.held.Host.Certificate)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	wildcard := w.proto(ctx)
-	wildcard.Certificate = certificateState(w.held.Settled, w.held.Settled.Probe, nil, health.Status)
+	wildcard.Certificate = certificateState(w.held.Host, w.held.Host.Probe, nil, health.Status)
 	renewalOf(wildcard, health)
 	return &contractv1.GetPreviewWildcardResponse{
 		Wildcard: wildcard,
@@ -227,7 +227,7 @@ func heldPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.
 	}
 	w := &wildcards{provider: p, records: p.Records(), held: held}
 	wildcard := w.proto(ctx)
-	health, err := p.Certificates().Inspect(ctx, held.Edge, held.Hostname(), held.Settled.Certificate)
+	health, err := p.Certificates().Inspect(ctx, held.Edge, held.Hostname(), held.Host.Certificate)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
 }
 
 func (w *wildcards) routeInstalled(ctx context.Context) bool {
-	holder, held := w.held.Holder()
+	holder, held := w.held.OwningEdge()
 	if !held {
 		return false
 	}
@@ -303,7 +303,7 @@ func (w *wildcards) releasable(ctx context.Context) error {
 }
 
 func (w *wildcards) holding() (edge.Edge, error) {
-	holder, held := w.held.Holder()
+	holder, held := w.held.OwningEdge()
 	if !held {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account records which edge holds %s, and tearing it down through a guessed edge would delete its certificate, its DNS records and the record itself while leaving the real wildcard entry standing with nothing left to name it: run `ocel domain use '%s' --preview` from the project whose edge raised it — that writes the edge down and changes nothing else — then release it",
@@ -345,10 +345,10 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 		return nil, err
 	}
 	groups := []*planv1.ChangeGroup{removedGroup}
-	for _, cert := range w.held.Settled.Certificates() {
+	for _, cert := range w.held.Host.Certificates() {
 		groups = append(groups, certificateGroup(cert))
 	}
-	for _, rec := range w.held.Settled.WrittenRecords() {
+	for _, rec := range w.held.Host.WrittenRecords() {
 		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -356,7 +356,7 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range w.held.Settled.OwedRecords() {
+	for _, rec := range w.held.Host.ManualRecords() {
 		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -401,7 +401,7 @@ func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
 	if err := w.releasable(ctx); err != nil {
 		return err
 	}
-	settle, err := w.settlement(front)
+	cutover, err := w.dnsCutover(front)
 	if err != nil {
 		return err
 	}
@@ -409,10 +409,10 @@ func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
 	if err := front.DestroyPreviewWildcard(ctx, w.held.BaseDomain); err != nil {
 		return err
 	}
-	if err := settle.release(ctx, w.held.Settled.WrittenRecords(), progress.Say); err != nil {
+	if err := cutover.release(ctx, w.held.Host.WrittenRecords(), progress.Say); err != nil {
 		return err
 	}
-	for _, cert := range w.held.Settled.Certificates() {
+	for _, cert := range w.held.Host.Certificates() {
 		if !cert.Requested {
 			continue
 		}

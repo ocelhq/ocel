@@ -8,7 +8,7 @@ type HostVerdict int
 
 const (
 	HostPass HostVerdict = iota
-	HostOwed
+	HostNeedsAction
 	HostFail
 )
 

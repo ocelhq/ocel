@@ -46,7 +46,7 @@ func TestLiveTheHostCheckVerdictsReadOffABootstrappedBoxAndGateNothing(t *testin
 	checks := hostChecksOn(t, p, []string{owed, "*.preview." + owed})
 
 	dns := about(t, checks, owed)
-	if dns.Verdict != provider.HostOwed {
+	if dns.Verdict != provider.HostNeedsAction {
 		t.Errorf("the verdict for %s is %v (%q), want it owed: a name nothing resolves is a record a human has not written yet", owed, dns.Verdict, dns.Finding)
 	}
 

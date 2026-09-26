@@ -88,8 +88,8 @@ func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-*.preview.acme.com") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
-	if held := readHeldWildcard(t, provider); len(held.Settled.Superseded) != 0 {
-		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", held.Settled.Superseded)
+	if held := readHeldWildcard(t, provider); len(held.Host.Superseded) != 0 {
+		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", held.Host.Superseded)
 	}
 	if records := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(records, validationRecord) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", records)
@@ -338,7 +338,7 @@ func TestThePreviewWildcardCarriesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	seedWildcard(t, p, stackrecords.Wildcard{
 		BaseDomain: "preview.acme.com",
 		Edge:       fake.KindRelay,
-		Settled:    stackrecords.Settled{Certificate: provider.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
+		Host:       stackrecords.HostnameState{Certificate: provider.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
 	})
 	expiry := time.Now().Add(9 * 24 * time.Hour).Unix()
 	p.ReportCertificate(provider.CertificateHealth{
