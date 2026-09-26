@@ -203,7 +203,7 @@ func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Ti
 	if serving == "" {
 		cause := s.unreached(hostname)
 		if outlasted != "" {
-			cause = ", and " + outlasted
+			cause += ", and " + outlasted
 		}
 		return Pending(Refuse(CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
