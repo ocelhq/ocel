@@ -200,10 +200,10 @@ func TestEnsureReadyHealsAStaleBootstrapWithoutAcceptingReplacements(t *testing.
 	applied := bootstrap.Applied()
 	healing := applied[len(applied)-1]
 	if !healing.RefuseReplacements {
-		t.Error("the heal reached Apply() attended, and nothing is there to accept a replacement")
+		t.Error("the heal reached Apply() allowed to replace resources, and nothing is there to accept a replacement")
 	}
 	if !slices.Equal(healing.Features, []string{fake.FeatureCache}) {
-		t.Errorf("the heal applied %v, want the features already state", healing.Features)
+		t.Errorf("the heal applied %v, want the features already installed", healing.Features)
 	}
 }
 
