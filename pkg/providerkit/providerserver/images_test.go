@@ -127,14 +127,14 @@ func TestTheImageRowIsTheStacksOwnAndNothingElseInventsIt(t *testing.T) {
 func TestADeployPushesTheImageTheBuildProducedUnderTheRegistryCoordinate(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.ImageStore().Pushed()
+	pushed := vendor.ImageStore().Pushed()
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image its container app runs", pushed)
 	}
@@ -149,14 +149,14 @@ func TestADeployPushesTheImageTheBuildProducedUnderTheRegistryCoordinate(t *test
 func TestADigestTheRegistryAlreadyHasIsNotPushedAgain(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.ImageStore().Preload(pushedCoordinate)
+	client, vendor := deployServed(t)
+	vendor.ImageStore().Preload(pushedCoordinate)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
+	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the deploy pushed %v that the registry already has", pushed)
 	}
 }
@@ -179,7 +179,7 @@ func TestADigestTheRegistryAlreadyHasShowsOnThePlan(t *testing.T) {
 
 func TestAContainerAppOnAProviderTakingNeitherPathFailsNamingTheGap(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := containerDeployRequest("/")
 	req.Dry = true
@@ -203,14 +203,14 @@ func TestAContainerAppOnAProviderTakingNeitherPathFailsNamingTheGap(t *testing.T
 				"leaves the reader to guess what to type", refused, want)
 		}
 	}
-	if opened := provider.ImageStore().Opened(); len(opened) != 0 {
+	if opened := vendor.ImageStore().Opened(); len(opened) != 0 {
 		t.Errorf("a registry was opened as %v where the deploy named none", opened)
 	}
 }
 
 func TestAServerlessDeployNamesNoImageToPush(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := deployRequest()
 	req.ImageRegistry = &contractv1.ImageRegistry{Server: "ghcr.io", Namespace: "acme", Password: "hunter2"}
@@ -218,7 +218,7 @@ func TestAServerlessDeployNamesNoImageToPush(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if asked := provider.ImageStore().Asked(); len(asked) != 0 {
+	if asked := vendor.ImageStore().Asked(); len(asked) != 0 {
 		t.Errorf("a serverless deploy asked the registry about %v, and it ships zips rather than images", asked)
 	}
 }
@@ -226,8 +226,8 @@ func TestAServerlessDeployNamesNoImageToPush(t *testing.T) {
 func TestARegistryThatCannotBeReachedStopsTheDeploy(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.ImageStore().FailPushes(errors.New("the token is not accepted"))
+	client, vendor := deployServed(t)
+	vendor.ImageStore().FailPushes(errors.New("the token is not accepted"))
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result != nil && result.GetSuccess() {
@@ -241,13 +241,13 @@ func TestARegistryThatCannotBeReachedStopsTheDeploy(t *testing.T) {
 func TestThePasswordTheDeploySendsReachesTheRegistryAndNothingElse(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	result, events := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	opened := provider.ImageStore().Opened()
+	opened := vendor.ImageStore().Opened()
 	if len(opened) != 1 || opened[0].Password != "hunter2" {
 		t.Fatalf("the registry was opened as %v, want the one target the deploy resolved", opened)
 	}
@@ -346,21 +346,21 @@ func (p loadingProvider) OpenDirectImages(context.Context) (provider.ImageStore,
 
 func loadServed(t *testing.T) (contractv1connect.ProviderServiceClient, loadingProvider) {
 	t.Helper()
-	provider := loadingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), direct: fake.NewImages()}
-	return servedBy(t, provider), provider
+	vendor := loadingProvider{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), direct: fake.NewImages()}
+	return servedBy(t, vendor), vendor
 }
 
 func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := loadServed(t)
+	client, vendor := loadServed(t)
 
 	result, _ := deploy(t, client, containerDeployRequest("/"))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	handed := provider.direct.Pushed()
+	handed := vendor.direct.Pushed()
 	if len(handed) != 1 {
 		t.Fatalf("the deploy handed over %v, want the one image its container app runs: a box with no registry account is the zero-config default", handed)
 	}
@@ -371,7 +371,7 @@ func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testi
 		t.Errorf("the transfer landed %q, want the cli-owned coordinate %q verbatim, so release, rollback and retention never learn which path sent it",
 			handed[0].ImageRef, loadedCoordinate)
 	}
-	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
+	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("a deploy naming no registry pushed %v to one", pushed)
 	}
 }
@@ -379,17 +379,17 @@ func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testi
 func TestADigestTheBoxAlreadyHasIsNotSentAgain(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := loadServed(t)
-	provider.direct.Preload(loadedCoordinate)
+	client, vendor := loadServed(t)
+	vendor.direct.Preload(loadedCoordinate)
 
 	result, _ := deploy(t, client, containerDeployRequest("/"))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if len(provider.direct.Asked()) == 0 {
+	if len(vendor.direct.Asked()) == 0 {
 		t.Error("the deploy streamed without asking whether the image was already there")
 	}
-	if handed := provider.direct.Pushed(); len(handed) != 0 {
+	if handed := vendor.direct.Pushed(); len(handed) != 0 {
 		t.Errorf("the redeploy sent %v again over a box that already has the digest", handed)
 	}
 }
@@ -397,21 +397,21 @@ func TestADigestTheBoxAlreadyHasIsNotSentAgain(t *testing.T) {
 func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectly(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := loadServed(t)
+	client, vendor := loadServed(t)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.ImageStore().Pushed()
+	pushed := vendor.ImageStore().Pushed()
 	if len(pushed) != 1 || pushed[0].ImageRef != pushedCoordinate {
 		t.Fatalf("the deploy pushed %v, want the one registry coordinate %q", pushed, pushedCoordinate)
 	}
-	if handed := provider.direct.Pushed(); len(handed) != 0 {
+	if handed := vendor.direct.Pushed(); len(handed) != 0 {
 		t.Errorf("the same deploy also sent %v straight onto the box: the registry setting is the only switch, and both paths ran", handed)
 	}
-	if asked := provider.direct.Asked(); len(asked) != 0 {
+	if asked := vendor.direct.Asked(); len(asked) != 0 {
 		t.Errorf("the direct store was asked about %v where a registry was named", asked)
 	}
 }
@@ -460,11 +460,11 @@ func (p addressingProvider) OpenDirectImages(context.Context) (provider.ImageSto
 func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	provider := addressingProvider{
+	vendor := addressingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
 		direct:   addressedImages{Images: fake.NewImages(), at: "deploy@box.invalid"},
 	}
-	client := servedBy(t, provider)
+	client := servedBy(t, vendor)
 
 	result, events := deploy(t, client, containerDeployRequest("/"))
 	if result == nil || !result.GetSuccess() {
@@ -499,11 +499,11 @@ func (l *stagingLedger) records() []edge.DeploymentRecord {
 	return append([]edge.DeploymentRecord(nil), l.staged...)
 }
 
-func staging(t *testing.T, provider *fake.Provider) *stagingLedger {
+func staging(t *testing.T, vendor *fake.Provider) *stagingLedger {
 	t.Helper()
 	stager := &stagingLedger{}
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		stager.Ledger = ledger.New(provider.Records(), state.Class, state.Slug)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
+		stager.Ledger = ledger.New(vendor.Records(), state.Class, state.Slug)
 		return stager
 	})
 	return stager
@@ -512,14 +512,14 @@ func staging(t *testing.T, provider *fake.Provider) *stagingLedger {
 func TestAnAppSpecNamesTheCoordinateTheProviderWillStoreRatherThanTheOneTheBuildLeft(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	app := specs[len(specs)-1].App
 	if app == nil {
 		t.Fatal("the last spec the stacks port saw provisions no app")
@@ -532,14 +532,14 @@ func TestAnAppSpecNamesTheCoordinateTheProviderWillStoreRatherThanTheOneTheBuild
 func TestAnAppSpecNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := loadServed(t)
+	client, vendor := loadServed(t)
 
 	result, _ := deploy(t, client, containerDeployRequest("/"))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	app := specs[len(specs)-1].App
 	if app == nil {
 		t.Fatal("the last spec the stacks port saw provisions no app")
@@ -552,8 +552,8 @@ func TestAnAppSpecNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -572,8 +572,8 @@ func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
 func TestTheStagedRecordNamesTheHealthPathTheReleaseIsGatedOn(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/healthz")))
 	if result == nil || !result.GetSuccess() {
@@ -592,8 +592,8 @@ func TestTheStagedRecordNamesTheHealthPathTheReleaseIsGatedOn(t *testing.T) {
 func TestTheStagedRecordNamesTheContainerTheReleaseProvisioned(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -604,7 +604,7 @@ func TestTheStagedRecordNamesTheContainerTheReleaseProvisioned(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	entries, err := stackrecords.List(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,8 +626,8 @@ func TestTheStagedRecordNamesTheContainerTheReleaseProvisioned(t *testing.T) {
 
 func TestAServerlessRecordNamesNoImage(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	result, _ := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -672,14 +672,14 @@ func savedImage(t *testing.T) []byte {
 	return saved
 }
 
-func daemonWithTheBuiltImage(t *testing.T, arch string) *builtImageDaemon {
+func daemonWithTheBuiltImage(t *testing.T, architecture string) *builtImageDaemon {
 	t.Helper()
 	saved := savedImage(t)
 	daemon := &builtImageDaemon{}
 	daemonServing(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/json"):
-			_, _ = w.Write([]byte(`{"Architecture":"` + arch + `","Os":"linux"}`))
+			_, _ = w.Write([]byte(`{"Architecture":"` + architecture + `","Os":"linux"}`))
 		case strings.HasSuffix(r.URL.Path, "/get"):
 			daemon.mu.Lock()
 			daemon.exported++
@@ -697,11 +697,11 @@ func wrappingServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 	return wrappingServedOn(t, "amd64")
 }
 
-func wrappingServedOn(t *testing.T, arch string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
+func wrappingServedOn(t *testing.T, architecture string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, provider.WrappingContainers(arch, containerRuntimeBytes))
-	return client, provider
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedBy(t, vendor.WrappingContainers(architecture, containerRuntimeBytes))
+	return client, vendor
 }
 
 func wrappedCoordinate() string {
@@ -712,14 +712,14 @@ func wrappedCoordinate() string {
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames(t *testing.T) {
 	builtProject(t)
 	daemon := daemonWithTheBuiltImage(t, "amd64")
-	client, provider := wrappingServed(t)
+	client, vendor := wrappingServed(t)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	asked := provider.ImageStore().Asked()
+	asked := vendor.ImageStore().Asked()
 	if len(asked) != 1 {
 		t.Fatalf("the deploy asked the registry about %v, want the one image its container app runs", asked)
 	}
@@ -732,7 +732,7 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames
 	if asked[0].Digest != "" {
 		t.Errorf("the push pins %q before the wrap has run, and the digest it is pushed under is only known once the image is built", asked[0].Digest)
 	}
-	pushed := provider.ImageStore().Pushed()
+	pushed := vendor.ImageStore().Pushed()
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the store was handed %v, want the wrapped image itself rather than a coordinate to copy", pushed)
 	}
@@ -744,14 +744,14 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames
 func TestTheArchitectureTheDaemonNamesIsWhatTheRuntimeIsAskedFor(t *testing.T) {
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "arm64")
-	client, provider := wrappingServedOn(t, "arm64")
+	client, vendor := wrappingServedOn(t, "arm64")
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if asked := provider.WrappedFor(); len(asked) == 0 || asked[0] != "arm64" {
+	if asked := vendor.WrappedFor(); len(asked) == 0 || asked[0] != "arm64" {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the daemon says the image is built for: a runtime built for another one cannot execute", asked)
 	}
 }
@@ -759,7 +759,7 @@ func TestTheArchitectureTheDaemonNamesIsWhatTheRuntimeIsAskedFor(t *testing.T) {
 func TestAnImageBuiltForAnArchitectureTheTargetDoesNotRunIsRefusedBeforeItIsPushed(t *testing.T) {
 	builtProject(t)
 	daemon := daemonWithTheBuiltImage(t, "arm64")
-	client, provider := wrappingServedOn(t, "amd64")
+	client, vendor := wrappingServedOn(t, "amd64")
 
 	_, _, err := deployStream(t, client, registryDeployRequest())
 	if err == nil {
@@ -770,7 +770,7 @@ func TestAnImageBuiltForAnArchitectureTheTargetDoesNotRunIsRefusedBeforeItIsPush
 			t.Errorf("Deploy() refused with %q, want it to name %s so the mismatch reads at a glance", err, named)
 		}
 	}
-	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
+	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the store was handed %v, want nothing pushed for an image the target cannot run", pushed)
 	}
 	if daemon.exports() != 0 {
@@ -781,7 +781,7 @@ func TestAnImageBuiltForAnArchitectureTheTargetDoesNotRunIsRefusedBeforeItIsPush
 func TestAnAppsOwnDeclaredArchitectureIsTheOneItsImageIsBuiltFor(t *testing.T) {
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "arm64")
-	client, provider := wrappingServedOn(t, "amd64")
+	client, vendor := wrappingServedOn(t, "amd64")
 
 	req := registryDeployRequest()
 	for _, container := range req.GetManifest().GetContainers() {
@@ -791,7 +791,7 @@ func TestAnAppsOwnDeclaredArchitectureIsTheOneItsImageIsBuiltFor(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed: the app declares arm64 and its image is built for it", result.GetError())
 	}
-	if asked := provider.WrappedFor(); len(asked) == 0 || asked[0] != "arm64" {
+	if asked := vendor.WrappedFor(); len(asked) == 0 || asked[0] != "arm64" {
 		t.Errorf("the provider was asked for a runtime built for %v, want arm64", asked)
 	}
 }
@@ -799,14 +799,14 @@ func TestAnAppsOwnDeclaredArchitectureIsTheOneItsImageIsBuiltFor(t *testing.T) {
 func TestAWrappedContainerRunsTheCoordinateItWasPushedUnder(t *testing.T) {
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "amd64")
-	client, provider := wrappingServed(t)
+	client, vendor := wrappingServed(t)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	var image string
 	for i := len(specs) - 1; i >= 0; i-- {
 		if specs[i].App != nil {
@@ -822,15 +822,15 @@ func TestAWrappedContainerRunsTheCoordinateItWasPushedUnder(t *testing.T) {
 func TestAWrappedCoordinateTheRegistryAlreadyHasIsNeitherWrappedNorPushed(t *testing.T) {
 	builtProject(t)
 	daemon := daemonWithTheBuiltImage(t, "amd64")
-	client, provider := wrappingServed(t)
-	provider.ImageStore().Preload(wrappedCoordinate())
+	client, vendor := wrappingServed(t)
+	vendor.ImageStore().Preload(wrappedCoordinate())
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
+	if pushed := vendor.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the deploy pushed %v that the registry already has", pushed)
 	}
 	if daemon.exports() != 0 {

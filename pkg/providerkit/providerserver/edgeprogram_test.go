@@ -52,13 +52,13 @@ func previewBootstrapped(t *testing.T, client contractv1connect.ProviderServiceC
 
 func TestUsePreviewWildcardSendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	specs := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs()
+	specs := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Specs()
 	if len(specs) != 1 {
 		t.Fatalf("the edge reconciled %d wildcards, want the one raised", len(specs))
 	}
@@ -80,13 +80,13 @@ func TestUsePreviewWildcardSendsTheProviderProgramToAnEdgeThatRunsCode(t *testin
 
 func TestUsePreviewWildcardLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindDirect, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	specs := provider.Edges().(*fake.Edges).Edge(fake.KindDirect).Specs()
+	specs := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect).Specs()
 	if len(specs) != 1 {
 		t.Fatalf("the edge reconciled %d wildcards, want the one raised", len(specs))
 	}
@@ -97,8 +97,8 @@ func TestUsePreviewWildcardLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) 
 
 func TestUsePreviewWildcardRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProgram(t *testing.T) {
 	t.Parallel()
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedProvider(t, "1.0.0", unprogrammed{provider})
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.0.0", unprogrammed{vendor})
 
 	stream, err := client.UsePreviewWildcard(t.Context(), &contractv1.UsePreviewWildcardRequest{
 		Tier:       environmentv1.Tier_TIER_PREVIEW,
@@ -117,7 +117,7 @@ func TestUsePreviewWildcardRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProg
 
 func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -126,7 +126,7 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
+	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
 		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
@@ -157,7 +157,7 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 
 func TestDeployLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
@@ -166,7 +166,7 @@ func TestDeployLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindDirect).Stacks()
+	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindDirect).Stacks()
 	if len(stacks) != 1 {
 		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
@@ -177,8 +177,8 @@ func TestDeployLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) {
 
 func TestDeployRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProgram(t *testing.T) {
 	builtProject(t)
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedProvider(t, "1.0.0", unprogrammed{provider})
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.0.0", unprogrammed{vendor})
 	bootstrappedOverRPC(t, client)
 
 	req := deployRequest()
@@ -193,19 +193,19 @@ func TestDeployRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProgram(t *testi
 func previewDeployed(t *testing.T, req *contractv1.DeployRequest) (*fake.Provider, *progressv1.ResultEvent) {
 	t.Helper()
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
-	seedWildcard(t, provider, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
 	result, _ := deploy(t, client, req)
-	return provider, result
+	return vendor, result
 }
 
 func previewRefused(t *testing.T, req *contractv1.DeployRequest) string {
 	t.Helper()
 	builtProject(t)
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
-	seedWildcard(t, provider, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
 
 	stream, err := client.Deploy(t.Context(), req)
 	if err != nil {
@@ -221,9 +221,9 @@ func previewRefused(t *testing.T, req *contractv1.DeployRequest) string {
 	return said + connectMessage(stream.Err())
 }
 
-func onlyStack(t *testing.T, provider *fake.Provider) edge.StackSpec {
+func onlyStack(t *testing.T, vendor *fake.Provider) edge.StackSpec {
 	t.Helper()
-	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
+	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
 		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
@@ -242,16 +242,16 @@ func declaresPreview(req *contractv1.DeployRequest, hostnames ...string) *contra
 }
 
 func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
-	provider, result := previewDeployed(t, previewDeployRequest())
+	vendor, result := previewDeployed(t, previewDeployRequest())
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	state := readStack(t, provider, edge.ClassPreview, "shop")
+	state := readStack(t, vendor, edge.ClassPreview, "shop")
 	if !state.Edge.ServedOnGlobalPreview("preview.acme.com") {
 		t.Errorf("the stack records %q, want the wildcard every preview of it is served on", state.Edge.GlobalPreview)
 	}
-	spec := onlyStack(t, provider)
+	spec := onlyStack(t, vendor)
 	if !spec.PruneOnly {
 		t.Error("the stack uploads a worker of its own, though the shared preview entry is what answers on the wildcard")
 	}
@@ -265,16 +265,16 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 }
 
 func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
-	provider, result := previewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
+	vendor, result := previewDeployed(t, declaresPreview(previewDeployRequest(), "*.preview.shop.example"))
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	state := readStack(t, provider, edge.ClassPreview, "shop")
+	state := readStack(t, vendor, edge.ClassPreview, "shop")
 	if state.Edge.GlobalPreview != "" {
 		t.Errorf("the stack records %q, want nothing: this project serves its previews on a wildcard of its own", state.Edge.GlobalPreview)
 	}
-	spec := onlyStack(t, provider)
+	spec := onlyStack(t, vendor)
 	if spec.PruneOnly {
 		t.Error("the stack is prune-only, though its own worker is what answers on the project's wildcard")
 	}
@@ -290,12 +290,12 @@ func TestPreviewDeployWithNoAppsPrunesItsOwnWorker(t *testing.T) {
 	req := declaresPreview(previewDeployRequest(), "*.preview.shop.example")
 	req.Manifest.Apps, req.Manifest.Functions = nil, nil
 
-	provider, result := previewDeployed(t, req)
+	vendor, result := previewDeployed(t, req)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	spec := onlyStack(t, provider)
+	spec := onlyStack(t, vendor)
 	if !spec.PruneOnly {
 		t.Error("the stack uploads a worker, though this project has no app left for it to serve")
 	}
@@ -319,9 +319,9 @@ func TestPreviewDeployRefusesTwoPreviewDomains(t *testing.T) {
 	}
 }
 
-func productionStack(t *testing.T, provider *fake.Provider) edge.StackSpec {
+func productionStack(t *testing.T, vendor *fake.Provider) edge.StackSpec {
 	t.Helper()
-	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
+	stacks := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
 		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
@@ -331,7 +331,7 @@ func productionStack(t *testing.T, provider *fake.Provider) edge.StackSpec {
 func TestDeployTellsTheEdgeWhichAppEachProductionHostnameAnswersFrom(t *testing.T) {
 	t.Run("a project hostname answers from the first app alone", func(t *testing.T) {
 		builtProject(t)
-		client, provider := deployServed(t)
+		client, vendor := deployServed(t)
 
 		req := twoAppRequest()
 		req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -340,14 +340,14 @@ func TestDeployTellsTheEdgeWhichAppEachProductionHostnameAnswersFrom(t *testing.
 		}
 
 		want := map[string]string{"shop.example": "web"}
-		if got := productionStack(t, provider).DomainApps; !maps.Equal(got, want) {
+		if got := productionStack(t, vendor).DomainApps; !maps.Equal(got, want) {
 			t.Errorf("DomainApps = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("an app hostname answers from the app that declares it", func(t *testing.T) {
 		builtProject(t)
-		client, provider := deployServed(t)
+		client, vendor := deployServed(t)
 
 		req := twoAppRequest()
 		req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -360,7 +360,7 @@ func TestDeployTellsTheEdgeWhichAppEachProductionHostnameAnswersFrom(t *testing.
 		}
 
 		want := map[string]string{"shop.example": "web", "admin.shop.example": "admin"}
-		if got := productionStack(t, provider).DomainApps; !maps.Equal(got, want) {
+		if got := productionStack(t, vendor).DomainApps; !maps.Equal(got, want) {
 			t.Errorf("DomainApps = %v, want %v", got, want)
 		}
 	})

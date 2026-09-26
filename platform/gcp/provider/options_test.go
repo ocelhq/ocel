@@ -48,13 +48,13 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var refusal refusal.Refusal
+			var refused refusal.Refusal
 			p, err := gcp.New(context.Background(), provider.Settings{Options: tc.options})
-			if !errors.As(err, &refusal) || refusal.Code != tc.code {
+			if !errors.As(err, &refused) || refused.Code != tc.code {
 				t.Fatalf("New() = %v, %v, want a %q refusal", p, err, tc.code)
 			}
-			if !strings.Contains(refusal.Message, tc.names) {
-				t.Errorf("New() refused with %q, want it to name %q so the author knows which line to edit", refusal.Message, tc.names)
+			if !strings.Contains(refused.Message, tc.names) {
+				t.Errorf("New() refused with %q, want it to name %q so the author knows which line to edit", refused.Message, tc.names)
 			}
 		})
 	}

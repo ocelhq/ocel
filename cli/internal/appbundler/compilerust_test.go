@@ -42,14 +42,14 @@ func rustCrate(t *testing.T) string {
 	return dir
 }
 
-func compileRust(t *testing.T, source, arch string) (string, string, error) {
+func compileRust(t *testing.T, source, architecture string) (string, string, error) {
 	t.Helper()
 	out := t.TempDir()
 	appDir := filepath.Join(out, "apps", "web")
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: appbuild.Framework{Name: appbuild.FrameworkRust, Arch: arch},
+		Framework: appbuild.Framework{Name: appbuild.FrameworkRust, Arch: architecture},
 		Source:    source,
 		FuncDir:   funcDir,
 		AppDir:    appDir,

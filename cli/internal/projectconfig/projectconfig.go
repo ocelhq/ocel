@@ -427,12 +427,12 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	return &Health{Path: path}, nil
 }
 
-func resolveFramework(app, dir, framework, arch, compute string) (Framework, error) {
+func resolveFramework(app, dir, framework, declared, compute string) (Framework, error) {
 	name, err := frameworkOf(app, dir, strings.TrimSpace(framework), strings.TrimSpace(compute))
 	if err != nil {
 		return Framework{}, err
 	}
-	architecture, err := architectureOf(app, strings.TrimSpace(arch))
+	architecture, err := architectureOf(app, strings.TrimSpace(declared))
 	if err != nil {
 		return Framework{}, err
 	}

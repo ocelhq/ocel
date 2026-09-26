@@ -28,10 +28,10 @@ func (r *interceptedRecords) List(ctx context.Context, under records.Name) ([]re
 	return listed, err
 }
 
-func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
+func containerStacks(t *testing.T, store records.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
 	t.Helper()
 	cfg, spec := containerStackSpec(t)
-	cfg.Records = records
+	cfg.Records = store
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"

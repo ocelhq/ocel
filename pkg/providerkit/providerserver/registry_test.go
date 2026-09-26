@@ -72,13 +72,13 @@ func TestAProviderWithNoRegistryOfItsOwnLeavesTheResolveUnimplemented(t *testing
 }
 
 func TestAProviderWithARegistryAnswersItsCoordinatesAndCredentials(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{
 		Server:    "registry.invalid",
 		Namespace: "ocel/acme",
 		Username:  "robot",
 		Password:  "hunter2",
 	}}
-	client := registryServed(t, provider)
+	client := registryServed(t, vendor)
 
 	resp, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
 		Repositories: []string{"web", "api"},
@@ -102,8 +102,8 @@ func TestAProviderWithARegistryAnswersItsCoordinatesAndCredentials(t *testing.T)
 }
 
 func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
-	client := registryServed(t, provider)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
+	client := registryServed(t, vendor)
 
 	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
 		Repositories: []string{"web", "api"},
@@ -111,7 +111,7 @@ func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) 
 		t.Fatalf("ResolveImageRegistry() error = %v", err)
 	}
 
-	asked := provider.repositories()
+	asked := vendor.repositories()
 	if len(asked) != 1 {
 		t.Fatalf("the provider was asked %d times, want exactly one resolve per deploy", len(asked))
 	}
@@ -121,8 +121,8 @@ func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) 
 }
 
 func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
-	client := registryServed(t, provider)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
+	client := registryServed(t, vendor)
 
 	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
 		Repositories: []string{"web"},
@@ -131,7 +131,7 @@ func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
 		t.Fatalf("ResolveImageRegistry() error = %v", err)
 	}
 
-	asking := provider.asking()
+	asking := vendor.asking()
 	if len(asking) != 1 || asking[0] != edge.ClassPreview {
 		t.Errorf("the provider resolved a registry for %v, want %v: a class keeps its images apart from the other class's",
 			asking, edge.ClassPreview)
@@ -139,20 +139,20 @@ func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
 }
 
 func TestAResolveNamingNoRepositoryNeverReachesTheProvider(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
-	client := registryServed(t, provider)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
+	client := registryServed(t, vendor)
 
 	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{}); err == nil {
 		t.Fatal("ResolveImageRegistry() with nothing to push succeeded, want a resolve to happen only when something is pushed")
 	}
-	if asked := provider.repositories(); len(asked) != 0 {
+	if asked := vendor.repositories(); len(asked) != 0 {
 		t.Errorf("the provider was asked %v for a deploy that pushes nothing", asked)
 	}
 }
 
 func TestAProviderThatHostsNoRegistryForThisDeployLeavesTheResolveUnimplemented(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{})}
-	client := registryServed(t, provider)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{})}
+	client := registryServed(t, vendor)
 
 	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
 		Repositories: []string{"web"},
@@ -165,8 +165,8 @@ func TestAProviderThatHostsNoRegistryForThisDeployLeavesTheResolveUnimplemented(
 }
 
 func TestARegistryWithNoServerIsRefusedRatherThanPassedOn(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Namespace: "ocel/acme"}}
-	client := registryServed(t, provider)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Namespace: "ocel/acme"}}
+	client := registryServed(t, vendor)
 
 	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
 		Repositories: []string{"web"},
@@ -180,8 +180,8 @@ func TestARegistryWithNoServerIsRefusedRatherThanPassedOn(t *testing.T) {
 }
 
 func TestARegistryTheProviderRefusesToNameFailsTheResolve(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), refusal: errors.New("the repository could not be created")}
-	client := registryServed(t, provider)
+	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), refusal: errors.New("the repository could not be created")}
+	client := registryServed(t, vendor)
 
 	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
 		Repositories: []string{"web"},

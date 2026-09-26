@@ -29,14 +29,14 @@ func pythonApp(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-func vendored(t *testing.T, source, arch string) (string, string) {
+func vendored(t *testing.T, source, architecture string) (string, string) {
 	t.Helper()
 	out := t.TempDir()
 	appDir := filepath.Join(out, "apps", "web")
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: appbuild.Framework{Name: "python", Arch: arch},
+		Framework: appbuild.Framework{Name: "python", Arch: architecture},
 		Source:    source,
 		FuncDir:   funcDir,
 		AppDir:    appDir,

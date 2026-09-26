@@ -104,7 +104,7 @@ func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (
 var loginRefusals = []string{"Permission denied (", "Too many authentication failures"}
 
 func loginRefused(stderr string) bool {
-	return slices.ContainsFunc(loginRefusals, func(refusal string) bool { return strings.Contains(stderr, refusal) })
+	return slices.ContainsFunc(loginRefusals, func(message string) bool { return strings.Contains(stderr, message) })
 }
 
 func (r Result) problem(command string) error {

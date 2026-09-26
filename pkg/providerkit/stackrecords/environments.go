@@ -53,8 +53,8 @@ func RecordEnvironmentMeta(ctx context.Context, store records.Store, class edge.
 	return nil
 }
 
-func EnvironmentMetas(ctx context.Context, records records.Store, class edge.Class, slug string) (map[string]EnvironmentMeta, error) {
-	recorded, err := records.List(ctx, EnvironmentsRecord(class, slug))
+func EnvironmentMetas(ctx context.Context, store records.Store, class edge.Class, slug string) (map[string]EnvironmentMeta, error) {
+	recorded, err := store.List(ctx, EnvironmentsRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
@@ -69,8 +69,8 @@ func EnvironmentMetas(ctx context.Context, records records.Store, class edge.Cla
 	return meta, nil
 }
 
-func StackNames(ctx context.Context, records records.Store, class edge.Class, slug string) ([]naming.StackName, error) {
-	recorded, err := records.List(ctx, StacksRecord(class, slug))
+func StackNames(ctx context.Context, store records.Store, class edge.Class, slug string) ([]naming.StackName, error) {
+	recorded, err := store.List(ctx, StacksRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
@@ -85,8 +85,8 @@ func StackNames(ctx context.Context, records records.Store, class edge.Class, sl
 	return names, nil
 }
 
-func PreviewEnvironments(ctx context.Context, records records.Store, slug string) ([]Environment, error) {
-	stacks, err := StackNames(ctx, records, edge.ClassPreview, slug)
+func PreviewEnvironments(ctx context.Context, store records.Store, slug string) ([]Environment, error) {
+	stacks, err := StackNames(ctx, store, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func PreviewEnvironments(ctx context.Context, records records.Store, slug string
 		persisted[stack.Env] = persisted[stack.Env] || stack.IsInfra()
 	}
 	slices.Sort(identities)
-	meta, err := EnvironmentMetas(ctx, records, edge.ClassPreview, slug)
+	meta, err := EnvironmentMetas(ctx, store, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, err
 	}

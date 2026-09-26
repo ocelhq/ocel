@@ -19,8 +19,8 @@ type Edge struct {
 	pins    pin.Pins
 }
 
-func New(records records.Store, pins pin.Pins) *Edge {
-	return &Edge{records: records, pins: pins}
+func New(store records.Store, pins pin.Pins) *Edge {
+	return &Edge{records: store, pins: pins}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }

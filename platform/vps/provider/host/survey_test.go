@@ -17,13 +17,13 @@ func TestASurveyLineCutShortIsRefusedRatherThanRead(t *testing.T) {
 		"a probe naming only a kind":  {kindUnreadable + "\t", "could not check"},
 	} {
 		_, _, err := readSurvey(probe.line + "\n")
-		var refusal refusal.Refusal
-		if !errors.As(err, &refusal) {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) {
 			t.Errorf("readSurvey over %s = %v, want a refusal rather than a host read as having nothing", what, err)
 			continue
 		}
-		if !strings.Contains(refusal.Message, probe.said) {
-			t.Errorf("readSurvey over %s refused with %q, want it to say %q", what, refusal.Message, probe.said)
+		if !strings.Contains(refused.Message, probe.said) {
+			t.Errorf("readSurvey over %s refused with %q, want it to say %q", what, refused.Message, probe.said)
 		}
 	}
 }

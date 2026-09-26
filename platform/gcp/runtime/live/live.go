@@ -24,11 +24,11 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	records, err := f.reader.Bindings(ctx, bindingNames(f.bindings))
+	stored, err := f.reader.Bindings(ctx, bindingNames(f.bindings))
 	if err != nil {
 		return nil, err
 	}
-	return merged(resolved, f.bindings, records), nil
+	return merged(resolved, f.bindings, stored), nil
 }
 
 func bindingNames(bindings []live.Binding) []string {
@@ -39,10 +39,10 @@ func bindingNames(bindings []live.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, records []envvars.StoredBinding) map[string]string {
-	out := make(map[string]string, len(resolved)+len(records))
+func merged(resolved map[string]string, bindings []live.Binding, stored []envvars.StoredBinding) map[string]string {
+	out := make(map[string]string, len(resolved)+len(stored))
 	maps.Copy(out, resolved)
-	for i, record := range records {
+	for i, record := range stored {
 		out[bindings[i].Key] = string(record.Value)
 	}
 	return out
@@ -65,10 +65,10 @@ func FromManifest(raw []byte) (*live.Values, error) {
 	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, records records.Store, sealer records.Cipher) *live.Values {
+func Over(manifest vars.Manifest, store records.Store, sealer records.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: envvars.EnvironmentReader{
-			Records:     records,
+			Records:     store,
 			Cipher:      sealer,
 			Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,

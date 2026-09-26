@@ -55,8 +55,8 @@ func ServedBindingTypes(hooks Hooks) []provider.BindingType {
 	return served
 }
 
-func NewHookStacks(records records.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
-	return &hookStacks{records: records, artifacts: artifacts, hooks: hooks}
+func NewHookStacks(store records.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
+	return &hookStacks{records: store, artifacts: artifacts, hooks: hooks}
 }
 
 type provisionFunc func(ctx context.Context, in ProvisionRequest, progress edge.Progress) (provider.Binding, error)

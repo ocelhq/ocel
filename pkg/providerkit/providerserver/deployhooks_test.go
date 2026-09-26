@@ -101,30 +101,30 @@ func (w *warming) WarmFunctions(_ context.Context, targets []string, _ edge.Prog
 
 func TestDeployWarmsEveryFunctionAProviderKnowsHowToWarm(t *testing.T) {
 	builtProject(t)
-	provider := &warming{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
+	vendor := &warming{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if len(provider.warmed) != 1 {
-		t.Fatalf("the deploy warmed %v, want the function it provisioned", provider.warmed)
+	if len(vendor.warmed) != 1 {
+		t.Fatalf("the deploy warmed %v, want the function it provisioned", vendor.warmed)
 	}
 }
 
 func TestDeployEmbedsTheBytecodeCacheOfEveryFunctionItShipped(t *testing.T) {
 	builtProject(t)
-	provider := &embedding{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
+	vendor := &embedding{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if len(provider.embedded) != 1 {
-		t.Fatalf("the deploy embedded %v, want the artifact of the one function it shipped", provider.embedded)
+	if len(vendor.embedded) != 1 {
+		t.Fatalf("the deploy embedded %v, want the artifact of the one function it shipped", vendor.embedded)
 	}
-	if !strings.Contains(provider.embedded[0], ".zip") {
-		t.Errorf("the deploy embedded %q, want it to name the artifact the function runs from", provider.embedded[0])
+	if !strings.Contains(vendor.embedded[0], ".zip") {
+		t.Errorf("the deploy embedded %q, want it to name the artifact the function runs from", vendor.embedded[0])
 	}
 }
 
@@ -169,13 +169,13 @@ func (w watchedArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, bod
 
 func TestDeployHandsPreflightTheSpecBeforeItUploadsAnything(t *testing.T) {
 	builtProject(t)
-	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
+	vendor := &preflighting{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	preflighted := provider.Preflighted()
+	preflighted := vendor.Preflighted()
 	if len(preflighted) != 1 {
 		t.Fatalf("the deploy ran %d preflights, want the one that precedes the upload", len(preflighted))
 	}
@@ -193,14 +193,14 @@ func TestDeployHandsPreflightTheSpecBeforeItUploadsAnything(t *testing.T) {
 
 func TestPreflightSeesWhichResourcesEachAppUses(t *testing.T) {
 	builtProject(t)
-	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
+	vendor := &preflighting{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
 
 	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	used := map[string][]string{}
-	for _, app := range provider.Preflighted()[0].Apps {
+	for _, app := range vendor.Preflighted()[0].Apps {
 		for _, resource := range app.Resources {
 			used[app.App] = append(used[app.App], resource.Name)
 		}
@@ -216,9 +216,9 @@ func TestPreflightSeesWhichResourcesEachAppUses(t *testing.T) {
 
 func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 	builtProject(t)
-	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
-	provider.RefusePreflight(refusal.Refuse(refusal.CodeInvalid, "this account has no room for what the manifest asks for"))
-	client := servedBy(t, provider)
+	vendor := &preflighting{Provider: fake.NewProvider(fake.Options{})}
+	vendor.RefusePreflight(refusal.Refuse(refusal.CodeInvalid, "this account has no room for what the manifest asks for"))
+	client := servedBy(t, vendor)
 
 	stream, err := client.Deploy(context.Background(), deployRequest())
 	if err != nil {
@@ -239,7 +239,7 @@ func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 	if !strings.Contains(said, "no room") {
 		t.Errorf("Deploy() failed with %q, want the preflight's own refusal", said)
 	}
-	if uploaded := provider.uploads(); len(uploaded) != 0 {
+	if uploaded := vendor.uploads(); len(uploaded) != 0 {
 		t.Errorf("the deploy uploaded %v after a refusing preflight, want nothing put in the store", uploaded)
 	}
 }

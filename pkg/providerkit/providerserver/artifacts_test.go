@@ -262,16 +262,16 @@ func packagedFiles(t *testing.T, p provider.Provider, ref provider.ArtifactRef) 
 
 func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 	builtProject(t)
-	provider := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
+	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	spec := provider.FakeStacks().Provisioned()[1]
-	files := packagedFiles(t, provider, spec.App.Functions[0].Artifact)
+	spec := vendor.FakeStacks().Provisioned()[1]
+	files := packagedFiles(t, vendor, spec.App.Functions[0].Artifact)
 	if _, ok := files[builtEntrypoint]; !ok {
 		t.Errorf("the package contains %v, want the built artifact's own files", files)
 	}
@@ -282,7 +282,7 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 		t.Errorf("the app spec has %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.VendorState)
 	}
 
-	requests := provider.packings()
+	requests := vendor.packings()
 	if len(requests) != 1 || requests[0].App != "web" || requests[0].Values.Folder != spec.App.Values.Folder {
 		t.Errorf("the vendor was asked to pack %+v, want the app's own values, once", requests)
 	}
@@ -293,8 +293,8 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
 
-	provider := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
+	vendor := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
+	client := servedBy(t, vendor)
 	bootstrappedOverRPC(t, client)
 
 	req := deployRequest()
@@ -314,10 +314,10 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	spec := provider.FakeStacks().Provisioned()[1]
+	spec := vendor.FakeStacks().Provisioned()[1]
 	packages := map[string]map[string]string{}
 	for _, fn := range spec.App.Functions {
-		packages[fn.Name] = packagedFiles(t, provider, fn.Artifact)
+		packages[fn.Name] = packagedFiles(t, vendor, fn.Artifact)
 	}
 	if got := packages["server"][edge.RoutingManifestFile]; got != string(routing) {
 		t.Errorf("the entry function's package contains %s = %q, want the routing manifest it routes the app with", edge.RoutingManifestFile, got)
@@ -367,9 +367,9 @@ func (c countedArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, bod
 
 func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
 	builtProject(t)
-	provider := &countingProvider{Provider: fake.NewProvider(fake.Options{}), puts: map[string]int{}}
-	provider.WithArtifactStore(countedArtifacts{ArtifactStore: provider.Artifacts(), on: provider})
-	client := servedBy(t, provider)
+	vendor := &countingProvider{Provider: fake.NewProvider(fake.Options{}), puts: map[string]int{}}
+	vendor.WithArtifactStore(countedArtifacts{ArtifactStore: vendor.Artifacts(), on: vendor})
+	client := servedBy(t, vendor)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PREVIEW,
 		Features: []string{fake.FeatureCache, fake.FeatureImages},
@@ -381,7 +381,7 @@ func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
 		}
 	}
 
-	uploads := provider.uploads()
+	uploads := vendor.uploads()
 	if len(uploads) == 0 {
 		t.Fatal("the deploy uploaded nothing, so the count proves nothing")
 	}
@@ -462,18 +462,18 @@ func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
 	}
 
 	base := fake.NewProvider(fake.Options{})
-	provider := &barrierProvider{
+	vendor := &barrierProvider{
 		Provider: base,
 		store:    &barrierArtifacts{ArtifactStore: base.Artifacts(), want: functions, ready: make(chan struct{})},
 	}
-	provider.WithArtifactStore(provider.store)
-	client := servedBy(t, provider)
+	vendor.WithArtifactStore(vendor.store)
+	client := servedBy(t, vendor)
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if provider.store.peak != functions {
+	if vendor.store.peak != functions {
 		t.Errorf("at most %d of the app's %d functions were uploading at once, want them in flight together: an app of many functions waits one round trip at a time otherwise",
-			provider.store.peak, functions)
+			vendor.store.peak, functions)
 	}
 }

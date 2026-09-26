@@ -36,11 +36,11 @@ type Edges struct {
 	edges map[edge.Kind]*Edge
 }
 
-func NewEdges(records records.Store) *Edges {
+func NewEdges(store records.Store) *Edges {
 	registry := &Edges{edges: map[edge.Kind]*Edge{}}
 	for _, kind := range []edge.Kind{KindRelay, KindDirect} {
 		registry.order = append(registry.order, kind)
-		registry.edges[kind] = newEdge(kind, records)
+		registry.edges[kind] = newEdge(kind, store)
 	}
 	return registry
 }
@@ -166,8 +166,8 @@ func (e *Edge) Serving(certificate string) bool {
 	return certificate != "" && slices.Contains(slices.Collect(maps.Values(e.serving)), certificate)
 }
 
-func newEdge(kind edge.Kind, records records.Store) *Edge {
-	return &Edge{kind: kind, records: records, owners: map[string]string{}, serving: map[string]string{}}
+func newEdge(kind edge.Kind, store records.Store) *Edge {
+	return &Edge{kind: kind, records: store, owners: map[string]string{}, serving: map[string]string{}}
 }
 
 func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
@@ -292,9 +292,9 @@ func (e *Edge) open(state edge.StackState) (*Stack, error) {
 	}
 	build := e.ledgers
 	if build == nil {
-		records := e.records
+		store := e.records
 		build = func(stack edge.StackState) Ledger {
-			return ledger.New(records, stack.Class, stack.Slug)
+			return ledger.New(store, stack.Class, stack.Slug)
 		}
 	}
 	return &Stack{front: e, state: state, ledger: build(state)}, nil

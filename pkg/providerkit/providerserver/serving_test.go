@@ -180,8 +180,8 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
 
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider)
+	vendor := fake.NewProvider(fake.Options{})
+	client := servedBy(t, vendor)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
@@ -191,7 +191,7 @@ func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	app := specs[len(specs)-1].App
 	if app == nil {
 		t.Fatal("the last spec the stacks port saw provisions no app")
@@ -214,8 +214,8 @@ func TestTheStagedRecordIncludesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -289,8 +289,8 @@ func drawingProvider() drawing {
 
 func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	builtProject(t)
-	provider := drawingProvider()
-	client := servedBy(t, provider)
+	vendor := drawingProvider()
+	client := servedBy(t, vendor)
 
 	req := deployRequest()
 	req.Dry = true
@@ -298,14 +298,14 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 		t.Fatalf("Deploy(dry) = %q, want it to succeed", result.GetError())
 	}
 
-	drawn := provider.releases.drawnApps()
+	drawn := vendor.releases.drawnApps()
 	if len(drawn) != 1 {
 		t.Fatalf("a dry deploy drew %d app stacks, want the one the manifest declares", len(drawn))
 	}
 	if result, _ := deploy(t, client, deployRequest()); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	applied := appStacks(provider.releases.Stacks.(*fake.Stacks).Provisioned())
+	applied := appStacks(vendor.releases.Stacks.(*fake.Stacks).Provisioned())
 	if len(applied) != 1 {
 		t.Fatalf("the apply provisioned %d app stacks, want the one the manifest declares", len(applied))
 	}

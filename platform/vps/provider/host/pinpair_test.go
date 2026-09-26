@@ -29,8 +29,8 @@ func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t
 			return session.Result{}, false
 		}
 		_, err := New(box.dial, Keys{}, []Pin{pin}, Front{}).VerifiedPins(context.Background())
-		var refusal refusal.Refusal
-		if refused := errors.As(err, &refusal); refused != refuses {
+		var refused refusal.Refusal
+		if refused := errors.As(err, &refused); refused != refuses {
 			t.Errorf("a pair the box reports %q vouches as %v, want refused=%v: a mismatched pair is one the proxy refuses at the flip, taking every hostname pinned to it off the air", verdict, err, refuses)
 		}
 		if refuses && (!strings.Contains(err.Error(), caddy.PinKey(pin.Path)) || !strings.Contains(err.Error(), caddy.PinCertificate(pin.Path))) {

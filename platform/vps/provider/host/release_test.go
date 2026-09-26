@@ -472,8 +472,8 @@ func TestEveryWayTheGateOrTheFlipCanFailReachesTheSameEndState(t *testing.T) {
 			if err == nil {
 				t.Fatalf("%s released successfully", what)
 			}
-			var refusal refusal.Refusal
-			if !errors.As(err, &refusal) {
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) {
 				t.Errorf("%s failed with %T, want a refusal the cli renders", what, err)
 			}
 			if !unserved(err) {
@@ -537,8 +537,8 @@ func TestAFlipThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) 
 	if err == nil {
 		t.Fatal("a flip that never came back released successfully")
 	}
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Errorf("a flip that never came back failed with %T, want the refusal every other failure renders", err)
 	}
 	if !strings.Contains(err.Error(), "connection reset by peer") {
@@ -993,8 +993,8 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 	if err == nil {
 		t.Fatal("the stop after the flip was refused and the release reported success")
 	}
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("a failure after the flip failed with %T (%v), want the refusal every other failure renders: a bare machine error reads as a failed release while the new one is in fact serving", err, err)
 	}
 	if unserved(err) {
@@ -1190,8 +1190,8 @@ func strandedByWrite(t *testing.T, landed bool, back session.Result) (*flipped, 
 	if err == nil {
 		t.Fatal("a release whose flip configuration was never written released successfully")
 	}
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Errorf("a flip configuration that could not be written failed with %T, want the refusal every other failure renders", err)
 	}
 	return box, err
@@ -1394,8 +1394,8 @@ func TestARetireeThatWouldNotStopSaysTheFlipTookAndStillStopsEveryOther(t *testi
 	if unserved(err) {
 		t.Errorf("a release whose retiree would not stop after the flip refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", err)
 	}
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Errorf("a release whose retiree would not stop after the flip failed with %T, want the refusal every other failure renders", err)
 	}
 	for detail, wanted := range map[string]string{

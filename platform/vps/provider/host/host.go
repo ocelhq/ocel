@@ -316,7 +316,7 @@ var sudoRefusals = []string{"sudo: a password is required", "is not in the sudoe
 
 func sudoRefused(result session.Result) bool {
 	first, _, _ := strings.Cut(strings.TrimSpace(result.Stderr), "\n")
-	return result.Code == 1 && slices.ContainsFunc(sudoRefusals, func(refusal string) bool { return strings.Contains(first, refusal) })
+	return result.Code == 1 && slices.ContainsFunc(sudoRefusals, func(message string) bool { return strings.Contains(first, message) })
 }
 
 func spoken(result session.Result) string {

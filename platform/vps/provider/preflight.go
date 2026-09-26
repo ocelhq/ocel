@@ -43,11 +43,11 @@ func refusing(found []error) error {
 		if err == nil {
 			continue
 		}
-		var refusal refusal.Refusal
-		if !errors.As(err, &refusal) {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) {
 			return err
 		}
-		said = append(said, refusal.Message)
+		said = append(said, refused.Message)
 	}
 	switch len(said) {
 	case 0:

@@ -31,7 +31,9 @@ var runtimeArchTokens = map[string]string{
 
 func runtimeArches() []string { return []string{arch.X8664, arch.ARM64} }
 
-func runtimeLayerResourceID(arch string) string { return "RuntimeLayer" + runtimeArchTokens[arch] }
+func runtimeLayerResourceID(architecture string) string {
+	return "RuntimeLayer" + runtimeArchTokens[architecture]
+}
 
 func shortRuntimeDigest(digest string) string {
 	if len(digest) <= runtimeDigestLen {
@@ -40,22 +42,22 @@ func shortRuntimeDigest(digest string) string {
 	return digest[:runtimeDigestLen]
 }
 
-func runtimeLayerOutputKey(arch, digest string) string {
-	return runtimeLayerResourceID(arch) + shortRuntimeDigest(digest) + "Arn"
+func runtimeLayerOutputKey(architecture, digest string) string {
+	return runtimeLayerResourceID(architecture) + shortRuntimeDigest(digest) + "Arn"
 }
 
-func runtimeLayerName(ns Namespace, class, arch, digest string) string {
-	return suffixed(class, string(ns)+"-runtime") + "-" + runtimeArchTokens[arch] + "-" + shortRuntimeDigest(digest)
+func runtimeLayerName(ns Namespace, class, architecture, digest string) string {
+	return suffixed(class, string(ns)+"-runtime") + "-" + runtimeArchTokens[architecture] + "-" + shortRuntimeDigest(digest)
 }
 
 func runtimeLayerArches() map[string]string {
 	arches := make(map[string]string, len(runtimeArches()))
-	for _, arch := range runtimeArches() {
-		shipped, err := payloads.RuntimeLayer(arch)
+	for _, architecture := range runtimeArches() {
+		shipped, err := payloads.RuntimeLayer(architecture)
 		if err != nil {
 			continue
 		}
-		arches[runtimeLayerOutputKey(arch, shipped.SHA256)] = arch
+		arches[runtimeLayerOutputKey(architecture, shipped.SHA256)] = architecture
 	}
 	return arches
 }
@@ -68,28 +70,28 @@ func shippedRuntimeArches() []string {
 
 func runtimeLayerPlacements(bucket string) (map[string]payloads.Placement, error) {
 	placed := make(map[string]payloads.Placement, len(runtimeArches()))
-	for _, arch := range runtimeArches() {
-		shipped, err := payloads.RuntimeLayer(arch)
+	for _, architecture := range runtimeArches() {
+		shipped, err := payloads.RuntimeLayer(architecture)
 		if err != nil {
 			return nil, err
 		}
-		placed[arch] = payloads.At(bucket, runtimeLayerKeyPrefix, shipped)
+		placed[architecture] = payloads.At(bucket, runtimeLayerKeyPrefix, shipped)
 	}
 	return placed, nil
 }
 
 func placeRuntimeLayers(ctx context.Context, store ObjectStore, bucket string) (map[string]payloads.Placement, error) {
 	placed := make(map[string]payloads.Placement, len(runtimeArches()))
-	for _, arch := range runtimeArches() {
-		shipped, err := payloads.RuntimeLayer(arch)
+	for _, architecture := range runtimeArches() {
+		shipped, err := payloads.RuntimeLayer(architecture)
 		if err != nil {
 			return nil, err
 		}
-		at, err := payloads.Place(ctx, store, bucket, runtimeLayerKeyPrefix, runtimeLayerLabel+" ("+arch+")", shipped)
+		at, err := payloads.Place(ctx, store, bucket, runtimeLayerKeyPrefix, runtimeLayerLabel+" ("+architecture+")", shipped)
 		if err != nil {
 			return nil, err
 		}
-		placed[arch] = at
+		placed[architecture] = at
 	}
 	return placed, nil
 }
@@ -104,9 +106,9 @@ func runtimeLayerTemplateAt(ns Namespace, class, bucket string) (string, error) 
 
 func runtimeLayerTemplate(ns Namespace, class string, code map[string]payloads.Placement) string {
 	var resources, outputs strings.Builder
-	for _, arch := range runtimeArches() {
-		at := code[arch]
-		id := runtimeLayerResourceID(arch)
+	for _, architecture := range runtimeArches() {
+		at := code[architecture]
+		id := runtimeLayerResourceID(architecture)
 		fmt.Fprintf(&resources, `  %s:
     Type: AWS::Lambda::LayerVersion
     Properties:
@@ -117,13 +119,13 @@ func runtimeLayerTemplate(ns Namespace, class string, code map[string]payloads.P
         S3Key: %s
       CompatibleArchitectures:
         - %s
-`, id, runtimeLayerName(ns, class, arch, at.SHA256),
-			fmt.Sprintf("Ocel %s runtime (%s) - payload %s", arch, class, shortRuntimeDigest(at.SHA256)),
-			at.Bucket, at.Key, arch)
+`, id, runtimeLayerName(ns, class, architecture, at.SHA256),
+			fmt.Sprintf("Ocel %s runtime (%s) - payload %s", architecture, class, shortRuntimeDigest(at.SHA256)),
+			at.Bucket, at.Key, architecture)
 		fmt.Fprintf(&outputs, `  %s:
     Description: "Version ARN of the %s runtime, named after the payload it contains so a release only ever boots through the runtime the build that deploys it ships."
     Value: !Ref %s
-`, runtimeLayerOutputKey(arch, at.SHA256), arch, id)
+`, runtimeLayerOutputKey(architecture, at.SHA256), architecture, id)
 	}
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
@@ -214,9 +216,9 @@ func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace
 
 func missingRuntimeLayers(layers map[string]string) []string {
 	var missing []string
-	for _, arch := range shippedRuntimeArches() {
-		if layers[arch] == "" {
-			missing = append(missing, arch)
+	for _, architecture := range shippedRuntimeArches() {
+		if layers[architecture] == "" {
+			missing = append(missing, architecture)
 		}
 	}
 	return missing

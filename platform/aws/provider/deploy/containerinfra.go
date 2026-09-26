@@ -119,13 +119,13 @@ func leaseOf(record records.Record) (lease, error) {
 	return state, nil
 }
 
-func writeLease(ctx context.Context, records records.Store, record records.Record, state lease) error {
+func writeLease(ctx context.Context, store records.Store, record records.Record, state lease) error {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode the container infrastructure lease: %w", err)
 	}
 	record.Bytes = encoded
-	_, err = records.Write(ctx, record)
+	_, err = store.Write(ctx, record)
 	return err
 }
 

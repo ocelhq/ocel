@@ -97,8 +97,8 @@ func TestATableOcelCouldNotRenderIsRefusedWhenItIsRead(t *testing.T) {
 		"a pin the proxy could not open":  `{"grace":"30s","pins":[{"hostname":"shop.example.com","path":"/srv/certs/shop"}]}`,
 		"a preview base of one dns label": `{"grace":"30s","preview":"internal"}`,
 	} {
-		var refusal refusal.Refusal
-		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refusal) || !strings.Contains(err.Error(), live.RoutingTable) {
+		var refused refusal.Refusal
+		if _, err := ReadRoutingTable([]byte(written)); !errors.As(err, &refused) || !strings.Contains(err.Error(), live.RoutingTable) {
 			t.Errorf("ReadRoutingTable() over %s = %v, want a refusal naming %s: a row ocel cannot render takes every later reshape on this box with it",
 				what, err, live.RoutingTable)
 		}

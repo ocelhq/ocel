@@ -282,8 +282,8 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func ledgerFor(records records.Store, class edge.Class, slug string) *kitledger.Ledger {
-	return kitledger.New(records, class, slug)
+func ledgerFor(store records.Store, class edge.Class, slug string) *kitledger.Ledger {
+	return kitledger.New(store, class, slug)
 }
 
 var (

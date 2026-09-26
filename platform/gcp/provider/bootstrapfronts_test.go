@@ -177,9 +177,9 @@ func TestRemovingTheFeatureIsRefusedWhileAHostnameIsStillBoundToItsFront(t *test
 	registry.front.bound = []string{"shop.example.com"}
 	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 
-	var refusal refusal.Refusal
+	var refused refusal.Refusal
 	err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "shop.example.com") {
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "shop.example.com") {
 		t.Fatalf("dropFronts with a hostname still bound = %v, want a refusal naming it", err)
 	}
 	if len(registry.front.torn) != 0 {

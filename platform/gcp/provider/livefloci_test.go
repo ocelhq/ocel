@@ -110,10 +110,10 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 }
 
 func TestLiveSealer(t *testing.T) {
-	provider := live(t)
-	bootstrapped(t, provider, edge.ClassProduction)
+	vendor := live(t)
+	bootstrapped(t, vendor, edge.ClassProduction)
 
-	conformance.RunCipher(t, provider.Cipher())
+	conformance.RunCipher(t, vendor.Cipher())
 }
 
 func TestLiveSealingWhereNoKeyRingExistsSaysWhatToRun(t *testing.T) {
@@ -144,10 +144,10 @@ func bootstrappedClasses(t *testing.T, p *gcp.Provider) {
 }
 
 func TestLiveArtifactStore(t *testing.T) {
-	provider := live(t)
-	bootstrappedClasses(t, provider)
+	vendor := live(t)
+	bootstrappedClasses(t, vendor)
 
-	conformance.RunArtifactStore(t, provider.Facts(), provider.Artifacts())
+	conformance.RunArtifactStore(t, vendor.Facts(), vendor.Artifacts())
 }
 
 func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {

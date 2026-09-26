@@ -28,11 +28,11 @@ func projectRequest() *contractv1.ProjectRequest {
 func deployedProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	return client, provider
+	return client, vendor
 }
 
 func kinds(plan *planv1.ChangePlan) []string {
@@ -88,7 +88,7 @@ func TestPlanRemoveProjectOfAProjectNothingDeployedNamesNoStack(t *testing.T) {
 }
 
 func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
-	client, provider := deployedProject(t)
+	client, vendor := deployedProject(t)
 
 	stream, err := client.RemoveProject(context.Background(), projectRequest())
 	if err != nil {
@@ -102,7 +102,7 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,10 +112,10 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 }
 
 func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
-	client, provider := deployedProject(t)
+	client, vendor := deployedProject(t)
 	ctx := context.Background()
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	ref := specs[1].App.Functions[0].Artifact
 
 	stream, err := client.RemoveProject(ctx, projectRequest())
@@ -126,12 +126,12 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
 	}
 
-	if opened, err := provider.Artifacts().Open(ctx, ref); err == nil {
+	if opened, err := vendor.Artifacts().Open(ctx, ref); err == nil {
 		opened.Close()
 		t.Errorf("the artifact at %s survived the removal, want the project's whole prefix gone", ref.Key)
 	}
 
-	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
 	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Class: edge.ClassProduction}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
@@ -310,7 +310,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 
 func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	ctx := context.Background()
-	client, provider := deployedProject(t)
+	client, vendor := deployedProject(t)
 
 	consented, err := client.PlanRemoveProject(ctx, projectRequest())
 	if err != nil {
@@ -318,7 +318,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	}
 
 	admin := naming.AppStack(stackrecords.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
-	if err := stackrecords.Write(ctx, provider.Records(), edge.ClassProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
+	if err := stackrecords.Write(ctx, vendor.Records(), edge.ClassProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
 		t.Fatalf("stackrecords.Write() error = %v", err)
 	}
 
@@ -380,21 +380,21 @@ func TestARemovalOpensTheEdgeTheProjectRunsOnRatherThanTheDefault(t *testing.T) 
 
 func TestARemovalOpensItsDNSForTheEdgeTheProjectRunsOnWhenTheConfigNamesNone(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
 	req.Edge.Kind = string(fake.KindDirect)
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	opened := len(provider.DNS().(*fake.DNS).Fronts())
+	opened := len(vendor.DNS().(*fake.DNS).Fronts())
 
 	removal := projectRequest()
 	removal.Edge = writtenBy("shop.example")
 	if _, err := client.PlanRemoveProject(context.Background(), removal); err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
-	fronts := provider.DNS().(*fake.DNS).Fronts()[opened:]
+	fronts := vendor.DNS().(*fake.DNS).Fronts()[opened:]
 	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindDirect }) {
 		t.Errorf("the removal opened its DNS under %v, want the %s edge the stack runs on", fronts, fake.KindDirect)
 	}

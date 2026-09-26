@@ -560,11 +560,11 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 			r.sender.send(degradedEvent(need, detail))
 		},
 	}
-	records, err := check.Run(ctx, r.manifest)
+	verdicts, err := check.Run(ctx, r.manifest)
 	if err != nil {
 		return err
 	}
-	r.needs = records
+	r.needs = verdicts
 	return nil
 }
 

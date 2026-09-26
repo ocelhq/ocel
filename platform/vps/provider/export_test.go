@@ -27,7 +27,7 @@ func Elevating(inner provider.Bootstrap, gate func(context.Context) error) provi
 
 func (p *Provider) Host() *host.Host { return p.host }
 
-func (p *Provider) Recording(records records.Store) { p.records = records }
+func (p *Provider) Recording(store records.Store) { p.records = store }
 
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 

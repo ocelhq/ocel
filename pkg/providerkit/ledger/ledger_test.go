@@ -85,8 +85,8 @@ func (s *store) List(_ context.Context, under records.Name) ([]records.Record, e
 }
 
 func fixture() (*Ledger, *store) {
-	records := newStore()
-	return New(records, edge.ClassProduction, "shop"), records
+	store := newStore()
+	return New(store, edge.ClassProduction, "shop"), store
 }
 
 func TestNextSequenceRetriesPastAClaimerThatGotThereFirst(t *testing.T) {
@@ -144,21 +144,21 @@ func TestClaimTagLetsTheSamePromotionReclaimIt(t *testing.T) {
 }
 
 func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
-	l, records := fixture()
+	l, store := fixture()
 	ctx := context.Background()
 
 	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 	pointer := l.pointerName(edge.DefaultPointer).String()
-	records.racing = func(name string) {
+	store.racing = func(name string) {
 		if name != pointer {
 			return
 		}
-		records.racing = nil
-		recorded := records.rows[pointer]
+		store.racing = nil
+		recorded := store.rows[pointer]
 		recorded.Revision = "another deploy got here"
-		records.rows[pointer] = recorded
+		store.rows[pointer] = recorded
 	}
 
 	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress())
@@ -319,7 +319,7 @@ func TestSchemaIsWrittenAndReadBack(t *testing.T) {
 }
 
 func TestPointersAndDestroy(t *testing.T) {
-	l, records := fixture()
+	l, store := fixture()
 	ctx := context.Background()
 
 	for _, pointer := range []string{"", "staging"} {
@@ -334,8 +334,8 @@ func TestPointersAndDestroy(t *testing.T) {
 	if err := l.Destroy(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(records.rows) != 0 {
-		t.Fatalf("Destroy() left %d records behind", len(records.rows))
+	if len(store.rows) != 0 {
+		t.Fatalf("Destroy() left %d records behind", len(store.rows))
 	}
 }
 
@@ -543,18 +543,18 @@ func TestARollbackTakenBackKeepsTheTagItsReleaseAlreadyHad(t *testing.T) {
 }
 
 func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
-	l, records := fixture()
+	l, store := fixture()
 	ctx := context.Background()
 	promoting(t, l, edge.Promotion{PromotionID: "p1"})
 	pointer := l.pointerName(edge.DefaultPointer).String()
-	records.racing = func(name string) {
+	store.racing = func(name string) {
 		if name != pointer {
 			return
 		}
-		records.racing = nil
-		recorded := records.rows[pointer]
+		store.racing = nil
+		recorded := store.rows[pointer]
 		recorded.Revision = "another deploy got here"
-		records.rows[pointer] = recorded
+		store.rows[pointer] = recorded
 	}
 	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardProgress()); err == nil {
 		t.Fatal("a promotion onto a moved pointer succeeded")

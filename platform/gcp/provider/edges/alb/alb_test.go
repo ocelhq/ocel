@@ -110,8 +110,8 @@ func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T)
 	if len(refused) != 1 {
 		t.Fatalf("binding shop.example.com from two projects at once refused %d of them, want exactly one: %v", len(refused), refused)
 	}
-	var refusal refusal.Refusal
-	if !errors.As(refused[0], &refusal) {
+	var losing refusal.Refusal
+	if !errors.As(refused[0], &losing) {
 		t.Errorf("the losing bind failed with %v, want a refusal that says who serves the hostname", refused[0])
 	}
 
@@ -150,8 +150,8 @@ func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T)
 	raised := len(w.raised())
 
 	err = store.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, Surface("shop", edge.ClassProduction)) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, Surface("shop", edge.ClassProduction)) {
 		t.Fatalf("BindDomain(store) = %v, want a refusal naming the project that serves the hostname", err)
 	}
 	if after := w.hosts("ocel-alb-production-routes"); !maps.Equal(before, after) {

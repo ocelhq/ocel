@@ -117,7 +117,7 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 	server := newCertServer()
 	server.failure = "the authorization record does not resolve"
 
-	var refusal refusal.Refusal
+	var refused refusal.Refusal
 	_, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
@@ -126,11 +126,11 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 			return cert, nil
 		},
 	})
-	if !errors.As(err, &refusal) {
+	if !errors.As(err, &refused) {
 		t.Fatalf("Certificate() against a certificate Google gave up on = %v, want a refusal", err)
 	}
-	if !strings.Contains(refusal.Message, server.failure) {
-		t.Errorf("the refusal reads %q, want Google's own reason in it: the owner is the only one who can fix the record", refusal.Message)
+	if !strings.Contains(refused.Message, server.failure) {
+		t.Errorf("the refusal reads %q, want Google's own reason in it: the owner is the only one who can fix the record", refused.Message)
 	}
 }
 

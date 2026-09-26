@@ -42,13 +42,13 @@ func declaredAs(kind bindingsv1.BindingType) resourcesv1.ResourceType {
 	return resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED
 }
 
-func publishRecord(t *testing.T, provider *fake.Provider, class edge.Class, owner string, binding *bindingsv1.Binding) {
+func publishRecord(t *testing.T, vendor *fake.Provider, class edge.Class, owner string, binding *bindingsv1.Binding) {
 	t.Helper()
 	pair, err := envvarsserver.BindingPair(owner, binding)
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}
-	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
 	scope := envvars.Scope{Project: "shop", Class: class}
 	if _, err := store.SetBindings(context.Background(), scope, "", owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 		t.Fatalf("SetBindings: %v", err)
@@ -76,9 +76,9 @@ func bucketRecord(name, source string) *bindingsv1.Binding {
 func refusedDeploy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake.Provider)) string {
 	t.Helper()
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	if publish != nil {
-		publish(provider)
+		publish(vendor)
 	}
 	stream, err := client.Deploy(context.Background(), req)
 	if err != nil {
@@ -145,8 +145,8 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 
 	t.Run("a postgres record a publisher of yours owns is admitted", func(t *testing.T) {
 		builtProject(t)
-		client, provider := deployServed(t)
-		publishRecord(t, provider, edge.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
+		client, vendor := deployServed(t)
+		publishRecord(t, vendor, edge.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
 
 		result, _ := deploy(t, client, bindingRequest("orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES))
 		if !result.GetSuccess() {
@@ -201,8 +201,8 @@ func TestRefuseMismatchedBinding(t *testing.T) {
 func TestDeployBindsByTheExternalName(t *testing.T) {
 	t.Run("a record published under a name the app never declares is admitted", func(t *testing.T) {
 		builtProject(t)
-		client, provider := deployServed(t)
-		publishRecord(t, provider, edge.ClassProduction, "terraform", postgresRecord("sst-pg-orders", "terraform"))
+		client, vendor := deployServed(t)
+		publishRecord(t, vendor, edge.ClassProduction, "terraform", postgresRecord("sst-pg-orders", "terraform"))
 
 		result, _ := deploy(t, client, externalBindingRequest("orders", "sst-pg-orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES))
 		if !result.GetSuccess() {
@@ -246,8 +246,8 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 	said := func(t *testing.T, record *bindingsv1.Binding, kind bindingsv1.BindingType) []string {
 		t.Helper()
 		builtProject(t)
-		client, provider := deployServed(t)
-		publishRecord(t, provider, edge.ClassProduction, "terraform", record)
+		client, vendor := deployServed(t)
+		publishRecord(t, vendor, edge.ClassProduction, "terraform", record)
 		req := externalBindingRequest(record.GetName(), "", kind)
 		req.Manifest.Resources[0].LogicalName = "db--" + record.GetName()
 		result, events := deploy(t, client, req)

@@ -25,12 +25,12 @@ func TestPreflightReportsWhoThisRunIsAndWhatItIncludes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureCache},
 	})
-	recordProject(t, provider, "blog")
+	recordProject(t, vendor, "blog")
 
 	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -66,8 +66,8 @@ func TestPreflightReportsWhoThisRunIsAndWhatItIncludes(t *testing.T) {
 func TestPreflightNamesTheArchitectureContainerImagesAreBuiltFor(t *testing.T) {
 	t.Parallel()
 
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, provider.WrappingContainers("arm64", []byte("runtime")))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedBy(t, vendor.WrappingContainers("arm64", []byte("runtime")))
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -123,8 +123,8 @@ func TestACredentialProblemSaysWhatWentWrongByTheRefusalsCode(t *testing.T) {
 func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
-	provider.Credentials().(*fake.Credentials).Deny("run `fake login` and try again")
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.Credentials().(*fake.Credentials).Deny("run `fake login` and try again")
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -242,9 +242,9 @@ func TestPreflightRefusesABootstrapThisBuildCannotRead(t *testing.T) {
 func TestPreflightNamesWhoAlreadyServesEachHostnameThisProjectDeclares(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-other-production")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-other-production")
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -273,12 +273,12 @@ func TestPreflightNamesWhoAlreadyServesEachHostnameThisProjectDeclares(t *testin
 func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	seedStack(t, provider, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, vendor, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Bound: []string{"acme.com"}},
 	})
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -297,12 +297,12 @@ func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *tes
 func TestPreflightDoesNotRefuseAHostnameThisProjectAlreadyClaimsButNeverRecorded(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	seedStack(t, provider, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, vendor, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction},
 	})
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -321,9 +321,9 @@ func TestPreflightDoesNotRefuseAHostnameThisProjectAlreadyClaimsButNeverRecorded
 func TestPreflightReportsAnUnreadableOwnerRatherThanStoppingTheDeploy(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was throttled listing what it serves"))
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).OwnersUnreadable(errors.New("the edge was throttled listing what it serves"))
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -345,10 +345,10 @@ func TestPreflightReportsAnUnreadableOwnerRatherThanStoppingTheDeploy(t *testing
 func TestPreflightTreatsTheSharedPreviewEntryAsNobodysClaim(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
 	wildcard := edge.PreviewWildcard("previews.example.com")
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns(wildcard, edge.PreviewEntryOwner)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns(wildcard, edge.PreviewEntryOwner)
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PREVIEW,
@@ -367,8 +367,8 @@ func TestPreflightTreatsTheSharedPreviewEntryAsNobodysClaim(t *testing.T) {
 func TestPreflightNamesTheEdgeScopeTheEdgeCredentialsReach(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
-	provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "acct-42"}, nil)
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{Account: "acct-42"}, nil)
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -387,8 +387,8 @@ func TestPreflightNamesTheEdgeScopeTheEdgeCredentialsReach(t *testing.T) {
 func TestPreflightReportsEdgeCredentialsThatWouldNotAnswer(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
-	provider.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("token expired"))
+	client, vendor := contractServed(t, "1.2.3")
+	vendor.Edges().(*fake.Edges).Verifies(fake.KindRelay, edge.CredentialIdentity{}, errors.New("token expired"))
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
@@ -436,8 +436,8 @@ func TestPreflightLeavesTheEdgeScopeEmptyWhenNoEdgeVerifiesCredentials(t *testin
 func TestPreflightNamesNoEdgeScopeForAnEdgeThatChecksNoCredentials(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
-	front, err := provider.Edges().Open(fake.KindRelay)
+	client, vendor := contractServed(t, "1.2.3")
+	front, err := vendor.Edges().Open(fake.KindRelay)
 	if err != nil {
 		t.Fatal(err)
 	}

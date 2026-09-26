@@ -19,6 +19,6 @@ func (p containerRuntime) Arch(_ context.Context, app, declared string) (string,
 	return payloads.ContainerArch, nil
 }
 
-func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
-	return payloads.ContainerRuntime(arch)
+func (p containerRuntime) Binary(_ context.Context, architecture string) ([]byte, error) {
+	return payloads.ContainerRuntime(architecture)
 }

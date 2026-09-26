@@ -161,13 +161,13 @@ func TestTheContainerAProvisionedAppRunsOnIsRecordedAgainstItsStack(t *testing.T
 func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	if result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/"))); !result.GetSuccess() {
 		t.Fatalf("Deploy() of a container app = %q", result.GetError())
 	}
 
-	releases := ledger.New(provider.Records(), edge.ClassProduction, "shop")
+	releases := ledger.New(vendor.Records(), edge.ClassProduction, "shop")
 	record, found, err := releases.Record(context.Background(), "web", containerTestImage)
 	if err != nil {
 		t.Fatal(err)

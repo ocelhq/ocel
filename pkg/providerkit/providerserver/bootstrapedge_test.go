@@ -148,8 +148,8 @@ func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
 func TestRemovingTheFeatureTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindRelay)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, vendor := fronting(t, fake.KindRelay)
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	_, err := gate.Plan(context.Background(), edge.ClassProduction, providerserver.ApplyRequest{
 		Remove: []string{fake.FeatureImages},
@@ -168,8 +168,8 @@ func TestRemovingTheFeatureTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 func TestRemovingWhatTheFrontingFeatureDependsOnIsRefusedByName(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindRelay)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, vendor := fronting(t, fake.KindRelay)
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	_, err := gate.Plan(context.Background(), edge.ClassProduction, providerserver.ApplyRequest{
 		Remove: []string{fake.FeatureCache},
@@ -188,8 +188,8 @@ func TestRemovingWhatTheFrontingFeatureDependsOnIsRefusedByName(t *testing.T) {
 func TestRemovingAnEdgeFeatureThatFrontsNothingHereGoesAhead(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, vendor := fronting(t, fake.KindDirect)
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	ctx := context.Background()
 	req := providerserver.ApplyRequest{Remove: []string{fake.FeatureImages}}

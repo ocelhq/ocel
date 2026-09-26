@@ -71,12 +71,12 @@ func TestDecodeRefusesANestedUnknownOptionByItsPath(t *testing.T) {
 	}
 
 	_, err := Decode[nested]("vps", Options{"ssh": map[string]any{"hostt": "example.com"}})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "provider.vps.ssh.hostt") {
-		t.Errorf("Refusal.Message = %q, want the option's path in the config", refusal.Message)
+	if !strings.Contains(refused.Message, "provider.vps.ssh.hostt") {
+		t.Errorf("Refusal.Message = %q, want the option's path in the config", refused.Message)
 	}
 }
 
@@ -84,12 +84,12 @@ func TestDecodeRefusesAnOptionOfTheWrongType(t *testing.T) {
 	t.Parallel()
 
 	_, err := Decode[awsish]("aws", Options{"region": 42})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "region") {
-		t.Errorf("Refusal.Message = %q, want it to name the option", refusal.Message)
+	if !strings.Contains(refused.Message, "region") {
+		t.Errorf("Refusal.Message = %q, want it to name the option", refused.Message)
 	}
 }
 

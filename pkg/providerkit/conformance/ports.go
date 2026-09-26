@@ -694,9 +694,9 @@ func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, r
 	})
 
 	t.Run("Open refuses rather than answering empty", func(t *testing.T) {
-		var refusal refusal.Refusal
+		var refused refusal.Refusal
 		opened, err := artifacts.Open(ctx, ref)
-		if !errors.As(err, &refusal) {
+		if !errors.As(err, &refused) {
 			if err == nil {
 				opened.Close()
 			}
@@ -797,7 +797,7 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artifacts provider.ArtifactStore, records records.Store) {
+func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artifacts provider.ArtifactStore, store records.Store) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -964,13 +964,13 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			}
 		}
 
-		if records != nil {
+		if store != nil {
 			recorded := stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}
-			if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, recorded); err != nil {
+			if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, recorded); err != nil {
 				t.Fatalf("recording what the release returned, as the kit does after every Provision() = %v", err)
 			}
 			defer func() {
-				if err := stackrecords.Forget(ctx, records, ref.Class, ref.Project, ref.Name); err != nil {
+				if err := stackrecords.Forget(ctx, store, ref.Class, ref.Project, ref.Name); err != nil {
 					t.Errorf("forgetting the stack the teardown took = %v", err)
 				}
 			}()

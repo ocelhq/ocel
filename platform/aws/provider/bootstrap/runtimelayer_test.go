@@ -57,45 +57,45 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 					t.Fatalf("the runtime stack declares %d resources, want one layer version per architecture (%d)",
 						len(tmpl.Resources), len(runtimeArches()))
 				}
-				for _, arch := range runtimeArches() {
-					shipped, err := payloads.RuntimeLayer(arch)
+				for _, architecture := range runtimeArches() {
+					shipped, err := payloads.RuntimeLayer(architecture)
 					if err != nil {
-						t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
+						t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 					}
-					layer, ok := tmpl.Resources[runtimeLayerResourceID(arch)]
+					layer, ok := tmpl.Resources[runtimeLayerResourceID(architecture)]
 					if !ok {
-						t.Fatalf("the runtime stack declares no %s layer", arch)
+						t.Fatalf("the runtime stack declares no %s layer", architecture)
 					}
 					if layer.Type != "AWS::Lambda::LayerVersion" {
-						t.Errorf("%s Type = %q, want AWS::Lambda::LayerVersion", arch, layer.Type)
+						t.Errorf("%s Type = %q, want AWS::Lambda::LayerVersion", architecture, layer.Type)
 					}
 					if !strings.Contains(layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256)) {
 						t.Errorf("%s LayerName = %q, want the payload digest %s in it",
-							arch, layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256))
+							architecture, layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256))
 					}
-					if !strings.Contains(layer.Properties.LayerName, runtimeArchTokens[arch]) {
+					if !strings.Contains(layer.Properties.LayerName, runtimeArchTokens[architecture]) {
 						t.Errorf("%s LayerName = %q, names no architecture, so the two arches would collide",
-							arch, layer.Properties.LayerName)
+							architecture, layer.Properties.LayerName)
 					}
 					if want := payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256); layer.Properties.Content.S3Key != want {
-						t.Errorf("%s S3Key = %q, want %q", arch, layer.Properties.Content.S3Key, want)
+						t.Errorf("%s S3Key = %q, want %q", architecture, layer.Properties.Content.S3Key, want)
 					}
 					if layer.Properties.Content.S3Bucket != fixtureBucket {
-						t.Errorf("%s S3Bucket = %q, want the bootstrap's artifact bucket %q", arch, layer.Properties.Content.S3Bucket, fixtureBucket)
+						t.Errorf("%s S3Bucket = %q, want the bootstrap's artifact bucket %q", architecture, layer.Properties.Content.S3Bucket, fixtureBucket)
 					}
-					if len(layer.Properties.CompatibleArchitectures) != 1 || layer.Properties.CompatibleArchitectures[0] != arch {
-						t.Errorf("%s CompatibleArchitectures = %v, want [%s]", arch, layer.Properties.CompatibleArchitectures, arch)
+					if len(layer.Properties.CompatibleArchitectures) != 1 || layer.Properties.CompatibleArchitectures[0] != architecture {
+						t.Errorf("%s CompatibleArchitectures = %v, want [%s]", architecture, layer.Properties.CompatibleArchitectures, architecture)
 					}
 					if len(layer.Properties.CompatibleRuntimes) != 0 {
 						t.Errorf("%s CompatibleRuntimes = %v, want none listed: Lambda refuses the layer to any function whose runtime is left off the list, and one runtime serves them all",
-							arch, layer.Properties.CompatibleRuntimes)
+							architecture, layer.Properties.CompatibleRuntimes)
 					}
-					out, ok := tmpl.Outputs[runtimeLayerOutputKey(arch, shipped.SHA256)]
+					out, ok := tmpl.Outputs[runtimeLayerOutputKey(architecture, shipped.SHA256)]
 					if !ok {
-						t.Fatalf("the runtime stack publishes no %s output, so no release can reach the layer", runtimeLayerOutputKey(arch, shipped.SHA256))
+						t.Fatalf("the runtime stack publishes no %s output, so no release can reach the layer", runtimeLayerOutputKey(architecture, shipped.SHA256))
 					}
-					if !strings.Contains(out.Value, runtimeLayerResourceID(arch)) {
-						t.Errorf("%s output = %q, want the version ARN of %s", arch, out.Value, runtimeLayerResourceID(arch))
+					if !strings.Contains(out.Value, runtimeLayerResourceID(architecture)) {
+						t.Errorf("%s output = %q, want the version ARN of %s", architecture, out.Value, runtimeLayerResourceID(architecture))
 					}
 				}
 			})
@@ -105,11 +105,11 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 	t.Run("production and preview name different layers", func(t *testing.T) {
 		production := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, ClassProduction))
 		preview := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, ClassPreview))
-		for _, arch := range runtimeArches() {
-			id := runtimeLayerResourceID(arch)
+		for _, architecture := range runtimeArches() {
+			id := runtimeLayerResourceID(architecture)
 			if production.Resources[id].Properties.LayerName == preview.Resources[id].Properties.LayerName {
 				t.Errorf("both classes publish the %s runtime as %q, so one class's bootstrap writes the other's layer",
-					arch, production.Resources[id].Properties.LayerName)
+					architecture, production.Resources[id].Properties.LayerName)
 			}
 		}
 	})
@@ -128,17 +128,17 @@ func TestRunRuntimeLayers(t *testing.T) {
 		if body == "" {
 			t.Fatal("a first bootstrap created no runtime stack, so its releases have nothing to boot through")
 		}
-		for _, arch := range runtimeArches() {
-			shipped, err := payloads.RuntimeLayer(arch)
+		for _, architecture := range runtimeArches() {
+			shipped, err := payloads.RuntimeLayer(architecture)
 			if err != nil {
-				t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
+				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 			}
 			key := payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256)
 			if !store.has(key) {
-				t.Errorf("the %s runtime payload was never placed at %s", arch, key)
+				t.Errorf("the %s runtime payload was never placed at %s", architecture, key)
 			}
 			if !strings.Contains(body, key) {
-				t.Errorf("the runtime stack does not point at the placed %s payload %s", arch, key)
+				t.Errorf("the runtime stack does not point at the placed %s payload %s", architecture, key)
 			}
 		}
 	})
@@ -174,17 +174,17 @@ func TestReadRuntimeLayers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		for _, arch := range runtimeArches() {
-			shipped, err := payloads.RuntimeLayer(arch)
+		for _, architecture := range runtimeArches() {
+			shipped, err := payloads.RuntimeLayer(architecture)
 			if err != nil {
-				t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
+				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 			}
-			want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(arch, shipped.SHA256))
+			want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
 			if want == "" {
-				t.Fatalf("the seeded runtime stack published no %s ARN", arch)
+				t.Fatalf("the seeded runtime stack published no %s ARN", architecture)
 			}
-			if got := deployed.RuntimeLayers[arch]; got != want {
-				t.Errorf("RuntimeLayers[%s] = %q, want %q", arch, got, want)
+			if got := deployed.RuntimeLayers[architecture]; got != want {
+				t.Errorf("RuntimeLayers[%s] = %q, want %q", architecture, got, want)
 			}
 		}
 	})
@@ -249,17 +249,17 @@ func ensureRuntimeRequest() RuntimeLayerRequest {
 
 func assertShipsThisBuild(t *testing.T, stacks *fakeCFN, layers map[string]string) {
 	t.Helper()
-	for _, arch := range runtimeArches() {
-		shipped, err := payloads.RuntimeLayer(arch)
+	for _, architecture := range runtimeArches() {
+		shipped, err := payloads.RuntimeLayer(architecture)
 		if err != nil {
-			t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
+			t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 		}
-		want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(arch, shipped.SHA256))
+		want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
 		if want == "" {
-			t.Fatalf("the runtime stack publishes no %s ARN", arch)
+			t.Fatalf("the runtime stack publishes no %s ARN", architecture)
 		}
-		if layers[arch] != want {
-			t.Errorf("layers[%s] = %q, want %q", arch, layers[arch], want)
+		if layers[architecture] != want {
+			t.Errorf("layers[%s] = %q, want %q", architecture, layers[architecture], want)
 		}
 	}
 }
@@ -276,13 +276,13 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
 		assertShipsThisBuild(t, stacks, layers)
-		for _, arch := range runtimeArches() {
-			shipped, err := payloads.RuntimeLayer(arch)
+		for _, architecture := range runtimeArches() {
+			shipped, err := payloads.RuntimeLayer(architecture)
 			if err != nil {
-				t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
+				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 			}
 			if !store.has(payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256)) {
-				t.Errorf("the %s runtime payload the stack points at was never placed", arch)
+				t.Errorf("the %s runtime payload the stack points at was never placed", architecture)
 			}
 		}
 		if !log.says("published this build's runtime") {

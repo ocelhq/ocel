@@ -147,12 +147,12 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
-	var refusal refusal.Refusal
-	if !asRefusal(err, &refusal) {
+	var refused refusal.Refusal
+	if !asRefusal(err, &refused) {
 		t.Fatalf("Issue() over a pin that covers something else = %v, want a refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "*.staging.example.com") || !strings.Contains(refusal.Message, "pr-7.preview.example.com") {
-		t.Errorf("the refusal reads %q, want it to name what the pinned certificate covers and the hostname it does not", refusal.Message)
+	if !strings.Contains(refused.Message, "*.staging.example.com") || !strings.Contains(refused.Message, "pr-7.preview.example.com") {
+		t.Errorf("the refusal reads %q, want it to name what the pinned certificate covers and the hostname it does not", refused.Message)
 	}
 }
 
@@ -173,8 +173,8 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
-	var refusal refusal.Refusal
-	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, "expired") {
+	var refused refusal.Refusal
+	if !asRefusal(err, &refused) || !strings.Contains(refused.Message, "expired") {
 		t.Fatalf("Issue() over an expired pin = %v, want a refusal saying so: you placed it and you replace it", err)
 	}
 }
@@ -326,8 +326,8 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 
 	_, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
 		provider.Certificate{ID: certs.PinHandle(elsewhere)})
-	var refusal refusal.Refusal
-	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, caddy.PinsDir) {
+	var refused refusal.Refusal
+	if !asRefusal(err, &refused) || !strings.Contains(refused.Message, caddy.PinsDir) {
 		t.Fatalf("Inspect() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)
 	}
 	for _, command := range machine.commands() {
@@ -337,7 +337,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 	}
 }
 
-func asRefusal(err error, refusal *refusal.Refusal) bool { return errors.As(err, refusal) }
+func asRefusal(err error, refused *refusal.Refusal) bool { return errors.As(err, refused) }
 
 func TestABoxHasNoCertificateForThePreviewWildcardItself(t *testing.T) {
 	t.Parallel()
