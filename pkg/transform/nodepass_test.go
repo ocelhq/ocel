@@ -1,4 +1,4 @@
-package transformkit
+package transform
 
 import (
 	"maps"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
+	"github.com/ocelhq/ocel/pkg/transform/transformtest"
 )
 
 func functionRequest() Request {

@@ -30,7 +30,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/refusal":            true,
 	"github.com/ocelhq/ocel/pkg/runtimekit":         true,
 	"github.com/ocelhq/ocel/pkg/target":             true,
-	"github.com/ocelhq/ocel/pkg/transformkit":       true,
+	"github.com/ocelhq/ocel/pkg/transform":          true,
 	"github.com/ocelhq/ocel/platform/edge/contract": true,
 	dnsRecords: true,
 }

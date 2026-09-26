@@ -5,7 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -33,7 +33,7 @@ func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 
 func (p *Provider) Reaching(dial Reach) { p.reaches = dial }
 
-func (p *Provider) Transforming(pass transformkit.Pass) { p.transform = pass }
+func (p *Provider) Transforming(pass transform.Pass) { p.transform = pass }
 
 func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) provider.HostCheck {
 	here, unread := look(ctx, address)

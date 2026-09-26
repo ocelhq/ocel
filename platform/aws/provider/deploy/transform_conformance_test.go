@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/transformkit"
-	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
+	"github.com/ocelhq/ocel/pkg/transform"
+	"github.com/ocelhq/ocel/pkg/transform/transformtest"
 )
 
 const conformanceModule = `
@@ -33,10 +33,10 @@ func TestSurfaceConformance(t *testing.T) {
 
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
 
-	req := transformkit.Request{Provider: transformProvider, EnvClass: "production", Env: "prod"}
+	req := transform.Request{Provider: transformProvider, EnvClass: "production", Env: "prod"}
 	var candidates []transformCandidate
 	for _, kind := range slices.Sorted(maps.Keys(rendered)) {
-		req.Resources = append(req.Resources, transformkit.Resource{Type: kind, Name: kind + "-under-test"})
+		req.Resources = append(req.Resources, transform.Resource{Type: kind, Name: kind + "-under-test"})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: kind, Name: kind + "-under-test"},
 			names: rendered[kind],
@@ -56,15 +56,15 @@ func TestSurfaceConformance(t *testing.T) {
 		}
 	}
 
-	filled := make([]transformkit.Result, len(results))
+	filled := make([]transform.Result, len(results))
 	wanted := map[resourceRef]bool{}
 	for i, result := range results {
-		patches := transformkit.Patches{}
+		patches := transform.Patches{}
 		for key := range result.Patches {
 			patches[key] = map[string]any{"description": candidates[i].key.Type + " " + key}
 			wanted[rendered[candidates[i].key.Type][key]] = true
 		}
-		filled[i] = transformkit.Result{Patches: patches}
+		filled[i] = transform.Result{Patches: patches}
 	}
 
 	indexed, err := indexPatches(candidates, filled)

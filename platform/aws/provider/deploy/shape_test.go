@@ -15,8 +15,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/transformkit"
-	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
+	"github.com/ocelhq/ocel/pkg/transform"
+	"github.com/ocelhq/ocel/pkg/transform/transformtest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -58,7 +58,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 	}
 }
 
-func shaped(t *testing.T, pass transformkit.Pass, req provider.ShapeRequest) *costv1.ResourceSet {
+func shaped(t *testing.T, pass transform.Pass, req provider.ShapeRequest) *costv1.ResourceSet {
 	t.Helper()
 	tree := &pricing.Tree{}
 	project := tree.Scope("", "project", "shop")

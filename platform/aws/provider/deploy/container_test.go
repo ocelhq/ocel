@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -502,7 +502,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 		}
 	}
 
-	pass.out = []transformkit.Patches{{"role": {"description": "patched"}}}
+	pass.out = []transform.Patches{{"role": {"description": "patched"}}}
 	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
