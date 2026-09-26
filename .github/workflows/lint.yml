@@ -76,14 +76,16 @@ jobs:
       - name: The check refuses exactly the authors and paths it names
         run: node --test scripts/contract-paths.test.mjs
 
-      - name: Only a maintainer changes a contract path
+      - name: Only a branch of this repository or a maintainer's fork changes a contract path
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           ASSOCIATION: ${{ github.event.pull_request.author_association }}
         run: |
           git diff --name-only --no-renames "$BASE...$HEAD" > "$RUNNER_TEMP/paths"
-          node scripts/contract-paths.mjs "$ASSOCIATION" < "$RUNNER_TEMP/paths"
+          node scripts/contract-paths.mjs < "$RUNNER_TEMP/paths"
 
   actions:
     name: actionlint
