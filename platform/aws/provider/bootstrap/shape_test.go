@@ -3,12 +3,12 @@ package bootstrap
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func shapedOf(shaped []costkit.Shaped, typ string) []costkit.Shaped {
-	var out []costkit.Shaped
+func shapedOf(shaped []pricing.Shaped, typ string) []pricing.Shaped {
+	var out []pricing.Shaped
 	for _, s := range shaped {
 		if s.Type == typ {
 			out = append(out, s)

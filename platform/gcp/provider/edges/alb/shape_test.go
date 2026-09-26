@@ -4,7 +4,7 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -36,7 +36,7 @@ func declaredCounts(t *testing.T, program Program) map[string]int {
 	return counts
 }
 
-func shapedCounts(shaped []costkit.Shaped) map[string]int {
+func shapedCounts(shaped []pricing.Shaped) map[string]int {
 	counts := map[string]int{}
 	for _, s := range shaped {
 		counts[s.Type]++

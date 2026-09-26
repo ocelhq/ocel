@@ -1,7 +1,7 @@
 package alb
 
 import (
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -10,17 +10,17 @@ const (
 	previewBaseShaped = "preview"
 )
 
-func Shape(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
 	previewBase := ""
 	if site.Class == edge.ClassPreview {
 		previewBase = previewBaseShaped
 	}
-	shape := costkit.EdgeShape{
+	shape := pricing.EdgeShape{
 		Vendor:      costVendor,
 		Region:      site.Region,
 		BillsEgress: true,
 		Shared:      ShapeFront(site.Class, previewBase),
-		Apps:        make(map[string][]costkit.Shaped, len(site.Apps)),
+		Apps:        make(map[string][]pricing.Shaped, len(site.Apps)),
 	}
 	for _, app := range site.Apps {
 		if hosts := ShapeHosts(site.Slug, site.Class, app.Hostnames); len(hosts) > 0 {
@@ -41,9 +41,9 @@ const (
 	tfNetworkEndpointGroup = "google_compute_region_network_endpoint_group"
 )
 
-func ShapeFront(class edge.Class, previewBaseDomain string) []costkit.Shaped {
+func ShapeFront(class edge.Class, previewBaseDomain string) []pricing.Shaped {
 	front := frontNames(class)
-	shaped := []costkit.Shaped{
+	shaped := []pricing.Shaped{
 		{Name: front.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
 		{Name: front.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
 		{Name: front.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
@@ -57,21 +57,21 @@ func ShapeFront(class edge.Class, previewBaseDomain string) []costkit.Shaped {
 	}
 	if previewBaseDomain != "" {
 		shaped = append(shaped,
-			costkit.Shaped{Name: previewEntryName(previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
-			costkit.Shaped{Name: previewNEGName(previewBaseDomain), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
-			costkit.Shaped{Name: previewBackendName(previewBaseDomain), Type: tfBackendService, Properties: backendProperties(true)},
+			pricing.Shaped{Name: previewEntryName(previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
+			pricing.Shaped{Name: previewNEGName(previewBaseDomain), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
+			pricing.Shaped{Name: previewBackendName(previewBaseDomain), Type: tfBackendService, Properties: backendProperties(true)},
 		)
 	}
 	return shaped
 }
 
-func ShapeHosts(slug string, class edge.Class, hostnames []string) []costkit.Shaped {
-	var shaped []costkit.Shaped
+func ShapeHosts(slug string, class edge.Class, hostnames []string) []pricing.Shaped {
+	var shaped []pricing.Shaped
 	for _, hostname := range hostnames {
 		shaped = append(shaped,
-			costkit.Shaped{Name: entryName(slug, class, hostname), Type: tfCertificateMapEntry, Properties: map[string]any{}},
-			costkit.Shaped{Name: negName(slug, class, hostname), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
-			costkit.Shaped{Name: backendName(slug, class, hostname), Type: tfBackendService, Properties: backendProperties(true)},
+			pricing.Shaped{Name: entryName(slug, class, hostname), Type: tfCertificateMapEntry, Properties: map[string]any{}},
+			pricing.Shaped{Name: negName(slug, class, hostname), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
+			pricing.Shaped{Name: backendName(slug, class, hostname), Type: tfBackendService, Properties: backendProperties(true)},
 		)
 	}
 	return shaped

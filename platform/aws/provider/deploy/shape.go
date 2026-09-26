@@ -8,8 +8,8 @@ import (
 	"unicode"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/costkit"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
@@ -47,7 +47,7 @@ type shapedPatches struct {
 	unknown map[resourceRef][]string
 }
 
-func Shape(ctx context.Context, pass transformkit.Pass, region string, req provider.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
+func Shape(ctx context.Context, pass transformkit.Pass, region string, req provider.ShapeRequest, tree *pricing.Tree, scopes ShapeScopes) error {
 	project := naming.Sanitize(req.Deploy.Slug)
 	patched, err := shapeTransforms(ctx, pass, project, req)
 	if err != nil {
@@ -67,7 +67,7 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 	}
 	hasContainers := false
 	for _, app := range req.Deploy.Apps {
-		scope := tree.Scope(scopes.Environment, costkit.ScopeApp, app.App)
+		scope := tree.Scope(scopes.Environment, pricing.ScopeApp, app.App)
 		if app.Compute() == provider.ComputeContainer {
 			shape.container(scope, app)
 			hasContainers = true
@@ -84,7 +84,7 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 }
 
 type costShape struct {
-	tree    *costkit.Tree
+	tree    *pricing.Tree
 	region  string
 	patched shapedPatches
 }

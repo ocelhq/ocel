@@ -3,14 +3,14 @@ package edges
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestEveryEdgeThisProviderFrontsWithShapesWhatItProvisions(t *testing.T) {
 	t.Parallel()
 
-	site := costkit.EdgeSite{Slug: "shop", Class: edge.ClassProduction, Region: "us-east-1"}
+	site := pricing.EdgeSite{Slug: "shop", Class: edge.ClassProduction, Region: "us-east-1"}
 	for _, kind := range SupportedEdges() {
 		shape, err := Shape(kind, "ocel", site)
 		if err != nil {
@@ -25,7 +25,7 @@ func TestEveryEdgeThisProviderFrontsWithShapesWhatItProvisions(t *testing.T) {
 func TestAnEdgeThisProviderCannotFrontWithShapesNothing(t *testing.T) {
 	t.Parallel()
 
-	shape, err := Shape("relay", "ocel", costkit.EdgeSite{Slug: "shop", Class: edge.ClassProduction})
+	shape, err := Shape("relay", "ocel", pricing.EdgeSite{Slug: "shop", Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("Shape(relay) = %v", err)
 	}

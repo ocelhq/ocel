@@ -1,4 +1,4 @@
-package costkit
+package pricing
 
 import (
 	"fmt"

@@ -15,7 +15,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
 const (
@@ -66,7 +66,7 @@ func run(path, key string) error {
 	if err != nil {
 		return err
 	}
-	var card costkit.Card
+	var card pricing.Card
 	if err := json.Unmarshal(raw, &card); err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func list(service, key string) ([]sku, error) {
 			return nil, err
 		}
 		req.Header.Set(keyHeader, key)
-		body, err := costkit.Fetch(context.Background(), req)
+		body, err := pricing.Fetch(context.Background(), req)
 		if err != nil {
 			return nil, fmt.Errorf("list skus of %s: %w", service, err)
 		}
@@ -162,19 +162,19 @@ func match(skus []sku, query map[string]string) []sku {
 	return matched
 }
 
-func stepsOf(s sku) ([]costkit.PriceStep, string, error) {
+func stepsOf(s sku) ([]pricing.PriceStep, string, error) {
 	if len(s.PricingInfo) == 0 {
 		return nil, "", fmt.Errorf("sku %s has no pricing", s.SKUID)
 	}
 	expression := s.PricingInfo[0].PricingExpression
-	var steps []costkit.PriceStep
+	var steps []pricing.PriceStep
 	for _, tier := range expression.TieredRates {
 		units, err := decimal.NewFromString(tier.UnitPrice.Units)
 		if err != nil {
 			return nil, "", fmt.Errorf("sku %s: units %q: %w", s.SKUID, tier.UnitPrice.Units, err)
 		}
 		price := units.Add(decimal.NewFromInt(tier.UnitPrice.Nanos).Div(decimal.NewFromInt(nanosPerUnit)))
-		steps = append(steps, costkit.PriceStep{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
+		steps = append(steps, pricing.PriceStep{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
 	}
 	if len(steps) == 0 {
 		return nil, "", fmt.Errorf("sku %s has no tiered rates", s.SKUID)

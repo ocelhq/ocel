@@ -5,7 +5,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
@@ -14,14 +14,14 @@ import (
 
 func shapedSet(t *testing.T, class edge.Class) *costv1.ResourceSet {
 	t.Helper()
-	shape, err := cloudflare.Shape("ocel", costkit.EdgeSite{Slug: "shop", Class: class})
+	shape, err := cloudflare.Shape("ocel", pricing.EdgeSite{Slug: "shop", Class: class})
 	if err != nil {
 		t.Fatal(err)
 	}
-	tree := &costkit.Tree{}
-	tree.AddEdge(costkit.EdgeScopes{
-		Shared:      tree.Scope("", costkit.ScopeShared, string(class)),
-		Environment: tree.Scope("", costkit.ScopeEnvironment, "prod"),
+	tree := &pricing.Tree{}
+	tree.AddEdge(pricing.EdgeScopes{
+		Shared:      tree.Scope("", pricing.ScopeShared, string(class)),
+		Environment: tree.Scope("", pricing.ScopeEnvironment, "prod"),
 	}, shape)
 	set, err := tree.Set("ocel")
 	if err != nil {
@@ -36,7 +36,7 @@ func priced(t *testing.T, set *costv1.ResourceSet, profile costv1.Profile) *cost
 	if err != nil {
 		t.Fatal(err)
 	}
-	est, err := costkit.Estimate(card, cost.Table, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
+	est, err := pricing.Estimate(card, cost.Table, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
 	if err != nil {
 		t.Fatal(err)
 	}

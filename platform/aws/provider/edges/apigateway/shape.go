@@ -1,7 +1,7 @@
 package apigateway
 
 import (
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
 const (
@@ -10,11 +10,11 @@ const (
 	endpointType = "REGIONAL"
 )
 
-func Shape(site costkit.EdgeSite) (costkit.EdgeShape, error) {
-	return costkit.EdgeShape{
+func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
+	return pricing.EdgeShape{
 		Vendor: costVendor,
 		Region: site.Region,
-		Environment: []costkit.Shaped{{
+		Environment: []pricing.Shaped{{
 			Name: site.Slug, Type: tfRestAPI,
 			Properties: map[string]any{"endpoint_configuration": map[string]any{"types": []any{endpointType}}},
 		}},

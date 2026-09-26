@@ -6,7 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -39,7 +39,7 @@ type shapedType struct {
 	properties func(map[string]any) map[string]any
 }
 
-func Shape(ns Namespace, class string, features []string, options ...ShapeOption) ([]costkit.Shaped, error) {
+func Shape(ns Namespace, class string, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
 	in := featureInputs{ns: ns, class: class, artifactBucket: shapedArtifactBucket}
 	for _, option := range options {
 		option(&in)
@@ -56,7 +56,7 @@ func Shape(ns Namespace, class string, features []string, options ...ShapeOption
 		}
 		bodies = append(bodies, f.planned(in).body)
 	}
-	var shaped []costkit.Shaped
+	var shaped []pricing.Shaped
 	for _, body := range bodies {
 		shaped = append(shaped, shapeTemplate(body)...)
 	}
@@ -71,12 +71,12 @@ func shapedLayerPlacements() map[string]payloads.Placement {
 	return placed
 }
 
-func shapeTemplate(body string) []costkit.Shaped {
+func shapeTemplate(body string) []pricing.Shaped {
 	resources := templateSection(body, "Resources")
 	if resources == nil {
 		return nil
 	}
-	var out []costkit.Shaped
+	var out []pricing.Shaped
 	for i := 0; i+1 < len(resources.Content); i += 2 {
 		kind := mappingValue(resources.Content[i+1], "Type")
 		if kind == nil {
@@ -90,7 +90,7 @@ func shapeTemplate(body string) []costkit.Shaped {
 		if raw, ok := generic(mappingValue(resources.Content[i+1], "Properties")).(map[string]any); ok && typ.properties != nil {
 			properties = typ.properties(raw)
 		}
-		out = append(out, costkit.Shaped{Name: resources.Content[i].Value, Type: typ.token, Properties: properties})
+		out = append(out, pricing.Shaped{Name: resources.Content[i].Value, Type: typ.token, Properties: properties})
 	}
 	return out
 }
