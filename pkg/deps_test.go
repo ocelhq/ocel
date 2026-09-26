@@ -39,6 +39,14 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 	}{
 		{name: "pkg", pattern: "./...", open: depstest.OpenToPkg},
 		{name: "provider", pattern: "./provider/...", open: providerBuildsOn},
+		{name: "appbuild", pattern: "./appbuild/...", open: providerBuildsOn},
+		{name: "arch", pattern: "./arch/...", open: providerBuildsOn},
+		{name: "envvars", pattern: "./envvars/...", open: providerBuildsOn},
+		{name: "envvarsserver", pattern: "./envvarsserver/...", open: providerBuildsOn},
+		{name: "images", pattern: "./images/...", open: providerBuildsOn},
+		{name: "records", pattern: "./records/...", open: providerBuildsOn},
+		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
+		{name: "stackrecords", pattern: "./stackrecords/...", open: providerBuildsOn},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
