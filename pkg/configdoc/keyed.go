@@ -26,11 +26,7 @@ func keyedSchema(target reflect.Type, shorthands []string) object {
 			"additionalProperties": false,
 		})
 	}
-	schema := object{"oneOf": alternatives}
-	if name := typeName(target); name != "" {
-		schema["title"] = name
-	}
-	return schema
+	return named(target, object{"oneOf": alternatives})
 }
 
 func KeysOf(union Keyed) []string { return fieldNames(jsonFields(reflect.TypeOf(union))) }

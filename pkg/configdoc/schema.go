@@ -99,38 +99,67 @@ func schemaOf(target reflect.Type) object {
 }
 
 func objectSchema(target reflect.Type) object {
+	fields := jsonFields(target)
 	properties := object{}
-	var required []any
-	for _, field := range jsonFields(target) {
-		property := schemaOf(field.kind)
-		if field.doc != "" {
-			property["description"] = field.doc
-		}
-		if field.pattern != "" {
-			property["anyOf"] = []any{
-				object{"pattern": field.pattern},
-				object{"pattern": interpolationPattern},
-			}
-		}
-		if field.secret != "" {
-			property["pattern"] = secretPlaceholder.String()
-		}
-		if len(field.enum) > 0 {
-			if items, ok := property["items"].(object); ok {
-				items["enum"] = toAny(field.enum)
-			} else {
-				property["enum"] = toAny(field.enum)
-			}
-		}
-		properties[field.name] = property
-		if !field.optional {
+	var required, unless []any
+	freeing := ""
+	for _, field := range fields {
+		properties[field.name] = fieldSchema(field)
+		switch {
+		case field.unless != "":
+			unless = append(unless, field.name)
+			freeing = field.unless
+		case !field.optional:
 			required = append(required, field.name)
 		}
 	}
+	if freeing == "" {
+		return named(target, closedObject(properties, required))
+	}
+	spelled := object{}
+	for name, property := range properties {
+		spelled[name] = property
+	}
+	spelled[freeing] = false
+	return named(target, object{"oneOf": []any{
+		closedObject(properties, append(slices.Clone(required), freeing)),
+		closedObject(spelled, append(slices.Clone(required), unless...)),
+	}})
+}
+
+func fieldSchema(field jsonField) object {
+	property := schemaOf(field.kind)
+	if field.doc != "" {
+		property["description"] = field.doc
+	}
+	if field.pattern != "" {
+		property["anyOf"] = []any{
+			object{"pattern": field.pattern},
+			object{"pattern": interpolationPattern},
+		}
+	}
+	if field.secret != "" {
+		property["pattern"] = secretPlaceholder.String()
+	}
+	if len(field.enum) > 0 {
+		if items, ok := property["items"].(object); ok {
+			items["enum"] = toAny(field.enum)
+		} else {
+			property["enum"] = toAny(field.enum)
+		}
+	}
+	return property
+}
+
+func closedObject(properties object, required []any) object {
 	schema := object{"type": "object", "properties": properties, "additionalProperties": false}
 	if len(required) > 0 {
 		schema["required"] = required
 	}
+	return schema
+}
+
+func named(target reflect.Type, schema object) object {
 	if name := typeName(target); name != "" {
 		schema["title"] = name
 	}
