@@ -42,14 +42,14 @@ const (
 )
 
 func ShapeFront(class edge.Class, previewBaseDomain string) []costkit.Shaped {
-	held := frontNames(class)
+	front := frontNames(class)
 	shaped := []costkit.Shaped{
-		{Name: held.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
-		{Name: held.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
-		{Name: held.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
-		{Name: held.URLMap, Type: tfURLMap, Properties: map[string]any{}},
-		{Name: held.Proxy, Type: tfTargetHTTPSProxy, Properties: map[string]any{}},
-		{Name: held.Rule, Type: tfGlobalForwardingRule, Properties: map[string]any{
+		{Name: front.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
+		{Name: front.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
+		{Name: front.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
+		{Name: front.URLMap, Type: tfURLMap, Properties: map[string]any{}},
+		{Name: front.Proxy, Type: tfTargetHTTPSProxy, Properties: map[string]any{}},
+		{Name: front.Rule, Type: tfGlobalForwardingRule, Properties: map[string]any{
 			"load_balancing_scheme": externalManaged,
 			"network_tier":          premiumTier,
 			"port_range":            httpsPortRange,

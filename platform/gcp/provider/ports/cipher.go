@@ -68,7 +68,7 @@ func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) (
 func (s Cipher) keyless(class edge.Class, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"this project holds no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
+			"this project has no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
 			class, s.Clients.KeyRing(), class, provider.BootstrapVarsKeyCommand(class))
 	}
 	return fmt.Errorf("%s: %w", doing, err)

@@ -28,18 +28,18 @@ import (
 )
 
 const (
-	reasonStanding = "already current"
+	reasonCurrent  = "already current"
 	reasonEmulated = "emulator serves one implicit database"
 	reasonRingKept = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
-	reasonShared   = "the %s bootstrap still stands and shares it"
+	reasonShared   = "the %s bootstrap is still installed and shares it"
 	reasonDestroy  = "scheduled, destroyed after 24h"
 
-	reasonUngranted = "it stands, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
-	reasonUnpruned  = "it stands under cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
+	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
+	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
 
-	reasonUnprotected = "it stands with delete protection off, and one call would take every record both classes hold with it"
+	reasonUnprotected = "it exists with delete protection off, and one call would take every record both classes store with it"
 
-	reasonUnlocked = "it stands open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
+	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
 )
 
 const passphraseBytes = 32
@@ -68,16 +68,16 @@ type bootstrapGate struct{ p *Provider }
 
 func (g bootstrapGate) Catalogue() []provider.Feature { return bootstrap{}.Catalogue() }
 
-func (g bootstrapGate) stood(ctx context.Context) (bootstrap, error) {
-	held, err := g.p.stood(ctx)
+func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
+	opened, err := g.p.openClients(ctx)
 	if err != nil {
 		return bootstrap{}, err
 	}
-	return bootstrap{clients: held, fronts: g.p.Edges()}, nil
+	return bootstrap{clients: opened, fronts: g.p.Edges()}, nil
 }
 
 func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
-	b, err := g.stood(ctx)
+	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -85,7 +85,7 @@ func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider
 }
 
 func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	b, err := g.stood(ctx)
+	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -93,7 +93,7 @@ func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) 
 }
 
 func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
-	b, err := g.stood(ctx)
+	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest,
 }
 
 func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
-	b, err := g.stood(ctx)
+	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -109,7 +109,7 @@ func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (provid
 }
 
 func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
-	b, err := g.stood(ctx)
+	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
 	}
@@ -139,16 +139,16 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 		WrittenBy:     read.Stamp.Writer,
 	}}
 	for _, feature := range read.Stamp.Features {
-		standing, err := b.frontStands(ctx, read.Class, feature)
+		installed, err := b.frontInstalled(ctx, read.Class, feature)
 		if err != nil {
 			return provider.BootstrapDescription{}, err
 		}
 		stacks = append(stacks, provider.BootstrapStack{
 			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
 			Feature:       feature,
-			Present:       standing,
+			Present:       installed,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: standing,
+			DigestCurrent: installed,
 			WrittenBy:     read.Stamp.Writer,
 		})
 	}
@@ -161,15 +161,15 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 	}, nil
 }
 
-func (b bootstrap) held(ctx context.Context, req provider.BootstrapRequest) (survey, error) {
-	if carried, held := req.VendorState.(survey); held && carried.Class == req.Class {
-		return carried, nil
+func (b bootstrap) surveyFor(ctx context.Context, req provider.BootstrapRequest) (survey, error) {
+	if passed, ok := req.VendorState.(survey); ok && passed.Class == req.Class {
+		return passed, nil
 	}
 	return b.survey(ctx, req.Class)
 }
 
 func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	read, err := b.held(ctx, req)
+	read, err := b.surveyFor(ctx, req)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -179,11 +179,11 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err := b.frontsFree(ctx, req.Class, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return provider.Plan{}, err
 	}
-	standing, err := b.described(ctx, read)
+	current, err := b.described(ctx, read)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := bootstrapplan.ChangeGroups(standing, b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(current, b.Catalogue(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
 
 	params := provider.ChangeGroup{
@@ -208,12 +208,12 @@ func planned(read survey, items []item) []provider.Change {
 		switch {
 		case read.mends(item) != "":
 			change.Action, change.Reason = provider.ActionUpdate, read.mends(item)
-		case item.Shared && read.sibling && read.holds(item):
+		case item.Shared && read.sibling && read.has(item):
 			change.Action, change.Reason, change.Slow = provider.ActionKeep, sharedWith(read.Class), false
 		case read.Emulated && item.Kind == KindDatabase:
 			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonEmulated, false
-		case read.holds(item):
-			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonStanding, false
+		case read.has(item):
+			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonCurrent, false
 		}
 		changes = append(changes, change)
 	}
@@ -225,7 +225,7 @@ func sharedWith(class edge.Class) string {
 }
 
 func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
-	read, err := b.held(ctx, req)
+	read, err := b.surveyFor(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -234,8 +234,8 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	}
 
 	items := bootstrapItems(read.Names, req.Class, read.Emulated)
-	holder := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
-	if err := b.stand(ctx, read, stampHolder(items, holder), progress); err != nil {
+	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
+	if err := b.provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
 		return err
 	}
 	if err := b.dropFronts(ctx, read, req, progress); err != nil {
@@ -247,17 +247,17 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		State:    stateApplying,
 		Writer:   req.WrittenBy.String(),
 		Digest:   digestOf(read.Names.Namespace(), items),
-		Features: standingFeatures(b.Catalogue(), read.Stamp.Features, req),
+		Features: installedFeatures(b.Catalogue(), read.Stamp.Features, req),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
 		return err
 	}
 	for _, item := range items {
-		if item.ID() == holder.ID() {
+		if item.ID() == stampBucket.ID() {
 			continue
 		}
-		if err := b.stand(ctx, read, item, progress); err != nil {
+		if err := b.provision(ctx, read, item, progress); err != nil {
 			return err
 		}
 	}
@@ -269,63 +269,63 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return err
 }
 
-func stampHolder(items []item, holder item) item {
-	if at := slices.IndexFunc(items, func(each item) bool { return each.ID() == holder.ID() }); at >= 0 {
+func stampItem(items []item, stampBucket item) item {
+	if at := slices.IndexFunc(items, func(each item) bool { return each.ID() == stampBucket.ID() }); at >= 0 {
 		return items[at]
 	}
-	return holder
+	return stampBucket
 }
 
-func (b bootstrap) stand(ctx context.Context, read survey, held item, progress edge.Progress) error {
-	if mends := read.mends(held); mends != "" {
-		if err := b.mend(ctx, read, held); err != nil {
+func (b bootstrap) provision(ctx context.Context, read survey, target item, progress edge.Progress) error {
+	if mends := read.mends(target); mends != "" {
+		if err := b.mend(ctx, read, target); err != nil {
 			return err
 		}
-		say(progress, "mended "+held.ID()+": "+mends)
+		say(progress, "mended "+target.ID()+": "+mends)
 		return nil
 	}
-	if read.holds(held) {
-		say(progress, held.ID()+": "+reasonStanding)
+	if read.has(target) {
+		say(progress, target.ID()+": "+reasonCurrent)
 		return nil
 	}
-	if err := b.make(ctx, read, held); err != nil {
+	if err := b.make(ctx, read, target); err != nil {
 		return err
 	}
-	say(progress, "created "+held.ID())
+	say(progress, "created "+target.ID())
 	return nil
 }
 
-func (b bootstrap) mend(ctx context.Context, read survey, held item) error {
-	switch held.Kind {
+func (b bootstrap) mend(ctx context.Context, read survey, target item) error {
+	switch target.Kind {
 	case KindDatabase:
 		return b.protectDatabase(ctx)
 	case KindRepository:
-		return b.pruneRepository(ctx, held.Name)
+		return b.pruneRepository(ctx, target.Name)
 	case KindBucket:
-		return b.lockBucket(ctx, held.Name)
+		return b.lockBucket(ctx, target.Name)
 	default:
-		return b.make(ctx, read, held)
+		return b.make(ctx, read, target)
 	}
 }
 
-func (b bootstrap) make(ctx context.Context, read survey, held item) error {
-	switch held.Kind {
+func (b bootstrap) make(ctx context.Context, read survey, target item) error {
+	switch target.Kind {
 	case KindDatabase:
 		return b.makeDatabase(ctx, read)
 	case KindBucket:
-		return b.makeBucket(ctx, read, held)
+		return b.makeBucket(ctx, read, target)
 	case KindKeyRing:
 		return b.makeKeyRing(ctx)
 	case KindKey:
-		return b.makeKey(ctx, held.Name)
+		return b.makeKey(ctx, target.Name)
 	case KindSecret:
-		return b.makeSecret(ctx, held.Name)
+		return b.makeSecret(ctx, target.Name)
 	case KindRepository:
-		return b.makeRepository(ctx, held.Name)
+		return b.makeRepository(ctx, target.Name)
 	case KindServiceAccount:
-		return b.makeAccount(ctx, read, held.Name)
+		return b.makeAccount(ctx, read, target.Name)
 	default:
-		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing stands up a %s", held.Kind)
+		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
 }
 
@@ -370,7 +370,7 @@ func (b bootstrap) stampRefusal(ctx context.Context, read survey, err error) err
 
 func (b bootstrap) writerNow(ctx context.Context, read survey) string {
 	now, err := b.stamped(ctx, read.Names.Bucket(read.Class))
-	if err != nil || !now.held {
+	if err != nil || !now.present {
 		return read.Stamp.Writer
 	}
 	return now.stamp.Writer
@@ -383,21 +383,21 @@ func writerNamed(writer string) string {
 	return writer
 }
 
-func (b bootstrap) makeBucket(ctx context.Context, read survey, held item) error {
+func (b bootstrap) makeBucket(ctx context.Context, read survey, target item) error {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return err
 	}
-	if err := client.Bucket(held.Name).Create(ctx, read.Project, bucketAttrs(read.Region, held)); err != nil && !taken(err) {
-		return fmt.Errorf("create the %s bucket: %w", held.Name, err)
+	if err := client.Bucket(target.Name).Create(ctx, read.Project, bucketAttrs(read.Region, target)); err != nil && !taken(err) {
+		return fmt.Errorf("create the %s bucket: %w", target.Name, err)
 	}
 	return nil
 }
 
-func bucketAttrs(region string, held item) *storage.BucketAttrs {
+func bucketAttrs(region string, target item) *storage.BucketAttrs {
 	return &storage.BucketAttrs{
 		Location:                 region,
-		VersioningEnabled:        held.Versioned,
+		VersioningEnabled:        target.Versioned,
 		UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
 		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
 	}
@@ -416,7 +416,7 @@ func (b bootstrap) lockBucket(ctx context.Context, name string) error {
 		UniformBucketLevelAccess: &storage.UniformBucketLevelAccess{Enabled: true},
 		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
 	}); err != nil {
-		return fmt.Errorf("hold the %s bucket to IAM alone: %w", name, err)
+		return fmt.Errorf("restrict the %s bucket to IAM alone: %w", name, err)
 	}
 	return nil
 }
@@ -503,17 +503,17 @@ func (b bootstrap) makeSecret(ctx context.Context, name string) error {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
 
-	held, err := b.passphraseHeld(ctx, name)
+	exists, err := b.passphraseExists(ctx, name)
 	if err != nil {
 		return err
 	}
-	if held {
+	if exists {
 		return nil
 	}
 
 	minted := make([]byte, passphraseBytes)
 	if _, err := rand.Read(minted); err != nil {
-		return fmt.Errorf("mint the passphrase %s holds: %w", name, err)
+		return fmt.Errorf("mint the passphrase %s stores: %w", name, err)
 	}
 	_, err = attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(b.clients.project, name), &secretmanager.AddSecretVersionRequest{
 		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(minted)},
@@ -617,7 +617,7 @@ func (b bootstrap) pruneRepository(ctx context.Context, name string) error {
 	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Patch(repositoryPath(b.clients, name),
 		&artifactregistry.Repository{CleanupPolicies: pruningUntaggedImages()}).
 		UpdateMask("cleanup_policies").Context(ctx).Do); err != nil {
-		return fmt.Errorf("hold the %s image repository to the cleanup policy this bootstrap names: %w", name, err)
+		return fmt.Errorf("set the %s image repository's cleanup policy to the one this bootstrap names: %w", name, err)
 	}
 	return nil
 }
@@ -669,7 +669,7 @@ func (b bootstrap) repositoryAwaited(ctx context.Context, doing string, operatio
 	}
 	finished, err := until(ctx, doing, func() (*artifactregistry.Operation, error) {
 		return attempted(ctx, service.Projects.Locations.Operations.Get(operation.Name).Context(ctx).Do)
-	}, func(held *artifactregistry.Operation) bool { return held.Done })
+	}, func(polled *artifactregistry.Operation) bool { return polled.Done })
 	if err != nil {
 		return err
 	}
@@ -707,18 +707,18 @@ func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey) er
 	if err != nil {
 		return err
 	}
-	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
+	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("read the %q Firestore database that already stands: %w", b.clients.Database(), err)
+		return fmt.Errorf("read the %q Firestore database that already exists: %w", b.clients.Database(), err)
 	}
-	if held.LocationId == read.Region {
+	if database.LocationId == read.Region {
 		return b.protectDatabase(ctx)
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"project %s already holds the %q Firestore database in %s and Firestore never moves one, "+
+		"project %s already has the %q Firestore database in %s and Firestore never moves one, "+
 			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
 			"Bootstrap this project in %s, or deploy into a project with no %q database",
-		read.Project, b.clients.Database(), held.LocationId, read.Region, held.LocationId, b.clients.Database())
+		read.Project, b.clients.Database(), database.LocationId, read.Region, database.LocationId, b.clients.Database())
 }
 
 func (b bootstrap) protectDatabase(ctx context.Context) error {
@@ -730,9 +730,9 @@ func (b bootstrap) protectDatabase(ctx context.Context) error {
 		&firestoreadmin.GoogleFirestoreAdminV1Database{DeleteProtectionState: protectionOn}).
 		UpdateMask("deleteProtectionState").Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("hold the %q Firestore database under delete protection: %w", b.clients.Database(), err)
+		return fmt.Errorf("turn on delete protection for the %q Firestore database: %w", b.clients.Database(), err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("holding the %q Firestore database under delete protection", b.clients.Database()), operation)
+	return b.awaited(ctx, fmt.Sprintf("turning on delete protection for the %q Firestore database", b.clients.Database()), operation)
 }
 
 func (b bootstrap) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
@@ -745,7 +745,7 @@ func (b bootstrap) awaited(ctx context.Context, doing string, operation *firesto
 	}
 	finished, err := until(ctx, doing, func() (*firestoreadmin.GoogleLongrunningOperation, error) {
 		return attempted(ctx, service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do)
-	}, func(held *firestoreadmin.GoogleLongrunningOperation) bool { return held.Done })
+	}, func(polled *firestoreadmin.GoogleLongrunningOperation) bool { return polled.Done })
 	if err != nil {
 		return fmt.Errorf("wait for %s: %w", doing, err)
 	}
@@ -831,24 +831,24 @@ func removals(read survey) []removal {
 	return out
 }
 
-func removing(read survey, held item) removal {
-	taking := removal{item: held, action: provider.ActionDelete}
+func removing(read survey, target item) removal {
+	taking := removal{item: target, action: provider.ActionDelete}
 	switch {
-	case held.Kind == KindKeyRing:
+	case target.Kind == KindKeyRing:
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
-	case held.Shared && read.sibling:
+	case target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Class)
-	case held.Kind == KindDatabase && read.Emulated:
+	case target.Kind == KindDatabase && read.Emulated:
 		taking.action, taking.reason = provider.ActionKeep, reasonEmulated
-	case held.Kind == KindDatabase:
+	case target.Kind == KindDatabase:
 		taking.action = provider.ActionDisableThenDelete
-	case held.Kind == KindKey:
+	case target.Kind == KindKey:
 		taking.reason, taking.item.Slow = reasonDestroy, true
-	case held.Name == read.Names.Bucket(read.Class):
+	case target.Name == read.Names.Bucket(read.Class):
 		taking.item.Slow = true
 	}
-	if taking.action != provider.ActionKeep && !read.holds(taking.item) {
-		taking.action, taking.reason = provider.ActionKeep, "nothing stands here"
+	if taking.action != provider.ActionKeep && !read.has(taking.item) {
+		taking.action, taking.reason = provider.ActionKeep, "nothing is provisioned here"
 	}
 	return taking
 }
@@ -860,7 +860,7 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 	}
 	if read.stateOf != "" {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"%s still holds the state of %s, and removing the bucket a stack is recorded in strands what that stack stood up.\n"+
+			"%s still stores the state of %s, and removing the bucket a stack is recorded in strands what that stack provisioned.\n"+
 				"Run `%s` in every project deployed here first",
 			read.Names.StateBucket(class), read.stateOf, destroyIn(class))
 	}
@@ -897,22 +897,22 @@ func destroyIn(class edge.Class) string {
 	return "ocel destroy production"
 }
 
-func (b bootstrap) take(ctx context.Context, read survey, held item) error {
-	switch held.Kind {
+func (b bootstrap) take(ctx context.Context, read survey, target item) error {
+	switch target.Kind {
 	case KindSecret:
-		return b.takeSecret(ctx, held.Name)
+		return b.takeSecret(ctx, target.Name)
 	case KindKey:
-		return b.takeKey(ctx, held.Name)
+		return b.takeKey(ctx, target.Name)
 	case KindDatabase:
 		return b.takeDatabase(ctx, read)
 	case KindBucket:
-		return b.takeBucket(ctx, held.Name)
+		return b.takeBucket(ctx, target.Name)
 	case KindRepository:
-		return b.takeRepository(ctx, held.Name)
+		return b.takeRepository(ctx, target.Name)
 	case KindServiceAccount:
-		return b.takeAccount(ctx, read.Class, held.Name)
+		return b.takeAccount(ctx, read.Class, target.Name)
 	default:
-		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
+		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
 	}
 }
 
@@ -932,7 +932,7 @@ func (b bootstrap) takeKey(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	key, err := b.keyHeld(ctx, name)
+	key, err := b.readKey(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -940,18 +940,18 @@ func (b bootstrap) takeKey(ctx context.Context, name string) error {
 		return nil
 	}
 	versions := client.ListCryptoKeyVersions(ctx, &kmspb.ListCryptoKeyVersionsRequest{Parent: keyPath(b.clients, name)})
-	var held []*kmspb.CryptoKeyVersion
+	var listed []*kmspb.CryptoKeyVersion
 	for {
 		version, err := versions.Next()
 		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("list the versions the %s key holds: %w", name, err)
+			return fmt.Errorf("list the versions the %s key has: %w", name, err)
 		}
-		held = append(held, version)
+		listed = append(listed, version)
 	}
-	for _, version := range destroyable(held) {
+	for _, version := range destroyable(listed) {
 		if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
 			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
 		}); err != nil {
@@ -1008,9 +1008,9 @@ func (b bootstrap) takeBucket(ctx context.Context, name string) error {
 		return err
 	}
 	bucket := client.Bucket(name)
-	held := bucket.Objects(ctx, &storage.Query{Versions: true})
+	objects := bucket.Objects(ctx, &storage.Query{Versions: true})
 	for {
-		attrs, err := held.Next()
+		attrs, err := objects.Next()
 		if errors.Is(err, iterator.Done) {
 			break
 		}
@@ -1018,7 +1018,7 @@ func (b bootstrap) takeBucket(ctx context.Context, name string) error {
 			if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
 				return nil
 			}
-			return fmt.Errorf("list what %s holds: %w", name, err)
+			return fmt.Errorf("list what %s contains: %w", name, err)
 		}
 		object := bucket.Object(attrs.Name)
 		if attrs.Generation != 0 {

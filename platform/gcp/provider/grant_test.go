@@ -62,12 +62,12 @@ func TestAPolicyThatKeepsChangingUnderTheGrantIsRefusedRatherThanRetriedForever(
 	server := &policyServer{refusals: grantAttempts + 1}
 	err := (bootstrap{clients: server.open(t)}).grantRunAs(context.Background(), "ocel-production")
 	if err == nil {
-		t.Fatal("grantRunAs() over a policy that never settles = nil, want the refusal that names what the grant is for")
+		t.Fatal("grantRunAs() over a policy that never stops changing = nil, want the refusal that names what the grant is for")
 	}
 	if !strings.Contains(err.Error(), "ocel-production") {
 		t.Errorf("grantRunAs() = %v, want it to name the account the deploy would run apps as", err)
 	}
 	if got := server.writes.Load(); got != grantAttempts {
-		t.Errorf("the grant wrote the policy %d times, want %d: a retry that never gives up holds a bootstrap open", got, grantAttempts)
+		t.Errorf("the grant wrote the policy %d times, want %d: a retry that never gives up keeps a bootstrap open", got, grantAttempts)
 	}
 }

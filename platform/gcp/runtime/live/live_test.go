@@ -50,16 +50,16 @@ func (s stores) publish(t *testing.T, scope envvars.Scope, environment, name str
 	}
 }
 
-func resolved(t *testing.T, held *live.Values) map[string]string {
+func resolved(t *testing.T, values *live.Values) map[string]string {
 	t.Helper()
-	if err := held.Join(held.Prefetch(context.Background())); err != nil {
+	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v", err)
 	}
 	var pushed struct {
 		Values map[string]string `json:"values"`
 	}
 	sink := &sink{}
-	held.Attach(sink)
+	values.Attach(sink)
 	if len(sink.lines) != 1 {
 		t.Fatalf("the child was pushed %d generations, want the one the prefetch resolved", len(sink.lines))
 	}
@@ -77,23 +77,23 @@ func (s *sink) Write(p []byte) (int, error) {
 }
 
 func manifestOf(keys ...string) vars.Manifest {
-	held := vars.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Class: "production"}
+	manifest := vars.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Class: "production"}
 	for _, key := range keys {
-		held.Keys = append(held.Keys, live.Key{Key: key})
+		manifest.Keys = append(manifest.Keys, live.Key{Key: key})
 	}
-	return held
+	return manifest
 }
 
 func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) {
 	t.Parallel()
-	held := fakeStores()
+	fakes := fakeStores()
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
-	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://live")
-	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
+	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://live")
+	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION_SECRET", Folder: "/web"})
-	got := resolved(t, Over(manifest, held.records, held.sealer))
+	got := resolved(t, Over(manifest, fakes.records, fakes.sealer))
 
 	if got["DATABASE_URL"] != "postgres://live" || got["SESSION_SECRET"] != "s3ss10n" {
 		t.Errorf("resolved %v, want both pinned cells opened, the folder-scoped one under its folder", got)
@@ -102,23 +102,23 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) 
 
 func TestAPreviewReadsItsEnvironmentsValueOverTheClassWideOne(t *testing.T) {
 	t.Parallel()
-	held := fakeStores()
+	fakes := fakeStores()
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassPreview}
-	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}}, "class-wide")
-	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
+	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}}, "class-wide")
+	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
 
 	manifest := manifestOf("MARK")
 	manifest.Class, manifest.Environment = "preview", "pr-7"
-	if got := resolved(t, Over(manifest, held.records, held.sealer)); got["MARK"] != "pr-7-only" {
+	if got := resolved(t, Over(manifest, fakes.records, fakes.sealer)); got["MARK"] != "pr-7-only" {
 		t.Errorf("resolved MARK=%q, want the preview environment's own value to shadow the class-wide one", got["MARK"])
 	}
 }
 
 func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 	t.Parallel()
-	held := fakeStores()
+	fakes := fakeStores()
 
-	values := Over(manifestOf("DATABASE_URL"), held.records, held.sealer)
+	values := Over(manifestOf("DATABASE_URL"), fakes.records, fakes.sealer)
 	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v, want a cell nothing is stored for to resolve to nothing rather than fail", err)
 	}
@@ -129,16 +129,16 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 
 func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 	t.Parallel()
-	held := fakeStores()
+	fakes := fakeStores()
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
-	held.publish(t, scope, "", "db--main", &bindingsv1.Binding{
+	fakes.publish(t, scope, "", "db--main", &bindingsv1.Binding{
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}},
 	})
 
 	manifest := manifestOf()
 	manifest.Bindings = []live.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
-	got := resolved(t, Over(manifest, held.records, held.sealer))
+	got := resolved(t, Over(manifest, fakes.records, fakes.sealer))
 
 	record := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal([]byte(got["OCEL_RESOURCE_POSTGRES_main"]), record); err != nil {
@@ -155,14 +155,14 @@ func TestAManifestNamingNothingLiveBuildsNoStoreClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, err := FromManifest(raw)
+	values, err := FromManifest(raw)
 	if err != nil {
 		t.Fatalf("FromManifest() = %v", err)
 	}
-	if held != nil {
+	if values != nil {
 		t.Error("a manifest naming no key and no binding built a store client anyway")
 	}
-	if err := held.Join(held.Prefetch(context.Background())); err != nil {
+	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Errorf("Prefetch() on nothing live = %v, want nil", err)
 	}
 }
@@ -188,11 +188,11 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, err := FromManifest(raw)
+	values, err := FromManifest(raw)
 	if err != nil {
 		t.Fatalf("FromManifest() = %v", err)
 	}
-	if got := resolved(t, held); got["DATABASE_URL"] != "postgres://through-kms" {
+	if got := resolved(t, values); got["DATABASE_URL"] != "postgres://through-kms" {
 		t.Errorf("resolved %v, want the value read out of the Firestore database and opened by the class key the manifest names", got)
 	}
 }

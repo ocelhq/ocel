@@ -123,7 +123,7 @@ func TestAWaitGivesUpWhenTheRunIsCancelledRatherThanSpin(t *testing.T) {
 	}
 }
 
-func TestAWaitSurfacesTheErrorTheAnswerCarries(t *testing.T) {
+func TestAWaitSurfacesTheErrorItsReadReturns(t *testing.T) {
 	sunk := errors.New("no such thing")
 	if _, err := until(context.Background(), "the thing", func() (int, error) { return 0, sunk },
 		func(int) bool { return true }); !errors.Is(err, sunk) {

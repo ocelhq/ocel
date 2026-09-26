@@ -91,20 +91,20 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 	}
 
 	under := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
-	held, err := store.List(ctx, under)
+	listed, err := store.List(ctx, under)
 	if err != nil {
 		t.Fatalf("List(%s) = %v", under, err)
 	}
-	if len(held) != 4 {
-		t.Fatalf("List(%s) returned %d records, want the 4 written under it: a name a document id cannot hold collides with its neighbours", under, len(held))
+	if len(listed) != 4 {
+		t.Fatalf("List(%s) returned %d records, want the 4 written under it: a name a document id cannot contain collides with its neighbours", under, len(listed))
 	}
-	for _, record := range held {
+	for _, record := range listed {
 		if len(record.Name) != 4 {
 			t.Errorf("List() returned %v, want the four segments written", record.Name)
 			continue
 		}
 		if !bytes.Equal(record.Bytes, []byte(record.Name[3])) {
-			t.Errorf("List() returned %s carrying %q, want the segment read back as it was written", record.Name, record.Bytes)
+			t.Errorf("List() returned %s containing %q, want the segment read back as it was written", record.Name, record.Bytes)
 		}
 	}
 }
@@ -116,7 +116,7 @@ func TestLiveSealer(t *testing.T) {
 	conformance.RunCipher(t, provider.Cipher())
 }
 
-func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
+func TestLiveSealingWhereNoKeyRingExistsSaysWhatToRun(t *testing.T) {
 	live(t)
 
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "australia-southeast2"})
@@ -129,14 +129,14 @@ func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 		Name:    "DATABASE_URL",
 	}, []byte("postgres://example"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Seal() where no key ring stands = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("Seal() where no key ring exists = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "ocel bootstrap") {
 		t.Errorf("Seal() refused with %q, want it to name the command that creates the key", refused.Message)
 	}
 }
 
-func bucketsStanding(t *testing.T, p *gcp.Provider) {
+func bootstrappedClasses(t *testing.T, p *gcp.Provider) {
 	t.Helper()
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		bootstrapped(t, p, class)
@@ -145,12 +145,12 @@ func bucketsStanding(t *testing.T, p *gcp.Provider) {
 
 func TestLiveArtifactStore(t *testing.T) {
 	provider := live(t)
-	bucketsStanding(t, provider)
+	bootstrappedClasses(t, provider)
 
 	conformance.RunArtifactStore(t, provider.Facts(), provider.Artifacts())
 }
 
-func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
+func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {
 	live(t)
 
 	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
@@ -159,7 +159,7 @@ func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 	var refused refusal.Refusal
 	err := nowhere.Artifacts().Put(context.Background(), ref, bytes.NewReader([]byte("a build artifact")))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Put() where no bucket stands = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("Put() where no bucket exists = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "ocel bootstrap") {
 		t.Errorf("Put() refused with %q, want it to name the command that creates the bucket", refused.Message)
@@ -168,7 +168,7 @@ func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 
 func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 	p := live(t)
-	bucketsStanding(t, p)
+	bootstrappedClasses(t, p)
 
 	ctx := context.Background()
 	artifacts := p.Artifacts()
@@ -193,19 +193,19 @@ func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 		if err != nil || gone {
 			t.Errorf("Has(%s/%s) = %v, %v, want it swept: one prefix names the same run in every store", store, swept, gone, err)
 		}
-		held, err := artifacts.Has(ctx, provider.ArtifactRef{Class: class, Bucket: store, Key: kept + "bundle.zip"})
-		if err != nil || !held {
-			t.Errorf("Has(%s/%s) = %v, %v, want it left alone", store, kept, held, err)
+		left, err := artifacts.Has(ctx, provider.ArtifactRef{Class: class, Bucket: store, Key: kept + "bundle.zip"})
+		if err != nil || !left {
+			t.Errorf("Has(%s/%s) = %v, %v, want it left alone", store, kept, left, err)
 		}
 	}
 }
 
 func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) {
-	held := live(t)
-	bucketsStanding(t, held)
+	p := live(t)
+	bootstrappedClasses(t, p)
 
 	ctx := context.Background()
-	artifacts := held.Artifacts()
+	artifacts := p.Artifacts()
 	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact"))); err != nil {
 		t.Fatal(err)
@@ -233,11 +233,11 @@ func TestLiveListingUnderANameReturnsTheRecordStoredAtIt(t *testing.T) {
 		}
 	}
 
-	held, err := store.List(ctx, under)
+	listed, err := store.List(ctx, under)
 	if err != nil {
 		t.Fatalf("List(%s) = %v", under, err)
 	}
-	if len(held) != 2 {
-		t.Fatalf("List(%s) returned %d records, want the record at the name and the one beneath it: the sibling store answers with both", under, len(held))
+	if len(listed) != 2 {
+		t.Fatalf("List(%s) returned %d records, want the record at the name and the one beneath it: the sibling store answers with both", under, len(listed))
 	}
 }

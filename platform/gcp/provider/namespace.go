@@ -77,7 +77,7 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"the Cloud Run service %s would be named %s, which is %d characters and Cloud Run builds a url from %d: "+
 				"a service is named for the namespace, the project, the environment and the app it serves, "+
-				"and carries %d characters of a hash of the four, because every one of them may hold a dash and a name joined by dashes alone would read two ways.\n"+
+				"and ends in %d characters of a hash of the four, because every one of them may contain a dash and a name joined by dashes alone would read two ways.\n"+
 				"Name a shorter namespace in %s, a shorter project slug, or a shorter app",
 			app, service, len(service), maxServiceName, serviceHashLen, provider.NamespaceEnvVar)
 	}
@@ -96,7 +96,7 @@ func (n Names) PreviewService(label, app, function string) (string, error) {
 	if len(service) > edge.PreviewLabelMaxLen || !cloudRunService.MatchString(service) {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"the preview %s would be served by a Cloud Run service named %q, which Cloud Run will not take: "+
-				"a service on a shared preview wildcard is named the label its hostname carries, "+
+				"a service on a shared preview wildcard is named the label its hostname begins with, "+
 				"because the load balancer hands the whole label to Cloud Run to find it, "+
 				"and Cloud Run takes at most %d characters of lowercase letters, digits and dashes, "+
 				"starting with a letter and ending with a letter or a digit.\n"+
@@ -122,11 +122,11 @@ func (n Names) ConnectorAccountEmail() string {
 func (n Names) ConnectorKeySecret() string { return n.Connector() + "-key" }
 
 func (n Names) connectorFits() error {
-	if held := len(n.Connector()); held > maxAccountID {
+	if length := len(n.Connector()); length > maxAccountID {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %q service account the connector runs as is %d characters and IAM takes %d.\n"+
 				"Name a shorter namespace in %s",
-			n.Connector(), held, maxAccountID, provider.NamespaceEnvVar)
+			n.Connector(), length, maxAccountID, provider.NamespaceEnvVar)
 	}
 	return nil
 }

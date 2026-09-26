@@ -43,8 +43,8 @@ func (s *iamServer) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyReque
 func (s *iamServer) GetIamPolicy(_ context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if held := s.keyPolicy[req.GetResource()]; held != nil {
-		return held, nil
+	if policy := s.keyPolicy[req.GetResource()]; policy != nil {
+		return policy, nil
 	}
 	return &iampb.Policy{Etag: []byte("BwXhoLA=")}, nil
 }
@@ -137,7 +137,7 @@ func (s *iamServer) keyMembers(key, role string) []string {
 	return nil
 }
 
-func standingIAM() *iamServer {
+func grantedIAM() *iamServer {
 	return &iamServer{
 		keys:      map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production": true},
 		keyPolicy: map[string]*iampb.Policy{},
@@ -145,9 +145,9 @@ func standingIAM() *iamServer {
 	}
 }
 
-func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyAlone(t *testing.T) {
+func TestTheRuntimeAccountIsLimitedToReadingThisDatabaseAndOpeningUnderTheClassKeyAlone(t *testing.T) {
 	t.Parallel()
-	server := standingIAM()
+	server := grantedIAM()
 	b := bootstrap{clients: server.open(t)}
 	read := survey{Class: edge.ClassProduction, Names: b.clients.Names}
 	ctx := context.Background()
@@ -163,50 +163,50 @@ func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyA
 	if condition == nil || !strings.Contains(condition.Expression, "projects/acme-prod/databases/ocel") {
 		t.Errorf("the read is conditioned on %+v, want this namespace's one database: IAM fences Firestore no finer than a database", condition)
 	}
-	if held, _ := server.projectMembers("roles/datastore.user"); len(held) > 0 {
-		t.Errorf("the runtime account holds roles/datastore.user, and a runtime writes nothing")
+	if writers, _ := server.projectMembers("roles/datastore.user"); len(writers) > 0 {
+		t.Errorf("the runtime account has roles/datastore.user, and a runtime writes nothing")
 	}
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
-	if held := server.keyMembers(key, workloadOpeningRole); !slices.Contains(held, member) {
-		t.Errorf("the production key binds %v to %s, want the runtime account: it opens what the deploy sealed", held, workloadOpeningRole)
+	if openers := server.keyMembers(key, workloadOpeningRole); !slices.Contains(openers, member) {
+		t.Errorf("the production key binds %v to %s, want the runtime account: it opens what the deploy sealed", openers, workloadOpeningRole)
 	}
-	if held := server.keyMembers(key, connectorSealingRole); len(held) > 0 {
-		t.Errorf("the runtime account holds %s, and a runtime seals nothing", connectorSealingRole)
+	if sealers := server.keyMembers(key, connectorSealingRole); len(sealers) > 0 {
+		t.Errorf("the runtime account has %s, and a runtime seals nothing", connectorSealingRole)
 	}
 
-	stands, err := b.accountStands(ctx, edge.ClassProduction, "ocel-production")
+	found, err := b.accountPresence(ctx, edge.ClassProduction, "ocel-production")
 	if err != nil {
-		t.Fatalf("accountStands() = %v", err)
+		t.Fatalf("accountPresence() = %v", err)
 	}
-	if !stands.held || stands.mends != "" {
-		t.Errorf("accountStands() = %+v after the grants landed, want it standing with nothing to mend", stands)
+	if !found.present || found.mends != "" {
+		t.Errorf("accountPresence() = %+v after the grants landed, want it present with nothing to mend", found)
 	}
 	written := server.writes
 	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
 		t.Fatalf("makeAccount() again = %v", err)
 	}
 	if server.writes != written {
-		t.Errorf("a second bootstrap wrote %d more policies, want none: the grants already stand", server.writes-written)
+		t.Errorf("a second bootstrap wrote %d more policies, want none: the grants are already in place", server.writes-written)
 	}
 }
 
 func TestAnAccountThatMayNotReadIsSurveyedAsMendable(t *testing.T) {
 	t.Parallel()
-	server := standingIAM()
+	server := grantedIAM()
 	b := bootstrap{clients: server.open(t)}
 
-	stands, err := b.accountStands(context.Background(), edge.ClassProduction, "ocel-production")
+	found, err := b.accountPresence(context.Background(), edge.ClassProduction, "ocel-production")
 	if err != nil {
-		t.Fatalf("accountStands() = %v", err)
+		t.Fatalf("accountPresence() = %v", err)
 	}
-	if !stands.held || stands.mends != reasonUnread {
-		t.Errorf("accountStands() = %+v, want it standing and mended for the read it lacks: a bootstrap made before the runtime read live would otherwise never grant it", stands)
+	if !found.present || found.mends != reasonUnread {
+		t.Errorf("accountPresence() = %+v, want it present and mended for the read it lacks: a bootstrap made before the runtime read live would otherwise never grant it", found)
 	}
 }
 
 func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T) {
 	t.Parallel()
-	server := standingIAM()
+	server := grantedIAM()
 	b := bootstrap{clients: server.open(t)}
 	read := survey{Class: edge.ClassProduction, Names: b.clients.Names}
 	ctx := context.Background()
@@ -218,11 +218,11 @@ func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T
 		t.Fatalf("takeAccount() = %v", err)
 	}
 	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"
-	if held, _ := server.projectMembers(workloadRecordsRole); slices.Contains(held, member) {
+	if readers, _ := server.projectMembers(workloadRecordsRole); slices.Contains(readers, member) {
 		t.Errorf("the project still binds the deleted account to %s, and a deleted principal's binding lingers in the policy for anyone to read", workloadRecordsRole)
 	}
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
-	if held := server.keyMembers(key, workloadOpeningRole); slices.Contains(held, member) {
+	if openers := server.keyMembers(key, workloadOpeningRole); slices.Contains(openers, member) {
 		t.Errorf("the key still binds the deleted account to %s", workloadOpeningRole)
 	}
 }

@@ -16,9 +16,9 @@ func complete() Manifest {
 
 func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
 	t.Parallel()
-	held := complete()
-	held.Keys = nil
-	rendered, err := Render(held)
+	manifest := complete()
+	manifest.Keys = nil
+	rendered, err := Render(manifest)
 	if err != nil || rendered != nil {
 		t.Errorf("Render() = %q, %v, want nothing: a container with no live value boots with no manifest and opens no store", rendered, err)
 	}
@@ -26,9 +26,9 @@ func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
 
 func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	t.Parallel()
-	held := complete()
-	held.Class, held.Environment = "preview", "pr-7"
-	rendered, err := Render(held)
+	manifest := complete()
+	manifest.Class, manifest.Environment = "preview", "pr-7"
+	rendered, err := Render(manifest)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
 	}
@@ -36,13 +36,13 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() = %v", err)
 	}
-	if parsed.Project != held.Project || parsed.Region != held.Region || parsed.Namespace != held.Namespace ||
-		parsed.Slug != held.Slug || parsed.Class != held.Class || parsed.Environment != held.Environment ||
+	if parsed.Project != manifest.Project || parsed.Region != manifest.Region || parsed.Namespace != manifest.Namespace ||
+		parsed.Slug != manifest.Slug || parsed.Class != manifest.Class || parsed.Environment != manifest.Environment ||
 		len(parsed.Keys) != 1 || parsed.Keys[0].Key != "DATABASE_URL" {
-		t.Errorf("Parse(Render()) = %+v, want %+v", parsed, held)
+		t.Errorf("Parse(Render()) = %+v, want %+v", parsed, manifest)
 	}
 	if strings.Contains(string(rendered), "endpoint") {
-		t.Errorf("a manifest against the real project carries %s, and an endpoint there would send the runtime past Google", rendered)
+		t.Errorf("a manifest against the real project contains %s, and an endpoint there would send the runtime past Google", rendered)
 	}
 }
 
@@ -57,9 +57,9 @@ func TestAManifestMissingWhatAddressesTheStoreIsRefused(t *testing.T) {
 		"a class nothing is called": func(m *Manifest) { m.Class = "staging" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			held := complete()
-			sabotage(&held)
-			if _, err := Render(held); err == nil {
+			manifest := complete()
+			sabotage(&manifest)
+			if _, err := Render(manifest); err == nil {
 				t.Errorf("Render() without %s = nil, want a refusal: the runtime would boot with nowhere to read from", name)
 			}
 		})

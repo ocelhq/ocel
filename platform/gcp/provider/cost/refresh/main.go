@@ -78,8 +78,8 @@ func run(path, key string) error {
 			continue
 		}
 		service := rate.Query[queryService]
-		skus, held := catalog[service]
-		if !held {
+		skus, listed := catalog[service]
+		if !listed {
 			if skus, err = list(service, key); err != nil {
 				return fmt.Errorf("%s: %w", rate.ID, err)
 			}
@@ -164,7 +164,7 @@ func match(skus []sku, query map[string]string) []sku {
 
 func stepsOf(s sku) ([]costkit.PriceStep, string, error) {
 	if len(s.PricingInfo) == 0 {
-		return nil, "", fmt.Errorf("sku %s carries no pricing", s.SKUID)
+		return nil, "", fmt.Errorf("sku %s has no pricing", s.SKUID)
 	}
 	expression := s.PricingInfo[0].PricingExpression
 	var steps []costkit.PriceStep
@@ -177,7 +177,7 @@ func stepsOf(s sku) ([]costkit.PriceStep, string, error) {
 		steps = append(steps, costkit.PriceStep{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
 	}
 	if len(steps) == 0 {
-		return nil, "", fmt.Errorf("sku %s carries no tiered rates", s.SKUID)
+		return nil, "", fmt.Errorf("sku %s has no tiered rates", s.SKUID)
 	}
 	sort.Slice(steps, func(i, j int) bool { return steps[i].Start.LessThan(steps[j].Start) })
 	return steps, expression.UsageUnit, nil

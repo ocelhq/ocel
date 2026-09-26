@@ -103,36 +103,36 @@ func (s *certServer) drop(w http.ResponseWriter, name string) {
 }
 
 func (s *certServer) readAuthorization(w http.ResponseWriter, name string) {
-	held, standing := s.authorizations[name]
-	if !standing {
+	authorization, present := s.authorizations[name]
+	if !present {
 		missing(w)
 		return
 	}
-	writeBody(w, held)
+	writeBody(w, authorization)
 }
 
 func (s *certServer) readCertificate(w http.ResponseWriter, name string) {
-	held, standing := s.certificates[name]
-	if !standing {
+	certificate, present := s.certificates[name]
+	if !present {
 		missing(w)
 		return
 	}
 	if s.failure != "" {
-		held.Managed.State = certificateFailed
-		held.Managed.ProvisioningIssue = &certmanager.ProvisioningIssue{Details: s.failure}
-		writeBody(w, held)
+		certificate.Managed.State = certificateFailed
+		certificate.Managed.ProvisioningIssue = &certmanager.ProvisioningIssue{Details: s.failure}
+		writeBody(w, certificate)
 		return
 	}
 	if s.provisioning > 0 {
 		s.provisioning--
-		provisioning := *held
-		managed := *held.Managed
+		provisioning := *certificate
+		managed := *certificate.Managed
 		managed.State = certificateProvisioning
 		provisioning.Managed = &managed
 		writeBody(w, &provisioning)
 		return
 	}
-	writeBody(w, held)
+	writeBody(w, certificate)
 }
 
 func missing(w http.ResponseWriter) {
@@ -143,11 +143,11 @@ func missing(w http.ResponseWriter) {
 func (s *certServer) certified() map[string]*certmanager.Certificate {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held := make(map[string]*certmanager.Certificate, len(s.certificates))
+	certified := make(map[string]*certmanager.Certificate, len(s.certificates))
 	for name, cert := range s.certificates {
-		held[name] = cert
+		certified[name] = cert
 	}
-	return held
+	return certified
 }
 
 func (s *certServer) authorized() []string {

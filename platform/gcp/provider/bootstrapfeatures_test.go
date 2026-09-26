@@ -19,11 +19,11 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 	catalogue := bootstrap{}.Catalogue()
 	at := slices.IndexFunc(catalogue, func(f provider.Feature) bool { return f.Name == albFeature })
 	if at < 0 {
-		t.Fatalf("Catalogue() = %v, want the %q feature: a standing cost is consented to by being planned", catalogue, albFeature)
+		t.Fatalf("Catalogue() = %v, want the %q feature: a recurring cost is consented to by being planned", catalogue, albFeature)
 	}
 	feature := catalogue[at]
 	if !strings.Contains(feature.Summary, "$18") {
-		t.Errorf("the %q feature reads %q, and the one bootstrap item with a standing cost says the price in the plan", albFeature, feature.Summary)
+		t.Errorf("the %q feature reads %q, and the one bootstrap item with a recurring cost says the price in the plan", albFeature, feature.Summary)
 	}
 
 	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(alb.Kind))
@@ -44,7 +44,7 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 	}
 }
 
-func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingStoodUp(t *testing.T) {
+func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingProvisioned(t *testing.T) {
 	t.Parallel()
 
 	fronted := apisFor([]string{albFeature})
@@ -57,7 +57,7 @@ func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingStoodUp(t *t
 	plain := apisFor(nil)
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com"} {
 		if slices.Contains(plain, api) {
-			t.Errorf("a bootstrap standing no load balancer up demands %s, and it would be refused for a service it never calls", api)
+			t.Errorf("a bootstrap provisioning no load balancer demands %s, and it would be refused for a service it never calls", api)
 		}
 	}
 	for _, api := range BootstrapAPIs {
@@ -86,7 +86,7 @@ func TestAnAlbBootstrapChecksTheComputeAndCertificateManagerPermissionsAndNamesT
 	plain := permissionsFor(nil)
 	for _, permission := range plain {
 		if strings.HasPrefix(permission, "compute.") || strings.HasPrefix(permission, "certificatemanager.") {
-			t.Errorf("a bootstrap standing no load balancer up checks %s, and a credential would be refused for a service it never calls", permission)
+			t.Errorf("a bootstrap provisioning no load balancer checks %s, and a credential would be refused for a service it never calls", permission)
 		}
 	}
 
@@ -99,11 +99,11 @@ func TestAnAlbBootstrapChecksTheComputeAndCertificateManagerPermissionsAndNamesT
 	if slices.ContainsFunc(rolesCovering(nil), func(role string) bool {
 		return strings.HasPrefix(role, "roles/compute.") || strings.HasPrefix(role, "roles/certificatemanager.")
 	}) {
-		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing stands up is one more than the credential needs", rolesCovering(nil))
+		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing provisions is one more than the credential needs", rolesCovering(nil))
 	}
 }
 
-func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing.T) {
+func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatNeedsIt(t *testing.T) {
 	t.Parallel()
 
 	b := bootstrap{}
@@ -118,11 +118,11 @@ func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing
 		Class: edge.ClassProduction, Features: []string{albFeature},
 	})
 	if !slices.ContainsFunc(fronted, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
-		t.Errorf("an %q plan holds %v, want a group for %q so the reader sees what it costs before it stands", alb.Kind, fronted, albFeature)
+		t.Errorf("an %q plan has %v, want a group for %q so the reader sees what it costs before it is provisioned", alb.Kind, fronted, albFeature)
 	}
 
 	plain := bootstrapplan.ChangeGroups(read, catalogue, provider.BootstrapRequest{Class: edge.ClassProduction})
 	if slices.ContainsFunc(plain, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
-		t.Errorf("a plan that asked for no edge holds %v, and a load balancer nothing named would stand and bill", plain)
+		t.Errorf("a plan that asked for no edge has %v, and a load balancer nothing named would be provisioned and bill", plain)
 	}
 }

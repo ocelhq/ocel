@@ -169,7 +169,7 @@ func stagedGo(t *testing.T) string {
 	return staged(t, dir, goRuntime, "server", []string{"./server"}, map[string]string{})
 }
 
-func held(t *testing.T, repository string, image v1.Image) string {
+func pushedToDaemon(t *testing.T, repository string, image v1.Image) string {
 	t.Helper()
 	digest, err := image.Digest()
 	if err != nil {
@@ -211,7 +211,7 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework a
 	if err != nil {
 		t.Fatalf("wrap the %s function's image in the runtime, as a deploy does: %v", framework.Name, err)
 	}
-	return held(t, repository, wrapped)
+	return pushedToDaemon(t, repository, wrapped)
 }
 
 func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string {
@@ -255,7 +255,7 @@ func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return held(t, repository, image)
+	return pushedToDaemon(t, repository, image)
 }
 
 func serverlessSpec(app, image string, values map[string]string) provider.StackSpec {
@@ -327,7 +327,7 @@ func runningAs(t *testing.T, p *gcp.Provider, spec provider.StackSpec) []provide
 	return []provider.Function{{Name: spec.App.App, Physical: service}}
 }
 
-func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T) {
+func TestLiveAContainerAppIsDeployedAndReleasedAgainOntoANewRevision(t *testing.T) {
 	ctx := context.Background()
 	p := runnable(t)
 	first := serverImage(t, p, "ocel-live/app", "served-one")
@@ -347,12 +347,12 @@ func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T
 	}
 	at := reachable(t, containers[0].URL)
 	if status, said := answering(t, at); status != http.StatusOK || said != "served-one" {
-		t.Fatalf("GET %s = %d %q, want the image this release stood up", at, status, said)
+		t.Fatalf("GET %s = %d %q, want the image this release deployed", at, status, said)
 	}
 
 	second := serverImage(t, p, "ocel-live/app", "served-two")
 	if second == first {
-		t.Fatal("both releases carry one image, so nothing would prove a new revision serves")
+		t.Fatal("both releases ship one image, so nothing would prove a new revision serves")
 	}
 	released, err := p.ProvisionContainers(ctx, containerSpec("app", second, nil), nil)
 	if err != nil {
@@ -362,7 +362,7 @@ func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T
 		t.Errorf("the app moved from %s to %s, and a release keeps the url it was reached at", containers[0].URL, released[0].URL)
 	}
 	if status, said := answering(t, at); status != http.StatusOK || said != "served-two" {
-		t.Errorf("GET %s = %d %q, want the image the second release stood up: traffic is pinned to the revision it made", at, status, said)
+		t.Errorf("GET %s = %d %q, want the image the second release deployed: traffic is pinned to the revision it made", at, status, said)
 	}
 }
 

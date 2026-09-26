@@ -77,7 +77,7 @@ func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 		t.Errorf("cpu = %s, want 4.80 (200,000 vCPU-s at 0.000024)", got)
 	}
 	if function.GetMonthlyFixed() != "0.00" {
-		t.Errorf("a serverless service stands for %s a month, want nothing", function.GetMonthlyFixed())
+		t.Errorf("a serverless service costs %s a month, want nothing", function.GetMonthlyFixed())
 	}
 	rule := estimateOfType(t, est, set, "google_compute_global_forwarding_rule", "project:shop/shared:production")
 	if rule.GetMonthlyFixed() != "18.25" {
@@ -86,7 +86,7 @@ func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 	for _, r := range est.GetResources() {
 		for _, c := range r.GetComponents() {
 			if c.GetName() == "Data transfer out to internet" {
-				t.Errorf("%s bills internet egress behind a load balancer that carries it instead", r.GetResource())
+				t.Errorf("%s bills internet egress behind a load balancer that bills that egress itself", r.GetResource())
 			}
 		}
 	}

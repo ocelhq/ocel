@@ -47,7 +47,7 @@ func (e *Edge) credentialPermissions(tier edge.CredentialTier) (edge.CredentialD
 	var does string
 	switch tier {
 	case edge.TierBootstrap:
-		does = "stands the load balancer up and takes it down"
+		does = "provisions the load balancer and takes it down"
 	case edge.TierDeploy:
 		does = "binds a hostname: a certificate and its map entry, a backend onto a serverless NEG, and a host rule in the url map"
 	default:

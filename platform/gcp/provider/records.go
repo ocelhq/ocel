@@ -9,50 +9,50 @@ import (
 
 type recordStore struct{ p *Provider }
 
-func (r recordStore) stood(ctx context.Context) (ports.Records, error) {
-	held, err := r.p.stood(ctx)
+func (r recordStore) openRecords(ctx context.Context) (ports.Records, error) {
+	resolved, err := r.p.openClients(ctx)
 	if err != nil {
 		return ports.Records{}, err
 	}
-	return ports.Records{Clients: held.Workload()}, nil
+	return ports.Records{Clients: resolved.Workload()}, nil
 }
 
 func (r recordStore) Read(ctx context.Context, name records.Name) (records.Record, error) {
-	held, err := r.stood(ctx)
+	store, err := r.openRecords(ctx)
 	if err != nil {
 		return records.Record{}, err
 	}
-	return held.Read(ctx, name)
+	return store.Read(ctx, name)
 }
 
 func (r recordStore) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	held, err := r.stood(ctx)
+	store, err := r.openRecords(ctx)
 	if err != nil {
 		return "", err
 	}
-	return held.Write(ctx, record)
+	return store.Write(ctx, record)
 }
 
 func (r recordStore) WritePair(ctx context.Context, first, second records.Record) error {
-	held, err := r.stood(ctx)
+	store, err := r.openRecords(ctx)
 	if err != nil {
 		return err
 	}
-	return held.WritePair(ctx, first, second)
+	return store.WritePair(ctx, first, second)
 }
 
 func (r recordStore) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
-	held, err := r.stood(ctx)
+	store, err := r.openRecords(ctx)
 	if err != nil {
 		return err
 	}
-	return held.Remove(ctx, name, expected)
+	return store.Remove(ctx, name, expected)
 }
 
 func (r recordStore) List(ctx context.Context, under records.Name) ([]records.Record, error) {
-	held, err := r.stood(ctx)
+	store, err := r.openRecords(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return held.List(ctx, under)
+	return store.List(ctx, under)
 }

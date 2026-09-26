@@ -18,9 +18,9 @@ import (
 )
 
 type stack struct {
-	e     *Edge
-	state edge.StackState
-	held  held
+	e        *Edge
+	state    edge.StackState
+	recorded edgeRecord
 }
 
 func (s *stack) State() edge.StackState { return s.state }
@@ -39,7 +39,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 }
 
 func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress edge.Progress) error {
-	hosts := maps.Clone(s.held.Hosts)
+	hosts := maps.Clone(s.recorded.Hosts)
 	serving := map[string]string{}
 	var took []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
@@ -50,8 +50,8 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress
 		if _, promoted := promotion.Builds[host.App]; !promoted {
 			continue
 		}
-		service, held := serving[host.App]
-		if !held {
+		service, known := serving[host.App]
+		if !known {
 			found, err := s.serving(ctx, host.App)
 			if err != nil {
 				return err
@@ -76,10 +76,10 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress
 			progress.Detail("Routing " + hostname + " to " + hosts[hostname].Service)
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
-			return errors.Join(err, s.raise(ctx, s.held.Hosts))
+			return errors.Join(err, s.raise(ctx, s.recorded.Hosts))
 		}
 	}
-	s.held.Hosts = hosts
+	s.recorded.Hosts = hosts
 	s.keep()
 	return nil
 }
@@ -89,21 +89,21 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progre
 }
 
 func (s *stack) adopt(front Front) error {
-	if err := s.state.Private.Into(&s.held); err != nil {
+	if err := s.state.Private.Into(&s.recorded); err != nil {
 		return err
 	}
-	s.held.Front = front
+	s.recorded.Front = front
 	s.keep()
 	return nil
 }
 
-func (s *stack) keep() { s.state.Private = edge.Own(s.held) }
+func (s *stack) keep() { s.state.Private = edge.Own(s.recorded) }
 
 func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {
-		return s.e.deps.Routes.Hold(ctx, s.held.Front.URLMap, hostname)
+		return s.e.deps.Routes.ServeNotFound(ctx, s.recorded.Front.URLMap, hostname)
 	}
-	return s.e.deps.Routes.Route(ctx, s.held.Front.URLMap, hostname, host.Backend)
+	return s.e.deps.Routes.Route(ctx, s.recorded.Front.URLMap, hostname, host.Backend)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -119,16 +119,16 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 				"which serves every project's previews from one wildcard with the project in the label",
 			edge.PreviewWildcard(base), Kind, edge.PreviewWildcard(base))
 	}
-	if !s.held.Front.standing() {
+	if !s.recorded.Front.provisioned() {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer stands for class %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this class first",
+			"no %s load balancer is provisioned for class %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this class first",
 			Kind, s.state.Class, binding.Hostname)
 	}
 	service, err := s.serving(ctx, binding.App)
 	if err != nil {
 		return err
 	}
-	hosts := maps.Clone(s.held.Hosts)
+	hosts := maps.Clone(s.recorded.Hosts)
 	if hosts == nil {
 		hosts = map[string]Host{}
 	}
@@ -152,24 +152,24 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return errors.Join(err, release())
 	}
 	if err := s.reach(ctx, hosts[binding.Hostname], binding.Hostname); err != nil {
-		return errors.Join(err, s.raise(ctx, s.held.Hosts), release())
+		return errors.Join(err, s.raise(ctx, s.recorded.Hosts), release())
 	}
-	s.held.Hosts = hosts
+	s.recorded.Hosts = hosts
 	s.keep()
 	s.state.Bind(binding.Hostname)
-	s.state.PublishFront(binding.Hostname, s.held.Front.Address)
+	s.state.PublishFront(binding.Hostname, s.recorded.Front.Address)
 	return nil
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
-	if _, bound := s.held.Hosts[hostname]; !bound {
+	if _, bound := s.recorded.Hosts[hostname]; !bound {
 		s.state.Release(hostname)
 		s.state.PublishFront(hostname, "")
 		return nil
 	}
-	hosts := maps.Clone(s.held.Hosts)
+	hosts := maps.Clone(s.recorded.Hosts)
 	delete(hosts, hostname)
-	if err := s.e.deps.Routes.Unroute(ctx, s.held.Front.URLMap, hostname); err != nil {
+	if err := s.e.deps.Routes.Unroute(ctx, s.recorded.Front.URLMap, hostname); err != nil {
 		return err
 	}
 	if err := s.raise(ctx, hosts); err != nil {
@@ -181,7 +181,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if len(hosts) == 0 {
 		hosts = nil
 	}
-	s.held.Hosts = hosts
+	s.recorded.Hosts = hosts
 	s.keep()
 	s.state.Release(hostname)
 	s.state.PublishFront(hostname, "")
@@ -199,7 +199,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
 		Class:          s.state.Class,
-		CertificateMap: s.held.Front.CertificateMap,
+		CertificateMap: s.recorded.Front.CertificateMap,
 		Hosts:          hosts,
 	}), edge.DiscardProgress())
 	return err
@@ -236,14 +236,14 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	}
 	owner := Surface(s.state.Slug, s.state.Class)
 	if len(record.Bytes) > 0 {
-		var held claim
-		if err := json.Unmarshal(record.Bytes, &held); err != nil {
+		var existing claim
+		if err := json.Unmarshal(record.Bytes, &existing); err != nil {
 			return false, fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
-		if held.Owner == owner {
+		if existing.Owner == owner {
 			return false, nil
 		}
-		return false, claimedBy(hostname, held.Owner)
+		return false, claimedBy(hostname, existing.Owner)
 	}
 	encoded, err := json.Marshal(claim{Owner: owner})
 	if err != nil {
@@ -266,11 +266,11 @@ func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name reco
 		return refusal.Refuse(refusal.CodeBusy,
 			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
 	}
-	var held claim
-	if err := json.Unmarshal(record.Bytes, &held); err != nil {
+	var existing claim
+	if err := json.Unmarshal(record.Bytes, &existing); err != nil {
 		return fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
-	return claimedBy(hostname, held.Owner)
+	return claimedBy(hostname, existing.Owner)
 }
 
 func claimedBy(hostname, owner string) error {
@@ -287,15 +287,15 @@ func (s *stack) disown(ctx context.Context, hostname string) error {
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
-	for _, hostname := range slices.Sorted(maps.Keys(s.held.Hosts)) {
-		if err := s.e.deps.Routes.Unroute(ctx, s.held.Front.URLMap, hostname); err != nil {
+	for _, hostname := range slices.Sorted(maps.Keys(s.recorded.Hosts)) {
+		if err := s.e.deps.Routes.Unroute(ctx, s.recorded.Front.URLMap, hostname); err != nil {
 			return err
 		}
 		if err := s.disown(ctx, hostname); err != nil {
 			return err
 		}
 	}
-	if len(s.held.Hosts) > 0 {
+	if len(s.recorded.Hosts) > 0 {
 		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), edge.DiscardProgress()); err != nil {
 			return err
 		}
@@ -303,7 +303,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err := s.ledger().Destroy(ctx); err != nil {
 		return err
 	}
-	s.held.Hosts = nil
+	s.recorded.Hosts = nil
 	s.keep()
 	for _, hostname := range s.state.Bound {
 		s.state.PublishFront(hostname, "")

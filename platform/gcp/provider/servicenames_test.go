@@ -72,7 +72,7 @@ func TestAFunctionThatIsNotTheAppItselfIsNamedApart(t *testing.T) {
 	}
 }
 
-func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItCarries(t *testing.T) {
+func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItNames(t *testing.T) {
 	names := serviceNames(t)
 
 	service, err := names.Service("j-1874-deploy-node", stackrecords.ProductionEnv, "web", "fn--web--index")
@@ -103,7 +103,7 @@ func TestANameCloudRunWouldNotBuildAUrlFromIsRefused(t *testing.T) {
 	}
 }
 
-func TestAnAppNamedWithWhatCloudRunRefusesIsCarriedIntoANameItTakes(t *testing.T) {
+func TestAnAppNamedWithWhatCloudRunRefusesIsTurnedIntoANameItTakes(t *testing.T) {
 	names := serviceNames(t)
 
 	service, err := names.Service("Shop_Front", stackrecords.ProductionEnv, "Web API", "Web API")
@@ -127,7 +127,7 @@ func TestAnEnvironmentAndAnAppThatSplitTheSameLettersAreTwoServices(t *testing.T
 		t.Fatal(err)
 	}
 	if preview == beside {
-		t.Errorf("both are served by %q, and a name joined by dashes alone reads two ways when every part may hold one: "+
+		t.Errorf("both are served by %q, and a name joined by dashes alone reads two ways when every part may contain one: "+
 			"a preview of one app would take another app's production service", preview)
 	}
 }
@@ -148,7 +148,7 @@ func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
 	}
 }
 
-func TestAPreviewServedOnTheSharedWildcardIsNamedTheLabelItsHostnameCarries(t *testing.T) {
+func TestAPreviewServedOnTheSharedWildcardIsNamedTheLabelInItsHostname(t *testing.T) {
 	names := serviceNames(t)
 	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
 
@@ -227,7 +227,7 @@ func TestThePreviewRefusalNamesTheDoubleDashesCloudRunTakes(t *testing.T) {
 	}
 }
 
-func TestAPreviewLabelNothingNamedIsRefusedRatherThanStandingSomethingUnreachable(t *testing.T) {
+func TestAPreviewLabelNothingNamedIsRefusedRatherThanDeployingSomethingUnreachable(t *testing.T) {
 	names := serviceNames(t)
 
 	if _, err := names.PreviewService("", "web", "web"); err == nil {
@@ -250,7 +250,7 @@ func TestOneAppIsNamedTheSameServiceEveryRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first != again {
-		t.Errorf("Service() named %q and then %q, and a release that renames its service strands the one standing", first, again)
+		t.Errorf("Service() named %q and then %q, and a release that renames its service strands the one already deployed", first, again)
 	}
 	if !cloudRunName.MatchString(first) {
 		t.Errorf("Service() = %q, which Cloud Run will not take as a service name", first)

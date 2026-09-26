@@ -78,7 +78,7 @@ func TestLiveBootstrapper(t *testing.T) {
 	conformance.RunBootstrap(t, bootstrapOf(t, p), p.Facts().DefaultEdge)
 }
 
-func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
+func TestLiveTheBootstrapProvisionsTheStackTheDataPortsRead(t *testing.T) {
 	p := live(t)
 	class := edge.ClassProduction
 	bootstrapped(t, p, edge.ClassPreview)
@@ -90,10 +90,10 @@ func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
 	if !described.Present || described.Unfinished {
-		t.Fatalf("Describe() = %+v, want a bootstrap that stands and finished", described)
+		t.Fatalf("Describe() = %+v, want a bootstrap that is installed and finished", described)
 	}
 	if len(described.Stacks) != 1 || !described.Stacks[0].DigestCurrent {
-		t.Fatalf("Describe().Stacks = %+v, want one stack carrying the item list Apply wrote", described.Stacks)
+		t.Fatalf("Describe().Stacks = %+v, want one stack recording the item list Apply wrote", described.Stacks)
 	}
 	if described.Stacks[0].WrittenBy != "live-suite" {
 		t.Errorf("Describe().Stacks[0].Writer = %q, want the writer the apply recorded", described.Stacks[0].WrittenBy)
@@ -104,7 +104,7 @@ func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
 	t.Run("Store", func(t *testing.T) { conformance.RunStore(t, p.Records()) })
 }
 
-func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItStoodUp(t *testing.T) {
+func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItProvisioned(t *testing.T) {
 	p := live(t)
 	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
@@ -144,7 +144,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	groups := map[string]string{}
 	for _, group := range plan.Groups {
 		if !strings.HasPrefix(group.Name, string(gcp.Vendor)+"/") {
-			t.Errorf("Plan() returned the group %q, want every group named under the vendor that stands it up", group.Name)
+			t.Errorf("Plan() returned the group %q, want every group named under the vendor that provisions it", group.Name)
 		}
 		for _, change := range group.Changes {
 			kinds[change.Kind+"/"+change.Name] = string(change.Action)
@@ -177,7 +177,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) {
 	p := live(t)
 	if !emulated() {
-		t.Skip("a second namespace stands up a second key ring, and Google never deletes one, so this runs against the emulator only")
+		t.Skip("a second namespace provisions a second key ring, and Google never deletes one, so this runs against the emulator only")
 	}
 	class := edge.ClassProduction
 	here := bootstrapped(t, p, class)
@@ -195,7 +195,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 		t.Fatalf("Describe() under a second namespace = %v", err)
 	}
 	if described.Present {
-		t.Errorf("Describe() under namespace %s reads the bootstrap standing under %s as its own", names(t, beside).Namespace(), names(t, p).Namespace())
+		t.Errorf("Describe() under namespace %s reads the bootstrap installed under %s as its own", names(t, beside).Namespace(), names(t, p).Namespace())
 	}
 
 	plan, err := elsewhere.Plan(ctx, provider.BootstrapRequest{Class: class})
@@ -210,7 +210,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 				continue
 			}
 			if change.Action != provider.ActionCreate {
-				t.Errorf("Plan() under namespace %s shows %s %s as %q, want a create: nothing of it stands yet",
+				t.Errorf("Plan() under namespace %s shows %s %s as %q, want a create: nothing of it exists yet",
 					names(t, beside).Namespace(), change.Kind, change.Name, change.Action)
 			}
 		}
@@ -224,12 +224,12 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 		names(t, p).Namespace().String():      here,
 		names(t, beside).Namespace().String(): elsewhere,
 	} {
-		standing, err := bootstrap.Describe(ctx, class)
+		installed, err := bootstrap.Describe(ctx, class)
 		if err != nil {
 			t.Fatalf("Describe() under namespace %s = %v", what, err)
 		}
-		if !standing.Present || standing.Unfinished || !standing.Stacks[0].DigestCurrent {
-			t.Errorf("Describe() under namespace %s = %+v, want a bootstrap that stands beside the other, not under it", what, standing)
+		if !installed.Present || installed.Unfinished || !installed.Stacks[0].DigestCurrent {
+			t.Errorf("Describe() under namespace %s = %+v, want a bootstrap installed beside the other, not under it", what, installed)
 		}
 	}
 }
@@ -304,7 +304,7 @@ func TestLiveAnApplyThatNeverFinishedReadsAsUnfinishedAndAReApplyFinishesIt(t *t
 		t.Fatalf("Describe() after the second Apply() = %v", err)
 	}
 	if healed.Unfinished || !healed.Present {
-		t.Fatalf("Describe() = %+v after a re-apply, want a bootstrap that stands and finished", healed)
+		t.Fatalf("Describe() = %+v after a re-apply, want a bootstrap that is installed and finished", healed)
 	}
 }
 
@@ -327,7 +327,7 @@ func interrupt(t *testing.T, p *gcp.Provider, class edge.Class) {
 	}
 }
 
-func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
+func TestLiveAStateBucketStoringAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	p := live(t)
 	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
@@ -354,14 +354,14 @@ func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 		t.Fatalf("Remove() with a stack still in the state bucket = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "shop") {
-		t.Errorf("Remove() refused with %q, want it to name the stack still standing", refused.Message)
+		t.Errorf("Remove() refused with %q, want it to name the stack still deployed", refused.Message)
 	}
 	if err := object.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
+func TestLiveASharedResourceStaysWhileTheSiblingClassIsInstalled(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 	bootstrapped(t, p, edge.ClassProduction)
@@ -383,7 +383,7 @@ func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
 	}
 	database := kept["firestore:database/"+liveNames(t).Database()]
 	if database.Action != provider.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
-		t.Errorf("PlanRemove() shows the database as %q (%q), want it kept with a reason naming the sibling class still standing",
+		t.Errorf("PlanRemove() shows the database as %q (%q), want it kept with a reason naming the sibling class still installed",
 			database.Action, database.Reason)
 	}
 }
@@ -394,19 +394,19 @@ func TestLiveThePassphraseIsMintedOnceAndNotWrittenOverAgain(t *testing.T) {
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
-	minted := passphraseHeld(t, class)
+	minted := storedPassphrase(t, class)
 	if len(minted) == 0 {
 		t.Fatal("the bootstrap minted an empty passphrase, and every Pulumi stack in this project is encrypted under it")
 	}
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() a second time = %v", err)
 	}
-	if again := passphraseHeld(t, class); !bytes.Equal(minted, again) {
+	if again := storedPassphrase(t, class); !bytes.Equal(minted, again) {
 		t.Fatal("a second apply wrote a new passphrase, and nothing opens the state the first one encrypted")
 	}
 }
 
-func passphraseHeld(t *testing.T, class edge.Class) []byte {
+func storedPassphrase(t *testing.T, class edge.Class) []byte {
 	t.Helper()
 
 	ctx := context.Background()
@@ -415,11 +415,11 @@ func passphraseHeld(t *testing.T, class edge.Class) []byte {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
 	name := "projects/" + liveProject() + "/secrets/" + liveNames(t).PassphraseSecret(class) + "/versions/latest"
-	held, err := service.Projects.Secrets.Versions.Access(name).Context(ctx).Do()
+	version, err := service.Projects.Secrets.Versions.Access(name).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}
-	decoded, err := base64.StdEncoding.DecodeString(held.Payload.Data)
+	decoded, err := base64.StdEncoding.DecodeString(version.Payload.Data)
 	if err != nil {
 		t.Fatalf("decode the passphrase: %v", err)
 	}
@@ -433,7 +433,7 @@ func onRealGoogleCloud(t *testing.T) {
 	}
 }
 
-func TestProjectTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T) {
+func TestProjectTheDatabaseIsARowOfItsOwnProvisionedUnderDeleteProtection(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	bootstrapped(t, p, edge.ClassProduction)
@@ -443,16 +443,16 @@ func TestProjectTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T)
 	if err != nil {
 		t.Fatalf("reach the Firestore admin API: %v", err)
 	}
-	held, err := service.Projects.Databases.Get("projects/" + liveProject() + "/databases/ocel").Context(ctx).Do()
+	database, err := service.Projects.Databases.Get("projects/" + liveProject() + "/databases/ocel").Context(ctx).Do()
 	if err != nil {
-		t.Fatalf("read the database the bootstrap stood up: %v", err)
+		t.Fatalf("read the database the bootstrap provisioned: %v", err)
 	}
-	if held.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
-		t.Errorf("the ocel database stands with delete protection %q, want it on: every record both classes hold lives in it",
-			held.DeleteProtectionState)
+	if database.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
+		t.Errorf("the ocel database has delete protection %q, want it on: every record both classes write lives in it",
+			database.DeleteProtectionState)
 	}
-	if held.LocationId != liveRegion() {
-		t.Errorf("the database stands in %q, want the one region the bootstrap was given, %q", held.LocationId, liveRegion())
+	if database.LocationId != liveRegion() {
+		t.Errorf("the database is in %q, want the one region the bootstrap was given, %q", database.LocationId, liveRegion())
 	}
 }
 
@@ -597,7 +597,7 @@ func stamped(t *testing.T, class edge.Class, body string) {
 	}
 }
 
-func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing.T) {
+func TestLiveASecretWithNoVersionInItIsNotPresentAndAReApplyMintsOne(t *testing.T) {
 	p := live(t)
 	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
@@ -628,7 +628,7 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 				continue
 			}
 			if change.Action != provider.ActionCreate {
-				t.Errorf("Plan() shows the passphrase secret as %q while it holds no version at all, and nothing would ever put one in it", change.Action)
+				t.Errorf("Plan() shows the passphrase secret as %q while it has no version at all, and nothing would ever put one in it", change.Action)
 			}
 		}
 	}
@@ -636,7 +636,7 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() over a secret with no version = %v", err)
 	}
-	if len(passphraseHeld(t, class)) == 0 {
+	if len(storedPassphrase(t, class)) == 0 {
 		t.Error("the apply left the passphrase secret empty, and every Pulumi stack in this class is encrypted under it")
 	}
 }
@@ -701,12 +701,12 @@ func TestProjectADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, err := service.Projects.Databases.Get("projects/" + liveProject() + "/databases/ocel").Context(ctx).Do()
+	database, err := service.Projects.Databases.Get("projects/" + liveProject() + "/databases/ocel").Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("read the database the apply mended: %v", err)
 	}
-	if held.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
-		t.Errorf("the ocel database stands with delete protection %q after an apply, want it back on", held.DeleteProtectionState)
+	if database.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
+		t.Errorf("the ocel database has delete protection %q after an apply, want it back on", database.DeleteProtectionState)
 	}
 }
 
@@ -717,7 +717,7 @@ func elsewhereRegion() string {
 	return "us-east1"
 }
 
-func TestProjectADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
+func TestProjectADatabaseInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	class := edge.ClassProduction
@@ -728,11 +728,11 @@ func TestProjectADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testi
 	err := bootstrapOf(t, elsewhere).Apply(context.Background(),
 		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("Apply() against a database Firestore holds in another region = %v, want an %s refusal: the conflict is not a success",
+		t.Fatalf("Apply() against a database that exists in another region = %v, want an %s refusal: the conflict is not a success",
 			err, refusal.CodeInvalid)
 	}
 	if !strings.Contains(refused.Message, liveRegion()) {
-		t.Errorf("Apply() refused with %q, want it to name the region the database actually stands in", refused.Message)
+		t.Errorf("Apply() refused with %q, want it to name the region the database actually lives in", refused.Message)
 	}
 }
 
@@ -795,7 +795,7 @@ func accounts(t *testing.T) *iam.Service {
 	return service
 }
 
-func TestLiveTheRuntimeAccountStandsWithTheGrantADeployNeeds(t *testing.T) {
+func TestLiveTheRuntimeAccountExistsWithTheGrantADeployNeeds(t *testing.T) {
 	p := live(t)
 	class := edge.ClassProduction
 	bootstrapped(t, p, class)
@@ -839,6 +839,6 @@ func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 
 	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).WorkloadAccountEmail(class)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
-		t.Errorf("%s still stands after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
+		t.Errorf("%s still exists after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
 	}
 }

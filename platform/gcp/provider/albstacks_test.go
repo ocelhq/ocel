@@ -37,7 +37,7 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 	}
 	if prefixes["shop"] == prefixes["blog"] || prefixes["shop"] == prefixes[""] {
 		t.Errorf("the stacks keep state at %v, want a prefix each: the state backend lists every stack under the prefix "+
-			"it is opened at, so one shared prefix makes every operation cost what the account holds", prefixes)
+			"it is opened at, so one shared prefix makes every operation cost what the account stores", prefixes)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	stacks := stacking(t)
 	front, spec := stacks.config(stacks.p.resolved, alb.Target{Class: edge.ClassProduction}, "secret", nil)
 	if front.Refresh == nil || !front.Refresh(spec.Ref, kitpulumi.OperationProvision) {
-		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by holding " +
+		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the class back to unrouted")
 	}
 }

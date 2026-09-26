@@ -16,10 +16,10 @@ func TestEveryResponseTheLoadBalancerSendsNamesItAsTheEdge(t *testing.T) {
 	action, _ := seen["ocel-alb-production-routes"].Args["headerAction"].(map[string]any)
 	added, _ := action["responseHeadersToAdds"].([]any)
 	for _, header := range added {
-		held, _ := header.(map[string]any)
-		if held["headerName"] == edge.HeaderEdge && held["headerValue"] == string(Kind) && held["replace"] == true {
+		fields, _ := header.(map[string]any)
+		if fields["headerName"] == edge.HeaderEdge && fields["headerValue"] == string(Kind) && fields["replace"] == true {
 			return
 		}
 	}
-	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a settle reads to know which edge answers a hostname, so no hostname on this edge is ever settled", added, edge.HeaderEdge, Kind)
+	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a liveness probe reads to know which edge answers a hostname, so no hostname on this edge is ever cut over", added, edge.HeaderEdge, Kind)
 }

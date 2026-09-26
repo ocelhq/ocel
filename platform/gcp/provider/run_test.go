@@ -36,10 +36,10 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 	}
 	container := template.Containers[0]
 	if !container.Resources.CpuIdle {
-		t.Error("a function holds its cpu between requests, want it idle: that is what request-based billing is")
+		t.Error("a function keeps its cpu between requests, want it idle: that is what request-based billing is")
 	}
 	if container.StartupProbe != nil {
-		t.Error("a function carries a startup probe, and nothing declared a path to probe")
+		t.Error("a function has a startup probe, and nothing declared a path to probe")
 	}
 	if got := container.Resources.Limits; got["cpu"] != "1" || got["memory"] != "512Mi" {
 		t.Errorf("a revision asks for %v, want one vCPU and 512Mi", got)
@@ -70,14 +70,14 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 		t.Error("a container's cpu idles between requests, and a container is paid for by the instance: it keeps its cpu")
 	}
 	if container.StartupProbe == nil || container.StartupProbe.HttpGet == nil {
-		t.Fatal("a container carries no startup probe, and up means a 2xx on the path the wire named")
+		t.Fatal("a container has no startup probe, and up means a 2xx on the path the wire named")
 	}
 	if got := container.StartupProbe.HttpGet; got.Path != "/healthz" || got.Port != appbuild.InjectedPort {
 		t.Errorf("a container is probed at %v, want /healthz on %d", got, appbuild.InjectedPort)
 	}
 }
 
-func TestARevisionCarriesEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
+func TestARevisionSetsEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-web",
 		image:   "web@sha256:abc",
@@ -85,12 +85,12 @@ func TestARevisionCarriesEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
 		env:     map[string]string{"DATABASE_URL": "postgres://", "API_KEY": "k"},
 	})
 
-	var carried []string
+	var entries []string
 	for _, entry := range desired.Template.Containers[0].Env {
-		carried = append(carried, entry.Name+"="+entry.Value)
+		entries = append(entries, entry.Name+"="+entry.Value)
 	}
-	if got := strings.Join(carried, " "); got != "API_KEY=k DATABASE_URL=postgres://" {
-		t.Errorf("a revision carries %q, want every value in one order, so an unchanged deploy asks for no new revision", got)
+	if got := strings.Join(entries, " "); got != "API_KEY=k DATABASE_URL=postgres://" {
+		t.Errorf("a revision sets %q, want every value in one order, so an unchanged deploy asks for no new revision", got)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestTrafficIsPinnedToOneRevisionByName(t *testing.T) {
 	pinned := trafficTo("ocel-shop-prod-web-00007-abc")
 
 	if len(pinned) != 1 {
-		t.Fatalf("traffic is split %d ways, want all of it on the revision this release stood up", len(pinned))
+		t.Fatalf("traffic is split %d ways, want all of it on the revision this release created", len(pinned))
 	}
 	if pinned[0].Type != trafficByRevision {
 		t.Errorf("traffic is allocated by %q, want %q: the latest revision is whatever ran last, which is not what this release promised",
@@ -160,17 +160,17 @@ func TestTrafficIsPinnedToOneRevisionByName(t *testing.T) {
 	}
 }
 
-func TestAnEmulatedRunFindsTheImageUnderTheNameTheDaemonHoldsItBy(t *testing.T) {
+func TestAnEmulatedRunFindsTheImageUnderTheNameTheDaemonStoresItUnder(t *testing.T) {
 	pinned := "europe-west1-docker.pkg.dev/floci/ocel-preview/web@sha256:abc123"
 
-	real := pushing(t, "").heldAs(pinned)
+	real := pushing(t, "").storedAs(pinned)
 	if real != pinned {
-		t.Errorf("heldAs() = %q against a registry, want the digest the release pinned", real)
+		t.Errorf("storedAs() = %q against a registry, want the digest the release pinned", real)
 	}
 
-	emulated := pushing(t, "http://127.0.0.1:4588").heldAs(pinned)
+	emulated := pushing(t, "http://127.0.0.1:4588").storedAs(pinned)
 	if emulated != "europe-west1-docker.pkg.dev/floci/ocel-preview/web:sha256-abc123" {
-		t.Errorf("heldAs() = %q under emulation, want the tag the image was written into the daemon under: "+
+		t.Errorf("storedAs() = %q under emulation, want the tag the image was written into the daemon under: "+
 			"a docker daemon resolves nothing by the digest a registry would have given it", emulated)
 	}
 }
@@ -180,11 +180,11 @@ func released(t *testing.T, server *runServer, s serving) (string, string) {
 	if s.image == "" {
 		s.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:abc"
 	}
-	stood, err := server.open(t).stand(context.Background(), s, nil)
+	deployed, err := server.open(t).deployService(context.Background(), s, nil)
 	if err != nil {
-		t.Fatalf("stand(%s) = %v", s.service, err)
+		t.Fatalf("deployService(%s) = %v", s.service, err)
 	}
-	return stood.url, stood.revision
+	return deployed.url, deployed.revision
 }
 
 func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.T) {
@@ -197,14 +197,14 @@ func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.
 	_, two := released(t, server, second)
 
 	if one == "" || two == "" {
-		t.Fatalf("a release stood revisions %q and %q up, want each named: a rollback pins the revision its promotion recorded", one, two)
+		t.Fatalf("a release created revisions %q and %q, want each named: a rollback pins the revision its promotion recorded", one, two)
 	}
 	if one == two {
-		t.Errorf("both releases stood revision %q up, want a revision apiece: a rollback to the first would pin what the second serves", one)
+		t.Errorf("both releases created revision %q, want a revision apiece: a rollback to the first would pin what the second serves", one)
 	}
-	standing := server.serving()
-	if !servedBy(standing.Traffic, two) {
-		t.Errorf("the service serves %+v, want all of it on %s, the revision the second release reported", standing.Traffic, two)
+	service := server.serving()
+	if !servedBy(service.Traffic, two) {
+		t.Errorf("the service serves %+v, want all of it on %s, the revision the second release reported", service.Traffic, two)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestAFunctionTheSpecGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 
 	released(t, server, serving{service: "ocel-shop-prod-fn", compute: provider.ComputeServerless})
 
-	if desired := server.standing(); desired.InvokerIamDisabled {
+	if desired := server.current(); desired.InvokerIamDisabled {
 		t.Error("a function the plan says has no url may be invoked without an invoker check, " +
 			"and a function reached only through its app is reachable by everybody instead")
 	}
@@ -224,7 +224,7 @@ func TestAFunctionTheSpecGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) 
 
 	released(t, server, serving{service: "ocel-shop-prod-fn", compute: provider.ComputeServerless, public: true})
 
-	if desired := server.standing(); !desired.InvokerIamDisabled {
+	if desired := server.current(); !desired.InvokerIamDisabled {
 		t.Error("a function the plan gives a url of its own still checks its invoker, and a service nobody may invoke answers nothing")
 	}
 	if bound := server.bound(); len(bound) != 0 {
@@ -238,12 +238,12 @@ func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
 
 	released(t, server, serving{service: "ocel-shop-prod-app", compute: provider.ComputeContainer, health: "/", public: true})
 
-	if desired := server.standing(); !desired.InvokerIamDisabled {
-		t.Error("the app's own front still checks its invoker, and nothing else stands between the internet and it")
+	if desired := server.current(); !desired.InvokerIamDisabled {
+		t.Error("the app's own front still checks its invoker, and nothing else sits between the internet and it")
 	}
 }
 
-func TestAReleaseOntoAStandingServiceNeverHandsTrafficBackToTheLatestRevision(t *testing.T) {
+func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t *testing.T) {
 	server := &runServer{}
 	first := serving{
 		service: "ocel-shop-prod-app",
@@ -261,15 +261,15 @@ func TestAReleaseOntoAStandingServiceNeverHandsTrafficBackToTheLatestRevision(t 
 	for _, patched := range server.releases() {
 		if len(patched.Traffic) == 0 {
 			t.Fatal("a patch named no traffic, and Cloud Run replaces the body it is handed: " +
-				"the allocation this release held would go back to the latest revision, which is whatever ran last")
+				"the allocation this release pinned would go back to the latest revision, which is whatever ran last")
 		}
 		if patched.Traffic[0].Type != trafficByRevision || patched.Traffic[0].Revision == "" {
 			t.Errorf("a patch allocated traffic by %q, want it by the name of a revision", patched.Traffic[0].Type)
 		}
 	}
-	standing := server.serving()
-	if !servedBy(standing.Traffic, revisionName(standing.LatestReadyRevision)) {
-		t.Errorf("the service serves %+v, want all of it on the revision the second release stood up", standing.Traffic)
+	service := server.serving()
+	if !servedBy(service.Traffic, revisionName(service.LatestReadyRevision)) {
+		t.Errorf("the service serves %+v, want all of it on the revision the second release created", service.Traffic)
 	}
 }
 
@@ -292,11 +292,11 @@ func TestAServiceChangedUnderAReleaseIsReadAgainAndPatchedAgain(t *testing.T) {
 	again.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	released(t, server, again)
 
-	standing := server.serving()
-	if !servedBy(standing.Traffic, revisionName(standing.LatestReadyRevision)) {
-		t.Errorf("the service serves %+v after a patch a concurrent write refused, want the release it asked for", standing.Traffic)
+	service := server.serving()
+	if !servedBy(service.Traffic, revisionName(service.LatestReadyRevision)) {
+		t.Errorf("the service serves %+v after a patch a concurrent write refused, want the release it asked for", service.Traffic)
 	}
-	if got := standing.Template.Containers[0].Image; !strings.HasSuffix(got, "sha256-two") {
+	if got := service.Template.Containers[0].Image; !strings.HasSuffix(got, "sha256-two") {
 		t.Errorf("the service runs %q, want the image the second release named: a 409 says the read the write was built on is stale", got)
 	}
 }
@@ -307,14 +307,14 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 
 	server.patchConflicts = releaseAttempts + 1
 	before := server.tries()
-	_, err := server.open(t).stand(context.Background(), serves("ocel-shop-prod-app"), nil)
+	_, err := server.open(t).deployService(context.Background(), serves("ocel-shop-prod-app"), nil)
 	if err == nil {
-		t.Fatal("stand() over a service that never settles = nil, want the release refused")
+		t.Fatal("deployService() over a service that never stops changing = nil, want the release refused")
 	}
 	if !strings.Contains(err.Error(), "ocel-shop-prod-app") {
-		t.Errorf("stand() = %v, want the service it was releasing named", err)
+		t.Errorf("deployService() = %v, want the service it was releasing named", err)
 	}
 	if patched := server.tries(); patched-before != releaseAttempts {
-		t.Errorf("the release patched %d times, want %d: a retry that never gives up holds a deploy open", patched-before, releaseAttempts)
+		t.Errorf("the release patched %d times, want %d: a retry that never gives up keeps a deploy open", patched-before, releaseAttempts)
 	}
 }

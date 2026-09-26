@@ -14,19 +14,19 @@ import (
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
-const heldAccessToken = "ya29.a0-secret"
+const mintedAccessToken = "ya29.a0-secret"
 
-type heldToken struct {
+type fixedToken struct {
 	token string
 	err   error
 }
 
-func (h heldToken) Token(context.Context) (string, error) { return h.token, h.err }
+func (h fixedToken) Token(context.Context) (string, error) { return h.token, h.err }
 
 func tokenInfo(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+heldAccessToken {
+		if r.Header.Get("Authorization") != "Bearer "+mintedAccessToken {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -52,7 +52,7 @@ func TestWhoamiNamesTheProjectTheRegionAndWhoTheTokenBelongsTo(t *testing.T) {
 	principal, err := gcp.Credentials{
 		Project:      gcp.Named("acme-prod"),
 		Region:       "europe-west1",
-		Tokens:       heldToken{token: heldAccessToken},
+		Tokens:       fixedToken{token: mintedAccessToken},
 		TokenInfoURL: server.URL,
 		Projects:     &reachedProject{},
 	}.Whoami(context.Background())
@@ -79,30 +79,30 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 	server := tokenInfo(t, `{}`)
 
 	for _, tc := range []struct {
-		name string
-		held gcp.Credentials
+		name        string
+		credentials gcp.Credentials
 	}{
 		{
 			name: "no credentials to mint a token from",
-			held: gcp.Credentials{
+			credentials: gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
-				Tokens:       heldToken{err: errors.New("google: could not find default credentials")},
+				Tokens:       fixedToken{err: errors.New("google: could not find default credentials")},
 				TokenInfoURL: server.URL,
 			},
 		},
 		{
 			name: "a token nothing will vouch for",
-			held: gcp.Credentials{
+			credentials: gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
-				Tokens:       heldToken{token: "expired"},
+				Tokens:       fixedToken{token: "expired"},
 				TokenInfoURL: server.URL,
 			},
 		},
 		{
 			name: "nothing listening where the token endpoint should be",
-			held: gcp.Credentials{
+			credentials: gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
-				Tokens:       heldToken{token: heldAccessToken},
+				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: unreachable(t),
 			},
 		},
@@ -111,7 +111,7 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 			t.Parallel()
 
 			var refused refusal.Refusal
-			principal, err := tc.held.Whoami(context.Background())
+			principal, err := tc.credentials.Whoami(context.Background())
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 				t.Fatalf("Whoami() = %+v, %v, want a denied refusal", principal, err)
 			}
@@ -144,19 +144,19 @@ func TestTheAccessTokenReachesNoUrlAndNoErrorString(t *testing.T) {
 
 			_, err := gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
-				Tokens:       heldToken{token: heldAccessToken},
+				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: endpoint,
 			}.Whoami(context.Background())
 			if err == nil {
 				t.Fatal("Whoami() answered, want a refusal")
 			}
-			if strings.Contains(err.Error(), heldAccessToken) {
-				t.Errorf("Whoami() failed with %q, which carries the access token into every log line and CLI output that prints it", err)
+			if strings.Contains(err.Error(), mintedAccessToken) {
+				t.Errorf("Whoami() failed with %q, which puts the access token into every log line and CLI output that prints it", err)
 			}
 		})
 	}
 
-	if url, _ := asked.Load().(string); strings.Contains(url, heldAccessToken) {
+	if url, _ := asked.Load().(string); strings.Contains(url, mintedAccessToken) {
 		t.Errorf("the token endpoint was asked at %q, which leaves the access token in every proxy and access log on the way", url)
 	}
 }
@@ -179,7 +179,7 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 
 		principal, err := gcp.Credentials{
 			Project:      gcp.Named("acme-prod"),
-			Tokens:       heldToken{token: heldAccessToken},
+			Tokens:       fixedToken{token: mintedAccessToken},
 			TokenInfoURL: server.URL,
 			Projects:     &reachedProject{},
 		}.Whoami(context.Background())
@@ -212,7 +212,7 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 			var refused refusal.Refusal
 			_, err := gcp.Credentials{
 				Project:      gcp.Named("acme-prod"),
-				Tokens:       heldToken{token: heldAccessToken},
+				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: server.URL,
 			}.Whoami(context.Background())
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {

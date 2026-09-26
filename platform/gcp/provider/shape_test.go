@@ -42,7 +42,7 @@ func TestEveryBootstrapItemHasAShape(t *testing.T) {
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, item := range bootstrapItems(names, class, false) {
 			if _, shaped := itemTypes[item.Kind]; !shaped {
-				t.Errorf("%s stands up a %s the shape has no name for", class, item.ID())
+				t.Errorf("%s provisions a %s the shape has no name for", class, item.ID())
 			}
 		}
 	}

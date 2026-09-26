@@ -30,11 +30,11 @@ func databaseCondition(project string, ns provider.Namespace) *cloudresourcemana
 	}
 }
 
-func sameCondition(held, want *cloudresourcemanager.Expr) bool {
-	if held == nil || want == nil {
-		return held == nil && want == nil
+func sameCondition(current, want *cloudresourcemanager.Expr) bool {
+	if current == nil || want == nil {
+		return current == nil && want == nil
 	}
-	return held.Expression == want.Expression
+	return current.Expression == want.Expression
 }
 
 func (c *clients) projectPolicy(ctx context.Context) (*cloudresourcemanager.Policy, error) {
@@ -52,7 +52,7 @@ func (c *clients) projectPolicy(ctx context.Context) (*cloudresourcemanager.Poli
 	return policy, nil
 }
 
-func (c *clients) projectRoleHeld(ctx context.Context, member, role string, condition *cloudresourcemanager.Expr) (bool, error) {
+func (c *clients) projectRoleGranted(ctx context.Context, member, role string, condition *cloudresourcemanager.Expr) (bool, error) {
 	policy, err := c.projectPolicy(ctx)
 	if err != nil {
 		return false, err
@@ -94,7 +94,7 @@ func (c *clients) bindProjectRole(ctx context.Context, member, role string, cond
 			break
 		}
 	}
-	return fmt.Errorf("hold %s to %s on project %s: %w", member, role, c.project, refused)
+	return fmt.Errorf("update the %s binding of %s on project %s: %w", role, member, c.project, refused)
 }
 
 func (c *clients) keyPolicy(ctx context.Context, class edge.Class) (*iampb.Policy, error) {
@@ -120,7 +120,7 @@ func (c *clients) keyPolicy(ctx context.Context, class edge.Class) (*iampb.Polic
 	return policy, nil
 }
 
-func (c *clients) keyRolesHeld(ctx context.Context, class edge.Class, member string, roles []string) (bool, error) {
+func (c *clients) keyRolesGranted(ctx context.Context, class edge.Class, member string, roles []string) (bool, error) {
 	policy, err := c.keyPolicy(ctx, class)
 	if err != nil || policy == nil {
 		return false, err
@@ -152,7 +152,7 @@ func (c *clients) bindKeyRoles(ctx context.Context, class edge.Class, member str
 	if _, err := dialled(ctx, func() (*iampb.Policy, error) {
 		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: keyPath(c, string(class)), Policy: policy})
 	}); err != nil {
-		return false, fmt.Errorf("hold %s to %v on the %s key: %w", member, wanted, class, err)
+		return false, fmt.Errorf("set the roles %s has on the %s key to %v: %w", member, class, wanted, err)
 	}
 	return true, nil
 }
@@ -180,9 +180,9 @@ func boundMember(bindings []*cloudresourcemanager.Binding, role, member string,
 func boundKeyRoles(bindings []*iampb.Binding, member string, roles, wanted []string) ([]*iampb.Binding, bool) {
 	changed := false
 	for _, role := range roles {
-		var held bool
-		bindings, held = boundKeyMember(bindings, role, member, slices.Contains(wanted, role))
-		changed = changed || held
+		var roleChanged bool
+		bindings, roleChanged = boundKeyMember(bindings, role, member, slices.Contains(wanted, role))
+		changed = changed || roleChanged
 	}
 	return bindings, changed
 }

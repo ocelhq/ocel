@@ -22,19 +22,19 @@ func (e *Edge) previewRecord() records.Name {
 	return append(stackrecords.EdgeStacksRecord(edge.ClassPreview), string(Kind), "preview-wildcard")
 }
 
-func (e *Edge) heldPreview(ctx context.Context) (previewEntry, error) {
+func (e *Edge) recordedPreview(ctx context.Context) (previewEntry, error) {
 	record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
 	if err != nil {
 		return previewEntry{}, fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
-	var held previewEntry
+	var preview previewEntry
 	if len(record.Bytes) == 0 {
-		return held, nil
+		return preview, nil
 	}
-	if err := json.Unmarshal(record.Bytes, &held); err != nil {
+	if err := json.Unmarshal(record.Bytes, &preview); err != nil {
 		return previewEntry{}, fmt.Errorf("decode which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
-	return held, nil
+	return preview, nil
 }
 
 func (e *Edge) rememberPreview(ctx context.Context, entry previewEntry) error {
@@ -59,7 +59,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 	}
 	if spec.Certificate == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge terminates TLS for %s at the load balancer, so its certificate map needs the wildcard certificate, and this reconcile carries none",
+			"the %q edge terminates TLS for %s at the load balancer, so its certificate map needs the wildcard certificate, and this reconcile names none",
 			Kind, wildcard)
 	}
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
@@ -101,7 +101,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 			return err
 		}
 	}
-	if front.standing() {
+	if front.provisioned() {
 		if _, err := e.raiseServing(ctx, edge.ClassPreview, previewEntry{}, edge.DiscardProgress()); err != nil {
 			return err
 		}

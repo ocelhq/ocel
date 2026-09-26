@@ -61,7 +61,7 @@ func TestThePythonBaseRunsTheVersionTheWheelsAreVendoredFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(*asked, "debian13") {
-		t.Errorf("a python function is built on %q, and only debian 13 carries python %s, which the cli vendors wheels for",
+		t.Errorf("a python function is built on %q, and only debian 13 ships python %s, which the cli vendors wheels for",
 			*asked, arch.PythonVersion)
 	}
 }
@@ -107,7 +107,7 @@ func TestANodeFunctionFindsNodeOnTheBasesPath(t *testing.T) {
 	}
 }
 
-func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
+func TestARuntimeNoBaseIsShippedForIsRefused(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 
 	_, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: "deno"})
@@ -122,7 +122,7 @@ func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
 	}
 }
 
-func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsCarriedFor(t *testing.T) {
+func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsShippedFor(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 
 	_, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: appbuild.FrameworkNext})
@@ -155,23 +155,23 @@ func TestAFunctionBuiltForArm64IsRefused(t *testing.T) {
 	}
 }
 
-func TestTheRuntimeIsCarriedForTheRuntimeThatBootsThroughOne(t *testing.T) {
+func TestTheRuntimeIsShippedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 	ctx := context.Background()
 
 	body, err := p.ReadFunctionRuntime(ctx, appbuild.Framework{Name: appbuild.FrameworkNode})
 	if err != nil {
-		t.Fatalf("FunctionRuntimePayload(node) = %v", err)
+		t.Fatalf("ReadFunctionRuntime(node) = %v", err)
 	}
 	if len(body) == 0 {
-		t.Fatal("FunctionRuntimePayload(node) carried nothing, and a node function boots through it")
+		t.Fatal("ReadFunctionRuntime(node) returned nothing, and a node function boots through it")
 	}
-	carried, err := p.ReadFunctionRuntime(ctx, appbuild.Framework{Name: appbuild.FrameworkGo})
+	compiled, err := p.ReadFunctionRuntime(ctx, appbuild.Framework{Name: appbuild.FrameworkGo})
 	if err != nil {
-		t.Fatalf("FunctionRuntimePayload(go) = %v", err)
+		t.Fatalf("ReadFunctionRuntime(go) = %v", err)
 	}
-	if len(carried) != 0 {
-		t.Error("FunctionRuntimePayload(go) carried a node runtime into an image that runs a compiled binary")
+	if len(compiled) != 0 {
+		t.Error("ReadFunctionRuntime(go) returned a node runtime for an image that runs a compiled binary")
 	}
 }
 

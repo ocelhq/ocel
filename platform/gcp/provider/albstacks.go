@@ -69,7 +69,7 @@ func outputsOf(ctx context.Context, automation *kitpulumi.Automation, ref provid
 	}
 	read := make(map[string]string, len(outputs))
 	for name, output := range outputs {
-		if value, held := output.Value.(string); held {
+		if value, ok := output.Value.(string); ok {
 			read[name] = value
 		}
 	}
@@ -81,7 +81,7 @@ func (s albStacks) opened(
 	target alb.Target,
 	program alb.Program,
 ) (*kitpulumi.Automation, provider.StackSpec, error) {
-	clients, err := s.p.stood(ctx)
+	clients, err := s.p.openClients(ctx)
 	if err != nil {
 		return nil, provider.StackSpec{}, err
 	}
@@ -132,21 +132,21 @@ func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.
 	}
 	secret := clients.PassphraseSecret(class)
 	name := "projects/" + clients.project + "/secrets/" + secret + "/versions/latest"
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
+	version, err := attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
 		return secrets.Projects.Secrets.Versions.Access(name).Context(ctx).Do(call...)
 	})
 	if err != nil {
 		if absent(err) {
 			return "", refusal.Refuse(refusal.CodeNotReady,
-				"the %s edge keeps the state of the load balancer it stands up sealed under the %s secret, and this project holds none for class %s: run `ocel bootstrap` for this class first",
+				"the %s edge keeps the state of the load balancer it provisions sealed under the %s secret, and this project has none for class %s: run `ocel bootstrap` for this class first",
 				alb.Kind, secret, class)
 		}
 		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", alb.Kind, err)
 	}
-	if held.Payload == nil {
-		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %s holds a version with no payload", alb.Kind, secret)
+	if version.Payload == nil {
+		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %s has a version with no payload", alb.Kind, secret)
 	}
-	passphrase, err := base64.StdEncoding.DecodeString(held.Payload.Data)
+	passphrase, err := base64.StdEncoding.DecodeString(version.Payload.Data)
 	if err != nil {
 		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", alb.Kind, err)
 	}

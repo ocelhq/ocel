@@ -22,7 +22,7 @@ const (
 	certificateFailed       = "FAILED"
 )
 
-const certificateRenewal = "Certificate Manager renews it while the authorization record stands"
+const certificateRenewal = "Certificate Manager renews it while the authorization record exists"
 
 const certificateExpiry = 30 * 24 * time.Hour
 
@@ -45,29 +45,29 @@ func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostna
 type certificates struct{ *Provider }
 
 func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return provider.Certificate{}, err
 	}
 	name := clients.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
-	held := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Manual: req.Current.Manual}
+	cert := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Manual: req.Current.Manual}
 
 	authorization, err := p.authorized(ctx, clients, req)
 	if err != nil {
 		return provider.Certificate{}, err
 	}
-	held, err = req.Prove(ctx, held, []edge.Record{{
+	cert, err = req.Prove(ctx, cert, []edge.Record{{
 		Name:  strings.TrimSuffix(authorization.DnsResourceRecord.Name, "."),
 		Type:  edge.RecordTypeCNAME,
 		Value: authorization.DnsResourceRecord.Data,
 	}})
 	if err != nil {
-		return held, err
+		return cert, err
 	}
 	if err := p.certified(ctx, clients, req, name, authorization.Name); err != nil {
-		return held, err
+		return cert, err
 	}
-	return held, nil
+	return cert, nil
 }
 
 func (p *Provider) authorized(
@@ -81,12 +81,12 @@ func (p *Provider) authorized(
 	}
 	id := authorizationID(req.Hostname)
 	name := clients.certificatesGlobal() + "/dnsAuthorizations/" + id
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
+	authorization, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
 	})
 	switch {
 	case err == nil:
-		return held, nil
+		return authorization, nil
 	case !absent(err):
 		return nil, fmt.Errorf("read the dns authorization for %s: %w", req.Hostname, err)
 	}
@@ -102,22 +102,22 @@ func (p *Provider) authorized(
 	if err != nil {
 		return nil, err
 	}
-	held, err = attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
+	authorization, err = attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read the dns authorization for %s: %w", req.Hostname, err)
 	}
-	if held.DnsResourceRecord == nil {
+	if authorization.DnsResourceRecord == nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"the dns authorization for %s carries no record to write, and ownership of a domain is proved by writing the one Certificate Manager names",
+			"the dns authorization for %s names no record to write, and ownership of a domain is proved by writing the one Certificate Manager names",
 			req.Hostname)
 	}
-	return held, nil
+	return authorization, nil
 }
 
 func (p *Provider) certificates(ctx context.Context) (*clients, *certmanager.Service, error) {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -173,14 +173,14 @@ func (p *Provider) issued(
 	req provider.CertificateRequest,
 	name string,
 ) error {
-	settled, err := waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
+	certificate, err := waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
 		func() (*certmanager.Certificate, error) {
 			return attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 				return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
 			})
 		},
-		func(held *certmanager.Certificate) bool {
-			return held != nil && held.Managed != nil && held.Managed.State != certificateProvisioning
+		func(cert *certmanager.Certificate) bool {
+			return cert != nil && cert.Managed != nil && cert.Managed.State != certificateProvisioning
 		})
 	if code, _ := provider.RefusedCode(err); code == refusal.CodeNotReady {
 		return provider.Resumable(err)
@@ -188,23 +188,23 @@ func (p *Provider) issued(
 	if err != nil {
 		return err
 	}
-	if settled.Managed.State == certificateActive {
+	if certificate.Managed.State == certificateActive {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"Certificate Manager gave up on the certificate for %s: %s.\n"+
 			"The authorization record has to resolve from the public internet before Google will issue: check it, then bind the hostname again",
-		req.Hostname, provisioningIssue(settled))
+		req.Hostname, provisioningIssue(certificate))
 }
 
-func provisioningIssue(held *certmanager.Certificate) string {
-	if held.Managed.ProvisioningIssue == nil {
-		return held.Managed.State
+func provisioningIssue(cert *certmanager.Certificate) string {
+	if cert.Managed.ProvisioningIssue == nil {
+		return cert.Managed.State
 	}
-	if details := held.Managed.ProvisioningIssue.Details; details != "" {
+	if details := cert.Managed.ProvisioningIssue.Details; details != "" {
 		return details
 	}
-	return held.Managed.ProvisioningIssue.Reason
+	return cert.Managed.ProvisioningIssue.Reason
 }
 
 func (p certificates) Inspect(
@@ -220,7 +220,7 @@ func (p certificates) Inspect(
 	if err != nil {
 		return provider.CertificateHealth{}, err
 	}
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -232,27 +232,27 @@ func (p certificates) Inspect(
 	health := provider.CertificateHealth{
 		Terminates: true,
 		Renewal:    certificateRenewal,
-		Domains:    covered(held),
+		Domains:    covered(current),
 	}
 	health.Status = certificateProvisioning
-	if held.Managed != nil {
-		health.Status = held.Managed.State
+	if current.Managed != nil {
+		health.Status = current.Managed.State
 	}
 	health.Issued = health.Status == certificateActive
 	health.Covers = slices.Contains(health.Domains, hostname)
-	if lapses, err := time.Parse(time.RFC3339, held.ExpireTime); err == nil {
+	if lapses, err := time.Parse(time.RFC3339, current.ExpireTime); err == nil {
 		health.ExpiresAt = lapses.Unix()
 		health.ExpiringSoon = time.Until(lapses) < certificateExpiry
 	}
 	return health, nil
 }
 
-func covered(held *certmanager.Certificate) []string {
-	if len(held.SanDnsnames) > 0 {
-		return slices.Clone(held.SanDnsnames)
+func covered(cert *certmanager.Certificate) []string {
+	if len(cert.SanDnsnames) > 0 {
+		return slices.Clone(cert.SanDnsnames)
 	}
-	if held.Managed != nil {
-		return slices.Clone(held.Managed.Domains)
+	if cert.Managed != nil {
+		return slices.Clone(cert.Managed.Domains)
 	}
 	return nil
 }
@@ -265,7 +265,7 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	parent := clients.certificatesGlobal() + "/certificateMaps/" + certificateMap
 	var bound []string
 	for page := ""; ; {
-		held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
+		entries, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
 			return certificates.Projects.Locations.CertificateMaps.CertificateMapEntries.
 				List(parent).PageToken(page).Context(ctx).Do(call...)
 		})
@@ -275,12 +275,12 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 		if err != nil {
 			return nil, fmt.Errorf("read what the certificate map %s serves: %w", certificateMap, err)
 		}
-		for _, entry := range held.CertificateMapEntries {
+		for _, entry := range entries.CertificateMapEntries {
 			if entry.Hostname != "" {
 				bound = append(bound, entry.Hostname)
 			}
 		}
-		if page = held.NextPageToken; page == "" {
+		if page = entries.NextPageToken; page == "" {
 			break
 		}
 	}
@@ -296,7 +296,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if err != nil {
 		return err
 	}
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+	current, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -312,10 +312,10 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 		}); err != nil {
 		return err
 	}
-	if held.Managed == nil {
+	if current.Managed == nil {
 		return nil
 	}
-	for _, authorization := range held.Managed.DnsAuthorizations {
+	for _, authorization := range current.Managed.DnsAuthorizations {
 		if err := p.awaitCertificates(ctx, certificates, "release "+authorization,
 			func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 				return certificates.Projects.Locations.DnsAuthorizations.Delete(authorization).Context(ctx).Do(call...)
@@ -336,7 +336,7 @@ func (p *Provider) awaitCertificates(
 	if err != nil {
 		return fmt.Errorf("ask Certificate Manager to %s: %w", doing, err)
 	}
-	settled, err := until(ctx, "Certificate Manager to "+doing, func() (*certmanager.Operation, error) {
+	finished, err := until(ctx, "Certificate Manager to "+doing, func() (*certmanager.Operation, error) {
 		if started.Done {
 			return started, nil
 		}
@@ -347,9 +347,9 @@ func (p *Provider) awaitCertificates(
 	if err != nil {
 		return err
 	}
-	if settled.Error != nil {
+	if finished.Error != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"Certificate Manager refused to %s: %s", doing, settled.Error.Message)
+			"Certificate Manager refused to %s: %s", doing, finished.Error.Message)
 	}
 	return nil
 }

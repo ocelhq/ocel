@@ -81,11 +81,11 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project strin
 	if base == "" {
 		return nil
 	}
-	held := pulumi.String(project)
+	projectID := pulumi.String(project)
 	entry := previewEntryName(base)
 	if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
 		Name:         pulumi.String(entry),
-		Project:      held,
+		Project:      projectID,
 		Map:          pulumi.String(spec.Names.CertificateMap),
 		Hostname:     pulumi.String(edge.PreviewWildcard(base)),
 		Certificates: pulumi.StringArray{pulumi.String(spec.Preview.Certificate)},
@@ -95,7 +95,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project strin
 	neg := previewNEGName(base)
 	group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
 		Name:                pulumi.String(neg),
-		Project:             held,
+		Project:             projectID,
 		Region:              pulumi.String(spec.Region),
 		NetworkEndpointType: pulumi.String(serverlessNEG),
 		CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
@@ -108,7 +108,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project strin
 	backend := previewBackendName(base)
 	_, err = compute.NewBackendService(ctx, backend, &compute.BackendServiceArgs{
 		Name:                pulumi.String(backend),
-		Project:             held,
+		Project:             projectID,
 		Protocol:            pulumi.String("HTTPS"),
 		LoadBalancingScheme: pulumi.String(externalManaged),
 		EnableCdn:           pulumi.Bool(true),
@@ -132,10 +132,10 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project strin
 
 func frontProgram(spec frontSpec) Program {
 	return func(ctx *pulumi.Context, project string) error {
-		held := pulumi.String(project)
+		projectID := pulumi.String(project)
 		address, err := compute.NewGlobalAddress(ctx, spec.Names.Address, &compute.GlobalAddressArgs{
 			Name:        pulumi.String(spec.Names.Address),
-			Project:     held,
+			Project:     projectID,
 			AddressType: pulumi.String("EXTERNAL"),
 		})
 		if err != nil {
@@ -143,7 +143,7 @@ func frontProgram(spec frontSpec) Program {
 		}
 		notFound, err := compute.NewBackendService(ctx, spec.Names.NotFound, &compute.BackendServiceArgs{
 			Name:                pulumi.String(spec.Names.NotFound),
-			Project:             held,
+			Project:             projectID,
 			Protocol:            pulumi.String("HTTPS"),
 			LoadBalancingScheme: pulumi.String(externalManaged),
 			Description: pulumi.String(
@@ -155,14 +155,14 @@ func frontProgram(spec frontSpec) Program {
 		certificates, err := certificatemanager.NewCertificateMapResource(ctx, spec.Names.CertificateMap,
 			&certificatemanager.CertificateMapResourceArgs{
 				Name:    pulumi.String(spec.Names.CertificateMap),
-				Project: held,
+				Project: projectID,
 			})
 		if err != nil {
 			return err
 		}
 		routes, err := compute.NewURLMap(ctx, spec.Names.URLMap, &compute.URLMapArgs{
 			Name:               pulumi.String(spec.Names.URLMap),
-			Project:            held,
+			Project:            projectID,
 			DefaultService:     notFound.SelfLink,
 			DefaultRouteAction: refusingRouteAction(),
 			HeaderAction:       markingHeaderAction(),
@@ -172,7 +172,7 @@ func frontProgram(spec frontSpec) Program {
 		}
 		proxy, err := compute.NewTargetHttpsProxy(ctx, spec.Names.Proxy, &compute.TargetHttpsProxyArgs{
 			Name:           pulumi.String(spec.Names.Proxy),
-			Project:        held,
+			Project:        projectID,
 			UrlMap:         routes.SelfLink,
 			CertificateMap: pulumi.Sprintf(certificateHost, project, spec.Names.CertificateMap),
 		})
@@ -181,7 +181,7 @@ func frontProgram(spec frontSpec) Program {
 		}
 		if _, err := compute.NewGlobalForwardingRule(ctx, spec.Names.Rule, &compute.GlobalForwardingRuleArgs{
 			Name:                pulumi.String(spec.Names.Rule),
-			Project:             held,
+			Project:             projectID,
 			Target:              proxy.SelfLink,
 			IpAddress:           address.Address,
 			PortRange:           pulumi.String(httpsPortRange),

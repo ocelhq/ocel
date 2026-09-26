@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func TestTheConnectorImageRunsTheBinaryItCarries(t *testing.T) {
+func TestTheConnectorImageRunsTheBinaryItContains(t *testing.T) {
 	t.Parallel()
 
 	built, err := connectorImage(empty.Image, []byte("connector"))
@@ -33,14 +33,14 @@ func TestTheConnectorImageRunsTheBinaryItCarries(t *testing.T) {
 		t.Errorf("the image starts %v, want %s", file.Config.Entrypoint, connectorImagePath)
 	}
 	if len(file.Config.Cmd) != 0 {
-		t.Errorf("the image carries the base's command %v, and a static base's command is not the connector", file.Config.Cmd)
+		t.Errorf("the image has the base's command %v, and a static base's command is not the connector", file.Config.Cmd)
 	}
 	layers, err := built.Layers()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(layers) != 1 {
-		t.Errorf("the image holds %d layers on an empty base, want the one that carries the connector", len(layers))
+		t.Errorf("the image has %d layers on an empty base, want the one that contains the connector", len(layers))
 	}
 
 	again, err := connectorImage(empty.Image, []byte("connector"))
@@ -63,7 +63,7 @@ func TestTheConnectorImageRunsTheBinaryItCarries(t *testing.T) {
 func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *testing.T) {
 	t.Parallel()
 
-	held, err := serviceOf(serving{
+	service, err := serviceOf(serving{
 		service: "ocel-connector",
 		image:   "example.com/ocel-connector:sha256-abc",
 		account: "ocel-connector@project.iam.gserviceaccount.com",
@@ -76,29 +76,29 @@ func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *t
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
 	}
-	if !held.InvokerIamDisabled {
-		t.Error("the connector service checks IAM on an invoke, and the console carries its own token rather than a Google credential")
+	if !service.InvokerIamDisabled {
+		t.Error("the connector service checks IAM on an invoke, and the console sends its own token rather than a Google credential")
 	}
-	if held.Template.Scaling.MinInstanceCount != 0 || held.Template.Scaling.MaxInstanceCount != connectorInstances {
-		t.Errorf("the connector scales %+v, want nothing standing idle and %d at most", held.Template.Scaling, connectorInstances)
+	if service.Template.Scaling.MinInstanceCount != 0 || service.Template.Scaling.MaxInstanceCount != connectorInstances {
+		t.Errorf("the connector scales %+v, want nothing running idle and %d at most", service.Template.Scaling, connectorInstances)
 	}
-	if held.Template.ServiceAccount != "ocel-connector@project.iam.gserviceaccount.com" {
-		t.Errorf("the connector runs as %q, want its own service account", held.Template.ServiceAccount)
+	if service.Template.ServiceAccount != "ocel-connector@project.iam.gserviceaccount.com" {
+		t.Errorf("the connector runs as %q, want its own service account", service.Template.ServiceAccount)
 	}
-	if held.Ingress != ingressEverywhere {
-		t.Errorf("the connector takes traffic from %q, and the console dials it from outside the project", held.Ingress)
+	if service.Ingress != ingressEverywhere {
+		t.Errorf("the connector takes traffic from %q, and the console dials it from outside the project", service.Ingress)
 	}
 }
 
 func TestAnAppServiceStillScalesAsItDid(t *testing.T) {
 	t.Parallel()
 
-	held, err := serviceOf(serving{service: "app", image: "example.com/app:tag", compute: provider.ComputeServerless})
+	service, err := serviceOf(serving{service: "app", image: "example.com/app:tag", compute: provider.ComputeServerless})
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
 	}
-	if held.Template.Scaling.MaxInstanceCount != 0 {
-		t.Errorf("an app that named no ceiling got one of %d", held.Template.Scaling.MaxInstanceCount)
+	if service.Template.Scaling.MaxInstanceCount != 0 {
+		t.Errorf("an app that named no ceiling got one of %d", service.Template.Scaling.MaxInstanceCount)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestAProjectGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
 	}
 	if bindings[0].Condition == nil ||
 		bindings[0].Condition.Expression != `resource.name == "projects/example-project/databases/ocel"` {
-		t.Fatalf("the grant carries %+v, and an unconditional roles/datastore.user reaches every database in the project",
+		t.Fatalf("the grant's condition is %+v, and an unconditional roles/datastore.user reaches every database in the project",
 			bindings[0].Condition)
 	}
 	if _, again := boundMember(bindings, connectorRecordsRole, member, only, true); again {
@@ -134,12 +134,12 @@ func TestAnotherNamespacesConditionalGrantIsADifferentBinding(t *testing.T) {
 
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
 	shop := databaseCondition("example-project", "shop")
-	held := []*cloudresourcemanager.Binding{
+	existing := []*cloudresourcemanager.Binding{
 		{Role: connectorRecordsRole, Members: []string{member}, Condition: shop},
 		{Role: connectorRecordsRole, Members: []string{member}},
 	}
 
-	bindings, changed := boundMember(held, connectorRecordsRole, member,
+	bindings, changed := boundMember(existing, connectorRecordsRole, member,
 		databaseCondition("example-project", "ocel"), true)
 	if !changed || len(bindings) != 3 {
 		t.Fatalf("granting for another namespace = %+v, %v, want a third binding of its own", bindings, changed)
@@ -163,10 +163,10 @@ func TestAnotherMembersGrantSurvivesTheConnectorsRemoval(t *testing.T) {
 
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
 	only := databaseCondition("example-project", "ocel")
-	held := []*cloudresourcemanager.Binding{
+	existing := []*cloudresourcemanager.Binding{
 		{Role: connectorRecordsRole, Members: []string{"user:someone@example.com", member}, Condition: only},
 	}
-	bindings, changed := boundMember(held, connectorRecordsRole, member, only, false)
+	bindings, changed := boundMember(existing, connectorRecordsRole, member, only, false)
 	if !changed {
 		t.Fatal("revoking changed nothing")
 	}
@@ -197,12 +197,12 @@ func TestTheConnectorIsNamedForTheNamespaceAndFitsWhatIAMTakes(t *testing.T) {
 func TestAnUnsetComputeTakesTheCloudRunServiceThatScalesToNothing(t *testing.T) {
 	t.Parallel()
 
-	held, err := provider.ConnectorCompute("", connectorCompute)
+	compute, err := provider.ConnectorCompute("", connectorCompute)
 	if err != nil {
 		t.Fatalf("provider.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
 	}
-	if held != provider.ComputeServerless {
-		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, provider.ComputeServerless)
+	if compute != provider.ComputeServerless {
+		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", compute, provider.ComputeServerless)
 	}
 }
 
@@ -229,10 +229,10 @@ func TestRemovingTheConnectorAttemptsEveryStepAndReportsEveryFailure(t *testing.
 		func() error { ran = append(ran, "images"); return nil },
 	)
 	if want := []string{"service", "grants", "account", "images"}; !slices.Equal(ran, want) {
-		t.Errorf("removal ran %v, want %v: a step that fails leaves the later ones standing if they are skipped", ran, want)
+		t.Errorf("removal ran %v, want %v: a step that fails leaves the later ones in place if they are skipped", ran, want)
 	}
 	if err == nil || !strings.Contains(err.Error(), "the service would not go") || !strings.Contains(err.Error(), "the account would not go") {
-		t.Errorf("removal reported %v, want every failure named so the operator knows what still stands", err)
+		t.Errorf("removal reported %v, want every failure named so the operator knows what still exists", err)
 	}
 	if err := everyStep(func() error { return nil }, func() error { return nil }); err != nil {
 		t.Errorf("a removal every step of which passed reported %v", err)
@@ -242,7 +242,7 @@ func TestRemovingTheConnectorAttemptsEveryStepAndReportsEveryFailure(t *testing.
 func TestTheConnectorServiceMountsItsKeyOutOfSecretManager(t *testing.T) {
 	t.Parallel()
 
-	held, err := serviceOf(serving{
+	service, err := serviceOf(serving{
 		service: "ocel-connector",
 		image:   "example.com/ocel-connector:sha256-abc",
 		compute: provider.ComputeServerless,
@@ -251,17 +251,17 @@ func TestTheConnectorServiceMountsItsKeyOutOfSecretManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
 	}
-	if len(held.Template.Volumes) != 1 || held.Template.Volumes[0].Secret == nil {
-		t.Fatalf("the connector revision carries volumes %+v, want the one Secret Manager fills", held.Template.Volumes)
+	if len(service.Template.Volumes) != 1 || service.Template.Volumes[0].Secret == nil {
+		t.Fatalf("the connector revision has volumes %+v, want the one Secret Manager fills", service.Template.Volumes)
 	}
-	volume := held.Template.Volumes[0]
+	volume := service.Template.Volumes[0]
 	if volume.Secret.Secret != "ocel-connector-key" {
 		t.Errorf("the key volume reads secret %q, want the connector's own", volume.Secret.Secret)
 	}
 	if len(volume.Secret.Items) != 1 || volume.Secret.Items[0].Path != connectorKeyFile || volume.Secret.Items[0].Version != "latest" {
 		t.Errorf("the key volume exposes %+v, want the latest version as the file the config names", volume.Secret.Items)
 	}
-	mounts := held.Template.Containers[0].VolumeMounts
+	mounts := service.Template.Containers[0].VolumeMounts
 	if len(mounts) != 1 || mounts[0].Name != volume.Name || mounts[0].MountPath != connectorKeyDir {
 		t.Errorf("the container mounts %+v, want the key volume at %s", mounts, connectorKeyDir)
 	}
@@ -296,13 +296,13 @@ func TestTheKeyMintedIntoSecretManagerNamesThePublicKeyTheConsoleVerifiesWith(t 
 func TestTheConnectorsPublicKeyIsReadOffTheServiceItRunsAs(t *testing.T) {
 	t.Parallel()
 
-	held := &run.GoogleCloudRunV2Service{Template: &run.GoogleCloudRunV2RevisionTemplate{
+	service := &run.GoogleCloudRunV2Service{Template: &run.GoogleCloudRunV2RevisionTemplate{
 		Containers: []*run.GoogleCloudRunV2Container{{Env: []*run.GoogleCloudRunV2EnvVar{
 			{Name: connectorVersionEnv, Value: "0.9.9"},
 			{Name: connectorPublicKeyEnv, Value: "cHVibGlj"},
 		}}},
 	}}
-	if got := connectorPublicKeyOf(held); got != "cHVibGlj" {
+	if got := connectorPublicKeyOf(service); got != "cHVibGlj" {
 		t.Errorf("connectorPublicKeyOf = %q, want the key the install stamped on the service", got)
 	}
 	if got := connectorPublicKeyOf(&run.GoogleCloudRunV2Service{}); got != "" {
@@ -322,14 +322,14 @@ func TestTheConnectorConfigNamesWhereItsKeyIsMounted(t *testing.T) {
 		t.Fatal(err)
 	}
 	if read["keyPath"] != connectorKeyPath || read["console"] != "https://console.example.com" || read["connectorId"] != "conn-1" {
-		t.Errorf("the config carried is %v, want keyPath added and the rest kept", read)
+		t.Errorf("the config written is %v, want keyPath added and the rest kept", read)
 	}
 	if _, err := keyPathed([]byte(`[]`), connectorKeyPath); err == nil {
-		t.Error("a config that is no object was carried")
+		t.Error("a config that is no object was written")
 	}
 }
 
-func TestTheConnectorHoldsOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
+func TestTheConnectorHasOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -366,21 +366,21 @@ func TestAReinstallWithFewerGrantsTakesTheKeyRoleItNoLongerCallsForAway(t *testi
 		t.Fatal("dropping the reveal grant changed nothing on the key")
 	}
 	for _, binding := range bindings {
-		held := slices.Contains(binding.GetMembers(), member)
-		if binding.GetRole() == connectorOpeningRole && held {
-			t.Errorf("the connector still holds %s after the reveal grant went, and a role nothing calls for is one more than the minimum", connectorOpeningRole)
+		granted := slices.Contains(binding.GetMembers(), member)
+		if binding.GetRole() == connectorOpeningRole && granted {
+			t.Errorf("the connector still has %s after the reveal grant went, and a role nothing calls for is one more than the minimum", connectorOpeningRole)
 		}
-		if binding.GetRole() == connectorSealingRole && !held {
-			t.Errorf("the connector lost %s while its write grant stands", connectorSealingRole)
+		if binding.GetRole() == connectorSealingRole && !granted {
+			t.Errorf("the connector lost %s while its write grant remains", connectorSealingRole)
 		}
 	}
 	if _, again := boundKeyRoles(bindings, member, connectorKeyRoles, []string{connectorSealingRole}); again {
-		t.Error("holding the same roles again rewrote the policy, so every install would churn the key's IAM")
+		t.Error("granting the same roles again rewrote the policy, so every install would churn the key's IAM")
 	}
 	bindings, _ = boundKeyRoles(bindings, member, connectorKeyRoles, nil)
 	for _, binding := range bindings {
 		if slices.Contains(binding.GetMembers(), member) {
-			t.Errorf("removal left the connector holding %s", binding.GetRole())
+			t.Errorf("removal left the connector with %s", binding.GetRole())
 		}
 	}
 }
