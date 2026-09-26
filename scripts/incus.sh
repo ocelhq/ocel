@@ -55,7 +55,7 @@ ssh_opts() {
         -o LogLevel=ERROR
 }
 
-cloud_init_finished() {
+cloud_init_ended() {
     incus exec "$1" -- cloud-init status 2>/dev/null |
         grep -qE '^status: (done|error|degraded)'
 }
@@ -71,7 +71,7 @@ wait_ssh() {
                 return 0
             fi
         fi
-        if [ "$deadline" -gt $((SECONDS + grace)) ] && cloud_init_finished "$name"; then
+        if [ "$deadline" -gt $((SECONDS + grace)) ] && cloud_init_ended "$name"; then
             deadline=$((SECONDS + grace))
         fi
         sleep 2
