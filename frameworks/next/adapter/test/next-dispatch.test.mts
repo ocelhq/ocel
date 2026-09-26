@@ -1263,9 +1263,9 @@ test("primes a top-level-await middleware module at INIT, not deferred to first 
 });
 
 test("registers the adapter's waitUntil on the invocation's own ctx", async () => {
-  let settled = false;
+  let finished = false;
   const backgroundWork = Promise.resolve().then(() => {
-    settled = true;
+    finished = true;
   });
   const load = () => ({
     default: () => ({ response: new Response(null, { status: 200 }), waitUntil: backgroundWork }),
@@ -1283,7 +1283,7 @@ test("registers the adapter's waitUntil on the invocation's own ctx", async () =
 
   expect(registered).toEqual([backgroundWork]);
   await backgroundWork;
-  expect(settled).toBe(true);
+  expect(finished).toBe(true);
 });
 
 test("passes a request.waitUntil that forwards to the invocation's own ctx", async () => {

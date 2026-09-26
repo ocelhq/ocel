@@ -114,7 +114,7 @@ afterAll(async () => {
 });
 
 describe.each(Object.keys(doors))("%s", (door) => {
-  test("a request carrying no secret never reaches the app", async () => {
+  test("a request with no secret never reaches the app", async () => {
     process.env.OCEL_ORIGIN_ROUTER = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
@@ -123,7 +123,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
     expect(seen).toBeUndefined();
   });
 
-  test("a request carrying the wrong secret never reaches the app", async () => {
+  test("a request with the wrong secret never reaches the app", async () => {
     process.env.OCEL_ORIGIN_ROUTER = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
@@ -144,7 +144,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
     await waitFor(() => messages.filter((m) => m.type === "invocation-complete").length > before);
   });
 
-  test("a request carrying the secret is served, and the app never sees it", async () => {
+  test("a request with the secret is served, and the app never sees it", async () => {
     process.env.OCEL_ORIGIN_ROUTER = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);

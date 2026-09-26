@@ -49,7 +49,7 @@ func preflightedFor(t *testing.T, p *vps.Provider, image string) error {
 	return p.PreflightDeploy(context.Background(), liveDeployPreflight(t, image))
 }
 
-func TestLiveAStandingBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testing.T) {
+func TestLiveARunningBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	if err := preflightedOn(t, p); err != nil {

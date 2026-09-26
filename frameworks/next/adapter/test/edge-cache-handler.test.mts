@@ -126,8 +126,8 @@ test("writes a fetch entry stamped with its own tags and lastModified", async ()
 
 test("hands the write's promise back rather than detaching it", async () => {
   const Handler = loadHandler("edge");
-  let settle: () => void;
-  const landed = new Promise<void>((resolve) => (settle = resolve));
+  let land: () => void;
+  const landed = new Promise<void>((resolve) => (land = resolve));
   bind({ fetchSet: () => landed });
 
   const pending = new Handler().set("k", { kind: "FETCH", data: {} }, {});
@@ -136,7 +136,7 @@ test("hands the write's promise back rather than detaching it", async () => {
   await Promise.resolve();
   expect(done).toBe(false);
 
-  settle!();
+  land!();
   await pending;
   expect(done).toBe(true);
 });

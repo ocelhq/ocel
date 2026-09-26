@@ -119,7 +119,7 @@ describe("retryTransientOrigin", () => {
 });
 
 describe("isServiceThrottle", () => {
-  it("is true for a 429 carrying x-amzn-errortype", () => {
+  it("is true for a 429 with an x-amzn-errortype header", () => {
     expect(isServiceThrottle(throttled())).toBe(true);
   });
 

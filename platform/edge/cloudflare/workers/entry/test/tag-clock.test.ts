@@ -431,7 +431,7 @@ describe("two builds sharing one binding", () => {
 });
 
 describe("a store read that never finishes", () => {
-  function neverSettlingStore() {
+  function neverFinishingStore() {
     let calls = 0;
     return {
       get calls() {
@@ -445,13 +445,13 @@ describe("a store read that never finishes", () => {
   }
 
   it("degrades to 'untrusted' once the bound elapses, rather than hanging forever", async () => {
-    const store = neverSettlingStore();
+    const store = neverFinishingStore();
     const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
     expect(await clock.freshness(["posts"], 1_000, 3_000)).toBe("untrusted");
   });
 
   it("does not hang prime() either", async () => {
-    const store = neverSettlingStore();
+    const store = neverFinishingStore();
     const clock = createTagClock(cfg, { store, snapshotReadTimeoutMs: 5 });
     expect(await clock.prime(3_000)).toBeNull();
   });

@@ -18,7 +18,7 @@ func TestTheFixturesOfAnotherLanguageHaveNoJS(t *testing.T) {
 		t.Run(filepath.Base(filepath.Dir(dir))+"/"+filepath.Base(dir), func(t *testing.T) {
 			hasJS, err := HasJS(&projectconfig.Config{Dir: dir})
 			if err != nil {
-				t.Fatalf("HoldsJS: %v", err)
+				t.Fatalf("HasJS: %v", err)
 			}
 			if hasJS {
 				t.Fatalf("%s contains js, and its own language is not js", dir)

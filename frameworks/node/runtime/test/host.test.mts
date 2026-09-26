@@ -189,13 +189,13 @@ describe("onListening", () => {
 });
 
 describe("invocation lifecycle", () => {
-  test("delays invocation-complete until waitUntil settles, after request-end", async () => {
+  test("delays invocation-complete until waitUntil finishes, after request-end", async () => {
     const events: string[] = [];
     const invoke: Invoke = (_req, res, ocel) => {
       ocel.waitUntil(
         new Promise<void>((r) =>
           setTimeout(() => {
-            events.push("waitUntil-settled");
+            events.push("waitUntil-finished");
             r();
           }, 120),
         ),
@@ -221,16 +221,16 @@ describe("invocation lifecycle", () => {
     );
     expect(reIdx).toBeGreaterThanOrEqual(0);
     expect(icIdx).toBeGreaterThan(reIdx);
-    expect(events).toContain("waitUntil-settled");
+    expect(events).toContain("waitUntil-finished");
   });
 
   test("still completes when the request is aborted (close without finish)", async () => {
-    let settled = false;
+    let drained = false;
     const invoke: Invoke = (_req, res, ocel) => {
       ocel.waitUntil(
         new Promise<void>((r) =>
           setTimeout(() => {
-            settled = true;
+            drained = true;
             r();
           }, 60),
         ),
@@ -260,11 +260,11 @@ describe("invocation lifecycle", () => {
     await waitFor(() =>
       messages.some((m) => m.type === "invocation-complete" && m.payload.requestId === "req-abort"),
     );
-    expect(settled).toBe(true);
+    expect(drained).toBe(true);
   });
 
   test("keeps the invocation open for work deferred through the background bridge", async () => {
-    let settled = false;
+    let drained = false;
     const invoke: Invoke = (_req, res, ocel) =>
       runWithWaitUntil(ocel.waitUntil, async () => {
         await Promise.resolve();
@@ -272,7 +272,7 @@ describe("invocation lifecycle", () => {
           () =>
             new Promise<void>((r) =>
               setTimeout(() => {
-                settled = true;
+                drained = true;
                 r();
               }, 80),
             ),
@@ -283,14 +283,14 @@ describe("invocation lifecycle", () => {
     const port = await start(invoke);
 
     await request(port, "req-bridge");
-    expect(settled).toBe(false);
+    expect(drained).toBe(false);
 
     await waitFor(() =>
       messages.some(
         (m) => m.type === "invocation-complete" && m.payload.requestId === "req-bridge",
       ),
     );
-    expect(settled).toBe(true);
+    expect(drained).toBe(true);
   });
 });
 

@@ -35,7 +35,7 @@ export type BindingPlaceholders = { readonly [type: string]: BindingNames };
 
 /**
  * The placeholders `B` describes: one property of one record per leaf, each
- * carrying the type that record publishes it as. `G` is what marks `B` as
+ * typed as that record publishes it. `G` is what marks `B` as
  * written down; while nothing has augmented it — nothing has run
  * `ocel bindings generate` — every name stays open and the deploy is the check.
  */

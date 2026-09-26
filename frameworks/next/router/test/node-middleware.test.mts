@@ -221,7 +221,7 @@ describe("node middleware forwarding", () => {
     expect(res.headers.getSetCookie()).toEqual(["sid=abc; Path=/"]);
   });
 
-  it("redirects to the middleware's own Location without carrying the request query", async () => {
+  it("redirects to the middleware's own Location without appending the request query", async () => {
     const origin = fakeOrigin(() => mwResponse({ location: "/login" }, { status: 307 }));
     const res = await serve(
       new Request("https://app.example/static.txt?a=1"),

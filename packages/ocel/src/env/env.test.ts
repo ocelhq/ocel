@@ -1474,7 +1474,7 @@ describe("validating a group against the stored cells", () => {
     });
   });
 
-  it("does not owe a member its own spelling makes optional when the group is on", async () => {
+  it("does not report a member missing that its own spelling makes optional when the group is on", async () => {
     declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_D1_ID", "an-id")] });
     defineEnv({
       github7: group(
