@@ -51,10 +51,13 @@ impl Received {
 }
 
 pub fn collector(requests: usize) -> (String, Receiver<Received>) {
-    holding(requests, Vec::new())
+    collector_with_cells(requests, Vec::new())
 }
 
-pub fn holding(requests: usize, cells: Vec<VariableCell>) -> (String, Receiver<Received>) {
+pub fn collector_with_cells(
+    requests: usize,
+    cells: Vec<VariableCell>,
+) -> (String, Receiver<Received>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
     let url = format!("http://{}", listener.local_addr().expect("addr"));
     let (sender, receiver) = channel();

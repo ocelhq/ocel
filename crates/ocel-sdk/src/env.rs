@@ -46,7 +46,7 @@ impl Secret {
     }
 
     /// The secret's current value, read from the environment on every call. It fails with
-    /// [`Error::Unset`] when nothing stands for the key any more, the way the read of a
+    /// [`Error::Unset`] when the key has no value any more, the way the read of a
     /// missing variable fails, rather than hand back an empty secret.
     pub fn value(&self) -> Result<String, Error> {
         delivered(&self.key).ok_or_else(|| unset(&self.key))

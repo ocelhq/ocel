@@ -59,7 +59,9 @@ fn an_async_main_over_the_attribute_posts_what_it_declares_and_returns() {
 }
 
 fn under_discovery(app: impl FnOnce()) -> Received {
-    let _phase: MutexGuard<'_, ()> = PHASE.lock().unwrap_or_else(|held| held.into_inner());
+    let _phase: MutexGuard<'_, ()> = PHASE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (url, requests) = collector(1);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);

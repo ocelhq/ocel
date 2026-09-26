@@ -1,6 +1,6 @@
 mod collector;
 
-use collector::{cell, holding, Received, DECLARE_ENV};
+use collector::{cell, collector_with_cells, Received, DECLARE_ENV};
 
 #[allow(dead_code)]
 #[derive(ocel::Env)]
@@ -20,7 +20,8 @@ struct GitHub {
 
 #[test]
 fn a_group_nothing_references_declares_nothing() {
-    let (url, requests) = holding(1, vec![cell("DATABASE_URL", "", "postgres://shop")]);
+    let (url, requests) =
+        collector_with_cells(1, vec![cell("DATABASE_URL", "", "postgres://shop")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
     std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
@@ -42,7 +43,7 @@ fn a_group_nothing_references_declares_nothing() {
     assert_eq!(keys, ["DATABASE_URL"]);
     assert!(
         declared.groups.is_empty(),
-        "groups = {:?}, want nothing from a group no struct holds",
+        "groups = {:?}, want nothing from a group no struct field names",
         declared.groups
     );
 }

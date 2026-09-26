@@ -3,11 +3,11 @@ use std::sync::{Mutex, MutexGuard};
 static ENV: Mutex<()> = Mutex::new(());
 
 fn env() -> MutexGuard<'static, ()> {
-    ENV.lock().unwrap_or_else(|held| held.into_inner())
+    ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 #[test]
-fn a_connection_string_carries_credentials_percent_encoded() {
+fn a_connection_string_includes_credentials_percent_encoded() {
     let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_delivered",
@@ -86,7 +86,7 @@ fn a_binding_that_was_never_delivered_names_the_commands_that_deliver_it() {
 }
 
 #[test]
-fn a_binding_of_another_kind_says_what_it_carries() {
+fn a_binding_of_another_kind_says_what_it_contains() {
     let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_mistyped",
@@ -103,7 +103,7 @@ fn a_binding_of_another_kind_says_what_it_carries() {
 }
 
 #[test]
-fn a_binding_carrying_nothing_at_all_says_what_it_carries() {
+fn a_binding_containing_nothing_at_all_says_what_it_contains() {
     let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_empty", r#"{"name":"empty"}"#);
     let err = Postgres::new("empty")
@@ -131,7 +131,7 @@ fn a_binding_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
 }
 
 #[test]
-fn a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_it_held() {
+fn a_value_that_is_not_a_binding_record_is_reported_without_quoting_its_value() {
     let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_unreadable", "s3cret-not-json");
     let err = Postgres::new("unreadable")
@@ -139,7 +139,7 @@ fn a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_it_held
         .expect_err("not a binding record");
     assert!(
         !err.to_string().contains("s3cret"),
-        "error = {err}, want it to name the key without the value it held"
+        "error = {err}, want it to name the key without quoting its value"
     );
     assert_eq!(
         err.to_string(),

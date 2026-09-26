@@ -1,6 +1,6 @@
 mod collector;
 
-use collector::{cell, holding, Received, REPORT_ENV_PROBLEMS};
+use collector::{cell, collector_with_cells, Received, REPORT_ENV_PROBLEMS};
 
 #[allow(dead_code)]
 #[derive(ocel::Env)]
@@ -19,8 +19,8 @@ struct Inherited {
 }
 
 #[test]
-fn a_scoped_member_of_a_group_a_root_value_turned_on_is_owed() {
-    let (url, requests) = holding(2, vec![cell("INHERITED_TOKEN", "", "t")]);
+fn a_scoped_member_of_a_group_a_root_value_turned_on_is_required() {
+    let (url, requests) = collector_with_cells(2, vec![cell("INHERITED_TOKEN", "", "t")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
     std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);

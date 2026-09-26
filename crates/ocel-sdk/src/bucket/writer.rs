@@ -14,8 +14,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll};
 
 /// One object's bytes, written as they are produced. A small body goes up in a single
-/// request; a body that outgrows what one request carries is uploaded in parts, which
-/// shutting the writer down settles and dropping it throws away. Nothing is stored until
+/// request; a body past the single-request ceiling is uploaded in parts, which
+/// shutting the writer down completes and dropping it aborts. Nothing is stored until
 /// the shutdown returns without an error.
 pub struct Writer {
     state: State,
@@ -30,13 +30,13 @@ struct Leash {
 
 impl Leash {
     fn upload_id(&self) -> String {
-        self.held().clone()
+        self.locked_upload_id().clone()
     }
 
-    fn held(&self) -> MutexGuard<'_, String> {
+    fn locked_upload_id(&self) -> MutexGuard<'_, String> {
         self.upload_id
             .lock()
-            .unwrap_or_else(|held| held.into_inner())
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -61,10 +61,10 @@ struct Core {
     completed: Vec<CompletedPart>,
 }
 
-fn settled() -> Error {
+fn finished() -> Error {
     Error::Refused {
         key: String::new(),
-        said: "this writer has already been settled".to_string(),
+        said: "this writer has already finished".to_string(),
     }
 }
 
@@ -95,7 +95,7 @@ impl Writer {
     pub(super) async fn put(&mut self, body: Bytes) -> Result<(), Error> {
         let outcome = {
             let State::Ready(core) = &mut self.state else {
-                return Err(settled());
+                return Err(finished());
             };
             core.buffered.extend_from_slice(&body);
             core.drain(false).await
@@ -110,12 +110,12 @@ impl Writer {
         Err(err)
     }
 
-    pub(super) async fn settle(mut self) -> Result<Object, Error> {
+    pub(super) async fn finish(mut self) -> Result<Object, Error> {
         let State::Ready(mut core) = std::mem::replace(&mut self.state, State::Spent) else {
-            return Err(settled());
+            return Err(finished());
         };
         match core.finish().await {
-            Ok(Some(held)) => Ok(held),
+            Ok(Some(written)) => Ok(written),
             Ok(None) => head(&core.reached, &core.key).await,
             Err(err) => {
                 core.abort().await;
@@ -206,7 +206,7 @@ impl Core {
             })
             .await
             .map_err(|err| refused(&self.key, &err))?;
-        *self.leash.held() = response.into_owned().upload_id;
+        *self.leash.locked_upload_id() = response.into_owned().upload_id;
         Ok(())
     }
 
@@ -277,7 +277,7 @@ impl Core {
             })
             .await
             .map_err(|err| refused(&self.key, &err))?;
-        self.leash.held().clear();
+        self.leash.locked_upload_id().clear();
         self.completed.clear();
         response
             .into_owned()
@@ -341,7 +341,7 @@ impl Core {
     }
 
     async fn abort(&mut self) {
-        let upload_id = std::mem::take(&mut *self.leash.held());
+        let upload_id = std::mem::take(&mut *self.leash.locked_upload_id());
         if upload_id.is_empty() {
             return;
         }
@@ -391,7 +391,7 @@ impl tokio::io::AsyncWrite for Writer {
         std::task::ready!(self.poll_drain(context))?;
         let State::Ready(core) = &mut self.state else {
             return Poll::Ready(Err(std::io::Error::other(
-                "this writer has already been settled",
+                "this writer has already finished",
             )));
         };
         core.buffered.extend_from_slice(buffer);
@@ -428,7 +428,7 @@ impl tokio::io::AsyncWrite for Writer {
             std::task::ready!(self.poll_drain(context))?;
             let State::Ready(mut core) = std::mem::replace(&mut self.state, State::Spent) else {
                 return Poll::Ready(Err(std::io::Error::other(
-                    "this writer has already been settled",
+                    "this writer has already finished",
                 )));
             };
             self.state = State::Finishing(Box::pin(async move {
@@ -453,7 +453,7 @@ impl tokio::io::AsyncWrite for Writer {
 
 impl Drop for Writer {
     fn drop(&mut self) {
-        let upload_id = std::mem::take(&mut *self.leash.held());
+        let upload_id = std::mem::take(&mut *self.leash.locked_upload_id());
         if upload_id.is_empty() {
             return;
         }

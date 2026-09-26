@@ -110,9 +110,9 @@ pub trait Declare: Sized {
 
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` is not an ocel::Group, so no #[ocel(group)] field can hold it.",
-    label = "this field holds a group",
-    note = "a group's struct carries #[derive(ocel::Group)], not #[derive(ocel::Env)], and holds no #[ocel(group)] fields of its own: a group nests one level only."
+    message = "`{Self}` is not an ocel::Group, so no #[ocel(group)] field can have it as its type.",
+    label = "this type must be an ocel::Group",
+    note = "a group's struct uses #[derive(ocel::Group)], not #[derive(ocel::Env)], and contains no #[ocel(group)] fields of its own: a group nests one level only."
 )]
 pub trait Group: Declare {}
 
@@ -122,9 +122,9 @@ pub struct Registered(pub fn() -> Declared);
 inventory::collect!(Registered);
 
 /// Post everything the structs this binary links declare to the dev server, and report
-/// whether the run was discovery. A `false` means the app should carry on and serve.
+/// whether the run was discovery. A `false` means the app should continue and serve.
 ///
-/// [`macro@main`](crate::main) calls this, so an app that carries the attribute never
+/// [`macro@main`](crate::main) calls this, so an app whose `main` has the attribute never
 /// calls it itself. The client the declarations go over is async, and the runtime it
 /// runs on is this call's own thread, so `discover` blocks whether or not the app has
 /// a runtime of its own.
@@ -205,18 +205,22 @@ fn joined(all: &mut Declared) -> Result<(), Error> {
     for index in 0..all.groups.len() {
         let (key, members) = (all.groups[index].key, (all.groups[index].members)());
         for mut member in members.variables {
-            if let Some(held) = all.variables.iter().find(|held| held.key == member.key) {
-                let detail = match held.group {
+            if let Some(existing) = all
+                .variables
+                .iter()
+                .find(|existing| existing.key == member.key)
+            {
+                let detail = match existing.group {
                     Some(seen) => format!(
                         "belongs to the group '{seen}' and to the group '{key}'. A variable belongs to one group."
                     ),
                     None => {
-                        let (held, member) = (
-                            site(held.file, held.line),
+                        let (existing, member) = (
+                            site(existing.file, existing.line),
                             site(member.file, member.line),
                         );
                         format!(
-                            "is declared in {held} and in the group '{key}' at {member}. A key is declared exactly once, in exactly one file."
+                            "is declared in {existing} and in the group '{key}' at {member}. A key is declared exactly once, in exactly one file."
                         )
                     }
                 };
@@ -365,7 +369,7 @@ fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem>
                 if stored.iter().any(|cell| cell.folder == folder) {
                     continue;
                 }
-                if !owed(declared, variable, cells, folder) {
+                if !required_at(declared, variable, cells, folder) {
                     continue;
                 }
                 problems.push(problem(
@@ -394,7 +398,7 @@ fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem>
     problems
 }
 
-fn owed(
+fn required_at(
     declared: &Declared,
     variable: &DeclaredVariable,
     cells: &[VariableCell],

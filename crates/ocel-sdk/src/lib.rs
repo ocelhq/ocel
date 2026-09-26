@@ -1,5 +1,5 @@
 //! The library Rust apps import to declare the infrastructure and the environment an app
-//! needs. A declaration is a struct in the app's own crate, held as a value:
+//! needs. A declaration is a struct in the app's own crate, loaded as a value:
 //!
 //! ```ignore
 //! #[derive(ocel::Resources, Clone)]
@@ -57,8 +57,8 @@ pub use ocel_macros::Resources;
 /// reads the delivered values into it.
 pub use ocel_macros::Env;
 
-/// Declares every field of a struct as a member of the group that holds it. A struct
-/// nothing holds declares nothing.
+/// Declares every field of a struct as a member of the group named after the
+/// `#[ocel(group)]` field whose type it is. A struct no such field names declares nothing.
 pub use ocel_macros::Group;
 
 #[doc(hidden)]

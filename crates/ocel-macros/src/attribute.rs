@@ -137,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn a_field_with_no_attribute_carries_no_entries() {
+    fn a_field_with_no_attribute_has_no_entries() {
         assert!(parsed("pub port: u16").is_empty());
     }
 

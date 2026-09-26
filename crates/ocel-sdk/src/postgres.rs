@@ -31,7 +31,7 @@ impl Postgres {
         &self.name
     }
 
-    /// The postgres URL of the delivered binding: the record's url verbatim when it carries
+    /// The postgres URL of the delivered binding: the record's url verbatim when it has
     /// one, and otherwise one built from its host, port, database and credentials,
     /// percent-encoded, with its tls mode as `sslmode`. It fails when no binding was delivered
     /// for the name, and during discovery.
@@ -39,8 +39,8 @@ impl Postgres {
         Ok(connection_string(&self.properties("connection_string")?))
     }
 
-    /// The sqlx pool over the delivered binding, opened on the first call and returned as it
-    /// stands on every one after. A record under verify-full that names a CA trusts that CA
+    /// The sqlx pool over the delivered binding, opened on the first call and returned unchanged
+    /// on every one after. A record under verify-full that names a CA trusts that CA
     /// for the server's certificate. It fails when no binding was delivered for the name, and
     /// during discovery.
     #[cfg(feature = "postgres")]

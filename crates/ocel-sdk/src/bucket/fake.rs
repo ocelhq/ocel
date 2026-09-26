@@ -37,11 +37,11 @@ pub(super) struct Store {
 }
 
 impl Store {
-    pub(super) fn held(&self, key: &str) -> Option<Stored> {
+    pub(super) fn object(&self, key: &str) -> Option<Stored> {
         self.objects.lock().expect("the objects").get(key).cloned()
     }
 
-    pub(super) fn hold(&self, key: &str, stored: Stored) {
+    pub(super) fn insert(&self, key: &str, stored: Stored) {
         self.objects
             .lock()
             .expect("the objects")
@@ -58,7 +58,7 @@ pub(super) struct Fake {
     pub(super) store: Arc<Store>,
 }
 
-pub(super) fn stand() -> Fake {
+pub(super) fn start() -> Fake {
     let store = Arc::new(Store::default());
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
     let address = format!("http://{}", listener.local_addr().expect("addr"));
@@ -182,15 +182,15 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
         .collect();
 
     if received.method == "GET" {
-        let Some(held) = store.held(key) else {
+        let Some(stored) = store.object(key) else {
             answer(stream, 404, "text/plain", Vec::new(), &[]);
             return;
         };
         let (status, body) = match received.headers.get("range") {
-            Some(range) => (206, sliced(&held.body, range)),
-            None => (200, held.body.clone()),
+            Some(range) => (206, sliced(&stored.body, range)),
+            None => (200, stored.body.clone()),
         };
-        answer(stream, status, &held.content_type, body, &[]);
+        answer(stream, status, &stored.content_type, body, &[]);
         return;
     }
 
@@ -223,19 +223,20 @@ fn object(stream: &mut TcpStream, store: &Store, key: &str, received: &Received)
         return;
     }
 
-    let held = store.held(key);
-    if received.headers.get("if-none-match").map(String::as_str) == Some("*") && held.is_some() {
+    let existing = store.object(key);
+    if received.headers.get("if-none-match").map(String::as_str) == Some("*") && existing.is_some()
+    {
         answer(stream, 412, "text/plain", Vec::new(), &[]);
         return;
     }
     if let Some(wanted) = received.headers.get("if-match") {
-        if held.as_ref().map(|held| held.etag.as_str()) != Some(wanted.as_str()) {
+        if existing.as_ref().map(|existing| existing.etag.as_str()) != Some(wanted.as_str()) {
             answer(stream, 412, "text/plain", Vec::new(), &[]);
             return;
         }
     }
     let etag = store.tag();
-    store.hold(
+    store.insert(
         key,
         Stored {
             body: received.body.clone(),
@@ -272,18 +273,18 @@ fn sliced(body: &[u8], range: &str) -> Vec<u8> {
     body[from.min(body.len())..(to + 1).min(body.len())].to_vec()
 }
 
-fn info(key: &str, held: &Stored) -> ObjectInfo {
+fn info(key: &str, stored: &Stored) -> ObjectInfo {
     ObjectInfo {
         key: key.to_string(),
-        size: held.body.len() as i64,
-        etag: held.etag.clone(),
-        content_type: held.content_type.clone(),
+        size: stored.body.len() as i64,
+        etag: stored.etag.clone(),
+        content_type: stored.content_type.clone(),
         uploaded_at: buffa_types::google::protobuf::Timestamp {
             seconds: UPLOADED_AT,
             ..Default::default()
         }
         .into(),
-        metadata: held
+        metadata: stored
             .metadata
             .iter()
             .map(|(name, value)| (name.clone(), value.clone()))
@@ -323,8 +324,8 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
             encode(
                 &HeadResponse {
                     object: store
-                        .held(&request.key)
-                        .map(|held| info(&request.key, &held))
+                        .object(&request.key)
+                        .map(|stored| info(&request.key, &stored))
                         .into(),
                     ..Default::default()
                 },
@@ -337,7 +338,7 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
             let matching: Vec<ObjectInfo> = objects
                 .iter()
                 .filter(|(key, _)| key.starts_with(&request.prefix))
-                .map(|(key, held)| info(key, held))
+                .map(|(key, stored)| info(key, stored))
                 .collect();
             let from: usize = request.cursor.parse().unwrap_or_default();
             let page = match request.limit {
@@ -367,11 +368,11 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
         }
         "Copy" => {
             let request: CopyRequest = decode(body, json);
-            let held = store.held(&request.source_key)?;
-            store.hold(&request.destination_key, held.clone());
+            let source = store.object(&request.source_key)?;
+            store.insert(&request.destination_key, source.clone());
             encode(
                 &CopyResponse {
-                    object: info(&request.destination_key, &held).into(),
+                    object: info(&request.destination_key, &source).into(),
                     ..Default::default()
                 },
                 json,
@@ -449,15 +450,15 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
             for number in request.parts.iter().map(|part| part.part_number) {
                 whole.extend_from_slice(parts.get(&number)?);
             }
-            let held = Stored {
+            let completed = Stored {
                 body: whole,
                 etag: store.tag(),
                 ..Default::default()
             };
-            store.hold(&request.key, held.clone());
+            store.insert(&request.key, completed.clone());
             encode(
                 &CompleteMultipartResponse {
-                    object: info(&request.key, &held).into(),
+                    object: info(&request.key, &completed).into(),
                     ..Default::default()
                 },
                 json,

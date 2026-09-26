@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn every_type_but_a_string_and_a_secret_carries_a_schema() {
+    fn every_type_but_a_string_and_a_secret_has_a_schema() {
         assert!(ok("pub name: String").parsed().is_none());
         assert!(ok("pub signing_key: ocel::Secret").parsed().is_none());
         assert!(ok("pub timeout: Option<String>").parsed().is_none());
@@ -348,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn a_secret_is_live_and_an_option_carries_its_inner_type() {
+    fn a_secret_is_live_and_an_option_wraps_its_inner_type() {
         assert!(matches!(
             ok("pub signing_key: ocel::Secret").shape,
             Shape::Live
@@ -432,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_scope_nothing_could_hold_a_value_for_is_refused() {
+    fn a_folder_scope_no_value_could_be_set_for_is_refused() {
         for (source, want) in [
             (
                 r#"#[ocel(folders = [])] pub k: bool"#,

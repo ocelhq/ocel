@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard};
 static ENV: Mutex<()> = Mutex::new(());
 
 fn env() -> MutexGuard<'static, ()> {
-    ENV.lock().unwrap_or_else(|held| held.into_inner())
+    ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn clear(keys: &[&str]) {
@@ -55,7 +55,7 @@ fn a_delivered_value_is_read_before_the_plain_one() {
 }
 
 #[test]
-fn a_default_stands_in_for_an_unset_value_and_an_option_stays_none() {
+fn a_default_fills_in_an_unset_value_and_an_option_stays_none() {
     let _env = env();
     clear(&["DATABASE_NAME", "PORT", "TIMEOUT"]);
     std::env::set_var("DATABASE_NAME", "shop");
@@ -85,7 +85,7 @@ fn a_required_variable_with_no_value_names_the_command_that_sets_one() {
     let _env = env();
     clear(&["DATABASE_NAME", "PORT", "TIMEOUT"]);
 
-    let err = Basics::load().expect_err("nothing stands for DATABASE_NAME");
+    let err = Basics::load().expect_err("DATABASE_NAME has no value");
 
     assert_eq!(
         err.to_string(),
@@ -265,7 +265,7 @@ fn live_dir(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
 }
 
 #[test]
-fn a_value_only_the_live_directory_holds_is_read_from_its_file() {
+fn a_value_only_the_live_directory_has_is_read_from_its_file() {
     let _env = env();
     clear(&["FILE_ONLY"]);
     let dir = live_dir("only", &[("FILE_ONLY", "from the file\n")]);
@@ -300,13 +300,13 @@ fn a_delivered_value_is_read_before_the_live_directory_file() {
 }
 
 #[test]
-fn a_key_the_live_directory_holds_no_file_for_has_no_value() {
+fn a_key_the_live_directory_has_no_file_for_has_no_value() {
     let _env = env();
     clear(&["FILE_ONLY"]);
     let dir = live_dir("empty", &[]);
     std::env::set_var("OCEL_LIVE_DIR", &dir);
 
-    let err = FromFile::load().expect_err("no file carries the value");
+    let err = FromFile::load().expect_err("no file contains the value");
 
     assert!(matches!(err, ocel::Error::Unset { .. }));
     std::env::remove_var("OCEL_LIVE_DIR");

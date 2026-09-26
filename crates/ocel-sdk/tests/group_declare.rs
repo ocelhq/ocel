@@ -1,6 +1,6 @@
 mod collector;
 
-use collector::{cell, holding, Received, DECLARE_ENV, REPORT_ENV_PROBLEMS};
+use collector::{cell, collector_with_cells, Received, DECLARE_ENV, REPORT_ENV_PROBLEMS};
 
 #[allow(dead_code)]
 #[derive(ocel::Env)]
@@ -48,8 +48,8 @@ struct Stripe {
 }
 
 #[test]
-fn a_group_reaches_the_dev_server_once_and_owes_only_what_it_is_switched_on_for() {
-    let (url, requests) = holding(
+fn a_group_reaches_the_dev_server_once_and_requires_only_what_it_is_switched_on_for() {
+    let (url, requests) = collector_with_cells(
         2,
         vec![
             cell("DATABASE_URL", "", "postgres://shop"),

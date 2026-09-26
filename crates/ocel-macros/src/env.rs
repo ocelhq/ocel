@@ -115,7 +115,7 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
         }
     });
 
-    let held = groups.iter().map(|group| {
+    let checks = groups.iter().map(|group| {
         let ty = &group.ty;
         quote!(one_level::<#ty>();)
     });
@@ -124,7 +124,7 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
             const _: () = {
                 fn one_level<T: ::ocel::Group>() {}
                 fn nesting() {
-                    #(#held)*
+                    #(#checks)*
                 }
             };
         }
@@ -191,7 +191,7 @@ fn satisfiable(ident: &syn::Ident, variables: &[Variable]) -> syn::Result<()> {
         ));
         shared = Some(match shared {
             None => variable.folders.clone(),
-            Some(held) => held
+            Some(common) => common
                 .into_iter()
                 .filter(|folder| variable.folders.contains(folder))
                 .collect(),
@@ -299,14 +299,14 @@ fn groups(input: &DeriveInput, label: &str) -> syn::Result<Vec<Group>> {
             return Err(refused(
                 span,
                 &key,
-                "carries #[ocel(group)] beside another attribute. A group takes only #[ocel(group)], and its description is the doc comment above it.",
+                "has #[ocel(group)] beside another attribute. A group takes only #[ocel(group)], and its description is the doc comment above it.",
             ));
         }
-        let Some((ty, optional)) = held(&field.ty) else {
+        let Some((ty, optional)) = group_type(&field.ty) else {
             return Err(refused(
                 span,
                 &key,
-                "is tagged #[ocel(group)], so it holds an ocel::Group struct, or an Option of one to make the group optional.",
+                "is tagged #[ocel(group)], so its type is an ocel::Group struct, or an Option of one to make the group optional.",
             ));
         };
         groups.push(Group {
@@ -321,7 +321,7 @@ fn groups(input: &DeriveInput, label: &str) -> syn::Result<Vec<Group>> {
     Ok(groups)
 }
 
-fn held(ty: &Type) -> Option<(Type, bool)> {
+fn group_type(ty: &Type) -> Option<(Type, bool)> {
     let Type::Path(path) = ty else {
         return None;
     };

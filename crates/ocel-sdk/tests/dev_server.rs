@@ -14,7 +14,7 @@ fn a_dev_server_that_is_not_a_url_is_reported_before_any_declaration_is_posted()
 
     assert_eq!(
         err.to_string(),
-        "ocel: OCEL_DEV_SERVER does not hold a URL discovery can post to: 'not a url'"
+        "ocel: OCEL_DEV_SERVER is not a URL discovery can post to: 'not a url'"
     );
     assert!(matches!(err, ocel::Error::DevServer { .. }));
     assert_eq!(Infra::load().expect("the struct loads").db.name(), "main");
