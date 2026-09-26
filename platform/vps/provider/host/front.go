@@ -28,7 +28,7 @@ func openFront(front Front, box frontBox) proxy.Proxy {
 	}
 }
 
-func placedFile(front proxy.Proxy) string {
+func destination(front proxy.Proxy) string {
 	if file := front.File(); file != ProxyConfig {
 		return file
 	}

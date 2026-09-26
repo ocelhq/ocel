@@ -31,7 +31,7 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
 func switchboardStanding(binary []byte, front Front) boxContainer {
-	return placing(boardStanding(binary, front), placedFile(openFront(front, frontBox{})))
+	return placing(boardStanding(binary, front), destination(openFront(front, frontBox{})))
 }
 
 func placing(board boxContainer, file string) boxContainer {
