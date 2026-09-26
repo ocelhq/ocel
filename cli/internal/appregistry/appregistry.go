@@ -38,13 +38,13 @@ func RequireSecret(cfg *projectconfig.Config) error {
 	return err
 }
 
-func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier environmentv1.Tier) (images.RegistryTarget, bool, error) {
+func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier environmentv1.Tier) (images.Registry, bool, error) {
 	if cfg.Registry != nil {
 		password, err := secret(cfg)
 		if err != nil {
-			return images.RegistryTarget{}, false, err
+			return images.Registry{}, false, err
 		}
-		return images.RegistryTarget{
+		return images.Registry{
 			Server:    cfg.Registry.Server,
 			Namespace: cfg.Registry.Namespace,
 			Username:  cfg.Registry.Username,
@@ -53,19 +53,19 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier env
 	}
 	pushing, err := repositories(cfg)
 	if err != nil {
-		return images.RegistryTarget{}, false, err
+		return images.Registry{}, false, err
 	}
 	if len(pushing) == 0 {
-		return images.RegistryTarget{}, false, nil
+		return images.Registry{}, false, nil
 	}
 	resp, err := host.ResolveImageRegistry(ctx, &contractv1.ResolveImageRegistryRequest{Repositories: pushing, Tier: tier})
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		return images.RegistryTarget{}, false, nil
+		return images.Registry{}, false, nil
 	}
 	if err != nil {
-		return images.RegistryTarget{}, false, fmt.Errorf("resolve the registry this provider hosts: %w", err)
+		return images.Registry{}, false, fmt.Errorf("resolve the registry this provider hosts: %w", err)
 	}
-	return images.RegistryTarget{
+	return images.Registry{
 		Server:    resp.GetServer(),
 		Namespace: resp.GetNamespace(),
 		Username:  resp.GetUsername(),
@@ -88,7 +88,7 @@ func secret(cfg *projectconfig.Config) (string, error) {
 	return password, nil
 }
 
-func Wire(target images.RegistryTarget) *contractv1.ImageRegistry {
+func Wire(target images.Registry) *contractv1.ImageRegistry {
 	return &contractv1.ImageRegistry{
 		Server:    target.Server,
 		Namespace: target.Namespace,

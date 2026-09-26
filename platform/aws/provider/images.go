@@ -9,9 +9,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
-func (p *Provider) OpenRegistryImages(_ context.Context, target images.RegistryTarget) (images.ImageStore, error) {
+func (p *Provider) OpenRegistryImages(_ context.Context, target images.Registry) (images.Store, error) {
 	if !registry.Owns(target) {
-		return images.RegistryImages(target), nil
+		return images.RegistryStore(target), nil
 	}
 	return registry.Images(target, ecr.NewFromConfig(p.aws)), nil
 }

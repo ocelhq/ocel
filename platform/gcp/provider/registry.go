@@ -9,19 +9,19 @@ import (
 
 const registryUser = "oauth2accesstoken"
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ []string) (images.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ []string) (images.Registry, error) {
 	if p.emulated() {
-		return images.RegistryTarget{}, nil
+		return images.Registry{}, nil
 	}
 	names, err := p.Names(ctx)
 	if err != nil {
-		return images.RegistryTarget{}, err
+		return images.Registry{}, err
 	}
 	token, err := p.tokens.Token(ctx)
 	if err != nil {
-		return images.RegistryTarget{}, err
+		return images.Registry{}, err
 	}
-	return images.RegistryTarget{
+	return images.Registry{
 		Server:    p.options.Region + dockerRegistryHost,
 		Namespace: names.project + "/" + names.Repository(class),
 		Username:  registryUser,

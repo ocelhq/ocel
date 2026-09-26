@@ -175,8 +175,8 @@ func held(t *testing.T, repository string, image v1.Image) string {
 		t.Fatal(err)
 	}
 	target := repository + ":" + naming.DigestTag(digest.String())
-	push := images.ImagePush{App: repository, ImageRef: target, Digest: digest.String(), Built: image}
-	if err := images.DaemonImages().Push(context.Background(), push, nil); err != nil {
+	push := images.Push{App: repository, ImageRef: target, Digest: digest.String(), Built: image}
+	if err := images.DaemonStore().Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("write %s into the docker daemon the emulator runs out of: %v", target, err)
 	}
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()

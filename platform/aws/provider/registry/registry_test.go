@@ -66,7 +66,7 @@ func TestResolveMintsALoginAndCreatesNothing(t *testing.T) {
 	if !Owns(target) {
 		t.Error("Owns() = false for the target Resolve minted, so its pushes would never create the repository")
 	}
-	if Owns(images.RegistryTarget{Server: "ghcr.io", Username: "me", Password: "x"}) {
+	if Owns(images.Registry{Server: "ghcr.io", Username: "me", Password: "x"}) {
 		t.Error("Owns() = true for a registry the project named, whose repositories are not this provider's to create")
 	}
 }
@@ -83,7 +83,7 @@ func TestResolveRefusesALoginItCannotSplit(t *testing.T) {
 func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 	t.Parallel()
 
-	target := images.RegistryTarget{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
+	target := images.Registry{Server: "123456789012.dkr.ecr.us-east-1.amazonaws.com", Namespace: Namespace, Username: "AWS", Password: "tok3n"}
 	for coordinate, want := range map[string]string{
 		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc":              "ocel/web",
 		"123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/api@sha256:" + digest64("0"): "ocel/api",

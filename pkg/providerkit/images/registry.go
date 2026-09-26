@@ -5,22 +5,22 @@ import (
 	"strings"
 )
 
-type RegistryTarget struct {
+type Registry struct {
 	Server    string
 	Namespace string
 	Username  string
 	Password  string
 }
 
-func (t RegistryTarget) String() string {
+func (t Registry) String() string {
 	return fmt.Sprintf("registry %s namespace %q username %q password [redacted]", t.Server, t.Namespace, t.Username)
 }
 
-func (t RegistryTarget) GoString() string { return t.String() }
+func (t Registry) GoString() string { return t.String() }
 
-func (t RegistryTarget) Named() bool { return t.Server != "" }
+func (t Registry) Named() bool { return t.Server != "" }
 
-func (t RegistryTarget) ImageRef(repository, tag string) string {
+func (t Registry) ImageRef(repository, tag string) string {
 	parts := []string{t.Server}
 	if t.Namespace != "" {
 		parts = append(parts, strings.Trim(t.Namespace, "/"))

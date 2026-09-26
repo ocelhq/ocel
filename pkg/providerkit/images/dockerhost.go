@@ -84,7 +84,7 @@ func (d DockerHost) Export(ctx context.Context, client *http.Client, ref string)
 	if resp.StatusCode != http.StatusOK {
 		defer func() { _ = resp.Body.Close() }()
 		return nil, fmt.Errorf("the daemon at %s answered %q reading %s out as a tar stream: %s",
-			d.Address, resp.Status, ref, said(resp.Body))
+			d.Address, resp.Status, ref, readErrorBody(resp.Body))
 	}
 	return resp.Body, nil
 }
@@ -100,7 +100,7 @@ func (d DockerHost) Architecture(ctx context.Context, client *http.Client, ref s
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("the daemon at %s answered %q inspecting %s: %s", d.Address, resp.Status, ref, said(resp.Body))
+		return "", fmt.Errorf("the daemon at %s answered %q inspecting %s: %s", d.Address, resp.Status, ref, readErrorBody(resp.Body))
 	}
 	var inspected struct {
 		Architecture string `json:"Architecture"`
@@ -127,7 +127,7 @@ func (d DockerHost) Tag(ctx context.Context, client *http.Client, source, reposi
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("the daemon at %s answered %q naming %s as %s:%s, so the image cannot be reached by the coordinate it is released under: %s",
-			d.Address, resp.Status, source, repository, tag, said(resp.Body))
+			d.Address, resp.Status, source, repository, tag, readErrorBody(resp.Body))
 	}
 	return nil
 }

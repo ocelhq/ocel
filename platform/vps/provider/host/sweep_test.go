@@ -40,7 +40,7 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testing.T) {
 	t.Parallel()
 
-	command, err := pull(images.RegistryTarget{Server: "ghcr.io", Username: "ada", Password: "hunter2"}, "ghcr.io/shop/web:one", "sha256:0000")
+	command, err := pull(images.Registry{Server: "ghcr.io", Username: "ada", Password: "hunter2"}, "ghcr.io/shop/web:one", "sha256:0000")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testi
 		}
 		return session.Result{}, false
 	}
-	if _, err := stand.host().PullImage(context.Background(), images.RegistryTarget{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
+	if _, err := stand.host().PullImage(context.Background(), images.Registry{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
 		t.Fatalf("PullImage() = %v", err)
 	}
 	swept, pulled := stand.at(sweepCommand()), stand.at("docker pull")

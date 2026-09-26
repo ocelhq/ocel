@@ -126,12 +126,12 @@ func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []by
 		return nil, nil, err
 	}
 	discard := func() { _ = os.Remove(saved.Name()) }
-	checked := CompleteArchive(stream, host.Address, ref)
+	checked := NewVerifiedExport(stream, host.Address, ref)
 	_, copyErr := io.Copy(saved, checked)
 	closeErr := saved.Close()
-	if gap := checked.Gap(); gap != nil {
+	if incomplete := checked.VerifyErr(); incomplete != nil {
 		discard()
-		return nil, nil, gap
+		return nil, nil, incomplete
 	}
 	if copyErr != nil || closeErr != nil {
 		discard()

@@ -224,16 +224,16 @@ func TestAWrappedCoordinateTheRegistryAlreadyHoldsIsNeitherWrappedNorPushed(t *t
 
 type stubStore struct {
 	held   bool
-	pushed []images.ImagePush
+	pushed []images.Push
 }
 
-func (s *stubStore) Has(context.Context, images.ImagePush) (bool, error) {
+func (s *stubStore) Has(context.Context, images.Push) (bool, error) {
 	return s.held, nil
 }
 
 func (s *stubStore) Destination() string { return "the stub registry" }
 
-func (s *stubStore) Push(_ context.Context, push images.ImagePush, _ edge.Progress) error {
+func (s *stubStore) Push(_ context.Context, push images.Push, _ edge.Progress) error {
 	s.pushed = append(s.pushed, push)
 	return nil
 }
@@ -243,7 +243,7 @@ func TestShipHandsTheStoreTheWrappedImageAndClearsUpAfterIt(t *testing.T) {
 
 	store := &stubStore{}
 	cleaned := false
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
@@ -251,8 +251,8 @@ func TestShipHandsTheStoreTheWrappedImageAndClearsUpAfterIt(t *testing.T) {
 		},
 	}}}
 
-	if err := plan.Ship(context.Background(), nil); err != nil {
-		t.Fatalf("Ship() = %v", err)
+	if err := plan.PushMissing(context.Background(), nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
 	}
 	if len(store.pushed) != 1 || store.pushed[0].Built != empty.Image {
 		t.Fatalf("the store was handed %v, want the image the wrap built", store.pushed)
@@ -266,7 +266,7 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
 	store := &stubStore{held: true}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
@@ -274,8 +274,8 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHolds(t *testing.T) {
 		},
 	}}}
 
-	if err := plan.Ship(context.Background(), nil); err != nil {
-		t.Fatalf("Ship() = %v", err)
+	if err := plan.PushMissing(context.Background(), nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
 	}
 	if len(store.pushed) != 0 {
 		t.Errorf("the store was handed %v for a coordinate it already holds", store.pushed)

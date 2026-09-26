@@ -147,8 +147,8 @@ func forget(client *http.Client) {
 	_ = resp.Body.Close()
 }
 
-func transferPush(daemon images.DockerHost, client *http.Client, runtime []byte) images.ImagePush {
-	return images.ImagePush{
+func transferPush(daemon images.DockerHost, client *http.Client, runtime []byte) images.Push {
+	return images.Push{
 		App:      "live-transfer",
 		Source:   transferRepository + "@" + transferDigest,
 		ImageRef: transferCoordinate(runtime),
@@ -217,9 +217,9 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 		t.Fatalf("the machine claims %s before anything carried it, so the transfer cannot be proven here", coordinate)
 	}
 
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{push}}
-	if err := plan.Ship(ctx, nil); err != nil {
-		t.Fatalf("Ship() onto a machine with no registry account = %v", err)
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	if err := plan.PushMissing(ctx, nil); err != nil {
+		t.Fatalf("PushMissing() onto a machine with no registry account = %v", err)
 	}
 
 	named := strings.TrimSpace(vm.sshAs(t, deployLogin, "docker image ls --format '{{.Repository}}:{{.Tag}}' "+coordinate))
@@ -248,9 +248,9 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	if err != nil {
 		t.Fatalf("OpenDirectImages() = %v", err)
 	}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{transferPush(daemon, client, runtime)}}
-	if err := plan.Ship(ctx, nil); err != nil {
-		t.Fatalf("Ship() = %v", err)
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{transferPush(daemon, client, runtime)}}
+	if err := plan.PushMissing(ctx, nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
 	}
 
 	forget(client)
@@ -262,7 +262,7 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	if len(rows) != 1 || rows[0].Action != providerkit.ActionKeep {
 		t.Errorf("the plan shows %v for an image the machine already holds, want one %q row", rows, providerkit.ActionKeep)
 	}
-	if err := plan.Ship(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("a second Ship over a machine that already holds the digest = %v: the image is gone from this machine's daemon, so the transfer was attempted rather than skipped", err)
 	}
 	if _, err := vm.attempt(deployLogin, "docker image inspect "+coordinate); err != nil {

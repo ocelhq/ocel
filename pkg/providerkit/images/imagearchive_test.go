@@ -72,7 +72,7 @@ func TestAWholeArchivePassesThroughUntouchedAndReportsNoGap(t *testing.T) {
 	config, layer, manifest, index := imageFixture(t)
 	archive := archiveOf(t, []fixtureBlob{config, layer, manifest}, index)
 
-	checked := CompleteArchive(bytes.NewReader(archive), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
+	checked := NewVerifiedExport(bytes.NewReader(archive), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
 	carried, err := io.ReadAll(checked)
 	if err != nil {
 		t.Fatalf("reading through the check = %v", err)
@@ -80,8 +80,8 @@ func TestAWholeArchivePassesThroughUntouchedAndReportsNoGap(t *testing.T) {
 	if !bytes.Equal(carried, archive) {
 		t.Fatal("the check altered the bytes it carried, and the box would load something other than what the daemon exported")
 	}
-	if gap := checked.Gap(); gap != nil {
-		t.Errorf("Gap() over a whole archive = %v", gap)
+	if gap := checked.VerifyErr(); gap != nil {
+		t.Errorf("VerifyErr() over a whole archive = %v", gap)
 	}
 }
 
@@ -89,13 +89,13 @@ func TestAnArchiveMissingALayerItsManifestNamesIsRefusedNamingTheDigestAndTheDae
 	config, layer, manifest, index := imageFixture(t)
 	archive := archiveOf(t, []fixtureBlob{config, manifest}, index)
 
-	checked := CompleteArchive(bytes.NewReader(archive), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
+	checked := NewVerifiedExport(bytes.NewReader(archive), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
 	if _, err := io.ReadAll(checked); err != nil {
 		t.Fatalf("reading through the check = %v: the stream itself is carried whole either way", err)
 	}
-	gap := checked.Gap()
+	gap := checked.VerifyErr()
 	if gap == nil {
-		t.Fatal("Gap() over an archive missing a layer = nil, and the box would be the first to learn the daemon dropped it")
+		t.Fatal("VerifyErr() over an archive missing a layer = nil, and the box would be the first to learn the daemon dropped it")
 	}
 	for _, named := range []string{"sha256:" + layer.digest, "unix:///var/run/docker.sock", "ocel/web:sha256-abc", "rebuild"} {
 		if !strings.Contains(gap.Error(), named) {
@@ -105,11 +105,11 @@ func TestAnArchiveMissingALayerItsManifestNamesIsRefusedNamingTheDigestAndTheDae
 }
 
 func TestAStreamThatIsNoArchiveAtAllIsCarriedAndReportsNothing(t *testing.T) {
-	checked := CompleteArchive(strings.NewReader("not a tar"), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
+	checked := NewVerifiedExport(strings.NewReader("not a tar"), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
 	if _, err := io.ReadAll(checked); err != nil {
 		t.Fatalf("reading through the check = %v", err)
 	}
-	if gap := checked.Gap(); gap != nil {
-		t.Errorf("Gap() over bytes that are no archive = %v, want the daemon's own answer to stand", gap)
+	if gap := checked.VerifyErr(); gap != nil {
+		t.Errorf("VerifyErr() over bytes that are no archive = %v, want the daemon's own answer to stand", gap)
 	}
 }

@@ -11,17 +11,17 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type daemonImages struct{}
+type daemonStore struct{}
 
-func DaemonImages() ImageStore { return daemonImages{} }
+func DaemonStore() Store { return daemonStore{} }
 
-func (daemonImages) String() string { return "images written to the local docker daemon" }
+func (daemonStore) String() string { return "images written to the local docker daemon" }
 
-func (d daemonImages) GoString() string { return d.String() }
+func (d daemonStore) GoString() string { return d.String() }
 
-func (daemonImages) Destination() string { return "the local docker daemon" }
+func (daemonStore) Destination() string { return "the local docker daemon" }
 
-func (daemonImages) Has(ctx context.Context, push ImagePush) (bool, error) {
+func (daemonStore) Has(ctx context.Context, push Push) (bool, error) {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
 		return false, fmt.Errorf("%q names nowhere the daemon can hold an image: %w", push.ImageRef, err)
@@ -36,7 +36,7 @@ func (daemonImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	return true, nil
 }
 
-func (daemonImages) Push(ctx context.Context, push ImagePush, _ edge.Progress) error {
+func (daemonStore) Push(ctx context.Context, push Push, _ edge.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is written straight into the local docker daemon, and this release carries no image it was built into", push.App)

@@ -49,7 +49,7 @@ type StackPlan struct {
 
 	Uploads []Upload
 
-	Images ImagePlan
+	Images ImagePushes
 
 	Bindings Bindings
 

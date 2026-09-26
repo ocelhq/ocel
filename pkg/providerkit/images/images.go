@@ -9,7 +9,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type ImagePush struct {
+type Push struct {
 	App      string
 	Source   string
 	ImageRef string
@@ -20,15 +20,15 @@ type ImagePush struct {
 	Wrap     Wrapped
 }
 
-type ImageStore interface {
+type Store interface {
 	Destination() string
 
-	Has(ctx context.Context, push ImagePush) (bool, error)
+	Has(ctx context.Context, push Push) (bool, error)
 
-	Push(ctx context.Context, push ImagePush, progress edge.Progress) error
+	Push(ctx context.Context, push Push, progress edge.Progress) error
 }
 
-func ImageRef(repository, tag string, target RegistryTarget) string {
+func Ref(repository, tag string, target Registry) string {
 	if !target.Named() {
 		return repository + ":" + tag
 	}

@@ -78,7 +78,7 @@ func (vm machine) hashed(t *testing.T, password string) string {
 	return line
 }
 
-func (vm machine) registry(t *testing.T) images.RegistryTarget {
+func (vm machine) registry(t *testing.T) images.Registry {
 	t.Helper()
 	port := freePort(t)
 	password := secretOf(t)
@@ -103,7 +103,7 @@ func (vm machine) registry(t *testing.T) images.RegistryTarget {
 	vm.forwarding(t, port)
 	server := fmt.Sprintf("127.0.0.1:%d", port)
 	answering(t, server)
-	return images.RegistryTarget{
+	return images.Registry{
 		Server:    server,
 		Namespace: pullNamespace,
 		Username:  liveRegistryLogin,
@@ -149,15 +149,15 @@ func answering(t *testing.T, server string) {
 	t.Fatalf("the registry on the machine never answered at %s: %s", server, said)
 }
 
-func liveDigest(t *testing.T, target images.RegistryTarget, coordinate string) string {
+func liveDigest(t *testing.T, target images.Registry, coordinate string) string {
 	t.Helper()
-	seed := images.ImagePush{
+	seed := images.Push{
 		App:      pullRepository,
 		Source:   transferBase(),
 		ImageRef: coordinate,
 		Digest:   transferDigest,
 	}
-	if err := images.RegistryImages(target).Push(context.Background(), seed, nil); err != nil {
+	if err := images.RegistryStore(target).Push(context.Background(), seed, nil); err != nil {
 		t.Fatalf("push %s into the registry the machine pulls from = %v", coordinate, err)
 	}
 	req, err := http.NewRequest(http.MethodHead,
@@ -192,7 +192,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	target := vm.registry(t)
 	coordinate := target.ImageRef(pullRepository, transferTag)
 	digest := liveDigest(t, target, coordinate)
-	push := images.ImagePush{
+	push := images.Push{
 		App:      pullRepository,
 		Source:   transferBase(),
 		ImageRef: coordinate,
@@ -207,7 +207,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Images() = %v", err)
 	}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{push}}
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{push}}
 
 	rows, err := plan.Rows(ctx)
 	if err != nil {
@@ -216,8 +216,8 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	if len(rows) != 1 || rows[0].Action != providerkit.ActionCreate {
 		t.Fatalf("the plan shows %v before anything carried the image, want one %q row", rows, providerkit.ActionCreate)
 	}
-	if err := plan.Ship(ctx, nil); err != nil {
-		t.Fatalf("Ship() through a registry the machine can reach = %v", err)
+	if err := plan.PushMissing(ctx, nil); err != nil {
+		t.Fatalf("PushMissing() through a registry the machine can reach = %v", err)
 	}
 
 	named := strings.TrimSpace(vm.sshAs(t, deployLogin, "docker image ls --format '{{.Repository}}:{{.Tag}}' "+coordinate))
@@ -245,7 +245,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	if len(after) != 1 || after[0].Action != providerkit.ActionKeep {
 		t.Errorf("the plan shows %v for an image the machine already pulled, want one %q row", after, providerkit.ActionKeep)
 	}
-	if err := plan.Ship(ctx, nil); err != nil {
+	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("a second Ship over a machine that already holds the digest = %v", err)
 	}
 }

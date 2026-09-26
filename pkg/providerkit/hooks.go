@@ -19,9 +19,9 @@ type Hooks struct {
 	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress edge.Progress) error
 	WarmFunctions       func(ctx context.Context, targets []string, progress edge.Progress) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
-	EnsureImageRegistry func(ctx context.Context, class edge.Class, repositories []string) (images.RegistryTarget, error)
-	OpenRegistryImages  func(ctx context.Context, target images.RegistryTarget) (images.ImageStore, error)
-	OpenDirectImages    func(ctx context.Context) (images.ImageStore, error)
+	EnsureImageRegistry func(ctx context.Context, class edge.Class, repositories []string) (images.Registry, error)
+	OpenRegistryImages  func(ctx context.Context, target images.Registry) (images.Store, error)
+	OpenDirectImages    func(ctx context.Context) (images.Store, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	Cost                *CostHooks
 	FunctionImages      *FunctionImageHooks

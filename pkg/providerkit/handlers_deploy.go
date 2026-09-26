@@ -103,8 +103,8 @@ type deployRun struct {
 	scope     envvars.Scope
 	published *publishedBindings
 
-	registry images.RegistryTarget
-	images   images.ImageStore
+	registry images.Registry
+	images   images.Store
 
 	dry           bool
 	draft         draft
@@ -1070,7 +1070,7 @@ func declaredVariables(clientBundle bool, held AppValues) []edge.VariableRecord 
 	return declared
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFacts, images ImagePlan, values AppValues, result StackResult) error {
+func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFacts, images ImagePushes, values AppValues, result StackResult) error {
 	urlByLogical := make(map[string]string, len(result.Functions))
 	physicalByLogical := make(map[string]string, len(result.Functions))
 	for _, fn := range result.Functions {
@@ -1395,7 +1395,7 @@ func bindingOf(message *bindingsv1.Binding) Binding {
 }
 
 func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {
-	r.registry = images.RegistryTarget{
+	r.registry = images.Registry{
 		Server:    wired.GetServer(),
 		Namespace: wired.GetNamespace(),
 		Username:  wired.GetUsername(),
@@ -1445,26 +1445,26 @@ func originOf(containers []AppContainer, app string) string {
 	return ""
 }
 
-func runs(images ImagePlan, entry AppEntry) string {
+func runs(images ImagePushes, entry AppEntry) string {
 	if pushed := images.ImageRef(entry.App); pushed != "" {
 		return pushed
 	}
 	return entry.Image
 }
 
-func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (images.ImagePush, error) {
+func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (images.Push, error) {
 	return r.wrappedPush(ctx, entry)
 }
 
-func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []images.ImagePush) (ImagePlan, error) {
+func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []images.Push) (ImagePushes, error) {
 	if len(functions) > 0 {
-		return ImagePlan{Store: r.images, Pushes: functions}, nil
+		return ImagePushes{Store: r.images, Pushes: functions}, nil
 	}
 	if entry.Compute() != ComputeContainer || entry.Image == "" {
-		return ImagePlan{}, nil
+		return ImagePushes{}, nil
 	}
 	if r.images == nil {
-		return ImagePlan{}, refusal.Refuse(refusal.CodeInvalid,
+		return ImagePushes{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs as a container, and this provider is served by pulling its image from a registry rather than being handed one: "+
 				"nothing names a registry, so the image has nowhere to go and the machine has nowhere to pull it from.\n"+
 				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",
@@ -1472,7 +1472,7 @@ func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []i
 	}
 	push, err := r.containerPush(ctx, entry)
 	if err != nil {
-		return ImagePlan{}, err
+		return ImagePushes{}, err
 	}
-	return ImagePlan{Store: r.images, Pushes: []images.ImagePush{push}}, nil
+	return ImagePushes{Store: r.images, Pushes: []images.Push{push}}, nil
 }

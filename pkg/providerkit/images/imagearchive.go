@@ -18,22 +18,22 @@ const (
 	archiveKeptSize = 4 << 20
 )
 
-type ImageArchive struct {
-	stream io.Reader
-	pipe   *io.PipeWriter
-	done   chan error
-	once   sync.Once
-	gap    error
+type VerifiedExport struct {
+	stream    io.Reader
+	pipe      *io.PipeWriter
+	done      chan error
+	once      sync.Once
+	verifyErr error
 }
 
-func CompleteArchive(stream io.Reader, daemon, ref string) *ImageArchive {
+func NewVerifiedExport(stream io.Reader, daemon, ref string) *VerifiedExport {
 	reader, writer := io.Pipe()
-	a := &ImageArchive{stream: stream, pipe: writer, done: make(chan error, 1)}
-	go func() { a.done <- inventory(reader, daemon, ref) }()
+	a := &VerifiedExport{stream: stream, pipe: writer, done: make(chan error, 1)}
+	go func() { a.done <- verifyExportComplete(reader, daemon, ref) }()
 	return a
 }
 
-func (a *ImageArchive) Read(p []byte) (int, error) {
+func (a *VerifiedExport) Read(p []byte) (int, error) {
 	n, err := a.stream.Read(p)
 	if n > 0 {
 		if _, written := a.pipe.Write(p[:n]); written != nil {
@@ -41,16 +41,16 @@ func (a *ImageArchive) Read(p []byte) (int, error) {
 		}
 	}
 	if err != nil {
-		a.settle(err)
+		a.finishVerify(err)
 	}
 	return n, err
 }
 
-func (a *ImageArchive) settle(err error) {
+func (a *VerifiedExport) finishVerify(err error) {
 	a.once.Do(func() {
 		if errors.Is(err, io.EOF) {
 			_ = a.pipe.Close()
-			a.gap = <-a.done
+			a.verifyErr = <-a.done
 			return
 		}
 		_ = a.pipe.CloseWithError(err)
@@ -58,7 +58,7 @@ func (a *ImageArchive) settle(err error) {
 	})
 }
 
-func (a *ImageArchive) Gap() error { return a.gap }
+func (a *VerifiedExport) VerifyErr() error { return a.verifyErr }
 
 type archiveDescriptor struct {
 	Digest string `json:"digest"`
@@ -70,7 +70,7 @@ type archiveManifest struct {
 	Manifests []archiveDescriptor `json:"manifests"`
 }
 
-func inventory(from *io.PipeReader, daemon, ref string) error {
+func verifyExportComplete(from *io.PipeReader, daemon, ref string) error {
 	present := map[string]bool{}
 	kept := map[string][]byte{}
 	archive := tar.NewReader(from)
@@ -142,4 +142,4 @@ func inventory(from *io.PipeReader, daemon, ref string) error {
 		daemon, ref, len(lost), strings.Join(lost, ", "))
 }
 
-var _ io.Reader = (*ImageArchive)(nil)
+var _ io.Reader = (*VerifiedExport)(nil)
