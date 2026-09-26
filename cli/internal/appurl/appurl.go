@@ -6,7 +6,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 func Production(cfg *projectconfig.Config) map[string]string {
@@ -35,7 +35,7 @@ func byApp(cfg *projectconfig.Config, project []string, declared func(projectcon
 	}
 
 	urls := make(map[string]string, len(apps))
-	for slot, served := range providerkit.AttributeHostnames(project, own) {
+	for slot, served := range appbuild.AttributeHostnames(project, own) {
 		if host := first(served); host != "" {
 			urls[apps[slot].Name] = "https://" + host
 		}
@@ -50,9 +50,9 @@ func Variables(clientBundle bool, url string) []manifestbuilder.Variable {
 	var written []manifestbuilder.Variable
 	for _, v := range []manifestbuilder.Variable{
 		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
-		{Key: providerkit.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
+		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
 	} {
-		if providerkit.OcelWritten(clientBundle, v.Key) {
+		if appbuild.IsOcelInjectedEnv(clientBundle, v.Key) {
 			written = append(written, v)
 		}
 	}

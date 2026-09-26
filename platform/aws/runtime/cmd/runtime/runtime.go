@@ -17,7 +17,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
@@ -103,10 +103,10 @@ func primeBytecode(p *bytecode.Priming) primer {
 
 type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error)
 
-func bringUp(ctx context.Context, served providerkit.FunctionConfig, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
+func bringUp(ctx context.Context, served appbuild.FunctionConfig, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
 	if executable(served) {
 		return bringUpChild(func() (*execChild, error) {
-			return startExecutable(served.Command, providerkit.InjectedPort, env, spawnBudget(start))
+			return startExecutable(served.Command, appbuild.InjectedPort, env, spawnBudget(start))
 		}, values, prefetch)
 	}
 	return bringUpNodeWithBytecode(ctx, startNode(entrypointPath(served)), values, prefetch, env, start, prime)
@@ -491,16 +491,16 @@ func supervise(what string, exited <-chan error) {
 	os.Exit(1)
 }
 
-func executable(a providerkit.FunctionConfig) bool { return len(a.Command) > 0 }
+func executable(a appbuild.FunctionConfig) bool { return len(a.Command) > 0 }
 
-func readArtifact() providerkit.FunctionConfig {
-	var a providerkit.FunctionConfig
-	data, err := os.ReadFile(filepath.Join(taskRoot(), providerkit.FunctionConfigFile))
+func readArtifact() appbuild.FunctionConfig {
+	var a appbuild.FunctionConfig
+	data, err := os.ReadFile(filepath.Join(taskRoot(), appbuild.FunctionConfigFile))
 	if err != nil {
 		return a
 	}
 	if json.Unmarshal(data, &a) != nil {
-		return providerkit.FunctionConfig{}
+		return appbuild.FunctionConfig{}
 	}
 	return a
 }

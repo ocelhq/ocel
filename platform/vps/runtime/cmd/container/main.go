@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/runtimekit/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtimekit/child"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
@@ -42,14 +42,14 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
 		return fatal("the image has no ENTRYPOINT or CMD")
 	}
-	exposed := providerkit.InjectedPortText
+	exposed := appbuild.InjectedPortText
 	env := make([]string, 0, len(environ))
 	manifest := ""
 	healthPath := ""
 	for _, entry := range environ {
 		name, value, _ := strings.Cut(entry, "=")
 		switch name {
-		case providerkit.InjectedPortName:
+		case appbuild.InjectedPortName:
 			exposed = value
 			continue
 		case vars.EnvVar:
@@ -83,7 +83,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	defer fronting.Close()
 
-	env = append(env, providerkit.InjectedPortName+"="+strconv.Itoa(internal))
+	env = append(env, appbuild.InjectedPortName+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env...)
 

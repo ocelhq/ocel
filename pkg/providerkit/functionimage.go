@@ -13,12 +13,13 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const FunctionImageRoot = "/ocel/app"
 
-func FunctionImage(base v1.Image, framework Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
+func FunctionImage(base v1.Image, framework appbuild.Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
 	rels, err := artifactFiles(dir)
 	if err != nil {
 		return nil, err
@@ -59,14 +60,14 @@ func FunctionImage(base v1.Image, framework Framework, dir string, overlay map[s
 	return mutate.Config(appended, config)
 }
 
-func functionStaging(dir string) (FunctionConfig, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, FunctionConfigFile))
+func functionStaging(dir string) (appbuild.FunctionConfig, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, appbuild.FunctionConfigFile))
 	if err != nil {
-		return FunctionConfig{}, err
+		return appbuild.FunctionConfig{}, err
 	}
-	var staged FunctionConfig
+	var staged appbuild.FunctionConfig
 	if err := json.Unmarshal(raw, &staged); err != nil {
-		return FunctionConfig{}, err
+		return appbuild.FunctionConfig{}, err
 	}
 	return staged, nil
 }
@@ -77,26 +78,26 @@ const NodeRuntimePath = NodeRuntimeRoot + "/entrypoint.mjs"
 
 const HandlerName = "OCEL_HANDLER"
 
-func BootsThroughRuntime(framework Framework) bool {
-	return framework.Name == FrameworkNode || framework.Name == FrameworkNext
+func BootsThroughRuntime(framework appbuild.Framework) bool {
+	return framework.Name == appbuild.FrameworkNode || framework.Name == appbuild.FrameworkNext
 }
 
-func servedHandler(staged FunctionConfig) string {
+func servedHandler(staged appbuild.FunctionConfig) string {
 	return HandlerName + "=" + path.Join(FunctionImageRoot, staged.Handler)
 }
 
 func boundPort(env []string) []string {
 	kept := make([]string, 0, len(env)+1)
 	for _, entry := range env {
-		if name, _, _ := strings.Cut(entry, "="); name == InjectedPortName {
+		if name, _, _ := strings.Cut(entry, "="); name == appbuild.InjectedPortName {
 			continue
 		}
 		kept = append(kept, entry)
 	}
-	return append(kept, InjectedPortName+"="+InjectedPortText)
+	return append(kept, appbuild.InjectedPortName+"="+appbuild.InjectedPortText)
 }
 
-func functionCommand(framework Framework, staged FunctionConfig) ([]string, error) {
+func functionCommand(framework appbuild.Framework, staged appbuild.FunctionConfig) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil

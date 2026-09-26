@@ -21,6 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -29,9 +30,9 @@ import (
 var liveRelease = naming.NewRelease("live", "wp4")
 
 var (
-	nodeRuntime   = providerkit.Framework{Name: providerkit.FrameworkNode, Arch: arch.X8664}
-	goRuntime     = providerkit.Framework{Name: providerkit.FrameworkGo, Arch: arch.X8664}
-	pythonRuntime = providerkit.Framework{Name: providerkit.FrameworkPython, Arch: arch.X8664}
+	nodeRuntime   = appbuild.Framework{Name: appbuild.FrameworkNode, Arch: arch.X8664}
+	goRuntime     = appbuild.Framework{Name: appbuild.FrameworkGo, Arch: arch.X8664}
+	pythonRuntime = appbuild.Framework{Name: appbuild.FrameworkPython, Arch: arch.X8664}
 )
 
 func runnable(t *testing.T) *gcp.Provider {
@@ -100,15 +101,15 @@ func asked(t *testing.T, uri string) (int, string) {
 	return resp.StatusCode, strings.TrimSpace(string(said))
 }
 
-func staged(t *testing.T, dir string, framework providerkit.Framework, handler string, command []string, files map[string]string) string {
+func staged(t *testing.T, dir string, framework appbuild.Framework, handler string, command []string, files map[string]string) string {
 	t.Helper()
-	config, err := json.Marshal(providerkit.FunctionConfig{
+	config, err := json.Marshal(appbuild.FunctionConfig{
 		Framework: framework, Handler: handler, Command: command, ID: "live", App: "live",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	files[providerkit.FunctionConfigFile] = string(config)
+	files[appbuild.FunctionConfigFile] = string(config)
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -180,7 +181,7 @@ func held(t *testing.T, repository string, image v1.Image) string {
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
 }
 
-func functionImage(t *testing.T, p *gcp.Provider, repository string, framework providerkit.Framework, dir string) string {
+func functionImage(t *testing.T, p *gcp.Provider, repository string, framework appbuild.Framework, dir string) string {
 	t.Helper()
 	ctx := context.Background()
 	base, err := p.ResolveFunctionBase(ctx, framework)
@@ -259,7 +260,7 @@ func serverlessPlan(app, image string, values map[string]string) providerkit.Sta
 	return serverlessPlanOn(app, image, nodeRuntime, values)
 }
 
-func serverlessPlanOn(app, image string, framework providerkit.Framework, values map[string]string) providerkit.StackPlan {
+func serverlessPlanOn(app, image string, framework appbuild.Framework, values map[string]string) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "live",
@@ -389,7 +390,7 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	}
 }
 
-func servesItsOwn(t *testing.T, app string, framework providerkit.Framework, stage func(*testing.T) string, mark string) {
+func servesItsOwn(t *testing.T, app string, framework appbuild.Framework, stage func(*testing.T) string, mark string) {
 	t.Helper()
 	ctx := context.Background()
 	p := runnable(t)

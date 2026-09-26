@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -37,7 +38,7 @@ const funcDirSuffix = ".func"
 
 const entryFuncDirName = "index" + funcDirSuffix
 
-const configFileName = providerkit.FunctionConfigFile
+const configFileName = appbuild.FunctionConfigFile
 
 const buildPlanFileName = "build-plan.json"
 
@@ -50,12 +51,12 @@ type buildPlan struct {
 }
 
 type functionSummary struct {
-	Name         string                `json:"name"`
-	Framework    providerkit.Framework `json:"framework"`
-	Handler      string                `json:"handler"`
-	ArtifactPath string                `json:"artifactPath"`
-	Strategy     string                `json:"strategy"`
-	Entrypoint   string                `json:"entrypoint,omitempty"`
+	Name         string             `json:"name"`
+	Framework    appbuild.Framework `json:"framework"`
+	Handler      string             `json:"handler"`
+	ArtifactPath string             `json:"artifactPath"`
+	Strategy     string             `json:"strategy"`
+	Entrypoint   string             `json:"entrypoint,omitempty"`
 }
 
 type builderRequest struct {
@@ -237,7 +238,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 }
 
 func compiledFromSource(framework string) bool {
-	return framework == providerkit.FrameworkGo || framework == providerkit.FrameworkPython || framework == providerkit.FrameworkRust
+	return framework == appbuild.FrameworkGo || framework == appbuild.FrameworkPython || framework == appbuild.FrameworkRust
 }
 
 func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
@@ -248,7 +249,7 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 	}
 	return appbundler.Compile(ctx, appbundler.Compilation{
 		App:            a.Name,
-		Framework:      providerkit.Framework{Name: a.Framework.Name, Arch: a.Framework.Architecture()},
+		Framework:      appbuild.Framework{Name: a.Framework.Name, Arch: a.Framework.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
 		Entrypoint:     a.Entrypoint,
 		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
@@ -259,7 +260,7 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 }
 
 func discoveryRootsFor(cfg *projectconfig.Config, framework string) ([]string, error) {
-	if framework != providerkit.FrameworkPython {
+	if framework != appbuild.FrameworkPython {
 		return nil, nil
 	}
 	roots, err := discovery.RootsOf(cfg)
@@ -493,7 +494,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 		return manifestbuilder.Function{}, err
 	}
 
-	var fc providerkit.FunctionConfig
+	var fc appbuild.FunctionConfig
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 const DefaultHealthCheckPath = "/"
@@ -34,7 +35,7 @@ func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functio
 		if configured.Image == "" {
 			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and carries no image, so the manifest would hand a provider an app with nothing to run", name)
 		}
-		if !providerkit.PinnedImage(configured.Image) {
+		if !appbuild.PinnedImage(configured.Image) {
 			return nil, fmt.Errorf("manifestbuilder: app %q carries image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", name, configured.Image)
 		}
 		if packed[name] {

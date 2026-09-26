@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -204,7 +204,7 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 	}
 	var raw bytes.Buffer
 	written := tar.NewWriter(&raw)
-	for name, body := range map[string][]byte{"app": read, strings.TrimPrefix(providerkit.ContainerRuntimePath, "/"): runtime} {
+	for name, body := range map[string][]byte{"app": read, strings.TrimPrefix(appbuild.ContainerRuntimePath, "/"): runtime} {
 		if err := written.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body))}); err != nil {
 			t.Fatal(err)
 		}
@@ -225,7 +225,7 @@ func fixtures(t *testing.T, vm machine) {
 		held[strings.TrimSpace(tagged)] = true
 	}
 	if !held[fixtureBase] {
-		vm.feeds(t, "sudo docker import --change 'ENTRYPOINT [\""+providerkit.ContainerRuntimePath+"\", \"/app\"]' - "+fixtureBase+" >/dev/null",
+		vm.feeds(t, "sudo docker import --change 'ENTRYPOINT [\""+appbuild.ContainerRuntimePath+"\", \"/app\"]' - "+fixtureBase+" >/dev/null",
 			fixtureBinary(t, vm.arch(t)))
 	}
 	for tag, envs := range map[string][]string{

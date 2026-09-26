@@ -10,6 +10,7 @@ import (
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -178,7 +179,7 @@ func withServeDescriptors(t *testing.T, files map[string]string) map[string]stri
 		if _, written := out[descriptor]; written {
 			continue
 		}
-		out[descriptor] = serveDescriptor(t, providerkit.FrameworkNext, buildIDOf(t, contents))
+		out[descriptor] = serveDescriptor(t, appbuild.FrameworkNext, buildIDOf(t, contents))
 	}
 	return out
 }

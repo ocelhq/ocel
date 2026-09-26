@@ -12,6 +12,7 @@ import (
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -19,7 +20,7 @@ import (
 func servedDescriptor(t *testing.T, app string, desc edge.ServeDescriptor) string {
 	t.Helper()
 	root := t.TempDir()
-	dir := providerkit.AppArtifactRoot(root, app)
+	dir := appbuild.AppArtifactRoot(root, app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

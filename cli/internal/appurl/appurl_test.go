@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 func TestProduction(t *testing.T) {
@@ -61,7 +61,7 @@ func TestProduction(t *testing.T) {
 			Apps:    []projectconfig.App{{Name: "web"}, {Name: "api"}},
 		}
 
-		served := providerkit.AttributeHostnames(cfg.Domains["production"], [][]string{nil, nil})
+		served := appbuild.AttributeHostnames(cfg.Domains["production"], [][]string{nil, nil})
 		urls := appurl.Production(cfg)
 		if got, want := urls["web"], "https://"+served[0][0]; got != want {
 			t.Errorf("web url = %q, want %q: the deploy serves a project hostname on the first app `apps` names", got, want)
@@ -105,8 +105,8 @@ func TestPrepend(t *testing.T) {
 	t.Parallel()
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Framework: projectconfig.Framework{Name: providerkit.FrameworkNext}},
-		{Name: "api", Framework: projectconfig.Framework{Name: providerkit.FrameworkGo}},
+		{Name: "web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}},
+		{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}},
 		{Name: "docs"},
 	}}
 	byApp := map[string][]manifestbuilder.Variable{
@@ -123,11 +123,11 @@ func TestPrepend(t *testing.T) {
 	if got, want := held[constants.AppURLEnvName].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got, want)
 	}
-	if got, want := held[providerkit.ClientURLEnvName].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", providerkit.ClientURLEnvName, got)
+	if got, want := held[appbuild.ClientURLEnvName].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", appbuild.ClientURLEnvName, got)
 	}
-	if !held[providerkit.ClientURLEnvName].ClientAccessible {
-		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", providerkit.ClientURLEnvName)
+	if !held[appbuild.ClientURLEnvName].ClientAccessible {
+		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", appbuild.ClientURLEnvName)
 	}
 	if held[constants.AppURLEnvName].ClientAccessible {
 		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", constants.AppURLEnvName)
@@ -136,7 +136,7 @@ func TestPrepend(t *testing.T) {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
 	if got := keys(byApp["api"]); !slices.Equal(got, []string{constants.AppURLEnvName}) {
-		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, constants.AppURLEnvName, providerkit.ClientURLEnvName)
+		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, constants.AppURLEnvName, appbuild.ClientURLEnvName)
 	}
 	if len(byApp["docs"]) != 0 {
 		t.Errorf("docs variables = %+v, want none where the app has no hostname", byApp["docs"])
@@ -150,11 +150,11 @@ func TestBuildEnv(t *testing.T) {
 	if got, want := env[""][constants.AppURLEnvName], "https://acme.com"; got != want {
 		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, holding %q", env, want)
 	}
-	if got, want := env[""][providerkit.ClientURLEnvName], "https://acme.com"; got != want {
-		t.Errorf("build env %s = %q, want %q: an app `apps` does not name is built by the node builder", providerkit.ClientURLEnvName, got, want)
+	if got, want := env[""][appbuild.ClientURLEnvName], "https://acme.com"; got != want {
+		t.Errorf("build env %s = %q, want %q: an app `apps` does not name is built by the node builder", appbuild.ClientURLEnvName, got, want)
 	}
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Framework: projectconfig.Framework{Name: providerkit.FrameworkPython}}}}
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkPython}}}}
 	if got := appurl.BuildEnv(cfg, map[string]string{"api": "https://api.acme.com"})["api"]; !maps.Equal(got, map[string]string{constants.AppURLEnvName: "https://api.acme.com"}) {
 		t.Errorf("build env = %v, want only %s for a python app", got, constants.AppURLEnvName)
 	}

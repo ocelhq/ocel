@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -124,24 +125,6 @@ type AppValues struct {
 	Phase     string
 }
 
-const (
-	ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
-)
-
-func FrameworkBundlesClient(framework string) bool {
-	return framework == FrameworkNode || framework == FrameworkNext
-}
-
-func OcelWritten(clientBundle bool, key string) bool {
-	switch key {
-	case constants.AppURLEnvName:
-		return true
-	case ClientURLEnvName:
-		return clientBundle
-	}
-	return false
-}
-
 func (v AppValues) Injected() map[string]string {
 	if v.Phase == "" {
 		return nil
@@ -178,20 +161,15 @@ type SecretRef struct {
 	Folder string
 }
 
-type Framework struct {
-	Name string `json:"name"`
-	Arch string `json:"arch,omitempty"`
-}
-
-func frameworkOf(fn *contractv1.ManifestFunction) Framework {
-	return Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
+func frameworkOf(fn *contractv1.ManifestFunction) appbuild.Framework {
+	return appbuild.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
 }
 
 type FunctionSpec struct {
 	Name      string
 	Route     string
 	Handler   string
-	Framework Framework
+	Framework appbuild.Framework
 	Artifact  ArtifactRef
 	Image     string
 	Env       map[string]string

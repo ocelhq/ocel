@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -28,7 +29,7 @@ func functionPlanDeclaring(class edge.Class, env string, values providerkit.AppV
 			Functions: []providerkit.FunctionSpec{{
 				Name:      "fn--api--index",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/api-index@sha256:abc",
-				Framework: providerkit.Framework{Name: providerkit.FrameworkNode, Arch: arch.X8664},
+				Framework: appbuild.Framework{Name: appbuild.FrameworkNode, Arch: arch.X8664},
 				Env:       map[string]string{"OCEL_ROUTE": "index"},
 			}},
 		},

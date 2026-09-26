@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 )
 
@@ -68,12 +68,12 @@ func TestContainerHelper(t *testing.T) {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(served{
-			Port:   os.Getenv(providerkit.InjectedPortName),
+			Port:   os.Getenv(appbuild.InjectedPortName),
 			Secret: os.Getenv(originguard.OriginSecretVar),
 			Health: os.Getenv(originguard.HealthPathVar),
 		})
 	})
-	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv(providerkit.InjectedPortName), mux); err != nil {
+	if err := http.ListenAndServe("127.0.0.1:"+os.Getenv(appbuild.InjectedPortName), mux); err != nil {
 		os.Exit(97)
 	}
 }
@@ -106,7 +106,7 @@ func launch(t *testing.T, role string, environ ...string) *running {
 	t.Helper()
 	port := exposedPort(t)
 	command := appCommand(t)
-	environ = append([]string{providerkit.InjectedPortName + "=" + port}, environ...)
+	environ = append([]string{appbuild.InjectedPortName + "=" + port}, environ...)
 
 	out := &running{port: port, code: make(chan int, 1)}
 	go func() { out.code <- run(context.Background(), command, append(environ, roleVar+"="+role)) }()
@@ -206,10 +206,10 @@ func TestRun(t *testing.T) {
 			t.Fatal("the app was handed no port to bind at all")
 		}
 		if body.Port == r.port {
-			t.Errorf("the app was handed %s=%s, the very port the platform routes to; the front must own the exposed port", providerkit.InjectedPortName, body.Port)
+			t.Errorf("the app was handed %s=%s, the very port the platform routes to; the front must own the exposed port", appbuild.InjectedPortName, body.Port)
 		}
 		if _, err := strconv.Atoi(body.Port); err != nil {
-			t.Errorf("the app was handed %s=%q, which is no port", providerkit.InjectedPortName, body.Port)
+			t.Errorf("the app was handed %s=%q, which is no port", appbuild.InjectedPortName, body.Port)
 		}
 		if code := r.quit(t, ""); code != 0 {
 			t.Errorf("run = %d, want 0 for an app that finished cleanly", code)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -79,7 +80,7 @@ func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 	if len(standing) != 1 {
 		t.Fatalf("ProvisionContainers(%s) stood up %v", tag, standing)
 	}
-	return release{physical: standing[0].Physical, address: standing[0].Physical + ":" + providerkit.InjectedPortText}
+	return release{physical: standing[0].Physical, address: standing[0].Physical + ":" + appbuild.InjectedPortText}
 }
 
 func releasing(p *vps.Provider, held release, drain time.Duration, progress edge.Progress) error {
@@ -96,7 +97,7 @@ func releasing(p *vps.Provider, held release, drain time.Duration, progress edge
 
 func inflightOn(t *testing.T, vm machine, held release) int {
 	t.Helper()
-	read := strings.TrimSpace(vm.beside(t, held.physical, "curl -sS -m 5 http://127.0.0.1:"+providerkit.InjectedPortText+"/inflight"))
+	read := strings.TrimSpace(vm.beside(t, held.physical, "curl -sS -m 5 http://127.0.0.1:"+appbuild.InjectedPortText+"/inflight"))
 	count, err := strconv.Atoi(read)
 	if err != nil {
 		return -1

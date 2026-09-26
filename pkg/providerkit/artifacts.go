@@ -18,6 +18,7 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -153,7 +154,7 @@ func (r *deployRun) stageFunctions(
 }
 
 func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
-	root := ArtifactRoot()
+	root := appbuild.ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() == entry.App {

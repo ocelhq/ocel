@@ -7,7 +7,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -91,7 +91,7 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 		}
 		apps = append(apps, host.AppRelease{
 			RouteKey:   held.key,
-			Target:     held.record.Physical + ":" + providerkit.InjectedPortText,
+			Target:     held.record.Physical + ":" + appbuild.InjectedPortText,
 			HealthPath: held.record.HealthPath,
 		})
 	}

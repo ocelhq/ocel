@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 type Language string
@@ -149,11 +149,11 @@ func HoldsJS(cfg *projectconfig.Config) (bool, error) {
 }
 
 var frameworkLanguages = map[string]Language{
-	providerkit.FrameworkNode:   JS,
-	providerkit.FrameworkNext:   JS,
-	providerkit.FrameworkGo:     Go,
-	providerkit.FrameworkPython: Python,
-	providerkit.FrameworkRust:   Rust,
+	appbuild.FrameworkNode:   JS,
+	appbuild.FrameworkNext:   JS,
+	appbuild.FrameworkGo:     Go,
+	appbuild.FrameworkPython: Python,
+	appbuild.FrameworkRust:   Rust,
 }
 
 func LanguageOf(framework, dir string) Language {
@@ -165,7 +165,7 @@ func LanguageOf(framework, dir string) Language {
 
 func ClientBundle(framework, dir string) bool {
 	if framework != "" {
-		return providerkit.FrameworkBundlesClient(framework)
+		return appbuild.FrameworkBundlesClient(framework)
 	}
 	language, manifested := languageOfManifest(dir)
 	return manifested && language == JS

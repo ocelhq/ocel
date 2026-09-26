@@ -26,6 +26,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -535,7 +536,7 @@ func (r *deployRun) servedHostnames() [][]string {
 	for slot, entry := range r.plan.Apps {
 		own[slot] = tierHostnames(entry.Manifest.GetDomains(), tier)
 	}
-	return AttributeHostnames(tierHostnames(r.manifest.GetDomains(), tier), own)
+	return appbuild.AttributeHostnames(tierHostnames(r.manifest.GetDomains(), tier), own)
 }
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
@@ -550,7 +551,7 @@ func (r *deployRun) checkpoint(ctx context.Context) error {
 func (r *deployRun) checkNeeds(ctx context.Context) error {
 	check := NeedCheck{
 		Edge:          r.front,
-		Root:          ArtifactRoot(),
+		Root:          appbuild.ArtifactRoot(),
 		AllowDegraded: r.allowDegraded,
 		Degraded: func(need edge.Need, detail string) {
 			r.sender.send(degradedEvent(need, detail))
@@ -854,7 +855,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 
 func (r *deployRun) serving(entry AppEntry) (ServingFacts, error) {
 	return ServingFactsFor(ServingQuery{
-		Root:              ArtifactRoot(),
+		Root:              appbuild.ArtifactRoot(),
 		Project:           naming.Sanitize(r.plan.Slug),
 		App:               entry.App,
 		Framework:         entry.Manifest.GetFramework().GetName(),
@@ -1050,7 +1051,7 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, progress edg
 func declaredVariables(clientBundle bool, held AppValues) []edge.VariableRecord {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, key := range slices.Sorted(maps.Keys(held.Plain)) {
-		if !OcelWritten(clientBundle, key) {
+		if !appbuild.IsOcelInjectedEnv(clientBundle, key) {
 			names = append(names, key)
 		}
 	}
@@ -1137,7 +1138,7 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	if compatibility.IsZero() {
 		return nil, nil
 	}
-	bundle, err := os.ReadFile(filepath.Join(AppArtifactRoot(ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
+	bundle, err := os.ReadFile(filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s was released with an edge bundle at %s but its build left no %s for the edge to load; rebuild the app",

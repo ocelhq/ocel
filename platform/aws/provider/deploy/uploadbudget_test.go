@@ -9,7 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 type blockingArtifactStore struct {
@@ -75,7 +75,7 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		go func() {
 			defer group.Done()
 			coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
-			failures[slot] = pushStaticAssetSet(context.Background(), cfg, app, providerkit.FrameworkNext, coord)
+			failures[slot] = pushStaticAssetSet(context.Background(), cfg, app, appbuild.FrameworkNext, coord)
 		}()
 	}
 

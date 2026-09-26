@@ -13,6 +13,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -47,7 +48,7 @@ func routedCoordinate(t *testing.T) naming.Coordinate {
 }
 
 func routedApp() *contractv1.ManifestApp {
-	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: providerkit.FrameworkNext}}
+	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}}
 }
 
 func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) providerkit.StackPlan {
@@ -84,7 +85,7 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 
 func routedPlan(t *testing.T, cfg Config) providerkit.StackPlan {
 	t.Helper()
-	return servingPlan(t, cfg, "web", providerkit.FrameworkNext, routedCoordinate(t))
+	return servingPlan(t, cfg, "web", appbuild.FrameworkNext, routedCoordinate(t))
 }
 
 func routedRouter(t *testing.T, cfg Config) *routerHost {
@@ -126,8 +127,8 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 
 func routedFunctions() []*contractv1.ManifestFunction {
 	return []*contractv1.ManifestFunction{
-		{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: providerkit.FrameworkNext}, RouteId: "/"},
-		{LogicalName: "fn--web--admin", App: "web", Framework: &contractv1.Framework{Name: providerkit.FrameworkNext}, RouteId: "/admin"},
+		{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/"},
+		{LogicalName: "fn--web--admin", App: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}, RouteId: "/admin"},
 	}
 }
 
@@ -238,11 +239,11 @@ func TestAppEnvCarriesTheDeploymentURLToTheFunction(t *testing.T) {
 	app := routedApp()
 	app.Variables = []*contractv1.ManifestVariable{
 		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
-		{Key: providerkit.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+		{Key: appbuild.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 	}
 
 	env := plannedEnv(t, Config{}, app, nil)
-	for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
+	for _, key := range []string{constants.AppURLEnvName, appbuild.ClientURLEnvName} {
 		if got, want := env[key], "https://shop.example"; got != want {
 			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}

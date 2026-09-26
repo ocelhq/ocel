@@ -33,7 +33,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/watcher"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 var (
@@ -428,8 +428,8 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 	}
 	merged[constants.AppFolderEnvName] = appFolder
 	merged[constants.AppURLEnvName] = localURL(merged[portEnv])
-	if scope.OcelWrites(providerkit.ClientURLEnvName, nil) {
-		merged[providerkit.ClientURLEnvName] = merged[constants.AppURLEnvName]
+	if scope.OcelWrites(appbuild.ClientURLEnvName, nil) {
+		merged[appbuild.ClientURLEnvName] = merged[constants.AppURLEnvName]
 	}
 	return merged
 }

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -65,7 +65,7 @@ func TestAReleaseStandsUpOneLabelledContainerOnTheOneNetworkTargetsResolveAcross
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
 		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),
-		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+providerkit.InjectedPortText),
+		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+appbuild.InjectedPortText),
 		"the image the release names":                          quoted(appImage),
 	} {
 		if !strings.Contains(command, wanted) {

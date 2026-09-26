@@ -1,4 +1,4 @@
-package providerkit
+package appbuild
 
 const FunctionConfigFile = "config.json"
 

@@ -14,6 +14,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 const promotionUnitSpan = "Promotion"
@@ -204,7 +205,7 @@ func TestDeployServesAProjectHostnameOnTheFirstAppAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	served := providerkit.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
+	served := appbuild.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
 	if want := []string{"https://" + served[0][0]}; !slices.Equal(servedAppURLs(result, "web"), want) {
 		t.Errorf("web is served %v, want %v", servedAppURLs(result, "web"), want)
 	}

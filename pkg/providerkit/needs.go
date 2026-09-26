@@ -2,37 +2,16 @@ package providerkit
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/constants"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const (
-	artifactRootDir = constants.ProjectStateDirName + "/output"
-
-	appsDir = "apps"
-
-	configFileName = "ocel.json"
-)
-
-func ArtifactRoot() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return artifactRootDir
-	}
-	return filepath.Join(wd, artifactRootDir)
-}
-
-func AppArtifactRoot(root, app string) string { return filepath.Join(root, appsDir, app) }
+const configFileName = "ocel.json"
 
 var degradeOf = map[edge.Need]string{
 	edge.NeedEdgeMiddleware: "middleware runs in the origin's Node server the way `next start` runs it, so every request pays the round trip to the origin before it is routed",
@@ -138,7 +117,7 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()
-		desc, present, err := ReadServeDescriptor(c.Root, name)
+		desc, present, err := appbuild.ReadServeDescriptor(c.Root, name)
 		if err != nil {
 			return nil, err
 		}
@@ -230,19 +209,4 @@ func onceChecked(ctx context.Context, check func(context.Context) (edge.CodeEnti
 		}
 		return entitlement, err
 	}
-}
-
-func ReadServeDescriptor(root, app string) (edge.ServeDescriptor, bool, error) {
-	raw, err := os.ReadFile(filepath.Join(AppArtifactRoot(root, app), edge.ServeDescriptorFile))
-	if errors.Is(err, fs.ErrNotExist) {
-		return edge.ServeDescriptor{}, false, nil
-	}
-	if err != nil {
-		return edge.ServeDescriptor{}, false, fmt.Errorf("read serve descriptor for %s: %w", app, err)
-	}
-	var desc edge.ServeDescriptor
-	if err := json.Unmarshal(raw, &desc); err != nil {
-		return edge.ServeDescriptor{}, false, fmt.Errorf("parse serve descriptor for %s: %w", app, err)
-	}
-	return desc, true, nil
 }

@@ -11,6 +11,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -18,7 +19,7 @@ import (
 
 func builtEdgeBundle(t *testing.T, app string, bundle []byte) {
 	t.Helper()
-	path := filepath.Join(providerkit.AppArtifactRoot(providerkit.ArtifactRoot(), app), filepath.FromSlash(edge.AppBundleFile))
+	path := filepath.Join(appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), app), filepath.FromSlash(edge.AppBundleFile))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
@@ -32,15 +33,15 @@ func basedOn(t *testing.T, config v1.Config) (*Provider, *string) {
 
 func TestTheBaseAFunctionRunsOnIsPinnedByDigestPerRuntime(t *testing.T) {
 	for _, runtime := range []string{
-		providerkit.FrameworkNode,
-		providerkit.FrameworkGo,
-		providerkit.FrameworkPython,
-		providerkit.FrameworkRust,
+		appbuild.FrameworkNode,
+		appbuild.FrameworkGo,
+		appbuild.FrameworkPython,
+		appbuild.FrameworkRust,
 	} {
 		t.Run(runtime, func(t *testing.T) {
 			p, asked := basedOn(t, v1.Config{})
 
-			if _, err := p.ResolveFunctionBase(context.Background(), providerkit.Framework{Name: runtime}); err != nil {
+			if _, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: runtime}); err != nil {
 				t.Fatalf("FunctionBase(%s) = %v", runtime, err)
 			}
 			if !strings.HasPrefix(*asked, "gcr.io/distroless/") {
@@ -56,7 +57,7 @@ func TestTheBaseAFunctionRunsOnIsPinnedByDigestPerRuntime(t *testing.T) {
 func TestThePythonBaseRunsTheVersionTheWheelsAreVendoredFor(t *testing.T) {
 	p, asked := basedOn(t, v1.Config{})
 
-	if _, err := p.ResolveFunctionBase(context.Background(), providerkit.Framework{Name: providerkit.FrameworkPython}); err != nil {
+	if _, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: appbuild.FrameworkPython}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(*asked, "debian13") {
@@ -68,7 +69,7 @@ func TestThePythonBaseRunsTheVersionTheWheelsAreVendoredFor(t *testing.T) {
 func TestABaseDropsTheEntrypointTheFunctionsCommandWouldBeAppendedTo(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{Entrypoint: []string{"/nodejs/bin/node"}})
 
-	base, err := p.ResolveFunctionBase(context.Background(), providerkit.Framework{Name: providerkit.FrameworkNode})
+	base, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: appbuild.FrameworkNode})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestABaseDropsTheEntrypointTheFunctionsCommandWouldBeAppendedTo(t *testing.
 func TestANodeFunctionFindsNodeOnTheBasesPath(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{Env: []string{"PATH=/usr/bin:/bin"}})
 
-	base, err := p.ResolveFunctionBase(context.Background(), providerkit.Framework{Name: providerkit.FrameworkNode})
+	base, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: appbuild.FrameworkNode})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +110,7 @@ func TestANodeFunctionFindsNodeOnTheBasesPath(t *testing.T) {
 func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 
-	_, err := p.ResolveFunctionBase(context.Background(), providerkit.Framework{Name: "deno"})
+	_, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: "deno"})
 	if err == nil {
 		t.Fatal("FunctionBase(deno) built an image on a base nothing names")
 	}
@@ -124,14 +125,14 @@ func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
 func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsCarriedFor(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 
-	_, err := p.ResolveFunctionBase(context.Background(), providerkit.Framework{Name: providerkit.FrameworkNext})
+	_, err := p.ResolveFunctionBase(context.Background(), appbuild.Framework{Name: appbuild.FrameworkNext})
 	if err == nil {
 		t.Fatal("FunctionBase(next) built an image, and Next on Cloud Run is not something this provider serves")
 	}
 	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("FunctionBase(next) code = %v, want %v", code, refusal.CodeInvalid)
 	}
-	if !strings.Contains(err.Error(), providerkit.FrameworkNext) {
+	if !strings.Contains(err.Error(), appbuild.FrameworkNext) {
 		t.Errorf("FunctionBase(next) = %v, want the runtime named", err)
 	}
 }
@@ -140,7 +141,7 @@ func TestAFunctionBuiltForArm64IsRefused(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 
 	_, err := p.ResolveFunctionBase(context.Background(),
-		providerkit.Framework{Name: providerkit.FrameworkNode, Arch: arch.ARM64})
+		appbuild.Framework{Name: appbuild.FrameworkNode, Arch: arch.ARM64})
 	if err == nil {
 		t.Fatal("FunctionBase() built an arm64 function, and Cloud Run runs x86_64 alone")
 	}
@@ -158,14 +159,14 @@ func TestTheRuntimeIsCarriedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 	ctx := context.Background()
 
-	body, err := p.ReadFunctionRuntime(ctx, providerkit.Framework{Name: providerkit.FrameworkNode})
+	body, err := p.ReadFunctionRuntime(ctx, appbuild.Framework{Name: appbuild.FrameworkNode})
 	if err != nil {
 		t.Fatalf("FunctionRuntimePayload(node) = %v", err)
 	}
 	if len(body) == 0 {
 		t.Fatal("FunctionRuntimePayload(node) carried nothing, and a node function boots through it")
 	}
-	carried, err := p.ReadFunctionRuntime(ctx, providerkit.Framework{Name: providerkit.FrameworkGo})
+	carried, err := p.ReadFunctionRuntime(ctx, appbuild.Framework{Name: appbuild.FrameworkGo})
 	if err != nil {
 		t.Fatalf("FunctionRuntimePayload(go) = %v", err)
 	}
@@ -187,7 +188,7 @@ func TestOneBaseIsFetchedOnceHoweverManyFunctionsRunOnIt(t *testing.T) {
 
 	ctx := context.Background()
 	for range 2 {
-		if _, err := p.ResolveFunctionBase(ctx, providerkit.Framework{Name: providerkit.FrameworkNode}); err != nil {
+		if _, err := p.ResolveFunctionBase(ctx, appbuild.Framework{Name: appbuild.FrameworkNode}); err != nil {
 			t.Fatalf("FunctionBase() = %v", err)
 		}
 	}

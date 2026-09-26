@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -304,7 +304,7 @@ func (p standingProxy) standsApp(t *testing.T, upstream, body string) {
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.Labelled(t)...)
 	stood, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image,
-		"caddy", "respond", "--listen", ":"+providerkit.InjectedPortText, body)...).CombinedOutput()
+		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}
@@ -464,7 +464,7 @@ func (p standingProxy) standsSlowApp(t *testing.T, upstream string, slow time.Du
 		int(slow.Seconds()))
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", p.network, "--entrypoint", "nc", caddy.Image,
-		"-lk", "-p", providerkit.InjectedPortText, "-e", "sh", "-c", answer).CombinedOutput()
+		"-lk", "-p", appbuild.InjectedPortText, "-e", "sh", "-c", answer).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}
@@ -474,7 +474,7 @@ func (p standingProxy) standsSlowApp(t *testing.T, upstream string, slow time.Du
 func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t *testing.T) {
 	stood := proxyStanding(t)
 
-	one, two := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
+	one, two := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
 	stood.standsApp(t, one, "one")
 	stood.standsApp(t, two, "two")
 	serving := func(upstream string) RoutingTable {
@@ -599,7 +599,7 @@ func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t
 func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T) {
 	stood := proxyStanding(t)
 
-	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
+	retired, next := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
 	stood.standsSlowApp(t, retired, 2*time.Second)
 	stood.standsApp(t, next, "two")
 	serving := func(upstream string) RoutingTable {
@@ -661,7 +661,7 @@ func askedFor(hostname string, timeout time.Duration) (string, error) {
 func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *testing.T) {
 	stood := proxyStanding(t)
 
-	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
+	retired, next := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
 	stood.standsSlowApp(t, retired, 4*time.Second)
 	stood.standsApp(t, next, "two")
 	serving := func(upstream string) RoutingTable {

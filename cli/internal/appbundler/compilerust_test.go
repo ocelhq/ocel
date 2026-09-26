@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -49,7 +49,7 @@ func compileRust(t *testing.T, source, arch string) (string, string, error) {
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: providerkit.Framework{Name: providerkit.FrameworkRust, Arch: arch},
+		Framework: appbuild.Framework{Name: appbuild.FrameworkRust, Arch: arch},
 		Source:    source,
 		FuncDir:   funcDir,
 		AppDir:    appDir,
@@ -215,15 +215,15 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	var config providerkit.FunctionConfig
-	readJSON(t, filepath.Join(funcDir, providerkit.FunctionConfigFile), &config)
+	var config appbuild.FunctionConfig
+	readJSON(t, filepath.Join(funcDir, appbuild.FunctionConfigFile), &config)
 	if config.Handler != "web" {
 		t.Errorf("handler = %q, want the binary named after the app", config.Handler)
 	}
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Framework != (providerkit.Framework{Name: "rust", Arch: "x86_64"}) {
+	if config.Framework != (appbuild.Framework{Name: "rust", Arch: "x86_64"}) {
 		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Framework)
 	}
 
@@ -321,7 +321,7 @@ func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
 	}
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Framework:  providerkit.Framework{Name: providerkit.FrameworkRust},
+		Framework:  appbuild.Framework{Name: appbuild.FrameworkRust},
 		Source:     source,
 		Entrypoint: "bin",
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),

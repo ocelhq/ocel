@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 const listenPollInterval = 20 * time.Millisecond
@@ -71,7 +71,7 @@ func (c *execChild) awaitReady(ctx context.Context) error {
 }
 
 func executableEnv(port int, extraEnv []string) []string {
-	env := append(os.Environ(), providerkit.InjectedPortName+"="+strconv.Itoa(port))
+	env := append(os.Environ(), appbuild.InjectedPortName+"="+strconv.Itoa(port))
 	return append(env, extraEnv...)
 }
 

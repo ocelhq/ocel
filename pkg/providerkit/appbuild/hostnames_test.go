@@ -1,10 +1,10 @@
-package providerkit_test
+package appbuild_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 func TestAttributeHostnames(t *testing.T) {
@@ -13,7 +13,7 @@ func TestAttributeHostnames(t *testing.T) {
 	t.Run("gives a project-level hostname to the first app alone", func(t *testing.T) {
 		t.Parallel()
 
-		served := providerkit.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
+		served := appbuild.AttributeHostnames([]string{"shop.example"}, [][]string{nil, nil})
 		if want := []string{"shop.example"}; !slices.Equal(served[0], want) {
 			t.Errorf("the first app is served %v, want %v", served[0], want)
 		}
@@ -25,7 +25,7 @@ func TestAttributeHostnames(t *testing.T) {
 	t.Run("puts an app's own hostnames ahead of the project's", func(t *testing.T) {
 		t.Parallel()
 
-		served := providerkit.AttributeHostnames(
+		served := appbuild.AttributeHostnames(
 			[]string{"shop.example", "www.shop.example"},
 			[][]string{{"web.shop.example"}, {"admin.shop.example"}},
 		)
@@ -40,7 +40,7 @@ func TestAttributeHostnames(t *testing.T) {
 	t.Run("hands a hostname declared twice to the app that reaches it first", func(t *testing.T) {
 		t.Parallel()
 
-		served := providerkit.AttributeHostnames([]string{"shop.example"}, [][]string{nil, {"shop.example"}})
+		served := appbuild.AttributeHostnames([]string{"shop.example"}, [][]string{nil, {"shop.example"}})
 		if want := []string{"shop.example"}; !slices.Equal(served[0], want) {
 			t.Errorf("the first app is served %v, want %v", served[0], want)
 		}
