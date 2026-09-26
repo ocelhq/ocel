@@ -45,6 +45,7 @@ export function frontNamed(env: NodeJS.ProcessEnv, dir = frontsDir): Front | und
 const portHolders: Record<string, string> = {
   nginx: "nginx holds :80 and :443",
   "nginx-container": "container ocel-front-nginx publishes :80 and :443",
+  "nginx-network": "container ocel-front-nginx-network publishes :80 and :443",
 };
 
 export function holderOf(front: Front): string {

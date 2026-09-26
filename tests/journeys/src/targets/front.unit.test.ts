@@ -51,6 +51,17 @@ describe("holderOf", () => {
     expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx-container" })!)).toBe(
       "container ocel-front-nginx publishes :80 and :443",
     );
+    expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx-network" })!)).toBe(
+      "container ocel-front-nginx-network publishes :80 and :443",
+    );
+  });
+
+  it("knows what holds the ports on every front directory the lanes can name", async () => {
+    for (const entry of await readdir(frontsDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        expect(() => holderOf(frontNamed({ [FRONT_ENV]: entry.name })!)).not.toThrow();
+      }
+    }
   });
 
   it("refuses a front the journey knows nothing holding the ports for", () => {
