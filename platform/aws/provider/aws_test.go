@@ -23,7 +23,7 @@ import (
 
 var defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
 
-func TestStateBackendURLCarriesTheEndpointTheAccountIsReachedOn(t *testing.T) {
+func TestStateBackendURLIncludesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 	t.Setenv("AWS_ENDPOINT_URL", "")
 	t.Setenv("AWS_ENDPOINT_URL_S3", "")
 	if got := stateBackendURL("state", "hello"); got != "s3://state/hello" {
