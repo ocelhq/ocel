@@ -13,7 +13,7 @@ export function scopeProblem(folders: readonly string[]): string | undefined {
   const seen = new Set<string>();
   for (const folder of folders) {
     if (seen.has(folder)) {
-      return `folder '${folder}' is named twice. A scoped variable holds one value per folder it names.`;
+      return `folder '${folder}' is named twice. A scoped variable has one value per folder it names.`;
     }
     seen.add(folder);
 

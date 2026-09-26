@@ -57,14 +57,14 @@ export function getConfig<TCase extends BindingCase>(
     binding = fromJson(BindingSchema, JSON.parse(raw));
   } catch (cause) {
     throw new Error(
-      `${key} does not carry a binding record, so this app cannot read it as a ${BindingType[type]}`,
+      `${key} does not contain a binding record, so this app cannot read it as a ${BindingType[type]}`,
       { cause },
     );
   }
 
   if (binding.properties.case !== kind) {
     throw new Error(
-      `${key} carries a ${BindingType[bindingTypeOf(binding)]} binding, and this app reads it as a ${BindingType[type]}`,
+      `${key} contains a ${BindingType[bindingTypeOf(binding)]} binding, and this app reads it as a ${BindingType[type]}`,
     );
   }
   return binding.properties.value as BindingProperties<TCase>;

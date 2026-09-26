@@ -443,7 +443,7 @@ def _members(cls: type) -> tuple[_Variable, ...]:
         if _group_annotation(annotation)[0] is not None:
             raise EnvDefinitionError(
                 "",
-                f"{cls.__name__}.{attr} holds a group of its own. A group holds "
+                f"{cls.__name__}.{attr} is itself a group. A group contains "
                 f"variables, and groups nest one level only.",
             )
         member = _definition(cls, attr, annotation)
@@ -453,8 +453,8 @@ def _members(cls: type) -> tuple[_Variable, ...]:
     if not members:
         raise EnvDefinitionError(
             "",
-            f"{cls.__name__} declares no variables. A group holds the variables an app "
-            f"takes together, so it holds at least one.",
+            f"{cls.__name__} declares no variables. A group contains the variables an app "
+            f"takes together, so it has at least one.",
         )
     return tuple(members)
 

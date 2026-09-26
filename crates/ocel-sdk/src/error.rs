@@ -27,19 +27,19 @@ pub enum Error {
         key: String,
     },
 
-    /// A binding was delivered, but it carries another kind of resource.
-    #[error("{key} carries a {carried} binding, and this app reads it as a {expected}")]
+    /// A binding was delivered, but it is for another kind of resource.
+    #[error("{key} contains a {found} binding, and this app reads it as a {expected}")]
     WrongBindingType {
         /// The environment variable the binding arrived in.
         key: String,
-        /// The kind of resource the delivered binding carries.
-        carried: String,
+        /// The kind of resource the delivered binding is for.
+        found: String,
         /// The kind of resource the app read it as.
         expected: String,
     },
 
-    /// The environment variable holds something that is not a binding record.
-    #[error("{key} does not carry a binding record, so this app cannot read it as a {expected}")]
+    /// The environment variable contains something that is not a binding record.
+    #[error("{key} does not contain a binding record, so this app cannot read it as a {expected}")]
     Binding {
         /// The environment variable the binding arrived in.
         key: String,
@@ -50,7 +50,7 @@ pub enum Error {
     /// The address discovery was told to post declarations to is not a URL.
     #[error("ocel: OCEL_DEV_SERVER does not hold a URL discovery can post to: '{server}'")]
     DevServer {
-        /// The address the environment carried.
+        /// The address the environment set.
         server: String,
     },
 
@@ -117,14 +117,14 @@ pub enum Error {
 
     /// An operation that cannot answer with nothing named an object the bucket does not
     /// hold.
-    #[error("the bucket holds no object under '{key}'")]
+    #[error("the bucket has no object under '{key}'")]
     NotFound {
         /// The key that named nothing.
         key: String,
     },
 
-    /// A write carried `if_not_exists` or `if_match`, and the object did not meet it.
-    #[error("the object under '{key}' did not meet the condition this write carried")]
+    /// A write set `if_not_exists` or `if_match`, and the object did not meet it.
+    #[error("the object under '{key}' did not meet the condition this write set")]
     PreconditionFailed {
         /// The key whose current state refused the write.
         key: String,
@@ -148,7 +148,7 @@ pub enum Error {
         "ocel: OCEL_RUNTIME_ADDRESS does not hold a URL the runtime can be reached at: '{address}'"
     )]
     RuntimeAddress {
-        /// The address the environment carried.
+        /// The address the environment set.
         address: String,
     },
 
@@ -157,7 +157,7 @@ pub enum Error {
     UntrustedRuntime,
 
     /// A public url was asked of a bucket that is served at no public address.
-    #[error("this bucket carries no public address, so '{key}' has no public url: declare the bucket with #[ocel(public)] and give the project a domain to serve it from")]
+    #[error("this bucket has no public address, so '{key}' has no public url: declare the bucket with #[ocel(public)] and give the project a domain to serve it from")]
     NotPublic {
         /// The key a public url was asked for.
         key: String,

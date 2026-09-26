@@ -62,10 +62,10 @@ func binding(name string, typ bindingsv1.BindingType) (*bindingsv1.Binding, erro
 
 	record := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal([]byte(raw), record); err != nil {
-		return nil, fmt.Errorf("%s does not carry a binding record, so this app cannot read it as a %s", key, kindOf(typ))
+		return nil, fmt.Errorf("%s does not contain a binding record, so this app cannot read it as a %s", key, kindOf(typ))
 	}
 	if got := typeOf(record); got != typ {
-		return nil, fmt.Errorf("%s carries a %s binding, and this app reads it as a %s", key, kindOf(got), kindOf(typ))
+		return nil, fmt.Errorf("%s contains a %s binding, and this app reads it as a %s", key, kindOf(got), kindOf(typ))
 	}
 	return record, nil
 }

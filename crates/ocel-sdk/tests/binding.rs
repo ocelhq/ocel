@@ -97,7 +97,7 @@ fn a_binding_of_another_kind_says_what_it_carries() {
         .expect_err("a bucket binding");
     assert_eq!(
         err.to_string(),
-        "OCEL_RESOURCE_POSTGRES_mistyped carries a BUCKET binding, and this app reads it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_mistyped contains a BUCKET binding, and this app reads it as a POSTGRES"
     );
     assert!(matches!(err, Error::WrongBindingType { .. }));
 }
@@ -111,7 +111,7 @@ fn a_binding_carrying_nothing_at_all_says_what_it_carries() {
         .expect_err("no properties");
     assert_eq!(
         err.to_string(),
-        "OCEL_RESOURCE_POSTGRES_empty carries a UNSPECIFIED binding, and this app reads it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_empty contains a UNSPECIFIED binding, and this app reads it as a POSTGRES"
     );
 }
 
@@ -143,7 +143,7 @@ fn a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_it_held
     );
     assert_eq!(
         err.to_string(),
-        "OCEL_RESOURCE_POSTGRES_unreadable does not carry a binding record, so this app cannot read it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_unreadable does not contain a binding record, so this app cannot read it as a POSTGRES"
     );
 }
 

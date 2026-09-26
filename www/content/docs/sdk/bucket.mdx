@@ -176,7 +176,7 @@ still carries that etag. Either unmet is refused rather than overwritten.
 
 A bucket declared `public` serves every object it holds anonymously, and `publicUrl(key)` is the
 address. In TypeScript that method exists only on a bucket declared public; the other languages
-fail at the call on a bucket that carries no public address.
+fail at the call on a bucket that has no public address.
 
 ```ts title="resources/index.ts"
 import { bucket } from "ocel/bucket";

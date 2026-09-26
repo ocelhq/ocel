@@ -304,7 +304,7 @@ impl Bucket {
     }
 
     /// The address the object under `key` is served at anonymously. It fails on a bucket
-    /// that carries no public address.
+    /// that has no public address.
     pub fn public_url(&self, key: &str) -> Result<String, Error> {
         let reached = self.reached("public_url")?;
         if reached.public_base_url.is_empty() {
@@ -451,7 +451,7 @@ impl Put<'_> {
         self
     }
 
-    /// Write only when the bucket holds no object under the key, and fail with
+    /// Write only when the bucket has no object under the key, and fail with
     /// [`Error::PreconditionFailed`] when it does.
     pub fn if_not_exists(mut self) -> Self {
         self.options.if_none_match = "*".to_string();

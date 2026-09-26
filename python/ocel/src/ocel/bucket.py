@@ -64,11 +64,11 @@ class ObjectNotFound(FileNotFoundError):
     key: str
 
     def __init__(self, key: str):
-        super().__init__(f'the bucket holds no object under "{key}"')
+        super().__init__(f'the bucket has no object under "{key}"')
         self.key = key
 
     def __str__(self) -> str:
-        return f'the bucket holds no object under "{self.key}"'
+        return f'the bucket has no object under "{self.key}"'
 
 
 class PreconditionFailed(Exception):
@@ -79,7 +79,7 @@ class PreconditionFailed(Exception):
     key: str
 
     def __init__(self, key: str):
-        super().__init__(f'the object under "{key}" did not meet the condition this write carried')
+        super().__init__(f'the object under "{key}" did not meet the condition this write set')
         self.key = key
 
 
@@ -480,11 +480,11 @@ class Bucket:
 
     def public_url(self, key: str) -> str:
         """The address the object under ``key`` is served at anonymously. It fails on a
-        bucket that carries no public address."""
+        bucket that has no public address."""
         reached = self._runtime("public_url")
         if not reached.public_base_url:
             raise RuntimeError(
-                f'this bucket carries no public address, so "{key}" has no public url: '
+                f'this bucket has no public address, so "{key}" has no public url: '
                 f"declare the bucket with public=True and give the project a domain to "
                 f"serve it from"
             )
