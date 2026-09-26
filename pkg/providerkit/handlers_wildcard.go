@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	connect "connectrpc.com/connect"
@@ -17,13 +16,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type wildcards struct {
 	provider provider.Provider
 	records  records.Store
-	held     Wildcard
+	held     stackrecords.Wildcard
 	sel      *contractv1.EdgeSelection
 	audience *eventStream
 }
@@ -34,7 +34,7 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 		return nil, err
 	}
 	records := provider.Records()
-	held, err := readWildcard(ctx, records)
+	held, err := stackrecords.ReadWildcard(ctx, records)
 	if err != nil {
 		return nil, err
 	}
@@ -53,24 +53,8 @@ func (w *wildcards) settlement(front edge.Edge) (settlement, error) {
 	return s, nil
 }
 
-func readWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
-	name := WildcardRecord(edge.ClassPreview)
-	record, err := records.ReadOrEmpty(ctx, store, name)
-	if err != nil {
-		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
-	}
-	var held Wildcard
-	if len(record.Bytes) == 0 {
-		return held, nil
-	}
-	if err := json.Unmarshal(record.Bytes, &held); err != nil {
-		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
-	}
-	return held, nil
-}
-
 func (w *wildcards) save(ctx context.Context) error {
-	name := WildcardRecord(edge.ClassPreview)
+	name := stackrecords.WildcardRecord(edge.ClassPreview)
 	record, err := records.ReadOrEmpty(ctx, w.records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -112,7 +96,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return err
 	}
 	wildcard := edge.PreviewWildcard(base)
-	w.held = Wildcard{
+	w.held = stackrecords.Wildcard{
 		BaseDomain: base,
 		Edge:       front.Kind(),
 		Scope:      front.Facts().CredentialScope,
@@ -233,7 +217,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 }
 
 func heldPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.PreviewWildcard, error) {
-	held, err := readWildcard(ctx, p.Records())
+	held, err := stackrecords.ReadWildcard(ctx, p.Records())
 	if err != nil {
 		return nil, err
 	}
@@ -283,34 +267,7 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 }
 
 func (w *wildcards) served(ctx context.Context) ([]string, error) {
-	return ProjectsServedOnPreview(ctx, w.records, w.held.BaseDomain)
-}
-
-func ProjectsServedOnPreview(ctx context.Context, records records.Store, baseDomain string) ([]string, error) {
-	if baseDomain == "" {
-		return nil, nil
-	}
-	under := EdgeStacksRecord(edge.ClassPreview)
-	held, err := records.List(ctx, under)
-	if err != nil {
-		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
-	}
-	var served []string
-	for _, record := range held {
-		rest, named := record.Name.Under(under)
-		if !named || len(record.Bytes) == 0 {
-			continue
-		}
-		var state EdgeStackState
-		if err := json.Unmarshal(record.Bytes, &state); err != nil {
-			return nil, fmt.Errorf("read %s: %w", record.Name, err)
-		}
-		if state.Edge.ServedOnGlobalPreview(baseDomain) {
-			served = append(served, rest[0])
-		}
-	}
-	slices.Sort(served)
-	return served, nil
+	return stackrecords.ProjectsServedOnPreview(ctx, w.records, w.held.BaseDomain)
 }
 
 func (w *wildcards) live(ctx context.Context) ([]string, error) {
@@ -320,7 +277,7 @@ func (w *wildcards) live(ctx context.Context) ([]string, error) {
 	}
 	var carrying []string
 	for _, slug := range served {
-		environments, err := previewEnvironments(ctx, w.records, slug)
+		environments, err := stackrecords.PreviewEnvironments(ctx, w.records, slug)
 		if err != nil {
 			return nil, err
 		}
@@ -387,7 +344,7 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 		return nil, err
 	}
 	groups := []*planv1.ChangeGroup{removedGroup}
-	for _, cert := range w.held.Settled.certificates() {
+	for _, cert := range w.held.Settled.Certificates() {
 		groups = append(groups, certificateGroup(cert))
 	}
 	for _, rec := range w.held.Settled.WrittenRecords() {
@@ -454,7 +411,7 @@ func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
 	if err := settle.release(ctx, w.held.Settled.WrittenRecords(), progress.Say); err != nil {
 		return err
 	}
-	for _, cert := range w.held.Settled.certificates() {
+	for _, cert := range w.held.Settled.Certificates() {
 		if !cert.Requested {
 			continue
 		}
@@ -463,5 +420,5 @@ func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
 			return err
 		}
 	}
-	return records.Forget(ctx, w.records, WildcardRecord(edge.ClassPreview))
+	return records.Forget(ctx, w.records, stackrecords.WildcardRecord(edge.ClassPreview))
 }

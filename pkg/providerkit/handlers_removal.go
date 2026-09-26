@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -24,7 +25,7 @@ type projectRemoval struct {
 	front    edge.Edge
 	stack    edge.EdgeStack
 	store    stackStore
-	state    EdgeStackState
+	state    stackrecords.EdgeState
 	settle   settlement
 
 	slug    string
@@ -51,7 +52,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	store := stackStore{records: provider.Records(), name: EdgeStackRecord(class, req.GetSlug())}
+	store := stackStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, req.GetSlug())}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
@@ -79,7 +80,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 			return nil, err
 		}
 	}
-	entries, err := ReadStacks(ctx, provider.Records(), class, req.GetSlug())
+	entries, err := stackrecords.List(ctx, provider.Records(), class, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +292,7 @@ func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, pr
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
-	return ForgetStack(ctx, r.provider.Records(), r.class, r.slug, stack)
+	return stackrecords.Forget(ctx, r.provider.Records(), r.class, r.slug, stack)
 }
 
 func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progress) error {
@@ -302,7 +303,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progres
 	if err := r.stack.Destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}
-	r.state = EdgeStackState{}
+	r.state = stackrecords.EdgeState{}
 	return r.store.write(ctx, r.state)
 }
 
@@ -345,8 +346,8 @@ func (r *projectRemoval) purgeObjects(ctx context.Context, progress edge.Progres
 
 func (r *projectRemoval) environments() []string {
 	envs := slices.Clone(r.pointer)
-	if r.class == edge.ClassProduction && !slices.Contains(envs, ProductionEnv) {
-		envs = append(envs, ProductionEnv)
+	if r.class == edge.ClassProduction && !slices.Contains(envs, stackrecords.ProductionEnv) {
+		envs = append(envs, stackrecords.ProductionEnv)
 	}
 	if r.scope != EveryPreview && !slices.Contains(envs, r.scope) {
 		envs = append(envs, r.scope)
@@ -356,7 +357,7 @@ func (r *projectRemoval) environments() []string {
 }
 
 func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) error {
-	remaining, err := ReadStacks(ctx, r.provider.Records(), r.class, r.slug)
+	remaining, err := stackrecords.List(ctx, r.provider.Records(), r.class, r.slug)
 	if err != nil {
 		return err
 	}
@@ -364,10 +365,10 @@ func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) err
 		return nil
 	}
 	progress.Say("Forgetting the project")
-	if err := records.Forget(ctx, r.provider.Records(), EdgeStackRecord(r.class, r.slug)); err != nil {
+	if err := records.Forget(ctx, r.provider.Records(), stackrecords.EdgeStackRecord(r.class, r.slug)); err != nil {
 		return err
 	}
-	return records.Forget(ctx, r.provider.Records(), ProjectRecord(r.class, r.slug))
+	return records.Forget(ctx, r.provider.Records(), stackrecords.ProjectRecord(r.class, r.slug))
 }
 
 func reclaim(
@@ -386,7 +387,7 @@ func reclaim(
 			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
 			continue
 		}
-		if err := ForgetStack(ctx, p.Records(), class, slug, target.Stack); err != nil {
+		if err := stackrecords.Forget(ctx, p.Records(), class, slug, target.Stack); err != nil {
 			errs = append(errs, err)
 		}
 		for _, prefix := range target.Prefixes {

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -17,7 +17,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 	bootstrapped(t, vm, edge.ClassProduction)
 
 	store := vm.deploying(t).Records()
-	name := providerkit.ProjectRecord(edge.ClassProduction, "records-induction")
+	name := stackrecords.ProjectRecord(edge.ClassProduction, "records-induction")
 	ctx := context.Background()
 
 	held, err := records.ReadOrEmpty(ctx, store, name)

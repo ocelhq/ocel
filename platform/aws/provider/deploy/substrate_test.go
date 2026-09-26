@@ -10,9 +10,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -159,7 +159,7 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	if len(destroyed) != 3 || destroyed[2] != substrateRef(edge.ClassProduction).Name.String() {
 		t.Fatalf("destroying the last container stack tore down %v, want the substrate to go with it: nothing idle-billing survives the last container", destroyed)
 	}
-	if _, present, err := providerkit.ReadStack(ctx, cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || present {
+	if _, present, err := stackrecords.Read(ctx, cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || present {
 		t.Errorf("the substrate is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
 	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction); err != nil || recorded {

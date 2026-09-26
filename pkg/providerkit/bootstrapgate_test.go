@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -101,7 +102,7 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
-	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatalf("RecordBootstrap() error = %v", err)
 	}
 	state, err := gate.State(ctx, edge.ClassProduction)
@@ -112,11 +113,11 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 		t.Error("State().AutoHeal is off after the record said it is on")
 	}
 
-	held, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(edge.ClassProduction))
+	held, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
-	var settings providerkit.BootstrapSettings
+	var settings stackrecords.BootstrapSettings
 	if err := json.Unmarshal(held.Bytes, &settings); err != nil || !settings.AutoHeal {
 		t.Fatalf("the bootstrap record holds %q, %v, want auto_heal on", held.Bytes, err)
 	}
@@ -182,7 +183,7 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
@@ -234,7 +235,7 @@ func TestAdmitAsksForNoHealingAndGetsNone(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
@@ -262,7 +263,7 @@ func TestAdmitWillNotHealFromADevelopmentBuild(t *testing.T) {
 	gate, provider := gated(t, "dev+cafebabe")
 	bootstrap := provider.FakeBootstrap()
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
@@ -286,7 +287,7 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
@@ -327,7 +328,7 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
@@ -398,16 +399,16 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := provider.Records().Write(ctx, records.Record{Name: providerkit.ProjectRecord(edge.ClassPreview, slug)}); err != nil {
+		if _, err := provider.Records().Write(ctx, records.Record{Name: stackrecords.ProjectRecord(edge.ClassPreview, slug)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	wildcard, err := json.Marshal(providerkit.Wildcard{BaseDomain: "previews.example.com"})
+	wildcard, err := json.Marshal(stackrecords.Wildcard{BaseDomain: "previews.example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := provider.Records().Write(ctx, records.Record{
-		Name:  providerkit.WildcardRecord(edge.ClassPreview),
+		Name:  stackrecords.WildcardRecord(edge.ClassPreview),
 		Bytes: wildcard,
 	}); err != nil {
 		t.Fatal(err)

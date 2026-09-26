@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -150,18 +151,18 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		AutoHeal: &healing,
 	})
 
-	held, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(edge.ClassProduction))
+	held, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
-	var state providerkit.BootstrapSettings
+	var state stackrecords.BootstrapSettings
 	if err := json.Unmarshal(held.Bytes, &state); err != nil || !state.AutoHeal {
 		t.Fatalf("the bootstrap record holds %q, %v, want auto_heal on", held.Bytes, err)
 	}
 
-	written, err := providerkit.RecordSchema(ctx, provider.Records(), edge.ClassProduction)
-	if err != nil || written != providerkit.RecordSchemaVersion {
-		t.Fatalf("RecordSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, providerkit.RecordSchemaVersion)
+	written, err := stackrecords.WrittenSchema(ctx, provider.Records(), edge.ClassProduction)
+	if err != nil || written != stackrecords.SchemaVersion {
+		t.Fatalf("WrittenSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, stackrecords.SchemaVersion)
 	}
 
 	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
@@ -270,12 +271,12 @@ func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
 func recordProject(t *testing.T, provider *fake.Provider, slug string, features ...string) {
 	t.Helper()
 
-	body, err := json.Marshal(providerkit.Project{Features: features})
+	body, err := json.Marshal(stackrecords.Project{Features: features})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := provider.Records().Write(context.Background(), records.Record{
-		Name:  providerkit.ProjectRecord(edge.ClassProduction, slug),
+		Name:  stackrecords.ProjectRecord(edge.ClassProduction, slug),
 		Bytes: body,
 	}); err != nil {
 		t.Fatal(err)
@@ -730,7 +731,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	if planned.GetBootstrap().GetPresent() {
 		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
 	}
-	if _, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(edge.ClassProduction)); !errors.Is(err, records.ErrNotFound) {
+	if _, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction)); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
 	}
 }

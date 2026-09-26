@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -229,7 +229,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a container app = %+v, want it to reach the Containers hooks alone", contained)
 	}
 
-	if err := providerkit.WriteStack(context.Background(), p.Records(), ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(context.Background(), p.Records(), ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		Containers: contained.Containers,
 	}); err != nil {

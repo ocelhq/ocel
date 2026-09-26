@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -216,12 +216,12 @@ func TestATableDeletedMidTeardownHoldsNoRecords(t *testing.T) {
 
 func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 	for _, name := range []records.Name{
-		providerkit.ProjectsRecord(edge.ClassProduction),
-		providerkit.BootstrapRecord(edge.ClassProduction),
-		providerkit.WildcardRecord(edge.ClassPreview),
-		providerkit.EdgeStacksRecord(edge.ClassPreview),
-		providerkit.StacksRecord(edge.ClassProduction, "shop"),
-		providerkit.EnvironmentsRecord(edge.ClassPreview, "shop"),
+		stackrecords.ProjectsRecord(edge.ClassProduction),
+		stackrecords.BootstrapRecord(edge.ClassProduction),
+		stackrecords.WildcardRecord(edge.ClassPreview),
+		stackrecords.EdgeStacksRecord(edge.ClassPreview),
+		stackrecords.StacksRecord(edge.ClassProduction, "shop"),
+		stackrecords.EnvironmentsRecord(edge.ClassPreview, "shop"),
 	} {
 		partition, err := awsports.Partition(name)
 		if err != nil {
@@ -235,9 +235,9 @@ func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 
 func TestTheSchemaRecordSitsOnTheSameKeyEveryLayoutWrote(t *testing.T) {
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		partition, err := awsports.Partition(providerkit.SchemaRecord(class))
+		partition, err := awsports.Partition(stackrecords.SchemaRecord(class))
 		if err != nil {
-			t.Fatalf("Partition(%s) err = %v", providerkit.SchemaRecord(class), err)
+			t.Fatalf("Partition(%s) err = %v", stackrecords.SchemaRecord(class), err)
 		}
 		if partition != records.RootSchema {
 			t.Errorf("the %s schema record partitions on %q, want %q: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records",
@@ -247,11 +247,11 @@ func TestTheSchemaRecordSitsOnTheSameKeyEveryLayoutWrote(t *testing.T) {
 }
 
 func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
-	shop, err := awsports.Partition(providerkit.StackRecord(edge.ClassProduction, "shop", naming.InfraStack("shop")))
+	shop, err := awsports.Partition(stackrecords.StackRecord(edge.ClassProduction, "shop", naming.InfraStack("shop")))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
-	web, err := awsports.Partition(providerkit.StackRecord(edge.ClassProduction, "web", naming.InfraStack("web")))
+	web, err := awsports.Partition(stackrecords.StackRecord(edge.ClassProduction, "web", naming.InfraStack("web")))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}

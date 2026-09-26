@@ -20,11 +20,11 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -267,7 +267,7 @@ func serverlessPlanOn(app, image string, framework appbuild.Framework, values ma
 		Ref: provider.StackRef{
 			Project: "live",
 			Class:   edge.ClassPreview,
-			Name:    naming.AppStack(providerkit.ProductionEnv, app, liveRelease),
+			Name:    naming.AppStack(stackrecords.ProductionEnv, app, liveRelease),
 		},
 		Kind: provider.StackApp,
 		App: &provider.AppPlan{

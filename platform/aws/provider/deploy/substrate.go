@@ -16,10 +16,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -93,7 +93,7 @@ func substrateTags(class edge.Class) map[string]string {
 }
 
 func consumersRecord(class edge.Class) records.Name {
-	return append(providerkit.StacksRecord(class, SubstrateSlug), substrateConsumers)
+	return append(stackrecords.StacksRecord(class, SubstrateSlug), substrateConsumers)
 }
 
 func consumerRecord(ref provider.StackRef) records.Name {
@@ -101,7 +101,7 @@ func consumerRecord(ref provider.StackRef) records.Name {
 }
 
 func leaseRecord(class edge.Class) records.Name {
-	return append(providerkit.StacksRecord(class, SubstrateSlug), substrateLease)
+	return append(stackrecords.StacksRecord(class, SubstrateSlug), substrateLease)
 }
 
 type lease struct {
@@ -138,7 +138,7 @@ func (r *Stacks) readSubstrate(ctx context.Context, class edge.Class) (substrate
 	if err != nil {
 		return substrate{}, false, err
 	}
-	_, present, err := providerkit.ReadStack(ctx, held.cfg.Records, class, SubstrateSlug, substrateRef(class).Name)
+	_, present, err := stackrecords.Read(ctx, held.cfg.Records, class, SubstrateSlug, substrateRef(class).Name)
 	if err != nil || !present {
 		return substrate{}, false, err
 	}
@@ -185,7 +185,7 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref provider.StackRef, pro
 		Tags: substrateTags(class),
 		Work: work,
 	}
-	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: provider.WrittenByVersion(""),
 	}); err != nil {
@@ -298,7 +298,7 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref 
 	if err := owner.automation.Destroy(ctx, substrate, progress); err != nil {
 		return fmt.Errorf("take down the container substrate for the %s class: %w", ref.Class, err)
 	}
-	if err := providerkit.ForgetStack(ctx, store, ref.Class, SubstrateSlug, substrate.Name); err != nil {
+	if err := stackrecords.Forget(ctx, store, ref.Class, SubstrateSlug, substrate.Name); err != nil {
 		return err
 	}
 	if err := records.Forget(ctx, store, awsports.ContainerFrontRecord(ref.Class)); err != nil {

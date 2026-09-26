@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -52,7 +53,7 @@ func buildIdentity(seq int) string {
 func seedEnvironment(t *testing.T, provider *fake.Provider, slug string, stacks ...naming.StackName) {
 	t.Helper()
 	for _, stack := range stacks {
-		name := providerkit.StackRecord(edge.ClassPreview, slug, stack)
+		name := stackrecords.StackRecord(edge.ClassPreview, slug, stack)
 		held, err := records.ReadOrEmpty(context.Background(), provider.Records(), name)
 		if err != nil {
 			t.Fatal(err)
@@ -360,7 +361,7 @@ func TestListEnvironmentsNamesEveryPreviewAndItsLifecycle(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	release := naming.NewRelease("b1", "")
 	seedEnvironment(t, provider, "shop",
-		naming.AppStack(providerkit.ProductionEnv, "web", release),
+		naming.AppStack(stackrecords.ProductionEnv, "web", release),
 		naming.AppStack("pr-7", "web", release),
 		naming.AppStack("staging", "web", release),
 		naming.InfraStack("staging"),
@@ -395,11 +396,11 @@ func TestListEnvironmentsCarriesWhatTheDeployRecordedAboutEachPreview(t *testing
 		naming.InfraStack("staging"),
 	)
 	before := time.Now().Unix()
-	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), provider.Records(),
 		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
-	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), provider.Records(),
 		edge.ClassPreview, "shop", "staging", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -434,13 +435,13 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	t.Parallel()
 	_, provider := contractServed(t, "1.0.0")
 	ctx := context.Background()
-	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(ctx, provider.Records(),
 		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	first := readEnvironmentMeta(t, provider, "shop", "pr-7")
 
-	if err := providerkit.RecordEnvironmentMeta(ctx, provider.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(ctx, provider.Records(),
 		edge.ClassPreview, "shop", "pr-7", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -457,16 +458,16 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 
 func environmentRecordBytes(t *testing.T, provider *fake.Provider, slug, env string) []byte {
 	t.Helper()
-	held, err := provider.Records().Read(context.Background(), providerkit.EnvironmentRecord(edge.ClassPreview, slug, env))
+	held, err := provider.Records().Read(context.Background(), stackrecords.EnvironmentRecord(edge.ClassPreview, slug, env))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return held.Bytes
 }
 
-func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string) providerkit.EnvironmentMeta {
+func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string) stackrecords.EnvironmentMeta {
 	t.Helper()
-	var meta providerkit.EnvironmentMeta
+	var meta stackrecords.EnvironmentMeta
 	if err := json.Unmarshal(environmentRecordBytes(t, provider, slug, env), &meta); err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +537,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	seedPromotions(t, provider, edge.ClassPreview, "shop", "pr-7", "p1", "p2")
 	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
 	seedEnvironment(t, provider, "shop", outlived, naming.InfraStack("pr-7"))
-	if err := providerkit.RecordEnvironmentMeta(context.Background(), provider.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), provider.Records(),
 		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
@@ -566,7 +567,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	if len(history) != 0 {
 		t.Errorf("pr-7 still holds %v, want its promotions gone with the pointer", history)
 	}
-	name := providerkit.EnvironmentRecord(edge.ClassPreview, "shop", "pr-7")
+	name := stackrecords.EnvironmentRecord(edge.ClassPreview, "shop", "pr-7")
 	if _, err := provider.Records().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
@@ -652,7 +653,7 @@ func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, imag
 
 	release := releaseOf(t, buildIdentity(1))
 	name := naming.AppStack(pointer, app, release)
-	if err := providerkit.WriteStack(context.Background(), p.Records(), edge.ClassPreview, slug, name, providerkit.RecordedStack{
+	if err := stackrecords.Write(context.Background(), p.Records(), edge.ClassPreview, slug, name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    release.String(),
@@ -697,7 +698,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	if want := []string{"web ghcr.io/acme/web:pr-7"}; !slices.Equal(swept.swept(), want) {
 		t.Errorf("the teardown reconciled %v, want %v: this preview's ledger names none of its releases any more, and the sweep is otherwise a deploy's final act — a box that is never deployed to again holds this image forever", swept.swept(), want)
 	}
-	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
+	if _, standing, err := stackrecords.Read(context.Background(), provider.Records(),
 		edge.ClassPreview, "shop", stack); err != nil || standing {
 		t.Errorf("%s still stands after its preview came down (%v): a teardown that reads only what the ledger last named reports success over every container it left running", stack, err)
 	}
@@ -713,7 +714,7 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 	if !held {
 		t.Fatalf("this test drives the record store's removal refusal and the provider holds a %T", provider.Records())
 	}
-	records.RefuseRemoval(providerkit.StackRecord(edge.ClassPreview, "shop", stack),
+	records.RefuseRemoval(stackrecords.StackRecord(edge.ClassPreview, "shop", stack),
 		errors.New("the record store answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
@@ -771,7 +772,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T)
 		t.Fatalf("the second RemoveEnvironment() = %q", result.GetError())
 	}
 
-	if _, standing, err := providerkit.ReadStack(context.Background(), provider.Records(),
+	if _, standing, err := stackrecords.Read(context.Background(), provider.Records(),
 		edge.ClassPreview, "shop", stack); err != nil || standing {
 		t.Errorf("%s still stands after a second teardown that reported success (%v): the first run emptied the ledger before it fell over, so a reclaim driven off the ledger's diff has nothing left to name and every container of this preview keeps running", stack, err)
 	}

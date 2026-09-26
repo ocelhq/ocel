@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -314,7 +314,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		return session.Result{}, false
 	}
 
-	held, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(edge.ClassProduction, "shop"))
+	held, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(edge.ClassProduction, "shop"))
 	if err != nil {
 		t.Fatalf("Read() as the login every deploy runs as = %v", err)
 	}
@@ -353,7 +353,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		return session.Result{}, false
 	}
 
-	_, err := NewRecords(b.host()).Read(context.Background(), providerkit.ProjectRecord(edge.ClassProduction, "shop"))
+	_, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(edge.ClassProduction, "shop"))
 	if err == nil {
 		t.Fatal("a record tier this login could neither read nor elevate to read answered a row")
 	}

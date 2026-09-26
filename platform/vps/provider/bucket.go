@@ -16,11 +16,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -464,7 +464,7 @@ func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostCla
 }
 
 func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.Class) error {
-	entries, err := providerkit.ReadStacks(ctx, p.records, class, project)
+	entries, err := stackrecords.List(ctx, p.records, class, project)
 	if err != nil {
 		return err
 	}
@@ -478,7 +478,7 @@ func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.C
 	return nil
 }
 
-func (p *Provider) holdStackOrigins(ctx context.Context, ref provider.StackRef, entry providerkit.StackEntry, claims func() ([]host.HostClaim, error)) error {
+func (p *Provider) holdStackOrigins(ctx context.Context, ref provider.StackRef, entry stackrecords.NamedStack, claims func() ([]host.HostClaim, error)) error {
 	buckets := slices.DeleteFunc(slices.Clone(entry.Bindings), func(binding provider.Binding) bool {
 		return binding.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, binding.Name)
 	})
@@ -560,7 +560,7 @@ func (p *Provider) reconcileStore(ctx context.Context, ref provider.StackRef, pr
 }
 
 func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool, error) {
-	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
+	entries, err := stackrecords.List(ctx, p.records, ref.Class, ref.Project)
 	if err != nil {
 		return false, err
 	}
@@ -599,7 +599,7 @@ func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progr
 }
 
 func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]string, error) {
-	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
+	entries, err := stackrecords.List(ctx, p.records, ref.Class, ref.Project)
 	if err != nil {
 		return nil, err
 	}

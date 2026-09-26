@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -524,7 +525,7 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 
 func deployPreview(t *testing.T, provider *fake.Provider, environment string) {
 	t.Helper()
-	name := providerkit.StackRecord(edge.ClassPreview, slug, naming.InfraStack(environment))
+	name := stackrecords.StackRecord(edge.ClassPreview, slug, naming.InfraStack(environment))
 	if _, err := provider.Records().Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")}); err != nil {
 		t.Fatalf("record a deployed preview environment: %v", err)
 	}

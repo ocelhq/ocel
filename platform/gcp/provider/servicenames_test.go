@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -22,7 +22,7 @@ func serviceNames(t *testing.T) gcp.Names {
 func TestAServiceIsNamedForTheProjectEnvironmentAndAppItServes(t *testing.T) {
 	names := serviceNames(t)
 
-	service, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	service, err := names.Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatalf("Service() = %v", err)
 	}
@@ -40,7 +40,7 @@ func TestAServiceIsNamedForTheProjectEnvironmentAndAppItServes(t *testing.T) {
 func TestTwoEnvironmentsOfOneAppAreTwoServices(t *testing.T) {
 	names := serviceNames(t)
 
-	production, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	production, err := names.Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,11 +56,11 @@ func TestTwoEnvironmentsOfOneAppAreTwoServices(t *testing.T) {
 func TestAFunctionThatIsNotTheAppItselfIsNamedApart(t *testing.T) {
 	names := serviceNames(t)
 
-	whole, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	whole, err := names.Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}
-	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "fn--web--checkout")
+	part, err := names.Service("shop", stackrecords.ProductionEnv, "web", "fn--web--checkout")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestAFunctionThatIsNotTheAppItselfIsNamedApart(t *testing.T) {
 func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItCarries(t *testing.T) {
 	names := serviceNames(t)
 
-	service, err := names.Service("j-1874-deploy-node", providerkit.ProductionEnv, "web", "fn--web--index")
+	service, err := names.Service("j-1874-deploy-node", stackrecords.ProductionEnv, "web", "fn--web--index")
 	if err != nil {
 		t.Fatalf("Service() = %v", err)
 	}
@@ -91,7 +91,7 @@ func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItCarries(t *testing.T) 
 func TestANameCloudRunWouldNotBuildAUrlFromIsRefused(t *testing.T) {
 	names := serviceNames(t)
 
-	_, err := names.Service(strings.Repeat("shopfront", 5), providerkit.ProductionEnv, "web", "web")
+	_, err := names.Service(strings.Repeat("shopfront", 5), stackrecords.ProductionEnv, "web", "web")
 	if err == nil {
 		t.Fatal("Service() named a service too long for Cloud Run to build a url from")
 	}
@@ -106,7 +106,7 @@ func TestANameCloudRunWouldNotBuildAUrlFromIsRefused(t *testing.T) {
 func TestAnAppNamedWithWhatCloudRunRefusesIsCarriedIntoANameItTakes(t *testing.T) {
 	names := serviceNames(t)
 
-	service, err := names.Service("Shop_Front", providerkit.ProductionEnv, "Web API", "Web API")
+	service, err := names.Service("Shop_Front", stackrecords.ProductionEnv, "Web API", "Web API")
 	if err != nil {
 		t.Fatalf("Service() = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAnEnvironmentAndAnAppThatSplitTheSameLettersAreTwoServices(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	beside, err := names.Service("shop", providerkit.ProductionEnv, "1-web", "1-web")
+	beside, err := names.Service("shop", stackrecords.ProductionEnv, "1-web", "1-web")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,11 +135,11 @@ func TestAnEnvironmentAndAnAppThatSplitTheSameLettersAreTwoServices(t *testing.T
 func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
 	names := serviceNames(t)
 
-	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "fn--web--checkout")
+	part, err := names.Service("shop", stackrecords.ProductionEnv, "web", "fn--web--checkout")
 	if err != nil {
 		t.Fatal(err)
 	}
-	whole, err := names.Service("shop", providerkit.ProductionEnv, "web-checkout", "web-checkout")
+	whole, err := names.Service("shop", stackrecords.ProductionEnv, "web-checkout", "web-checkout")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,11 +241,11 @@ func TestAPreviewLabelNothingNamedIsRefusedRatherThanStandingSomethingUnreachabl
 func TestOneAppIsNamedTheSameServiceEveryRelease(t *testing.T) {
 	names := serviceNames(t)
 
-	first, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	first, err := names.Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	again, err := names.Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}

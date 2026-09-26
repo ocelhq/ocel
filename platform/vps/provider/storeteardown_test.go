@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -102,8 +102,8 @@ func holdingBuckets(t *testing.T, p *vps.Provider, stack naming.StackName, named
 		held.Properties = map[string]string{provider.PropertyBucket: "prod-web-r0a1b2c3d-" + name}
 		bindings = append(bindings, held)
 	}
-	recorded := providerkit.RecordedStack{Kind: provider.StackApp, App: "web", Bindings: bindings}
-	if err := providerkit.WriteStack(context.Background(), records,
+	recorded := stackrecords.Stack{Kind: provider.StackApp, App: "web", Bindings: bindings}
+	if err := stackrecords.Write(context.Background(), records,
 		edge.ClassProduction, "shop", stack, recorded); err != nil {
 		t.Fatal(err)
 	}

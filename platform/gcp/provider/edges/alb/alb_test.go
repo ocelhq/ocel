@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
@@ -545,12 +545,12 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 	if err != nil {
 		t.Fatalf("Reconcile(%s) = %v", slug, err)
 	}
-	state := providerkit.EdgeStackState{Kind: Kind, Edge: stack.State()}
+	state := stackrecords.EdgeState{Kind: Kind, Edge: stack.State()}
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := providerkit.EdgeStackRecord(edge.ClassPreview, slug)
+	name := stackrecords.EdgeStackRecord(edge.ClassPreview, slug)
 	record, err := records.ReadOrEmpty(ctx, front.deps.Records, name)
 	if err != nil {
 		t.Fatal(err)

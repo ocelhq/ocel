@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -26,7 +27,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	if err != nil {
 		return nil, err
 	}
-	environments, err := previewEnvironments(ctx, p.Records(), req.GetSlug())
+	environments, err := stackrecords.PreviewEnvironments(ctx, p.Records(), req.GetSlug())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -48,7 +49,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err != nil {
 			return err
 		}
-		if pointer == ProductionEnv {
+		if pointer == stackrecords.ProductionEnv {
 			return refusal.Refuse(refusal.CodeInvalid,
 				"production is not an environment to remove; `ocel destroy production` removes the project's production footprint")
 		}
@@ -70,7 +71,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := forgetKeptRecords(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 			return err
 		}
-		if err := records.Forget(ctx, session.provider.Records(), EnvironmentRecord(edge.ClassPreview, req.GetSlug(), pointer)); err != nil {
+		if err := records.Forget(ctx, session.provider.Records(), stackrecords.EnvironmentRecord(edge.ClassPreview, req.GetSlug(), pointer)); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(removed) {
@@ -212,7 +213,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		}
 		env := pointer
 		if class == edge.ClassProduction {
-			env = ProductionEnv
+			env = stackrecords.ProductionEnv
 		}
 		targets, err := ReclaimTargets(req.GetSlug(), env,
 			pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
@@ -286,17 +287,17 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 }
 
 func reclaimStanding(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
-	entries, err := ReadStacks(ctx, p.Records(), edge.ClassPreview, slug)
+	entries, err := stackrecords.List(ctx, p.Records(), edge.ClassPreview, slug)
 	if err != nil {
 		return err
 	}
-	standing := make([]StackEntry, 0, len(entries))
+	standing := make([]stackrecords.NamedStack, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Name.Env == pointer {
 			standing = append(standing, entry)
 		}
 	}
-	slices.SortStableFunc(standing, func(a, b StackEntry) int {
+	slices.SortStableFunc(standing, func(a, b stackrecords.NamedStack) int {
 		return cmp.Compare(infraLast(a.Name), infraLast(b.Name))
 	})
 	elsewhere, here := releasesOf(surviving), releasesOf(servingHere)
@@ -309,7 +310,7 @@ func reclaimStanding(ctx context.Context, p provider.Provider, slug, pointer str
 			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
 			continue
 		}
-		if err := ForgetStack(ctx, p.Records(), edge.ClassPreview, slug, entry.Name); err != nil {
+		if err := stackrecords.Forget(ctx, p.Records(), edge.ClassPreview, slug, entry.Name); err != nil {
 			errs = append(errs, err)
 		}
 		if entry.Name.IsInfra() {

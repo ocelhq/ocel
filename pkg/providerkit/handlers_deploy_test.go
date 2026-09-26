@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -303,14 +304,14 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 2 {
 		t.Fatalf("the project records %d stacks, want the infra stack and one app stack", len(entries))
 	}
-	var infra, app providerkit.StackEntry
+	var infra, app stackrecords.NamedStack
 	for _, entry := range entries {
 		if entry.Name.IsInfra() {
 			infra = entry
@@ -322,7 +323,7 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		t.Errorf("the infra stack records bindings %v, want the resource it stood up", infra.Bindings)
 	}
 	if app.App != "web" || app.Identity == "" {
-		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.RecordedStack)
+		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.Stack)
 	}
 	if len(app.Functions) != 1 {
 		t.Errorf("the app stack records %d functions, want the one it stood up", len(app.Functions))
@@ -422,7 +423,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), edge.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
+	if entries, rerr := stackrecords.List(context.Background(), base.Records(), edge.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
 		t.Errorf("the refused deploy recorded %v, want nothing written for a binding the kit would not accept", entries)
 	}
 }

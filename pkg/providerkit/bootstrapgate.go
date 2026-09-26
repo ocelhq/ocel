@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -248,10 +249,10 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 	if err := g.Bootstrap.Apply(ctx, intended.request(class, req, g.WrittenBy), progress); err != nil {
 		return err
 	}
-	if err := g.RecordBootstrap(ctx, class, BootstrapSettings{AutoHeal: autoHeal}); err != nil {
+	if err := g.RecordBootstrap(ctx, class, stackrecords.BootstrapSettings{AutoHeal: autoHeal}); err != nil {
 		return err
 	}
-	return EnsureRecordSchema(ctx, g.Records, class)
+	return stackrecords.EnsureSchema(ctx, g.Records, class)
 }
 
 func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class, progress edge.Progress) error {
@@ -270,7 +271,7 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class,
 	if err := g.Bootstrap.Remove(ctx, class, progress); err != nil {
 		return err
 	}
-	return records.Forget(ctx, g.Records, BootstrapRecord(class))
+	return records.Forget(ctx, g.Records, stackrecords.BootstrapRecord(class))
 }
 
 func (g Gate) Vacant(ctx context.Context, class edge.Class) error {
@@ -299,17 +300,17 @@ func (g Gate) admitRemovals(ctx context.Context, class edge.Class, removing []st
 }
 
 func (g Gate) RecordedFeatures(ctx context.Context, class edge.Class) (map[string][]string, error) {
-	held, err := g.Records.List(ctx, ProjectsRecord(class))
+	held, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
 	for _, record := range held {
-		rest, under := record.Name.Under(ProjectsRecord(class))
+		rest, under := record.Name.Under(stackrecords.ProjectsRecord(class))
 		if !under || len(rest) != 1 || len(record.Bytes) == 0 {
 			continue
 		}
-		var project Project
+		var project stackrecords.Project
 		if err := json.Unmarshal(record.Bytes, &project); err != nil {
 			return nil, fmt.Errorf("read %s's record: %w", record.Name, err)
 		}
@@ -409,22 +410,22 @@ func denied(refusal refusal.Refusal) string {
 }
 
 func (g Gate) autoHeal(ctx context.Context, class edge.Class) (bool, error) {
-	held, err := records.ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
+	held, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
 	if err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
 	if len(held.Bytes) == 0 {
 		return false, nil
 	}
-	var state BootstrapSettings
+	var state stackrecords.BootstrapSettings
 	if err := json.Unmarshal(held.Bytes, &state); err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
 	return state.AutoHeal, nil
 }
 
-func (g Gate) RecordBootstrap(ctx context.Context, class edge.Class, state BootstrapSettings) error {
-	held, err := records.ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
+func (g Gate) RecordBootstrap(ctx context.Context, class edge.Class, state stackrecords.BootstrapSettings) error {
+	held, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
 	if err != nil {
 		return fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
@@ -444,13 +445,13 @@ type Occupancy struct {
 }
 
 func (g Gate) Occupancy(ctx context.Context, class edge.Class) (Occupancy, error) {
-	held, err := g.Records.List(ctx, ProjectsRecord(class))
+	held, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
 	if err != nil {
 		return Occupancy{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
 	for _, record := range held {
-		rest, under := record.Name.Under(ProjectsRecord(class))
+		rest, under := record.Name.Under(stackrecords.ProjectsRecord(class))
 		if !under || rest[0] == "" {
 			continue
 		}
@@ -459,12 +460,12 @@ func (g Gate) Occupancy(ctx context.Context, class edge.Class) (Occupancy, error
 	slices.Sort(projects)
 	occupancy := Occupancy{Projects: slices.Compact(projects)}
 
-	wildcard, err := records.ReadOrEmpty(ctx, g.Records, WildcardRecord(class))
+	wildcard, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.WildcardRecord(class))
 	if err != nil {
 		return Occupancy{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
 	}
 	if len(wildcard.Bytes) > 0 {
-		var recorded Wildcard
+		var recorded stackrecords.Wildcard
 		if err := json.Unmarshal(wildcard.Bytes, &recorded); err != nil {
 			return Occupancy{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
 		}

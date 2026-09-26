@@ -7,6 +7,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 )
 
 func TestAPreviewIdentityThatNamesProductionIsRefused(t *testing.T) {
@@ -14,17 +15,17 @@ func TestAPreviewIdentityThatNamesProductionIsRefused(t *testing.T) {
 
 	_, err := envName(&environmentv1.Environment{
 		Tier:     environmentv1.Tier_TIER_PREVIEW,
-		Identity: ProductionEnv,
+		Identity: stackrecords.ProductionEnv,
 	})
 
 	if err == nil {
 		t.Fatalf("envName() took %q as a preview identity, and every name a provider builds from the environment "+
-			"would then read as production's", ProductionEnv)
+			"would then read as production's", stackrecords.ProductionEnv)
 	}
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("envName() code = %v, want %v", code, refusal.CodeInvalid)
 	}
-	if !strings.Contains(err.Error(), ProductionEnv) {
+	if !strings.Contains(err.Error(), stackrecords.ProductionEnv) {
 		t.Errorf("envName() = %v, want the identity it refused named", err)
 	}
 }

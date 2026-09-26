@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -34,7 +34,7 @@ type Records struct {
 }
 
 func (r Records) collection(name records.Name) (*firestore.CollectionRef, edge.Class, error) {
-	class, named := providerkit.ClassOf(name)
+	class, named := stackrecords.ClassOf(name)
 	if !named {
 		return nil, "", Classless(name)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -32,7 +33,7 @@ func retireCertificate(ctx context.Context, p provider.Provider, settle settleme
 type certification struct {
 	provider provider.Provider
 	settle   settlement
-	settled  *Settled
+	settled  *stackrecords.Settled
 	persist  func(context.Context) error
 	uses     func(string) bool
 	notes    []string

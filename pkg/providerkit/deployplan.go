@@ -9,6 +9,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -297,9 +298,9 @@ func releasesOf(keys []string) map[appRelease]bool {
 	return served
 }
 
-func classifyStacks(entries []StackEntry, class edge.Class) (infra, apps []naming.StackName, pointers []string) {
+func classifyStacks(entries []stackrecords.NamedStack, class edge.Class) (infra, apps []naming.StackName, pointers []string) {
 	for _, entry := range entries {
-		production := entry.Name.Env == ProductionEnv
+		production := entry.Name.Env == stackrecords.ProductionEnv
 		if production != (class == edge.ClassProduction) {
 			continue
 		}

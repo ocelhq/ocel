@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -187,7 +187,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 	ref := infraRef()
 
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 		Kind: provider.StackInfra,
 		Bindings: []provider.Binding{
 			{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: "shop-uploads"}},
@@ -232,7 +232,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	own := &buckets{}
 	ref := infraRef()
 
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:     provider.StackInfra,
 		Bindings: []provider.Binding{{Type: provider.BindingBucket, Name: "uploads"}},
 	}); err != nil {
@@ -290,7 +290,7 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := infraRef()
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 		Kind: provider.StackInfra,
 		Bindings: []provider.Binding{
 			{Type: provider.BindingBucket, Name: "uploads"},
@@ -335,7 +335,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := infraRef()
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:     provider.StackInfra,
 		Bindings: []provider.Binding{{Type: provider.BindingBucket, Name: "uploads"}},
 	}); err != nil {
@@ -401,11 +401,11 @@ func function(ref provider.StackRef, name string) provider.Function {
 func recordFunctions(t *testing.T, records records.Store, ref provider.StackRef, names ...string) {
 	t.Helper()
 
-	stack := providerkit.RecordedStack{Kind: provider.StackApp}
+	stack := stackrecords.Stack{Kind: provider.StackApp}
 	for _, name := range names {
 		stack.Functions = append(stack.Functions, function(ref, name))
 	}
-	if err := providerkit.WriteStack(context.Background(), records, ref.Class, ref.Project, ref.Name, stack); err != nil {
+	if err := stackrecords.Write(context.Background(), records, ref.Class, ref.Project, ref.Name, stack); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -514,11 +514,11 @@ func containerApp(app string) *provider.AppPlan {
 func recordContainers(t *testing.T, records records.Store, ref provider.StackRef, names ...string) {
 	t.Helper()
 
-	stack := providerkit.RecordedStack{Kind: provider.StackApp}
+	stack := stackrecords.Stack{Kind: provider.StackApp}
 	for _, name := range names {
 		stack.Containers = append(stack.Containers, container(ref, name))
 	}
-	if err := providerkit.WriteStack(context.Background(), records, ref.Class, ref.Project, ref.Name, stack); err != nil {
+	if err := stackrecords.Write(context.Background(), records, ref.Class, ref.Project, ref.Name, stack); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1084,7 +1084,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := appRef()
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 	}); err != nil {
@@ -1119,7 +1119,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 			ctx := context.Background()
 			records := fake.NewRecords()
 			ref := appRef()
-			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+			if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
 				Kind:       provider.StackApp,
 				Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 			}); err != nil {

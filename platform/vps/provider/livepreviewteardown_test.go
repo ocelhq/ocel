@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -136,7 +137,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	if len(stood.Containers) != 1 {
 		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
 	}
-	if err := providerkit.WriteStack(ctx, p.Records(), edge.ClassPreview, slug, plan.Ref.Name, providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, p.Records(), edge.ClassPreview, slug, plan.Ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),
@@ -144,7 +145,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		Containers: stood.Containers,
 		WrittenBy:  provider.WrittenByVersion(""),
 	}); err != nil {
-		t.Fatalf("WriteStack(%s): %v", pointer, err)
+		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
 	}
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
 		App:        app,

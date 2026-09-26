@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 )
 
 func repoRoot(t *testing.T) string {
@@ -52,7 +52,7 @@ func deploymentIDFor(label string) string {
 func deployedAs(deploymentID string) Identity { return fingerprinted(deploymentID, "") }
 
 func fingerprinted(deploymentID, values string) Identity {
-	return deployedInto(providerkit.ProductionEnv, deploymentID, values)
+	return deployedInto(stackrecords.ProductionEnv, deploymentID, values)
 }
 
 func deployedInto(environment, deploymentID, values string) Identity {

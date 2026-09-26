@@ -11,10 +11,10 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -102,7 +102,7 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 
 	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Class: edge.ClassProduction}, providerkit.ProductionEnv)
+	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Class: edge.ClassProduction}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
 	t.Helper()
 	client, p := contractServed(t, "1.0.0")
-	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -163,7 +163,7 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]providerkit.Settled{
+		Hosts: map[string]stackrecords.Settled{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "cert-for-app"},
 				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
@@ -242,7 +242,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	client, p := contractServed(t, "1.0.0")
 	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -250,7 +250,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]providerkit.Settled{
+		Hosts: map[string]stackrecords.Settled{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
 				Superseded:  []provider.Certificate{{ID: "stalled-cert", Requested: true, Written: []edge.Record{stale}}},
@@ -317,9 +317,9 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
 
-	admin := naming.AppStack(providerkit.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
-	if err := providerkit.WriteStack(ctx, provider.Records(), edge.ClassProduction, "shop", admin, providerkit.RecordedStack{App: "admin"}); err != nil {
-		t.Fatalf("WriteStack() error = %v", err)
+	admin := naming.AppStack(stackrecords.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
+	if err := stackrecords.Write(ctx, provider.Records(), edge.ClassProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
+		t.Fatalf("stackrecords.Write() error = %v", err)
 	}
 
 	req := projectRequest()
