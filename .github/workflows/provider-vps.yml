@@ -136,7 +136,7 @@ jobs:
           for s in $(seq 0 $((SHARDS - 1))); do
             awk -v n="$SHARDS" -v s="$s" 'NR % n == s' live.tests > "shard-$s.tests"
             if [ ! -s "shard-$s.tests" ]; then
-              echo "::error::shard $s holds no test"
+              echo "::error::shard $s has no test"
               exit 1
             fi
             echo "lane $s runs:"

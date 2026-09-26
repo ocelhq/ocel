@@ -311,7 +311,7 @@ jobs:
           owner: ocelhq
           repositories: homebrew-tap
 
-      - name: Commit the cask unless the tap already carries it
+      - name: Commit the cask unless the tap already has it
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           VERSION: ${{ needs.release.outputs.version }}
@@ -321,7 +321,7 @@ jobs:
           endpoint=repos/ocelhq/homebrew-tap/contents/Casks/ocel.rb
           sha=$(gh api "$endpoint" --jq .sha 2>/dev/null || true)
           if [ -n "$sha" ] && gh api "$endpoint" -H "Accept: application/vnd.github.raw" | cmp -s - "$cask"; then
-            echo "the tap already carries ocel $VERSION"
+            echo "the tap already has ocel $VERSION"
             exit 0
           fi
           args=(-X PUT "$endpoint" -f "message=ocel $VERSION" -f "content=$(base64 -w0 "$cask")" -f branch=main)

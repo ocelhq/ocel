@@ -119,12 +119,12 @@ jobs:
       - name: Run the journey
         run: pnpm --filter @ocel-tests/journeys journey
 
-      - name: Take down what this run stood up
+      - name: Take down what this run provisioned
         if: always()
         run: |
           set -uo pipefail
           if [ -z "${OCEL_BIN:-}" ]; then
-            echo "no binary was built, so this run stood nothing up to take down"
+            echo "no binary was built, so this run provisioned nothing to take down"
             exit 0
           fi
           left=0
@@ -209,7 +209,7 @@ jobs:
           VERSION: ${{ steps.plan.outputs.version }}
         run: node scripts/release/version.mjs "$VERSION"
 
-      - name: Tag a commit off main that carries it, which fires the binaries workflow
+      - name: Tag a commit off main that has the stamped version, which fires the binaries workflow
         if: steps.plan.outputs.version != ''
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
