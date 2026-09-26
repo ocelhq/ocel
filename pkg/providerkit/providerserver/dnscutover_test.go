@@ -29,10 +29,10 @@ func (a *answering) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, 
 	return "", nil
 }
 
-func waiting(liveness provider.Liveness, attempts int) (settlement, *int) {
+func waiting(liveness provider.Liveness, attempts int) (dnsCutover, *int) {
 	slept := 0
 	clock := time.Unix(1700000000, 0)
-	return settlement{
+	return dnsCutover{
 		kind:     "relay",
 		liveness: liveness,
 		budget:   time.Duration(attempts) * time.Second,
@@ -50,9 +50,9 @@ func waiting(liveness provider.Liveness, attempts int) (settlement, *int) {
 func TestSettleWaitsUntilTheHostnameAnswers(t *testing.T) {
 	t.Parallel()
 	resolve := &answering{kind: "relay", after: 2}
-	settle, slept := waiting(resolve, 5)
+	cutover, slept := waiting(resolve, 5)
 
-	probe, err := settle.await(context.Background(), "app.acme.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "app.acme.com", func(string) {})
 	if err != nil {
 		t.Fatalf("await() = %v, want it to wait the hostname out", err)
 	}
@@ -67,9 +67,9 @@ func TestSettleWaitsUntilTheHostnameAnswers(t *testing.T) {
 func TestSettleGivesUpAfterItsLastAttempt(t *testing.T) {
 	t.Parallel()
 	resolve := &answering{kind: "relay", after: 99}
-	settle, slept := waiting(resolve, 3)
+	cutover, slept := waiting(resolve, 3)
 
-	probe, err := settle.await(context.Background(), "app.acme.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "app.acme.com", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal naming the wait", err)
@@ -87,9 +87,9 @@ func TestSettleGivesUpAfterItsLastAttempt(t *testing.T) {
 
 func TestSettleStopsWhenAnotherEdgeAnswers(t *testing.T) {
 	t.Parallel()
-	settle, _ := waiting(&answering{kind: "direct"}, 2)
+	cutover, _ := waiting(&answering{kind: "direct"}, 2)
 
-	probe, err := settle.await(context.Background(), "app.acme.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "app.acme.com", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
@@ -138,8 +138,8 @@ func TestTheSettleAsksTheProvidersProbeWhichEdgeAnswers(t *testing.T) {
 	t.Parallel()
 
 	provider := &boxProvider{answers: "box"}
-	settle := newSettlement(frontOf{kind: "box"}, nil, "", provider.Liveness())
-	if kind, err := settle.attempt(context.Background(), "shop.example.com"); err != nil || kind != "box" {
+	cutover := newDNSCutover(frontOf{kind: "box"}, nil, "", provider.Liveness())
+	if kind, err := cutover.attempt(context.Background(), "shop.example.com"); err != nil || kind != "box" {
 		t.Fatalf("attempt() = %q, %v, want the edge the provider's own probe answered", kind, err)
 	}
 	if len(provider.asked) != 1 || provider.asked[0] != "shop.example.com" || provider.kinds[0] != "box" {
@@ -151,10 +151,10 @@ func TestTheSettleRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 	t.Parallel()
 
 	provider := &boxProvider{answers: "cloudfront"}
-	settle, _ := waiting(provider.Liveness(), 3)
-	settle.kind = "box"
+	cutover, _ := waiting(provider.Liveness(), 3)
+	cutover.kind = "box"
 
-	probe, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	probe, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() over a hostname a different edge answers = %v, want a not-ready refusal rather than a settle that reads as done", err)
@@ -184,9 +184,9 @@ func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, erro
 	return "", nil
 }
 
-func onTheClock(resolve func(*time.Time) provider.Liveness, budget time.Duration) settlement {
+func onTheClock(resolve func(*time.Time) provider.Liveness, budget time.Duration) dnsCutover {
 	clock := time.Unix(1700000000, 0)
-	return settlement{
+	return dnsCutover{
 		kind:     "box",
 		liveness: resolve(&clock),
 		budget:   budget,
@@ -204,11 +204,11 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 	t.Parallel()
 
 	var asked int
-	settle := onTheClock(func(clock *time.Time) provider.Liveness {
+	cutover := onTheClock(func(clock *time.Time) provider.Liveness {
 		return slowly{clock: clock, cost: 15 * time.Second, asked: &asked}
-	}, settleBudget)
+	}, cutoverBudget)
 
-	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
@@ -225,15 +225,15 @@ func TestAnAttendedSettleWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
 	t.Parallel()
 
 	const minutes = 10 * time.Minute
-	for what, budget := range map[string]time.Duration{"domain add": attendedBudget, "a deploy": settleBudget} {
-		settle := onTheClock(func(clock *time.Time) provider.Liveness {
+	for what, budget := range map[string]time.Duration{"domain add": manualRecordBudget, "a deploy": cutoverBudget} {
+		cutover := onTheClock(func(clock *time.Time) provider.Liveness {
 			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "box"}
 		}, budget)
-		_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-		if budget == attendedBudget && err != nil {
+		_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
+		if budget == manualRecordBudget && err != nil {
 			t.Errorf("%s gave up on a front that answers after %s: %v. A fresh CloudFront distribution takes minutes to serve, and `ocel domain add` is the command that waits for it", what, minutes, err)
 		}
-		if budget == settleBudget && err == nil {
+		if budget == cutoverBudget && err == nil {
 			t.Errorf("%s waited %s for one hostname: a deploy leaves a slow hostname pending for `ocel domain add` rather than holding the release", what, minutes)
 		}
 	}
@@ -268,7 +268,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t 
 	t.Parallel()
 
 	var asked atomic.Int32
-	settle := settlement{
+	cutover := dnsCutover{
 		kind:     "box",
 		liveness: hanging{asked: &asked},
 		budget:   300 * time.Millisecond,
@@ -279,7 +279,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t 
 	}
 
 	began := time.Now()
-	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	if spent := time.Since(began); spent > 2*time.Second {
 		t.Fatalf("await() returned after %s, want it held to its 300ms deadline", spent)
 	}
@@ -306,9 +306,9 @@ func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T)
 	t.Parallel()
 
 	cause := "dial tcp 203.0.113.10:443: connect: connection refused"
-	settle, _ := waiting(stopped{cause: cause}, 2)
+	cutover, _ := waiting(stopped{cause: cause}, 2)
 
-	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
@@ -333,9 +333,9 @@ func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *t
 	t.Parallel()
 
 	cause := "dial tcp 203.0.113.10:443: i/o timeout"
-	settle, _ := waiting(outlasting{cause: cause}, 2)
+	cutover, _ := waiting(outlasting{cause: cause}, 2)
 
-	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("await() = %v, want a not-ready refusal", err)
@@ -351,9 +351,9 @@ func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *t
 func TestALivenessThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	t.Parallel()
 
-	settle, _ := waiting(&answering{kind: "relay", after: 99}, 2)
+	cutover, _ := waiting(&answering{kind: "relay", after: 99}, 2)
 
-	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
@@ -368,10 +368,10 @@ func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughItsLiveness(t *testing.T
 
 	cause := "x509: certificate is valid for parked.example.net, not shop.example.com"
 	provider := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
-	settle, _ := waiting(provider.Liveness(), 2)
-	settle.kind = "box"
+	cutover, _ := waiting(provider.Liveness(), 2)
+	cutover.kind = "box"
 
-	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
@@ -385,10 +385,10 @@ func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *tes
 	t.Parallel()
 
 	cause := "x509: certificate signed by unknown authority"
-	settle, _ := waiting(stopped{cause: cause}, 1)
-	settle.kind = "box"
+	cutover, _ := waiting(stopped{cause: cause}, 1)
+	cutover.kind = "box"
 	rows := &hostnames{
-		edgeSession: &edgeSession{settle: settle},
+		edgeSession: &edgeSession{cutover: cutover},
 		configured:  []ConfiguredHost{{Hostname: "shop.example.com"}},
 	}
 
@@ -396,7 +396,7 @@ func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *tes
 	if probe.OK {
 		t.Fatal("a hostname nothing answered for probed OK, and this test states nothing about the line it is reported under")
 	}
-	pending := rows.pendingOn("shop.example.com", provider.Certificate{}, provider.CertificateHealth{}, true, probe)
+	pending := rows.hostnameBlocker("shop.example.com", provider.Certificate{}, provider.CertificateHealth{}, true, probe)
 	if !strings.Contains(pending, cause) {
 		t.Errorf("`domain status` reports %q, and never what stopped the probe: the operator is told the hostname does not answer yet and left to guess between a firewall, a record that has not propagated and a chain nothing trusts",
 			pending)

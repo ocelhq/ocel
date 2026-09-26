@@ -217,11 +217,11 @@ func sortedRecords(records []Record) []Record {
 }
 
 func Unwritten(wanted, written []Record) []Record {
-	var owed []Record
+	var unwritten []Record
 	for _, rec := range wanted {
 		if !slices.Contains(written, rec) {
-			owed = append(owed, rec)
+			unwritten = append(unwritten, rec)
 		}
 	}
-	return owed
+	return unwritten
 }

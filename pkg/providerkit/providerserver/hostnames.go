@@ -47,7 +47,7 @@ func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequ
 		if err != nil {
 			return err
 		}
-		session.settle.attend(sender)
+		session.cutover.waitForManualRecords(sender)
 		return session.add(ctx, progress)
 	})
 }
@@ -68,18 +68,18 @@ func (d *hostnames) add(ctx context.Context, progress edge.Progress) error {
 	}
 	if !promoted {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"this project has promoted no release yet, so nothing would answer at %s: `ocel deploy` promotes one and settles every hostname it declares",
+			"this project has promoted no release yet, so nothing would answer at %s: `ocel deploy` promotes one and attaches every hostname it declares",
 			strings.Join(hostnamesOf(d.addTargets()), ", "))
 	}
-	var settledAny bool
+	var attachedAny bool
 	for _, host := range d.addTargets() {
-		changed, err := d.settleHost(ctx, host, progress)
+		changed, err := d.attachHostname(ctx, host, progress)
 		if err != nil {
 			return err
 		}
-		settledAny = settledAny || changed
+		attachedAny = attachedAny || changed
 	}
-	if !settledAny && d.host == "" {
+	if !attachedAny && d.host == "" {
 		progress.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.declared(), ", ")))
 	}
 	return nil
@@ -94,22 +94,22 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 	return slices.DeleteFunc(slices.Clone(d.configured), func(held ConfiguredHost) bool { return held.Hostname != d.host })
 }
 
-func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progress edge.Progress) (bool, error) {
+func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress edge.Progress) (bool, error) {
 	host := target.Hostname
-	settled := d.state.Host(host)
-	serving := settled.Serving()
-	held := settled.Certificate.ID
-	certifying := d.certification(host, &settled)
+	hostState := d.state.Host(host)
+	serving := hostState.Serving()
+	held := hostState.Certificate.ID
+	certifying := d.hostCertificates(host, &hostState)
 
 	if err := certifying.certify(ctx, host, progress); err != nil {
 		return false, err
 	}
-	if d.state.Ready(host, d.settle.kind) && settled.Certificate.ID == held {
+	if d.state.Ready(host, d.cutover.kind) && hostState.Certificate.ID == held {
 		return false, certifying.discardSuperseded(ctx, progress)
 	}
 
-	progress.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
+	progress.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.cutover.kind))
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
@@ -119,14 +119,14 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progr
 		return true, err
 	}
 
-	records, err := d.settle.recordsFor(d.stack.State(), host)
+	records, err := d.cutover.recordsFor(d.stack.State(), host)
 	if err != nil {
 		return true, err
 	}
-	written, err := d.settle.write(ctx, records,
-		fmt.Sprintf("Point %s at the %s edge", host, d.settle.kind), progress.Say)
-	settled.Written, settled.Owed = written.Written, written.Owed
-	d.state.Settle(host, settled)
+	written, err := d.cutover.write(ctx, records,
+		fmt.Sprintf("Point %s at the %s edge", host, d.cutover.kind), progress.Say)
+	hostState.Written, hostState.Manual = written.Written, written.Manual
+	d.state.SetHost(host, hostState)
 	if cerr := d.checkpoint(ctx); cerr != nil {
 		return true, errors.Join(err, cerr)
 	}
@@ -134,34 +134,34 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progr
 		return true, err
 	}
 
-	probe, err := d.settle.await(ctx, host, progress.Say)
-	settled.Probe = probe
-	d.state.Settle(host, settled)
+	probe, err := d.cutover.await(ctx, host, progress.Say)
+	hostState.Probe = probe
+	d.state.SetHost(host, hostState)
 	if cerr := d.checkpoint(ctx); cerr != nil {
 		return true, errors.Join(err, cerr)
 	}
 	if err != nil {
 		return true, err
 	}
-	progress.Say(fmt.Sprintf("%s is served by the %s edge", host, d.settle.kind))
-	return true, d.retire(ctx, host, serving, progress)
+	progress.Say(fmt.Sprintf("%s is served by the %s edge", host, d.cutover.kind))
+	return true, d.unbindPreviousEdge(ctx, host, serving, progress)
 }
 
-func (d *hostnames) certification(host string, settled *stackrecords.Settled) certification {
-	return certification{
-		provider: d.provider,
-		settle:   d.settle,
-		settled:  settled,
-		uses:     func(id string) bool { return d.state.Uses(id) },
+func (d *hostnames) hostCertificates(host string, hostState *stackrecords.HostnameState) hostCertificates {
+	return hostCertificates{
+		provider:  d.provider,
+		cutover:   d.cutover,
+		hostState: hostState,
+		uses:      func(id string) bool { return d.state.Uses(id) },
 		persist: func(ctx context.Context) error {
-			d.state.Settle(host, *settled)
+			d.state.SetHost(host, *hostState)
 			return d.checkpoint(ctx)
 		},
 	}
 }
 
-func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, progress edge.Progress) error {
-	if serving == "" || serving == d.settle.kind {
+func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving edge.Kind, progress edge.Progress) error {
+	if serving == "" || serving == d.cutover.kind {
 		return nil
 	}
 	stack, err := d.on(serving)
@@ -173,7 +173,7 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 		return err
 	}
 	progress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s",
-		host, flipWindow(d.settle.dns)))
+		host, flipWindow(d.cutover.dns)))
 	return nil
 }
 
@@ -201,23 +201,23 @@ func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
 		return nil
 	}
 	for _, host := range targets {
-		progress.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.settle.kind))
+		progress.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.cutover.kind))
 		if err := edge.Heeded(d.stack.UnbindDomain(ctx, host), progress); err != nil {
 			return err
 		}
-		settled := d.state.Host(host)
-		if err := d.settle.release(ctx, settled.Written, progress.Say); err != nil {
+		hostState := d.state.Host(host)
+		if err := d.cutover.release(ctx, hostState.Written, progress.Say); err != nil {
 			return err
 		}
 		d.state.Forget(host)
 		if err := d.checkpoint(ctx); err != nil {
 			return err
 		}
-		for _, cert := range settled.Certificates() {
+		for _, cert := range hostState.Certificates() {
 			if d.state.Uses(cert.ID) {
 				continue
 			}
-			if err := retireCertificate(ctx, d.provider, d.settle, cert, provider.Certificate{}, progress); err != nil {
+			if err := retireCertificate(ctx, d.provider, d.cutover, cert, provider.Certificate{}, progress); err != nil {
 				return err
 			}
 		}
@@ -292,47 +292,47 @@ func (d *hostnames) statusHosts() []string {
 }
 
 func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.ProductionHostname, error) {
-	settled := d.state.Host(host)
+	hostState := d.state.Host(host)
 	held := d.stack.State()
-	bound := edge.Pointable(edge.TargetOf(d.settle.kind, d.settle.unbound, held), held.Bound, host)
+	bound := edge.Pointable(edge.TargetOf(d.cutover.kind, d.cutover.unbound, held), held.Bound, host)
 
-	var owed []edge.Record
+	var manual []edge.Record
 	if bound {
-		wanted, err := d.settle.recordsFor(held, host)
+		wanted, err := d.cutover.recordsFor(held, host)
 		if err != nil {
 			return nil, err
 		}
-		owed = edge.Unwritten(wanted, settled.Written)
+		manual = edge.Unwritten(wanted, hostState.Written)
 	}
 
-	probe := settled.Probe
+	probe := hostState.Probe
 	if bound && d.live {
 		probe = d.probe(ctx, host)
 	}
-	health, err := d.provider.Certificates().Inspect(ctx, d.settle.kind, host, settled.Certificate)
+	health, err := d.provider.Certificates().Inspect(ctx, d.cutover.kind, host, hostState.Certificate)
 	if err != nil {
 		return nil, err
 	}
 	row := &contractv1.ProductionHostname{
 		Hostname:       host,
 		Declared:       slices.Contains(d.declared(), host),
-		Certificate:    certificateState(settled, probe, owed, health.Status),
+		Certificate:    certificateState(hostState, probe, manual, health.Status),
 		RenewalStatus:  health.Renewal,
 		ExpiresAt:      health.ExpiresAt,
 		ExpiringSoon:   health.ExpiringSoon,
-		ServingPointer: servingPointer(probe, d.settle.kind),
+		ServingPointer: servingPointer(probe, d.cutover.kind),
 	}
-	row.Pending = d.pendingOn(host, settled.Certificate, health, bound, probe)
+	row.Pending = d.hostnameBlocker(host, hostState.Certificate, health, bound, probe)
 	row.Ready = row.GetPending() == ""
 	return row, nil
 }
 
-func (d *hostnames) probe(ctx context.Context, host string) stackrecords.Probe {
-	serving, err := d.settle.attempt(ctx, host)
-	return stackrecords.Probe{At: d.settle.now().Unix(), OK: err == nil && serving == d.settle.kind, Edge: serving}
+func (d *hostnames) probe(ctx context.Context, host string) stackrecords.ServeProbe {
+	serving, err := d.cutover.attempt(ctx, host)
+	return stackrecords.ServeProbe{At: d.cutover.now().Unix(), OK: err == nil && serving == d.cutover.kind, Edge: serving}
 }
 
-func (d *hostnames) pendingOn(host string, cert provider.Certificate, health provider.CertificateHealth, bound bool, probe stackrecords.Probe) string {
+func (d *hostnames) hostnameBlocker(host string, cert provider.Certificate, health provider.CertificateHealth, bound bool, probe stackrecords.ServeProbe) string {
 	switch {
 	case !slices.Contains(d.declared(), host):
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
@@ -344,14 +344,14 @@ func (d *hostnames) pendingOn(host string, cert provider.Certificate, health pro
 		return fmt.Sprintf("certificate %s covers %s, which does not include %s",
 			cert.ID, strings.Join(health.Domains, ", "), host)
 	case !bound:
-		return fmt.Sprintf("%s is not bound to the %s edge yet; run `ocel domain add`", host, d.settle.kind)
+		return fmt.Sprintf("%s is not bound to the %s edge yet; run `ocel domain add`", host, d.cutover.kind)
 	case !probe.OK:
-		return fmt.Sprintf("%s does not answer as the %s edge yet%s", host, d.settle.kind, d.settle.unreached(host))
+		return fmt.Sprintf("%s does not answer as the %s edge yet%s", host, d.cutover.kind, d.cutover.unreached(host))
 	}
 	return ""
 }
 
-func servingPointer(probe stackrecords.Probe, kind edge.Kind) string {
+func servingPointer(probe stackrecords.ServeProbe, kind edge.Kind) string {
 	if probe.OK && probe.Edge != "" {
 		return string(probe.Edge)
 	}
@@ -365,12 +365,12 @@ func certificateStatusWord(status string) string {
 	return strings.ToLower(status)
 }
 
-func certificateState(settled stackrecords.Settled, probe stackrecords.Probe, owed []edge.Record, status string) *contractv1.CertificateState {
+func certificateState(hostState stackrecords.HostnameState, probe stackrecords.ServeProbe, manual []edge.Record, status string) *contractv1.CertificateState {
 	return &contractv1.CertificateState{
-		CertificateId:     settled.Certificate.ID,
+		CertificateId:     hostState.Certificate.ID,
 		CertificateStatus: status,
-		RecordsWritten:    recordLines(settled.WrittenRecords()),
-		RecordsOwed:       recordLines(append(settled.OwedRecords(), owed...)),
+		RecordsWritten:    recordLines(hostState.WrittenRecords()),
+		RecordsOwed:       recordLines(append(hostState.ManualRecords(), manual...)),
 		LastProbeAt:       probe.At,
 		LastProbeOk:       probe.OK,
 		LastProbeEdge:     string(probe.Edge),

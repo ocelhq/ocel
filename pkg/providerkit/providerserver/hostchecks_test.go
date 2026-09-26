@@ -130,7 +130,7 @@ func TestPreflightCarriesEveryStandingVerdictAndRefusesOnNone(t *testing.T) {
 
 	_, resp := hostChecksServed(t, []provider.HostCheck{
 		{Subject: "shop.example.com", Verdict: provider.HostPass, Finding: "resolves to this box"},
-		{Subject: "www.example.com", Verdict: provider.HostOwed, Finding: "does not resolve yet", Fix: "add the record"},
+		{Subject: "www.example.com", Verdict: provider.HostNeedsAction, Finding: "does not resolve yet", Fix: "add the record"},
 		{Subject: "", Verdict: provider.HostFail, Finding: "something listens on 2019", Fix: "rebootstrap"},
 	}, nil)
 
@@ -140,7 +140,7 @@ func TestPreflightCarriesEveryStandingVerdictAndRefusesOnNone(t *testing.T) {
 	}
 	wants := []contractv1.HostCheck_Verdict{
 		contractv1.HostCheck_VERDICT_PASS,
-		contractv1.HostCheck_VERDICT_OWED,
+		contractv1.HostCheck_VERDICT_NEEDS_ACTION,
 		contractv1.HostCheck_VERDICT_FAIL,
 	}
 	for i, want := range wants {

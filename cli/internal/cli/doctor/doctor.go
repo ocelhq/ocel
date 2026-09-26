@@ -194,7 +194,7 @@ func hostCheckSection(got *answers) (section, bool) {
 		switch check.GetVerdict() {
 		case contractv1.HostCheck_VERDICT_PASS:
 			s.pass(check.GetFinding())
-		case contractv1.HostCheck_VERDICT_OWED:
+		case contractv1.HostCheck_VERDICT_NEEDS_ACTION:
 			s.warn(check.GetFinding(), check.GetFix())
 		default:
 			s.fail(check.GetFinding(), check.GetFix())

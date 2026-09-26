@@ -858,7 +858,7 @@ func TestTheFirstDeploySettlesAHostnameItsDNSWriterPoints(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || noteOf(result) != "" {
-		t.Errorf("the first deploy returned urls %v and the note %q, want the hostname it settled printed: nothing was owed, so nothing waits on anyone",
+		t.Errorf("the first deploy returned urls %v and the note %q, want the hostname it settled printed: no record was left to write by hand, so nothing waits on anyone",
 			servedURLs(result), noteOf(result))
 	}
 }
@@ -873,8 +873,8 @@ func TestTheFirstDeploySettlesALocalhostNameWithNoDNSWriter(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if owed := owedRecordsIn(events); len(owed) != 0 {
-		t.Errorf("the deploy owed %v, want nothing: a localhost name resolves without any record", owed)
+	if manual := manualRecordsIn(events); len(manual) != 0 {
+		t.Errorf("the deploy asked for manual records %v, want none: a localhost name resolves without any record", manual)
 	}
 	if want := []string{"https://web-j-1-deploy-python.localhost"}; !slices.Equal(servedURLs(result), want) || noteOf(result) != "" {
 		t.Errorf("the deploy printed %v with the note %q, want %v", servedURLs(result), noteOf(result), want)
@@ -1039,8 +1039,8 @@ func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed without waiting on a record only you can write", result.GetError())
 	}
-	if owed := owedRecordsIn(events); !slices.Contains(owed, "_acme.shop.example CNAME") {
-		t.Errorf("the deploy owed %v, want the record that proves the certificate", owed)
+	if manual := manualRecordsIn(events); !slices.Contains(manual, "_acme.shop.example CNAME") {
+		t.Errorf("the deploy asked for manual records %v, want the record that proves the certificate", manual)
 	}
 	if len(servedURLs(result)) != 0 || !strings.Contains(noteOf(result), "Prove you own shop.example") {
 		t.Errorf("the deploy printed %v with the note %q, want no url and a note naming the proof it waits on",
@@ -1048,17 +1048,17 @@ func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 	}
 }
 
-func owedRecordsIn(events []*progressv1.OperationEvent) []string {
-	var owed []string
+func manualRecordsIn(events []*progressv1.OperationEvent) []string {
+	var manual []string
 	for _, event := range events {
 		for _, record := range event.GetDnsOwed().GetRecords() {
-			owed = append(owed, record.GetName()+" "+record.GetType())
+			manual = append(manual, record.GetName()+" "+record.GetType())
 		}
 	}
-	return owed
+	return manual
 }
 
-func TestDeployOwingRecordsSucceedsAndLeavesTheHostnameToDomainAdd(t *testing.T) {
+func TestDeployNeedingManualRecordsSucceedsAndLeavesTheHostnameToDomainAdd(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -1069,12 +1069,12 @@ func TestDeployOwingRecordsSucceedsAndLeavesTheHostnameToDomainAdd(t *testing.T)
 	if len(servedURLs(result)) != 0 {
 		t.Errorf("the deploy printed %v, want no url: shop.example answers nowhere until its record is written", servedURLs(result))
 	}
-	if owed := owedRecordsIn(events); !slices.Contains(owed, "shop.example CNAME") {
-		t.Errorf("the deploy owed %v, want the record that points shop.example at the edge, told the way domain add tells it", owed)
+	if manual := manualRecordsIn(events); !slices.Contains(manual, "shop.example CNAME") {
+		t.Errorf("the deploy asked for manual records %v, want the record that points shop.example at the edge, told the way domain add tells it", manual)
 	}
 	note := noteOf(result)
 	if !strings.Contains(note, "shop.example") || !strings.Contains(note, "ocel domain add") || strings.Contains(note, "deploy again") {
-		t.Errorf("the note = %q, want it naming the hostname, what is owed and that `ocel domain add` resumes it — never another deploy", note)
+		t.Errorf("the note = %q, want it naming the hostname, the record to add and that `ocel domain add` resumes it — never another deploy", note)
 	}
 
 	hostnameAdded(t, client, "shop.example")

@@ -13,27 +13,27 @@ import (
 )
 
 type EdgeState struct {
-	Kind  edge.Kind          `json:"kind,omitempty"`
-	Edge  edge.StackState    `json:"edge"`
-	Hosts map[string]Settled `json:"hosts,omitempty"`
+	Kind  edge.Kind                `json:"kind,omitempty"`
+	Edge  edge.StackState          `json:"edge"`
+	Hosts map[string]HostnameState `json:"hosts,omitempty"`
 }
 
-type Settled struct {
+type HostnameState struct {
 	Certificate provider.Certificate   `json:"certificate,omitzero"`
 	Superseded  []provider.Certificate `json:"superseded,omitempty"`
 	Written     []edge.Record          `json:"written,omitempty"`
-	Owed        []edge.Record          `json:"owed,omitempty"`
-	Probe       Probe                  `json:"probe,omitzero"`
+	Manual      []edge.Record          `json:"owed,omitempty"`
+	Probe       ServeProbe             `json:"probe,omitzero"`
 }
 
-func (s *Settled) Supersede(cert provider.Certificate) {
+func (s *HostnameState) Supersede(cert provider.Certificate) {
 	if !cert.Issued() || cert.ID == s.Certificate.ID || holds(s.Superseded, cert) {
 		return
 	}
 	s.Superseded = append(s.Superseded, cert)
 }
 
-func (s Settled) Certificates() []provider.Certificate {
+func (s HostnameState) Certificates() []provider.Certificate {
 	held := make([]provider.Certificate, 0, 1+len(s.Superseded))
 	for _, cert := range append([]provider.Certificate{s.Certificate}, s.Superseded...) {
 		if cert.Issued() && !holds(held, cert) {
@@ -47,7 +47,7 @@ func holds(certificates []provider.Certificate, cert provider.Certificate) bool 
 	return slices.ContainsFunc(certificates, func(other provider.Certificate) bool { return other.ID == cert.ID })
 }
 
-func (s Settled) WrittenRecords() []edge.Record {
+func (s HostnameState) WrittenRecords() []edge.Record {
 	written := slices.Clone(s.Written)
 	for _, cert := range s.Certificates() {
 		written = mergeRecords(written, cert.Written)
@@ -55,21 +55,21 @@ func (s Settled) WrittenRecords() []edge.Record {
 	return written
 }
 
-func (s Settled) OwedRecords() []edge.Record {
-	owed := slices.Clone(s.Owed)
+func (s HostnameState) ManualRecords() []edge.Record {
+	manual := slices.Clone(s.Manual)
 	for _, cert := range s.Certificates() {
-		owed = mergeRecords(owed, cert.Owed)
+		manual = mergeRecords(manual, cert.Manual)
 	}
-	return owed
+	return manual
 }
 
-type Probe struct {
+type ServeProbe struct {
 	At   int64     `json:"at,omitempty"`
 	OK   bool      `json:"ok,omitempty"`
 	Edge edge.Kind `json:"edge,omitempty"`
 }
 
-func (s Settled) Serving() edge.Kind {
+func (s HostnameState) Serving() edge.Kind {
 	if !s.Probe.OK {
 		return ""
 	}
@@ -77,19 +77,19 @@ func (s Settled) Serving() edge.Kind {
 }
 
 type Wildcard struct {
-	BaseDomain string    `json:"base_domain,omitempty"`
-	Edge       edge.Kind `json:"edge,omitempty"`
-	Scope      string    `json:"scope,omitempty"`
-	GrammarMin uint32    `json:"grammar_min,omitempty"`
-	GrammarMax uint32    `json:"grammar_max,omitempty"`
-	Settled    Settled   `json:"settled,omitzero"`
+	BaseDomain string        `json:"base_domain,omitempty"`
+	Edge       edge.Kind     `json:"edge,omitempty"`
+	Scope      string        `json:"scope,omitempty"`
+	GrammarMin uint32        `json:"grammar_min,omitempty"`
+	GrammarMax uint32        `json:"grammar_max,omitempty"`
+	Host       HostnameState `json:"settled,omitzero"`
 }
 
 func (w Wildcard) Hostname() string { return edge.PreviewWildcard(w.BaseDomain) }
 
-func (w Wildcard) Holder() (edge.Kind, bool) { return w.Edge, w.Edge != "" }
+func (w Wildcard) OwningEdge() (edge.Kind, bool) { return w.Edge, w.Edge != "" }
 
-func (s EdgeState) Host(hostname string) Settled { return s.Hosts[hostname] }
+func (s EdgeState) Host(hostname string) HostnameState { return s.Hosts[hostname] }
 
 func (s EdgeState) Hostnames() []string { return slices.Sorted(maps.Keys(s.Hosts)) }
 
@@ -97,11 +97,11 @@ func (s EdgeState) Ready(hostname string, kind edge.Kind) bool {
 	return kind != "" && s.Host(hostname).Serving() == kind
 }
 
-func (s *EdgeState) Settle(hostname string, settled Settled) {
+func (s *EdgeState) SetHost(hostname string, state HostnameState) {
 	if s.Hosts == nil {
-		s.Hosts = map[string]Settled{}
+		s.Hosts = map[string]HostnameState{}
 	}
-	s.Hosts[hostname] = settled
+	s.Hosts[hostname] = state
 }
 
 func (s EdgeState) WrittenRecords() []edge.Record {
@@ -120,12 +120,12 @@ func (s EdgeState) PointerRecords() []edge.Record {
 	return written
 }
 
-func (s EdgeState) OwedRecords() []edge.Record {
-	var owed []edge.Record
+func (s EdgeState) ManualRecords() []edge.Record {
+	var manual []edge.Record
 	for _, hostname := range s.Hostnames() {
-		owed = mergeRecords(owed, s.Hosts[hostname].OwedRecords())
+		manual = mergeRecords(manual, s.Hosts[hostname].ManualRecords())
 	}
-	return owed
+	return manual
 }
 
 func (s EdgeState) Certificates() []provider.Certificate {
@@ -144,8 +144,8 @@ func (s EdgeState) Uses(id string) bool {
 	if id == "" {
 		return false
 	}
-	for _, settled := range s.Hosts {
-		if settled.Certificate.ID == id {
+	for _, host := range s.Hosts {
+		if host.Certificate.ID == id {
 			return true
 		}
 	}

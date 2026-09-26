@@ -163,11 +163,11 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]stackrecords.Settled{
+		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "cert-for-app"},
 				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
-				Owed:        []edge.Record{{Name: "owed.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
+				Manual:      []edge.Record{{Name: "manual.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 			},
 		},
 	})
@@ -205,7 +205,7 @@ func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesHold(t *test
 	}
 	for _, item := range plan.GetGroups() {
 		switch item.GetName() {
-		case "owed.acme.com CNAME shop.relay.fake.invalid":
+		case "manual.acme.com CNAME shop.relay.fake.invalid":
 			if item.GetAction() != planv1.Change_ACTION_KEEP {
 				t.Errorf("the plan deletes %q, want a record ocel never wrote kept", item.GetName())
 			}
@@ -250,7 +250,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]stackrecords.Settled{
+		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
 				Superseded:  []provider.Certificate{{ID: "stalled-cert", Requested: true, Written: []edge.Record{stale}}},

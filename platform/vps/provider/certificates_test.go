@@ -195,8 +195,8 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 	if cert.Requested {
 		t.Error("Issue().Requested = true: Requested is a claim of delete authority, and ocel places no key material on a box so it holds authority to remove none")
 	}
-	if len(cert.Written) != 0 || len(cert.Owed) != 0 {
-		t.Errorf("Issue() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Owed)
+	if len(cert.Written) != 0 || len(cert.Manual) != 0 {
+		t.Errorf("Issue() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Manual)
 	}
 	for _, command := range machine.commands() {
 		if strings.Contains(command, "'docker' 'logs'") || strings.Contains(command, "docker version") {

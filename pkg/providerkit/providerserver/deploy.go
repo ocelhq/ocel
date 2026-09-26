@@ -227,7 +227,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.provision(ctx); err != nil {
 		return nil, err
 	}
-	if err := r.settleHostnames(ctx); err != nil {
+	if err := r.attachHostnames(ctx); err != nil {
 		return nil, err
 	}
 	return r.promote(ctx)
@@ -288,7 +288,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 			return nil
 		}
 		return refusal.Refuse(refusal.CodeNotReady,
-			"no domains.production declared on the project or any app, so this deploy has nowhere to serve: declare one, and the deploy that reads it settles it")
+			"no domains.production declared on the project or any app, so this deploy has nowhere to serve: declare one, and the deploy that reads it attaches it")
 	}
 	configured, err := r.configuredHosts()
 	if err != nil {
@@ -299,8 +299,8 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.installSettler(writer, r.selection.GetDns().GetZone())
-	r.settle.owed = unattended(r.sender)
+	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
+	r.cutover.manual = failOnManualRecords(r.sender)
 	return nil
 }
 
@@ -392,13 +392,13 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 	return r.checkpoint(ctx)
 }
 
-func (r *deployRun) settleHostnames(ctx context.Context) error {
+func (r *deployRun) attachHostnames(ctx context.Context) error {
 	if r.dry || r.world() != hostingProduction {
 		return nil
 	}
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
-			settling := &hostnames{edgeSession: r.edgeSession}
+			attaching := &hostnames{edgeSession: r.edgeSession}
 			for _, host := range r.configured {
 				serving := r.state.Host(host.Hostname).Serving()
 				if serving == r.front.Kind() {
@@ -410,7 +410,7 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 						host.Hostname, serving, r.front.Kind()))
 					continue
 				}
-				_, err := settling.settleHost(ctx, host, progress)
+				_, err := attaching.attachHostname(ctx, host, progress)
 				if waits, held := provider.LeftPending(err); held {
 					r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
 					continue

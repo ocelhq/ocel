@@ -27,7 +27,7 @@ type projectRemoval struct {
 	stack    edge.EdgeStack
 	store    edgeStateStore
 	state    stackrecords.EdgeState
-	settle   settlement
+	cutover  dnsCutover
 
 	slug    string
 	class   edge.Class
@@ -69,7 +69,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	removal := &projectRemoval{
 		provider: provider,
 		front:    front,
-		settle:   newSettlement(front, writer, req.GetEdge().GetDns().GetZone(), provider.Liveness()),
+		cutover:  newDNSCutover(front, writer, req.GetEdge().GetDns().GetZone(), provider.Liveness()),
 		store:    store,
 		state:    state,
 		slug:     req.GetSlug(),
@@ -162,7 +162,7 @@ func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range r.state.OwedRecords() {
+	for _, rec := range r.state.ManualRecords() {
 		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -309,7 +309,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progres
 }
 
 func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress edge.Progress) error {
-	if err := r.settle.release(ctx, written, progress.Say); err != nil {
+	if err := r.cutover.release(ctx, written, progress.Say); err != nil {
 		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
 	}
 	return nil
@@ -318,7 +318,7 @@ func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Reco
 func (r *projectRemoval) discardCertificates(ctx context.Context, held []provider.Certificate, progress edge.Progress) error {
 	var errs []error
 	for _, cert := range held {
-		if err := retireCertificate(ctx, r.provider, r.settle, cert, provider.Certificate{}, progress); err != nil {
+		if err := retireCertificate(ctx, r.provider, r.cutover, cert, provider.Certificate{}, progress); err != nil {
 			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
 		}
 	}

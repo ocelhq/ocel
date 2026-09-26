@@ -187,10 +187,10 @@ func (HostTrustReason) EnumDescriptor() ([]byte, []int) {
 type HostCheck_Verdict int32
 
 const (
-	HostCheck_VERDICT_UNSPECIFIED HostCheck_Verdict = 0
-	HostCheck_VERDICT_PASS        HostCheck_Verdict = 1
-	HostCheck_VERDICT_OWED        HostCheck_Verdict = 2
-	HostCheck_VERDICT_FAIL        HostCheck_Verdict = 3
+	HostCheck_VERDICT_UNSPECIFIED  HostCheck_Verdict = 0
+	HostCheck_VERDICT_PASS         HostCheck_Verdict = 1
+	HostCheck_VERDICT_NEEDS_ACTION HostCheck_Verdict = 2
+	HostCheck_VERDICT_FAIL         HostCheck_Verdict = 3
 )
 
 // Enum value maps for HostCheck_Verdict.
@@ -198,14 +198,14 @@ var (
 	HostCheck_Verdict_name = map[int32]string{
 		0: "VERDICT_UNSPECIFIED",
 		1: "VERDICT_PASS",
-		2: "VERDICT_OWED",
+		2: "VERDICT_NEEDS_ACTION",
 		3: "VERDICT_FAIL",
 	}
 	HostCheck_Verdict_value = map[string]int32{
-		"VERDICT_UNSPECIFIED": 0,
-		"VERDICT_PASS":        1,
-		"VERDICT_OWED":        2,
-		"VERDICT_FAIL":        3,
+		"VERDICT_UNSPECIFIED":  0,
+		"VERDICT_PASS":         1,
+		"VERDICT_NEEDS_ACTION": 2,
+		"VERDICT_FAIL":         3,
 	}
 )
 
@@ -5016,16 +5016,16 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0erenewal_status\x18\a \x01(\tR\rrenewalStatus\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\x03R\texpiresAt\x12#\n" +
-	"\rexpiring_soon\x18\t \x01(\bR\fexpiringSoon\"\xee\x01\n" +
+	"\rexpiring_soon\x18\t \x01(\bR\fexpiringSoon\"\xf6\x01\n" +
 	"\tHostCheck\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12A\n" +
 	"\averdict\x18\x02 \x01(\x0e2'.provider.contract.v1.HostCheck.VerdictR\averdict\x12\x18\n" +
 	"\afinding\x18\x03 \x01(\tR\afinding\x12\x10\n" +
-	"\x03fix\x18\x04 \x01(\tR\x03fix\"X\n" +
+	"\x03fix\x18\x04 \x01(\tR\x03fix\"`\n" +
 	"\aVerdict\x12\x17\n" +
 	"\x13VERDICT_UNSPECIFIED\x10\x00\x12\x10\n" +
-	"\fVERDICT_PASS\x10\x01\x12\x10\n" +
-	"\fVERDICT_OWED\x10\x02\x12\x10\n" +
+	"\fVERDICT_PASS\x10\x01\x12\x18\n" +
+	"\x14VERDICT_NEEDS_ACTION\x10\x02\x12\x10\n" +
 	"\fVERDICT_FAIL\x10\x03\"\xe3\x01\n" +
 	"\vDomainClaim\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12@\n" +
