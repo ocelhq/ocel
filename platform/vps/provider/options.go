@@ -60,7 +60,11 @@ type Manual struct {
 	Network string `json:"network,omitempty" doc:"A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated."`
 }
 
-const proxyManual = "manual"
+const (
+	proxyTraefik = "traefik"
+	proxyCaddy   = "caddy"
+	proxyManual  = "manual"
+)
 
 func (Proxy) Shorthands() []string { return []string{proxyManual} }
 
@@ -90,10 +94,10 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(`option "proxy": %w`, err)
 	}
 	*p = Proxy(decoded)
-	if _, held := keyed["traefik"]; held && p.Traefik == nil {
+	if _, held := keyed[proxyTraefik]; held && p.Traefik == nil {
 		p.Traefik = &Traefik{}
 	}
-	if _, held := keyed["caddy"]; held && p.Caddy == nil {
+	if _, held := keyed[proxyCaddy]; held && p.Caddy == nil {
 		p.Caddy = &Caddy{}
 	}
 	if _, held := keyed[proxyManual]; held && p.Manual == nil {
@@ -146,8 +150,9 @@ func (c *Caddy) written() host.CaddyFront {
 	}
 }
 
-func unsupported(spelled string) error {
-	return fmt.Errorf("option `\"proxy\": %s` is not supported yet; route to ocel yourself with `\"proxy\": \"manual\"`", spelled)
+func unsupported(key string) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"option `\"proxy\": { %q: … }` is not supported yet; route to ocel yourself with `\"proxy\": %q`", key, proxyManual)
 }
 
 func (p *Proxy) usable(certificates map[string]string) error {
@@ -163,41 +168,40 @@ func (p *Proxy) usable(certificates map[string]string) error {
 		if err := p.Traefik.usable(); err != nil {
 			return err
 		}
-		return providerkit.Refuse(providerkit.CodeInvalid, "%s", unsupported(`{ "traefik": … }`))
+		return unsupported(proxyTraefik)
 	case p.Caddy != nil:
 		if err := p.Caddy.usable(); err != nil {
 			return err
 		}
-		return providerkit.Refuse(providerkit.CodeInvalid, "%s", unsupported(`{ "caddy": … }`))
+		return unsupported(proxyCaddy)
 	}
 	return reaching("proxy.manual", p.Manual.Network, p.Manual.Port)
 }
 
 func (t *Traefik) usable() error {
-	const at = "proxy.traefik"
-	if err := presetKnown(at, t.Preset, host.TraefikPresets()); err != nil {
-		return err
-	}
 	filled := t.written().Filled()
-	if err := needs(at, "directory", filled.Directory); err != nil {
-		return err
-	}
-	if err := needs(at, "resolver", filled.Resolver); err != nil {
-		return err
-	}
-	return reachedOnce(at, t.Network, t.Port)
+	return adoptable("proxy."+proxyTraefik, t.Preset, host.TraefikPresets(), t.Network, t.Port,
+		required{"directory", filled.Directory}, required{"resolver", filled.Resolver})
 }
 
 func (c *Caddy) usable() error {
-	const at = "proxy.caddy"
-	if err := presetKnown(at, c.Preset, host.CaddyPresets()); err != nil {
-		return err
-	}
 	filled := c.written().Filled()
-	if err := needs(at, "directory", filled.Directory); err != nil {
+	return adoptable("proxy."+proxyCaddy, c.Preset, host.CaddyPresets(), c.Network, c.Port,
+		required{"directory", filled.Directory})
+}
+
+type required struct{ field, filled string }
+
+func adoptable(at, preset string, presets []string, writtenNetwork string, writtenPort int, fields ...required) error {
+	if err := presetKnown(at, preset, presets); err != nil {
 		return err
 	}
-	return reachedOnce(at, c.Network, c.Port)
+	for _, needed := range fields {
+		if err := needs(at, needed.field, needed.filled); err != nil {
+			return err
+		}
+	}
+	return reachedOnce(at, writtenNetwork, writtenPort)
 }
 
 func presetKnown(at, preset string, known []string) error {
