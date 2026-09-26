@@ -131,13 +131,13 @@ func TestAnInterruptedRunIsNotCancelledTwiceWhenItsCloseStillRuns(t *testing.T) 
 
 	s, out := liveSession(t)
 	s.interrupt()
-	settled := out.String()
+	atInterrupt := out.String()
 
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
-	if got := out.String(); got != settled {
-		t.Errorf("Close() after an interrupt wrote %q more, want the teardown to happen exactly once", got[len(settled):])
+	if got := out.String(); got != atInterrupt {
+		t.Errorf("Close() after an interrupt wrote %q more, want the teardown to happen exactly once", got[len(atInterrupt):])
 	}
 }
 
@@ -274,7 +274,7 @@ func TestSession(t *testing.T) {
 		}
 	})
 
-	t.Run("fail lists what a slow delete left standing, one item to a line", func(t *testing.T) {
+	t.Run("fail lists what a slow delete left in place, one item to a line", func(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel destroy production")
 		s.Fail(&edge.OutstandingError{
@@ -417,7 +417,7 @@ func TestSession(t *testing.T) {
 		}})
 
 		if title := s.stream.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
-			t.Errorf("stage title = %q, want the phase label the declaration carries", title)
+			t.Errorf("stage title = %q, want the phase label the declaration names", title)
 		}
 	})
 
@@ -717,7 +717,7 @@ func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testi
 	}
 }
 
-func TestCarriageReturnProgressWithNoNewlineIsCollapsedRatherThanHeld(t *testing.T) {
+func TestCarriageReturnProgressWithNoNewlineIsCollapsedRatherThanBuffered(t *testing.T) {
 	t.Parallel()
 
 	var emitted []string
@@ -728,10 +728,10 @@ func TestCarriageReturnProgressWithNoNewlineIsCollapsedRatherThanHeld(t *testing
 		}
 	}
 	if len(emitted) != 0 {
-		t.Errorf("the writer emitted %d lines, want a repainted line held until it is finished", len(emitted))
+		t.Errorf("the writer emitted %d lines, want a repainted line buffered until it is finished", len(emitted))
 	}
-	if len(w.held) > 128 {
-		t.Errorf("the writer holds %d bytes of one repainted line, want only the draft still on screen", len(w.held))
+	if len(w.pending) > 128 {
+		t.Errorf("the writer buffers %d bytes of one repainted line, want only the draft still on screen", len(w.pending))
 	}
 
 	w.flush()
@@ -743,7 +743,7 @@ func TestCarriageReturnProgressWithNoNewlineIsCollapsedRatherThanHeld(t *testing
 	}
 }
 
-func TestALineThatNeverEndsIsCutRatherThanHeldForever(t *testing.T) {
+func TestALineThatNeverEndsIsCutRatherThanBufferedForever(t *testing.T) {
 	t.Parallel()
 
 	var emitted []string
@@ -756,8 +756,8 @@ func TestALineThatNeverEndsIsCutRatherThanHeldForever(t *testing.T) {
 	if len(emitted) == 0 {
 		t.Fatalf("a subprocess wrote 256KiB with no line break and nothing was emitted, want the residue bounded")
 	}
-	if len(w.held) > maxHeldLine {
-		t.Errorf("the writer holds %d bytes, want at most %d", len(w.held), maxHeldLine)
+	if len(w.pending) > maxBufferedLine {
+		t.Errorf("the writer buffers %d bytes, want at most %d", len(w.pending), maxBufferedLine)
 	}
 }
 
@@ -899,7 +899,7 @@ func TestFormatAxis(t *testing.T) {
 
 		got := parseNDJSON(t, out.String())
 		if len(got) != 1 {
-			t.Fatalf("recorded %d envelopes, want the build line carried as one", len(got))
+			t.Fatalf("recorded %d envelopes, want the build line sent as one", len(got))
 		}
 		log := got[0].GetOperation().GetLog()
 		if log.GetMessage() != "webpack compiled" {
@@ -1085,7 +1085,7 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlockWhenVerbose(t
 		t.Fatalf("Write() = %v", err)
 	}
 	if strings.Contains(out.String(), "Packages: +812") {
-		t.Fatalf("stdout = %q, want build output held in its block until the phase completes", out.String())
+		t.Fatalf("stdout = %q, want build output kept in its block until the phase completes", out.String())
 	}
 
 	s.BuildOK()
@@ -1114,7 +1114,7 @@ func TestASuccessfulBuildCommitsItsWholeOutputInsideTheFlushedBlockWhenVerbose(t
 func TestAFailedPhaseShowsItsRawOutputWhateverTheVerbosity(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the phase's own span carries the failure", func(t *testing.T) {
+	t.Run("the phase's own span records the failure", func(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
 
@@ -1143,7 +1143,7 @@ func TestAFailedPhaseShowsItsRawOutputWhateverTheVerbosity(t *testing.T) {
 		s.Fail(errors.New("provision production: AccessDenied"))
 
 		if got := out.String(); !strings.Contains(got, blockIndent+"error: creating bucket assets: AccessDenied\n") {
-			t.Errorf("stdout = %q, want the block stranded by the failure to show what it held", got)
+			t.Errorf("stdout = %q, want the block stranded by the failure to show what it contained", got)
 		}
 	})
 }
@@ -1169,7 +1169,7 @@ func TestABuildLineThatCollapsesToNothingIsNeverEmitted(t *testing.T) {
 		}
 	}
 	if want := []string{"Packages: +812"}; strings.Join(messages, "|") != strings.Join(want, "|") {
-		t.Errorf("log events = %q, want only the line that carries something: %q", messages, want)
+		t.Errorf("log events = %q, want only the line that has content: %q", messages, want)
 	}
 }
 
@@ -1193,7 +1193,7 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 
 		s.Event(logLine("the vertex spoke first"))
 		if got := out.String(); strings.Contains(got, "the vertex spoke first") {
-			t.Fatalf("stdout = %q, want an orphan held until its stage is declared, never committed out of band", got)
+			t.Fatalf("stdout = %q, want an orphan buffered until its stage is declared, never committed out of band", got)
 		}
 
 		s.Event(declareProvisioning())
@@ -1270,10 +1270,10 @@ func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) 
 
 	got := out.String()
 	if !strings.Contains(got, blockIndent+padded+"\n") {
-		t.Errorf("stdout = %q, want the line as the stream carried it — only carriage returns collapse, and output is complete on success", got)
+		t.Errorf("stdout = %q, want the line as the stream sent it — only carriage returns collapse, and output is complete on success", got)
 	}
 	if strings.Contains(got, "\n"+blockIndent+"\n") {
-		t.Errorf("stdout = %q, want a line that carries nothing dropped rather than committed as a bare indent", got)
+		t.Errorf("stdout = %q, want an empty line dropped rather than committed as a bare indent", got)
 	}
 }
 
@@ -1339,7 +1339,7 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 			}
 		}
 		if len(spans) != 1 {
-			t.Fatalf("stream carries %d build spans, want the one the resumed phase ends on", len(spans))
+			t.Fatalf("stream contains %d build spans, want the one the resumed phase ends on", len(spans))
 		}
 		attrs := spans[0].GetAttributes()
 		if len(attrs) != 1 || attrs[0].GetKey() != progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT || attrs[0].GetValue() != "1" {

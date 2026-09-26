@@ -48,11 +48,11 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 		return err
 	}
 
-	holdsJS, err := discovery.HoldsJS(cfg)
+	hasJS, err := discovery.HasJS(cfg)
 	if err != nil {
 		return err
 	}
-	if holdsJS {
+	if hasJS {
 		if err := node.Ensure(cfg.Dir); err != nil {
 			return err
 		}

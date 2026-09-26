@@ -65,7 +65,7 @@ func TestParse(t *testing.T) {
 		}
 	})
 
-	t.Run("carries typed postgres config", func(t *testing.T) {
+	t.Run("parses typed postgres config", func(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{
@@ -80,7 +80,7 @@ func TestParse(t *testing.T) {
 		}
 	})
 
-	t.Run("carries typed bucket config", func(t *testing.T) {
+	t.Run("parses typed bucket config", func(t *testing.T) {
 		t.Parallel()
 
 		res, err := Parse(&resourcesv1.DeclareRequest{

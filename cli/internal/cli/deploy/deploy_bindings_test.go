@@ -56,7 +56,7 @@ func TestDeployBindsListedBindings(t *testing.T) {
 			t.Errorf("stdout = %q, want the `bindings` binding to have reached the provider on the manifest", out)
 		}
 		if !strings.Contains(out, "USAGE app=api resource=db--main") {
-			t.Errorf("stdout = %q, want a bound resource to carry its usage edge like any other", out)
+			t.Errorf("stdout = %q, want a bound resource to have its usage edge like any other", out)
 		}
 	})
 

@@ -37,7 +37,7 @@ func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
 			t.Errorf("bootstrap asked %v; a provider that draws no plan leaves the dependent names nowhere else to come from", got)
 		}
 		if strings.Contains(got[0], "intent=") || !strings.Contains(got[1], "intent=features=isr,force=false") {
-			t.Errorf("the provider was asked %v, want the second ask to carry the apply it would send", got)
+			t.Errorf("the provider was asked %v, want the second ask to include the apply it would send", got)
 		}
 	})
 }

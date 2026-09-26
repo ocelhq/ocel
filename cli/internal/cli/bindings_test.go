@@ -104,7 +104,7 @@ func TestRunBindingsSet(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses to take a name another publisher holds", func(t *testing.T) {
+	t.Run("refuses to take a name another publisher owns", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
@@ -175,7 +175,7 @@ func TestRunBindingsSet(t *testing.T) {
 
 		listed := bindingLs(t, root, bindingsOptions{})
 		if !strings.Contains(listed, "terraform") {
-			t.Errorf("ls stdout = %q, want the publisher that holds the name", listed)
+			t.Errorf("ls stdout = %q, want the publisher that owns the name", listed)
 		}
 	})
 
@@ -209,7 +209,7 @@ func TestRunBindingsSet(t *testing.T) {
 
 		for name, body := range map[string]string{
 			"not JSON at all":            "postgres://db.internal/app",
-			"a field no binding carries": `{"name":"main","postgres":{"host":"db.internal"},"nonsense":true}`,
+			"a field no binding has":     `{"name":"main","postgres":{"host":"db.internal"},"nonsense":true}`,
 			"nothing at all on stdin":    "",
 			"JSON that is not a binding": `["main"]`,
 			"a binding with no name":     `{"postgres":{"host":"db.internal"}}`,
@@ -327,16 +327,16 @@ func TestRunBindingsGenerate(t *testing.T) {
 			"      orders: { host: string; port: number; database: string; username: string; password: string; url: string; tlsMode: string; tlsCa: string };",
 		} {
 			if !strings.Contains(written, want) {
-				t.Errorf("generated file =\n%s\nwant it to hold %q", written, want)
+				t.Errorf("generated file =\n%s\nwant it to contain %q", written, want)
 			}
 		}
 		types := renderedPropertyTypes(t, written)
 		if len(types) != 11 {
-			t.Fatalf("generated file =\n%s\nrenders %d properties, want the eleven the two records carry", written, len(types))
+			t.Fatalf("generated file =\n%s\nrenders %d properties, want the eleven the two records have", written, len(types))
 		}
 		for _, rendered := range types {
 			if !slices.Contains([]string{"string", "number", "boolean", "unknown", "Record<string, unknown>"}, strings.TrimSuffix(rendered, "[]")) {
-				t.Errorf("generated file =\n%s\nwrote %q for a property; a shape says how a property reads, never what it holds", written, rendered)
+				t.Errorf("generated file =\n%s\nwrote %q for a property; a shape says how a property reads, never what it contains", written, rendered)
 			}
 		}
 		if !strings.Contains(out, bindingTypesFileName) {
@@ -356,7 +356,7 @@ func TestRunBindingsGenerate(t *testing.T) {
 			t.Errorf("generated file =\n%s\nwant the header to name the coordinate it read", written)
 		}
 		if !strings.Contains(written, "network:") || strings.Contains(written, "orders:") {
-			t.Errorf("generated file =\n%s\nwant only what that coordinate holds", written)
+			t.Errorf("generated file =\n%s\nwant only what that coordinate has", written)
 		}
 	})
 
@@ -420,7 +420,7 @@ func TestBindingBootstrap(t *testing.T) {
 
 		bindingSet(t, root, postgresBindingJSON("staged", "staging.internal"), bindingsOptions{preview: true, environment: "staging"})
 		if out := bindingLs(t, root, bindingsOptions{preview: true, environment: "staging"}); !strings.Contains(out, "staged") {
-			t.Errorf("ls --preview --environment staging = %q, want the binding that environment holds", out)
+			t.Errorf("ls --preview --environment staging = %q, want the binding that environment has", out)
 		}
 
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")

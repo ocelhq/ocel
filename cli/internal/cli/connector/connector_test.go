@@ -50,12 +50,12 @@ func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			c.upserted = append(c.upserted, body)
-			held := map[string]any{"id": "con_1", "organizationId": "org_1", "capabilities": []string{}}
+			registered := map[string]any{"id": "con_1", "organizationId": "org_1", "capabilities": []string{}}
 			for key, value := range body {
-				held[key] = value
+				registered[key] = value
 			}
-			c.rows = append(c.rows, held)
-			_ = json.NewEncoder(w).Encode(held)
+			c.rows = append(c.rows, registered)
+			_ = json.NewEncoder(w).Encode(registered)
 		case strings.HasPrefix(r.URL.Path, "/api/connectors/") && r.Method == http.MethodPatch:
 			if c.refusePatch {
 				http.Error(w, "nope", http.StatusInternalServerError)
@@ -64,11 +64,11 @@ func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			c.patched = append(c.patched, body)
-			held := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial"}
+			registered := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial"}
 			for key, value := range body {
-				held[key] = value
+				registered[key] = value
 			}
-			_ = json.NewEncoder(w).Encode(held)
+			_ = json.NewEncoder(w).Encode(registered)
 		case strings.HasPrefix(r.URL.Path, "/api/connectors/") && r.Method == http.MethodDelete:
 			c.deleted = append(c.deleted, strings.TrimPrefix(r.URL.Path, "/api/connectors/"))
 			w.WriteHeader(http.StatusNoContent)
@@ -208,8 +208,8 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	held := clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
-	if err := os.Truncate(held, providerclient.MaxMessageBytes+1); err != nil {
+	binary := clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
+	if err := os.Truncate(binary, providerclient.MaxMessageBytes+1); err != nil {
 		t.Fatalf("grow the connector past the ceiling: %v", err)
 	}
 
@@ -247,8 +247,8 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 		t.Fatal("a console that refused the address answered no error")
 	}
 	said := err.Error()
-	if !strings.Contains(said, "ocel connector add") || !strings.Contains(said, "already holds this target") {
-		t.Errorf("runAdd err = %q, and a half-finished add has to say that the console holds the target and that re-running finishes it", said)
+	if !strings.Contains(said, "ocel connector add") || !strings.Contains(said, "already has this target registered") {
+		t.Errorf("runAdd err = %q, and a half-finished add has to say that the console has the target registered and that re-running finishes it", said)
 	}
 	if len(srv.upserted) != 1 {
 		t.Errorf("upserts = %v, want the one the run made before it failed", srv.upserted)
@@ -337,7 +337,7 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	}
 }
 
-func TestRmTargetSaysSoWhenTheConsoleHoldsNoSuchTarget(t *testing.T) {
+func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
@@ -355,12 +355,12 @@ func TestRmTargetSaysSoWhenTheConsoleHoldsNoSuchTarget(t *testing.T) {
 	if len(srv.deleted) != 0 {
 		t.Fatalf("deleted = %v, want nothing deleted", srv.deleted)
 	}
-	if !strings.Contains(stdout.String(), "holds no connector") {
-		t.Errorf("stdout = %q, want it to say the console holds no such target", stdout.String())
+	if !strings.Contains(stdout.String(), "has no connector registered") {
+		t.Errorf("stdout = %q, want it to say the console has no such target registered", stdout.String())
 	}
 }
 
-func TestStatusSaysWhatTheConsoleHolds(t *testing.T) {
+func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	seen := time.Now().Add(-10 * time.Second)
 	srv := newConsoleServer(t, map[string]any{
@@ -380,7 +380,7 @@ func TestStatusSaysWhatTheConsoleHolds(t *testing.T) {
 	}
 	for _, want := range []string{fingerprint, "container over dial", "online", "envvars.read, envvars.write"} {
 		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
 	}
 }
@@ -482,36 +482,36 @@ func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	if log.Compute != "serverless" {
-		t.Errorf("the provider was asked for %q, want the compute the flag named carried through with no vendor table in the way", log.Compute)
+		t.Errorf("the provider was asked for %q, want the compute the flag named passed through with no vendor table in the way", log.Compute)
 	}
 	if len(srv.patched) != 1 || srv.patched[0]["compute"] != "serverless" {
-		t.Errorf("patches = %v, want the console told what the provider settled on", srv.patched)
+		t.Errorf("patches = %v, want the console told what the provider chose", srv.patched)
 	}
 }
 
 func read(t *testing.T, dir, apiURL string) *consolelink.Link {
 	t.Helper()
 
-	held, err := consolelink.Read(dir, apiURL)
+	linked, err := consolelink.Read(dir, apiURL)
 	if err != nil {
 		t.Fatalf("consolelink.Read: %v", err)
 	}
-	if held == nil {
+	if linked == nil {
 		t.Fatal("no link written")
 	}
-	return held
+	return linked
 }
 
 func chdir(t *testing.T, dir string, run func() error) error {
 	t.Helper()
 
-	held, err := os.Getwd()
+	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(held)
+	defer os.Chdir(wd)
 	return run()
 }

@@ -253,7 +253,7 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 		t.Fatalf("runInit: %v", err)
 	}
 	if len(*argv) != 0 {
-		t.Fatalf("ran %v in a directory holding no manifest", *argv)
+		t.Fatalf("ran %v in a directory with no manifest", *argv)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
 		t.Fatal("init wrote a package.json into a directory that had none")
@@ -288,7 +288,7 @@ func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *tes
 				t.Fatalf("read config: %v", err)
 			}
 			if !strings.Contains(string(written), tc.want) {
-				t.Fatalf("config =\n%s\nwant it to hold\n%s", written, tc.want)
+				t.Fatalf("config =\n%s\nwant it to contain\n%s", written, tc.want)
 			}
 		})
 	}

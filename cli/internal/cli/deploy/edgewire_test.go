@@ -39,7 +39,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 	}
 }
 
-func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
+func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
 	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n  dns: { cloudflare: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 
 	var stdout, stderr bytes.Buffer
@@ -53,7 +53,7 @@ func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
 	}
 	for _, want := range []string{"dns=cloudflare/acme.com", "allowDegraded=streaming,edge-cache"} {
 		if !strings.Contains(got[0], want) {
-			t.Errorf("provider saw %q, want it to carry %q", got[0], want)
+			t.Errorf("provider saw %q, want it to include %q", got[0], want)
 		}
 	}
 }
@@ -72,7 +72,7 @@ func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
 
 	rendered := stdout.String() + stderr.String()
 	if !strings.Contains(rendered, refusal) {
-		t.Errorf("rendered output = %q, want it to carry %q", rendered, refusal)
+		t.Errorf("rendered output = %q, want it to include %q", rendered, refusal)
 	}
 	if strings.Contains(rendered, "connection lost") {
 		t.Errorf("rendered output = %q, want a refusal not to read as a lost connection", rendered)

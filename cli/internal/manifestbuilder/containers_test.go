@@ -16,11 +16,11 @@ func containerOf(t *testing.T, m *contractv1.Manifest, app string) *contractv1.M
 			return c
 		}
 	}
-	t.Fatalf("manifest carries no container for app %q: %+v", app, m.GetContainers())
+	t.Fatalf("manifest has no container for app %q: %+v", app, m.GetContainers())
 	return nil
 }
 
-func TestAContainerAppIsCarriedAsASiblingJoinedToItByName(t *testing.T) {
+func TestAContainerAppIsWrittenAsASiblingJoinedToItByName(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{
@@ -32,7 +32,7 @@ func TestAContainerAppIsCarriedAsASiblingJoinedToItByName(t *testing.T) {
 	}
 
 	if len(manifest.GetContainers()) != 1 {
-		t.Fatalf("manifest carries %d containers, want only the one container app: %+v", len(manifest.GetContainers()), manifest.GetContainers())
+		t.Fatalf("manifest has %d containers, want only the one container app: %+v", len(manifest.GetContainers()), manifest.GetContainers())
 	}
 	container := containerOf(t, manifest, "api")
 	if got, want := container.GetImage(), "ocel/api@"+fakeDigest; got != want {
@@ -40,7 +40,7 @@ func TestAContainerAppIsCarriedAsASiblingJoinedToItByName(t *testing.T) {
 	}
 }
 
-func TestAContainerCarriesTheHealthPathTheAppAsksFor(t *testing.T) {
+func TestAContainerNamesTheHealthPathTheAppAsksFor(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{
@@ -55,7 +55,7 @@ func TestAContainerCarriesTheHealthPathTheAppAsksFor(t *testing.T) {
 	}
 }
 
-func TestAContainerCarriesTheArchitectureItsAppDeclares(t *testing.T) {
+func TestAContainerNamesTheArchitectureItsAppDeclares(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{
@@ -70,7 +70,7 @@ func TestAContainerCarriesTheArchitectureItsAppDeclares(t *testing.T) {
 	}
 }
 
-func TestAContainerThatAsksForNoHealthPathIsCarriedWithTheDefaultOne(t *testing.T) {
+func TestAContainerThatAsksForNoHealthPathIsWrittenWithTheDefaultOne(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{
@@ -106,25 +106,25 @@ func TestAContainerAppWithNoImageRefusesTheManifest(t *testing.T) {
 
 	_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil)
 	if err == nil {
-		t.Fatal("Build() carried a container app with no image, so a provider would be handed an app it has nothing to run")
+		t.Fatal("Build() included a container app with no image, so a provider would be handed an app it has nothing to run")
 	}
 	if !strings.Contains(err.Error(), `"api"`) {
 		t.Errorf("Build() error = %q, want it to name the app", err)
 	}
 }
 
-func TestAnImageCarriesADigestAndNeverATag(t *testing.T) {
+func TestAnImageNamesADigestAndNeverATag(t *testing.T) {
 	t.Parallel()
 
 	for _, ref := range []string{"ocel/api:latest", "ocel/api", "ocel/api@sha256:short"} {
 		_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container", Image: ref}}, "container", nil, nil, nil, nil)
 		if err == nil {
-			t.Errorf("Build() carried %q as an image identity, want only a digest-pinned ref, since a tag is repointable and a release is not", ref)
+			t.Errorf("Build() kept %q as an image identity, want only a digest-pinned ref, since a tag is repointable and a release is not", ref)
 		}
 	}
 }
 
-func TestAServerlessAppIsCarriedAsNoContainerAtAll(t *testing.T) {
+func TestAServerlessAppIsWrittenAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
 	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
@@ -134,7 +134,7 @@ func TestAServerlessAppIsCarriedAsNoContainerAtAll(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	if len(manifest.GetContainers()) != 0 {
-		t.Errorf("manifest carries %+v, want no container for an app that runs serverless", manifest.GetContainers())
+		t.Errorf("manifest has %+v, want no container for an app that runs serverless", manifest.GetContainers())
 	}
 }
 
@@ -147,7 +147,7 @@ func TestACallerThatPacksAContainerAppIsRefusedByTheBuilder(t *testing.T) {
 		{App: "api", Route: "index", Framework: Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
-		t.Fatal("Build() carried both a container and a function for one app, so routing would have two answers for the same request")
+		t.Fatal("Build() included both a container and a function for one app, so routing would have two answers for the same request")
 	}
 	if !strings.Contains(err.Error(), `"api"`) {
 		t.Errorf("Build() error = %q, want it to name the app", err)

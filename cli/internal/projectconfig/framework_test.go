@@ -121,7 +121,7 @@ func TestDetectFramework(t *testing.T) {
 func TestDetectFrameworkRefusals(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a directory holding no manifest names the directory and the key that settles it", func(t *testing.T) {
+	t.Run("a directory containing no manifest names the directory and the key that decides it", func(t *testing.T) {
 		t.Parallel()
 
 		dir := appDir(t, map[string]string{"main.rb": "puts 1\n"})
@@ -137,14 +137,14 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 		}
 	})
 
-	t.Run("a directory holding two frameworks' manifests is refused rather than guessed at", func(t *testing.T) {
+	t.Run("a directory containing two frameworks' manifests is refused rather than guessed at", func(t *testing.T) {
 		t.Parallel()
 
 		dir := appDir(t, map[string]string{"package.json": `{}`, "go.mod": "module example.com/api\n"})
 
 		_, err := detectFramework(dir)
 		if err == nil {
-			t.Fatal("detectFramework = nil error, want a refusal: node and go both stand here")
+			t.Fatal("detectFramework = nil error, want a refusal: node and go both have manifests here")
 		}
 		for _, want := range []string{dir, "framework", "node", "go"} {
 			if !strings.Contains(err.Error(), want) {
@@ -153,14 +153,14 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 		}
 	})
 
-	t.Run("a next manifest standing beside a go module is refused, not read as next", func(t *testing.T) {
+	t.Run("a next manifest beside a go module is refused, not read as next", func(t *testing.T) {
 		t.Parallel()
 
 		dir := appDir(t, map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"})
 
 		_, err := detectFramework(dir)
 		if err == nil {
-			t.Fatal("detectFramework = nil error, want a refusal: next does not settle what go also claims")
+			t.Fatal("detectFramework = nil error, want a refusal: next does not decide what go also claims")
 		}
 		for _, want := range []string{dir, "framework", "node", "go"} {
 			if !strings.Contains(err.Error(), want) {
@@ -169,14 +169,14 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 		}
 	})
 
-	t.Run("a cargo manifest standing beside a go module is refused rather than guessed at", func(t *testing.T) {
+	t.Run("a cargo manifest beside a go module is refused rather than guessed at", func(t *testing.T) {
 		t.Parallel()
 
 		dir := appDir(t, map[string]string{"Cargo.toml": "[package]\nname = \"api\"\n", "go.mod": "module example.com/api\n"})
 
 		_, err := detectFramework(dir)
 		if err == nil {
-			t.Fatal("detectFramework = nil error, want a refusal: go and rust both stand here")
+			t.Fatal("detectFramework = nil error, want a refusal: go and rust both have manifests here")
 		}
 		for _, want := range []string{dir, "framework", "go", "rust"} {
 			if !strings.Contains(err.Error(), want) {
@@ -226,7 +226,7 @@ export default {
 		}
 	})
 
-	t.Run("a named framework stands over what the directory holds", func(t *testing.T) {
+	t.Run("a named framework overrides what the directory contains", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -286,7 +286,7 @@ export default {
 			t.Fatalf("Resolve: %v", err)
 		}
 		if cfg.Apps[0].Framework != (Framework{}) {
-			t.Fatalf("Apps[0].Framework = %+v, want none: nothing stands at the path to be read", cfg.Apps[0].Framework)
+			t.Fatalf("Apps[0].Framework = %+v, want none: nothing exists at the path to be read", cfg.Apps[0].Framework)
 		}
 	})
 

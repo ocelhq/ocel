@@ -25,7 +25,7 @@ func TestTheSolveMountsTheAppBesideThePlanAndNothingElse(t *testing.T) {
 	}
 	slices.Sort(mounted)
 	if want := []string{"context", "dockerfile"}; !slices.Equal(mounted, want) {
-		t.Errorf("the solve mounts %v, want %v — the app itself, and the directory holding "+PlanFileName, mounted, want)
+		t.Errorf("the solve mounts %v, want %v — the app itself, and the directory containing "+PlanFileName, mounted, want)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestTheMountedPlanIsTheFileTheFrontendReads(t *testing.T) {
 		staged = append(staged, entry.Name())
 	}
 	if want := []string{PlanFileName}; !slices.Equal(staged, want) {
-		t.Fatalf("the mounted directory holds %v, want %v — railpack's frontend reads that name and nothing else from it", staged, want)
+		t.Fatalf("the mounted directory contains %v, want %v — railpack's frontend reads that name and nothing else from it", staged, want)
 	}
 
 	opt, err := solveOptions("testdata/plainserver", dir)
@@ -57,7 +57,7 @@ func TestTheMountedPlanIsTheFileTheFrontendReads(t *testing.T) {
 	}
 }
 
-func TestTheSolveCarriesNoEnvironmentNoSecretsAndNoBuildArgs(t *testing.T) {
+func TestTheSolveSendsNoEnvironmentNoSecretsAndNoBuildArgs(t *testing.T) {
 	opt, err := solveOptions("testdata/plainserver", t.TempDir())
 	if err != nil {
 		t.Fatalf("solveOptions() = %v", err)
@@ -67,10 +67,10 @@ func TestTheSolveCarriesNoEnvironmentNoSecretsAndNoBuildArgs(t *testing.T) {
 		t.Errorf("the solve attaches %d session providers, want none — a secret or a credential attached here is baked into the layers", len(opt.Session))
 	}
 	if len(opt.FrontendAttrs) != 0 {
-		t.Errorf("the solve carries frontend options %v, want none — railpack reads build args from these", opt.FrontendAttrs)
+		t.Errorf("the solve passes frontend options %v, want none — railpack reads build args from these", opt.FrontendAttrs)
 	}
 	if len(opt.FrontendInputs) != 0 {
-		t.Errorf("the solve carries frontend inputs %v, want none — a state handed to the frontend here is a second way into the build", opt.FrontendInputs)
+		t.Errorf("the solve passes frontend inputs %v, want none — a state handed to the frontend here is a second way into the build", opt.FrontendInputs)
 	}
 	if opt.Frontend != "" {
 		t.Errorf("the solve names frontend %q, want none: the frontend is linked into this binary, and naming one makes buildkitd pull an image", opt.Frontend)
@@ -147,10 +147,10 @@ func TestADockerfileBuildIsHandedToTheFrontendTheDaemonAlreadyHas(t *testing.T) 
 	opt := dockerfileSolve(t)
 
 	if opt.Frontend != dockerfileFrontend {
-		t.Errorf("the solve names frontend %q, want %q — the one buildkitd carries, so no frontend image is pulled", opt.Frontend, dockerfileFrontend)
+		t.Errorf("the solve names frontend %q, want %q — the one buildkitd ships with, so no frontend image is pulled", opt.Frontend, dockerfileFrontend)
 	}
 	if want := map[string]string{filenameAttr: DockerfileName}; !maps.Equal(opt.FrontendAttrs, want) {
-		t.Errorf("the solve carries frontend options %v, want %v — the file to read, and no build args", opt.FrontendAttrs, want)
+		t.Errorf("the solve passes frontend options %v, want %v — the file to read, and no build args", opt.FrontendAttrs, want)
 	}
 	if len(opt.Session) != 0 || len(opt.FrontendInputs) != 0 {
 		t.Errorf("the solve attaches %d session providers and %d frontend inputs, want none of either", len(opt.Session), len(opt.FrontendInputs))
@@ -191,14 +191,14 @@ func TestADockerfileBuildsTheAppDirectoryWhereverTheDockerfileLives(t *testing.T
 	}
 	own, err := opt.LocalMounts[contextMount].Open("server.js")
 	if err != nil {
-		t.Errorf("the build context holds no %q: %v — the app's own files are what the Dockerfile copies from", "server.js", err)
+		t.Errorf("the build context contains no %q: %v — the app's own files are what the Dockerfile copies from", "server.js", err)
 	} else {
 		_ = own.Close()
 	}
-	held, err := opt.LocalMounts[contextMount].Open("Node.Dockerfile")
+	file, err := opt.LocalMounts[contextMount].Open("Node.Dockerfile")
 	if err == nil {
-		_ = held.Close()
-		t.Error("the build context holds the shared Dockerfile, so the context is the directory that file is in rather than the app's own")
+		_ = file.Close()
+		t.Error("the build context contains the shared Dockerfile, so the context is the directory that file is in rather than the app's own")
 	}
 }
 

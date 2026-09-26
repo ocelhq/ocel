@@ -52,7 +52,7 @@ func countersigned(checksums string) []byte {
 
 func countersigns(checksums, signature []byte, identity string) error {
 	if want := countersigned(string(checksums)); !bytes.Equal(signature, want) || identity != providers.SignerIdentity(locatedVersion) {
-		return fmt.Errorf("%s carries %q, want %q signed as %s", providers.SignatureAsset, signature, want, identity)
+		return fmt.Errorf("%s contains %q, want %q signed as %s", providers.SignatureAsset, signature, want, identity)
 	}
 	return nil
 }
@@ -103,11 +103,11 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
 
-	lock, held, err := lockfile.Read(projectDir)
+	lock, found, err := lockfile.Read(projectDir)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if !held {
+	if !found {
 		t.Fatalf("no %s was written beside the config", lockfile.Name)
 	}
 	if lock.CLI != locatedVersion {
@@ -120,7 +120,7 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	}
 }
 
-func TestADryRunHoldingNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
+func TestADryRunWithNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	server := releaseServing(t, "aws")
@@ -248,11 +248,11 @@ func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
 		t.Fatalf("pin: %v", err)
 	}
 
-	lock, held, err := lockfile.Read(projectDir)
+	lock, found, err := lockfile.Read(projectDir)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if !held {
+	if !found {
 		t.Fatalf("no %s was left beside the config", lockfile.Name)
 	}
 	if lock.CLI != locatedVersion {

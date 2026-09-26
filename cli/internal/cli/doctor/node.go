@@ -15,8 +15,8 @@ func nodeReasons(cfg *projectconfig.Config) []string {
 	if strings.HasSuffix(cfg.Path, ".ts") {
 		reasons = append(reasons, filepath.Base(cfg.Path)+" is TypeScript")
 	}
-	if holds, err := discovery.HoldsJS(cfg); err != nil || holds {
-		reasons = append(reasons, "this project holds JavaScript")
+	if hasJS, err := discovery.HasJS(cfg); err != nil || hasJS {
+		reasons = append(reasons, "this project contains JavaScript")
 	}
 	if len(cfg.Transforms) > 0 {
 		reasons = append(reasons, "this project lists transforms")

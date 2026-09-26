@@ -70,7 +70,7 @@ func TestSpawn(t *testing.T) {
 func TestReady(t *testing.T) {
 	t.Parallel()
 
-	t.Run("exiting before the sentinel fails immediately, carrying the child's stderr", func(t *testing.T) {
+	t.Run("exiting before the sentinel fails immediately, including the child's stderr", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
@@ -286,11 +286,11 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
 		if events[0].GetProgress() == nil {
-			t.Errorf("events[0] holds %T, want a ProgressEvent", events[0].GetEvent())
+			t.Errorf("events[0] is %T, want a ProgressEvent", events[0].GetEvent())
 		}
 		result := events[1].GetResult()
 		if result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] holds %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
+			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
 		}
 
 		r.Close()
@@ -385,14 +385,14 @@ func TestDeploy(t *testing.T) {
 				t.Errorf("Deploy() error = %q, want a ctrl-C not dressed up as a lost connection", err)
 			}
 			if !errors.Is(err, context.Canceled) {
-				t.Errorf("Deploy() error = %q, want it to carry context.Canceled", err)
+				t.Errorf("Deploy() error = %q, want it to wrap context.Canceled", err)
 			}
 		case <-time.After(5 * time.Second):
 			t.Fatal("Deploy() hung after the run was cancelled")
 		}
 	})
 
-	t.Run("a terminal failure carries the provider's message verbatim", func(t *testing.T) {
+	t.Run("a terminal failure passes the provider's message through verbatim", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
@@ -520,7 +520,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
 		if result := events[1].GetResult(); result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] holds %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
+			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
 		}
 
 		r.Close()
@@ -528,7 +528,7 @@ func TestBootstrap(t *testing.T) {
 		assertNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("a terminal failure carries the provider's message", func(t *testing.T) {
+	t.Run("a terminal failure includes the provider's message", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()

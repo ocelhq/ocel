@@ -83,6 +83,6 @@ func TestTheWindowKeepsSpineOrderWithinATier(t *testing.T) {
 	t.Parallel()
 	f := planWindow([]unitTier{tierRunning, tierFailed, tierRunning, tierFailed}, 10)
 	if !slices.Equal(f.rows, []int{1, 3, 0, 2}) {
-		t.Errorf("row order = %v, want each tier held in spine order", f.rows)
+		t.Errorf("row order = %v, want each tier kept in spine order", f.rows)
 	}
 }

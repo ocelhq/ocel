@@ -145,7 +145,7 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 	var wanted []Address
 	seen := map[Cell]bool{}
 	for _, cell := range cells {
-		if _, held := g.plaintext[cell]; held || seen[cell] {
+		if _, ok := g.plaintext[cell]; ok || seen[cell] {
 			continue
 		}
 		seen[cell] = true
@@ -203,7 +203,7 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 		}
 	}
 
-	held, err := g.claim(req)
+	present, err := g.claim(req)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			continue
 		}
-		wanted = append(wanted, cellsOf(held, definition.GetKey())...)
+		wanted = append(wanted, cellsOf(present, definition.GetKey())...)
 	}
 	plaintext, err := g.reveal(ctx, wanted)
 	if err != nil {
@@ -223,7 +223,7 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	var cells []*resourcesv1.VariableCell
 	for _, definition := range req.GetDefinitions() {
 		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
-		for _, cell := range cellsOf(held, definition.GetKey()) {
+		for _, cell := range cellsOf(present, definition.GetKey()) {
 			var value string
 			if !live {
 				if !plaintext[cell].found {
@@ -242,19 +242,19 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	return &resourcesv1.DeclareEnvResponse{Cells: cells}, nil
 }
 
-func (g *Gate) claim(req *resourcesv1.DeclareEnvRequest) (heldCells, error) {
+func (g *Gate) claim(req *resourcesv1.DeclareEnvRequest) (presentCells, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	for _, group := range req.GetGroups() {
-		if slices.ContainsFunc(g.groups, func(held *resourcesv1.GroupDefinition) bool { return held.GetKey() == group.GetKey() }) {
+		if slices.ContainsFunc(g.groups, func(existing *resourcesv1.GroupDefinition) bool { return existing.GetKey() == group.GetKey() }) {
 			return nil, fmt.Errorf("environment group %s is declared twice", group.GetKey())
 		}
 	}
-	held := g.resolvedCells()
+	present := g.resolvedCells()
 	g.definitions = append(g.definitions, req.GetDefinitions()...)
 	g.groups = append(g.groups, req.GetGroups()...)
-	return held, nil
+	return present, nil
 }
 
 func (g *Gate) Scope() Scope {
@@ -286,15 +286,15 @@ func (g *Gate) Check() error {
 	definitions := slices.Clone(g.definitions)
 	groups := slices.Clone(g.groups)
 	apps := readers(g.scope.Apps)
-	held := g.resolvedCells()
+	present := g.resolvedCells()
 	g.mu.Unlock()
 
 	if err := collision(definitions, g.scope); err != nil {
 		return err
 	}
 	bound := g.scope.bindingDefinitions()
-	problems = append(problems, unresolved(definitions, groups, apps, held, problems)...)
-	problems = append(problems, unsetBindingVariables(bound, held)...)
+	problems = append(problems, unresolved(definitions, groups, apps, present, problems)...)
+	problems = append(problems, unsetBindingVariables(bound, present)...)
 	if len(problems) == 0 {
 		return nil
 	}
@@ -321,7 +321,7 @@ func declaredAt(definitions []*resourcesv1.VariableDefinition, key string) int {
 	return len(definitions)
 }
 
-func unresolved(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, apps []App, held heldCells, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
+func unresolved(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, apps []App, present presentCells, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
 	named := make(map[Cell]bool, len(reported))
 	for _, problem := range reported {
 		named[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = true
@@ -329,7 +329,7 @@ func unresolved(definitions []*resourcesv1.VariableDefinition, groups []*resourc
 
 	var problems []*resourcesv1.VariableProblem
 	for _, app := range apps {
-		for _, cell := range missing(definitions, groups, app.Folder, held) {
+		for _, cell := range missing(definitions, groups, app.Folder, present) {
 			if named[cell] {
 				continue
 			}

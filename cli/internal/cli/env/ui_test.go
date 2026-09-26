@@ -71,7 +71,7 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 }
 
 func TestRunnerValues(t *testing.T) {
-	t.Run("List carries a named environment's value as an override", func(t *testing.T) {
+	t.Run("List includes a named environment's value as an override", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		preview := envOptions{preview: true}
@@ -94,7 +94,7 @@ func TestRunnerValues(t *testing.T) {
 			}
 			override := stored(t, rows, "STRIPE_API_KEY")
 			if override.Environment != "staging" {
-				t.Errorf("STRIPE_API_KEY = %+v, want it to name the environment that holds it", override)
+				t.Errorf("STRIPE_API_KEY = %+v, want it to name the environment that stores it", override)
 			}
 			return nil
 		})
@@ -146,7 +146,7 @@ func TestRunnerValues(t *testing.T) {
 				t.Fatalf("Set expecting an empty cell err = %v, want varsui.ErrStaleValue — the page drew a cell somebody has since filled", err)
 			}
 			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://someone-elses.example" {
-				t.Errorf("the cell holds %q (err %v), want the value already there — a refused write must not have landed", got, err)
+				t.Errorf("the cell contains %q (err %v), want the value already there — a refused write must not have landed", got, err)
 			}
 
 			current := int64(1)
@@ -154,7 +154,7 @@ func TestRunnerValues(t *testing.T) {
 				t.Fatalf("Set expecting the current version err = %v, want the write to land", err)
 			}
 			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://mine.example" {
-				t.Errorf("the cell holds %q (err %v), want the write that quoted the right version", got, err)
+				t.Errorf("the cell contains %q (err %v), want the write that quoted the right version", got, err)
 			}
 			return nil
 		})
@@ -174,7 +174,7 @@ func TestRunnerValues(t *testing.T) {
 				t.Fatalf("Delete expecting version 1 err = %v, want varsui.ErrStaleValue — the page drew a value somebody has since replaced", err)
 			}
 			if got, found, err := revealOne(ctx, values, at.Cell); err != nil || !found || got != "https://someone-elses.example" {
-				t.Errorf("the cell holds %q (found %v, err %v), want the replacement — a refused delete must not have landed", got, found, err)
+				t.Errorf("the cell contains %q (found %v, err %v), want the replacement — a refused delete must not have landed", got, found, err)
 			}
 
 			current := int64(2)

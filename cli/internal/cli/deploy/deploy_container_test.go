@@ -165,7 +165,7 @@ func TestAContainersHealthPathIsTheOneTheAppNames(t *testing.T) {
 	out := deployContainerProject(t, `, health: { path: "/healthz" }`)
 
 	if !strings.Contains(out, "health=/healthz") {
-		t.Errorf("stdout = %q, want the health path the app names carried through to the provider", out)
+		t.Errorf("stdout = %q, want the health path the app names passed through to the provider", out)
 	}
 }
 
@@ -201,7 +201,7 @@ func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testin
 	}
 }
 
-func TestADeployThatNamesNoRegistryCarriesNone(t *testing.T) {
+func TestADeployThatNamesNoRegistrySendsNone(t *testing.T) {
 	deps, root, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
@@ -213,7 +213,7 @@ func TestADeployThatNamesNoRegistryCarriesNone(t *testing.T) {
 	}
 }
 
-func TestAServerlessOnlyDeployStillCarriesTheRegistryItsFunctionsMayBeRunFrom(t *testing.T) {
+func TestAServerlessOnlyDeployStillSendsTheRegistryItsFunctionsMayBeRunFrom(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)

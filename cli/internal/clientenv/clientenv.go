@@ -223,7 +223,7 @@ func CheckFresh(projectDir string, apps []App) error {
 	}
 	return fmt.Errorf(
 		"--prebuilt cannot deploy this build: %s. "+
-			"A client value is inlined into the browser bundle at build time, so this deploy would serve browsers something other than what its server holds. "+
+			"A client value is inlined into the browser bundle at build time, so this deploy would serve browsers something other than what its server resolves. "+
 			"Deploy without --prebuilt to build with the values this deploy resolved",
 		strings.Join(causes, ", and "),
 	)

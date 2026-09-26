@@ -33,10 +33,10 @@ func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functio
 			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and this project's config does not name it, so there is no directory to build its image from: give %q a name and a path under `apps`", name, name)
 		}
 		if configured.Image == "" {
-			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and carries no image, so the manifest would hand a provider an app with nothing to run", name)
+			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and names no image, so the manifest would hand a provider an app with nothing to run", name)
 		}
 		if !appbuild.PinnedImage(configured.Image) {
-			return nil, fmt.Errorf("manifestbuilder: app %q carries image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", name, configured.Image)
+			return nil, fmt.Errorf("manifestbuilder: app %q names image %q, and a release pins one repository at one digest: a tag repoints under a running release, so it never rides in the identity", name, configured.Image)
 		}
 		if packed[name] {
 			return nil, fmt.Errorf("manifestbuilder: app %q runs on container compute and was packed into functions as well, so two things would answer the same request", name)

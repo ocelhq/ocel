@@ -20,8 +20,8 @@ var tlsModes = map[string]bindingsv1.PostgresTlsMode{
 }
 
 func sslmode(mode bindingsv1.PostgresTlsMode) string {
-	for spelled, held := range tlsModes {
-		if held == mode {
+	for spelled, tlsMode := range tlsModes {
+		if tlsMode == mode {
 			return spelled
 		}
 	}
@@ -57,8 +57,8 @@ func Build(bound []projectconfig.Binding, values map[string]string, source strin
 		}
 		site := "bindings." + b.Group()
 		read := func(variable string) (string, error) {
-			value, held := values[variable]
-			if !held {
+			value, ok := values[variable]
+			if !ok {
 				return "", fmt.Errorf("%s, which `%s` reads, has no value here", variable, site)
 			}
 			return value, nil

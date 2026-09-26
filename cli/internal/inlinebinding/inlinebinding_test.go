@@ -21,7 +21,7 @@ func inline(p projectconfig.PostgresInline) projectconfig.Binding {
 }
 
 func TestBuild(t *testing.T) {
-	t.Run("a url binding carries the url whole", func(t *testing.T) {
+	t.Run("a url binding keeps the url whole", func(t *testing.T) {
 		records, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})},
 			map[string]string{"ORDERS_URL": "postgres://u:p@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool"}, "ocel.json")
 		if err != nil {

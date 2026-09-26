@@ -35,6 +35,6 @@ func TestScopeNamesTheVariablesATiersInlineBindingsRead(t *testing.T) {
 		t.Errorf("production OtherTiers = %+v, want none: production takes every binding it reads", got)
 	}
 	if got := DevScope(cfg).Bindings; len(got) != 0 {
-		t.Errorf("dev Bindings = %+v, want none: ocel dev stands up its own resources", got)
+		t.Errorf("dev Bindings = %+v, want none: ocel dev provisions its own resources", got)
 	}
 }

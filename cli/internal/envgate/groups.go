@@ -11,7 +11,7 @@ type GroupState struct {
 }
 
 func GroupStates(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, present []Cell, folder string) []GroupState {
-	cells := make(heldCells, len(present))
+	cells := make(presentCells, len(present))
 	for _, cell := range present {
 		cells[cell] = 0
 	}
@@ -35,7 +35,7 @@ func GroupStates(definitions []*resourcesv1.VariableDefinition, groups []*resour
 	return out
 }
 
-func needsValue(definition *resourcesv1.VariableDefinition, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, held heldCells) bool {
+func needsValue(definition *resourcesv1.VariableDefinition, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, present presentCells) bool {
 	if !definition.GetRequired() {
 		return false
 	}
@@ -43,11 +43,11 @@ func needsValue(definition *resourcesv1.VariableDefinition, definitions []*resou
 	if group == "" || groupRequired(groups, group) {
 		return true
 	}
-	return groupPresent(definitions, held, group, binding)
+	return groupPresent(definitions, present, group, binding)
 }
 
-func resolves(definition *resourcesv1.VariableDefinition, binding string, held heldCells) bool {
-	_, ok := hop(definition, binding, held)
+func resolves(definition *resourcesv1.VariableDefinition, binding string, present presentCells) bool {
+	_, ok := hop(definition, binding, present)
 	return ok
 }
 
@@ -60,12 +60,12 @@ func groupRequired(groups []*resourcesv1.GroupDefinition, key string) bool {
 	return false
 }
 
-func groupPresent(definitions []*resourcesv1.VariableDefinition, held heldCells, group, binding string) bool {
+func groupPresent(definitions []*resourcesv1.VariableDefinition, present presentCells, group, binding string) bool {
 	for _, definition := range definitions {
 		if definition.GetGroup() != group {
 			continue
 		}
-		if resolves(definition, binding, held) {
+		if resolves(definition, binding, present) {
 			return true
 		}
 	}

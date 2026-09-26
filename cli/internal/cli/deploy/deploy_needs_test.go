@@ -59,7 +59,7 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 	rendered := stdout.String() + stderr.String()
 	for _, want := range []string{"edge-middleware", "next start", "/dashboard", "/admin", `"edge-middleware" to ` + "`allowDegraded`"} {
 		if !strings.Contains(rendered, want) {
-			t.Errorf("rendered output = %q, want it to carry %q", rendered, want)
+			t.Errorf("rendered output = %q, want it to include %q", rendered, want)
 		}
 	}
 }
@@ -89,7 +89,7 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 	}
 	for _, want := range []string{"edge-middleware", "next start", "/dashboard", `"edge-middleware" to ` + "`allowDegraded`"} {
 		if !strings.Contains(message, want) {
-			t.Errorf("failed record error = %q, want it to carry %q", message, want)
+			t.Errorf("failed record error = %q, want it to include %q", message, want)
 		}
 	}
 }

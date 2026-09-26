@@ -31,7 +31,7 @@ func TestLoadContainingReturnsGroups(t *testing.T) {
 	}
 	if len(loadedGroups) != 1 || loadedGroups[0].GetKey() != "github" ||
 		loadedGroups[0].GetDescription() != "Sign in with GitHub" {
-		t.Errorf("groups = %v, want the declared group carried through", loadedGroups)
+		t.Errorf("groups = %v, want the declared group passed through", loadedGroups)
 	}
 }
 

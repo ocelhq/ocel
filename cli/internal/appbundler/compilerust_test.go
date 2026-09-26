@@ -82,7 +82,7 @@ func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T
 				t.Fatalf("the compile wrote no binary named after the app: %v", err)
 			}
 			if info.Mode()&0o111 == 0 {
-				t.Errorf("the binary is mode %v, want the execute bit — the zip carries the mode and the runtime execs it", info.Mode())
+				t.Errorf("the binary is mode %v, want the execute bit — the zip records the mode and the runtime execs it", info.Mode())
 			}
 
 			read, err := elf.Open(binary)
@@ -95,7 +95,7 @@ func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T
 			}
 			for _, program := range read.Progs {
 				if program.Type == elf.PT_INTERP {
-					t.Errorf("the binary asks for a dynamic loader, and a function's host carries no libc the app was linked against")
+					t.Errorf("the binary asks for a dynamic loader, and a function's host has no libc the app was linked against")
 				}
 			}
 		})
@@ -189,7 +189,7 @@ func TestCompileLinksTheCACrateBuildsForTheTargetIntoTheStaticBinary(t *testing.
 			}
 			for _, program := range read.Progs {
 				if program.Type == elf.PT_INTERP {
-					t.Errorf("the binary asks for a dynamic loader: the C it links is static musl, and a function's host carries no libc")
+					t.Errorf("the binary asks for a dynamic loader: the C it links is static musl, and a function's host has no libc")
 				}
 			}
 			if runtime.GOARCH != platform.goarch {
@@ -240,7 +240,7 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 	}
 }
 
-func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatHoldsIt(t *testing.T) {
+func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatContainsIt(t *testing.T) {
 	t.Parallel()
 	needsRustTarget(t, arch.X8664)
 
@@ -262,7 +262,7 @@ func TestCompileBuildsTheAppsCrateInsideTheCargoWorkspaceThatHoldsIt(t *testing.
 	}
 }
 
-func TestCompileRefusesARustAppDirectoryHoldingNoCrate(t *testing.T) {
+func TestCompileRefusesARustAppDirectoryWithNoCrate(t *testing.T) {
 	t.Parallel()
 	needsRustTarget(t, arch.X8664)
 

@@ -110,13 +110,13 @@ func (s *Session) buildLine(line string) {
 	}})
 }
 
-const maxHeldLine = 64 << 10
+const maxBufferedLine = 64 << 10
 
 type lineWriter struct {
 	emit func(string)
 
-	mu   sync.Mutex
-	held []byte
+	mu      sync.Mutex
+	pending []byte
 }
 
 func (w *lineWriter) Write(p []byte) (int, error) {
@@ -129,33 +129,33 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 func (w *lineWriter) take(p []byte) []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.held = append(w.held, p...)
+	w.pending = append(w.pending, p...)
 	var ready []string
 	for {
-		i := bytes.IndexByte(w.held, '\n')
+		i := bytes.IndexByte(w.pending, '\n')
 		if i < 0 {
 			break
 		}
-		line := string(w.held[:i])
-		w.held = w.held[i+1:]
+		line := string(w.pending[:i])
+		w.pending = w.pending[i+1:]
 		if collapseRewrites(line) != "" {
 			ready = append(ready, line)
 		}
 	}
-	if i := bytes.LastIndexByte(w.held, '\r'); i >= 0 {
-		w.held = w.held[i:]
+	if i := bytes.LastIndexByte(w.pending, '\r'); i >= 0 {
+		w.pending = w.pending[i:]
 	}
-	if len(w.held) > maxHeldLine {
-		ready = append(ready, string(w.held))
-		w.held = nil
+	if len(w.pending) > maxBufferedLine {
+		ready = append(ready, string(w.pending))
+		w.pending = nil
 	}
 	return ready
 }
 
 func (w *lineWriter) flush() {
 	w.mu.Lock()
-	line := string(w.held)
-	w.held = nil
+	line := string(w.pending)
+	w.pending = nil
 	w.mu.Unlock()
 	if collapseRewrites(line) != "" {
 		w.emit(line)

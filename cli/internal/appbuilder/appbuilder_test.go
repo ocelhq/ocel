@@ -322,7 +322,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		if len(got.Apps) != 2 {
-			t.Fatalf("request carried %d apps, want both", len(got.Apps))
+			t.Fatalf("request included %d apps, want both", len(got.Apps))
 		}
 		for _, app := range got.Apps {
 			if app.Env["POSTHOG_ID"] != vars[app.Name]["POSTHOG_ID"] {
@@ -511,7 +511,7 @@ func TestBuild(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(entries) != 1 || entries[0].Name() != configFileName {
-			t.Errorf("function directory holds %d entries, want only the %s the node builder wrote", len(entries), configFileName)
+			t.Errorf("function directory contains %d entries, want only the %s the node builder wrote", len(entries), configFileName)
 		}
 	})
 
@@ -1080,7 +1080,7 @@ func TestBuilderEnv(t *testing.T) {
 			t.Errorf("POSTHOG_ID = %q, want the resolved value", got)
 		}
 		if len(env) <= 3 {
-			t.Errorf("env holds %d entries, want the inherited environment as well", len(env))
+			t.Errorf("env has %d entries, want the inherited environment as well", len(env))
 		}
 	})
 
@@ -1172,7 +1172,7 @@ func TestRunNode(t *testing.T) {
 			t.Fatal("runNode succeeded on a non-zero exit, want error")
 		}
 		if !strings.Contains(err.Error(), "adapter could not resolve the entrypoint") {
-			t.Errorf("error = %q, want it to carry the failure the builder reported on stdout", err)
+			t.Errorf("error = %q, want it to include the failure the builder reported on stdout", err)
 		}
 	})
 
@@ -1201,7 +1201,7 @@ process.exitCode = 1;
 			t.Fatal("runNode succeeded on a non-zero exit, want error")
 		}
 		if !strings.Contains(err.Error(), message) {
-			t.Errorf("error carries %d bytes, want the full %d-byte record (process.exitCode must not truncate stdout, unlike process.exit)", len(err.Error()), len(message))
+			t.Errorf("error has %d bytes, want the full %d-byte record (process.exitCode must not truncate stdout, unlike process.exit)", len(err.Error()), len(message))
 		}
 	})
 

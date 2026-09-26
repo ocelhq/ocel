@@ -99,7 +99,7 @@ func TestTheConfirmationNamesWhatThePlanActuallyDoes(t *testing.T) {
 		t.Errorf("ConfirmVerb() = %q, want a mixed plan to read as one", got)
 	}
 	if !Mutates(mixedPlan()) {
-		t.Error("Mutates() = false for a plan holding creates, an update and a delete")
+		t.Error("Mutates() = false for a plan containing creates, an update and a delete")
 	}
 	if Mutates(&planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
 		{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_KEEP},
@@ -160,7 +160,7 @@ func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 	}
 }
 
-func TestAPlanOffATerminalCarriesNoEscapeCodes(t *testing.T) {
+func TestAPlanOffATerminalHasNoEscapeCodes(t *testing.T) {
 	t.Parallel()
 
 	got := projectPlan(t, mixedPlan())
@@ -169,7 +169,7 @@ func TestAPlanOffATerminalCarriesNoEscapeCodes(t *testing.T) {
 	}
 }
 
-func TestAPlanCarriesItsNotesAndTheEdgeFrontingIt(t *testing.T) {
+func TestAPlanIncludesItsNotesAndTheEdgeFrontingIt(t *testing.T) {
 	t.Parallel()
 
 	want := `
@@ -305,7 +305,7 @@ Proposed changes to the production bootstrap:
 		t.Errorf("projection =\n%s\nwant\n%s", got, fresh)
 	}
 
-	settled := adopting(planv1.Change_ACTION_KEEP, kept, engine)
+	unchanged := adopting(planv1.Change_ACTION_KEEP, kept, engine)
 	want := `
 Proposed changes to the production bootstrap:
 
@@ -314,11 +314,11 @@ Proposed changes to the production bootstrap:
 
 1 adopted, 1 unchanged.
 `
-	if got := projectPlan(t, settled); got != want {
+	if got := projectPlan(t, unchanged); got != want {
 		t.Errorf("projection =\n%s\nwant\n%s", got, want)
 	}
-	if Mutates(settled) {
-		t.Error("Mutates() = true for a plan that only adopts what stands, and every re-run would ask consent for nothing")
+	if Mutates(unchanged) {
+		t.Error("Mutates() = true for a plan that only adopts what is already installed, and every re-run would ask consent for nothing")
 	}
 	if got := ConfirmVerb(adopting(planv1.Change_ACTION_CREATE, dir, engine)); got != "Create these" {
 		t.Errorf("ConfirmVerb() = %q, want a plan that creates and adopts to read as one that creates", got)
@@ -329,11 +329,11 @@ func TestAGroupIsRolledUpByTheRuleTheProviderRollsItsOwnGroupsUpBy(t *testing.T)
 	t.Parallel()
 
 	rows := func(actions ...planv1.Change_Action) []*planv1.Change {
-		held := make([]*planv1.Change, 0, len(actions))
+		changes := make([]*planv1.Change, 0, len(actions))
 		for at, action := range actions {
-			held = append(held, &planv1.Change{Kind: "fs:dir", Name: "/etc/ocel/" + string(rune('a'+at)), Action: action})
+			changes = append(changes, &planv1.Change{Kind: "fs:dir", Name: "/etc/ocel/" + string(rune('a'+at)), Action: action})
 		}
-		return held
+		return changes
 	}
 	for name, tc := range map[string]struct {
 		changes []*planv1.Change

@@ -27,20 +27,20 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 	fingerprint, unreached := taken(ctx, deps, cfg, opts, stdout, stderr)
 	if fingerprint == "" {
 		if opts.target == "" {
-			return fmt.Errorf("%w\n\nThe console still holds this target; nothing was forgotten. Reach the machine and run this again, or read the fingerprint with `ocel connector status` and run `ocel connector rm --target <fingerprint>` to forget it in the console alone", unreached)
+			return fmt.Errorf("%w\n\nThe console still has this target registered; nothing was forgotten. Reach the machine and run this again, or read the fingerprint with `ocel connector status` and run `ocel connector rm --target <fingerprint>` to forget it in the console alone", unreached)
 		}
 		return forgotten(ctx, opts, access, opts.target, stdout)
 	}
 
-	held, err := opts.console.ByTarget(ctx, access, fingerprint)
+	registered, err := opts.console.ByTarget(ctx, access, fingerprint)
 	if err != nil {
 		return err
 	}
-	if held == nil {
-		fmt.Fprintf(stdout, "%s The console holds no connector for %s\n", check, bold(fingerprint))
+	if registered == nil {
+		fmt.Fprintf(stdout, "%s The console has no connector registered for %s\n", check, bold(fingerprint))
 		return nil
 	}
-	if err := opts.console.Remove(ctx, access, held.ID); err != nil {
+	if err := opts.console.Remove(ctx, access, registered.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
 	if unreached != nil {
@@ -53,15 +53,15 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 }
 
 func forgotten(ctx context.Context, opts options, access, fingerprint string, stdout io.Writer) error {
-	held, err := opts.console.ByTarget(ctx, access, fingerprint)
+	registered, err := opts.console.ByTarget(ctx, access, fingerprint)
 	if err != nil {
 		return err
 	}
-	if held == nil {
-		fmt.Fprintf(stdout, "%s The console holds no connector for %s\n", check, bold(fingerprint))
+	if registered == nil {
+		fmt.Fprintf(stdout, "%s The console has no connector registered for %s\n", check, bold(fingerprint))
 		return nil
 	}
-	if err := opts.console.Remove(ctx, access, held.ID); err != nil {
+	if err := opts.console.Remove(ctx, access, registered.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
 	fmt.Fprintf(stdout, "%s The console has forgotten %s; the target itself was never reached, so what is on it stays\n",

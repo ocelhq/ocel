@@ -107,7 +107,7 @@ describe("buildNext", () => {
     expect(env?.OCEL_ALLOW_DEGRADED).toBe("");
   });
 
-  it("builds for production whatever NODE_ENV the shell carries", async () => {
+  it("builds for production whatever NODE_ENV the shell sets", async () => {
     const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
     let env: Record<string, string> | undefined;
     nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);

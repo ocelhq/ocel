@@ -95,7 +95,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 
 	cmddeps.Yes(cmd, &opts.Yes)
 	cmd.Flags().BoolVar(&opts.Dry, "dry", false, "Print the changes and stop, applying nothing")
-	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else stands is left alone (also: all, none)")
+	cmd.Flags().StringVar(&opts.Features, "features", "", "Comma-separated `set` of features to add or refresh; whatever else is installed is left alone (also: all, none)")
 	cmd.Flags().StringVar(&opts.Remove, "remove", "", "Comma-separated `set` of features to tear down; nothing goes unless it is named here")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Remove a feature other projects still use")
 	cmd.Flags().BoolVar(&opts.AutoHeal, "auto-heal", false, "Let later deploys refresh stale features on their own; --auto-heal=false turns it off")
@@ -191,9 +191,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if err != nil {
 			return err
 		}
-		standing := enabledFeatures(catalogue)
-		going := goingFeatures(catalogue, standing, named)
-		if absent := without(named, standing); len(absent) > 0 {
+		installed := enabledFeatures(catalogue)
+		going := goingFeatures(catalogue, installed, named)
+		if absent := without(named, installed); len(absent) > 0 {
 			fmt.Fprintf(stdout, "%s is not in the %s bootstrap, so there is nothing to remove.\n",
 				strings.Join(absent, ", "), Name(tier))
 		}
@@ -203,7 +203,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		asking := ui.Asking()
 		picked := asking && !opts.FeaturesDeclared
-		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, string(cfg.EdgeID()), tier, asking, stdout)
+		requested, selected, err := chooseFeatures(ctx, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout)
 		if err != nil {
 			return err
 		}
@@ -252,7 +252,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			}
 			consented = ui.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
 		case len(going) > 0:
-			ui.Warning(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it stood up.", strings.Join(going, ", "), Name(tier)))
+			ui.Warning(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), Name(tier)))
 			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
 				ui.Warning(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
 			}

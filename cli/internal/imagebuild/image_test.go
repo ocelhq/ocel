@@ -16,7 +16,7 @@ func TestTheImageIsNamedAfterTheAppAndAddressedByItsDigest(t *testing.T) {
 	}
 
 	if image.Name != "web-api" {
-		t.Errorf("the image's repository is %q, want the app's own name, which is what a registry is told to hold", image.Name)
+		t.Errorf("the image's repository is %q, want the app's own name, which is what a registry is told to store", image.Name)
 	}
 	if image.Repository != "ocel/shop/web-api" {
 		t.Errorf("the image's repository is %q, want one scoped to the project and marked as ocel's: two projects that both name an app web share one repository, and a sweep of either removes the other's images", image.Repository)
@@ -31,7 +31,7 @@ func TestTheImageIsNamedAfterTheAppAndAddressedByItsDigest(t *testing.T) {
 
 func TestAnAppNameNoRepositoryCanBeDerivedFromIsRefusedAtTheCoordinate(t *testing.T) {
 	if _, err := imageFor("shop", strings.Repeat("a", maxRepository), someDigest); err == nil {
-		t.Error("imageFor() named a repository longer than docker holds, so the build fails at the daemon rather than at the coordinate")
+		t.Error("imageFor() named a repository longer than docker accepts, so the build fails at the daemon rather than at the coordinate")
 	}
 }
 
@@ -43,7 +43,7 @@ func TestAnAppNamedInSymbolsAloneIsStillGivenARepository(t *testing.T) {
 			continue
 		}
 		if !naming.IsRepositorySegment(image.Name) {
-			t.Errorf("imageFor(%q) named %q, which is no repository docker can hold", app, image.Repository)
+			t.Errorf("imageFor(%q) named %q, which docker rejects as a repository", app, image.Repository)
 		}
 	}
 }

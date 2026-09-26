@@ -69,7 +69,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			{Hostname: "acme.com", Cause: "the edge was throttled listing what it serves"},
 		}, projectconfig.DefaultFileName, func(message string) { warned = append(warned, message) })
 		if err != nil {
-			t.Fatalf("refuseClaimedDomains err = %v, want a deploy that carries on when the provider could not say who serves the hostname", err)
+			t.Fatalf("refuseClaimedDomains err = %v, want a deploy that continues when the provider could not say who serves the hostname", err)
 		}
 		if len(warned) != 1 || !strings.Contains(warned[0], "acme.com") || !strings.Contains(warned[0], "throttled") {
 			t.Errorf("warnings = %q, want one naming the hostname and why its owner could not be read", warned)

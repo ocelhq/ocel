@@ -21,12 +21,12 @@ func TestDeclareEnvFolderScopes(t *testing.T) {
 	t.Parallel()
 
 	refused := map[string][]string{
-		"a folder that is not anchored at the root":  {"web"},
-		"a folder carrying the store key delimiter":  {"/we#b"},
-		"a folder with an empty path segment":        {"//web"},
-		"a folder spelled with a trailing separator": {"/web/"},
-		"the root spelled as a folder":               {"/"},
-		"the same folder named twice":                {"/web", "/web"},
+		"a folder that is not anchored at the root":   {"web"},
+		"a folder containing the store key delimiter": {"/we#b"},
+		"a folder with an empty path segment":         {"//web"},
+		"a folder spelled with a trailing separator":  {"/web/"},
+		"the root spelled as a folder":                {"/"},
+		"the same folder named twice":                 {"/web", "/web"},
 	}
 	for name, folders := range refused {
 		t.Run(name+" is refused", func(t *testing.T) {

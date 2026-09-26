@@ -56,7 +56,7 @@ func TestAppVariables(t *testing.T) {
 		}
 	})
 
-	t.Run("carries client accessibility from the declaration", func(t *testing.T) {
+	t.Run("keeps client accessibility from the declaration", func(t *testing.T) {
 		t.Parallel()
 
 		definitions := []*resourcesv1.VariableDefinition{
@@ -80,7 +80,7 @@ func TestAppVariables(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the version each value resolved at", func(t *testing.T) {
+	t.Run("keeps the version each value resolved at", func(t *testing.T) {
 		t.Parallel()
 
 		definitions := []*resourcesv1.VariableDefinition{
@@ -100,11 +100,11 @@ func TestAppVariables(t *testing.T) {
 			t.Errorf("PLAIN_KEY = %+v, want the version its cell resolved at", got[0])
 		}
 		if got[1].Key != "LIVE_KEY" || got[1].Version != 9 {
-			t.Errorf("LIVE_KEY = %+v, want its cell's version carried too", got[1])
+			t.Errorf("LIVE_KEY = %+v, want its cell's version included too", got[1])
 		}
 	})
 
-	t.Run("carries the folder each key resolved from", func(t *testing.T) {
+	t.Run("keeps the folder each key resolved from", func(t *testing.T) {
 		t.Parallel()
 
 		definitions := []*resourcesv1.VariableDefinition{
@@ -149,10 +149,10 @@ func TestBuildEnv(t *testing.T) {
 			t.Errorf("INTERNAL_URL = %q, want %q: a build reads the plaintext class, client-accessible or not", got, want)
 		}
 		if _, ok := env["STRIPE_API_KEY"]; ok {
-			t.Error("env carries STRIPE_API_KEY; an encrypted class is nothing a build may read")
+			t.Error("env contains STRIPE_API_KEY; an encrypted class is nothing a build may read")
 		}
 		if _, ok := env["NEXT_PUBLIC_NEXT_PUBLIC_SITE_URL"]; ok {
-			t.Error("env carries a prefixed name; a key is delivered as it was declared")
+			t.Error("env contains a prefixed name; a key is delivered as it was declared")
 		}
 	})
 
@@ -177,10 +177,10 @@ func TestBuildEnv(t *testing.T) {
 			t.Errorf("admin SHARED_ID = %q, want %q", got, want)
 		}
 		if _, ok := env["admin"]["STRIPE_API_KEY"]; ok {
-			t.Errorf("admin env = %v, must not carry an encrypted-class value", env["admin"])
+			t.Errorf("admin env = %v, must not contain an encrypted-class value", env["admin"])
 		}
 		if _, ok := env["storefront"]["STRIPE_API_KEY"]; ok {
-			t.Errorf("storefront env = %v, must not carry an encrypted-class value", env["storefront"])
+			t.Errorf("storefront env = %v, must not contain an encrypted-class value", env["storefront"])
 		}
 	})
 
@@ -260,7 +260,7 @@ func TestVariablesByApp(t *testing.T) {
 func TestToApps(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries the folder binding into the manifest", func(t *testing.T) {
+	t.Run("passes the folder binding into the manifest", func(t *testing.T) {
 		t.Parallel()
 
 		got := toApps(t.TempDir(), []projectconfig.App{

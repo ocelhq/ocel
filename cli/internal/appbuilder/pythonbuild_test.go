@@ -62,6 +62,6 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 
 	entry := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "functions", "index.func", "main.py")
 	if _, err := os.Stat(entry); err != nil {
-		t.Fatalf("the build carried no module for the function to boot: %v", err)
+		t.Fatalf("the build produced no module for the function to boot: %v", err)
 	}
 }

@@ -130,7 +130,7 @@ func TestDeclareEnv(t *testing.T) {
 		}
 		slices.Sort(folders)
 		if want := []string{"/admin", "/web"}; !slices.Equal(folders, want) {
-			t.Fatalf("folders = %v, want both declarations' folders held", folders)
+			t.Fatalf("folders = %v, want both declarations' folders listed", folders)
 		}
 		if err := s.CheckEnv(context.Background()); err != nil {
 			t.Fatalf("CheckEnv = %v, want nil", err)
@@ -156,7 +156,7 @@ func TestCheckEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a required key the values do not hold", func(t *testing.T) {
+	t.Run("refuses a required key the values do not contain", func(t *testing.T) {
 		t.Parallel()
 		s, url := serveValues(t, map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
 
@@ -216,11 +216,11 @@ func TestCheckEnv(t *testing.T) {
 		}
 
 		if err := s.CheckEnv(ctx); err != nil {
-			t.Fatalf("CheckEnv = %v, want nil: the file holds a value for every folder the declaration names", err)
+			t.Fatalf("CheckEnv = %v, want nil: the file has a value for every folder the declaration names", err)
 		}
 	})
 
-	t.Run("states presence for a live key it holds no value for", func(t *testing.T) {
+	t.Run("states presence for a live key it has no value for", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		s, url := serveValues(t, map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
@@ -339,7 +339,7 @@ func TestResetManifest(t *testing.T) {
 func TestScopedFolders(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries every folder every declaration names", func(t *testing.T) {
+	t.Run("lists every folder every declaration names", func(t *testing.T) {
 		t.Parallel()
 		s, url := serveValues(t, map[string]string{}, envgate.Scope{})
 

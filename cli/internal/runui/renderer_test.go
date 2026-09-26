@@ -146,7 +146,7 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 	}
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 {
-		t.Fatalf("live region = %q, want the unit's row still standing after a notice landed", rows)
+		t.Fatalf("live region = %q, want the unit's row still in place after a notice landed", rows)
 	}
 	for _, row := range rows {
 		if strings.Contains(row, notice) {
@@ -445,7 +445,7 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	}
 }
 
-func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
+func TestChildStageStaysUnderItsParentUntilTheParentEnds(t *testing.T) {
 	t.Parallel()
 	s, out := drivenLiveStream(t)
 	r := s.r
@@ -465,7 +465,7 @@ func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 
 	s.Emit(spanEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
-		t.Fatal("want the finished child held in the live region under its still-running parent")
+		t.Fatal("want the finished child kept in the live region under its still-running parent")
 	}
 	if rows := liveRegion(t, s, out); len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") {
 		t.Fatalf("live region = %q, want the unit still running on its own row once the child finished", rows)
@@ -508,7 +508,7 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 				Log: &progressv1.LogEvent{StageId: phase, Message: "@ updating....."},
 			}}))
 			if strings.Contains(out.String(), "@ updating.....") {
-				t.Fatalf("output = %q, want the line held in its block until the phase completes", out.String())
+				t.Fatalf("output = %q, want the line kept in its block until the phase completes", out.String())
 			}
 
 			s.Emit(spanEvent(phase, tc.failed, time.Second))

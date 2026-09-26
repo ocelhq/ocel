@@ -44,7 +44,7 @@ func TestIdentityBlock(t *testing.T) {
 				"vps  deploy@srv1.example.com\n",
 		},
 		{
-			name: "an unnamed project leaves the tier standing alone",
+			name: "an unnamed project leaves the tier alone on its line",
 			ev: &streamv1.IdentityEvent{
 				Tier:   environmentv1.Tier_TIER_PRODUCTION,
 				Origin: &streamv1.Party{Vendor: "aws", Account: "123456789012", Location: "us-east-1"},
@@ -75,7 +75,7 @@ func TestIdentityBlock(t *testing.T) {
 		lines := IdentityBlock(Presentation{Color: true}, awsAndCloudflare)
 		painted := strings.Join(lines, "\n")
 		if !strings.Contains(painted, "\x1b[") {
-			t.Fatalf("coloured block carries no escapes:\n%q", painted)
+			t.Fatalf("coloured block contains no escapes:\n%q", painted)
 		}
 		for _, want := range []string{"123456789012", "deploy", "us-east-1", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"} {
 			if !strings.Contains(painted, want) {
@@ -92,7 +92,7 @@ func TestIdentityBlock(t *testing.T) {
 
 		plain := strings.Join(IdentityBlock(Presentation{}, awsAndCloudflare), "\n")
 		if strings.Contains(plain, "\x1b") {
-			t.Errorf("uncoloured block carries escapes:\n%q", plain)
+			t.Errorf("uncoloured block contains escapes:\n%q", plain)
 		}
 	})
 }

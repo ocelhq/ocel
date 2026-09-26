@@ -54,12 +54,12 @@ func detectFramework(dir string) (string, error) {
 		return appbuild.FrameworkNode, nil
 	case 0:
 		return "", fmt.Errorf(
-			"nothing in %s says what this app is built with: it holds no %s, %s, %s, %s or %s, so set \"framework\" to one of %s",
+			"nothing in %s says what this app is built with: it contains no %s, %s, %s, %s or %s, so set \"framework\" to one of %s",
 			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(appbuild.Frameworks()),
 		)
 	default:
 		return "", fmt.Errorf(
-			"%s holds the manifests of %s at once, and one app is built one way: set \"framework\" to the one this app is",
+			"%s contains the manifests of %s at once, and one app is built one way: set \"framework\" to the one this app is",
 			dir, quoted(named),
 		)
 	}

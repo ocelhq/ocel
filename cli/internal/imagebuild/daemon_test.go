@@ -39,7 +39,7 @@ func (a *asked) read(t *testing.T) (string, string, http.Header) {
 	return a.method, a.path, a.headers
 }
 
-func standIn(t *testing.T, answer func(http.ResponseWriter, *http.Request)) *asked {
+func fakeDaemon(t *testing.T, answer func(http.ResponseWriter, *http.Request)) *asked {
 	t.Helper()
 	socket := filepath.Join(t.TempDir(), "docker.sock")
 	listener, err := net.Listen("unix", socket)
@@ -94,7 +94,7 @@ func (h *handover) Addr() net.Addr { return &net.UnixAddr{Name: "docker", Net: "
 
 func servesBuilder(t *testing.T, workers ...*types.WorkerRecord) *asked {
 	t.Helper()
-	return standIn(t, func(w http.ResponseWriter, _ *http.Request) {
+	return fakeDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
 		conn, _, err := w.(http.Hijacker).Hijack()
 		if err != nil {
 			return
@@ -141,7 +141,7 @@ func TestTheBuilderIsReachedByUpgradingTheDaemonSocketRatherThanDiallingIt(t *te
 		t.Errorf("the request upgrades to %q, want %q, so the daemon answers raw gRPC rather than HTTP", got, "h2c")
 	}
 	if got := headers.Get("Connection"); got != "Upgrade" {
-		t.Errorf("the request carries Connection: %q, want Upgrade, and the daemon never hands the connection over", got)
+		t.Errorf("the request sends Connection: %q, want Upgrade, and the daemon never hands the connection over", got)
 	}
 }
 
@@ -223,7 +223,7 @@ func TestADaemonWithNoWorkerAtAllIsRefusedAtPreflight(t *testing.T) {
 }
 
 func TestADaemonThatServesNoBuilderIsRefusedWithTheAnswerItGave(t *testing.T) {
-	standIn(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	fakeDaemon(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 
 	err := imagebuild.Reachable(context.Background())
 	if err == nil {

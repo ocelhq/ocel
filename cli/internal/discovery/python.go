@@ -52,11 +52,11 @@ func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, 
 }
 
 func pythonRunRoot(configDir, dir string) (string, error) {
-	runRoot, _, err := walkUp(configDir, dir, holdsAPythonProject)
+	runRoot, _, err := walkUp(configDir, dir, hasAPythonProject)
 	return runRoot, err
 }
 
-func holdsAPythonProject(at string) bool {
+func hasAPythonProject(at string) bool {
 	for _, name := range pythonProjectFiles {
 		if info, err := os.Stat(filepath.Join(at, name)); err == nil && info.Mode().IsRegular() {
 			return true

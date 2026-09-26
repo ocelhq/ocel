@@ -64,7 +64,7 @@ func TestCompileWritesAnExecutableBootstrapForTheArchitectureItWasAsked(t *testi
 				t.Fatalf("the compile wrote no binary named after the app: %v", err)
 			}
 			if info.Mode()&0o111 == 0 {
-				t.Errorf("the binary is mode %v, want the execute bit — the zip carries the mode and the runtime execs it", info.Mode())
+				t.Errorf("the binary is mode %v, want the execute bit — the zip records the mode and the runtime execs it", info.Mode())
 			}
 
 			read, err := elf.Open(binary)
@@ -131,7 +131,7 @@ func TestCompileBuildsTheAppsOwnModuleWhateverWorkspaceEnclosesIt(t *testing.T) 
 
 	_, funcDir := compiled(t, pkg, "x86_64")
 	if _, err := os.Stat(filepath.Join(funcDir, "web")); err != nil {
-		t.Fatalf("the compile wrote no binary: a go workspace above the app names modules a release never carries, and the app's own go.mod is what is built: %v", err)
+		t.Fatalf("the compile wrote no binary: a go workspace above the app names modules a release never includes, and the app's own go.mod is what is built: %v", err)
 	}
 }
 

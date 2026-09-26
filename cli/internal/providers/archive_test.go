@@ -29,19 +29,19 @@ func tarball(t *testing.T, members ...entry) string {
 	var raw bytes.Buffer
 	compressed := gzip.NewWriter(&raw)
 	writer := tar.NewWriter(compressed)
-	for _, held := range members {
-		header := &tar.Header{Name: held.name, Typeflag: held.kind, Mode: int64(held.mode)}
-		if held.kind == tar.TypeSymlink {
-			header.Linkname = held.body
+	for _, member := range members {
+		header := &tar.Header{Name: member.name, Typeflag: member.kind, Mode: int64(member.mode)}
+		if member.kind == tar.TypeSymlink {
+			header.Linkname = member.body
 		} else {
-			header.Size = int64(len(held.body))
+			header.Size = int64(len(member.body))
 		}
 		if err := writer.WriteHeader(header); err != nil {
-			t.Fatalf("write the header for %q: %v", held.name, err)
+			t.Fatalf("write the header for %q: %v", member.name, err)
 		}
-		if held.kind == tar.TypeReg {
-			if _, err := writer.Write([]byte(held.body)); err != nil {
-				t.Fatalf("write the body of %q: %v", held.name, err)
+		if member.kind == tar.TypeReg {
+			if _, err := writer.Write([]byte(member.body)); err != nil {
+				t.Fatalf("write the body of %q: %v", member.name, err)
 			}
 		}
 	}
@@ -64,15 +64,15 @@ func zipped(t *testing.T, members ...entry) string {
 
 	var raw bytes.Buffer
 	writer := zip.NewWriter(&raw)
-	for _, held := range members {
-		header := &zip.FileHeader{Name: held.name, Method: zip.Deflate}
-		header.SetMode(held.mode)
+	for _, member := range members {
+		header := &zip.FileHeader{Name: member.name, Method: zip.Deflate}
+		header.SetMode(member.mode)
 		entry, err := writer.CreateHeader(header)
 		if err != nil {
-			t.Fatalf("write the header for %q: %v", held.name, err)
+			t.Fatalf("write the header for %q: %v", member.name, err)
 		}
-		if _, err := entry.Write([]byte(held.body)); err != nil {
-			t.Fatalf("write the body of %q: %v", held.name, err)
+		if _, err := entry.Write([]byte(member.body)); err != nil {
+			t.Fatalf("write the body of %q: %v", member.name, err)
 		}
 	}
 	if err := writer.Close(); err != nil {
@@ -190,7 +190,7 @@ func TestASymlinkMemberOfAZipBecomesARegularFileNeverALink(t *testing.T) {
 		t.Errorf("the member is a symlink to %q, want a zip never able to plant a link", "/etc/passwd")
 	}
 	if got := readUnpacked(t, into, "ocel-provider-vps.exe"); got != "/etc/passwd" {
-		t.Errorf("the member holds %q, want the link target kept as the file's own content", got)
+		t.Errorf("the member contains %q, want the link target kept as the file's own content", got)
 	}
 }
 

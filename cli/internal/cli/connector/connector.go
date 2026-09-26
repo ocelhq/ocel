@@ -37,14 +37,14 @@ type options struct {
 }
 
 func (o options) grants() []string {
-	held := []string{connectorkit.CapabilityEnvVarsRead}
+	capabilities := []string{connectorkit.CapabilityEnvVarsRead}
 	if o.write {
-		held = append(held, connectorkit.CapabilityEnvVarsWrite)
+		capabilities = append(capabilities, connectorkit.CapabilityEnvVarsWrite)
 	}
 	if o.reveal {
-		held = append(held, connectorkit.CapabilityEnvVarsReveal)
+		capabilities = append(capabilities, connectorkit.CapabilityEnvVarsReveal)
 	}
-	return held
+	return capabilities
 }
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
@@ -101,7 +101,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 	var opts options
 	cmd := &cobra.Command{
 		Use:     "status",
-		Short:   "Say what the console holds for the connectors of this organization",
+		Short:   "Say what the console has registered for the connectors of this organization",
 		Example: "  $ ocel connector status\n  $ ocel connector status --config ocel.vps.json",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -159,28 +159,28 @@ func vendored(cfg *projectconfig.Config) (string, error) {
 	return desc.ID, nil
 }
 
-func printed(out io.Writer, held consoleconnector.Connector, live consoleconnector.Liveness) {
-	fmt.Fprintf(out, "%s\n", bold(held.Target))
-	fmt.Fprintf(out, "  compute %s over %s, %s\n", named(held.Compute, "unset"), held.Reach, live)
-	fmt.Fprintf(out, "  url %s\n", named(held.URL, "none"))
-	fmt.Fprintf(out, "  can %s\n", listed(held.Capabilities))
-	if held.LastDenied != nil {
-		fmt.Fprintf(out, "  last refused %s at %s: %s\n", held.LastDenied.Verb, held.LastDenied.At, held.LastDenied.Message)
+func printed(out io.Writer, registered consoleconnector.Connector, live consoleconnector.Liveness) {
+	fmt.Fprintf(out, "%s\n", bold(registered.Target))
+	fmt.Fprintf(out, "  compute %s over %s, %s\n", named(registered.Compute, "unset"), registered.Reach, live)
+	fmt.Fprintf(out, "  url %s\n", named(registered.URL, "none"))
+	fmt.Fprintf(out, "  can %s\n", listed(registered.Capabilities))
+	if registered.LastDenied != nil {
+		fmt.Fprintf(out, "  last refused %s at %s: %s\n", registered.LastDenied.Verb, registered.LastDenied.At, registered.LastDenied.Message)
 	}
 }
 
-func named(held *string, absent string) string {
-	if held == nil || *held == "" {
+func named(value *string, absent string) string {
+	if value == nil || *value == "" {
 		return absent
 	}
-	return *held
+	return *value
 }
 
-func listed(held []string) string {
-	if len(held) == 0 {
+func listed(values []string) string {
+	if len(values) == 0 {
 		return "nothing yet"
 	}
-	written := slices.Clone(held)
+	written := slices.Clone(values)
 	slices.Sort(written)
 	return strings.Join(written, ", ")
 }

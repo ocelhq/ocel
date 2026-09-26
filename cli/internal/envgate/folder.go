@@ -42,7 +42,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	}
 
 	g.mu.Lock()
-	held := g.resolvedCells()
+	present := g.resolvedCells()
 	definitions := slices.Clone(g.definitions)
 	g.mu.Unlock()
 
@@ -53,7 +53,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	hops := make([]hopped, 0, len(definitions))
 	var wanted []Cell
 	for _, definition := range definitions {
-		cell, ok := hop(definition, binding, held)
+		cell, ok := hop(definition, binding, present)
 		if !ok {
 			continue
 		}
@@ -70,7 +70,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 
 	resolved := make(map[string]Resolved, len(hops))
 	for _, h := range hops {
-		from := Resolved{Folder: h.cell.Folder, Version: held[h.cell]}
+		from := Resolved{Folder: h.cell.Folder, Version: present[h.cell]}
 		if !h.live {
 			if !plaintext[h.cell].found {
 				continue
@@ -82,21 +82,21 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	return resolved, nil
 }
 
-func hop(definition *resourcesv1.VariableDefinition, binding string, held heldCells) (Cell, bool) {
+func hop(definition *resourcesv1.VariableDefinition, binding string, present presentCells) (Cell, bool) {
 	if scope := definition.GetFolders(); len(scope) > 0 {
 		if binding == "" || !slices.Contains(scope, binding) {
 			return Cell{}, false
 		}
 		cell := Cell{Key: definition.GetKey(), Folder: binding}
-		return cell, held.has(cell)
+		return cell, present.has(cell)
 	}
 	if binding != "" {
-		if cell := (Cell{Key: definition.GetKey(), Folder: binding}); held.has(cell) {
+		if cell := (Cell{Key: definition.GetKey(), Folder: binding}); present.has(cell) {
 			return cell, true
 		}
 	}
 	cell := Cell{Key: definition.GetKey()}
-	return cell, held.has(cell)
+	return cell, present.has(cell)
 }
 
 func (g *Gate) binding(app string) (string, bool) {
@@ -170,7 +170,7 @@ func CheckWritable(definitions []*resourcesv1.VariableDefinition, key, folder st
 			return fmt.Errorf("%s is scoped to %s, so it has no value at the project root — nothing would read one. Set it with --folder %s instead%s",
 				key, strings.Join(scope, " and "), scope[0], descriptionLine(definition))
 		}
-		return fmt.Errorf("%s is scoped to %s, so %s holds no value for it. Set it in one of the folders it names, or widen the scope where it is declared%s",
+		return fmt.Errorf("%s is scoped to %s, so %s has no value for it. Set it in one of the folders it names, or widen the scope where it is declared%s",
 			key, strings.Join(scope, " and "), folder, descriptionLine(definition))
 	}
 	return fmt.Errorf("no app in this project declares %s, so a value stored under it would be delivered to nothing: "+

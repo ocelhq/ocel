@@ -144,7 +144,7 @@ func TestResolve(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the version of the cell each key resolved from", func(t *testing.T) {
+	t.Run("reports the version of the cell each key resolved from", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.setAt("KEY", "", "root", 3)
@@ -164,7 +164,7 @@ func TestResolve(t *testing.T) {
 		}
 	})
 
-	t.Run("a live key carries its cell's version even with no value", func(t *testing.T) {
+	t.Run("a live key reports its cell's version even with no value", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.setAt("SESSION_SECRET", "", "sk_live_do_not_leak", 5)

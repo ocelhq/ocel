@@ -151,14 +151,14 @@ func dockerfileOptions(root, dockerfile string) (client.SolveOpt, error) {
 	if err != nil {
 		return client.SolveOpt{}, err
 	}
-	holding, err := fsutil.NewFS(filepath.Dir(dockerfile))
+	dockerfileDir, err := fsutil.NewFS(filepath.Dir(dockerfile))
 	if err != nil {
 		return client.SolveOpt{}, fmt.Errorf("read %s as the directory %s is in: %w", filepath.Dir(dockerfile), dockerfile, err)
 	}
 	return client.SolveOpt{
 		Frontend:      dockerfileFrontend,
 		FrontendAttrs: map[string]string{filenameAttr: filepath.Base(dockerfile)},
-		LocalMounts:   map[string]fsutil.FS{contextMount: source, frontendMount: holding},
+		LocalMounts:   map[string]fsutil.FS{contextMount: source, frontendMount: dockerfileDir},
 		Exports:       exports(),
 	}, nil
 }

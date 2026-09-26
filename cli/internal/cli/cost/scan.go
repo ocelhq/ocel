@@ -39,17 +39,17 @@ const (
 	defaultProfile = costv1.Profile_PROFILE_MODERATE
 	profilePrefix  = "PROFILE_"
 
-	unbuiltAssumption = "nothing is built, so each serverless app is priced as one function; run `ocel build` first to price the functions the build stands up"
+	unbuiltAssumption = "nothing is built, so each serverless app is priced as one function; run `ocel build` first to price the functions the build produces"
 )
 
 func profiles() []costv1.Profile {
-	held := make([]costv1.Profile, 0, len(costv1.Profile_name)-1)
+	all := make([]costv1.Profile, 0, len(costv1.Profile_name)-1)
 	for _, value := range slices.Sorted(maps.Keys(costv1.Profile_name)) {
 		if profile := costv1.Profile(value); profile != costv1.Profile_PROFILE_UNSPECIFIED {
-			held = append(held, profile)
+			all = append(all, profile)
 		}
 	}
-	return held
+	return all
 }
 
 func profileName(profile costv1.Profile) string {
@@ -113,10 +113,10 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 			return err
 		}
 		estimates := make(map[costv1.Profile]*costv1.Estimate, len(profiles()))
-		for _, held := range profiles() {
+		for _, profile := range profiles() {
 			estimate, err := pricer.Price(ctx, &costv1.PriceRequest{
 				Resources: set,
-				Usage:     &costv1.Usage{Profile: held, Resources: overrides},
+				Usage:     &costv1.Usage{Profile: profile, Resources: overrides},
 			})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -124,7 +124,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 				}
 				return err
 			}
-			estimates[held] = estimate
+			estimates[profile] = estimate
 		}
 		if deps.Presentation(stdout).Format == runui.FormatJSON {
 			return writeJSON(stdout, set, estimates[profile], assumptions)
@@ -155,9 +155,9 @@ func profileOf(name string) (costv1.Profile, error) {
 	if name == "" {
 		return defaultProfile, nil
 	}
-	for _, held := range profiles() {
-		if profileName(held) == name {
-			return held, nil
+	for _, profile := range profiles() {
+		if profileName(profile) == name {
+			return profile, nil
 		}
 	}
 	return costv1.Profile_PROFILE_UNSPECIFIED, fmt.Errorf("the usage profile is one of %s, not %q", strings.Join(profileNames(), ", "), name)
@@ -177,11 +177,11 @@ func usageFile(path string) (map[string]*structpb.Struct, error) {
 	}
 	overrides := make(map[string]*structpb.Struct, len(byResource))
 	for id, quantities := range byResource {
-		held, err := structpb.NewStruct(quantities)
+		usage, err := structpb.NewStruct(quantities)
 		if err != nil {
 			return nil, fmt.Errorf("the usage file %s sets %s to something that is not a quantity: %w", path, id, err)
 		}
-		overrides[id] = held
+		overrides[id] = usage
 	}
 	return overrides, nil
 }

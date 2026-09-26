@@ -66,11 +66,11 @@ func (r inlineRun) deploy(t *testing.T, opts deployOptions) (string, error) {
 
 func records(t *testing.T) []clitest.FakeBindingRecord {
 	t.Helper()
-	held, err := clitest.FakeBindingRecords()
+	published, err := clitest.FakeBindingRecords()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return held
+	return published
 }
 
 func TestDeployBindsAnInlineRecord(t *testing.T) {
@@ -85,19 +85,19 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if !strings.Contains(out, "BINDING bound=db--main name=main record=ocel:postgres.main owner=ocel-config") {
 			t.Errorf("output = %q, want main bound to the record ocel keeps for it", out)
 		}
-		held := records(t)
-		if len(held) != 1 || held[0].Name != "ocel:postgres.main" || held[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
-			t.Fatalf("records = %+v, want the one inline record in production", held)
+		published := records(t)
+		if len(published) != 1 || published[0].Name != "ocel:postgres.main" || published[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
+			t.Fatalf("records = %+v, want the one inline record in production", published)
 		}
-		if !strings.Contains(held[0].Wire, "s3cret-pw") || !strings.Contains(held[0].Wire, `"source":"ocel.config.ts"`) {
-			t.Errorf("record = %s, want the url whole and the config named as its source", held[0].Wire)
+		if !strings.Contains(published[0].Wire, "s3cret-pw") || !strings.Contains(published[0].Wire, `"source":"ocel.config.ts"`) {
+			t.Errorf("record = %s, want the url whole and the config named as its source", published[0].Wire)
 		}
 		sent, err := os.ReadFile(run.journal)
 		if err != nil {
 			t.Fatalf("read the deploy request: %v", err)
 		}
 		if strings.Contains(string(sent), "s3cret-pw") {
-			t.Errorf("the deploy request carries the database password: %s", sent)
+			t.Errorf("the deploy request contains the database password: %s", sent)
 		}
 		if strings.Contains(out, "s3cret-pw") {
 			t.Errorf("the deploy printed the database password: %s", out)
@@ -114,8 +114,8 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if said := err.Error() + out; !strings.Contains(said, "ocel env set MAIN_DATABASE_URL=<VALUE>") {
 			t.Errorf("refusal = %q, want the command that sets it", said)
 		}
-		if held := records(t); len(held) != 0 {
-			t.Errorf("records = %+v, want nothing kept for a refused deploy", held)
+		if published := records(t); len(published) != 0 {
+			t.Errorf("records = %+v, want nothing kept for a refused deploy", published)
 		}
 	})
 
@@ -136,8 +136,8 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if _, statErr := os.Stat(run.journal); statErr == nil {
 			t.Error("the deploy reached the provider after the check refused it")
 		}
-		if held := records(t); len(held) != 0 {
-			t.Errorf("records = %+v, want nothing kept", held)
+		if published := records(t); len(published) != 0 {
+			t.Errorf("records = %+v, want nothing kept", published)
 		}
 	})
 
@@ -165,8 +165,8 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if out, err := run.deploy(t, deployOptions{dry: true}); err != nil {
 			t.Fatalf("dry deploy: %v\n%s", err, out)
 		}
-		if held := records(t); len(held) != 0 {
-			t.Errorf("records = %+v, want a dry run to write nothing", held)
+		if published := records(t); len(published) != 0 {
+			t.Errorf("records = %+v, want a dry run to write nothing", published)
 		}
 	})
 
@@ -181,8 +181,8 @@ func TestDeployBindsAnInlineRecord(t *testing.T) {
 		if out, err := run.deploy(t, deployOptions{}); err != nil {
 			t.Fatalf("second deploy: %v\n%s", err, out)
 		}
-		if held := records(t); len(held) != 0 {
-			t.Errorf("records = %+v, want the record no binding keeps removed", held)
+		if published := records(t); len(published) != 0 {
+			t.Errorf("records = %+v, want the record no binding keeps removed", published)
 		}
 	})
 }

@@ -283,7 +283,7 @@ func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
 		}
 	}
 	if spanID == "" {
-		t.Fatalf("log = %s, want the log record to carry a span_id", log)
+		t.Fatalf("log = %s, want the log record to include a span_id", log)
 	}
 
 	trace := readTrace(t, run)

@@ -25,39 +25,39 @@ func preflightPreview(ctx context.Context, ui *runui.Session, runner *providercl
 	return bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
-type standing struct {
+type preflightFacts struct {
 	knownSlugs     []string
 	compute        string
 	containerArchs map[string]string
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (standing, error) {
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (preflightFacts, error) {
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Name())
 	if err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	if err := appregistry.RequireSecret(cfg); err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	if err := deps.RequireImageBuilder(ctx, ui, cfg, resp.GetContainerArchs()); err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
-	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
-		return standing{}, err
+	if err := ensureBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PREVIEW, out, in); err != nil {
+		return preflightFacts{}, err
 	}
 	site, err := requirePreviewDomain(cfg, resp.GetPreviewWildcard(), resp.GetIdentity(), pointer, ui)
 	if err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
-	return standing{
+	return preflightFacts{
 		knownSlugs:     resp.GetKnownSlugs(),
 		compute:        compute,
 		containerArchs: resp.GetContainerArchs(),
@@ -67,32 +67,32 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) (standing, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) (preflightFacts, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Name())
 	if err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	if err := appregistry.RequireSecret(cfg); err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	if err := deps.RequireImageBuilder(ctx, ui, cfg, resp.GetContainerArchs()); err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
-		return standing{}, err
+		return preflightFacts{}, err
 	}
-	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
-		return standing{}, err
+	if err := ensureBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
+		return preflightFacts{}, err
 	}
-	return standing{knownSlugs: resp.GetKnownSlugs(), compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
+	return preflightFacts{knownSlugs: resp.GetKnownSlugs(), compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
 }
 
-func settleBootstrap(ctx context.Context, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+func ensureBootstrap(ctx context.Context, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
 	if ui.Dry() {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}
@@ -119,7 +119,7 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, w
 	var b strings.Builder
 	for _, claim := range claims {
 		if cause := claim.GetCause(); cause != "" {
-			warn(fmt.Sprintf("Could not read who serves %s: %s\n  → this deploy carries on; if another project holds that hostname, this run takes it over",
+			warn(fmt.Sprintf("Could not read who serves %s: %s\n  → this deploy continues; if another project owns that hostname, this run takes it over",
 				claim.GetHostname(), cause))
 			continue
 		}
@@ -129,7 +129,7 @@ func refuseClaimedDomains(claims []*contractv1.DomainClaim, configName string, w
 		if b.Len() == 0 {
 			b.WriteString("another project already serves a hostname this project declares:")
 		}
-		fmt.Fprintf(&b, "\n  ✗ %s is held by %s", claim.GetHostname(), claim.GetOwner())
+		fmt.Fprintf(&b, "\n  ✗ %s is owned by %s", claim.GetHostname(), claim.GetOwner())
 	}
 	if b.Len() == 0 {
 		return nil

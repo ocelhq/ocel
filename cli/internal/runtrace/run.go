@@ -17,9 +17,6 @@ import (
 
 type ctxKey struct{}
 
-// FromContext returns the Run stored on ctx by Start, or nil if ctx carries
-// none — callers several layers below Start (subprocess wiring, in
-// particular) reach the run this way instead of taking it as a parameter.
 func FromContext(ctx context.Context) *Run {
 	r, _ := ctx.Value(ctxKey{}).(*Run)
 	return r

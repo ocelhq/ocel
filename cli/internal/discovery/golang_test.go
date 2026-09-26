@@ -164,6 +164,6 @@ func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {
 		t.Fatal("Run succeeded on a root that does not compile, want error")
 	}
 	if !strings.Contains(err.Error(), "undeclared") {
-		t.Errorf("error = %q, want it to carry the compile error", err)
+		t.Errorf("error = %q, want it to include the compile error", err)
 	}
 }

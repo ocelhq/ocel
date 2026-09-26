@@ -72,7 +72,7 @@ func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T)
 	}
 	var failed *docker.ExecFailed
 	if _, err := engine.Exec(ctx, running.ID, "false"); !errors.As(err, &failed) || failed.Code != 1 {
-		t.Fatalf("Exec(false) = %v, want an ExecFailed carrying exit code 1", err)
+		t.Fatalf("Exec(false) = %v, want an ExecFailed with exit code 1", err)
 	}
 
 	if _, err := engine.Exec(ctx, running.ID, "touch", "/var/lib/postgresql/data/kept"); err != nil {

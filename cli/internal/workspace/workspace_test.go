@@ -54,7 +54,7 @@ func TestTheWorkspaceAnAppIsAMemberOfIsWhatTheImageIsBuiltFrom(t *testing.T) {
 			manager: workspace.Npm,
 		},
 		{
-			name: "an npm-shrinkwrap stands in for the lockfile",
+			name: "an npm-shrinkwrap counts as the lockfile",
 			files: map[string]string{
 				"package.json":          `{"name":"root","workspaces":["apps/*"]}`,
 				"npm-shrinkwrap.json":   `{"lockfileVersion":3}`,
@@ -99,7 +99,7 @@ func TestTheWorkspaceAnAppIsAMemberOfIsWhatTheImageIsBuiltFrom(t *testing.T) {
 			manager: workspace.Bun,
 		},
 		{
-			name: "packageManager settles a root carrying two lockfiles",
+			name: "packageManager picks the manager for a root containing two lockfiles",
 			files: map[string]string{
 				"package.json":          `{"name":"root","workspaces":["apps/*"],"packageManager":"yarn@4.5.0"}`,
 				"yarn.lock":             "__metadata:\n  version: 8\n",
@@ -433,7 +433,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 		}
 	})
 
-	t.Run("a directory holding no lockfile for the app's workspace: dependency is refused", func(t *testing.T) {
+	t.Run("a directory containing no lockfile for the app's workspace: dependency is refused", func(t *testing.T) {
 		dir := t.TempDir()
 		write(t, dir, map[string]string{
 			"repo/pnpm-workspace.yaml":   "packages:\n  - apps/*\n",
@@ -444,7 +444,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 
 		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(dir)
 		if err == nil {
-			t.Fatal("Rebase() took a context holding no lockfile for the app's workspace: dependency, so the install inside the image resolves nothing")
+			t.Fatal("Rebase() took a context containing no lockfile for the app's workspace: dependency, so the install inside the image resolves nothing")
 		}
 		if !strings.Contains(err.Error(), "workspace:") || !strings.Contains(err.Error(), pnpmLockName) {
 			t.Errorf("Rebase() = %v, and the reader is never told what the context is missing", err)
@@ -474,7 +474,7 @@ func TestABuildContextIsTakenOnlyWhereTheInstallStillHasEverythingItReads(t *tes
 
 		_, err := located(t, filepath.Join(dir, "repo", "apps", "web")).Rebase(filepath.Join(dir, "repo", "apps"))
 		if err == nil {
-			t.Fatal("Rebase() took a context below the workspace root, so the install would read a lockfile the context does not carry")
+			t.Fatal("Rebase() took a context below the workspace root, so the install would read a lockfile the context does not contain")
 		}
 	})
 }

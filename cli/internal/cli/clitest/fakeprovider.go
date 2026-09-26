@@ -437,8 +437,8 @@ func consumeFakeBindings(m *contractv1.Manifest, env *environmentv1.Environment)
 		id := r.GetResource().GetName()
 		if r.GetBinding() != "" {
 			line := "BINDING bound=" + r.GetLogicalName() + " name=" + id
-			if held := storedFakeBinding(env, r.GetBinding()); held != nil {
-				line += " record=" + held.Name + " owner=" + held.Owner
+			if stored := storedFakeBinding(env, r.GetBinding()); stored != nil {
+				line += " record=" + stored.Name + " owner=" + stored.Owner
 			}
 			out = append(out, line)
 			continue
@@ -455,9 +455,9 @@ func storedFakeBinding(env *environmentv1.Environment, name string) *fakeBinding
 	if err != nil {
 		return nil
 	}
-	for _, held := range store {
-		if held.Tier == env.GetTier() && held.Name == name && (held.Environment == "" || held.Environment == env.GetIdentity()) {
-			return held
+	for _, binding := range store {
+		if binding.Tier == env.GetTier() && binding.Name == name && (binding.Environment == "" || binding.Environment == env.GetIdentity()) {
+			return binding
 		}
 	}
 	return nil
@@ -792,7 +792,7 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 						Kind:   "AWS::SSM::Parameter",
 						Name:   "/ocel/pulumi/passphrase",
 						Action: planv1.Change_ACTION_KEEP,
-						Reason: "the production bootstrap still stands and its Pulumi state is encrypted under it",
+						Reason: "the production bootstrap is still provisioned and its Pulumi state is encrypted under it",
 					},
 				},
 			},
@@ -1144,7 +1144,7 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 	}
 	if served := os.Getenv(FakeServedPreviewsEnvVar); served != "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"*.%s still carries live preview pointers for %s — run `ocel preview rm` or `ocel destroy preview` in each of them first",
+			"*.%s still has live preview pointers for %s — run `ocel preview rm` or `ocel destroy preview` in each of them first",
 			base, served,
 		))
 	}
@@ -1156,7 +1156,7 @@ func (s *deployFakeProviderServer) PlanRemovePreviewWildcard(ctx context.Context
 				Kind:   "preview entry worker",
 				Name:   "*." + base,
 				Action: planv1.Change_ACTION_DELETE,
-				Reason: "the shared entry worker holding this wildcard",
+				Reason: "the shared entry worker serving this wildcard",
 			},
 			{
 				Kind:   "DNS record",
@@ -1599,19 +1599,19 @@ func validateFixtureContainers(m *contractv1.Manifest) error {
 			return fmt.Errorf("container names the app %q, which this manifest says runs on %q", app, compute[app])
 		}
 		if served[app] {
-			return fmt.Errorf("app %s carries two containers, and an app is served by one process", app)
+			return fmt.Errorf("app %s declares two containers, and an app is served by one process", app)
 		}
 		served[app] = true
 		if !pinnedImage.MatchString(c.GetImage()) {
-			return fmt.Errorf("container for %s carries image %q, and a release pins one repository at one digest", app, c.GetImage())
+			return fmt.Errorf("container for %s names image %q, and a release pins one repository at one digest", app, c.GetImage())
 		}
 		if !strings.HasPrefix(c.GetHealthCheckPath(), "/") {
-			return fmt.Errorf("container for %s carries health_check_path %q, and a provider is never left to resolve one of its own", app, c.GetHealthCheckPath())
+			return fmt.Errorf("container for %s sets health_check_path %q, and a provider is never left to resolve one of its own", app, c.GetHealthCheckPath())
 		}
 	}
 	for app, kind := range compute {
 		if kind == string(provider.ComputeContainer) && !served[app] {
-			return fmt.Errorf("app %s runs on container compute and this manifest carries no container for it", app)
+			return fmt.Errorf("app %s runs on container compute and this manifest declares no container for it", app)
 		}
 	}
 	for _, fn := range m.GetFunctions() {
@@ -1631,7 +1631,7 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 			return fmt.Errorf("app %s: %w", a.GetName(), err)
 		}
 		if !provider.KnownCompute(a.GetCompute()) {
-			return fmt.Errorf("app %s carries compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), provider.ComputeNames(provider.Computes()))
+			return fmt.Errorf("app %s declares compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), provider.ComputeNames(provider.Computes()))
 		}
 	}
 	if err := validateFixtureContainers(m); err != nil {
@@ -1640,7 +1640,7 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 	declared := map[string]bool{}
 	for _, r := range m.GetResources() {
 		if r.GetLogicalName() == "" {
-			return fmt.Errorf("resource %s carries no logical name", r.GetResource().GetType())
+			return fmt.Errorf("resource %s has no logical name", r.GetResource().GetType())
 		}
 		if _, ok := naming.BindableAs(r.GetResource().GetType()); !ok {
 			return fmt.Errorf("resource %s has type %v, which names no resource kind", r.GetLogicalName(), r.GetResource().GetType())
@@ -1655,7 +1655,7 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 			return fmt.Errorf("usage %s names a resource this manifest never declares", describeUsage(u))
 		}
 		if len(u.GetFiles()) == 0 {
-			return fmt.Errorf("usage %s carries no file provenance", describeUsage(u))
+			return fmt.Errorf("usage %s names no file provenance", describeUsage(u))
 		}
 	}
 	return nil

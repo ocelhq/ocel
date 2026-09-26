@@ -57,7 +57,7 @@ func TestResolveRefusesBothFormsOfOneBaseName(t *testing.T) {
 
 	_, err := Resolve(context.Background(), dir, "")
 	if err == nil {
-		t.Fatal("resolved a directory holding both forms")
+		t.Fatal("resolved a directory containing both forms")
 	}
 	for _, name := range []string{DefaultFileName, TSFileName} {
 		if !strings.Contains(err.Error(), name) {

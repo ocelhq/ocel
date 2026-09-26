@@ -23,7 +23,7 @@ import (
 )
 
 func TestRunRun(t *testing.T) {
-	t.Run("with no leader it stands alone, resolves, runs and tears down", func(t *testing.T) {
+	t.Run("with no leader it runs on its own, resolves, runs and tears down", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -68,7 +68,7 @@ export default { slug: "test-app" };
 				t.Fatalf("app env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 			}
 			if !strings.Contains(raw, `"postgres"`) {
-				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
+				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
 			}
 		})
 
@@ -132,7 +132,7 @@ export default { slug: "test-app" };
 			t.Fatalf("run env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 		}
 		if !strings.Contains(raw, `"postgres"`) {
-			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
+			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
 		}
 
 		cancelLeader()

@@ -279,8 +279,8 @@ func TestGroupStates(t *testing.T) {
 
 	t.Run("a value at the root completes a group read from a folder", func(t *testing.T) {
 		t.Parallel()
-		held := []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}, {Key: "GITHUB_CLIENT_SECRET", Folder: "/web"}}
-		states := envgate.GroupStates(definitions, groups, held, "/web")
+		present := []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}, {Key: "GITHUB_CLIENT_SECRET", Folder: "/web"}}
+		states := envgate.GroupStates(definitions, groups, present, "/web")
 		if len(states[0].Missing) != 0 {
 			t.Errorf("github = %+v, want nothing missing: /web inherits the root value", states[0])
 		}
@@ -323,7 +323,7 @@ func TestRefusalGathersGroupedMembersInDeclarationOrder(t *testing.T) {
 	}
 }
 
-func TestMatrixCarriesGroupsOnce(t *testing.T) {
+func TestMatrixListsGroupsOnce(t *testing.T) {
 	t.Parallel()
 
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})

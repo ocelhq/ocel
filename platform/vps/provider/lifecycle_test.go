@@ -1193,7 +1193,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 
 	rival := run.rival(t)
 	taken := rival.refused(t, "deploy", "--yes")
-	for _, want := range []string{lifecycleHostname + " is held by " + boxedge.Surface(lifecycleSlug, edge.ClassProduction), "another project already serves a hostname this project declares"} {
+	for _, want := range []string{lifecycleHostname + " is owned by " + boxedge.Surface(lifecycleSlug, edge.ClassProduction), "another project already serves a hostname this project declares"} {
 		if !strings.Contains(taken, want) {
 			t.Errorf("a second project declaring %s was refused without saying %q, and a hostname belongs to one project:\n%s", lifecycleHostname, want, taken)
 		}

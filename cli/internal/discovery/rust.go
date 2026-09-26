@@ -23,11 +23,11 @@ func (rustLauncher) Command(ctx context.Context, _ string, root Root, server Ser
 	}
 	crate, ok := workspace.PackageAt(root.Dir)
 	if !ok {
-		return nil, fmt.Errorf("discovery: %s holds no Cargo.toml naming a package to declare from", root.Dir)
+		return nil, fmt.Errorf("discovery: %s has no Cargo.toml naming a package to declare from", root.Dir)
 	}
 	bins := crate.Bins()
 	if len(bins) == 0 {
-		return nil, fmt.Errorf("discovery: %s holds %s, which builds no binary to declare from", root.Dir, crate.Name)
+		return nil, fmt.Errorf("discovery: %s contains %s, which builds no binary to declare from", root.Dir, crate.Name)
 	}
 	if len(bins) > 1 {
 		return nil, fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per crate: keep one bin target in the crate at %s", crate.Name, len(bins), root.Dir)

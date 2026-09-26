@@ -156,7 +156,7 @@ func TestRunDev(t *testing.T) {
 				t.Fatalf("app env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 			}
 			if !strings.Contains(raw, `"postgres"`) {
-				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
+				t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
 			}
 		})
 	})
@@ -249,7 +249,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Fatalf("follower env missing OCEL_RESOURCE_POSTGRES_main, got: %s", dumped)
 		}
 		if !strings.Contains(raw, `"postgres"`) {
-			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to carry a postgres link", raw)
+			t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain a postgres link", raw)
 		}
 
 		if got, ok := env[constants.AppFolderEnvName]; !ok || got != "/web" {
@@ -787,7 +787,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 		}
 	})
 
-	t.Run("`ocel run` standing alone gets the same resources", func(t *testing.T) {
+	t.Run("`ocel run` on its own gets the same resources", func(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
@@ -806,7 +806,7 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 			t.Fatalf("read env dump: %v", readErr)
 		}
 		if !strings.Contains(string(dumped), "OCEL_RESOURCE_POSTGRES_main=") {
-			t.Errorf("command env carries no OCEL_RESOURCE_POSTGRES_main: %s", dumped)
+			t.Errorf("command env has no OCEL_RESOURCE_POSTGRES_main: %s", dumped)
 		}
 		if len(engine.Stopped) != 1 {
 			t.Errorf("stopped %v, want the command's container stopped once it exited", engine.Stopped)

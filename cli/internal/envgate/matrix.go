@@ -149,17 +149,17 @@ func state(definition *resourcesv1.VariableDefinition, folder string) CellState 
 	return CellOptional
 }
 
-func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, held heldCells) []Cell {
+func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, present presentCells) []Cell {
 	var out []Cell
 	for _, definition := range definitions {
-		if !needsValue(definition, definitions, groups, binding, held) {
+		if !needsValue(definition, definitions, groups, binding, present) {
 			continue
 		}
 		scope := definition.GetFolders()
 		if len(scope) > 0 && !slices.Contains(scope, binding) {
 			continue
 		}
-		if resolves(definition, binding, held) {
+		if resolves(definition, binding, present) {
 			continue
 		}
 		unset := Cell{Key: definition.GetKey()}
@@ -171,7 +171,7 @@ func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv
 	return out
 }
 
-func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, overrides map[Cell][]Override) []string {
+func columns(definitions []*resourcesv1.VariableDefinition, apps []App, present presentCells, overrides map[Cell][]Override) []string {
 	seen := map[string]bool{}
 	for _, definition := range definitions {
 		for _, folder := range definition.GetFolders() {
@@ -183,7 +183,7 @@ func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held hel
 			seen[app.Folder] = true
 		}
 	}
-	for cell := range held {
+	for cell := range present {
 		if cell.Folder != "" {
 			seen[cell.Folder] = true
 		}

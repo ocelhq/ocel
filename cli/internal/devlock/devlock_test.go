@@ -84,7 +84,7 @@ func TestRead(t *testing.T) {
 		}
 	})
 
-	t.Run("a dev lock that carries an address and no token is malformed", func(t *testing.T) {
+	t.Run("a dev lock that has an address and no token is malformed", func(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)

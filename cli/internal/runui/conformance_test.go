@@ -157,7 +157,7 @@ func TestTheLiveScrollbackIsPlainWithoutThePhaseStartLines(t *testing.T) {
 				t.Errorf("the live projection wrote no live window at all — it should differ from plain before the window is stripped")
 			}
 			if want := withoutStartLines(plain); want == plain {
-				t.Fatalf("fixture %s commits no phase-start line in plain output — it cannot hold this projection to account", name)
+				t.Fatalf("fixture %s commits no phase-start line in plain output — it cannot test this projection", name)
 			} else if got := scrollback(live); got != want {
 				t.Errorf("what the live run leaves in the scrollback is not plain minus its phase-start lines.\n--- live ---\n%s\n--- want ---\n%s", got, want)
 			}
@@ -183,7 +183,7 @@ func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *tes
 				}
 				lines := strings.Split(strings.TrimSuffix(written, "\n"), "\n")
 				if len(lines) != i+1 {
-					t.Fatalf("after envelope %d the stream holds %d lines, want one line per envelope emitted so far", i, len(lines))
+					t.Fatalf("after envelope %d the stream has %d lines, want one line per envelope emitted so far", i, len(lines))
 				}
 
 				want, err := protojson.Marshal(normalize(ev))
@@ -311,7 +311,7 @@ func TestEveryPhaseOnTheStreamCommitsAStartLineOffTheTerminal(t *testing.T) {
 				}
 			}
 			if len(wantStarts) == 0 {
-				t.Fatalf("fixture %s declares no phase — it cannot hold this projection to account", name)
+				t.Fatalf("fixture %s declares no phase — it cannot test this projection", name)
 			}
 			for _, want := range wantStarts {
 				if !strings.Contains(plain, want+"\n") {
@@ -338,28 +338,28 @@ type blockText struct {
 }
 
 type phaseBlock struct {
-	id     string
-	unit   string
-	title  string
-	path   string
-	held   []blockText
-	lines  []string
-	closed bool
-	mark   string
+	id      string
+	unit    string
+	title   string
+	path    string
+	pending []blockText
+	lines   []string
+	closed  bool
+	mark    string
 }
 
 func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 	open := map[string]*phaseBlock{}
 	units := map[string]string{}
 	phases := map[string]map[string]bool{}
-	holder := map[string]string{}
+	blockOf := map[string]string{}
 	claim := func(stageID []byte, text string, raw bool) {
-		b := open[holder[hex.EncodeToString(stageID)]]
+		b := open[blockOf[hex.EncodeToString(stageID)]]
 		if b == nil {
 			return
 		}
 		for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-			b.held = append(b.held, blockText{text: line, raw: raw})
+			b.pending = append(b.pending, blockText{text: line, raw: raw})
 		}
 	}
 	close := func(id, mark string) {
@@ -372,7 +372,7 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 		if len(phases[b.unit]) > 1 {
 			b.path += " › " + b.title
 		}
-		for _, line := range b.held {
+		for _, line := range b.pending {
 			if line.raw && mark != failMark {
 				continue
 			}
@@ -404,10 +404,10 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 						phases[parent] = map[string]bool{}
 					}
 					phases[parent][id] = true
-					holder[id] = id
+					blockOf[id] = id
 					order = append(order, id)
 				default:
-					holder[id] = holder[parent]
+					blockOf[id] = blockOf[parent]
 				}
 			}
 		case op.GetProgress() != nil:
@@ -473,7 +473,7 @@ func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
 			_, events := fixtureStream(t, name)
 			flushed := blocksOnTheStream(events)
 			if len(flushed) == 0 {
-				t.Fatalf("fixture %s flushes no block — it cannot hold this projection to account", name)
+				t.Fatalf("fixture %s flushes no block — it cannot test this projection", name)
 			}
 
 			for _, projection := range []struct{ name, text string }{
@@ -521,7 +521,7 @@ func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *tes
 				}
 			}
 			if len(inFlight) == 0 {
-				t.Fatalf("fixture %s is interrupted with no block in flight — it cannot hold this projection to account", name)
+				t.Fatalf("fixture %s is interrupted with no block in flight — it cannot test this projection", name)
 			}
 
 			for _, projection := range []struct{ name, text string }{

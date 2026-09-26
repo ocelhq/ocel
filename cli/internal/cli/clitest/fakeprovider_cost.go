@@ -63,9 +63,9 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 	tree := &costkit.Tree{}
 	project := tree.Scope("", costkit.ScopeProject, manifest.GetSlug())
 	environment := tree.Scope(project, costkit.ScopeEnvironment, env)
-	for _, held := range manifest.GetResources() {
-		if typ, shaped := costTypes[held.GetResource().GetType()]; shaped && held.GetBinding() == "" {
-			tree.Add(environment, costVendor, typ, held.GetLogicalName(), costRegion, map[string]any{"name": held.GetLogicalName()})
+	for _, resource := range manifest.GetResources() {
+		if typ, shaped := costTypes[resource.GetResource().GetType()]; shaped && resource.GetBinding() == "" {
+			tree.Add(environment, costVendor, typ, resource.GetLogicalName(), costRegion, map[string]any{"name": resource.GetLogicalName()})
 		}
 	}
 	functions := map[string][]string{}

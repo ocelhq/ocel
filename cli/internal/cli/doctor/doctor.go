@@ -34,7 +34,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		Short: "Check that everything is good to go",
 		Long: "Check that everything is good to go.\n\n" +
 			"Reads the project, the cloud credentials it reaches with, and what production and " +
-			"preview have set up, then names the fix for anything standing in the way. " +
+			"preview have set up, then names the fix for anything in the way. " +
 			"Nothing is created or changed.",
 		Example: "  $ ocel doctor",
 		Args:    cobra.NoArgs,
@@ -142,7 +142,7 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 		return found
 	}
 
-	if needed, held := nodeCheck(ctx, cfg); held {
+	if needed, applies := nodeCheck(ctx, cfg); applies {
 		project.checks = append(project.checks, needed)
 	}
 	project.identity = join(cfg.Slug, filepath.Base(cfg.Path))
@@ -176,10 +176,10 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 	for _, tier := range tiers {
 		found.add(tierSection(tier, hosts[tier], answers))
 	}
-	if checks, held := hostCheckSection(answers); held {
+	if checks, applies := hostCheckSection(answers); applies {
 		found.add(checks)
 	}
-	if certificates, held := certificateSection(answers); held {
+	if certificates, applies := certificateSection(answers); applies {
 		found.add(certificates)
 	}
 	return found
@@ -308,8 +308,8 @@ type answers struct {
 func (a *answers) addHostChecks(checks []*contractv1.HostCheck) {
 	for _, check := range checks {
 		seen := false
-		for _, held := range a.hostChecks {
-			if held.GetSubject() == check.GetSubject() && held.GetFinding() == check.GetFinding() {
+		for _, hostCheck := range a.hostChecks {
+			if hostCheck.GetSubject() == check.GetSubject() && hostCheck.GetFinding() == check.GetFinding() {
 				seen = true
 				break
 			}
@@ -418,8 +418,8 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 func (a *answers) keep(problems []*contractv1.CredentialProblem) {
 	for _, problem := range problems {
 		seen := false
-		for _, held := range a.problems {
-			if held.GetProvider() == problem.GetProvider() && held.GetMessage() == problem.GetMessage() {
+		for _, credentialProblem := range a.problems {
+			if credentialProblem.GetProvider() == problem.GetProvider() && credentialProblem.GetMessage() == problem.GetMessage() {
 				seen = true
 				break
 			}
@@ -459,14 +459,14 @@ func credentialSections(cfg *projectconfig.Config, got *answers) []section {
 	}
 
 	identity := got.identity
-	sections := []section{holder(
+	sections := []section{credentialsSection(
 		titleOr(identity.GetProvider(), "Credentials"),
 		identityText(identity),
 		take(identity.GetProvider()),
 	)}
 	if scope := identity.GetEdgeScope(); scope != "" {
 		edgeID := string(cfg.EdgeID())
-		sections = append(sections, holder(titleOr(edgeID, "Edge"), scope, take(edgeID)))
+		sections = append(sections, credentialsSection(titleOr(edgeID, "Edge"), scope, take(edgeID)))
 	}
 
 	for i, problem := range got.problems {
@@ -494,7 +494,7 @@ func sectionIndex(sections []section, name string) int {
 	return -1
 }
 
-func holder(name, identity string, checks []check) section {
+func credentialsSection(name, identity string, checks []check) section {
 	s := section{name: name, identity: identity, checks: checks}
 	if len(checks) == 0 {
 		s.pass("credentials valid")
@@ -561,7 +561,7 @@ func tierSection(tier environmentv1.Tier, hosts []string, got *answers) section 
 	}
 
 	if status.GetUnfinished() {
-		s.fail("an apply never finished, so nothing recorded is a claim about what stands",
+		s.fail("an apply never finished, so nothing recorded is a claim about what is provisioned",
 			"run `ocel bootstrap "+name+"` to plan the work that is left and finish it")
 		return s
 	}

@@ -156,24 +156,24 @@ func (u *uploads) givesUpOn(messageID string) bool {
 func (u *uploads) serves(name string, origins []string) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	held, provisioned := u.completers[name]
-	return provisioned && slices.Equal(held.origins, origins)
+	completer, provisioned := u.completers[name]
+	return provisioned && slices.Equal(completer.origins, origins)
 }
 
 func (u *uploads) granted() []string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	held := make([]string, 0, len(u.completers))
+	names := make([]string, 0, len(u.completers))
 	for name := range u.completers {
-		held = append(held, name)
+		names = append(names, name)
 	}
-	return held
+	return names
 }
 
-func (u *uploads) serve(name string, held completing) {
+func (u *uploads) serve(name string, completer completing) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.completers[name] = held
+	u.completers[name] = completer
 }
 
 func (u *uploads) complete(ctx context.Context, body string) error {
@@ -183,12 +183,12 @@ func (u *uploads) complete(ctx context.Context, body string) error {
 	}
 	for _, record := range event.Records {
 		u.mu.Lock()
-		held, known := u.completers[record.S3.Bucket.Name]
+		completer, known := u.completers[record.S3.Bucket.Name]
 		u.mu.Unlock()
 		if !known {
 			continue
 		}
-		if err := held.completer.Handle(ctx, production.S3Event{Records: []production.S3EventRecord{record}}); err != nil {
+		if err := completer.completer.Handle(ctx, production.S3Event{Records: []production.S3EventRecord{record}}); err != nil {
 			return err
 		}
 	}

@@ -339,7 +339,7 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("release refuses while projects still hold previews on the wildcard", func(t *testing.T) {
+	t.Run("release refuses while projects still have previews on the wildcard", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
@@ -432,7 +432,7 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("add with a host settles only that one", func(t *testing.T) {
+	t.Run("add with a host attaches only that one", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
@@ -531,7 +531,7 @@ export default {
 		}
 	})
 
-	t.Run("rm carries the configured set so the provider knows what was dropped", func(t *testing.T) {
+	t.Run("rm sends the configured set so the provider knows what was dropped", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
@@ -633,7 +633,7 @@ export default {
 			t.Errorf("stdout = %q, want --wait to keep polling until the host is ready", out)
 		}
 		if strings.Contains(out, "PENDING") {
-			t.Errorf("stdout = %q, want only the settled status rendered", out)
+			t.Errorf("stdout = %q, want only the ready status rendered", out)
 		}
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})

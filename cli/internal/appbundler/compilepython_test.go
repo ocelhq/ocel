@@ -47,7 +47,7 @@ func vendored(t *testing.T, source, arch string) (string, string) {
 	return appDir, funcDir
 }
 
-func TestCompileRefusesAPythonAppDirectoryHoldingNoEntrypoint(t *testing.T) {
+func TestCompileRefusesAPythonAppDirectoryWithNoEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	source := pythonApp(t, map[string]string{"server/main.py": "print('hi')\n"})
@@ -63,7 +63,7 @@ func TestCompileRefusesAPythonAppDirectoryHoldingNoEntrypoint(t *testing.T) {
 	}
 }
 
-func TestCompileCarriesThePythonAppsOwnSourceIntoTheArtifact(t *testing.T) {
+func TestCompileCopiesThePythonAppsOwnSourceIntoTheArtifact(t *testing.T) {
 	t.Parallel()
 
 	source := pythonApp(t, map[string]string{
@@ -76,11 +76,11 @@ func TestCompileCarriesThePythonAppsOwnSourceIntoTheArtifact(t *testing.T) {
 
 	for _, rel := range []string{"main.py", "probes.py", filepath.Join("static", "ocel.svg")} {
 		if _, err := os.Stat(filepath.Join(funcDir, rel)); err != nil {
-			t.Errorf("the artifact holds no %s: a python app is served from the files it was written as, not from a bundle: %v", rel, err)
+			t.Errorf("the artifact contains no %s: a python app is served from the files it was written as, not from a bundle: %v", rel, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(funcDir, "__pycache__")); err == nil {
-		t.Error("the artifact carries __pycache__, whose bytecode was compiled by whatever python built the app rather than the one that runs it")
+		t.Error("the artifact contains __pycache__, whose bytecode was compiled by whatever python built the app rather than the one that runs it")
 	}
 }
 
@@ -172,7 +172,7 @@ func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testin
 			"--no-compile",
 		} {
 			if !strings.Contains(argv, want) {
-				t.Errorf("pip is run as %q for %s, and it carries no %q: a wheel built for another machine or another python is installed silently and fails at import", argv, architecture, want)
+				t.Errorf("pip is run as %q for %s, and it includes no %q: a wheel built for another machine or another python is installed silently and fails at import", argv, architecture, want)
 			}
 		}
 	}
@@ -201,7 +201,7 @@ func TestCompileVendorsWhatTheAppDeclaresIntoTheArtifact(t *testing.T) {
 	t.Parallel()
 
 	if !pipAvailable() {
-		t.Skip("no python interpreter carrying pip on PATH to vendor with")
+		t.Skip("no python interpreter with pip on PATH to vendor with")
 	}
 	source := pythonApp(t, map[string]string{
 		"main.py":          "import six\n",
@@ -210,7 +210,7 @@ func TestCompileVendorsWhatTheAppDeclaresIntoTheArtifact(t *testing.T) {
 	_, funcDir := vendored(t, source, "x86_64")
 
 	if _, err := os.Stat(filepath.Join(funcDir, "six.py")); err != nil {
-		t.Errorf("the artifact holds no six.py: a declared dependency is carried in the package, since a function has no installer to reach for one: %v", err)
+		t.Errorf("the artifact contains no six.py: a declared dependency is shipped in the package, since a function has no installer to reach for one: %v", err)
 	}
 }
 
@@ -237,7 +237,7 @@ func TestCompileRefusesAnArchitectureNoWheelIsBuiltFor(t *testing.T) {
 	}
 }
 
-func TestCompileRefusesAPythonAppCarryingWhatCannotBeCopiedIntoTheArtifact(t *testing.T) {
+func TestCompileRefusesAPythonAppContainingWhatCannotBeCopiedIntoTheArtifact(t *testing.T) {
 	t.Parallel()
 
 	source := pythonApp(t, map[string]string{"main.py": "print('hi')\n"})
@@ -261,8 +261,8 @@ func TestCompileRefusesAPythonAppWhoseDeclaredDependenciesCannotBeRead(t *testin
 	t.Parallel()
 
 	source := pythonApp(t, map[string]string{
-		"main.py":                      "print('hi')\n",
-		"requirements.txt/held-as-dir": "six==1.17.0\n",
+		"main.py":                   "print('hi')\n",
+		"requirements.txt/is-a-dir": "six==1.17.0\n",
 	})
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
@@ -314,12 +314,12 @@ func TestCompileLeavesTheBuildHostsOwnDirectoriesOutOfThePythonArtifact(t *testi
 
 	for _, rel := range []string{".venv", ".env", ".git", ".DS_Store", "node_modules", "venv"} {
 		if _, err := os.Stat(filepath.Join(funcDir, rel)); err == nil {
-			t.Errorf("the artifact carries %s: what an interpreter or an installer leaves in the app directory holds the build host's paths and its secrets, neither of which the function runs on", rel)
+			t.Errorf("the artifact contains %s: what an interpreter or an installer leaves in the app directory contains the build host's paths and its secrets, neither of which the function runs on", rel)
 		}
 	}
 }
 
-func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *testing.T) {
+func TestCompileCopiesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *testing.T) {
 	t.Parallel()
 
 	fixtureImport := "from infra import db\n"
@@ -348,15 +348,15 @@ func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *te
 
 	for _, rel := range []string{filepath.Join(constants.DefaultDiscoveryDirName, "__init__.py"), filepath.Join(constants.DefaultDiscoveryDirName, "nested", "db.py")} {
 		if _, err := os.Stat(filepath.Join(funcDir, rel)); err != nil {
-			t.Errorf("the artifact holds no %s: `from infra import db` resolves at runtime only if the folder that declared it travels with the app: %v", rel, err)
+			t.Errorf("the artifact contains no %s: `from infra import db` resolves at runtime only if the folder that declared it travels with the app: %v", rel, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(funcDir, "server")); err == nil {
-		t.Error("the artifact holds a server/ of its own: a root already inside the app dir is carried by the app's own tree")
+		t.Error("the artifact contains a server/ of its own: a root already inside the app dir is included by the app's own tree")
 	}
 }
 
-func TestCompileCarriesNoDiscoveryRootTheAppsOwnDirectoryAlreadyHolds(t *testing.T) {
+func TestCompileCopiesNoDiscoveryRootTheAppsOwnDirectoryAlreadyContains(t *testing.T) {
 	t.Parallel()
 
 	project := pythonApp(t, map[string]string{
@@ -379,6 +379,6 @@ func TestCompileCarriesNoDiscoveryRootTheAppsOwnDirectoryAlreadyHolds(t *testing
 	}
 
 	if _, err := os.Stat(filepath.Join(funcDir, "..infra")); err == nil {
-		t.Error("the artifact carries ..infra: a root under the app directory is left to the app's own tree, whatever its name begins with")
+		t.Error("the artifact contains ..infra: a root under the app directory is left to the app's own tree, whatever its name begins with")
 	}
 }

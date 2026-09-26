@@ -30,9 +30,9 @@ func manifestVariable(t *testing.T, manifest *contractv1.Manifest, app, key stri
 		for _, v := range a.GetVariables() {
 			keys = append(keys, v.GetKey())
 		}
-		t.Fatalf("app %q carries no %s among its variables %q", app, key, keys)
+		t.Fatalf("app %q has no %s among its variables %q", app, key, keys)
 	}
-	t.Fatalf("manifest carries no app %q", app)
+	t.Fatalf("manifest has no app %q", app)
 	return nil
 }
 
@@ -65,7 +65,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		}
 	})
 
-	t.Run("the manifest carries it to the provider", func(t *testing.T) {
+	t.Run("the manifest passes it to the provider", func(t *testing.T) {
 		if got, want := manifestVariable(t, manifest, "api", constants.AppURLEnvName).GetValue(), "https://api.acme.com"; got != want {
 			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got, want)
 		}

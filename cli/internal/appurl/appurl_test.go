@@ -116,23 +116,23 @@ func TestPrepend(t *testing.T) {
 	}
 	appurl.Prepend(cfg, byApp, map[string]string{"web": "https://acme.com", "api": "https://api.acme.com"})
 
-	held := map[string]manifestbuilder.Variable{}
+	variables := map[string]manifestbuilder.Variable{}
 	for _, v := range byApp["web"] {
-		held[v.Key] = v
+		variables[v.Key] = v
 	}
-	if got, want := held[constants.AppURLEnvName].Value, "https://acme.com"; got != want {
+	if got, want := variables[constants.AppURLEnvName].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got, want)
 	}
-	if got, want := held[appbuild.ClientURLEnvName].Value, "https://acme.com"; got != want {
+	if got, want := variables[appbuild.ClientURLEnvName].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", appbuild.ClientURLEnvName, got)
 	}
-	if !held[appbuild.ClientURLEnvName].ClientAccessible {
+	if !variables[appbuild.ClientURLEnvName].ClientAccessible {
 		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", appbuild.ClientURLEnvName)
 	}
-	if held[constants.AppURLEnvName].ClientAccessible {
+	if variables[constants.AppURLEnvName].ClientAccessible {
 		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", constants.AppURLEnvName)
 	}
-	if held["LOG_LEVEL"].Value != "info" {
+	if variables["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
 	if got := keys(byApp["api"]); !slices.Equal(got, []string{constants.AppURLEnvName}) {
@@ -148,7 +148,7 @@ func TestBuildEnv(t *testing.T) {
 
 	env := appurl.BuildEnv(&projectconfig.Config{}, map[string]string{envwire.RootApp: "https://acme.com"})
 	if got, want := env[""][constants.AppURLEnvName], "https://acme.com"; got != want {
-		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, holding %q", env, want)
+		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, set to %q", env, want)
 	}
 	if got, want := env[""][appbuild.ClientURLEnvName], "https://acme.com"; got != want {
 		t.Errorf("build env %s = %q, want %q: an app `apps` does not name is built by the node builder", appbuild.ClientURLEnvName, got, want)

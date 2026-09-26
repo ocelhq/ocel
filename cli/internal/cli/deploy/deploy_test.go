@@ -244,7 +244,7 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("declared domains carry the slug", func(t *testing.T) {
+	t.Run("declared domains pass the slug to the preflight", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
@@ -262,7 +262,7 @@ export default {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app") {
-			t.Errorf("stdout = %q, want the preflight to have carried the project's slug", stdout.String())
+			t.Errorf("stdout = %q, want the preflight to have included the project's slug", stdout.String())
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)

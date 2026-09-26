@@ -147,11 +147,11 @@ func normalizeMessage(m protoreflect.Message) {
 	case *planv1.ChangeGroup:
 		sortChanges(v)
 	case *progressv1.SpanEvent:
-		settleSpanClock(v)
+		fillSpanClock(v)
 	}
 }
 
-func settleSpanClock(span *progressv1.SpanEvent) {
+func fillSpanClock(span *progressv1.SpanEvent) {
 	now := time.Now().UnixNano()
 	if span.StartTimeUnixNano <= 0 {
 		span.StartTimeUnixNano = now

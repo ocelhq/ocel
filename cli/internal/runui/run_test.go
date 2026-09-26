@@ -109,7 +109,7 @@ func TestThePlanFirstClassTakesYesInPlaceOfATerminal(t *testing.T) {
 		t.Fatalf("Run() = %v", err)
 	}
 	if !body.ran {
-		t.Error("the body never ran, want --yes to stand in for the terminal")
+		t.Error("the body never ran, want --yes to answer in place of the terminal")
 	}
 }
 
@@ -160,7 +160,7 @@ func TestADryRunDrivesTheProviderThroughTheDriveThatWritesNothing(t *testing.T) 
 	}
 }
 
-func TestTheSessionTheBodyIsHandedCarriesTheResolvedPresentation(t *testing.T) {
+func TestTheSessionTheBodyIsHandedHasTheResolvedPresentation(t *testing.T) {
 	var out bytes.Buffer
 	spec := specFor(t, &out)
 	spec.Present = runui.Resolve(runui.Origin{LogFormat: "json"})
@@ -243,7 +243,7 @@ func TestAConvergentDryRunAsksNothingAndTellsTheBodyItChangesNothing(t *testing.
 		t.Fatalf("Run() = %v", err)
 	}
 	if !body.dry {
-		t.Error("the body was not told the run is dry, want the seam to carry --dry to the work it gates")
+		t.Error("the body was not told the run is dry, want the seam to pass --dry to the work it gates")
 	}
 	if !body.granted {
 		t.Error("the guard stopped the body, want a run that changes nothing to need no guard")
@@ -532,7 +532,7 @@ func TestAPlanThatChangesSomethingStillRaisesTheGate(t *testing.T) {
 	}
 }
 
-func TestTheApplyCarriesThePlanTheRunShowed(t *testing.T) {
+func TestTheApplyUsesThePlanTheRunShowed(t *testing.T) {
 	var out bytes.Buffer
 	spec := planFirstSpec(t, &out)
 	spec.Present = runui.Resolve(runui.Origin{LogFormat: "json"})
@@ -545,10 +545,10 @@ func TestTheApplyCarriesThePlanTheRunShowed(t *testing.T) {
 
 	shown := shownPlan(t, out.String())
 	if !proto.Equal(shown, body.consented) {
-		t.Errorf("the plan the body carries into the apply is\n%v\nand the plan the run showed is\n%v", body.consented, shown)
+		t.Errorf("the plan the body passes into the apply is\n%v\nand the plan the run showed is\n%v", body.consented, shown)
 	}
 	if body.consented.GetHeadline() != "Proposed changes to the production bootstrap" {
-		t.Errorf("consented headline = %q, want the plan to carry the sentence it was shown under", body.consented.GetHeadline())
+		t.Errorf("consented headline = %q, want the plan to keep the sentence it was shown under", body.consented.GetHeadline())
 	}
 	if first := body.consented.GetGroups()[0].GetKind(); first != "stack" {
 		t.Errorf("the consented plan opens on a %q group, want the spine order the run showed, not the order the body drew", first)
@@ -568,7 +568,7 @@ func TestADeclinedGuardSaysSoOnTheStreamAndNotBehindIt(t *testing.T) {
 		t.Fatalf("Run() = %v", err)
 	}
 	if !strings.Contains(out.String(), `"message":"Aborted."`) {
-		t.Errorf("stream = %q, want the refusal carried as a diagnostic envelope, not written past the stream", out.String())
+		t.Errorf("stream = %q, want the refusal sent as a diagnostic envelope, not written past the stream", out.String())
 	}
 }
 

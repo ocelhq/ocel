@@ -80,7 +80,7 @@ func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 func assertFlipNote(t *testing.T, out, want string, absent []string) {
 	t.Helper()
 	if want != "" && !strings.Contains(out, want) {
-		t.Errorf("output = %q, want it to carry %q", out, want)
+		t.Errorf("output = %q, want it to include %q", out, want)
 	}
 	for _, unwanted := range absent {
 		if strings.Contains(out, unwanted) {

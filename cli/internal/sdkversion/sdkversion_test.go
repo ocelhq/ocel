@@ -97,7 +97,7 @@ func (collector) Declare(context.Context, *resourcesv1.DeclareRequest) (*resourc
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-func TestTheGateRefusesAMismatchedSDKAndHoldsTheRefusal(t *testing.T) {
+func TestTheGateRefusesAMismatchedSDKAndKeepsTheRefusal(t *testing.T) {
 	t.Parallel()
 
 	gate := NewGate("0.0.3")
@@ -126,8 +126,8 @@ func TestTheGateRefusesAMismatchedSDKAndHoldsTheRefusal(t *testing.T) {
 	if err := declare("rust/0.0.3"); err != nil {
 		t.Fatalf("a matching SDK was refused: %v", err)
 	}
-	if held := gate.Take(); held != nil {
-		t.Fatalf("Take() = %v after only compatible calls", held)
+	if refused := gate.Take(); refused != nil {
+		t.Fatalf("Take() = %v after only compatible calls", refused)
 	}
 
 	err := declare("js/0.0.2")
@@ -139,10 +139,10 @@ func TestTheGateRefusesAMismatchedSDKAndHoldsTheRefusal(t *testing.T) {
 	}
 
 	var mismatch *MismatchError
-	if held := gate.Take(); !errors.As(held, &mismatch) || mismatch.Language != JS || mismatch.SDK != "0.0.2" {
-		t.Fatalf("Take() = %v, want the js mismatch", held)
+	if refused := gate.Take(); !errors.As(refused, &mismatch) || mismatch.Language != JS || mismatch.SDK != "0.0.2" {
+		t.Fatalf("Take() = %v, want the js mismatch", refused)
 	}
-	if held := gate.Take(); held != nil {
-		t.Fatalf("Take() = %v after the refusal was taken", held)
+	if refused := gate.Take(); refused != nil {
+		t.Fatalf("Take() = %v after the refusal was taken", refused)
 	}
 }

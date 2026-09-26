@@ -154,10 +154,10 @@ func TestUnknownHostKeyRefusedAtThePromptRecordsNothing(t *testing.T) {
 
 	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
 	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want the refusal to stand")
+		t.Fatal("driveTrusting() error = nil, want the refusal returned")
 	}
 	if trust, ok := provider.HostTrustOf(err); !ok || trust.Reason != provider.UnknownHostKey {
-		t.Errorf("err = %v, want it to still carry the unknown-host-key refusal", err)
+		t.Errorf("err = %v, want it to still include the unknown-host-key refusal", err)
 	}
 	if got := fake.recorded(t); got != "" {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
@@ -167,7 +167,7 @@ func TestUnknownHostKeyRefusedAtThePromptRecordsNothing(t *testing.T) {
 	}
 }
 
-func TestUnknownHostKeyWithoutATTYNeverAsksAndCarriesTheRemedy(t *testing.T) {
+func TestUnknownHostKeyWithoutATTYNeverAsksAndIncludesTheRemedy(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -182,10 +182,10 @@ func TestUnknownHostKeyWithoutATTYNeverAsksAndCarriesTheRemedy(t *testing.T) {
 		t.Errorf("asked %v, want no prompt without a TTY", asker.asked)
 	}
 	if !strings.Contains(err.Error(), fakeKey(fakeHostKey).Fingerprint) {
-		t.Errorf("err = %v, want it to carry the fingerprint", err)
+		t.Errorf("err = %v, want it to include the fingerprint", err)
 	}
 	if !strings.Contains(err.Error(), "ssh-keyscan") {
-		t.Errorf("err = %v, want it to carry the remedy", err)
+		t.Errorf("err = %v, want it to include the remedy", err)
 	}
 	if got := fake.recorded(t); got != "" {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
@@ -261,7 +261,7 @@ func TestATrustWithNoConfirmerNeverAsks(t *testing.T) {
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
 
 	if err := driveTrusting(ctx, Trust{}, fake.drive); err == nil {
-		t.Fatal("driveTrusting() error = nil, want the refusal to stand with nobody to ask")
+		t.Fatal("driveTrusting() error = nil, want the refusal returned with nobody to ask")
 	}
 	if got := fake.recorded(t); got != "" {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
@@ -281,14 +281,14 @@ func TestTheLiveViewIsSuspendedForTheLengthOfThePrompt(t *testing.T) {
 	}
 
 	if err := driveTrusting(ctx, trust, fake.drive); err == nil {
-		t.Fatal("driveTrusting() error = nil, want the refusal to stand")
+		t.Fatal("driveTrusting() error = nil, want the refusal returned")
 	}
 	if suspended != 1 || resumed != 1 {
 		t.Errorf("suspended %d times and resumed %d, want one of each around the prompt", suspended, resumed)
 	}
 }
 
-func TestAPromptThatFailsStillCarriesTheRefusal(t *testing.T) {
+func TestAPromptThatFailsStillIncludesTheRefusal(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -297,7 +297,7 @@ func TestAPromptThatFailsStillCarriesTheRefusal(t *testing.T) {
 
 	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
 	if !errors.Is(err, prompt.ErrStdinBusy) {
-		t.Errorf("err = %v, want it to carry the prompt's own failure", err)
+		t.Errorf("err = %v, want it to include the prompt's own failure", err)
 	}
 	if !strings.Contains(err.Error(), "ssh-keyscan") {
 		t.Errorf("err = %v, want the refusal and its remedy kept alongside", err)
@@ -323,7 +323,7 @@ func TestHostKeyMismatchNeverAsksAndNeverRedrives(t *testing.T) {
 				t.Errorf("asked %v, want no prompt for a mismatch", asker.asked)
 			}
 			if !strings.Contains(err.Error(), "ssh-keygen -R") {
-				t.Errorf("err = %v, want it to carry the ssh-keygen -R remedy", err)
+				t.Errorf("err = %v, want it to include the ssh-keygen -R remedy", err)
 			}
 			if got := fake.recorded(t); got != "" {
 				t.Errorf("known_hosts = %q, want nothing recorded", got)
@@ -380,7 +380,7 @@ func TestARedriveThatRefusesAgainNeverAsksTwice(t *testing.T) {
 
 	err := driveTrusting(ctx, trustAsking(asker, io.Discard), func() error { drives++; return refusal })
 	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want the second refusal to stand")
+		t.Fatal("driveTrusting() error = nil, want the second refusal returned")
 	}
 	if drives != 2 {
 		t.Errorf("drove %d times, want at most one retry", drives)
@@ -425,8 +425,8 @@ func TestAProviderThatSpeaksInControlCharactersIsNeverOffered(t *testing.T) {
 		trust provider.HostTrust
 	}{
 		{"a redressed key type", provider.HostTrust{Address: fakeHostAddress, Got: provider.HostKey{Type: "ssh-ed25519\n\033[2K  trusted", Key: fakeHostKey}}},
-		{"a key blob carrying a second entry", provider.HostTrust{Address: fakeHostAddress, Got: provider.HostKey{Type: fakeHostKeyType, Key: fakeHostKey + "\nevil.example.com ssh-ed25519 " + fakeOtherHostKey}}},
-		{"an address carrying a second entry", provider.HostTrust{Address: fakeHostAddress + "\nevil.example.com", Got: fakeKey(fakeHostKey)}},
+		{"a key blob containing a second entry", provider.HostTrust{Address: fakeHostAddress, Got: provider.HostKey{Type: fakeHostKeyType, Key: fakeHostKey + "\nevil.example.com ssh-ed25519 " + fakeOtherHostKey}}},
+		{"an address containing a second entry", provider.HostTrust{Address: fakeHostAddress + "\nevil.example.com", Got: fakeKey(fakeHostKey)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -508,11 +508,11 @@ func TestTrustingTheSameHostKeyTwiceLeavesOneLine(t *testing.T) {
 	}
 
 	if lines := recordedLines(t, store); len(lines) != 1 {
-		t.Errorf("known_hosts holds %d lines (%v), want the entry recorded once", len(lines), lines)
+		t.Errorf("known_hosts has %d lines (%v), want the entry recorded once", len(lines), lines)
 	}
 }
 
-func TestAKeyAlreadyHeldUnderAListOfNamesIsNotRecordedAgain(t *testing.T) {
+func TestAKeyAlreadyRecordedUnderAListOfNamesIsNotRecordedAgain(t *testing.T) {
 	t.Parallel()
 
 	store := filepath.Join(t.TempDir(), "known_hosts")
@@ -530,7 +530,7 @@ func TestAKeyAlreadyHeldUnderAListOfNamesIsNotRecordedAgain(t *testing.T) {
 		t.Fatalf("read known_hosts: %v", err)
 	}
 	if string(content) != existing {
-		t.Errorf("known_hosts = %q, want the line OpenSSH already holds for that host left alone", content)
+		t.Errorf("known_hosts = %q, want the line OpenSSH already has for that host left alone", content)
 	}
 }
 
@@ -547,7 +547,7 @@ func TestADifferentKeyForTheSameHostIsStillRecorded(t *testing.T) {
 	}
 
 	if lines := recordedLines(t, store); len(lines) != 2 {
-		t.Errorf("known_hosts holds %d lines (%v), want a second key for the same host kept alongside the first", len(lines), lines)
+		t.Errorf("known_hosts has %d lines (%v), want a second key for the same host kept alongside the first", len(lines), lines)
 	}
 }
 

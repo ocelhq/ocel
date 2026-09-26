@@ -105,11 +105,11 @@ func writable(store string) (string, error) {
 }
 
 func record(store, line string) error {
-	held, err := os.ReadFile(store)
+	known, err := os.ReadFile(store)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if holds(string(held), line) {
+	if hasLine(string(known), line) {
 		return nil
 	}
 
@@ -122,7 +122,7 @@ func record(store, line string) error {
 	}
 	defer file.Close()
 
-	if len(held) > 0 && !strings.HasSuffix(string(held), "\n") {
+	if len(known) > 0 && !strings.HasSuffix(string(known), "\n") {
 		line = "\n" + line
 	}
 	if _, err := file.WriteString(line); err != nil {
@@ -131,13 +131,13 @@ func record(store, line string) error {
 	return file.Sync()
 }
 
-func holds(content, line string) bool {
+func hasLine(content, line string) bool {
 	want := strings.Fields(line)
 	if len(want) != 3 {
 		return false
 	}
-	for _, held := range strings.Split(content, "\n") {
-		fields := strings.Fields(held)
+	for _, existing := range strings.Split(content, "\n") {
+		fields := strings.Fields(existing)
 		if len(fields) != 3 || fields[1] != want[1] || fields[2] != want[2] {
 			continue
 		}

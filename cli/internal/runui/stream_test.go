@@ -153,7 +153,7 @@ func TestNDJSONIsOneEnvelopePerLineAndNeverBuffers(t *testing.T) {
 	}}}))
 
 	if lines := strings.Count(out.String(), "\n"); lines != 1 {
-		t.Errorf("after one envelope the stream holds %d lines, want 1 — the machine surface is the off-TTY liveness surface", lines)
+		t.Errorf("after one envelope the stream has %d lines, want 1 — the machine surface is the off-TTY liveness surface", lines)
 	}
 	if strings.Contains(out.String(), "\n ") || strings.Contains(strings.TrimRight(out.String(), "\n"), "\n") {
 		t.Errorf("stream = %q, want exactly one line per envelope", out.String())

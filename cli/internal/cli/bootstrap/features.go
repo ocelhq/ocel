@@ -46,29 +46,29 @@ func needsNote(stdout io.Writer, note string) string {
 	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
 }
 
-func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, standing, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
 	}
 	if !interactive {
-		return without(standing, going), true, nil
+		return without(installed, going), true, nil
 	}
-	return pickFeatures(ctx, catalogue, standing, going, kind, tier, stdout)
+	return pickFeatures(ctx, catalogue, installed, going, kind, tier, stdout)
 }
 
-func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, standing, going []string, kind string, tier environmentv1.Tier, stdout io.Writer) ([]string, bool, error) {
+func pickFeatures(ctx context.Context, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, stdout io.Writer) ([]string, bool, error) {
 	if len(catalogue) == 0 {
 		return nil, true, nil
 	}
 
-	kept := without(standing, going)
+	kept := without(installed, going)
 	required := requiredFeature(catalogue, kept, kind)
 
 	printIncluded(stdout, catalogue, kept, tier)
 	printRequired(stdout, catalogue, required, kind)
 
-	addable := addableFeatures(catalogue, standing, required)
+	addable := addableFeatures(catalogue, installed, required)
 	width := nameWidth(addable)
 	options := make([]huh.Option[string], 0, len(addable))
 	for _, name := range addable {
@@ -119,10 +119,10 @@ func requiredFeature(catalogue []*contractv1.Feature, included []string, kind st
 	return name
 }
 
-func addableFeatures(catalogue []*contractv1.Feature, standing []string, required string) []string {
+func addableFeatures(catalogue []*contractv1.Feature, installed []string, required string) []string {
 	var addable []string
 	for _, f := range catalogue {
-		if f.GetName() == required || slices.Contains(standing, f.GetName()) {
+		if f.GetName() == required || slices.Contains(installed, f.GetName()) {
 			continue
 		}
 		addable = append(addable, f.GetName())
@@ -369,17 +369,17 @@ func parseRemoveFlag(raw string, catalogue []*contractv1.Feature) ([]string, err
 	return inCatalogueOrder(catalogue, named), nil
 }
 
-func goingFeatures(catalogue []*contractv1.Feature, standing, named []string) []string {
+func goingFeatures(catalogue []*contractv1.Feature, installed, named []string) []string {
 	var doomed []string
 	for _, name := range named {
-		if slices.Contains(standing, name) {
+		if slices.Contains(installed, name) {
 			doomed = append(doomed, name)
 		}
 	}
 	for grew := true; grew; {
 		grew = false
 		for _, f := range catalogue {
-			if slices.Contains(doomed, f.GetName()) || !slices.Contains(standing, f.GetName()) {
+			if slices.Contains(doomed, f.GetName()) || !slices.Contains(installed, f.GetName()) {
 				continue
 			}
 			for _, dep := range f.GetDependsOn() {

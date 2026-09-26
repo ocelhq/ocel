@@ -123,7 +123,7 @@ func TestARailpackFileInTheAppChangesTheBuildOcelNeverReads(t *testing.T) {
 	}
 }
 
-func TestThePlanCarriesNothingFromTheEnvironmentOcelRunsIn(t *testing.T) {
+func TestThePlanTakesNothingFromTheEnvironmentOcelRunsIn(t *testing.T) {
 	t.Setenv("NODE_VERSION", "20")
 	t.Setenv("RAILPACK_START_CMD", "node leaked.js")
 
@@ -138,7 +138,7 @@ func TestThePlanCarriesNothingFromTheEnvironmentOcelRunsIn(t *testing.T) {
 }
 
 func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *testing.T) {
-	const leak = "a value the plan must never carry"
+	const leak = "a value the plan must never contain"
 	t.Setenv("OCEL_PLAN_LEAK", leak)
 
 	raw, err := imagebuild.Plan(located(t, "testdata/plainserver"))
@@ -148,7 +148,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 
 	for _, secret := range []string{"OCEL_PLAN_LEAK", leak} {
 		if strings.Contains(string(raw), secret) {
-			t.Errorf("the plan the frontend reads carries %q, so ocel's own environment reaches the build through the plan rather than through a build arg:\n%s", secret, raw)
+			t.Errorf("the plan the frontend reads contains %q, so ocel's own environment reaches the build through the plan rather than through a build arg:\n%s", secret, raw)
 		}
 	}
 }
@@ -247,14 +247,14 @@ func TestScopingAnInstallKeepsTheCachesAndTheSetupRailpackPutAroundIt(t *testing
 		}
 	}
 	if len(install) == 0 {
-		t.Error("the scoped install step carries no cache, so the package store is re-downloaded on every build")
+		t.Error("the scoped install step has no cache, so the package store is re-downloaded on every build")
 	}
 	if len(scoped.Steps) < len(unscoped.Steps) {
 		t.Errorf("the scoped plan has %d steps against %d for an app with no workspace, so scoping dropped a step railpack generated", len(scoped.Steps), len(unscoped.Steps))
 	}
 }
 
-func TestThePlanNeverCopiesWhatTheContextNoLongerCarries(t *testing.T) {
+func TestThePlanNeverCopiesWhatTheContextNoLongerContains(t *testing.T) {
 	root := t.TempDir()
 	for path, body := range map[string]string{
 		"package.json":      `{"name":"solo","scripts":{"start":"node server.js"}}`,
@@ -311,14 +311,14 @@ func TestANextAppInAWorkspaceIsBuiltAndStartedAsTheAppRatherThanTheRoot(t *testi
 		t.Errorf("the build step caches %v, and none of them is the app's own .next: railpack plans the root, and it has to reach into the member to cache what next writes there", cached)
 	}
 
-	var carried []string
+	var included []string
 	for _, input := range plan.Deploy.Inputs {
 		if input.Step == "build" {
-			carried = append(carried, input.Include...)
+			included = append(included, input.Include...)
 		}
 	}
-	if !contains(carried, ".") {
-		t.Errorf("the deploy takes %v from the build, and none of it is the directory the app was built in: next writes apps/web/.next, and an image that carries only root-level paths starts without it", carried)
+	if !contains(included, ".") {
+		t.Errorf("the deploy takes %v from the build, and none of it is the directory the app was built in: next writes apps/web/.next, and an image that contains only root-level paths starts without it", included)
 	}
 }
 
@@ -329,7 +329,7 @@ func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if want := "pnpm install --frozen-lockfile --filter \"{./apps/web}...\""; !strings.Contains(install, want) {
-		t.Errorf("the install step runs:\n%s\nwant %q — the root carries a go.mod as well, and railpack takes the first language it detects", install, want)
+		t.Errorf("the install step runs:\n%s\nwant %q — the root has a go.mod as well, and railpack takes the first language it detects", install, want)
 	}
 	if want := "pnpm --filter \"{./apps/web}\" run start"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
@@ -338,12 +338,12 @@ func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.
 
 const polyglotGoApp = "testdata/polyglotworkspace/apps/api"
 
-func TestAnAppCarryingAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.T) {
+func TestAnAppWithAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.T) {
 	plan := planned(t, polyglotGoApp)
 
 	build := strings.Join(plan.step(t, "build"), "\n")
 	if !strings.Contains(build, "go build") {
-		t.Errorf("the build step runs:\n%s\nwant a go build — the app carries a go.mod, and the package.json and requirements.txt beside it only hold what its tooling reads", build)
+		t.Errorf("the build step runs:\n%s\nwant a go build — the app has a go.mod, and the package.json and requirements.txt beside it only list what its tooling reads", build)
 	}
 	if strings.Contains(plan.Deploy.StartCommand, "pnpm") {
 		t.Errorf("the plan starts the app with %q, and no package manager starts a compiled binary", plan.Deploy.StartCommand)
@@ -352,12 +352,12 @@ func TestAnAppCarryingAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.
 
 const polyglotPythonApp = "testdata/polyglotworkspace/apps/svc"
 
-func TestAnAppCarryingAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
+func TestAnAppWithAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
 	plan := planned(t, polyglotPythonApp)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if !strings.Contains(install, "pip install") {
-		t.Errorf("the install step runs:\n%s\nwant a pip install — the app carries a %s, and the package.json beside it only holds the config's own dependencies", install, "requirements.txt")
+		t.Errorf("the install step runs:\n%s\nwant a pip install — the app has a %s, and the package.json beside it only lists the config's own dependencies", install, "requirements.txt")
 	}
 	if strings.Contains(plan.Deploy.StartCommand, "pnpm") {
 		t.Errorf("the plan starts the app with %q, and no package manager starts a python module", plan.Deploy.StartCommand)
@@ -369,7 +369,7 @@ func TestAnAppCarryingAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideI
 
 const polyglotCrateApp = "testdata/polyglotworkspace/apps/crate"
 
-func TestAnAppCarryingACargoManifestIsPlannedAsRustRatherThanLeftToRailpacksOwnDetection(t *testing.T) {
+func TestAnAppWithACargoManifestIsPlannedAsRustRatherThanLeftToRailpacksOwnDetection(t *testing.T) {
 	plan := planned(t, polyglotCrateApp)
 
 	build := strings.Join(plan.step(t, "build"), "\n")
@@ -391,7 +391,7 @@ func TestANodeAppShippingAScriptBesideItselfIsStillPlannedAsNode(t *testing.T) {
 
 	install := strings.Join(plan.step(t, "install"), "\n")
 	if want := "pnpm install --frozen-lockfile --filter \"{./apps/stray}...\""; !strings.Contains(install, want) {
-		t.Errorf("the install step runs:\n%s\nwant %q — the app carries a main.py and no python project file, and a script beside a node app is not a python project", install, want)
+		t.Errorf("the install step runs:\n%s\nwant %q — the app has a main.py and no python project file, and a script beside a node app is not a python project", install, want)
 	}
 	if want := "pnpm --filter \"{./apps/stray}\" run start"; plan.Deploy.StartCommand != want {
 		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)

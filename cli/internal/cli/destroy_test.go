@@ -190,7 +190,7 @@ func TestRunDestroy(t *testing.T) {
 		}
 	})
 
-	t.Run("the destroy carries the plan the human consented to", func(t *testing.T) {
+	t.Run("the destroy sends the plan the human consented to", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
@@ -210,7 +210,7 @@ func TestRunDestroy(t *testing.T) {
 		}
 		for _, want := range []string{"cloudfront/edge", "aws/test-app--infra", "aws/test-app--web--b1"} {
 			if !strings.Contains(out, "consented=") || !strings.Contains(consentedLine(out), want) {
-				t.Errorf("the destroy carried %q, want the plan it showed to name %q", consentedLine(out), want)
+				t.Errorf("the destroy sent %q, want the plan it showed to name %q", consentedLine(out), want)
 			}
 		}
 	})
@@ -350,11 +350,11 @@ func TestDestroyClassCommands(t *testing.T) {
 	preview, _, _ := destroyCmd.Find([]string{"preview"})
 	for _, cmd := range []*cobra.Command{production, preview} {
 		if cmd.Flags().Lookup("dry") == nil {
-			t.Errorf("destroy %s carries no --dry; every destructive command previews", cmd.Name())
+			t.Errorf("destroy %s has no --dry; every destructive command previews", cmd.Name())
 		}
 		yes := cmd.Flags().Lookup("yes")
 		if yes == nil {
-			t.Fatalf("destroy %s carries no --yes; one flag grants consent on every command", cmd.Name())
+			t.Fatalf("destroy %s has no --yes; one flag grants consent on every command", cmd.Name())
 		}
 		if yes.Usage != cmddeps.YesUsage {
 			t.Errorf("destroy %s --yes usage = %q, want the one line every command shows", cmd.Name(), yes.Usage)

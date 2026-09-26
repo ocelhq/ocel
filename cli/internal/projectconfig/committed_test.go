@@ -169,10 +169,10 @@ func uncommented(lines []string, at commentBlock, prefix string) []byte {
 }
 
 func keyPaths(prefix string, value any) []string {
-	switch held := value.(type) {
+	switch typed := value.(type) {
 	case map[string]any:
 		var paths []string
-		for key, item := range held {
+		for key, item := range typed {
 			at := prefix + "." + key
 			paths = append(paths, at)
 			paths = append(paths, keyPaths(at, item)...)
@@ -181,7 +181,7 @@ func keyPaths(prefix string, value any) []string {
 		return paths
 	case []any:
 		var paths []string
-		for i, item := range held {
+		for i, item := range typed {
 			paths = append(paths, keyPaths(fmt.Sprintf("%s[%d]", prefix, i), item)...)
 		}
 		return paths
@@ -297,29 +297,29 @@ func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
 			}
 			live := documentOf(t, path, path, source)
 			if want, got := keyPaths("", live), keyPaths("", picked); !slices.Equal(want, got) {
-				t.Errorf("%s picked at line %d holds keys %v, and a commented variant conflicts with a live key rather than adding %v", path, at.last+1, got, want)
+				t.Errorf("%s picked at line %d has keys %v, and a commented variant conflicts with a live key rather than adding %v", path, at.last+1, got, want)
 			}
 		}
 	}
 }
 
-func TestOnlyTheNodeFixtureCarriesTheTypeScriptConfig(t *testing.T) {
+func TestOnlyTheNodeFixtureHasTheTypeScriptConfig(t *testing.T) {
 	want := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "node")
-	var carrying []string
+	var configured []string
 	for _, dir := range fixturetest.Dirs(t) {
 		for _, path := range fixturetest.ConfigsIn(t, dir) {
 			if projectconfig.IsProgram(path) {
-				carrying = append(carrying, dir)
+				configured = append(configured, dir)
 				break
 			}
 		}
 	}
-	if !slices.Equal(carrying, []string{want}) {
-		t.Fatalf("the fixtures carrying a typescript config are %v, want only %s", carrying, want)
+	if !slices.Equal(configured, []string{want}) {
+		t.Fatalf("the fixtures with a typescript config are %v, want only %s", configured, want)
 	}
 }
 
-func TestAFixtureOfAnotherLanguageCarriesNoNodeFiles(t *testing.T) {
+func TestAFixtureOfAnotherLanguageHasNoNodeFiles(t *testing.T) {
 	for _, dir := range fixturetest.Dirs(t) {
 		if fixturetest.IsNode(t, dir) {
 			continue
@@ -333,7 +333,7 @@ func TestAFixtureOfAnotherLanguageCarriesNoNodeFiles(t *testing.T) {
 			}
 			switch entry.Name() {
 			case "package.json", "tsconfig.json", "node_modules":
-				t.Errorf("%s is not a node fixture and still carries %s", dir, path)
+				t.Errorf("%s is not a node fixture and still contains %s", dir, path)
 			}
 			return nil
 		})
@@ -347,7 +347,7 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "go")
 	for _, path := range fixturetest.ConfigsIn(t, dir) {
 		if projectconfig.IsProgram(path) {
-			t.Fatalf("the go fixture still carries %s", filepath.Base(path))
+			t.Fatalf("the go fixture still contains %s", filepath.Base(path))
 		}
 	}
 
@@ -371,7 +371,7 @@ func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "rust")
 	for _, path := range fixturetest.ConfigsIn(t, dir) {
 		if projectconfig.IsProgram(path) {
-			t.Fatalf("the rust fixture still carries %s", filepath.Base(path))
+			t.Fatalf("the rust fixture still contains %s", filepath.Base(path))
 		}
 	}
 

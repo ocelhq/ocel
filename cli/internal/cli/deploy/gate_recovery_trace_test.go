@@ -43,7 +43,7 @@ func (s traceSpan) retryCount(t *testing.T) int {
 			return n
 		}
 	}
-	t.Fatalf("span %q carries no ocel.retry_count attribute", s.Name)
+	t.Fatalf("span %q has no ocel.retry_count attribute", s.Name)
 	return -1
 }
 

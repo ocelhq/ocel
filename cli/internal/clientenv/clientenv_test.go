@@ -235,7 +235,7 @@ func TestGenerate(t *testing.T) {
 			t.Errorf("accessor names a server-only value:\n%s", accessor)
 		}
 		if strings.Contains(accessor, "sk-live") {
-			t.Errorf("accessor carries a resolved value; it must name the environment entry only:\n%s", accessor)
+			t.Errorf("accessor contains a resolved value; it must name the environment entry only:\n%s", accessor)
 		}
 	})
 
@@ -409,7 +409,7 @@ func TestGenerate(t *testing.T) {
 		}
 		for _, dir := range []string{store, admin} {
 			if _, err := os.Stat(filepath.Join(dir, constants.ProjectStateDirName)); !errors.Is(err, fs.ErrNotExist) {
-				t.Errorf("%s holds state of its own (err = %v), want every generated file under the project directory", dir, err)
+				t.Errorf("%s has state of its own (err = %v), want every generated file under the project directory", dir, err)
 			}
 		}
 	})
@@ -455,7 +455,7 @@ func TestGenerate(t *testing.T) {
 func TestCheckFresh(t *testing.T) {
 	t.Parallel()
 
-	t.Run("refuses a bundle that predates the value it carries", func(t *testing.T) {
+	t.Run("refuses a bundle that predates the value it inlines", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -554,7 +554,7 @@ func TestCheckFresh(t *testing.T) {
 func TestRecord(t *testing.T) {
 	t.Parallel()
 
-	t.Run("holds no plaintext", func(t *testing.T) {
+	t.Run("stores no plaintext", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
@@ -565,7 +565,7 @@ func TestRecord(t *testing.T) {
 		}
 
 		if got := read(t, filepath.Join(root, constants.ProjectStateDirName, "output", "client-digests.json")); strings.Contains(got, "https://example.com") {
-			t.Errorf("record carries the value itself: %s", got)
+			t.Errorf("record contains the value itself: %s", got)
 		}
 	})
 }

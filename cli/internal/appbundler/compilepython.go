@@ -28,7 +28,7 @@ const (
 func (c Compilation) vendorPython(ctx context.Context) error {
 	entry, err := os.Stat(filepath.Join(c.Source, pythonEntryFile))
 	if err != nil || !entry.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with python and %s holds no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
+		return fmt.Errorf("app %q is built with python and %s has no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
 	}
 	platform, runs := arch.PythonPlatformTag(c.Framework.Arch)
 	if !runs {
@@ -41,9 +41,9 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 		return err
 	}
 	if err := copySourceTree(c.Source, c.FuncDir); err != nil {
-		return fmt.Errorf("carry app %q into its artifact: %w", c.App, err)
+		return fmt.Errorf("copy app %q into its artifact: %w", c.App, err)
 	}
-	if err := c.carryDiscoveryRoots(); err != nil {
+	if err := c.copyDiscoveryRoots(); err != nil {
 		return err
 	}
 	if err := c.installRequirements(ctx, platform); err != nil {
@@ -52,13 +52,13 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FuncDir, c.AppDir)
 }
 
-func (c Compilation) carryDiscoveryRoots() error {
+func (c Compilation) copyDiscoveryRoots() error {
 	for _, root := range c.DiscoveryRoots {
 		if rel, err := filepath.Rel(c.Source, root); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
 			continue
 		}
 		if err := copySourceTree(root, filepath.Join(c.FuncDir, filepath.Base(root))); err != nil {
-			return fmt.Errorf("carry the %s app %q imports into its artifact: %w", filepath.Base(root), c.App, err)
+			return fmt.Errorf("copy the %s app %q imports into its artifact: %w", filepath.Base(root), c.App, err)
 		}
 	}
 	return nil
@@ -73,7 +73,7 @@ func (c Compilation) installRequirements(ctx context.Context, platform string) e
 	case err != nil:
 		return fmt.Errorf("read app %q's %s: %w", c.App, requirements, err)
 	case !declared.Mode().IsRegular():
-		return fmt.Errorf("app %q holds %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
+		return fmt.Errorf("app %q has %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
 	}
 	cmd := exec.CommandContext(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FuncDir, requirements, platform)...)
 	cmd.Dir = c.Source
@@ -125,7 +125,7 @@ func copyTree(source, dest string, skip func(name string) bool) error {
 			return os.MkdirAll(filepath.Join(dest, rel), 0o755)
 		}
 		if !entry.Type().IsRegular() {
-			return fmt.Errorf("%s is %s, and an artifact holds the app's own files: what this points at is read on the build host and is nowhere the function runs", path, entry.Type())
+			return fmt.Errorf("%s is %s, and an artifact contains the app's own files: what this points at is read on the build host and is nowhere the function runs", path, entry.Type())
 		}
 		info, err := entry.Info()
 		if err != nil {

@@ -205,7 +205,7 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		versions := reached[name]
 		if len(versions) > 1 {
 			slices.Sort(versions)
-			return fmt.Errorf("app %q reaches %s at versions %s, and it ships one package per platform: a function holds one copy of it, installed for its architecture, so every importer must agree on the version",
+			return fmt.Errorf("app %q reaches %s at versions %s, and it ships one package per platform: a function contains one copy of it, installed for its architecture, so every importer must agree on the version",
 				app, name, strings.Join(versions, ", "))
 		}
 		wanted[name] = versions[0]
@@ -308,13 +308,13 @@ func projectNpmConfig(from string) (string, bool) {
 		if info, err := os.Stat(config); err == nil && info.Mode().IsRegular() {
 			return config, true
 		}
-		if holdsAny(dir, ".git", "pnpm-workspace.yaml") || filepath.Dir(dir) == dir {
+		if hasAny(dir, ".git", "pnpm-workspace.yaml") || filepath.Dir(dir) == dir {
 			return "", false
 		}
 	}
 }
 
-func holdsAny(dir string, names ...string) bool {
+func hasAny(dir string, names ...string) bool {
 	return slices.ContainsFunc(names, func(name string) bool {
 		_, err := os.Stat(filepath.Join(dir, name))
 		return err == nil

@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
-func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
+func TestBootstrapSendsTheFeatureSetAndNoEdge(t *testing.T) {
 	cases := []struct {
 		name        string
 		declaration string
@@ -42,7 +42,7 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 				t.Errorf("provider saw %q, want %q", got[0], tc.want)
 			}
 			if strings.Contains(got[0], "kind=") {
-				t.Errorf("provider saw %q; bootstrap no longer carries an edge, the cloudflare-edge feature does", got[0])
+				t.Errorf("provider saw %q; bootstrap no longer includes an edge, the cloudflare-edge feature does", got[0])
 			}
 		})
 	}
@@ -59,7 +59,7 @@ func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
 
 	got := clitest.ReadJournal(t, journal)
 	if len(got) != 1 || got[0] != "features=isr force=false acceptReplacements=true" {
-		t.Errorf("provider saw %v, want the set the account already carries", got)
+		t.Errorf("provider saw %v, want the set the account already has", got)
 	}
 }
 
@@ -89,7 +89,7 @@ func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
 	}
 	got := clitest.ReadJournal(t, journal)
 	if len(got) != 1 || got[0] != "features=isr remove=image-optimization force=true acceptReplacements=true" {
-		t.Errorf("provider saw %v, want the named removal carried through", got)
+		t.Errorf("provider saw %v, want the named removal passed through", got)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 				}
 			}
 			if !strings.Contains(stdout.String(), "fronted by the cloudflare edge") {
-				t.Errorf("stdout = %q, want the plan to name the edge left standing in the account, not the one this run selected", stdout.String())
+				t.Errorf("stdout = %q, want the plan to name the edge left installed in the account, not the one this run selected", stdout.String())
 			}
 		})
 	}

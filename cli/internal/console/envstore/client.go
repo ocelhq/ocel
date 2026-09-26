@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 )
 
-var ErrNoValue = errors.New("the console holds no value under that key")
+var ErrNoValue = errors.New("the console stores no value under that key")
 
 type Value struct {
 	Key       string `json:"key"`

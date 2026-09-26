@@ -26,7 +26,7 @@ func Repository(slug, app string) (string, error) {
 	name := naming.Sanitize(app)
 	repository := LocalNamespace + "/" + project + "/" + name
 	if !naming.IsRepositorySegment(project) || !naming.IsRepositorySegment(name) || len(repository) > maxRepository {
-		return "", fmt.Errorf("project %q and app %q name an image repository of %q, which docker cannot hold: name them something a repository can be derived from", slug, app, repository)
+		return "", fmt.Errorf("project %q and app %q name an image repository of %q, which docker rejects as a repository name: name them something a repository can be derived from", slug, app, repository)
 	}
 	return repository, nil
 }

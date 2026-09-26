@@ -195,7 +195,7 @@ func previewFlag(cmd *cobra.Command, opts *envOptions) {
 }
 
 func devFlag(cmd *cobra.Command, opts *envOptions) {
-	cmd.Flags().BoolVar(&opts.dev, "dev", false, "Use the values `ocel dev` resolves, held by the linked console project")
+	cmd.Flags().BoolVar(&opts.dev, "dev", false, "Use the values `ocel dev` resolves, stored in the linked console project")
 }
 
 func valueFlags(cmd *cobra.Command, opts *envOptions) {

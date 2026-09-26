@@ -40,7 +40,7 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 		}
 	})
 
-	t.Run("a write goes through where the key stands", func(t *testing.T) {
+	t.Run("a write goes through where the key is installed", func(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapEnvVar, "vars-key")
 		root := setUpEnvFixture(t)
 
@@ -152,7 +152,7 @@ func TestAProviderWithoutTheVarsKeyFeature(t *testing.T) {
 			t.Errorf("stderr = %q, want no offer of a feature this provider has no name for", stderr.String())
 		}
 		if _, err := os.Stat(journal); !os.IsNotExist(err) {
-			t.Errorf("the provider was bootstrapped for a feature it does not carry: %v", err)
+			t.Errorf("the provider was bootstrapped for a feature it does not offer: %v", err)
 		}
 	})
 }

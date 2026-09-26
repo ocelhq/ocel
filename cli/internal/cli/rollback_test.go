@@ -177,7 +177,7 @@ func TestRunRollback(t *testing.T) {
 		}
 	})
 
-	t.Run("a tag no promotion carries is refused before anything is rolled back", func(t *testing.T) {
+	t.Run("a tag no promotion has is refused before anything is rolled back", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
@@ -188,7 +188,7 @@ func TestRunRollback(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		err := runRollback(context.Background(), deps, root, rollbackOptions{tag: "v9.9.9", yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runRollback err = nil, want an error for a tag nothing carries")
+			t.Fatal("runRollback err = nil, want an error for a tag nothing has")
 		}
 		for _, want := range []string{`"v9.9.9"`, "v1.0.0"} {
 			if !strings.Contains(stdout.String(), want) {

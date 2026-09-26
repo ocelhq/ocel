@@ -108,7 +108,7 @@ func TestPlanBootstrap(t *testing.T) {
 	}
 }
 
-func TestOfferedBootstrapCarriesTheEdgeTheProjectChose(t *testing.T) {
+func TestOfferedBootstrapSendsTheEdgeTheProjectChose(t *testing.T) {
 	plan := Plan{Features: []string{"isr"}, Missing: []string{"isr"}}
 	front := &contractv1.EdgeSelection{Kind: "cloudflare"}
 
@@ -149,12 +149,12 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 		}
 		for _, want := range []string{"ocel-bootstrap-isr", "ocel bootstrap preview --features isr"} {
 			if !strings.Contains(out.String(), want) {
-				t.Errorf("stdout = %q, want it to carry %q", out.String(), want)
+				t.Errorf("stdout = %q, want it to contain %q", out.String(), want)
 			}
 		}
 	})
 
-	t.Run("a bootstrap that carries what this project needs says nothing", func(t *testing.T) {
+	t.Run("a bootstrap that includes what this project needs says nothing", func(t *testing.T) {
 		status := bootstrapOf(core,
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 		)

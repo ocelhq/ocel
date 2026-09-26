@@ -5,16 +5,16 @@ import (
 	"slices"
 )
 
-type heldCells map[Cell]int64
+type presentCells map[Cell]int64
 
-func (h heldCells) has(cell Cell) bool {
+func (h presentCells) has(cell Cell) bool {
 	_, ok := h[cell]
 	return ok
 }
 
-func cellsOf(held heldCells, key string) []Cell {
+func cellsOf(present presentCells, key string) []Cell {
 	var out []Cell
-	for cell := range held {
+	for cell := range present {
 		if cell.Key == key {
 			out = append(out, cell)
 		}
@@ -23,15 +23,15 @@ func cellsOf(held heldCells, key string) []Cell {
 	return out
 }
 
-func (g *Gate) baseCells() heldCells {
-	cells := make(heldCells, len(g.cells))
+func (g *Gate) baseCells() presentCells {
+	cells := make(presentCells, len(g.cells))
 	for _, row := range g.cells {
 		cells[row.Cell] = row.Version
 	}
 	return cells
 }
 
-func (g *Gate) resolvedCells() heldCells {
+func (g *Gate) resolvedCells() presentCells {
 	cells := g.baseCells()
 	if g.scope.Environment == "" {
 		return cells

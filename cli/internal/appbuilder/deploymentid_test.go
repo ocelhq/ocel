@@ -63,7 +63,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 			t.Errorf("app web lost its resolved value: POSTHOG_ID = %q", got)
 		}
 		if got, taken := lookup(gotEnv, deploymentIDEnv); taken {
-			t.Errorf("builder env carries %s = %q, want each app to carry its own", deploymentIDEnv, got)
+			t.Errorf("builder env sets %s = %q, want each app to have its own", deploymentIDEnv, got)
 		}
 	})
 
@@ -88,7 +88,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 				return err
 			}
 			if id == "" {
-				t.Errorf("builder env carries no %s for the app it detects", deploymentIDEnv)
+				t.Errorf("builder env sets no %s for the app it detects", deploymentIDEnv)
 			}
 			writePlan(t, req.OutDir)
 			return nil
@@ -155,7 +155,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 func TestDeploymentID(t *testing.T) {
 	t.Parallel()
 
-	t.Run("an app carrying no id points at ocel build", func(t *testing.T) {
+	t.Run("an app with no id points at ocel build", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()

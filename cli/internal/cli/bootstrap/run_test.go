@@ -120,7 +120,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		}
 	})
 
-	t.Run("nothing standing is a clean no-op, not a teardown", func(t *testing.T) {
+	t.Run("nothing installed is a clean no-op, not a teardown", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -143,7 +143,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		}
 	})
 
-	t.Run("--dry with nothing standing declares the no-op and offers nothing", func(t *testing.T) {
+	t.Run("--dry with nothing installed declares the no-op and offers nothing", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -249,7 +249,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("the selected edge stands beside the stacks, in its own vocabulary", func(t *testing.T) {
+	t.Run("the selected edge is listed beside the stacks, in its own vocabulary", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
@@ -361,7 +361,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("--remove carries the force the apply needs, and leaves the rest standing", func(t *testing.T) {
+	t.Run("--remove passes the force the apply needs, and leaves the rest installed", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
@@ -376,11 +376,11 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 		got := clitest.ReadJournal(t, journal)
 		if len(got) != 1 || got[0] != "features=image-optimization remove=isr force=true acceptReplacements=true" {
-			t.Errorf("provider saw %v, want the named removal carried through and the unnamed feature ensured", got)
+			t.Errorf("provider saw %v, want the named removal passed through and the unnamed feature ensured", got)
 		}
 	})
 
-	t.Run("a standing feature no flag names is not the subject of the plan", func(t *testing.T) {
+	t.Run("an installed feature no flag names is not the subject of the plan", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr,image-optimization")
 
@@ -415,7 +415,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("--remove of a feature that is not standing says so and stops", func(t *testing.T) {
+	t.Run("--remove of a feature that is not installed says so and stops", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
@@ -449,7 +449,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 }
 
 func TestBootstrapYesMeansYes(t *testing.T) {
-	t.Run("an interactive yes on a plan holding a replacement carries the consent it needs", func(t *testing.T) {
+	t.Run("an interactive yes on a plan containing a replacement passes the consent it needs", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 		deps.StdinIsTerminal = func(io.Reader) bool { return true }
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
@@ -508,7 +508,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		}
 		out := stdout.String()
 		for _, want := range []string{
-			"Removing isr from the production bootstrap tears down what it stood up.",
+			"Removing isr from the production bootstrap tears down what it installed.",
 			"Aborted.",
 		} {
 			if !strings.Contains(out, want) {
@@ -534,10 +534,10 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		want := "Removing isr from the production bootstrap tears down what it stood up."
+		want := "Removing isr from the production bootstrap tears down what it installed."
 		said := streamDiagnostics(t, stdout.String())
 		if !slices.Contains(said, want) {
-			t.Errorf("the stream said %v, want it to carry %q — the consent that follows covers it", said, want)
+			t.Errorf("the stream said %v, want it to contain %q — the consent that follows covers it", said, want)
 		}
 		if strings.Contains(withoutEnvelopes(stdout.String()), want) {
 			t.Errorf("the disclosure also went out beside the stream; got:\n%s", stdout.String())
@@ -606,7 +606,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "Removing isr from the production bootstrap tears down what it stood up.") {
+		if !strings.Contains(stdout.String(), "Removing isr from the production bootstrap tears down what it installed.") {
 			t.Errorf("stdout = %q, want --dry to say what the removal takes even with no plan to render", stdout.String())
 		}
 		if _, err := os.Stat(journal); err == nil {
@@ -631,7 +631,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	})
 }
 
-func TestBootstrapCarriesAutoHeal(t *testing.T) {
+func TestBootstrapSendsAutoHeal(t *testing.T) {
 	tests := []struct {
 		name string
 		opts Options
@@ -669,7 +669,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		}
 		want := "Also adding: cloudflare-edge — this project's edge needs it\nAlso adding: isr — cloudflare-edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
 	})
 
@@ -683,7 +683,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		}
 		want := "Also adding: cloudfront-edge — this project's edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
 	})
 

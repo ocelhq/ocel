@@ -62,7 +62,7 @@ func verifySigned(verifier *verify.Verifier, signed verify.SignedEntity, checksu
 	}
 	policy := verify.NewPolicy(verify.WithArtifact(bytes.NewReader(checksums)), verify.WithCertificateIdentity(who))
 	if _, err := verifier.Verify(signed, policy); err != nil {
-		return fmt.Errorf("%s carries no signature over %s made by %s as %s: %w", SignatureAsset, ChecksumsAsset, SignerIssuer, identity, err)
+		return fmt.Errorf("%s contains no signature over %s made by %s as %s: %w", SignatureAsset, ChecksumsAsset, SignerIssuer, identity, err)
 	}
 	return nil
 }

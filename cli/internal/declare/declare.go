@@ -21,7 +21,7 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 		return Resource{}, fmt.Errorf("unsupported resource type: %s", id.GetType())
 	}
 	if !configMatches(req, id.GetType()) {
-		return Resource{}, fmt.Errorf("resource %s declares itself a %s but carries %s config", id.GetName(), id.GetType(), configName(req))
+		return Resource{}, fmt.Errorf("resource %s declares itself a %s but has %s config", id.GetName(), id.GetType(), configName(req))
 	}
 
 	return Resource{

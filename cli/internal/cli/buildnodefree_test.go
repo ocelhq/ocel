@@ -28,6 +28,6 @@ func TestBuildingAGoProjectUnpacksNoNodeBundle(t *testing.T) {
 		t.Fatalf("runBuild err = %v; stderr=%s", err, stderr.String())
 	}
 	if _, err := os.Stat(node.DistDir(root)); err == nil {
-		t.Fatalf("%s was unpacked for a project holding no JavaScript", node.DistDir(root))
+		t.Fatalf("%s was unpacked for a project with no JavaScript", node.DistDir(root))
 	}
 }

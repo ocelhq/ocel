@@ -25,7 +25,7 @@ import (
 type fakeStore struct {
 	cells     map[envgate.Cell]string
 	versions  map[envgate.Cell]int64
-	held      map[envgate.Address]string
+	values    map[envgate.Address]string
 	overrides []envgate.Stored
 
 	environments []string
@@ -38,12 +38,12 @@ type fakeStore struct {
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, held: map[envgate.Address]string{}}
+	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, values: map[envgate.Address]string{}}
 }
 
 func (s *fakeStore) override(cell envgate.Cell, environment string) {
 	s.overrides = append(s.overrides, envgate.Stored{Address: envgate.Address{Cell: cell, Environment: environment}, Version: 1})
-	s.held[envgate.Address{Cell: cell, Environment: environment}] = "override"
+	s.values[envgate.Address{Cell: cell, Environment: environment}] = "override"
 }
 
 func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
@@ -77,7 +77,7 @@ func (s *fakeStore) Read(_ context.Context, rows []envgate.Address) (map[envgate
 			}
 			continue
 		}
-		if value, ok := s.held[at]; ok {
+		if value, ok := s.values[at]; ok {
 			found[at] = value
 		}
 	}
@@ -105,7 +105,7 @@ func (s *fakeStore) Set(_ context.Context, at envgate.Address, value string, exp
 	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
 	}
-	s.held[at] = value
+	s.values[at] = value
 	if at.Environment != "" {
 		s.overrides = append(s.overrides, envgate.Stored{Address: at, Version: 1})
 		return nil
@@ -120,7 +120,7 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int6
 		return varsui.ErrStaleValue
 	}
 	s.deletes++
-	delete(s.held, at)
+	delete(s.values, at)
 	if at.Environment != "" {
 		s.overrides = slices.DeleteFunc(s.overrides, func(row envgate.Stored) bool {
 			return row.Cell == at.Cell && row.Environment == at.Environment
@@ -133,8 +133,8 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int6
 }
 
 func (s *fakeStore) History(_ context.Context, at envgate.Address) ([]varsui.Version, error) {
-	_, held := s.held[at]
-	if _, base := s.cells[at.Cell]; !held && (!base || at.Environment != "") {
+	_, ok := s.values[at]
+	if _, base := s.cells[at.Cell]; !ok && (!base || at.Environment != "") {
 		return nil, nil
 	}
 	return []varsui.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil
@@ -194,9 +194,6 @@ func serveWith(t *testing.T, ctx context.Context, opts varsui.Options) *varsui.S
 	return s
 }
 
-// s.URL carries a trailing slash before its fragment, so joining a path onto it
-// raw yields "//api/value"; ServeMux 301s that to the cleaned path and the
-// client downgrades the method to GET on the way.
 func origin(s *varsui.Session) string {
 	return strings.TrimSuffix(strings.SplitN(s.URL, "#", 2)[0], "/")
 }
@@ -321,7 +318,7 @@ func TestServe(t *testing.T) {
 		}
 	})
 
-	t.Run("the launch URL carries the token in the fragment", func(t *testing.T) {
+	t.Run("the launch URL includes the token in the fragment", func(t *testing.T) {
 		t.Parallel()
 		s := session(t, newFakeStore(), def("API_URL"))
 
@@ -339,7 +336,7 @@ func TestServe(t *testing.T) {
 
 		resp := do(t, mustGet(t, s.URL))
 		if resp.StatusCode != http.StatusOK || !strings.Contains(bodyOf(t, resp), "<title>vars</title>") {
-			t.Errorf("GET / = %d, want the embedded page — it holds no secrets and must load before the token is read", resp.StatusCode)
+			t.Errorf("GET / = %d, want the embedded page — it contains no secrets and must load before the token is read", resp.StatusCode)
 		}
 	})
 }
@@ -417,7 +414,7 @@ func TestAuthorization(t *testing.T) {
 				t.Errorf("%s = %d, want %d", tc.label, resp.StatusCode, http.StatusForbidden)
 			}
 			if len(store.cells) != 0 {
-				t.Errorf("store holds %v, want nothing — a refused request must not have written", store.cells)
+				t.Errorf("store contains %v, want nothing — a refused request must not have written", store.cells)
 			}
 		})
 	}
@@ -457,7 +454,7 @@ func TestGetState(t *testing.T) {
 
 		c := cellState(t, state(t, s), "API_URL", "")
 		if c.Set {
-			t.Error("the matrix reports API_URL filled, want it empty — pr-42's value is what pr-42 reads, not what the cell holds")
+			t.Error("the matrix reports API_URL filled, want it empty — pr-42's value is what pr-42 reads, not what the cell stores")
 		}
 		want := []envgate.Override{{Environment: "pr-42", Version: 1}}
 		if !reflect.DeepEqual(c.Overrides, want) {
@@ -514,7 +511,7 @@ func TestPutValue(t *testing.T) {
 			t.Errorf("refusal = %q, want it to name the scope that forbids the cell", body)
 		}
 		if len(store.cells) != 0 {
-			t.Errorf("store holds %v, want nothing", store.cells)
+			t.Errorf("store contains %v, want nothing", store.cells)
 		}
 	})
 
@@ -532,7 +529,7 @@ func TestPutValue(t *testing.T) {
 					t.Errorf("PUT to folder %q = %d, want %d", folder, resp.StatusCode, http.StatusBadRequest)
 				}
 				if len(store.cells) != 0 {
-					t.Errorf("store holds %v, want nothing — nothing resolves a value in %q", store.cells, folder)
+					t.Errorf("store contains %v, want nothing — nothing resolves a value in %q", store.cells, folder)
 				}
 			})
 		}
@@ -559,7 +556,7 @@ func TestPutValue(t *testing.T) {
 			t.Fatalf("PUT at the root = %d: %s", root.StatusCode, bodyOf(t, root))
 		}
 		if got := store.cells[envgate.Cell{Key: "ORDERS_URL"}]; got != "postgres://db/orders" {
-			t.Errorf("store holds %q for ORDERS_URL, want the value written", got)
+			t.Errorf("store has %q for ORDERS_URL, want the value written", got)
 		}
 	})
 
@@ -574,7 +571,7 @@ func TestPutValue(t *testing.T) {
 		}
 
 		if got := store.cells[envgate.Cell{Key: "POSTHOG_ID", Folder: "/web"}]; got != "ph_web" {
-			t.Errorf("store holds %q for POSTHOG_ID in /web, want %q", got, "ph_web")
+			t.Errorf("store has %q for POSTHOG_ID in /web, want %q", got, "ph_web")
 		}
 		if !cellState(t, state(t, s), "POSTHOG_ID", "/web").Set {
 			t.Error("the matrix still reports POSTHOG_ID in /web unset, want it filled without a restart")
@@ -593,7 +590,7 @@ func TestPutValue(t *testing.T) {
 		}
 		s := serve(t, store, gate)
 		if cellState(t, state(t, s), "API_URL", "").Problem == "" {
-			t.Fatal("the cell carries no complaint before the fix, so the test cannot show one being cleared")
+			t.Fatal("the cell has no complaint before the fix, so the test cannot show one being cleared")
 		}
 
 		resp := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "API_URL", "folder": "", "value": "https://ok.example"})
@@ -621,8 +618,8 @@ func TestPutValue(t *testing.T) {
 		}
 
 		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
-		if got := store.held[at]; got != "https://staging.example" {
-			t.Errorf("staging holds %q, want the override that was written", got)
+		if got := store.values[at]; got != "https://staging.example" {
+			t.Errorf("staging has %q, want the override that was written", got)
 		}
 		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://shared.example" {
 			t.Errorf("the value bound to all environments is %q, want it untouched", got)
@@ -641,8 +638,8 @@ func TestPutValue(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Fatalf("PUT = %d: %s, want it refused", resp.StatusCode, bodyOf(t, resp))
 		}
-		if len(store.held) != 0 {
-			t.Errorf("store holds %v, want the refused write to have landed nowhere", store.held)
+		if len(store.values) != 0 {
+			t.Errorf("store contains %v, want the refused write to have landed nowhere", store.values)
 		}
 	})
 
@@ -675,12 +672,12 @@ func TestPutValue(t *testing.T) {
 				if resp.StatusCode != tc.wantStatus {
 					t.Fatalf("PUT = %d, want %d: %s", resp.StatusCode, tc.wantStatus, bodyOf(t, resp))
 				}
-				held := store.held[at]
-				if tc.wantStatus == http.StatusOK && held != "https://mine.example" {
-					t.Errorf("staging holds %q, want the write that quoted the current version", held)
+				value := store.values[at]
+				if tc.wantStatus == http.StatusOK && value != "https://mine.example" {
+					t.Errorf("staging has %q, want the write that quoted the current version", value)
 				}
-				if tc.wantStatus == http.StatusConflict && held != "override" {
-					t.Errorf("staging holds %q, want the value already there — a stale write must not be applied", held)
+				if tc.wantStatus == http.StatusConflict && value != "override" {
+					t.Errorf("staging has %q, want the value already there — a stale write must not be applied", value)
 				}
 			})
 		}
@@ -752,7 +749,7 @@ func TestPutValue(t *testing.T) {
 			t.Errorf("stale PUT = %d, want %d — a refused write is a conflict, not a failed store", resp.StatusCode, http.StatusConflict)
 		}
 		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
-			t.Errorf("store holds %q, want the value already there — a stale write must not be applied", got)
+			t.Errorf("store has %q, want the value already there — a stale write must not be applied", got)
 		}
 	})
 }
@@ -787,7 +784,7 @@ func TestDeleteValue(t *testing.T) {
 		}
 
 		if len(store.cells) != 0 {
-			t.Errorf("store holds %v, want nothing", store.cells)
+			t.Errorf("store contains %v, want nothing", store.cells)
 		}
 		if cellState(t, state(t, s), "API_URL", "").Set {
 			t.Error("the matrix still reports API_URL filled, want it empty")
@@ -807,7 +804,7 @@ func TestDeleteValue(t *testing.T) {
 			t.Errorf("stale DELETE = %d, want %d — a refused delete is a conflict, not a failed store", resp.StatusCode, http.StatusConflict)
 		}
 		if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
-			t.Errorf("store holds %q, want the value already there — a stale delete must not be applied", got)
+			t.Errorf("store has %q, want the value already there — a stale delete must not be applied", got)
 		}
 	})
 
@@ -1052,7 +1049,7 @@ func TestReveal(t *testing.T) {
 		resp := request(t, s, http.MethodPost, "/api/reveal", map[string]any{"cells": []map[string]string{{"key": "API_URL"}}})
 		got := decode[revealed](t, resp)
 		if len(got.Values) != 0 || len(got.Errors) != 1 || got.Errors[0].Error != store.unreadable {
-			t.Errorf("reveal = %+v, want the failure carried on the cell rather than an empty value", got)
+			t.Errorf("reveal = %+v, want the failure reported on the cell rather than an empty value", got)
 		}
 	})
 }
@@ -1072,7 +1069,7 @@ func TestReferences(t *testing.T) {
 			t.Errorf("LOG_LEVEL reference = %+v, want the project and key it reads", got.Reference)
 		}
 		if other := cellState(t, state(t, s), "API_URL", ""); other.Reference != nil {
-			t.Errorf("API_URL reference = %+v, want none on a cell holding its own value", other.Reference)
+			t.Errorf("API_URL reference = %+v, want none on a cell storing its own value", other.Reference)
 		}
 	})
 }
@@ -1096,10 +1093,10 @@ type copyOutcomes struct {
 	}
 }
 
-func TestOtherSubstrate(t *testing.T) {
+func TestOtherTierStore(t *testing.T) {
 	t.Parallel()
 
-	t.Run("reading the other substrate lists declared cells with values for all but secrets", func(t *testing.T) {
+	t.Run("reading the other tier's store lists declared cells with values for all but secrets", func(t *testing.T) {
 		t.Parallel()
 		here := newFakeStore()
 		other := newFakeStore()
@@ -1138,11 +1135,11 @@ func TestOtherSubstrate(t *testing.T) {
 		}
 		for _, at := range other.read {
 			if at.Cell.Key == "STRIPE_KEY" {
-				t.Error("the secret was read from the other substrate for a browser listing")
+				t.Error("the secret was read from the other tier's store for a browser listing")
 			}
 		}
 		if len(here.read) != 0 {
-			t.Errorf("the session's own store was read %v, want the other substrate read without disturbing this one", here.read)
+			t.Errorf("the session's own store was read %v, want the other tier's store read without disturbing this one", here.read)
 		}
 	})
 
@@ -1182,14 +1179,14 @@ func TestOtherSubstrate(t *testing.T) {
 			t.Errorf("STRIPE_KEY = %+v, want the secret copied server-side without entering the browser", r)
 		}
 		if r := got.Results[2]; r.Saved || r.Error == "" {
-			t.Errorf("MISSING = %+v, want a cell the other substrate lacks reported rather than skipped", r)
+			t.Errorf("MISSING = %+v, want a cell the other tier's store lacks reported rather than skipped", r)
 		}
 		if body := bodyOf(t, request(t, s, http.MethodGet, "/api/state", nil)); strings.Contains(body, "sk_test") {
 			t.Error("the state leaks the copied secret")
 		}
 	})
 
-	t.Run("a session without another substrate says so", func(t *testing.T) {
+	t.Run("a session without another tier's store says so", func(t *testing.T) {
 		t.Parallel()
 		s := session(t, newFakeStore(), def("API_URL"))
 		if resp := request(t, s, http.MethodGet, "/api/other", nil); resp.StatusCode != http.StatusNotFound {
@@ -1215,7 +1212,7 @@ func TestRecovery(t *testing.T) {
 			t.Errorf("recovery = %+v, want the deploy named and API_URL missing", got.Recovery)
 		}
 		if standalone := state(t, session(t, newFakeStore(), def("API_URL"))); standalone.Recovery != nil {
-			t.Errorf("a standalone visit carries recovery %+v, want none", standalone.Recovery)
+			t.Errorf("a standalone visit has recovery %+v, want none", standalone.Recovery)
 		}
 	})
 

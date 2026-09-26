@@ -156,18 +156,18 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		return Container{}, err
 	}
 
-	held, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
+	existing, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
 	switch {
 	case cerrdefs.IsNotFound(err):
 	case err != nil:
 		return Container{}, fmt.Errorf("look for the container %s: %w", spec.Name, err)
-	case held.Container.State != nil && held.Container.State.Running:
-		if !runs(held.Container, spec) {
+	case existing.Container.State != nil && existing.Container.State.Running:
+		if !runs(existing.Container, spec) {
 			return Container{}, fmt.Errorf("a container named %s is running and is not the %s this project asks for, so it may be in use: stop what started it, or remove it with `docker rm -f %s`", spec.Name, spec.Image, spec.Name)
 		}
-		return d.reachable(held.Container, spec.Name, port)
+		return d.reachable(existing.Container, spec.Name, port)
 	default:
-		if _, err := d.api.ContainerRemove(ctx, held.Container.ID, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+		if _, err := d.api.ContainerRemove(ctx, existing.Container.ID, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
 			return Container{}, fmt.Errorf("replace the stopped container %s left by an earlier run: %w", spec.Name, err)
 		}
 	}
@@ -218,14 +218,14 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 func (d *daemon) adoptWinner(ctx context.Context, spec Spec, port network.Port) (Container, error) {
 	var winner container.InspectResponse
 	err := WaitReady(ctx, winnerStartsWithin, func(ctx context.Context) error {
-		held, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
+		inspected, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
 		if err != nil {
 			return err
 		}
-		if held.Container.State == nil || !held.Container.State.Running || !runs(held.Container, spec) {
+		if inspected.Container.State == nil || !inspected.Container.State.Running || !runs(inspected.Container, spec) {
 			return fmt.Errorf("the container %s another process created is not running %s", spec.Name, spec.Image)
 		}
-		winner = held.Container
+		winner = inspected.Container
 		return nil
 	})
 	if err != nil {
@@ -234,27 +234,27 @@ func (d *daemon) adoptWinner(ctx context.Context, spec Spec, port network.Port) 
 	return d.reachable(winner, spec.Name, port)
 }
 
-func runs(held container.InspectResponse, spec Spec) bool {
-	if held.Config == nil || held.Config.Image != spec.Image {
+func runs(inspected container.InspectResponse, spec Spec) bool {
+	if inspected.Config == nil || inspected.Config.Image != spec.Image {
 		return false
 	}
 	for key, value := range spec.Labels {
-		if held.Config.Labels[key] != value {
+		if inspected.Config.Labels[key] != value {
 			return false
 		}
 	}
 	return true
 }
 
-func (d *daemon) reachable(held container.InspectResponse, name string, port network.Port) (Container, error) {
+func (d *daemon) reachable(inspected container.InspectResponse, name string, port network.Port) (Container, error) {
 	var bindings []network.PortBinding
-	if settings := held.NetworkSettings; settings != nil {
+	if settings := inspected.NetworkSettings; settings != nil {
 		bindings = settings.Ports[port]
 	}
 	if len(bindings) == 0 {
 		return Container{}, fmt.Errorf("docker published no host port for %s", name)
 	}
-	return Container{ID: held.ID, Addr: net.JoinHostPort(d.reachedAt, bindings[0].HostPort)}, nil
+	return Container{ID: inspected.ID, Addr: net.JoinHostPort(d.reachedAt, bindings[0].HostPort)}, nil
 }
 
 func (d *daemon) discard(ctx context.Context, id string) {
@@ -338,16 +338,16 @@ func (d *daemon) Wipe(ctx context.Context, labels map[string]string) error {
 		return fmt.Errorf("list this project's containers: %w", err)
 	}
 	var failed []error
-	for _, held := range containers.Items {
-		failed = append(failed, d.Stop(ctx, held.ID))
+	for _, summary := range containers.Items {
+		failed = append(failed, d.Stop(ctx, summary.ID))
 	}
 	volumes, err := d.api.VolumeList(ctx, client.VolumeListOptions{Filters: filters})
 	if err != nil {
 		return errors.Join(append(failed, fmt.Errorf("list this project's volumes: %w", err))...)
 	}
-	for _, held := range volumes.Items {
-		if _, err := d.api.VolumeRemove(ctx, held.Name, client.VolumeRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
-			failed = append(failed, fmt.Errorf("remove the volume %s: %w", held.Name, err))
+	for _, vol := range volumes.Items {
+		if _, err := d.api.VolumeRemove(ctx, vol.Name, client.VolumeRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+			failed = append(failed, fmt.Errorf("remove the volume %s: %w", vol.Name, err))
 		}
 	}
 	return errors.Join(failed...)

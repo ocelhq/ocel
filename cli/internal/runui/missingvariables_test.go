@@ -88,7 +88,7 @@ func TestARefusalIsTheFailureNotADetailUnderOne(t *testing.T) {
 		}
 	}
 	if strings.Contains(got, "✗ Failed") {
-		t.Errorf("stdout = %q, want the refusal to stand as the failure headline", got)
+		t.Errorf("stdout = %q, want the refusal kept as the failure headline", got)
 	}
 }
 

@@ -117,7 +117,7 @@ func TestAProviderWhoseIdentityIsEmptyIsStillNamedByThePlan(t *testing.T) {
 		t.Fatal("ResolveComputes() accepted a provider that names no compute, want the plan refused")
 	}
 	if !strings.Contains(err.Error(), "aws") {
-		t.Errorf("ResolveComputes() error = %q, want the provider named from the package the project pins, which stands whether or not preflight could answer an identity", err)
+		t.Errorf("ResolveComputes() error = %q, want the provider named from the package the project pins, which is known whether or not preflight could answer an identity", err)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestAnAppThatFallsBackToServerlessIsRefusedItsBuildToo(t *testing.T) {
 	}
 }
 
-func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONHolds(t *testing.T) {
+func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONSets(t *testing.T) {
 	t.Parallel()
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{

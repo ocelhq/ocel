@@ -89,7 +89,7 @@ describe("protocol records", () => {
     expect(isReported("a plain string throw")).toBe(false);
   });
 
-  it("carries no app/stage when the failure is not scoped to either", () => {
+  it("names no app/stage when the failure is not scoped to either", () => {
     const { lines } = captureStdout();
     reportError("could not detect a runtime");
 

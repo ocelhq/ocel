@@ -160,8 +160,8 @@ func TestRunEnvSet(t *testing.T) {
 			opts envOptions
 			want string
 		}{
-			"the environment holding the override": {opts: staging, want: "sk_staging"},
-			"every other environment":              {opts: preview, want: "sk_shared"},
+			"the environment with the override": {opts: staging, want: "sk_staging"},
+			"every other environment":           {opts: preview, want: "sk_shared"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				opts := tc.opts
@@ -340,7 +340,7 @@ func TestEnvAsksTheBootstrapOnlyWhetherThisCLICanSpeakToIt(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
-		t.Fatalf("a variable this bootstrap holds was refused over a feature no variable needs: %v", err)
+		t.Fatalf("a variable this bootstrap stores was refused over a feature no variable needs: %v", err)
 	}
 }
 

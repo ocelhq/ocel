@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func TestProviderConfigCarriesTheProjectTransformModules(t *testing.T) {
+func TestProviderConfigIncludesTheProjectTransformModules(t *testing.T) {
 	modules := []string{"./transforms/network.transform.ts"}
 	config, err := providerConfig(&projectconfig.Config{Transforms: modules}, &projectconfig.ProviderDescriptor{ID: "aws"})
 	if err != nil {
@@ -20,7 +20,7 @@ func TestProviderConfigCarriesTheProjectTransformModules(t *testing.T) {
 	}
 }
 
-func TestProviderConfigCarriesTheProjectItConfigures(t *testing.T) {
+func TestProviderConfigIncludesTheProjectItConfigures(t *testing.T) {
 	config, err := providerConfig(&projectconfig.Config{Slug: "shop"}, &projectconfig.ProviderDescriptor{ID: "vps"})
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
@@ -30,7 +30,7 @@ func TestProviderConfigCarriesTheProjectItConfigures(t *testing.T) {
 	}
 }
 
-func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
+func TestProviderConfigIncludesTheDescriptorOptionsOpaquely(t *testing.T) {
 	config, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
 		ID:      "aws",
 		Options: json.RawMessage(`{"region":"us-east-1"}`),
@@ -65,6 +65,6 @@ func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) 
 		t.Fatalf("providerConfig: %v", err)
 	}
 	if len(config.GetOptions().GetFields()) != 0 {
-		t.Errorf("options = %v, want none for a descriptor carrying no options", config.GetOptions())
+		t.Errorf("options = %v, want none for a descriptor declaring no options", config.GetOptions())
 	}
 }

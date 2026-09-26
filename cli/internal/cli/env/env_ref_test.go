@@ -91,7 +91,7 @@ func TestRunEnvRef(t *testing.T) {
 			t.Fatal("runEnvGet through a reference to nothing err = nil, want a failure")
 		}
 		if !strings.Contains(err.Error(), "platform/STRIPE_API_KEY") {
-			t.Errorf("failure = %q, want it to name the cell that holds nothing", err)
+			t.Errorf("failure = %q, want it to name the cell that contains nothing", err)
 		}
 
 		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")

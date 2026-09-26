@@ -17,7 +17,7 @@ func shape(name, jsonType string, list bool) *envvarsv1.PropertyShape {
 }
 
 func TestRenderBindingTypes(t *testing.T) {
-	t.Run("writes what the checked-in fixture the transform package typechecks holds", func(t *testing.T) {
+	t.Run("writes what the checked-in fixture the transform package typechecks contains", func(t *testing.T) {
 		got := renderBindingTypes("production", []projectconfig.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
 		}, []*envvarsv1.BindingSummary{
@@ -52,7 +52,7 @@ func TestRenderBindingTypes(t *testing.T) {
 		}
 	})
 
-	t.Run("names the coordinate it read and holds no value", func(t *testing.T) {
+	t.Run("names the coordinate it read and contains no value", func(t *testing.T) {
 		got := renderBindingTypes("the preview environment pr-12", nil, []*envvarsv1.BindingSummary{
 			{Name: "network", Type: bindingsv1.BindingType_BINDING_TYPE_CUSTOM, Properties: []*envvarsv1.PropertyShape{shape("subnetIds", "string", true)}},
 		})
@@ -90,7 +90,7 @@ func TestRenderBindingTypes(t *testing.T) {
 			`"line\nbreak"`,
 		} {
 			if !strings.Contains(got, want) {
-				t.Errorf("renderBindingTypes() =\n%s\nwant it to hold %q", got, want)
+				t.Errorf("renderBindingTypes() =\n%s\nwant it to contain %q", got, want)
 			}
 		}
 		for _, never := range []string{`\a`, `\U000e0001`} {
@@ -111,7 +111,7 @@ func TestRenderBindingTypes(t *testing.T) {
 			},
 		})
 		if want := "orders: { url: string }"; !strings.Contains(got, want) {
-			t.Errorf("renderBindingTypes() =\n%s\nwant it to hold %q", got, want)
+			t.Errorf("renderBindingTypes() =\n%s\nwant it to contain %q", got, want)
 		}
 	})
 
@@ -129,14 +129,14 @@ func TestRenderBindingTypes(t *testing.T) {
 
 		for _, want := range []string{"orders: { host: string }", "invoices: { host: string }"} {
 			if !strings.Contains(got, want) {
-				t.Errorf("renderBindingTypes() =\n%s\nwant it to hold %q — two resources reading one record are two names a module can write", got, want)
+				t.Errorf("renderBindingTypes() =\n%s\nwant it to contain %q — two resources reading one record are two names a module can write", got, want)
 			}
 		}
 	})
 
-	t.Run("renders every shape a record can carry", func(t *testing.T) {
+	t.Run("renders every shape a record can have", func(t *testing.T) {
 		got := renderBindingTypes("production", nil, []*envvarsv1.BindingSummary{
-			{Name: "carries-nothing", Type: bindingsv1.BindingType_BINDING_TYPE_CUSTOM},
+			{Name: "no-properties", Type: bindingsv1.BindingType_BINDING_TYPE_CUSTOM},
 			{Name: "shapes", Type: bindingsv1.BindingType_BINDING_TYPE_CUSTOM, Properties: []*envvarsv1.PropertyShape{
 				shape("count", "number", false),
 				shape("public", "boolean", false),
@@ -147,7 +147,7 @@ func TestRenderBindingTypes(t *testing.T) {
 		})
 
 		for _, want := range []string{
-			"      \"carries-nothing\": {};\n",
+			"      \"no-properties\": {};\n",
 			"count: number",
 			"public: boolean",
 			"tags: Record<string, unknown>",
@@ -155,7 +155,7 @@ func TestRenderBindingTypes(t *testing.T) {
 			`"kebab-case": string`,
 		} {
 			if !strings.Contains(got, want) {
-				t.Errorf("renderBindingTypes() =\n%s\nwant it to hold %q", got, want)
+				t.Errorf("renderBindingTypes() =\n%s\nwant it to contain %q", got, want)
 			}
 		}
 	})

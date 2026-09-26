@@ -60,7 +60,7 @@ func goModule(configDir, dir string) (string, string, error) {
 		return "", "", err
 	}
 	if !found {
-		return "", "", fmt.Errorf("discovery: %s is a go folder, but no go.mod stands between it and %s", dir, configDir)
+		return "", "", fmt.Errorf("discovery: %s is a go folder, but neither it nor any folder up to %s has a go.mod", dir, configDir)
 	}
 
 	match := goModulePathRE.FindSubmatch(declaration)

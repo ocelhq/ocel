@@ -51,11 +51,11 @@ func TestIdentityEvent(t *testing.T) {
 		}
 	})
 
-	t.Run("an empty identity carries no origin", func(t *testing.T) {
+	t.Run("an empty identity has no origin", func(t *testing.T) {
 		t.Parallel()
 
 		if got := IdentityEvent(cfg, environmentv1.Tier_TIER_PREVIEW, &contractv1.Identity{}); got.GetOrigin() != nil {
-			t.Errorf("origin = %v, want nothing to stand for an identity the provider left blank", got.GetOrigin())
+			t.Errorf("origin = %v, want nothing to represent an identity the provider left blank", got.GetOrigin())
 		}
 	})
 }

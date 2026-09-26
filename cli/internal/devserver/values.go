@@ -45,7 +45,7 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 		keys = append(keys, key)
 	}
 	for key := range v.live {
-		if _, held := v.values[key]; !held {
+		if _, ok := v.values[key]; !ok {
 			keys = append(keys, key)
 		}
 	}

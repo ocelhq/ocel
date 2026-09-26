@@ -86,7 +86,7 @@ func (p Plan) Refusal(tier environmentv1.Tier) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"the %s bootstrap does not carry what this project needs: %s.\nRun `%s` and try again",
+		"the %s bootstrap does not include what this project needs: %s.\nRun `%s` and try again",
 		Name(tier), strings.Join(p.Missing, ", "), p.Command(tier),
 	)
 }

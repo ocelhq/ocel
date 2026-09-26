@@ -39,7 +39,7 @@ func TestLiveARailpackBuildLandsAWorkingImageInTheDaemon(t *testing.T) {
 		said := vm.SSH(t, where)
 		for _, secret := range []string{"OCEL_LIVE_LEAK", leaked} {
 			if strings.Contains(said, secret) {
-				t.Errorf("`%s` carries %q from ocel's own environment, so the build was not bare:\n%s", where, secret, said)
+				t.Errorf("`%s` shows %q from ocel's own environment, so the build was not bare:\n%s", where, secret, said)
 			}
 		}
 	}
@@ -59,7 +59,7 @@ func addresses(t *testing.T, vm livemachine.Machine, image imagebuild.Image, rep
 	}
 	for _, coordinate := range []string{image.Ref, image.Repository + ":" + image.Tag} {
 		if _, err := vm.Attempt("docker image inspect " + coordinate); err != nil {
-			t.Errorf("the daemon holds no image at %s, so the coordinate ocel hands a provider names nothing: %v", coordinate, err)
+			t.Errorf("the daemon has no image at %s, so the coordinate ocel hands a provider names nothing: %v", coordinate, err)
 		}
 	}
 	repoDigests := vm.SSH(t, "docker image inspect --format '{{json .RepoDigests}}' "+image.Repository+":"+image.Tag)
@@ -120,7 +120,7 @@ func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
 
 	want := declaredVersion(t)
 	if said := serves(t, vm, image, 18082); said != want {
-		t.Errorf("the express fixture answered %q, want %q: a redeploy is told apart by the version its package.json carries", said, want)
+		t.Errorf("the express fixture answered %q, want %q: a redeploy is told apart by the version its package.json names", said, want)
 	}
 }
 
@@ -147,8 +147,8 @@ func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
 	}
 
 	addresses(t, vm, image, "ocel/shop-live/workspace-express")
-	if held := vm.SSH(t, "docker run --rm --entrypoint sh "+image.Ref+" -c 'ls "+loc.Path+"/node_modules/express/package.json'"); !strings.Contains(held, "package.json") {
-		t.Errorf("the image holds %q where the app's own dependencies belong: the install inside it resolved nothing from the root's lockfile", held)
+	if out := vm.SSH(t, "docker run --rm --entrypoint sh "+image.Ref+" -c 'ls "+loc.Path+"/node_modules/express/package.json'"); !strings.Contains(out, "package.json") {
+		t.Errorf("the image contains %q where the app's own dependencies belong: the install inside it resolved nothing from the root's lockfile", out)
 	}
 	if said := serves(t, vm, image, 18083); said != workspaceGreeting {
 		t.Errorf("the app answered %q, want %q: the image serves the app only if the workspace package beside it was built and resolved", said, workspaceGreeting)

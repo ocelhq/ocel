@@ -51,7 +51,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 	}
 }
 
-func TestAUnitIsOneRowCarryingWhatItIsDoingNow(t *testing.T) {
+func TestAUnitIsOneRowShowingWhatItIsDoingNow(t *testing.T) {
 	t.Parallel()
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
