@@ -1025,7 +1025,7 @@ export function missingSet(recovery: Recovery | undefined): ReadonlySet<string> 
   );
 }
 
-export function unfilledMissing(
+export function stillMissingOf(
   catalogue: Catalogue,
   missing: ReadonlySet<string>,
   drafts: ReadonlyMap<string, string>,
