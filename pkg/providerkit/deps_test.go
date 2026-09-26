@@ -1,4 +1,4 @@
-package providerserver_test
+package providerkit_test
 
 import (
 	"os/exec"
@@ -27,9 +27,7 @@ var engines = []string{
 func TestTheKitReachesNothingItMayNotImport(t *testing.T) {
 	t.Parallel()
 
-	list := exec.Command("go", "list", "-deps", "./...")
-	list.Dir = ".."
-	out, err := list.CombinedOutput()
+	out, err := exec.Command("go", "list", "-deps", "./...").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list -deps: %v\n%s", err, out)
 	}
