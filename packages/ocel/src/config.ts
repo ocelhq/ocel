@@ -47,7 +47,7 @@ type AppFrameworkOf<T> = T extends { apps?: (infer A)[] }
 
 /**
  * Declares a project. The object it takes is the same document `ocel.json`
- * holds, so a TypeScript config is an authoring surface over data and nothing
+ * contains, so a TypeScript config is an authoring surface over data and nothing
  * more: nothing in it is evaluated at deploy time.
  */
 export function defineConfig(config: OcelConfig): OcelConfig {

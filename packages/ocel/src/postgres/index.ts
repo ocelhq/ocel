@@ -14,7 +14,7 @@ type PgReturn = Pool & { connectionString: string };
  * Declares a postgres database named `id` and returns a `pg` pool connected to it.
  *
  * At deploy the database is provisioned in your account, or bound to the record
- * `bindings` names; the pool connects through the record's url when it carries
+ * `bindings` names; the pool connects through the record's url when it has
  * one, reading its `sslmode` as libpq does, and otherwise through its host, port,
  * database, username and password, encrypted as its tls mode asks.
  * `connectionString` is the same connection as a URL, for tools that take one.

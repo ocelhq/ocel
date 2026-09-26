@@ -146,7 +146,7 @@ export const bindingPasswordAsText = defineConfig({
 
 export const bindingUrlAsText = defineConfig({
   slug: "test-app",
-  // @ts-expect-error a url carries its password, so it is an ocel variable
+  // @ts-expect-error a url contains its password, so it is an ocel variable
   bindings: { postgres: { orders: { url: "postgres://u:p@db/d" } } },
 });
 

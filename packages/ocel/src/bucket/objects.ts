@@ -7,7 +7,7 @@ import {
 import type { BucketContext } from "./bucket-context.js";
 import { ObjectNotFoundError, PreconditionFailedError } from "./errors.js";
 
-/** What a bucket knows about one object it holds. */
+/** What a bucket knows about one of its objects. */
 export interface ObjectInfo {
   /** The key the object is addressed by. */
   key: string;
@@ -48,7 +48,7 @@ export interface PutOptions {
   cacheControl?: string;
   /** User metadata to keep beside the object, capped at 2 KB. */
   metadata?: Record<string, string>;
-  /** `"*"` writes only when no object holds the key. */
+  /** `"*"` writes only when no object exists under the key. */
   ifNoneMatch?: "*";
   /** Writes only when the object's current etag matches. */
   ifMatch?: string;
@@ -66,7 +66,7 @@ export interface GetOptions {
 export interface ListOptions {
   /** Only keys under this prefix. */
   prefix?: string;
-  /** How many objects one page carries, at most 1000. */
+  /** How many objects one page contains, at most 1000. */
   limit?: number;
 }
 
@@ -110,7 +110,7 @@ export interface SignedUpload {
   method: string;
   /** Headers the signature covers, which the caller must send unchanged. */
   headers: Record<string, string>;
-  /** Form fields a POST target carries; empty for a PUT target. */
+  /** Form fields a POST upload sends with the body; empty for a PUT target. */
   fields: Record<string, string>;
 }
 
@@ -118,9 +118,9 @@ export interface SignedUpload {
 export interface BucketObjects {
   /** Writes `body` under `key`, in one request or in parts, and returns the stored object. */
   put(key: string, body: PutBody, options?: PutOptions): Promise<ObjectInfo>;
-  /** Reads the object under `key`, or `null` when the bucket holds none. */
+  /** Reads the object under `key`, or `null` when the bucket has none. */
   get(key: string, options?: GetOptions): Promise<ObjectBody | null>;
-  /** What the bucket knows about `key`, or `null` when it holds none. */
+  /** What the bucket knows about `key`, or `null` when it has none. */
   head(key: string): Promise<ObjectInfo | null>;
   /** Removes one key or many; a key that is not there is not an error. */
   delete(key: string | string[]): Promise<void>;
@@ -194,25 +194,25 @@ async function* chunked(
   size: number,
 ): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
-  let held: Uint8Array[] = [];
+  let buffered: Uint8Array[] = [];
   let length = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (value) {
-        held.push(value);
+        buffered.push(value);
         length += value.byteLength;
       }
       while (length >= size) {
-        const joined = concat(held, length);
+        const joined = concat(buffered, length);
         yield joined.subarray(0, size);
         const rest = joined.subarray(size);
-        held = rest.byteLength > 0 ? [rest] : [];
+        buffered = rest.byteLength > 0 ? [rest] : [];
         length = rest.byteLength;
       }
       if (done) break;
     }
-    if (length > 0) yield concat(held, length);
+    if (length > 0) yield concat(buffered, length);
   } finally {
     await reader.cancel().catch(() => {});
   }
@@ -385,15 +385,15 @@ export function createObjects(deps: {
 
   return {
     async put(key, body, options = {}) {
-      const held = await sized(body);
-      if (held.bytes && held.bytes.byteLength <= singleRequestCeiling) {
-        await putSingle(key, held.bytes, options);
+      const source = await sized(body);
+      if (source.bytes && source.bytes.byteLength <= singleRequestCeiling) {
+        await putSingle(key, source.bytes, options);
       } else {
         const stream =
-          held.stream ??
+          source.stream ??
           new ReadableStream<Uint8Array>({
             start(controller) {
-              controller.enqueue(held.bytes as Uint8Array);
+              controller.enqueue(source.bytes as Uint8Array);
               controller.close();
             },
           });
@@ -445,7 +445,7 @@ export function createObjects(deps: {
           cursor: cursor ?? "",
         });
         return {
-          objects: res.objects.map((held) => info(held, held.key)),
+          objects: res.objects.map((entry) => info(entry, entry.key)),
           cursor: res.nextCursor,
         };
       };
@@ -454,10 +454,10 @@ export function createObjects(deps: {
         async *[Symbol.asyncIterator]() {
           let cursor: string | undefined;
           for (;;) {
-            const held = await page({ cursor });
-            yield* held.objects;
-            if (!held.cursor) return;
-            cursor = held.cursor;
+            const listed = await page({ cursor });
+            yield* listed.objects;
+            if (!listed.cursor) return;
+            cursor = listed.cursor;
           }
         },
       };

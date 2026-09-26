@@ -114,11 +114,11 @@ function groupPresent(
   folder: string,
 ): boolean {
   return Object.entries(definitions).some(
-    ([key, definition]) => definition.group === group && held(cells, key, definition, folder),
+    ([key, definition]) => definition.group === group && hasCell(cells, key, definition, folder),
   );
 }
 
-function held(
+function hasCell(
   cells: readonly VariableCell[],
   key: string,
   definition: VariableDefinition,

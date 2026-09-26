@@ -117,11 +117,11 @@ describe("createUploadClient", () => {
     const delays: number[] = [];
     const realSetTimeout = globalThis.setTimeout;
     const spied = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
-      held: () => void,
+      callback: () => void,
       ms?: number,
     ) => {
       delays.push(ms ?? 0);
-      return realSetTimeout(held, 0);
+      return realSetTimeout(callback, 0);
     }) as never);
     const client = createUploadClient<TestBucket>({
       url: "https://app/api/upload",
@@ -194,7 +194,7 @@ describe("createUploadClient", () => {
     });
   });
 
-  it("posts a form when the target carries policy fields", async () => {
+  it("posts a form when the target includes policy fields", async () => {
     const fetch = vi.fn(async (url: string, _init?: FetchInit) => {
       if (url.includes("op=presign")) {
         return jsonRes({

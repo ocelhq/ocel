@@ -23,7 +23,7 @@ const typeOfCase: {
   custom: BindingType.CUSTOM,
 };
 
-/** The type a binding's properties case declares; UNSPECIFIED when it carries none. */
+/** The type a binding's properties case declares; UNSPECIFIED when it has none. */
 export function bindingTypeOf(binding: Binding): BindingType {
   return binding.properties.case ? typeOfCase[binding.properties.case] : BindingType.UNSPECIFIED;
 }

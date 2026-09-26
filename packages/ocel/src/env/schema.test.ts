@@ -9,7 +9,7 @@ import { EnvClientError } from "./client.js";
 import { declared, envSchema, inlined, sourceOf } from "./schema.js";
 
 describe("envSchema", () => {
-  it("hands back the definitions it was given, carrying only where they were declared", () => {
+  it("hands back the definitions it was given, adding only where they were declared", () => {
     const definitions = {
       SCHEMA_PORT: { class: "plain", client: true, schema: z.coerce.number() },
     } as const;
@@ -73,7 +73,7 @@ describe("inlined", () => {
 });
 
 describe("a browser bundle importing only ocel/env/schema", () => {
-  it("carries no code that reads, declares or resolves a value", async () => {
+  it("includes no code that reads, declares or resolves a value", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ocel-env-schema-bundle-"));
     const entry = join(dir, "entry.ts");
     writeFileSync(

@@ -28,7 +28,7 @@ export const FIXED = -1;
 /**
  * The generation of a value nothing marks the freshness of, which is read
  * again on every access. It is `NaN`, so it equals no generation — its own
- * included — and `Math.max` carries it over a group holding such a member.
+ * included — and `Math.max` passes it on to a group containing such a member.
  */
 export const UNCACHED = Number.NaN;
 

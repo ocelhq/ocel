@@ -204,7 +204,7 @@ describe("the declaration payload", () => {
       }),
     ]);
   });
-  it("carries every variable of one call, with its class and whether it is required", async () => {
+  it("declares every variable of one call, with its class and whether it is required", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
       PAYLOAD_PLAIN: { class: "plain", client: true, description: "Shown in the dashboard" },
@@ -253,7 +253,7 @@ describe("the declaration payload", () => {
     });
   });
 
-  it("names the module holding an envSchema() declaration apart from the one calling defineEnv", async () => {
+  it("names the module containing an envSchema() declaration apart from the one calling defineEnv", async () => {
     source.override = "/app/src/env.ts";
     const schema = envSchema({
       PAYLOAD_SCHEMA_MODULE: { class: "plain", client: true, schema: z.coerce.number() },
@@ -583,7 +583,7 @@ describe("reading a live value", () => {
     expect(() => defineEnv({ LIVE_NOT_A_STRING: { class: "secret" } })).toThrow(EnvValueError);
   });
 
-  it("fails init loudly when the push carried no value for a declared key", () => {
+  it("fails init loudly when the push sent no value for a declared key", () => {
     push(1, { SOMETHING_ELSE: "x" });
 
     expect(() => defineEnv({ LIVE_ABSENT_FROM_PUSH: { class: "secret" } })).toThrow(EnvValueError);
@@ -598,7 +598,7 @@ describe("reading from the live directory", () => {
     vi.stubEnv("OCEL_PHASE", "");
   });
 
-  it("reads the file the runtime wrote, bytes and all, when the environment carries nothing", () => {
+  it("reads the file the runtime wrote, bytes and all, when the environment has nothing", () => {
     vi.stubEnv("OCEL_LIVE_DIR", liveDir({ FILE_ONLY: "from the file\n" }));
 
     const env = defineEnv({ FILE_ONLY: { class: "secret" } });
@@ -632,7 +632,7 @@ describe("reading from the live directory", () => {
     expect(env.FILE_PUSHED).toBe("pushed");
   });
 
-  it("takes a key the live directory holds no file for as unset", () => {
+  it("takes a key the live directory has no file for as unset", () => {
     vi.stubEnv("OCEL_LIVE_DIR", liveDir({}));
 
     const env = defineEnv({ FILE_MISSING: { class: "secret" } });
@@ -651,7 +651,7 @@ describe("reading from the live directory", () => {
     expect(env.FILE_ROTATED).toBe("rotated");
   });
 
-  it("re-reads a group holding a live member the file delivers", () => {
+  it("re-reads a group containing a live member the file delivers", () => {
     const dir = liveDir({ FILE_GROUPED: "first" });
     vi.stubEnv("OCEL_LIVE_DIR", dir);
     vi.stubEnv("FILE_GROUPED_ID", "an id");
@@ -791,7 +791,7 @@ describe("a function that declares no live value", () => {
     expect(env.LIVE_IN_DEV_BARE).toBe("sk_dev_bare");
   });
 
-  it("prefers a pushed value to one standing under the same name in the environment", () => {
+  it("prefers a pushed value to one set under the same name in the environment", () => {
     vi.stubEnv("LIVE_PUSH_WINS", "from_the_environment");
     push(1, { LIVE_PUSH_WINS: "from_the_push" });
     const env = defineEnv({ LIVE_PUSH_WINS: { class: "secret" } });
@@ -826,7 +826,7 @@ describe("folder scoping", () => {
     );
   });
 
-  it("carries the scope on the declaration", async () => {
+  it("includes the scope in the declaration", async () => {
     defineEnv({ SCOPE_SENT: { class: "plain", folders: ["/web", "/admin"] } });
     await flushDeclarations();
 
@@ -1217,7 +1217,7 @@ describe("reading a group", () => {
     expect(env.stripeOptional?.GROUP_LIVE_ONLY).toBe("pushed");
   });
 
-  it("throws for a key a group holds, which is read through the group and not beside it", () => {
+  it("throws for a key a group contains, which is read through the group and not beside it", () => {
     vi.stubEnv("GROUP_MEMBER_DIRECT", "an-id");
     const env = defineEnv({
       github: group({ GROUP_MEMBER_DIRECT: { class: "plain" } }),
@@ -1259,7 +1259,7 @@ describe("group definition errors", () => {
     ).toThrow(EnvDefinitionError);
   });
 
-  it("names the group holding a duplicated key whichever side declared it first", () => {
+  it("names the group containing a duplicated key whichever side declared it first", () => {
     expect(() =>
       defineEnv({
         GROUP_ORDER_A: { class: "plain" },
@@ -1274,7 +1274,7 @@ describe("group definition errors", () => {
     ).toThrow(/group 'late'/);
   });
 
-  it("refuses a group name carrying a delimiter or a control character", () => {
+  it("refuses a group name containing a delimiter or a control character", () => {
     expect(() => defineEnv({ "bad#name": group({ GROUP_HASH: { class: "plain" } }) })).toThrow(
       /usable group name/,
     );
@@ -1344,7 +1344,7 @@ describe("what a group declares", () => {
     return call![0];
   }
 
-  it("carries each group once, in declaration order, with its description and requiredness", async () => {
+  it("declares each group once, in declaration order, with its description and requiredness", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
       github: group(
@@ -1361,7 +1361,7 @@ describe("what a group declares", () => {
     ]);
   });
 
-  it("keeps members in declaration order, each naming the group holding it", async () => {
+  it("keeps members in declaration order, each naming the group containing it", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
       PAYLOAD_LOOSE: { class: "plain" },
@@ -1379,7 +1379,7 @@ describe("what a group declares", () => {
     ]);
   });
 
-  it("carries a member's own optionality, not the group's", async () => {
+  it("declares a member's own optionality, not the group's", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
       github3: group(
@@ -1400,7 +1400,7 @@ describe("what a group declares", () => {
 });
 
 describe("validating a group against the stored cells", () => {
-  it("owes nothing for an optional group no cell has turned on", async () => {
+  it("reports nothing missing for an optional group no cell has turned on", async () => {
     defineEnv({
       github4: group(
         { CELLS_OFF_ID: { class: "plain" }, CELLS_OFF_SECRET: { class: "plain" } },
@@ -1412,7 +1412,7 @@ describe("validating a group against the stored cells", () => {
     expect(reportEnvProblemsMock).not.toHaveBeenCalled();
   });
 
-  it("owes nothing for an optional group whose members are all spelled optional", async () => {
+  it("reports nothing missing for an optional group whose members are all spelled optional", async () => {
     defineEnv({
       github5: group(
         {
@@ -1427,7 +1427,7 @@ describe("validating a group against the stored cells", () => {
     expect(reportEnvProblemsMock).not.toHaveBeenCalled();
   });
 
-  it("owes the rest of an optional group once one member has a cell", async () => {
+  it("reports the rest of an optional group missing once one member has a cell", async () => {
     declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_PARTIAL_ID", "an-id")] });
     defineEnv({
       github6: group(
@@ -1442,7 +1442,7 @@ describe("validating a group against the stored cells", () => {
     });
   });
 
-  it("owes every member of a required group with nothing stored", async () => {
+  it("reports every member of a required group missing with nothing stored", async () => {
     defineEnv({
       smtp2: group({ CELLS_SMTP_HOST: { class: "plain" }, CELLS_SMTP_PORT: { class: "plain" } }),
     });

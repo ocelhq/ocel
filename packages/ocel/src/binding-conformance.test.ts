@@ -46,7 +46,7 @@ describe("the binding conformance fixtures", () => {
     vi.unstubAllEnvs();
   });
 
-  it("carry exactly one record per binding type an app resolves", () => {
+  it("contain exactly one record per binding type an app resolves", () => {
     expect(readdirSync(fixtures).sort()).toEqual(types.map(fileOf).sort());
   });
 

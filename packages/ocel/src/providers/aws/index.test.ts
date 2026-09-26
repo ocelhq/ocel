@@ -3,13 +3,13 @@ import { defineConfig } from "../../config.js";
 import awsProvider from "./index";
 
 describe("awsProvider", () => {
-  it("returns its options keyed by the provider, carrying the given options", () => {
+  it("returns its options keyed by the provider, passing the given options through", () => {
     expect(awsProvider({ region: "us-east-1" })).toEqual({
       aws: { region: "us-east-1" },
     });
   });
 
-  it("carries the ordered transform module list at the root of the config", () => {
+  it("puts the ordered transform module list at the root of the config", () => {
     const config = defineConfig({
       slug: "test-app",
       transforms: ["./transforms/defaults.transform.ts", "./transforms/vpc.transform.ts"],
@@ -22,7 +22,7 @@ describe("awsProvider", () => {
     ]);
   });
 
-  it("carries already-issued certificate arns through, keyed by hostname", () => {
+  it("passes already-issued certificate arns through, keyed by hostname", () => {
     expect(
       awsProvider({
         certificates: {
@@ -38,7 +38,7 @@ describe("awsProvider", () => {
     });
   });
 
-  it("carries the arn of a key the account brought through to the provider", () => {
+  it("passes the arn of a key the account brought through to the provider", () => {
     expect(awsProvider({ varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" })).toEqual({
       aws: { varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" },
     });

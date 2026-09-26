@@ -34,13 +34,13 @@ export function sourceOf(definitions: EnvDefinitions): string {
 /** The {@link envSchema} export of a module, whatever it is named. */
 export type Declared<TModule> = Extract<TModule[keyof TModule], { readonly [SOURCE]: string }>;
 
-type Holding<TModule> = [Declared<TModule>] extends [never]
+type ExportingSchema<TModule> = [Declared<TModule>] extends [never]
   ? "this module exports nothing made by envSchema()"
   : unknown;
 
 /** Picks the {@link envSchema} export out of a module; a module without one fails at typecheck and at runtime. */
 export function declared<TModule extends object>(
-  module: TModule & Holding<TModule>,
+  module: TModule & ExportingSchema<TModule>,
 ): Declared<TModule> {
   for (const exported of Object.values(module)) {
     if (exported !== null && typeof exported === "object" && SOURCE in exported) {

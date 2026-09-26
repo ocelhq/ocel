@@ -3,13 +3,13 @@ import { defineConfig } from "../../config.js";
 import vpsProvider from "./index";
 
 describe("vpsProvider", () => {
-  it("returns its options keyed by the provider, carrying an ssh_config alias through", () => {
+  it("returns its options keyed by the provider, passing an ssh_config alias through", () => {
     expect(vpsProvider({ ssh: "prod-box" })).toEqual({
       vps: { ssh: "prod-box" },
     });
   });
 
-  it("carries a spelled-out destination through to the provider", () => {
+  it("passes a spelled-out destination through to the provider", () => {
     expect(
       vpsProvider({
         ssh: {
@@ -31,7 +31,7 @@ describe("vpsProvider", () => {
     });
   });
 
-  it("carries the public key the deploy login is to answer to", () => {
+  it("passes the public key the deploy login is to answer to", () => {
     expect(vpsProvider({ ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" })).toEqual({
       vps: { ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" },
     });

@@ -58,8 +58,8 @@ export async function _objectTypeChecks() {
   expectTypeOf(await storage.get("a.png")).toEqualTypeOf<ObjectBody | null>();
   expectTypeOf(await storage.put("a.png", "x")).toEqualTypeOf<ObjectInfo>();
   await storage.delete(["a.png", "b.png"]);
-  for await (const held of storage.list({ prefix: "a/" })) {
-    expectTypeOf(held).toEqualTypeOf<ObjectInfo>();
+  for await (const info of storage.list({ prefix: "a/" })) {
+    expectTypeOf(info).toEqualTypeOf<ObjectInfo>();
   }
   expectTypeOf(await storage.signedUrl("a.png")).toEqualTypeOf<string>();
 
