@@ -31,7 +31,7 @@ describe("isContractPath", () => {
   });
 
   it("is false for a file in a provider subpackage", () => {
-    assert.equal(isContractPath("pkg/provider/stackrecords/hostnames.go"), false);
+    assert.equal(isContractPath("pkg/provider/transform/transform.go"), false);
   });
 
   it("is false for a file in the provider package that is not Go", () => {
