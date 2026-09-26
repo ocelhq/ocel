@@ -14,12 +14,12 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type stackStore struct {
+type edgeStateStore struct {
 	records records.Store
 	name    records.Name
 }
 
-func (s stackStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
+func (s edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
 	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
@@ -34,7 +34,7 @@ func (s stackStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
 	return state, nil
 }
 
-func (s stackStore) write(ctx context.Context, state stackrecords.EdgeState) error {
+func (s edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState) error {
 	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
@@ -48,11 +48,11 @@ func (s stackStore) write(ctx context.Context, state stackrecords.EdgeState) err
 	return nil
 }
 
-type stackSession struct {
+type edgeSession struct {
 	provider provider.Provider
 	front    edge.Edge
 	stack    edge.EdgeStack
-	store    stackStore
+	store    edgeStateStore
 	state    stackrecords.EdgeState
 	settle   settlement
 }
@@ -80,7 +80,7 @@ func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection)
 	return p.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
 }
 
-func (h *handlers) openStack(ctx context.Context, class edge.Class, slug string, sel *contractv1.EdgeSelection) (*stackSession, error) {
+func (h *handlers) openEdgeSession(ctx context.Context, class edge.Class, slug string, sel *contractv1.EdgeSelection) (*edgeSession, error) {
 	provider, err := h.session.use()
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (h *handlers) openStack(ctx context.Context, class edge.Class, slug string,
 	if err != nil {
 		return nil, err
 	}
-	store := stackStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, slug)}
+	store := edgeStateStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, slug)}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
@@ -108,22 +108,22 @@ func (h *handlers) openStack(ctx context.Context, class edge.Class, slug string,
 	if err != nil {
 		return nil, err
 	}
-	session := &stackSession{provider: provider, front: front, stack: stack, store: store, state: state}
+	session := &edgeSession{provider: provider, front: front, stack: stack, store: store, state: state}
 	session.installSettler(writer, sel.GetDns().GetZone())
 	return session, nil
 }
 
-func (s *stackSession) installSettler(writer edge.DNSRecords, zone string) {
+func (s *edgeSession) installSettler(writer edge.DNSRecords, zone string) {
 	s.settle = newSettlement(s.front, writer, zone, s.provider.Liveness())
 }
 
-func (s *stackSession) checkpoint(ctx context.Context) error {
+func (s *edgeSession) checkpoint(ctx context.Context) error {
 	s.state.Kind = s.front.Kind()
 	s.state.Edge = s.stack.State()
 	return s.store.write(ctx, s.state)
 }
 
-func (s *stackSession) promoted(ctx context.Context) (bool, error) {
+func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
 	history, err := s.stack.Ledger().History(ctx, edge.DefaultPointer)
 	if err != nil {
 		return false, err
@@ -131,7 +131,7 @@ func (s *stackSession) promoted(ctx context.Context) (bool, error) {
 	return slices.ContainsFunc(history, func(entry edge.HistoryEntry) bool { return entry.Active }), nil
 }
 
-func (s *stackSession) on(kind edge.Kind) (edge.EdgeStack, error) {
+func (s *edgeSession) on(kind edge.Kind) (edge.EdgeStack, error) {
 	front, err := s.provider.Edges().Open(kind)
 	if err != nil {
 		return nil, err

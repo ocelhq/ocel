@@ -26,7 +26,7 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 
 	server := tokenInfo(t, `{"email":"deployer@acme.iam.gserviceaccount.com"}`)
 
-	identity, err := gcp.Credentials{
+	principal, err := gcp.Credentials{
 		Project:      gcp.Named("acme-prod"),
 		Region:       "europe-west1",
 		Tokens:       heldToken{token: heldAccessToken},
@@ -36,8 +36,8 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want an identity", err)
 	}
-	if identity.Vendor != gcp.Vendor {
-		t.Errorf("Whoami().Provider = %q, want %q: the CLI renders a credential section per provider and drops the ones naming none", identity.Vendor, gcp.Vendor)
+	if principal.Vendor != gcp.Vendor {
+		t.Errorf("Whoami().Provider = %q, want %q: the CLI renders a credential section per provider and drops the ones naming none", principal.Vendor, gcp.Vendor)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestAgainstTheEmulatorWhoamiSkipsGooglesTokenEndpointAndSaysWhereItIs(t *te
 
 	endpoint := "http://127.0.0.1:4588"
 	reader := &reachedProject{}
-	identity, err := gcp.Credentials{
+	principal, err := gcp.Credentials{
 		Project:  gcp.Named("floci-local"),
 		Region:   "europe-west1",
 		Tokens:   heldToken{err: errors.New("google: could not find default credentials")},
@@ -97,18 +97,18 @@ func TestAgainstTheEmulatorWhoamiSkipsGooglesTokenEndpointAndSaysWhereItIs(t *te
 	if err != nil {
 		t.Fatalf("Whoami() against the emulator = %v, want an identity: the emulator mints no Google token to ask about", err)
 	}
-	if identity.Principal != "emulator" {
-		t.Errorf("Whoami().Principal = %q, want the emulator named as the principal", identity.Principal)
+	if principal.Name != "emulator" {
+		t.Errorf("Whoami().Principal = %q, want the emulator named as the principal", principal.Name)
 	}
 	if reader.asked != "floci-local" {
 		t.Errorf("Whoami() asked about project %q, want the emulator's project still checked", reader.asked)
 	}
 	var said bool
-	for _, detail := range identity.Details {
+	for _, detail := range principal.Details {
 		said = said || strings.Contains(detail.Value, endpoint)
 	}
 	if !said {
-		t.Errorf("Whoami().Details = %+v, want a row naming %q so nobody reads an emulator run as a run against Google", identity.Details, endpoint)
+		t.Errorf("Whoami().Details = %+v, want a row naming %q so nobody reads an emulator run as a run against Google", principal.Details, endpoint)
 	}
 }
 

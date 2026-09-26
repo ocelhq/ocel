@@ -77,7 +77,7 @@ func staged(t *testing.T, stack edge.EdgeStack, url, assets string) edge.Deploym
 	t.Helper()
 	record := edge.DeploymentRecord{
 		App:           "web",
-		Identity:      "d1.f1",
+		Build:         "d1.f1",
 		Entry:         "/",
 		EntryFunction: entryFunction,
 		FunctionURLs:  map[string]string{"/": url},
@@ -116,7 +116,7 @@ func stagedContainer(t *testing.T, stack edge.EdgeStack) edge.DeploymentRecord {
 	t.Helper()
 	record := edge.DeploymentRecord{
 		App:         "web",
-		Identity:    "d1.f1",
+		Build:       "d1.f1",
 		Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
 		Physical:    "shop-prod-web-container-r3f8a1c90",
 		Origin:      "http://" + fakeFront.Host,

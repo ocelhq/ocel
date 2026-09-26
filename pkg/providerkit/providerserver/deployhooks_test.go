@@ -22,8 +22,8 @@ func (o occupied) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (occupied) InspectStack(context.Context, provider.StackRef) (provider.StackState, error) {
-	return provider.StackState{Present: true}, nil
+func (occupied) InspectStack(context.Context, provider.StackRef) (provider.InspectedStack, error) {
+	return provider.InspectedStack{Present: true}, nil
 }
 
 func TestDeployRefusesToAdoptAStackItHasNoRecordOf(t *testing.T) {

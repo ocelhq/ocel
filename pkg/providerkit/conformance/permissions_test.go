@@ -12,8 +12,8 @@ import (
 
 type permissionsPort struct{ err error }
 
-func (permissionsPort) Whoami(context.Context) (provider.Identity, error) {
-	return provider.Identity{Vendor: "test"}, nil
+func (permissionsPort) Whoami(context.Context) (provider.Principal, error) {
+	return provider.Principal{Vendor: "test"}, nil
 }
 
 func (s permissionsPort) Permissions(provider.CredentialTier) (edge.CredentialDocument, error) {

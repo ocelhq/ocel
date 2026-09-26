@@ -60,12 +60,12 @@ func TestLiveCredentials(t *testing.T) {
 
 	conformance.RunCredentials(t, credentials)
 
-	identity, err := credentials.Whoami(context.Background())
+	principal, err := credentials.Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() against the emulator = %v, want an identity: the project the run targets answers there", err)
 	}
-	if identity.Vendor != gcp.Vendor || identity.Account != liveProject() {
-		t.Errorf("Whoami() = %+v, want %s naming project %s", identity, gcp.Vendor, liveProject())
+	if principal.Vendor != gcp.Vendor || principal.Account != liveProject() {
+		t.Errorf("Whoami() = %+v, want %s naming project %s", principal, gcp.Vendor, liveProject())
 	}
 }
 

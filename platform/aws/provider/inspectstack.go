@@ -6,6 +6,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func (p *Provider) InspectStack(ctx context.Context, ref provider.StackRef) (provider.StackState, error) {
+func (p *Provider) InspectStack(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {
 	return p.stacks.Inspect(ctx, ref)
 }

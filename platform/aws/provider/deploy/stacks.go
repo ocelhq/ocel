@@ -483,12 +483,12 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress ed
 	return r.releaseSubstrate(ctx, held.cfg.Records, ref, progress)
 }
 
-func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.StackState, error) {
+func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {
 	outputs, err := r.Outputs(ctx, ref, nil)
 	if err != nil {
-		return provider.StackState{}, err
+		return provider.InspectedStack{}, err
 	}
-	return provider.StackState{Present: len(outputs) > 0}, nil
+	return provider.InspectedStack{Present: len(outputs) > 0}, nil
 }
 
 func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress edge.Progress) (auto.OutputMap, error) {

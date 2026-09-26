@@ -18,14 +18,14 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	first := edge.DeploymentRecord{App: "web", Identity: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
-	second := edge.DeploymentRecord{App: "web", Identity: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
+	first := edge.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
+	second := edge.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
 	for _, record := range []edge.DeploymentRecord{first, second} {
 		if err := stack.Ledger().PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.dynamo.beforePut = func(key string, items map[string]map[string]ddbtypes.AttributeValue) {
@@ -34,7 +34,7 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 
-	err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Identity}}, "", edge.DiscardProgress())
+	err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}, "", edge.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Promote(p2) = %v, want the busy refusal a moved pointer earns", err)

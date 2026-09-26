@@ -26,7 +26,7 @@ func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, point
 		entry := "conformance-prod-" + app + "-r0a1b2c3d"
 		staged := edge.DeploymentRecord{
 			App:           app,
-			Identity:      identity,
+			Build:         identity,
 			Entry:         "/",
 			EntryFunction: entry,
 			FunctionURLs:  map[string]string{"/": "https://conformance-" + app + ".example.com/"},

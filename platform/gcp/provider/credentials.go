@@ -66,38 +66,38 @@ type Credentials struct {
 
 const emulatorPrincipal = "emulator"
 
-func (c Credentials) Whoami(ctx context.Context) (provider.Identity, error) {
+func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	project, err := c.Project.Project(ctx)
 	if err != nil {
-		return provider.Identity{}, err
+		return provider.Principal{}, err
 	}
-	identity := provider.Identity{
-		Vendor:    Vendor,
-		Account:   project,
-		Principal: emulatorPrincipal,
-		Location:  c.Region,
+	principal := provider.Principal{
+		Vendor:   Vendor,
+		Account:  project,
+		Name:     emulatorPrincipal,
+		Location: c.Region,
 	}
 	if c.Endpoint != "" {
-		identity.Details = []provider.Detail{{Label: "emulator", Value: c.Endpoint}}
+		principal.Details = []provider.PrincipalDetail{{Label: "emulator", Value: c.Endpoint}}
 	} else {
 		token, err := c.Tokens.Token(ctx)
 		if err != nil {
-			return provider.Identity{}, unauthenticated()
+			return provider.Principal{}, unauthenticated()
 		}
-		principal, err := c.principal(ctx, token)
+		name, err := c.principal(ctx, token)
 		if err != nil {
-			return provider.Identity{}, err
+			return provider.Principal{}, err
 		}
-		identity.Principal = principal
+		principal.Name = name
 	}
 	if c.Projects == nil {
-		return provider.Identity{}, refusal.Refuse(refusal.CodeDenied,
+		return provider.Principal{}, refusal.Refuse(refusal.CodeDenied,
 			"nothing here can ask whether this credential reaches project %s, and a credential nothing vouched for deploys nothing", project)
 	}
 	if err := c.Projects.Reaches(ctx, project); err != nil {
-		return provider.Identity{}, err
+		return provider.Principal{}, err
 	}
-	return identity, nil
+	return principal, nil
 }
 
 func unauthenticated() error {

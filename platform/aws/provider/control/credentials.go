@@ -40,17 +40,17 @@ func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
 	}
 }
 
-func (c Credentials) Whoami(ctx context.Context) (provider.Identity, error) {
+func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	out, err := c.STS.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return provider.Identity{}, refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
+		return provider.Principal{}, refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
 	}
 	arn := aws.ToString(out.Arn)
-	return provider.Identity{
-		Account:   aws.ToString(out.Account),
-		Principal: principalOf(arn),
-		Location:  c.Region,
-		Details:   details(c.Profile),
+	return provider.Principal{
+		Account:  aws.ToString(out.Account),
+		Name:     principalOf(arn),
+		Location: c.Region,
+		Details:  details(c.Profile),
 	}, nil
 }
 
@@ -84,11 +84,11 @@ func principalOf(arn string) string {
 	return arn
 }
 
-func details(profile string) []provider.Detail {
+func details(profile string) []provider.PrincipalDetail {
 	if profile == "" {
 		return nil
 	}
-	return []provider.Detail{{Label: "profile", Value: profile}}
+	return []provider.PrincipalDetail{{Label: "profile", Value: profile}}
 }
 
 var _ provider.Credentials = Credentials{}

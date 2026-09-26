@@ -543,7 +543,7 @@ func RunCredentials(t *testing.T, credentials provider.Credentials) {
 	ctx := context.Background()
 
 	t.Run("Whoami either says who this is or refuses as denied", func(t *testing.T) {
-		identity, err := credentials.Whoami(ctx)
+		principal, err := credentials.Whoami(ctx)
 		if err != nil {
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
@@ -554,10 +554,10 @@ func RunCredentials(t *testing.T, credentials provider.Credentials) {
 			}
 			return
 		}
-		if identity.Vendor == "" {
-			t.Error("Whoami() answered an identity naming no provider")
+		if principal.Vendor == "" {
+			t.Error("Whoami() answered a principal naming no provider")
 		}
-		for _, detail := range identity.Details {
+		for _, detail := range principal.Details {
 			if detail.Label == "" {
 				t.Errorf("Whoami() returned a detail with no label: %+v", detail)
 			}

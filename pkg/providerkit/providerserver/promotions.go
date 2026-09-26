@@ -21,7 +21,7 @@ import (
 )
 
 func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
-	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openEdgeSession(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
 	if undeployed(err) {
 		return &contractv1.ListPromotionsResponse{}, nil
 	}
@@ -36,7 +36,7 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 }
 
 func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
-	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openEdgeSession(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -109,7 +109,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 			pointer = ""
 		}
 
-		session, err := h.openStack(ctx, class, req.GetSlug(), req.GetEdge())
+		session, err := h.openEdgeSession(ctx, class, req.GetSlug(), req.GetEdge())
 		if undeployed(err) {
 			progress.Say("Nothing to prune.")
 			return nil

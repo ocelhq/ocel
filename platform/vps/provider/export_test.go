@@ -17,7 +17,7 @@ func StoreCoordinate(ref provider.StackRef) records.SealScope { return storeCoor
 
 func StoreName(ref provider.StackRef) string { return storeName(ref) }
 
-func Whoami(ctx context.Context, live hostSurvey) (provider.Identity, error) {
+func Whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	return whoami(ctx, live)
 }
 

@@ -383,7 +383,7 @@ func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, imag
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    release.String(),
-		Identity:   buildIdentity(1),
+		Build:      buildIdentity(1),
 		Containers: []provider.AppContainer{{Name: app, Physical: name.String() + "-" + app, Image: image}},
 	}); err != nil {
 		t.Fatal(err)

@@ -207,7 +207,7 @@ func TestPruneKeepsNAndTheActivePromotion(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{"p1", "p2", "p3", "p4"} {
-		if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: id}); err != nil {
+		if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Build: id}); err != nil {
 			t.Fatal(err)
 		}
 		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": id}}, "", edge.DiscardProgress()); err != nil {
@@ -261,7 +261,7 @@ func TestPruneKeepsARecordAnUnprunedPromotionStillNames(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
+	if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Build: "b1"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"p1", "p2"} {
@@ -346,16 +346,16 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 	if _, found, err := l.Record(ctx, "web", "abc"); err != nil || found {
 		t.Fatalf("Record() before staging = %v, %v, want nothing found", found, err)
 	}
-	staged := edge.DeploymentRecord{App: "web", Identity: "abc"}
+	staged := edge.DeploymentRecord{App: "web", Build: "abc"}
 	if err := l.PutStaged(ctx, staged); err != nil {
 		t.Fatal(err)
 	}
 	got, found, err := l.Record(ctx, "web", "abc")
-	if err != nil || !found || got.App != "web" || got.Identity != "abc" {
+	if err != nil || !found || got.App != "web" || got.Build != "abc" {
 		t.Fatalf("Record() = %+v, %v, %v", got, found, err)
 	}
 	if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web"}); err == nil {
-		t.Fatal("PutStaged() with no identity succeeded, want it refused")
+		t.Fatal("PutStaged() with no build succeeded, want it refused")
 	}
 }
 

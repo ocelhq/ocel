@@ -44,7 +44,7 @@ func Scope(class edge.Class, slug string) string {
 	return string(class) + naming.PathSeparator + naming.Sanitize(slug)
 }
 
-func RecordKey(app, identity string) string { return "record:" + app + "/" + identity }
+func RecordKey(app, build string) string { return "record:" + app + "/" + build }
 
 func (l *Ledger) name(rest ...string) records.Name {
 	return append(records.Name{records.RootLedger, l.scope}, rest...)
@@ -70,8 +70,8 @@ func (l *Ledger) promotionName(pointer, id string) records.Name {
 
 func (l *Ledger) recordsName() records.Name { return l.name("records") }
 
-func (l *Ledger) recordName(app, identity string) records.Name {
-	return l.name("records", app, identity)
+func (l *Ledger) recordName(app, build string) records.Name {
+	return l.name("records", app, build)
 }
 
 func (l *Ledger) tagName(tag string) records.Name { return l.name("tags", tag) }
@@ -156,10 +156,10 @@ func (l *Ledger) SchemaVersion(ctx context.Context) (int, error) {
 }
 
 func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
-	if record.App == "" || record.Identity == "" {
-		return fmt.Errorf("stage a deployment record: it names app %q and identity %q, and the ledger keys records by both", record.App, record.Identity)
+	if record.App == "" || record.Build == "" {
+		return fmt.Errorf("stage a deployment record: it names app %q and build %q, and the ledger keys records by both", record.App, record.Build)
 	}
-	held, err := records.ReadOrEmpty(ctx, l.records, l.recordName(record.App, record.Identity))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.recordName(record.App, record.Build))
 	if err != nil {
 		return fmt.Errorf("read the deployment record for %s: %w", record.App, err)
 	}
@@ -174,17 +174,17 @@ func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) er
 	return nil
 }
 
-func (l *Ledger) Record(ctx context.Context, app, identity string) (edge.DeploymentRecord, bool, error) {
-	held, err := records.ReadOrEmpty(ctx, l.records, l.recordName(app, identity))
+func (l *Ledger) Record(ctx context.Context, app, build string) (edge.DeploymentRecord, bool, error) {
+	held, err := records.ReadOrEmpty(ctx, l.records, l.recordName(app, build))
 	if err != nil {
-		return edge.DeploymentRecord{}, false, fmt.Errorf("read the deployment record for %s/%s: %w", app, identity, err)
+		return edge.DeploymentRecord{}, false, fmt.Errorf("read the deployment record for %s/%s: %w", app, build, err)
 	}
 	if len(held.Bytes) == 0 {
 		return edge.DeploymentRecord{}, false, nil
 	}
 	var record edge.DeploymentRecord
 	if err := json.Unmarshal(held.Bytes, &record); err != nil {
-		return edge.DeploymentRecord{}, false, fmt.Errorf("decode the deployment record for %s/%s: %w", app, identity, err)
+		return edge.DeploymentRecord{}, false, fmt.Errorf("decode the deployment record for %s/%s: %w", app, build, err)
 	}
 	return record, true, nil
 }
@@ -596,11 +596,11 @@ func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) e
 func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecord, held []string) error {
 	for _, row := range rows {
 		names := []records.Name{l.promotionName(pointer, row.PromotionID)}
-		for app, identity := range row.Builds {
-			if slices.Contains(held, RecordKey(app, identity)) {
+		for app, build := range row.Builds {
+			if slices.Contains(held, RecordKey(app, build)) {
 				continue
 			}
-			names = append(names, l.recordName(app, identity))
+			names = append(names, l.recordName(app, build))
 		}
 		if row.Tag != "" {
 			names = append(names, l.tagName(row.Tag))
@@ -693,8 +693,8 @@ func recordKeysOf(rows []promotionRecord) []string {
 	seen := map[string]bool{}
 	var keys []string
 	for _, row := range rows {
-		for app, identity := range row.Builds {
-			k := RecordKey(app, identity)
+		for app, build := range row.Builds {
+			k := RecordKey(app, build)
 			if seen[k] {
 				continue
 			}

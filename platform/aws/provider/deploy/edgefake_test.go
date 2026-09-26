@@ -400,7 +400,7 @@ func TestRecordingEdge(t *testing.T) {
 		f := &recordingEdge{kind: cloudflare.Kind}
 		stack := f.opened(t, edge.StackState{})
 
-		if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{App: "web", Identity: "b1"}); err == nil {
+		if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{App: "web", Build: "b1"}); err == nil {
 			t.Error("expected PutStaged to reject a state no reconcile ever produced")
 		}
 		if len(f.staged) != 0 {
@@ -415,7 +415,7 @@ func TestRecordingEdge(t *testing.T) {
 		ctx := context.Background()
 		stack := f.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		record := edge.DeploymentRecord{App: "web", Identity: "b1"}
+		record := edge.DeploymentRecord{App: "web", Build: "b1"}
 		if err := stack.Ledger().PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}

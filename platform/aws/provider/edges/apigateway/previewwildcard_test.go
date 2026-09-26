@@ -75,11 +75,11 @@ func rulesOn(t *testing.T, w *world, domain string) map[string]*fakeRule {
 func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
-	record := edge.DeploymentRecord{App: "web", Identity: "d1.f1", Entry: "/", EntryFunction: previewEntry}
+	record := edge.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
 	if err := stack.Ledger().PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
-	promotion := edge.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Identity}}
+	promotion := edge.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}
 	if err := stack.Promote(ctx, promotion, pointer, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}

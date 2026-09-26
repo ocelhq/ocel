@@ -647,7 +647,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		state := keyedState(srv.URL, "s3cr3t")
 		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
 
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 
@@ -672,7 +672,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		srv, got := capture(t)
 		state := keyedState(srv.URL, "s3cr3t")
 
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != dataKey {
@@ -687,7 +687,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		state := keyedState(srv.URL, "s3cr3t")
 		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
 
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != "" {
@@ -790,7 +790,7 @@ func TestDestroy(t *testing.T) {
 func promote(t *testing.T, p *cloudflare, state edge.StackState, app, build string) {
 	t.Helper()
 	s := stackOn(p, state)
-	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Identity: build}); err != nil {
+	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Build: build}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", app, err)
 	}
 	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", edge.DiscardProgress()); err != nil {

@@ -25,18 +25,18 @@ func TestWhoamiPlacesTheRegionBesideTheAccountRatherThanAmongTheDetails(t *testi
 		Region: "eu-west-1",
 	}
 
-	identity, err := creds.Whoami(context.Background())
+	principal, err := creds.Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() = %v", err)
 	}
-	if identity.Account != "123456789012" || identity.Principal != "deployer" {
-		t.Errorf("Whoami() = %+v, want the account and the principal the ARN names", identity)
+	if principal.Account != "123456789012" || principal.Name != "deployer" {
+		t.Errorf("Whoami() = %+v, want the account and the principal the ARN names", principal)
 	}
-	if identity.Location != "eu-west-1" {
-		t.Errorf("Whoami().Location = %q, want the region this run acts in", identity.Location)
+	if principal.Location != "eu-west-1" {
+		t.Errorf("Whoami().Location = %q, want the region this run acts in", principal.Location)
 	}
-	if len(identity.Details) != 0 {
-		t.Errorf("Whoami().Details = %+v, want nothing beside a region already said and a profile never set", identity.Details)
+	if len(principal.Details) != 0 {
+		t.Errorf("Whoami().Details = %+v, want nothing beside a region already said and a profile never set", principal.Details)
 	}
 }
 
@@ -49,11 +49,11 @@ func TestWhoamiKeepsTheProfileAmongTheDetails(t *testing.T) {
 		Profile: "acme",
 	}
 
-	identity, err := creds.Whoami(context.Background())
+	principal, err := creds.Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() = %v", err)
 	}
-	if len(identity.Details) != 1 || identity.Details[0].Label != "profile" || identity.Details[0].Value != "acme" {
-		t.Errorf("Whoami().Details = %+v, want the profile the credentials were read from", identity.Details)
+	if len(principal.Details) != 1 || principal.Details[0].Label != "profile" || principal.Details[0].Value != "acme" {
+		t.Errorf("Whoami().Details = %+v, want the profile the credentials were read from", principal.Details)
 	}
 }

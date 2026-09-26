@@ -29,17 +29,17 @@ func (c *Credentials) Admit() {
 	c.refusal = nil
 }
 
-func (c *Credentials) Whoami(context.Context) (provider.Identity, error) {
+func (c *Credentials) Whoami(context.Context) (provider.Principal, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.refusal != nil {
-		return provider.Identity{}, c.refusal
+		return provider.Principal{}, c.refusal
 	}
-	return provider.Identity{
-		Vendor:    Vendor,
-		Account:   "000000000000",
-		Principal: "fake/reference",
-		Details:   []provider.Detail{{Label: "region", Value: c.region}},
+	return provider.Principal{
+		Vendor:  Vendor,
+		Account: "000000000000",
+		Name:    "fake/reference",
+		Details: []provider.PrincipalDetail{{Label: "region", Value: c.region}},
 	}, nil
 }
 

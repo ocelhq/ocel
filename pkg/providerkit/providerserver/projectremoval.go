@@ -25,7 +25,7 @@ type projectRemoval struct {
 	provider provider.Provider
 	front    edge.Edge
 	stack    edge.EdgeStack
-	store    stackStore
+	store    edgeStateStore
 	state    stackrecords.EdgeState
 	settle   settlement
 
@@ -53,7 +53,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	store := stackStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, req.GetSlug())}
+	store := edgeStateStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, req.GetSlug())}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
