@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -96,7 +97,7 @@ func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
 		switch {
 		case key == appbuild.InjectedPortName:
 			injected = append(injected, key)
-		case key == HandlerName:
+		case key == images.HandlerName:
 			served = append(served, key)
 		case strings.HasPrefix(key, ownedPrefix):
 			owned = append(owned, key)
@@ -105,7 +106,7 @@ func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
 	if len(served) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares %s, and %s is the name a function's image sets to the file its runtime serves: a value declared under it would take the place of the app's own entrypoint and leave the release gated on a function that never boots. Rename it",
-			app, strings.Join(served, ", "), HandlerName)
+			app, strings.Join(served, ", "), images.HandlerName)
 	}
 	if len(injected) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,

@@ -5,37 +5,16 @@ import (
 	"fmt"
 	"strings"
 
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ImageKind = "image"
 
-type ImagePush struct {
-	App      string
-	Source   string
-	ImageRef string
-	Digest   string
-
-	Function bool
-	Built    v1.Image
-	Wrap     Wrapped
-}
-
-type ImageStore interface {
-	Destination() string
-
-	Has(ctx context.Context, push ImagePush) (bool, error)
-
-	Push(ctx context.Context, push ImagePush, progress edge.Progress) error
-}
-
 type ImagePlan struct {
-	Store  ImageStore
-	Pushes []ImagePush
+	Store  images.ImageStore
+	Pushes []images.ImagePush
 }
 
 func (p ImagePlan) String() string {
@@ -83,7 +62,7 @@ func (p ImagePlan) Ship(ctx context.Context, progress edge.Progress) error {
 	return nil
 }
 
-func (p ImagePlan) push(ctx context.Context, push ImagePush, progress edge.Progress) error {
+func (p ImagePlan) push(ctx context.Context, push images.ImagePush, progress edge.Progress) error {
 	if push.Wrap != nil {
 		if progress != nil {
 			progress.Detail("Wrapping the image in the ocel runtime")
@@ -107,7 +86,7 @@ func (p ImagePlan) ImageRef(app string) string {
 	return ""
 }
 
-func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
+func (p ImagePlan) held(ctx context.Context, push images.ImagePush) (bool, error) {
 	if p.Store == nil {
 		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is pushed to %s and this release carries nothing to push it with", push.App, push.ImageRef)
@@ -119,14 +98,7 @@ func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	return held, nil
 }
 
-func imageRef(repository, tag string, target RegistryTarget) string {
-	if !target.Named() {
-		return repository + ":" + tag
-	}
-	return target.ImageRef(naming.RepositorySegment(repository), tag)
-}
-
-func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget) (ImageStore, error) {
+func imageStoreFor(ctx context.Context, provider Provider, target images.RegistryTarget) (images.ImageStore, error) {
 	hooks := provider.Hooks()
 	if !target.Named() {
 		if hooks.OpenDirectImages == nil {
@@ -137,5 +109,5 @@ func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget
 	if hooks.OpenRegistryImages != nil {
 		return hooks.OpenRegistryImages(ctx, target)
 	}
-	return RegistryImages(target), nil
+	return images.RegistryImages(target), nil
 }

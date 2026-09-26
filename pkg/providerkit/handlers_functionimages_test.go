@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 type imaging struct {
@@ -181,10 +182,10 @@ func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T)
 }
 
 func TestAFunctionRunAsAnImageRefusesTheNameItsHandlerIsInjectedUnder(t *testing.T) {
-	refusal := refusedImagedDeploy(t, providerkit.HandlerName, "/tmp/theirs.mjs",
+	refusal := refusedImagedDeploy(t, images.HandlerName, "/tmp/theirs.mjs",
 		"Deploy() stood up an app declaring OCEL_HANDLER, want it refused: the image tells its runtime which file to serve under that very name")
 
-	for _, want := range []string{providerkit.HandlerName, "web", "runtime"} {
+	for _, want := range []string{images.HandlerName, "web", "runtime"} {
 		if !strings.Contains(refusal, want) {
 			t.Errorf("the refusal reads %q and never names %q", refusal, want)
 		}
@@ -212,9 +213,9 @@ func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	for _, layer := range layers {
 		held = append(held, tarNames(t, layer)...)
 	}
-	want := strings.TrimPrefix(providerkit.NodeRuntimePath, "/")
+	want := strings.TrimPrefix(images.NodeRuntimePath, "/")
 	if !slices.Contains(held, want) {
-		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, providerkit.NodeRuntimePath)
+		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, images.NodeRuntimePath)
 	}
 }
 
@@ -302,20 +303,20 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testin
 	if !slices.Equal(config.Entrypoint, []string{appbuild.ContainerRuntimePath}) {
 		t.Errorf("the function's image enters at %v, want the runtime: it is what reads the function's secrets live", config.Entrypoint)
 	}
-	if !slices.Equal(config.Cmd, []string{"node", providerkit.NodeRuntimePath}) {
+	if !slices.Equal(config.Cmd, []string{"node", images.NodeRuntimePath}) {
 		t.Errorf("the runtime runs %v, want the node runtime the function is served through", config.Cmd)
 	}
 	files := regularFiles(t, pushed[0].Built)
 	for _, want := range []string{
-		strings.TrimPrefix(providerkit.NodeRuntimePath, "/"),
+		strings.TrimPrefix(images.NodeRuntimePath, "/"),
 		strings.TrimPrefix(appbuild.ContainerRuntimePath, "/"),
 	} {
 		if !slices.Contains(files, want) {
 			t.Errorf("the image holds %v and nothing at /%s", files, want)
 		}
 	}
-	if slices.Contains(files, strings.TrimPrefix(providerkit.NodeRuntimeRoot, "/")) {
-		t.Errorf("the image holds a file at %s, where the node runtime's directory stands, and a file over a directory cannot be loaded", providerkit.NodeRuntimeRoot)
+	if slices.Contains(files, strings.TrimPrefix(images.NodeRuntimeRoot, "/")) {
+		t.Errorf("the image holds a file at %s, where the node runtime's directory stands, and a file over a directory cannot be loaded", images.NodeRuntimeRoot)
 	}
 	if asked := provider.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the function is built for", asked)
@@ -396,4 +397,39 @@ func TestAnUnsetSecretIsRefusedByThePlanOfAWrappedFunction(t *testing.T) {
 	if entered(t, events, "web") {
 		t.Error("the deploy was already standing web up when the unset secret was refused")
 	}
+}
+
+func tarNames(t *testing.T, layer v1.Layer) []string {
+	t.Helper()
+	body, err := layer.Uncompressed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer body.Close()
+	var names []string
+	reader := tar.NewReader(body)
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header.Typeflag == tar.TypeDir {
+			continue
+		}
+		names = append(names, header.Name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func configOf(t *testing.T, image v1.Image) v1.Config {
+	t.Helper()
+	file, err := image.ConfigFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return file.Config
 }

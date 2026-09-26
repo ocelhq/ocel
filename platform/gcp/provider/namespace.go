@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -69,7 +70,7 @@ func (n Names) WorkloadAccountEmail(class edge.Class) string {
 func (n Names) Service(project, env, app, function string) (string, error) {
 	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(app)}
 	if function != app {
-		parts = append(parts, providerkit.FunctionRoute(app, function))
+		parts = append(parts, images.FunctionRoute(app, function))
 	}
 	service := strings.Join(parts, "-") + "-" + serviceHash(string(n.namespace), project, env, app, function)
 	if len(service) > maxServiceName {
@@ -90,7 +91,7 @@ var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 func (n Names) PreviewService(label, app, function string) (string, error) {
 	service := label
 	if function != app {
-		service = strings.Join([]string{label, providerkit.FunctionRoute(app, function), functionSuffix}, naming.FieldSeparator)
+		service = strings.Join([]string{label, images.FunctionRoute(app, function), functionSuffix}, naming.FieldSeparator)
 	}
 	if len(service) > edge.PreviewLabelMaxLen || !cloudRunService.MatchString(service) {
 		return "", refusal.Refuse(refusal.CodeInvalid,

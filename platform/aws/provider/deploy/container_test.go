@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -66,7 +67,7 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 		Ref:    providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind:   providerkit.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: providerkit.ImagePlan{Pushes: []providerkit.ImagePush{{App: "web", ImageRef: containerImage}}},
+		Images: providerkit.ImagePlan{Pushes: []images.ImagePush{{App: "web", ImageRef: containerImage}}},
 		App: &providerkit.AppPlan{
 			App:             "web",
 			Deployment:      "d1",

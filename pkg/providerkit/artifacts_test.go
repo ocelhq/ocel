@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 func builtTree(t *testing.T, files map[string]string) string {
@@ -27,7 +28,7 @@ func builtTree(t *testing.T, files map[string]string) string {
 
 func walked(t *testing.T, dir string) []string {
 	t.Helper()
-	rels, err := artifactFiles(dir)
+	rels, err := images.ArtifactFiles(dir)
 	if err != nil {
 		t.Fatalf("artifactFiles: %v", err)
 	}

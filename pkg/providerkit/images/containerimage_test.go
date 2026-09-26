@@ -1,4 +1,4 @@
-package providerkit_test
+package images_test
 
 import (
 	"archive/tar"
@@ -13,8 +13,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 const wrappedDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -78,7 +78,7 @@ func TestWrapContainerBootsTheImagesOwnCommandThroughTheRuntime(t *testing.T) {
 		User:       "app",
 	})
 
-	wrapped, err := providerkit.WrapContainer(base, []byte("a runtime"))
+	wrapped, err := images.WrapContainer(base, []byte("a runtime"))
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
@@ -101,7 +101,7 @@ func TestWrapContainerCarriesTheRuntimeExecutableAtThePathItBootsFrom(t *testing
 	base := baseContainer(t, v1.Config{Cmd: []string{"node", "server.js"}})
 	runtime := []byte("a runtime binary")
 
-	wrapped, err := providerkit.WrapContainer(base, runtime)
+	wrapped, err := images.WrapContainer(base, runtime)
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
@@ -120,7 +120,7 @@ func TestWrapContainerCarriesALiveDirectoryAnyImageUserCanProjectInto(t *testing
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"node", "server.js"}, User: "1000"})
-	wrapped, err := providerkit.WrapContainer(base, []byte("a runtime"))
+	wrapped, err := images.WrapContainer(base, []byte("a runtime"))
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
@@ -138,7 +138,7 @@ func TestWrapContainerCarriesALiveDirectoryAnyImageUserCanProjectInto(t *testing
 func TestWrapContainerRefusesAnImageThereIsNothingToRunInFrontOf(t *testing.T) {
 	t.Parallel()
 
-	_, err := providerkit.WrapContainer(empty.Image, []byte("a runtime"))
+	_, err := images.WrapContainer(empty.Image, []byte("a runtime"))
 	if err == nil {
 		t.Fatal("WrapContainer() wrapped an image naming neither an entrypoint nor a command, and the container would boot the runtime over nothing")
 	}
@@ -152,7 +152,7 @@ func TestWrapContainerRefusesAnImageThereIsNothingToRunInFrontOf(t *testing.T) {
 func wrappedDigestOf(t *testing.T, runtime []byte) string {
 	t.Helper()
 	base := baseContainer(t, v1.Config{Entrypoint: []string{"/app/server"}})
-	wrapped, err := providerkit.WrapContainer(base, runtime)
+	wrapped, err := images.WrapContainer(base, runtime)
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestWrappingOneImageInOneRuntimeTwiceCarriesTheSameDigest(t *testing.T) {
 func TestTheRuntimeTagNamesTheImagesDigestAndTheRuntimeItIsWrappedIn(t *testing.T) {
 	t.Parallel()
 
-	tag := providerkit.RuntimeTag(wrappedDigest, []byte("a runtime binary"))
+	tag := images.RuntimeTag(wrappedDigest, []byte("a runtime binary"))
 	prefix := "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef-ocel-"
 	if !strings.HasPrefix(tag, prefix) {
 		t.Fatalf("RuntimeTag() = %q, want it to open with %q: the tag is read back as the image the deploy built", tag, prefix)
@@ -187,7 +187,7 @@ func TestTheRuntimeTagNamesTheImagesDigestAndTheRuntimeItIsWrappedIn(t *testing.
 	if held := strings.TrimPrefix(tag, prefix); len(held) != 12 {
 		t.Errorf("RuntimeTag() names the runtime as %q, want twelve hex characters", held)
 	}
-	if other := providerkit.RuntimeTag(wrappedDigest, []byte("a newer runtime binary")); other == tag {
+	if other := images.RuntimeTag(wrappedDigest, []byte("a newer runtime binary")); other == tag {
 		t.Error("two runtimes share one tag, so a rebuilt runtime would be read as already pushed and never reach the registry")
 	}
 }

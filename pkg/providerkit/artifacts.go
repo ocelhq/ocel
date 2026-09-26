@@ -8,17 +8,16 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"golang.org/x/sync/errgroup"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -144,7 +143,7 @@ func (r *deployRun) stageFunctions(
 	entry AppEntry,
 	pack AppPack,
 	routing *RoutingPlan,
-) ([]Upload, []ImagePush, error) {
+) ([]Upload, []images.ImagePush, error) {
 	if hooks := r.provider.Hooks(); hooks.FunctionImages != nil {
 		pushes, err := r.imageFunctions(ctx, hooks, entry, pack, routing)
 		return nil, pushes, err
@@ -226,7 +225,7 @@ func (r *deployRun) stageArtifact(
 	if err != nil {
 		return Upload{}, err
 	}
-	rels, err := artifactFiles(dir)
+	rels, err := images.ArtifactFiles(dir)
 	if err != nil {
 		return Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
@@ -248,35 +247,6 @@ func (r *deployRun) stageArtifact(
 		Path:   path,
 		Digest: sum,
 	}, nil
-}
-
-func artifactFiles(dir string) ([]string, error) {
-	var rels []string
-	if err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		if !entry.Type().IsRegular() && entry.Type()&fs.ModeSymlink == 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		rels = append(rels, filepath.ToSlash(rel))
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	slices.Sort(rels)
-	return rels, nil
-}
-
-func overlayFiles(overlay map[string][]byte) []string {
-	return slices.Sorted(maps.Keys(overlay))
 }
 
 const artifactDigestLen = 16
@@ -320,7 +290,7 @@ func digestArtifact(dir string, rels []string, overlay map[string][]byte) (strin
 			return "", err
 		}
 	}
-	for _, rel := range overlayFiles(overlay) {
+	for _, rel := range images.OverlayFiles(overlay) {
 		writeLenPrefixed(sum, []byte(rel))
 		sum.Write([]byte{0})
 		writeLenPrefixed(sum, overlay[rel])
@@ -381,7 +351,7 @@ func writeArchive(into io.Writer, dir string, rels []string, overlay map[string]
 			return err
 		}
 	}
-	for _, rel := range overlayFiles(overlay) {
+	for _, rel := range images.OverlayFiles(overlay) {
 		entry, err := archive.Create(rel)
 		if err != nil {
 			return err

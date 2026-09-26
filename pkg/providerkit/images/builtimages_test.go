@@ -1,4 +1,4 @@
-package providerkit_test
+package images_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 func servingRegistry(t *testing.T) string {
@@ -23,9 +23,9 @@ func servingRegistry(t *testing.T) string {
 }
 
 func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
-	push := providerkit.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := images.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
-	err := providerkit.DaemonImages().Push(context.Background(), push, nil)
+	err := images.DaemonImages().Push(context.Background(), push, nil)
 	if err == nil {
 		t.Fatal("Push() took an image the deploy never built, want it refused: nothing was handed over to write")
 	}
@@ -36,9 +36,9 @@ func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
 
 func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
-	push := providerkit.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := images.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
-	held, err := providerkit.DaemonImages().Has(context.Background(), push)
+	held, err := images.DaemonImages().Has(context.Background(), push)
 	if err == nil {
 		t.Fatalf("Has() = %v, nil against a daemon nothing answers on, want the failure surfaced: a deploy would take silence for an absent image and push over nothing", held)
 	}
@@ -53,7 +53,7 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 		"index.mjs":   "export const handler = () => {}",
 		"config.json": functionConfig(t, nil),
 	})
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,15 +61,15 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := providerkit.RegistryTarget{Server: host, Namespace: "ocel"}
-	push := providerkit.ImagePush{
+	target := images.RegistryTarget{Server: host, Namespace: "ocel"}
+	push := images.ImagePush{
 		App:      "server",
 		ImageRef: target.ImageRef("web-server", naming.DigestTag(digest.String())),
 		Digest:   digest.String(),
 		Built:    image,
 	}
 
-	store := providerkit.RegistryImages(target)
+	store := images.RegistryImages(target)
 	held, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() error = %v", err)

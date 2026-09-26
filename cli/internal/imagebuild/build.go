@@ -12,7 +12,7 @@ import (
 	railpack "github.com/railwayapp/railpack/buildkit"
 	"github.com/tonistiigi/fsutil"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 const (
@@ -87,7 +87,7 @@ func (c Choice) solve(arch string) (client.SolveOpt, func(), error) {
 	if opt.FrontendAttrs == nil {
 		opt.FrontendAttrs = map[string]string{}
 	}
-	opt.FrontendAttrs[platformAttr] = providerkit.ContainerPlatform(arch)
+	opt.FrontendAttrs[platformAttr] = images.ContainerPlatform(arch)
 	return opt, done, nil
 }
 

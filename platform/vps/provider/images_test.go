@@ -21,7 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -258,7 +258,7 @@ func (b *box) fedTo(needle string) string {
 	return ""
 }
 
-func standing(t *testing.T, machine *box) providerkit.ImageStore {
+func standing(t *testing.T, machine *box) images.ImageStore {
 	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
@@ -283,15 +283,15 @@ func daemonHolding(t *testing.T, tar string) *int {
 		_, _ = io.WriteString(w, tar)
 	}))
 	t.Cleanup(daemon.Close)
-	t.Setenv(providerkit.DockerTLSVerifyEnv, "")
-	t.Setenv(providerkit.DockerCertPathEnv, "")
-	t.Setenv(providerkit.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
+	t.Setenv(images.DockerTLSVerifyEnv, "")
+	t.Setenv(images.DockerCertPathEnv, "")
+	t.Setenv(images.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
 	return &reads
 }
 
-func aPush(t *testing.T) providerkit.ImagePush {
+func aPush(t *testing.T) images.ImagePush {
 	t.Helper()
-	return providerkit.ImagePush{
+	return images.ImagePush{
 		App:      "web",
 		Source:   "ocel/shop/web@sha256:abc",
 		ImageRef: loadedImageRef,
@@ -363,7 +363,7 @@ func wrapped(t *testing.T) v1.Image {
 	if err != nil {
 		t.Fatal(err)
 	}
-	built, err := providerkit.WrapContainer(base, []byte("#!/bin/sh\nexec \"$@\"\n"))
+	built, err := images.WrapContainer(base, []byte("#!/bin/sh\nexec \"$@\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +415,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(served.Close)
 	server := strings.TrimPrefix(served.URL, "http://")
-	store, err := p.OpenRegistryImages(context.Background(), providerkit.RegistryTarget{Server: server})
+	store, err := p.OpenRegistryImages(context.Background(), images.RegistryTarget{Server: server})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +424,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	push := providerkit.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
+	push := images.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}

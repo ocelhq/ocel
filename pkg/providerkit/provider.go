@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -22,7 +23,7 @@ type Provider interface {
 	DNS() DNS
 	Certificates() Certificates
 	Connector() Connector
-	Runtime() Runtime
+	Runtime() images.Runtime
 	Liveness() Liveness
 }
 

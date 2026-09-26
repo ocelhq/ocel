@@ -3,9 +3,9 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
-func (p *Provider) OpenDirectImages(context.Context) (providerkit.ImageStore, error) {
-	return providerkit.DaemonImages(), nil
+func (p *Provider) OpenDirectImages(context.Context) (images.ImageStore, error) {
+	return images.DaemonImages(), nil
 }

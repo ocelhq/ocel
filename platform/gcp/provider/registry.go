@@ -3,25 +3,25 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const registryUser = "oauth2accesstoken"
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ []string) (providerkit.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ []string) (images.RegistryTarget, error) {
 	if p.emulated() {
-		return providerkit.RegistryTarget{}, nil
+		return images.RegistryTarget{}, nil
 	}
 	names, err := p.Names(ctx)
 	if err != nil {
-		return providerkit.RegistryTarget{}, err
+		return images.RegistryTarget{}, err
 	}
 	token, err := p.tokens.Token(ctx)
 	if err != nil {
-		return providerkit.RegistryTarget{}, err
+		return images.RegistryTarget{}, err
 	}
-	return providerkit.RegistryTarget{
+	return images.RegistryTarget{
 		Server:    p.options.Region + dockerRegistryHost,
 		Namespace: names.project + "/" + names.Repository(class),
 		Username:  registryUser,

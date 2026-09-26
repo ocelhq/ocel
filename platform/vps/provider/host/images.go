@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -55,7 +55,7 @@ func (h *Host) HoldsImage(ctx context.Context, imageRef string) (bool, error) {
 	return strings.TrimSpace(named) != "", nil
 }
 
-func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget, imageRef, digest string) (string, error) {
+func (h *Host) PullImage(ctx context.Context, target images.RegistryTarget, imageRef, digest string) (string, error) {
 	command, err := pull(target, imageRef, digest)
 	if err != nil {
 		return "", err
@@ -89,7 +89,7 @@ const (
 	pullCeiling  = 8 * time.Second
 )
 
-func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, imageRef, command, elevation string) (string, error) {
+func (h *Host) pulling(ctx context.Context, target images.RegistryTarget, imageRef, command, elevation string) (string, error) {
 	what := "pull " + imageRef + " from " + target.Server
 	var said, stderr string
 	var err error
@@ -103,7 +103,7 @@ func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, i
 		if target.Password != "" {
 			secret = strings.NewReader(target.Password)
 		}
-		if said, stderr, err = h.spoke(ctx, what, command, secret, elevation); err == nil || !providerkit.Throttled(stderr) {
+		if said, stderr, err = h.spoke(ctx, what, command, secret, elevation); err == nil || !images.Throttled(stderr) {
 			return said, err
 		}
 	}
@@ -125,7 +125,7 @@ func waiting(ctx context.Context, attempt int) error {
 	}
 }
 
-func LoginStands(target providerkit.RegistryTarget) error {
+func LoginStands(target images.RegistryTarget) error {
 	if target.Password == "" || target.Username != "" {
 		return nil
 	}
@@ -133,7 +133,7 @@ func LoginStands(target providerkit.RegistryTarget) error {
 		"%s has a password but no username\nSet `username` beside `password` in the project's `registry`", target.Server)
 }
 
-func pull(target providerkit.RegistryTarget, imageRef, digest string) (string, error) {
+func pull(target images.RegistryTarget, imageRef, digest string) (string, error) {
 	pinned, err := pinnedTo(imageRef, digest)
 	if err != nil {
 		return "", err

@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -174,8 +175,8 @@ func held(t *testing.T, repository string, image v1.Image) string {
 		t.Fatal(err)
 	}
 	target := repository + ":" + naming.DigestTag(digest.String())
-	push := providerkit.ImagePush{App: repository, ImageRef: target, Digest: digest.String(), Built: image}
-	if err := providerkit.DaemonImages().Push(context.Background(), push, nil); err != nil {
+	push := images.ImagePush{App: repository, ImageRef: target, Digest: digest.String(), Built: image}
+	if err := images.DaemonImages().Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("write %s into the docker daemon the emulator runs out of: %v", target, err)
 	}
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
@@ -194,9 +195,9 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework a
 	}
 	overlay := map[string][]byte{}
 	if len(payload) > 0 {
-		overlay[providerkit.NodeRuntimePath] = payload
+		overlay[images.NodeRuntimePath] = payload
 	}
-	image, err := providerkit.FunctionImage(base, framework, dir, overlay)
+	image, err := images.FunctionImage(base, framework, dir, overlay)
 	if err != nil {
 		t.Fatalf("build the %s function's image: %v", framework.Name, err)
 	}
@@ -205,7 +206,7 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework a
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped, err := providerkit.WrapContainer(image, binary)
+	wrapped, err := images.WrapContainer(image, binary)
 	if err != nil {
 		t.Fatalf("wrap the %s function's image in the runtime, as a deploy does: %v", framework.Name, err)
 	}
