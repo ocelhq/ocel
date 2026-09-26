@@ -1,4 +1,4 @@
-package provider_test
+package aws_test
 
 import (
 	"os/exec"
@@ -7,17 +7,17 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
-	provider "github.com/ocelhq/ocel/platform/aws/provider"
+	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 func TestAWSProvider(t *testing.T) {
 	conformance.Run(t, conformance.Suite{
-		Spec:    providerkit.Spec{Version: "test", New: provider.New},
+		Spec:    providerkit.Spec{Version: "test", New: aws.New},
 		Options: providerkit.Options{"region": "us-east-1"},
 		Binary:  buildProvider(t),
 		Certificates: &conformance.CertificateChecks{
@@ -29,10 +29,10 @@ func TestAWSProvider(t *testing.T) {
 func TestTheProviderCarriesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	t.Parallel()
 
-	p := provider.NewProvider(provider.Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 
-	if p.Facts().Vendor != provider.Vendor {
-		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, provider.Vendor)
+	if p.Facts().Vendor != aws.Vendor {
+		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, aws.Vendor)
 	}
 	for _, want := range []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket} {
 		if !slices.Contains(p.Facts().Bindings, want) {

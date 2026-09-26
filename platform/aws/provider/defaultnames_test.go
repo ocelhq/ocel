@@ -1,4 +1,4 @@
-package provider_test
+package aws_test
 
 import (
 	"github.com/ocelhq/ocel/pkg/providerkit"

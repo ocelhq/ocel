@@ -1,4 +1,4 @@
-package provider_test
+package aws_test
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
@@ -21,7 +21,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	provider "github.com/ocelhq/ocel/platform/aws/provider"
+	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 )
 
@@ -29,7 +29,7 @@ var update = flag.Bool("update", false, "rewrite the golden files")
 
 func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
-	p := provider.NewProvider(provider.Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	spec := providerkit.Spec{
 		Version: "test",
 		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return p, nil },
@@ -171,7 +171,7 @@ func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
 }
 
 func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
-	p := provider.NewProvider(provider.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(aws.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	spec := providerkit.Spec{
 		Version: "test",
 		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return p, nil },

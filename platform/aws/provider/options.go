@@ -1,4 +1,4 @@
-package provider
+package aws
 
 type Options struct {
 	Region       string            `json:"region,omitempty" doc:"The AWS region to deploy into."`
