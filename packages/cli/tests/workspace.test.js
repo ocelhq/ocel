@@ -57,11 +57,11 @@ describe("the ocel package", () => {
 describe("the workspace", () => {
   const names = workspacePackages();
 
-  it("holds no provider package", () => {
+  it("contains no provider package", () => {
     expect(names.filter((name) => name?.startsWith("@ocel/provider-"))).toEqual([]);
   });
 
-  it("holds the cli wrapper and every platform package", () => {
+  it("contains the cli wrapper and every platform package", () => {
     expect(names).toEqual(expect.arrayContaining(["@ocel/cli", ...platforms]));
   });
 });
@@ -69,7 +69,7 @@ describe("the workspace", () => {
 describe("the release version", () => {
   const version = readFileSync(join(repo, "VERSION"), "utf8").trim();
 
-  it("is the version every published package carries", () => {
+  it("is the version every published package has", () => {
     const published = globSync("packages/*/package.json", { cwd: repo }).map((path) => [
       path,
       JSON.parse(readFileSync(join(repo, path), "utf8")).version,

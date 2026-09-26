@@ -114,10 +114,10 @@ describe("declaring a postgres binding", () => {
   it("says how to name the project when nothing supplies the config root", () => {
     Reflect.deleteProperty(globalThis, "$cli");
 
-    expect(() => declare()).toThrow(/pass `project` to say which directory holds it/);
+    expect(() => declare()).toThrow(/pass `project` to say which directory contains it/);
   });
 
-  it("keeps only the fields a postgres binding carries", () => {
+  it("keeps only the fields a postgres binding contains", () => {
     postgres("orders", {
       getSSTBinding: () => ({ properties: { ...properties, extra: "dropped" } }),
     });
@@ -162,7 +162,7 @@ describe("publishing a postgres binding", () => {
     expect(argv().args.slice(-1)).toEqual(["--preview"]);
   });
 
-  it("holds a digest and never a property", async () => {
+  it("outputs a digest and never a property", async () => {
     const created = await postgresProvider.create(declare().props as never);
 
     expect(created.outs.digest).toMatch(/^[0-9a-f]{64}$/);
@@ -220,7 +220,7 @@ describe("changing a published postgres binding", () => {
     });
   });
 
-  it("holds still when nothing changed", async () => {
+  it("reports no change when nothing changed", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
 
     expect(await postgresProvider.diff("id", olds, declare().props as never)).toMatchObject({
@@ -296,7 +296,7 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("holds still when nothing changed", async () => {
+  it("reports no change when nothing changed", async () => {
     const olds = (await customProvider.create(declareCustom().props as never)).outs;
 
     expect(await customProvider.diff("id", olds, declareCustom().props as never)).toMatchObject({

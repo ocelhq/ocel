@@ -41,7 +41,7 @@ export interface EvaluatedResource {
   readonly tags: TagMap;
 }
 
-/** The answer to one request, one entry per candidate the request carried. */
+/** The answer to one request, one entry per candidate the request named. */
 export interface EvaluateResponse {
   readonly resources: readonly EvaluatedResource[];
 }

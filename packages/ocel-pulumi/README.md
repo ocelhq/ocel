@@ -10,7 +10,7 @@ pnpm add @ocel/pulumi
 ```
 
 `@pulumi/pulumi` and `ocel` are peer dependencies. `ocel` is resolved from the ocel
-project — the directory holding `ocel.json` — not from the Pulumi program.
+project — the directory containing `ocel.json` — not from the Pulumi program.
 
 ## Use
 
@@ -84,7 +84,7 @@ bind.postgres("orders", {
 | ------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
 | `class`       | `"production"`              | The ocel class the binding is published to.                                                     |
 | `environment` | none                        | One preview environment; `class: "preview"` only. Left off, the binding serves every preview.   |
-| `project`     | the program's directory     | The directory holding `ocel.json`.                                                      |
+| `project`     | the program's directory     | The directory containing `ocel.json`.                                                      |
 | `parent`      | none                        | The Pulumi resource this binding hangs under.                                                   |
 
 One call is one resource. Remove the call and the published binding goes with it. A name

@@ -10,7 +10,7 @@ pnpm add @ocel/sst
 ```
 
 `ocel` is a peer dependency, and it is resolved from the ocel project — the
-directory holding `ocel.json` — not from the SST app.
+directory containing `ocel.json` — not from the SST app.
 
 ## Use
 
@@ -77,7 +77,7 @@ bind.postgres("orders", {
 | ------------- | -------------------- | ----------------------------------------------------------- |
 | `class`       | `"production"`       | The ocel class the binding is published to.                     |
 | `environment` | none                 | One preview environment; `class: "preview"` only. Left off, the binding serves every preview. |
-| `project`     | the SST config root  | The directory holding `ocel.json`.                      |
+| `project`     | the SST config root  | The directory containing `ocel.json`.                      |
 
 One call is one resource. Remove the call and the published binding goes with it.
 A name belongs to whoever published it, so two stacks publishing `orders` into

@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe("platform-packages.mjs", () => {
-  it("fills every platform package with the executable binary its release archive holds", () => {
+  it("fills every platform package with the executable binary its release archive contains", () => {
     const run = stage(every);
     expect(run.stderr).toBe("");
     expect(run.status).toBe(0);

@@ -17,7 +17,7 @@ import { type BindingPlaceholdersOf, bindings as openBindings } from "./output";
 
 /**
  * The records this project's config binds, keyed by resource type and then by
- * the name the config keys them under, with `custom` holding the records
+ * the name the config keys them under, with `custom` containing the records
  * nothing declared. `ocel bindings generate` writes an augmentation of this
  * interface from the records themselves; until something does, every name is
  * open and the deploy is what checks it.
@@ -37,7 +37,7 @@ export type TransformBindings = BindingPlaceholdersOf<Bindings, BindingsGenerate
 /**
  * The records a transform module reads, one placeholder per property named.
  * Nothing is resolved here: `bindings.custom.network.subnetIds` is the
- * instruction the deploy carries out against the records published to the
+ * instruction the deploy applies against the records published to the
  * environment it targets.
  */
 export const bindings = openBindings as TransformBindings;

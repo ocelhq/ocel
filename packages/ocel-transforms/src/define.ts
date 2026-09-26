@@ -8,7 +8,7 @@ export type EnvClass = "development" | "preview" | "production";
 /**
  * What a rule's `if` gate is allowed to decide on: the environment being
  * deployed and the app a candidate resource belongs to. Resources shared
- * across apps carry no `app`, so `ctx.app === "api"` is false for them.
+ * across apps have no `app`, so `ctx.app === "api"` is false for them.
  */
 export interface GateContext {
   readonly envClass: EnvClass;
@@ -49,7 +49,7 @@ export type TransformRule = { readonly if?: Gate; readonly tags?: TagMap } & {
   };
 };
 
-/** Keys a rule may carry besides the providers it targets. */
+/** Keys a rule may have besides the providers it targets. */
 export const ruleKeywords = ["if", "tags"] as const;
 
 /** What a callback form of `defineTransform` is handed, and nothing besides. */

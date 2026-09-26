@@ -33,7 +33,7 @@ export function runBindings(args: string[], target: Target, input?: string): voi
 export function checkTarget(target: Target): void {
   if (!target.project) {
     throw new Error(
-      "an ocel project is required: it is the directory holding ocel.json, whose apps consume this binding, and it is never read from a Pulumi stack or project name",
+      "an ocel project is required: it is the directory containing ocel.json, whose apps consume this binding, and it is never read from a Pulumi stack or project name",
     );
   }
   if (target.class !== "production" && target.class !== "preview") {

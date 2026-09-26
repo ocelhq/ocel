@@ -14,7 +14,7 @@ export interface VpsContainerArgs {
   mounts: string[];
   /**
    * The image to run, pinned by digest (`…@sha256:…`). Swap it for a build of
-   * the same engine that carries what you need, such as pgvector.
+   * the same engine that includes what you need, such as pgvector.
    */
   image: string;
   /** Arguments handed to the image's entrypoint, such as `["-c", "max_connections=200"]`. */
@@ -44,7 +44,7 @@ export interface VpsVolumeArgs {
 }
 
 /**
- * One key per thing the vps provider stands up on the box for an ocel resource.
+ * One key per thing the vps provider provisions on the box for an ocel resource.
  */
 export interface VpsResourceArgs {
   postgres: {

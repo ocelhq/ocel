@@ -3,7 +3,7 @@ import { source } from "./cli.js";
 import { customBinding } from "./custom.js";
 
 describe("the record a custom binding publishes as", () => {
-  it("carries the properties verbatim, sourced to pulumi and granting nothing", () => {
+  it("passes the properties through verbatim, sourced to pulumi and granting nothing", () => {
     const record = customBinding("network", {
       subnetIds: ["subnet-0a1", "subnet-0b2"],
       securityGroupIds: ["sg-0c3"],
@@ -29,7 +29,7 @@ describe("the record a custom binding publishes as", () => {
   });
 
   it("refuses a record with nothing to read", () => {
-    expect(() => customBinding("network", {})).toThrow(/carries no properties/);
+    expect(() => customBinding("network", {})).toThrow(/has no properties/);
   });
 
   it("refuses a property that never resolved", () => {

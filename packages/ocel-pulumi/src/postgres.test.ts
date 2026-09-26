@@ -34,7 +34,7 @@ describe("the record a postgres binding publishes as", () => {
     ).toEqual({ ...fixture, source });
   });
 
-  it("carries the grants it was handed", () => {
+  it("keeps the grants it was handed", () => {
     const binding = postgresBinding("orders", {
       properties: fixture.postgres,
       grants: [
@@ -73,7 +73,7 @@ describe("the record a postgres binding publishes as", () => {
 
   it("refuses a resource missing a field an app resolving it reads", () => {
     const { password, ...rest } = fixture.postgres;
-    expect(() => postgresBinding("orders", { properties: rest })).toThrow(/carries no password/);
+    expect(() => postgresBinding("orders", { properties: rest })).toThrow(/has no password/);
   });
 
   it("refuses a port that is not a whole number", () => {
