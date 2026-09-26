@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -59,7 +59,7 @@ func TestWhoamiNamesTheProjectTheRegionAndWhoTheTokenBelongsTo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want the identity the ADC token belongs to", err)
 	}
-	if named := providerkit.IdentityProto(gcp.Vendor, identity).GetProvider(); named != string(gcp.Vendor) {
+	if named := providerserver.IdentityProto(gcp.Vendor, identity).GetProvider(); named != string(gcp.Vendor) {
 		t.Errorf("the identity names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, gcp.Vendor)
 	}
 	if identity.Account != "acme-prod" {

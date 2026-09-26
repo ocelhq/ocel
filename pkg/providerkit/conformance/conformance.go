@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 )
 
 type Suite struct {
 	New func(ctx context.Context, settings provider.Settings) (provider.Provider, error)
 
-	Spec providerkit.Spec
+	Server providerserver.Config
 
 	Options provider.Options
 

@@ -20,8 +20,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 )
@@ -31,11 +31,11 @@ var update = flag.Bool("update", false, "rewrite the golden files")
 func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
-	spec := providerkit.Spec{
+	config := providerserver.Config{
 		Version: "test",
 		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
-	server := httptest.NewServer(providerkit.ConformanceMux(spec))
+	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
@@ -173,11 +173,11 @@ func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
 
 func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
 	p := aws.NewProvider(aws.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
-	spec := providerkit.Spec{
+	config := providerserver.Config{
 		Version: "test",
 		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
-	server := httptest.NewServer(providerkit.ConformanceMux(spec))
+	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {

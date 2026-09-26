@@ -1,0 +1,63 @@
+package providerserver_test
+
+import (
+	"context"
+	"net/http/httptest"
+	"slices"
+	"testing"
+
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
+)
+
+func TestConfigureHandsTheProviderTheTransformModulesTheProjectLists(t *testing.T) {
+	var seen provider.Settings
+	config := providerserver.Config{
+		Version: "test",
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+			seen = settings
+			return fake.NewProvider(fake.Options{}), nil
+		},
+	}
+	server := httptest.NewServer(providerserver.ConformanceMux(config))
+	t.Cleanup(server.Close)
+
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	modules := []string{"./transforms/network.transform.ts", "./transforms/tags.transform.ts"}
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{
+		Config: &contractv1.ProviderConfig{Transforms: modules},
+	}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	if !slices.Equal(seen.Transforms, modules) {
+		t.Errorf("Transforms = %v, want %v", seen.Transforms, modules)
+	}
+}
+
+func TestConfigureHandsTheProviderTheProjectItServes(t *testing.T) {
+	var seen provider.Settings
+	config := providerserver.Config{
+		Version: "test",
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+			seen = settings
+			return fake.NewProvider(fake.Options{}), nil
+		},
+	}
+	server := httptest.NewServer(providerserver.ConformanceMux(config))
+	t.Cleanup(server.Close)
+
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{
+		Config: &contractv1.ProviderConfig{Slug: "shop"},
+	}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	if seen.Slug != "shop" {
+		t.Errorf("Slug = %q, want shop", seen.Slug)
+	}
+}

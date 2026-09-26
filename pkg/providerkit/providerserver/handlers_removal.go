@@ -1,0 +1,401 @@
+package providerserver
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+
+	connect "connectrpc.com/connect"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+type projectRemoval struct {
+	provider provider.Provider
+	front    edge.Edge
+	stack    edge.EdgeStack
+	store    stackStore
+	state    stackrecords.EdgeState
+	settle   settlement
+
+	slug    string
+	class   edge.Class
+	scope   string
+	infra   []naming.StackName
+	apps    []naming.StackName
+	pointer []string
+}
+
+func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectRequest) (*projectRemoval, error) {
+	provider, err := h.session.use()
+	if err != nil {
+		return nil, err
+	}
+	if req.GetSlug() == "" {
+		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and a removal plan is drawn for one")
+	}
+	class, err := classOf(req.GetEnvironment().GetTier())
+	if err != nil {
+		return nil, err
+	}
+	scope, err := envScope(req.GetEnvironment())
+	if err != nil {
+		return nil, err
+	}
+	store := stackStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, req.GetSlug())}
+	state, err := store.read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	front, err := h.removalEdge(provider, state, req.GetEdge())
+	if err != nil {
+		return nil, err
+	}
+	writer, err := dnsFor(provider, front, req.GetEdge())
+	if err != nil {
+		return nil, err
+	}
+	removal := &projectRemoval{
+		provider: provider,
+		front:    front,
+		settle:   newSettlement(front, writer, req.GetEdge().GetDns().GetZone(), provider.Liveness()),
+		store:    store,
+		state:    state,
+		slug:     req.GetSlug(),
+		class:    class,
+		scope:    scope,
+	}
+	if !removal.state.Edge.Empty() {
+		if removal.stack, err = front.Open(removal.state.Edge); err != nil {
+			return nil, err
+		}
+	}
+	entries, err := stackrecords.List(ctx, provider.Records(), class, req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	removal.infra, removal.apps, removal.pointer = classifyStacks(entries, class)
+	return removal, nil
+}
+
+func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*planv1.ChangePlan, error) {
+	removal, err := h.openRemoval(ctx, req)
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	plan, err := removal.plan()
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	return plan, nil
+}
+
+func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
+	plan := &planv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
+	vendor := string(r.provider.Facts().Vendor)
+	for _, stack := range r.apps {
+		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
+			Kind:    provider.StackGroupKind,
+			Name:    vendor + "/" + stack.String(),
+			Feature: stack.App,
+			Action:  planv1.Change_ACTION_DELETE,
+			Reason:  "everything this release of " + stack.App + " stood up",
+		})
+	}
+	for _, stack := range r.infra {
+		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
+			Kind:    provider.StackGroupKind,
+			Name:    vendor + "/" + stack.String(),
+			Feature: stack.Env,
+			Action:  planv1.Change_ACTION_DELETE,
+			Reason:  "the resources every app in " + stack.Env + " binds to",
+			Slow:    true,
+		})
+	}
+	for _, group := range r.front.ProjectRemovals(edge.ProjectScope{
+		Slug:      r.slug,
+		Class:     r.class,
+		Hostnames: r.state.Hostnames(),
+		Front:     r.state.Edge.Front,
+	}) {
+		converted, err := edgeGroupProto(group)
+		if err != nil {
+			return nil, err
+		}
+		plan.Groups = append(plan.Groups, converted)
+	}
+	plan.Groups = append(plan.Groups, r.recordGroups()...)
+	plan.Groups = append(plan.Groups,
+		&planv1.ChangeGroup{
+			Kind:   "variable values",
+			Name:   r.slug,
+			Action: planv1.Change_ACTION_DELETE,
+			Reason: "the values this project's apps read, and the bindings published beside them",
+		},
+		&planv1.ChangeGroup{
+			Kind:   "stored objects",
+			Name:   r.slug,
+			Action: planv1.Change_ACTION_DELETE,
+			Reason: "the artifacts, assets and cache entries every release of this project wrote",
+		})
+	return plan, nil
+}
+
+func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
+	var groups []*planv1.ChangeGroup
+	for _, rec := range r.state.WrittenRecords() {
+		groups = append(groups, &planv1.ChangeGroup{
+			Kind:   "DNS record",
+			Name:   rec.String(),
+			Action: planv1.Change_ACTION_DELETE,
+			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
+		})
+	}
+	for _, rec := range r.state.OwedRecords() {
+		groups = append(groups, &planv1.ChangeGroup{
+			Kind:   "DNS record",
+			Name:   rec.String(),
+			Action: planv1.Change_ACTION_KEEP,
+			Reason: "you created it yourself; ocel never wrote it, so it is yours to remove",
+		})
+	}
+	for _, cert := range r.state.Certificates() {
+		groups = append(groups, certificateGroup(cert))
+	}
+	return groups
+}
+
+func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
+	if !cert.Requested {
+		return &planv1.ChangeGroup{
+			Kind:   "certificate",
+			Name:   cert.ID,
+			Action: planv1.Change_ACTION_KEEP,
+			Reason: "ocel never requested it, so it is not ocel's to delete: whoever placed it is who removes it",
+		}
+	}
+	return &planv1.ChangeGroup{
+		Kind:   "certificate",
+		Name:   cert.ID,
+		Action: planv1.Change_ACTION_DELETE,
+		Reason: "ocel requested it for a hostname this project serves, and nothing is left to serve",
+	}
+}
+
+func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
+		removal, err := h.openRemoval(ctx, req)
+		if err != nil {
+			return err
+		}
+		if err := removal.holdToPlan(req.GetConsented()); err != nil {
+			return err
+		}
+		return removal.run(ctx, progress)
+	})
+}
+
+func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
+	if len(consented.GetGroups()) == 0 {
+		return nil
+	}
+	standing, err := r.plan()
+	if err != nil {
+		return err
+	}
+	shown, err := PlanOf(consented)
+	if err != nil {
+		return err
+	}
+	drawn, err := PlanOf(standing)
+	if err != nil {
+		return err
+	}
+	return bootstrapplan.RefuseUnconsentedChanges(shown, drawn)
+}
+
+func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error {
+	var errs []error
+
+	if err := r.unbind(ctx, progress); err != nil {
+		errs = append(errs, err)
+	}
+	for _, stack := range append(slices.Clone(r.apps), r.infra...) {
+		if err := r.destroy(ctx, stack, progress); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	written, held := r.state.PointerRecords(), r.state.Certificates()
+	if err := r.tearDownEdge(ctx, progress); err != nil {
+		errs = append(errs, err)
+	} else {
+		if err := r.releaseRecords(ctx, written, progress); err != nil {
+			errs = append(errs, err)
+		}
+		if err := r.discardCertificates(ctx, held, progress); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := r.purgeValues(ctx, progress); err != nil {
+		errs = append(errs, err)
+	}
+	if err := r.purgeObjects(ctx, progress); err != nil {
+		errs = append(errs, err)
+	}
+	if err := errors.Join(errs...); err != nil {
+		progress.Say("Leaving the project on record: the rerun reads its progress from what is still here")
+		return err
+	}
+	return r.forget(ctx, progress)
+}
+
+func (r *projectRemoval) unbind(ctx context.Context, progress edge.Progress) error {
+	if r.stack == nil || r.stack.State().Empty() {
+		return nil
+	}
+	var errs []error
+	for _, hostname := range r.stack.State().Bound {
+		progress.Say("Unbinding " + hostname + " from the edge")
+		if err := edge.Heeded(r.stack.UnbindDomain(ctx, hostname), progress); err != nil {
+			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
+		}
+	}
+	for _, pointer := range r.pointers() {
+		progress.Say(fmt.Sprintf("Removing pointer %q from the store", pointer))
+		if _, err := r.stack.RemovePointer(ctx, pointer, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *projectRemoval) pointers() []string {
+	if r.class == edge.ClassProduction {
+		return []string{edge.DefaultPointer}
+	}
+	return r.pointer
+}
+
+func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress edge.Progress) error {
+	progress.Say("Destroying " + stack.String())
+	ref := provider.StackRef{Project: r.slug, Class: r.class, Name: stack}
+	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
+		return fmt.Errorf("destroy %s: %w", stack, err)
+	}
+	return stackrecords.Forget(ctx, r.provider.Records(), r.class, r.slug, stack)
+}
+
+func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progress) error {
+	if r.stack == nil || r.stack.State().Empty() {
+		return nil
+	}
+	progress.Say("Destroying what the edge stack owns")
+	if err := r.stack.Destroy(ctx); err != nil {
+		return fmt.Errorf("destroy the edge stack: %w", err)
+	}
+	r.state = stackrecords.EdgeState{}
+	return r.store.write(ctx, r.state)
+}
+
+func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress edge.Progress) error {
+	if err := r.settle.release(ctx, written, progress.Say); err != nil {
+		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
+	}
+	return nil
+}
+
+func (r *projectRemoval) discardCertificates(ctx context.Context, held []provider.Certificate, progress edge.Progress) error {
+	var errs []error
+	for _, cert := range held {
+		if err := retireCertificate(ctx, r.provider, r.settle, cert, provider.Certificate{}, progress); err != nil {
+			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress) error {
+	progress.Say("Removing the project's stored variable values")
+	store := envvars.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
+	if _, err := store.Purge(ctx, envvars.Scope{Project: r.slug, Class: r.class}); err != nil {
+		return fmt.Errorf("remove %s's stored variable values: %w", r.slug, err)
+	}
+	return nil
+}
+
+func (r *projectRemoval) purgeObjects(ctx context.Context, progress edge.Progress) error {
+	var errs []error
+	for _, env := range r.environments() {
+		prefix := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: env}.StoragePrefix()
+		if err := r.provider.Artifacts().RemovePrefix(ctx, r.class, prefix, progress); err != nil {
+			errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *projectRemoval) environments() []string {
+	envs := slices.Clone(r.pointer)
+	if r.class == edge.ClassProduction && !slices.Contains(envs, stackrecords.ProductionEnv) {
+		envs = append(envs, stackrecords.ProductionEnv)
+	}
+	if r.scope != EveryPreview && !slices.Contains(envs, r.scope) {
+		envs = append(envs, r.scope)
+	}
+	slices.Sort(envs)
+	return envs
+}
+
+func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) error {
+	remaining, err := stackrecords.List(ctx, r.provider.Records(), r.class, r.slug)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return nil
+	}
+	progress.Say("Forgetting the project")
+	if err := records.Forget(ctx, r.provider.Records(), stackrecords.EdgeStackRecord(r.class, r.slug)); err != nil {
+		return err
+	}
+	return records.Forget(ctx, r.provider.Records(), stackrecords.ProjectRecord(r.class, r.slug))
+}
+
+func reclaim(
+	ctx context.Context,
+	p provider.Provider,
+	slug string,
+	class edge.Class,
+	targets []ReclaimTarget,
+	progress edge.Progress,
+) error {
+	var errs []error
+	for _, target := range targets {
+		progress.Say("Reclaiming " + target.App + " " + target.Build.String())
+		ref := provider.StackRef{Project: slug, Class: class, Name: target.Stack}
+		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
+			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
+			continue
+		}
+		if err := stackrecords.Forget(ctx, p.Records(), class, slug, target.Stack); err != nil {
+			errs = append(errs, err)
+		}
+		for _, prefix := range target.Prefixes {
+			if err := p.Artifacts().RemovePrefix(ctx, class, prefix, progress); err != nil {
+				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}

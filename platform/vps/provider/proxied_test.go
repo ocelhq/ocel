@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
@@ -17,7 +17,7 @@ func refusingReach(t *testing.T, resources []provider.Resource, grants []provide
 		return naming.Proxied(provider.WireBindingType(kind)) || kind == provider.BindingType("queue")
 	}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
-	return providerkit.RefuseUnreachableBindings(p.Facts().Vendor, p.Facts().Bindings, proxied, resources, grants)
+	return providerserver.RefuseUnreachableBindings(p.Facts().Vendor, p.Facts().Bindings, proxied, resources, grants)
 }
 
 func TestABoxRefusesAProxiedBindingItServesNothingFor(t *testing.T) {
@@ -26,7 +26,7 @@ func TestABoxRefusesAProxiedBindingItServesNothingFor(t *testing.T) {
 	grants := []provider.Binding{{Name: "queue", Resource: "queue--jobs", Type: provider.BindingType("queue")}}
 	err := refusingReach(t, nil, grants)
 
-	var unreachable *providerkit.UnreachableBindingError
+	var unreachable *providerserver.UnreachableBindingError
 	if !errors.As(err, &unreachable) {
 		t.Fatalf("a proxied binding a box serves nothing for = %v, want it refused before the app is handed a record it cannot read", err)
 	}

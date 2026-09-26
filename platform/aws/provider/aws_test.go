@@ -10,8 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -303,7 +303,7 @@ func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v", err)
 	}
-	named := providerkit.IdentityProto(Vendor, identity).GetProvider()
+	named := providerserver.IdentityProto(Vendor, identity).GetProvider()
 	if named != string(Vendor) {
 		t.Errorf("the identity names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, Vendor)
 	}

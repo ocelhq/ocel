@@ -9,16 +9,16 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 func TestAWSProvider(t *testing.T) {
 	conformance.Run(t, conformance.Suite{
-		Spec:    providerkit.Spec{Version: "test", New: aws.New},
+		Server:  providerserver.Config{Version: "test", New: aws.New},
 		Options: provider.Options{"region": "us-east-1"},
 		Binary:  buildProvider(t),
 		Certificates: &conformance.CertificateChecks{

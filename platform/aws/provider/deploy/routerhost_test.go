@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -56,7 +56,7 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
-	serving, err := providerkit.ServingFactsFor(providerkit.ServingQuery{
+	serving, err := providerserver.ServingFactsFor(providerserver.ServingQuery{
 		Root:              cfg.ArtifactRoot,
 		Project:           "shop",
 		App:               app,
