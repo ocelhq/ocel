@@ -29,7 +29,7 @@ func committedSchemaFile(t *testing.T, root string) string {
 	return filepath.Join("www", "public", "schema", strings.TrimSpace(string(version)), "ocel.schema.json")
 }
 
-const compareTable = "www/components/compare/data.ts"
+const compareTable = "www/components/docs/compare/data.ts"
 
 var sampleNamed = regexp.MustCompile("filename: \"([^\"]+)\",\\s*code: `([^`]*)`")
 
