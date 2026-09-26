@@ -1,12 +1,15 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func swapping(t *testing.T, restoreFails bool) (string, int) {
@@ -96,5 +99,31 @@ func TestASwapWhoseRestoreFailsPutsTheOldServerBackOnTheDataItHad(t *testing.T) 
 	)
 	if strings.Contains(ran, "docker volume rm "+name+"-g16") {
 		t.Errorf("a swap that failed removed the only copy of the data the old server had:\n%s", ran)
+	}
+}
+
+func TestAnUpgradeOverAStoppedServerSaysWhichServerToStartAndWhichVersionToSetBack(t *testing.T) {
+	t.Parallel()
+
+	spec := resourced()
+	spec.Volume.Generation = "17"
+	stand := machine(nil)
+	stand.answer = func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, quoted(servingSelectors())):
+			return session.Result{Stdout: "exited " + spec.Image + "\n"}, true
+		case strings.Contains(command, LabelGeneration):
+			return session.Result{Stdout: "16\n"}, true
+		}
+		return session.Result{}, false
+	}
+	err := stand.host().StandResource(context.Background(), spec, "secret")
+	if err == nil {
+		t.Fatal("StandResource() over a stopped server holding version 16 data = nil, want it refused until the server can dump that data")
+	}
+	for _, want := range []string{"Run `docker start " + spec.Name + "`", "set the version back to 16"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("StandResource() = %q, want it to say %q", err, want)
+		}
 	}
 }

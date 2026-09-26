@@ -359,7 +359,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 			return providerkit.Refuse(providerkit.CodeNotReady,
 				"%s holds version %s data, this deploy declares %s, and %s is not running to dump it\n"+
 					"Run `docker start %s` or set the version back to %s",
-				spec.Resource, from, spec.Volume.Generation, spec.Name, from)
+				spec.Resource, from, spec.Volume.Generation, spec.Name, spec.Name, from)
 		}
 		return h.upgrade(ctx, spec, from, digest, secret, elevation)
 	}
