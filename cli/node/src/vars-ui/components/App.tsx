@@ -24,7 +24,7 @@ function Code({ children }: { children: React.ReactNode }) {
 
 function Banner() {
   const current = useValue(store.state);
-  const left = useValue(store.unfilled).length;
+  const left = useValue(store.stillMissing).length;
   const _only = useValue(store.unfilledOnly);
   const recovery = current?.recovery;
   if (!current || !recovery) return null;
@@ -46,7 +46,7 @@ function Banner() {
 function Resume() {
   const busySaving = useValue(store.saving);
   const busyFinishing = useValue(store.finishing);
-  const left = useValue(store.unfilled).length;
+  const left = useValue(store.stillMissing).length;
   const busy = busySaving || busyFinishing;
   return (
     <div className="flex flex-wrap items-center gap-2">

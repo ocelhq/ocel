@@ -26,8 +26,8 @@ import {
   type SaveResult,
   type State,
   saveSummary,
+  stillMissingOf,
   unfilledLensCount,
-  unfilledMissing,
   type VariableGroupPending,
   type VariableGroupState,
   type Version,
@@ -202,8 +202,8 @@ export const visible = computed(() => {
   return lines.filter((line) => editable(line.variant)).map((line) => line.variant);
 });
 
-export const unfilled = computed(() =>
-  unfilledMissing(catalogue.value, missing.value, drafts.value, baselines.value),
+export const stillMissing = computed(() =>
+  stillMissingOf(catalogue.value, missing.value, drafts.value, baselines.value),
 );
 
 export const finishing = signal(false);
@@ -217,7 +217,7 @@ export async function load(): Promise<void> {
     return;
   }
   void attend();
-  unfilledOnly.value = unfilled.value.length > 0;
+  unfilledOnly.value = stillMissing.value.length > 0;
   expanded.value = new Set(
     listing.value.groups.filter((group) => group.unfilled > 0).map((group) => group.folder),
   );
@@ -796,8 +796,8 @@ export async function resume(): Promise<void> {
         return;
       }
     }
-    if (unfilled.value.length > 0) {
-      finishError.value = `The deploy still needs ${plural(unfilled.value.length, "cell")} filled.`;
+    if (stillMissing.value.length > 0) {
+      finishError.value = `The deploy still needs ${plural(stillMissing.value.length, "cell")} filled.`;
       return;
     }
     await sessionPort()?.done();

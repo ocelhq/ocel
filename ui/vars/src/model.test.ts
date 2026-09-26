@@ -30,10 +30,10 @@ import {
   saveSummary,
   setForOptions,
   sizeLine,
+  stillMissingOf,
   storedAt,
   tallyLine,
   unfilledCount,
-  unfilledMissing,
   variantAt,
   variantsOf,
 } from "./model";
@@ -704,7 +704,7 @@ describe("recovery", () => {
   });
 
   it("counts a missing cell as filled once it is set and valid, or has a draft", () => {
-    expect(unfilledMissing(catalogue, missing, new Map(), new Map()).map((v) => v.at)).toEqual([
+    expect(stillMissingOf(catalogue, missing, new Map(), new Map()).map((v) => v.at)).toEqual([
       at("B"),
       at("C"),
       at("D", "/web"),
@@ -714,7 +714,7 @@ describe("recovery", () => {
       [addressKey(at("C")), "fixed"],
       [addressKey(at("D", "/web")), "d"],
     ]);
-    expect(unfilledMissing(catalogue, missing, drafts, new Map())).toEqual([]);
+    expect(stillMissingOf(catalogue, missing, drafts, new Map())).toEqual([]);
   });
 });
 
