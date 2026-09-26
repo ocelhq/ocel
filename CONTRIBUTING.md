@@ -40,7 +40,7 @@ rules 1–9 to `pkg/` and the vendors that implement the provider contract.
 ## Structure
 
 - Code goes where the [codebase map](AGENTS.md#codebase-map) puts it. A new top-level
-  directory or package gets its map entry before it gets files.
+  directory gets its map entry before it gets files.
 - A package sits under `pkg/provider/` only if nothing but providers uses it.
 - A vendor keeps each port, hook or hook group in its own file
   ([Naming](.greptile/rules.md#naming) rule 6).
