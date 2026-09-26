@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { posix } from "node:path";
+import { parseArgs } from "node:util";
 
 const contractFiles = [
   ".github/workflows/contract-paths.yml",
@@ -45,16 +46,24 @@ function fail(...lines) {
 }
 
 if (import.meta.main) {
+  const { values } = parseArgs({
+    options: {
+      repository: { type: "string", default: "" },
+      "head-repository": { type: "string", default: "" },
+      association: { type: "string", default: "" },
+      "changed-files": { type: "string", default: "" },
+    },
+  });
   const pullRequest = {
-    repository: process.env.REPOSITORY ?? "",
-    headRepository: process.env.HEAD_REPOSITORY ?? "",
-    association: process.env.ASSOCIATION ?? "",
+    repository: values.repository,
+    headRepository: values["head-repository"],
+    association: values.association,
   };
   const files = readFileSync(0, "utf8")
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
-  const changedFiles = Number(process.env.CHANGED_FILES);
+  const changedFiles = Number.parseInt(values["changed-files"], 10);
   if (!(files.length >= changedFiles)) {
     fail(
       `GitHub listed ${files.length} of ${changedFiles} changed files, and this check cannot see the rest.`,
