@@ -1,9 +1,11 @@
 package host
 
 import (
+	"context"
 	"slices"
 	"strconv"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -50,6 +52,8 @@ func openFront(front Front, box frontBox) proxy.Proxy {
 	switch {
 	case front.Manual != nil:
 		return manual.Manual{Box: box, Port: front.Manual.Port}
+	case front.adopted():
+		return unservedFront{named: front.named()}
 	default:
 		return caddy.Builtin{Box: box}
 	}
@@ -60,6 +64,29 @@ func destination(front proxy.Proxy) string {
 		return file
 	}
 	return ""
+}
+
+type unservedFront struct{ named string }
+
+func (u unservedFront) refused() error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s is not supported yet as the proxy fronting this box; route to ocel yourself with `\"proxy\": \"manual\"`", u.named)
+}
+
+func (unservedFront) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
+
+func (u unservedFront) Render(proxy.Spec) ([]byte, error) { return nil, u.refused() }
+
+func (unservedFront) File() string { return "" }
+
+func (unservedFront) Unrendered([]byte, proxy.Permission) string { return "" }
+
+func (u unservedFront) Reload(context.Context) error { return u.refused() }
+
+func (u unservedFront) Inspect(context.Context) (proxy.Standing, error) { return nil, u.refused() }
+
+func (u unservedFront) Certificate(context.Context, string) (proxy.Certificate, error) {
+	return proxy.Certificate{}, u.refused()
 }
 
 func (state RoutingTable) hostnames() []string {
