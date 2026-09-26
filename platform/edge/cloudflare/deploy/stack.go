@@ -195,7 +195,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		}
 	}
 
-	if err := p.reconcileWorkerRoutes(ctx, genericUp, routePlan{
+	if err := p.reconcileWorkerRoutes(ctx, genericUp, routeSpec{
 		desired:        spec.Domains,
 		bound:          prior.Bound,
 		prune:          spec.PruneRoutes,

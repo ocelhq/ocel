@@ -239,17 +239,17 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		script string
-		plan   routePlan
+		spec   routeSpec
 	}{
 		{
 			name:   "a stem that reaches the shared script never sweeps it",
 			script: "ocel-preview",
-			plan:   stemPlan("ocel-preview", "pr-1-abc1234567.preview.app.com"),
+			spec:   stemSpec("ocel-preview", "pr-1-abc1234567.preview.app.com"),
 		},
 		{
 			name:   "the shared script does not sweep its own route",
 			script: previewEntryScript,
-			plan:   prunedPlan("pr-1-abc1234567.preview.app.com"),
+			spec:   prunedSpec("pr-1-abc1234567.preview.app.com"),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -266,7 +266,7 @@ func TestPruneStaleRoutesSparesThePreviewEntry(t *testing.T) {
 				},
 			}
 
-			if err := m.provider(t).reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: tc.script}, tc.plan, nil); err != nil {
+			if err := m.provider(t).reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: tc.script}, tc.spec, nil); err != nil {
 				t.Fatalf("reconcileWorkerRoutes: %v", err)
 			}
 			if len(m.deletedRoutes) != 0 {

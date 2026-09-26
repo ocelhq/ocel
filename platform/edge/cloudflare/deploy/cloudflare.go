@@ -409,7 +409,7 @@ func (p *cloudflare) deployApp(ctx context.Context, app edge.AppDeployment) (edg
 		return edge.AppResult{}, fmt.Errorf("put worker script: %w", err)
 	}
 
-	if err := p.reconcileWorkerRoutes(ctx, up, routePlan{desired: app.Domains, prune: true}, app.Warn); err != nil {
+	if err := p.reconcileWorkerRoutes(ctx, up, routeSpec{desired: app.Domains, prune: true}, app.Warn); err != nil {
 		return edge.AppResult{}, err
 	}
 	url, err := p.setSubdomain(ctx, up, len(app.Domains) == 0)

@@ -17,7 +17,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type routePlan struct {
+type routeSpec struct {
 	desired        []string
 	bound          []string
 	prune          bool
@@ -26,11 +26,11 @@ type routePlan struct {
 	owns           func(script string) bool
 }
 
-func (plan routePlan) ownsRoute(scriptName, owner string) bool {
-	if owner == scriptName || edge.NameUnderStem(plan.pruneStem, owner) {
+func (spec routeSpec) ownsRoute(scriptName, owner string) bool {
+	if owner == scriptName || edge.NameUnderStem(spec.pruneStem, owner) {
 		return true
 	}
-	return plan.owns != nil && plan.owns(owner)
+	return spec.owns != nil && spec.owns(owner)
 }
 
 func projectOwnsScript(namespace, slug string) func(script string) bool {
@@ -43,7 +43,7 @@ func projectOwnsScript(namespace, slug string) func(script string) bool {
 	}
 }
 
-func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
+func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, spec routeSpec, warn func(string)) error {
 	warn = nilSafeWarn(warn)
 	routes := p.routeSnapshot()
 
@@ -51,17 +51,17 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, plan 
 		return err
 	}
 
-	if plan.requiredRecord != "" && len(plan.desired) > 0 {
-		if err := p.verifyProxiedRecord(ctx, up.accountID, plan.requiredRecord); err != nil {
+	if spec.requiredRecord != "" && len(spec.desired) > 0 {
+		if err := p.verifyProxiedRecord(ctx, up.accountID, spec.requiredRecord); err != nil {
 			return err
 		}
 	}
 
-	wanted := make(map[string]bool, len(plan.desired)+len(plan.bound))
-	for _, host := range plan.bound {
+	wanted := make(map[string]bool, len(spec.desired)+len(spec.bound))
+	for _, host := range spec.bound {
 		wanted[host] = true
 	}
-	for _, host := range plan.desired {
+	for _, host := range spec.desired {
 		zoneID, zoneName, err := p.resolveZone(ctx, up.accountID, routeBaseDomain(host))
 		if err != nil {
 			return err
@@ -70,15 +70,15 @@ func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, plan 
 		if !coveredByUniversalSSL(host, zoneName) {
 			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
 		}
-		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName, plan); err != nil {
+		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName, spec); err != nil {
 			return err
 		}
 	}
 
-	if !plan.prune {
+	if !spec.prune {
 		return nil
 	}
-	return p.pruneStaleRoutes(ctx, routes, up, plan.pruneStem, wanted)
+	return p.pruneStaleRoutes(ctx, routes, up, spec.pruneStem, wanted)
 }
 
 func (p *cloudflare) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, stem string, wanted map[string]bool) error {
@@ -180,7 +180,7 @@ func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, 
 	return "", nil
 }
 
-func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, plan routePlan) error {
+func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, spec routeSpec) error {
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
 		return err
@@ -192,7 +192,7 @@ func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneI
 		if route.Script == scriptName {
 			return nil
 		}
-		if !plan.ownsRoute(scriptName, route.Script) {
+		if !spec.ownsRoute(scriptName, route.Script) {
 			return fmt.Errorf("worker route %q is owned by %q, which this project does not own, so it is left in place; release it from the project that owns it first", pattern, route.Script)
 		}
 		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{

@@ -36,7 +36,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
 		return "", err
 	}
-	if err := p.reconcileWorkerRoutes(ctx, up, routePlan{desired: []string{wildcard}}, spec.Warn); err != nil {
+	if err := p.reconcileWorkerRoutes(ctx, up, routeSpec{desired: []string{wildcard}}, spec.Warn); err != nil {
 		return "", err
 	}
 	if _, err := p.setSubdomain(ctx, up, false); err != nil {

@@ -458,20 +458,20 @@ func (m *cfMock) provider(t *testing.T) *cloudflare {
 	)}
 }
 
-func prunedPlan(desired ...string) routePlan {
-	return routePlan{desired: desired, prune: true}
+func prunedSpec(desired ...string) routeSpec {
+	return routeSpec{desired: desired, prune: true}
 }
 
-func stemPlan(stem string, desired ...string) routePlan {
-	return routePlan{desired: desired, prune: true, pruneStem: stem}
+func stemSpec(stem string, desired ...string) routeSpec {
+	return routeSpec{desired: desired, prune: true, pruneStem: stem}
 }
 
-func ownedPlan(slug string, desired ...string) routePlan {
-	return routePlan{desired: desired, owns: projectOwnsScript(defaultNamespace, slug)}
+func ownedSpec(slug string, desired ...string) routeSpec {
+	return routeSpec{desired: desired, owns: projectOwnsScript(defaultNamespace, slug)}
 }
 
-func requiredRecordPlan(record string, desired ...string) routePlan {
-	return routePlan{desired: desired, requiredRecord: record}
+func requiredRecordSpec(record string, desired ...string) routeSpec {
+	return routeSpec{desired: desired, requiredRecord: record}
 }
 
 func assertSet(t *testing.T, what string, got, want []string) {
@@ -505,7 +505,7 @@ type routeCase struct {
 	name   string
 	mock   *cfMock
 	script string
-	plan   routePlan
+	spec   routeSpec
 
 	wantErr         []string
 	createdRoutes   []string
@@ -524,7 +524,7 @@ func (tc routeCase) run(t *testing.T) {
 	err := tc.mock.provider(t).reconcileWorkerRoutes(
 		t.Context(),
 		upload{accountID: "acct", scriptName: tc.script},
-		tc.plan,
+		tc.spec,
 		func(s string) { warnings = append(warnings, s) },
 	)
 
@@ -568,7 +568,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 		up := upload{accountID: "acct", scriptName: "ocel-preview"}
-		if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
+		if err := m.provider(t).reconcileWorkerRoutes(t.Context(), up, prunedSpec("*.preview.app.com"), nil); err != nil {
 			t.Fatalf("reconcileWorkerRoutes: %v", err)
 		}
 
@@ -589,7 +589,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			name:          "every desired domain is attached",
 			mock:          &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			script:        "ocel-prod",
-			plan:          prunedPlan("app.com", "www.app.com"),
+			spec:          prunedSpec("app.com", "www.app.com"),
 			createdRoutes: []string{"app.com/*", "www.app.com/*"},
 		},
 		{
@@ -605,7 +605,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:   "ocel-preview",
-			plan:     prunedPlan("*.preview.app.com"),
+			spec:     prunedSpec("*.preview.app.com"),
 			warnings: []string{"Advanced Certificate"},
 		},
 		{
@@ -623,7 +623,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-prod",
-			plan:          prunedPlan("app.com"),
+			spec:          prunedSpec("app.com"),
 			deletedRoutes: []string{"stale"},
 		},
 		{
@@ -639,7 +639,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-shop-preview",
-			plan:          stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			spec:          stemSpec("ocel-shop-preview", "*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			deletedRoutes: []string{"perapp"},
 			warnings:      []string{"Advanced Certificate"},
@@ -657,7 +657,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-shop-preview",
-			plan:          stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			spec:          stemSpec("ocel-shop-preview", "*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
 		},
@@ -671,7 +671,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:  "ocel-shop-prod",
-			plan:    ownedPlan("shop", "shop.app.com"),
+			spec:    ownedSpec("shop", "shop.app.com"),
 			wantErr: []string{"ocel-other-prod", "shop.app.com/*"},
 		},
 		{
@@ -684,7 +684,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:          "ocel--shop--prod--web",
-			plan:            ownedPlan("shop", "shop.app.com"),
+			spec:            ownedSpec("shop", "shop.app.com"),
 			repointedRoutes: []string{"mine"},
 		},
 		{
@@ -697,7 +697,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:  "ocel-shop-prod",
-			plan:    ownedPlan("shop", "shop.app.com"),
+			spec:    ownedSpec("shop", "shop.app.com"),
 			wantErr: []string{"ocel-shopfoo-prod"},
 		},
 		{
@@ -710,7 +710,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:          "ocel-shop-preview",
-			plan:            stemPlan("ocel-shop-preview", "*.preview.app.com"),
+			spec:            stemSpec("ocel-shop-preview", "*.preview.app.com"),
 			repointedRoutes: []string{"wildcard"},
 			warnings:        []string{"Advanced Certificate"},
 		},
@@ -724,7 +724,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-shop-preview",
-			plan:          prunedPlan("*.preview.app.com"),
+			spec:          prunedSpec("*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
 		},
@@ -741,7 +741,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-preview",
-			plan:          requiredRecordPlan("*.preview.app.com", "pr-2-abc1234567.preview.app.com"),
+			spec:          requiredRecordSpec("*.preview.app.com", "pr-2-abc1234567.preview.app.com"),
 			createdRoutes: []string{"pr-2-abc1234567.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
 		},
@@ -755,7 +755,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:        "ocel-preview",
-			plan:          requiredRecordPlan("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
+			spec:          requiredRecordSpec("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
 			createdRoutes: []string{"pr-1-abc1234567.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
 		},
@@ -763,7 +763,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			name:    "a required record missing fails and names the record to add",
 			mock:    &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			script:  "ocel-preview",
-			plan:    requiredRecordPlan("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
+			spec:    requiredRecordSpec("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
 			wantErr: []string{"*.preview.app.com"},
 		},
 		{
@@ -776,7 +776,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				},
 			},
 			script:  "ocel-preview",
-			plan:    requiredRecordPlan("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
+			spec:    requiredRecordSpec("*.preview.app.com", "pr-1-abc1234567.preview.app.com"),
 			wantErr: []string{"proxied", "*.preview.app.com"},
 		},
 		{
@@ -787,7 +787,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 				existingCustomDomains: []map[string]any{{"id": "cd1", "hostname": "app.com", "service": "ocel-prod"}},
 			},
 			script:          "ocel-prod",
-			plan:            prunedPlan("app.com"),
+			spec:            prunedSpec("app.com"),
 			createdRoutes:   []string{"app.com/*"},
 			detachedDomains: []string{"cd1"},
 		},
@@ -795,7 +795,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			name:          "a hostname Universal SSL does not cover is warned about",
 			mock:          &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			script:        "ocel-preview",
-			plan:          prunedPlan("*.preview.app.com"),
+			spec:          prunedSpec("*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
 		},
@@ -814,7 +814,7 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		mock            *cfMock
-		plan            routePlan
+		spec            routeSpec
 		zoneLists       int
 		routeLists      int
 		reconcilePasses int
@@ -822,21 +822,21 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 		{
 			name:       "many hostnames share one zone and route list",
 			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			plan:       prunedPlan("app.com", "www.app.com", "api.app.com"),
+			spec:       prunedSpec("app.com", "www.app.com", "api.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
 		},
 		{
 			name:       "a required record costs no extra list",
 			mock:       &cfMock{zoneID: "zone1", zoneName: "app.com", existingRecords: []map[string]any{{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "comment": recordComment, "proxied": true}}},
-			plan:       requiredRecordPlan("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
+			spec:       requiredRecordSpec("*.preview.app.com", "pr-1.preview.app.com", "pr-2.preview.app.com"),
 			zoneLists:  1,
 			routeLists: 1,
 		},
 		{
 			name:            "zones are read once, routes once per pass",
 			mock:            &cfMock{zoneID: "zone1", zoneName: "app.com"},
-			plan:            prunedPlan("app.com"),
+			spec:            prunedSpec("app.com"),
 			reconcilePasses: 3,
 			zoneLists:       1,
 			routeLists:      3,
@@ -847,7 +847,7 @@ func TestReconcileWorkerRoutesRequestBudget(t *testing.T) {
 
 			p := tc.mock.provider(t)
 			for range max(tc.reconcilePasses, 1) {
-				if err := p.reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: "ocel-prod"}, tc.plan, nil); err != nil {
+				if err := p.reconcileWorkerRoutes(t.Context(), upload{accountID: "acct", scriptName: "ocel-prod"}, tc.spec, nil); err != nil {
 					t.Fatalf("reconcileWorkerRoutes: %v", err)
 				}
 			}

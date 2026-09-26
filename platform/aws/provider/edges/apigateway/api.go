@@ -30,7 +30,7 @@ const (
 	integrationProxyPathParameter = "integration.request.path.proxy"
 )
 
-type apiPlan struct {
+type apiSpec struct {
 	name        string
 	region      string
 	account     string
@@ -83,9 +83,9 @@ func findAPIs(ctx context.Context, c Clients, wanted []string) ([]string, error)
 	return ids, nil
 }
 
-func createAPI(ctx context.Context, c Clients, plan apiPlan) (string, error) {
+func createAPI(ctx context.Context, c Clients, spec apiSpec) (string, error) {
 	out, err := c.APIGateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
-		Name:             aws.String(plan.name),
+		Name:             aws.String(spec.name),
 		Description:      aws.String("Ocel serves this project's requests through this API; the stage variables name the release in effect."),
 		BinaryMediaTypes: []string{"*/*"},
 		EndpointConfiguration: &agtypes.EndpointConfiguration{
@@ -93,12 +93,12 @@ func createAPI(ctx context.Context, c Clients, plan apiPlan) (string, error) {
 		},
 	})
 	if err != nil {
-		return "", createAPIError(plan.name, err)
+		return "", createAPIError(spec.name, err)
 	}
 	return aws.ToString(out.Id), nil
 }
 
-func shapeAPI(ctx context.Context, c Clients, plan apiPlan, id string) error {
+func shapeAPI(ctx context.Context, c Clients, spec apiSpec, id string) error {
 	resources, err := apiResources(ctx, c, id)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func shapeAPI(ctx context.Context, c Clients, plan apiPlan, id string) error {
 		return err
 	}
 	for _, path := range []string{rootPath, proxy} {
-		if err := putEntryRoute(ctx, c, plan, id, resources[path]); err != nil {
+		if err := putEntryRoute(ctx, c, spec, id, resources[path]); err != nil {
 			return err
 		}
 	}
@@ -126,7 +126,7 @@ func shapeAPI(ctx context.Context, c Clients, plan apiPlan, id string) error {
 	if err := putProbeRoute(ctx, c, id, resources[probe]); err != nil {
 		return err
 	}
-	if plan.assetBucket != "" {
+	if spec.assetBucket != "" {
 		next, err := ensureResource(ctx, c, id, resources, rootPath, staticParent)
 		if err != nil {
 			return err
@@ -139,7 +139,7 @@ func shapeAPI(ctx context.Context, c Clients, plan apiPlan, id string) error {
 		if err != nil {
 			return err
 		}
-		if err := putStaticRoute(ctx, c, plan, id, resources[staticProxy]); err != nil {
+		if err := putStaticRoute(ctx, c, spec, id, resources[staticProxy]); err != nil {
 			return err
 		}
 	}
@@ -261,7 +261,7 @@ func ensureIntegrationResponse(ctx context.Context, c Clients, in *apigateway.Pu
 	return nil
 }
 
-func putEntryRoute(ctx context.Context, c Clients, plan apiPlan, api, resource string) error {
+func putEntryRoute(ctx context.Context, c Clients, spec apiSpec, api, resource string) error {
 	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
 		ResourceId:        aws.String(resource),
@@ -276,8 +276,8 @@ func putEntryRoute(ctx context.Context, c Clients, plan apiPlan, api, resource s
 		HttpMethod:            aws.String(anyMethod),
 		Type:                  agtypes.IntegrationTypeAwsProxy,
 		IntegrationHttpMethod: aws.String("POST"),
-		Credentials:           aws.String(plan.role),
-		Uri:                   aws.String(entryURI(plan)),
+		Credentials:           aws.String(spec.role),
+		Uri:                   aws.String(entryURI(spec)),
 		ResponseTransferMode:  agtypes.ResponseTransferModeStream,
 	}); err != nil {
 		return fmt.Errorf("point REST API %s at the entry function: %w", api, err)
@@ -324,7 +324,7 @@ func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
 	return nil
 }
 
-func putStaticRoute(ctx context.Context, c Clients, plan apiPlan, api, resource string) error {
+func putStaticRoute(ctx context.Context, c Clients, spec apiSpec, api, resource string) error {
 	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
 		RestApiId:         aws.String(api),
 		ResourceId:        aws.String(resource),
@@ -340,8 +340,8 @@ func putStaticRoute(ctx context.Context, c Clients, plan apiPlan, api, resource 
 		HttpMethod:            aws.String(getMethod),
 		Type:                  agtypes.IntegrationTypeAws,
 		IntegrationHttpMethod: aws.String(getMethod),
-		Credentials:           aws.String(plan.role),
-		Uri:                   aws.String(staticURI(plan)),
+		Credentials:           aws.String(spec.role),
+		Uri:                   aws.String(staticURI(spec)),
 		RequestParameters:     map[string]string{integrationProxyPathParameter: proxyPathParameter},
 	}); err != nil {
 		return fmt.Errorf("point REST API %s at the release's static assets: %w", api, err)
@@ -426,17 +426,17 @@ func deleteAPI(ctx context.Context, c Clients, id string) error {
 	return nil
 }
 
-func entryURI(plan apiPlan) string {
+func entryURI(spec apiSpec) string {
 	return fmt.Sprintf(
 		"arn:aws:apigateway:%s:lambda:path/2021-11-15/functions/arn:aws:lambda:%s:%s:function:${stageVariables.%s}/response-streaming-invocations",
-		plan.region, plan.region, plan.account, entryVariable,
+		spec.region, spec.region, spec.account, entryVariable,
 	)
 }
 
-func staticURI(plan apiPlan) string {
+func staticURI(spec apiSpec) string {
 	return fmt.Sprintf(
 		"arn:aws:apigateway:%s:s3:path/%s/${stageVariables.%s}/%s/%s/{proxy}",
-		plan.region, plan.assetBucket, assetsVariable, staticParent, staticPathPart,
+		spec.region, spec.assetBucket, assetsVariable, staticParent, staticPathPart,
 	)
 }
 
