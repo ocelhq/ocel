@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

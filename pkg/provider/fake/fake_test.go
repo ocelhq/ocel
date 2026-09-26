@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

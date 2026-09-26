@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {

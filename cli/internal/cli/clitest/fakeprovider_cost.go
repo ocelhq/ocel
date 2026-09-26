@@ -9,7 +9,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/provider/stackrecords"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
