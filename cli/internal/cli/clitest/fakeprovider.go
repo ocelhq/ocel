@@ -1296,7 +1296,7 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 	status, certID, _ := strings.Cut(os.Getenv(FakeDomainCertEnvVar), " ")
 	expires, _ := strconv.ParseInt(os.Getenv(FakeDomainExpiresEnvVar), 10, 64)
 
-	resp := &contractv1.GetHostnameStatusResponse{Ready: ready && len(req.GetConfigured()) > 0}
+	resp := &contractv1.GetHostnameStatusResponse{Ready: ready && len(req.GetConfigured()) > 0, ManualRecords: splitList(os.Getenv(FakeGlobalDomainManualRecordsEnvVar))}
 	for _, host := range fakeConfigured(req) {
 		row := &contractv1.ProductionHostname{
 			Hostname: host,

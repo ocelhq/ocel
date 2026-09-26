@@ -91,6 +91,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
 	t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
+	t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
 
 	var stdout, stderr bytes.Buffer
 	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
@@ -99,6 +100,9 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	report := asJSON(t, stdout.String())
 	if report["ready"] != true {
 		t.Errorf("json = %v, want it to report the project ready", report)
+	}
+	if owned, _ := report["manualRecords"].([]any); len(owned) != 1 || owned[0] != "_ocel.shop.app.com CNAME _target.acm-validations.aws" {
+		t.Errorf("json manualRecords = %v, want the project's records the user has to write", report["manualRecords"])
 	}
 	hosts, ok := report["hosts"].([]any)
 	if !ok || len(hosts) != 1 {
@@ -124,6 +128,10 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	written, _ := host["recordsWritten"].([]any)
 	if len(written) != 1 || written[0] != "shop.app.com AAAA 100::" {
 		t.Errorf("json recordsWritten = %v, want the record ocel wrote", host["recordsWritten"])
+	}
+	manual, _ := host["manualRecords"].([]any)
+	if len(manual) != 1 || manual[0] != "_ocel.shop.app.com CNAME _target.acm-validations.aws" {
+		t.Errorf("json manualRecords = %v, want the record the user has to write", host["manualRecords"])
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }
