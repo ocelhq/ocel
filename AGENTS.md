@@ -32,7 +32,7 @@
 ## About Ocel
 
 **Ocel deploys apps to your own cloud.** Three pieces, each building on the one before —
-the CLI stands alone; the SDK and console do not.
+the CLI works on its own; the SDK and console do not.
 
 - **CLI** — deploys apps. Point it at a project and it builds, provisions and ships into
   your own provider account, with as little configuration as possible.
@@ -67,7 +67,7 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   included, and the `DESIGN.md` that governs them. No React; depends on nothing.
 - **`console/`** — Ocel's hosted control plane. Never call it a cloud.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
-  holds its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
+  has its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
 - **`platform/edge/`** — the edge role. `contract/` is what any edge must satisfy and what
   an edge and an origin agree on; both sides depend on it, neither owns it. Siblings are
@@ -76,7 +76,7 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`platform/s3/`** — the S3 protocol as a store any origin can reach with a static
   credential: the plain-S3 bucket backend and its in-bucket upload sessions. The one
   `platform/` path every vendor may import, and it imports none of them.
-- **`frameworks/<name>/`** — framework support, holding only what is **not** a branch of
+- **`frameworks/<name>/`** — framework support, containing only what is **not** a branch of
   some host: shared protocol, the build-time adapter, and the host-neutral serving
   runtime a host drives through ports. Host-specific glue lives with the host.
 - **`frameworks/node/`** — the `<name>` that is a runtime rather than a framework. It takes
@@ -101,9 +101,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
   apps they drive. A fixture directory exercises one concern and nothing else. Under
-  `tests/fronts/<name>/`, a proxy a vps box runs in front of ocel: the steps that stand
+  `tests/fronts/<name>/`, a proxy a vps box runs in front of ocel: the steps that set
   it up before bootstrap, check it after, and take it down, and the `proxy` option its
-  projects carry. Both the live suite and a journey lane drive them.
+  projects set. Both the live suite and a journey lane drive them.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changes/`** — the release mechanism; the workflow runs the
