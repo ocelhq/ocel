@@ -203,7 +203,7 @@ func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t 
 
 	w := newWorld()
 	name := distributionName(defaultNamespace, strings.Repeat("storefront-", 20), edge.ClassProduction)
-	plan := distributionPlan{
+	spec := distributionSpec{
 		name:          name,
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -213,7 +213,7 @@ func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t 
 		oac:           "origin-access-control",
 	}
 
-	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	raised, err := createDistribution(context.Background(), w.clients(), spec, nil, "")
 	if err != nil {
 		t.Fatalf("createDistribution: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestEveryConfigIncludesLoggingSoAnUpdateIsLegal(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
-	plan := distributionPlan{
+	spec := distributionSpec{
 		name:          "storefront",
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -287,13 +287,13 @@ func TestEveryConfigIncludesLoggingSoAnUpdateIsLegal(t *testing.T) {
 		oac:           "origin-access-control",
 	}
 
-	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	raised, err := createDistribution(context.Background(), w.clients(), spec, nil, "")
 	if err != nil {
 		t.Fatalf("createDistribution: %v", err)
 	}
 	assertLogging(t, "the config sent to CreateDistribution", w.front.distributions[raised.id].config)
 
-	if err := reshapeDistribution(context.Background(), w.clients(), plan, raised.id); err != nil {
+	if err := reshapeDistribution(context.Background(), w.clients(), spec, raised.id); err != nil {
 		t.Fatalf("reshapeDistribution: %v", err)
 	}
 	assertLogging(t, "the config sent to UpdateDistribution", w.front.distributions[raised.id].config)
@@ -313,7 +313,7 @@ func TestEveryConfigSpellsOutTheFieldsAnUpdateInsistsOn(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
-	plan := distributionPlan{
+	spec := distributionSpec{
 		name:          "storefront",
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -323,13 +323,13 @@ func TestEveryConfigSpellsOutTheFieldsAnUpdateInsistsOn(t *testing.T) {
 		oac:           "origin-access-control",
 	}
 
-	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	raised, err := createDistribution(context.Background(), w.clients(), spec, nil, "")
 	if err != nil {
 		t.Fatalf("createDistribution: %v", err)
 	}
 	assertComplete(t, "the config sent to CreateDistribution", w.front.distributions[raised.id].config)
 
-	if err := reshapeDistribution(context.Background(), w.clients(), plan, raised.id); err != nil {
+	if err := reshapeDistribution(context.Background(), w.clients(), spec, raised.id); err != nil {
 		t.Fatalf("reshapeDistribution: %v", err)
 	}
 	assertComplete(t, "the config sent to UpdateDistribution", w.front.distributions[raised.id].config)
@@ -407,7 +407,7 @@ func TestEveryCertificateAConfigNamesIsOneAnUpdateAccepts(t *testing.T) {
 	)
 
 	w := newWorld()
-	plan := distributionPlan{
+	spec := distributionSpec{
 		name:          "storefront",
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
 		function:      "arn:aws:cloudfront::111122223333:function/resolver",
@@ -417,20 +417,20 @@ func TestEveryCertificateAConfigNamesIsOneAnUpdateAccepts(t *testing.T) {
 		oac:           "origin-access-control",
 	}
 
-	raised, err := createDistribution(context.Background(), w.clients(), plan, nil, "")
+	raised, err := createDistribution(context.Background(), w.clients(), spec, nil, "")
 	if err != nil {
 		t.Fatalf("createDistribution: %v", err)
 	}
 	assertViewerCertificate(t, "the config sent to CreateDistribution", w.front.distributions[raised.id].config)
 
-	if err := serveAlias(context.Background(), w.clients(), plan, raised.id, alias, certificate); err != nil {
+	if err := serveAlias(context.Background(), w.clients(), spec, raised.id, alias, certificate); err != nil {
 		t.Fatalf("serveAlias: %v", err)
 	}
 	if got := certificateOf(w.front.distributions[raised.id].config); got != certificate {
 		t.Errorf("the distribution serves the alias under certificate %q, want %q", got, certificate)
 	}
 
-	if err := dropAlias(context.Background(), w.clients(), plan, raised.id, alias); err != nil {
+	if err := dropAlias(context.Background(), w.clients(), spec, raised.id, alias); err != nil {
 		t.Fatalf("dropAlias: %v", err)
 	}
 	dropped := w.front.distributions[raised.id].config

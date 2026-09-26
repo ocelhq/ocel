@@ -45,8 +45,8 @@ func (s *stack) slug() string { return s.state.Slug }
 
 func (s *stack) class() edge.Class { return s.state.Class }
 
-func (s *stack) plan(pointer string) apiPlan {
-	return apiPlan{
+func (s *stack) spec(pointer string) apiSpec {
+	return apiSpec{
 		name:        apiName(s.p.ns, s.slug(), s.class(), pointer),
 		region:      s.own.Region,
 		account:     accountOf(s.own.Role),
@@ -104,18 +104,18 @@ func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (edge
 }
 
 func (s *stack) reconcileAPI(ctx context.Context, c Clients, pointer string) (string, error) {
-	plan, id, err := s.apiFor(ctx, c, pointer)
+	spec, id, err := s.apiFor(ctx, c, pointer)
 	if err != nil {
 		return "", err
 	}
-	if err := shapeAPI(ctx, c, plan, id); err != nil {
+	if err := shapeAPI(ctx, c, spec, id); err != nil {
 		return "", err
 	}
 	return id, nil
 }
 
 func (s *stack) ensureAPI(ctx context.Context, c Clients, pointer string) (string, error) {
-	plan, id, err := s.apiFor(ctx, c, pointer)
+	spec, id, err := s.apiFor(ctx, c, pointer)
 	if err != nil {
 		return "", err
 	}
@@ -124,30 +124,30 @@ func (s *stack) ensureAPI(ctx context.Context, c Clients, pointer string) (strin
 		return "", err
 	}
 	if !shaped {
-		if err := shapeAPI(ctx, c, plan, id); err != nil {
+		if err := shapeAPI(ctx, c, spec, id); err != nil {
 			return "", err
 		}
 	}
 	return id, nil
 }
 
-func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiPlan, string, error) {
-	plan := s.plan(pointer)
-	id, found, err := s.findAPIFor(ctx, c, pointer, plan.name)
+func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiSpec, string, error) {
+	spec := s.spec(pointer)
+	id, found, err := s.findAPIFor(ctx, c, pointer, spec.name)
 	if err != nil {
-		return apiPlan{}, "", err
+		return apiSpec{}, "", err
 	}
 	if found {
-		return plan, id, nil
+		return spec, id, nil
 	}
-	if plan.role == "" || plan.region == "" {
-		return apiPlan{}, "", fmt.Errorf("the stack serving %s records no invoke role or region; reconcile it before promoting into it", s.slug())
+	if spec.role == "" || spec.region == "" {
+		return apiSpec{}, "", fmt.Errorf("the stack serving %s records no invoke role or region; reconcile it before promoting into it", s.slug())
 	}
-	id, err = createAPI(ctx, c, plan)
+	id, err = createAPI(ctx, c, spec)
 	if err != nil {
-		return apiPlan{}, "", err
+		return apiSpec{}, "", err
 	}
-	return plan, id, nil
+	return spec, id, nil
 }
 
 func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string) (string, bool, error) {

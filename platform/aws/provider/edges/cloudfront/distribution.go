@@ -29,7 +29,7 @@ type front struct {
 	domainName string
 }
 
-type distributionPlan struct {
+type distributionSpec struct {
 	name          string
 	assetOrigin   string
 	function      string
@@ -40,7 +40,7 @@ type distributionPlan struct {
 	front         awsports.ContainerFront
 }
 
-func (p distributionPlan) keeping(current *cftypes.DistributionConfig) distributionPlan {
+func (p distributionSpec) keeping(current *cftypes.DistributionConfig) distributionSpec {
 	if p.front.VPCOrigin == "" {
 		p.front = containerFrontOf(current)
 	}
@@ -60,7 +60,7 @@ func containerFrontOf(config *cftypes.DistributionConfig) awsports.ContainerFron
 	return awsports.ContainerFront{}
 }
 
-func (p distributionPlan) origins() *cftypes.Origins {
+func (p distributionSpec) origins() *cftypes.Origins {
 	origins := []cftypes.Origin{{
 		Id:                    aws.String(assetOriginID),
 		DomainName:            aws.String(p.assetOrigin),
@@ -98,7 +98,7 @@ type distributionSummary struct {
 	aliases    map[string]bool
 }
 
-func (p distributionPlan) ready() error {
+func (p distributionSpec) ready() error {
 	missing := []string{}
 	for name, value := range map[string]string{
 		"asset bucket":            p.assetOrigin,
@@ -119,7 +119,7 @@ func (p distributionPlan) ready() error {
 	return fmt.Errorf("the stack for %s names no %s, so there is nothing to build a distribution out of; reconcile it before promoting into it", p.name, strings.Join(missing, ", no "))
 }
 
-func (p distributionPlan) config(aliases []string, certificate string) *cftypes.DistributionConfig {
+func (p distributionSpec) config(aliases []string, certificate string) *cftypes.DistributionConfig {
 	slices.Sort(aliases)
 	config := &cftypes.DistributionConfig{
 		CallerReference:              aws.String(p.name),
@@ -337,15 +337,15 @@ func findDistribution(ctx context.Context, c Clients, name string) (front, bool,
 	return front{}, false, nil
 }
 
-func createDistribution(ctx context.Context, c Clients, plan distributionPlan, aliases []string, certificate string) (front, error) {
-	if err := plan.ready(); err != nil {
+func createDistribution(ctx context.Context, c Clients, spec distributionSpec, aliases []string, certificate string) (front, error) {
+	if err := spec.ready(); err != nil {
 		return front{}, err
 	}
 	out, err := c.CloudFront.CreateDistribution(ctx, &cloudfront.CreateDistributionInput{
-		DistributionConfig: plan.config(aliases, certificate),
+		DistributionConfig: spec.config(aliases, certificate),
 	})
 	if err != nil {
-		return front{}, createError("distribution", plan.name, err)
+		return front{}, createError("distribution", spec.name, err)
 	}
 	return front{
 		id:         aws.ToString(out.Distribution.Id),
@@ -353,8 +353,8 @@ func createDistribution(ctx context.Context, c Clients, plan distributionPlan, a
 	}, nil
 }
 
-func reshapeDistribution(ctx context.Context, c Clients, plan distributionPlan, id string) error {
-	if err := plan.ready(); err != nil {
+func reshapeDistribution(ctx context.Context, c Clients, spec distributionSpec, id string) error {
+	if err := spec.ready(); err != nil {
 		return err
 	}
 	current, etag, err := configOf(ctx, c, id)
@@ -362,11 +362,11 @@ func reshapeDistribution(ctx context.Context, c Clients, plan distributionPlan, 
 		return err
 	}
 	aliases, certificate := aliasesOf(current), certificateOf(current)
-	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(current).config(aliases, certificate), current))
+	return putConfig(ctx, c, id, etag, completeFrom(spec.keeping(current).config(aliases, certificate), current))
 }
 
-func (p *cloudFront) declareContainerFront(ctx context.Context, c Clients, plan distributionPlan, kind, id string, front awsports.ContainerFront) error {
-	if err := plan.ready(); err != nil {
+func (p *cloudFront) declareContainerFront(ctx context.Context, c Clients, spec distributionSpec, kind, id string, front awsports.ContainerFront) error {
+	if err := spec.ready(); err != nil {
 		return err
 	}
 	current, etag, err := configOf(ctx, c, id)
@@ -376,8 +376,8 @@ func (p *cloudFront) declareContainerFront(ctx context.Context, c Clients, plan 
 	if containerFrontOf(current) == front {
 		return nil
 	}
-	plan.front = front
-	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliasesOf(current), certificateOf(current)), current)); err != nil {
+	spec.front = front
+	if err := putConfig(ctx, c, id, etag, completeFrom(spec.config(aliasesOf(current), certificateOf(current)), current)); err != nil {
 		return fmt.Errorf("declare the container front as an origin of %s %s: %w", kind, id, err)
 	}
 	return p.rollout().awaitDeployed(ctx, kind, id, containerFrontRollingOut, distributionStatus(c, id))
@@ -429,7 +429,7 @@ func certificateOf(config *cftypes.DistributionConfig) string {
 	return aws.ToString(config.ViewerCertificate.ACMCertificateArn)
 }
 
-func serveAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostname, certificate string) error {
+func serveAlias(ctx context.Context, c Clients, spec distributionSpec, id, hostname, certificate string) error {
 	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		return err
@@ -442,13 +442,13 @@ func serveAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostn
 		certificate = certificateOf(current)
 	}
 	aliases = append(aliases, hostname)
-	if err := putConfig(ctx, c, id, etag, completeFrom(plan.keeping(current).config(aliases, certificate), current)); err != nil {
+	if err := putConfig(ctx, c, id, etag, completeFrom(spec.keeping(current).config(aliases, certificate), current)); err != nil {
 		return aliasError(hostname, id, err)
 	}
 	return nil
 }
 
-func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostname string) error {
+func dropAlias(ctx context.Context, c Clients, spec distributionSpec, id, hostname string) error {
 	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		if isNotFound(err) {
@@ -466,7 +466,7 @@ func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostna
 	if len(aliases) == 0 {
 		certificate = ""
 	}
-	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(current).config(aliases, certificate), current))
+	return putConfig(ctx, c, id, etag, completeFrom(spec.keeping(current).config(aliases, certificate), current))
 }
 
 func (p *cloudFront) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {

@@ -135,13 +135,13 @@ func TestBuildEnv(t *testing.T) {
 	t.Run("exports every plaintext value under its own name and nothing else", func(t *testing.T) {
 		t.Parallel()
 
-		plans := []appPlan{{name: "storefront", variables: []manifestbuilder.Variable{
+		specs := []appSpec{{name: "storefront", variables: []manifestbuilder.Variable{
 			{Key: "NEXT_PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
 			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
 			{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
 		}}}
 
-		env := buildEnv(plans)["storefront"]
+		env := buildEnv(specs)["storefront"]
 		if got, want := env["NEXT_PUBLIC_SITE_URL"], "https://example.com"; got != want {
 			t.Errorf("NEXT_PUBLIC_SITE_URL = %q, want %q", got, want)
 		}
@@ -159,7 +159,7 @@ func TestBuildEnv(t *testing.T) {
 	t.Run("exports only plaintext values", func(t *testing.T) {
 		t.Parallel()
 
-		plans := []appPlan{
+		specs := []appSpec{
 			{name: "admin", variables: []manifestbuilder.Variable{
 				{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"},
 				{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"},
@@ -172,7 +172,7 @@ func TestBuildEnv(t *testing.T) {
 			}},
 		}
 
-		env := buildEnv(plans)
+		env := buildEnv(specs)
 		if got, want := env["admin"]["SHARED_ID"], "same"; got != want {
 			t.Errorf("admin SHARED_ID = %q, want %q", got, want)
 		}
@@ -187,12 +187,12 @@ func TestBuildEnv(t *testing.T) {
 	t.Run("gives each app its own value for a diverged key", func(t *testing.T) {
 		t.Parallel()
 
-		plans := []appPlan{
+		specs := []appSpec{
 			{name: "storefront", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
 			{name: "admin", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
 		}
 
-		env := buildEnv(plans)
+		env := buildEnv(specs)
 		if got, want := env["storefront"]["POSTHOG_ID"], "ph-store"; got != want {
 			t.Errorf("storefront POSTHOG_ID = %q, want %q", got, want)
 		}
@@ -208,7 +208,7 @@ func TestBuildEnv(t *testing.T) {
 			envwire.RootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
 		}
 
-		env := buildEnv(appPlans(&projectconfig.Config{Dir: t.TempDir()}, variables))
+		env := buildEnv(appSpecs(&projectconfig.Config{Dir: t.TempDir()}, variables))
 		if _, ok := env[envwire.RootApp]; ok {
 			t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
 		}

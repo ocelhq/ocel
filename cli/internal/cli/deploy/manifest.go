@@ -70,8 +70,8 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err := checkAppPaths(cfg, configName); err != nil {
 		return nil, nil, err
 	}
-	plans := appPlans(cfg, variables)
-	clients := clientApps(plans)
+	specs := appSpecs(cfg, variables)
+	clients := clientApps(specs)
 	if prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, nil, err
@@ -86,7 +86,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 				return nil, nil, err
 			}
 		}
-		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
+		if err := deps.BuildApp(ctx, cfg, buildEnv(specs), buildOut); err != nil {
 			return nil, nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -245,49 +245,49 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 	return byApp
 }
 
-type appPlan struct {
+type appSpec struct {
 	name         string
 	dir          string
 	clientBundle bool
 	variables    []manifestbuilder.Variable
 }
 
-func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
+func appSpecs(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appSpec {
 	if len(cfg.Apps) == 0 {
-		return []appPlan{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[envwire.RootApp]}}
+		return []appSpec{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[envwire.RootApp]}}
 	}
-	plans := make([]appPlan, 0, len(cfg.Apps))
+	specs := make([]appSpec, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)
-		plans = append(plans, appPlan{
+		specs = append(specs, appSpec{
 			name:         a.Name,
 			dir:          dir,
 			clientBundle: discovery.ClientBundle(a.Framework.Name, dir),
 			variables:    variables[a.Name],
 		})
 	}
-	return plans
+	return specs
 }
 
-func buildEnv(plans []appPlan) map[string]map[string]string {
-	byApp := make(map[string]map[string]string, len(plans))
-	for _, plan := range plans {
+func buildEnv(specs []appSpec) map[string]map[string]string {
+	byApp := make(map[string]map[string]string, len(specs))
+	for _, spec := range specs {
 		env := make(map[string]string)
-		for _, v := range plan.variables {
+		for _, v := range spec.variables {
 			if v.Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 				continue
 			}
 			env[v.Key] = v.Value
 		}
-		byApp[plan.name] = env
+		byApp[spec.name] = env
 	}
 	return byApp
 }
 
-func clientApps(plans []appPlan) []clientenv.App {
-	apps := make([]clientenv.App, 0, len(plans))
-	for _, plan := range plans {
-		apps = append(apps, clientenv.App{Name: plan.name, Dir: plan.dir, ClientBundle: plan.clientBundle, Variables: plan.variables})
+func clientApps(specs []appSpec) []clientenv.App {
+	apps := make([]clientenv.App, 0, len(specs))
+	for _, spec := range specs {
+		apps = append(apps, clientenv.App{Name: spec.name, Dir: spec.dir, ClientBundle: spec.clientBundle, Variables: spec.variables})
 	}
 	return apps
 }

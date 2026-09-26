@@ -42,8 +42,8 @@ func TestTheCommentOnADistributionIsTheOwnerAProjectClaims(t *testing.T) {
 	slug := strings.Repeat("s", 120)
 	p := &cloudFront{ns: ns}
 
-	plan := distributionPlan{name: distributionName(ns, slug, edge.ClassProduction)}
-	comment := aws.ToString(plan.config(nil, "").Comment)
+	spec := distributionSpec{name: distributionName(ns, slug, edge.ClassProduction)}
+	comment := aws.ToString(spec.config(nil, "").Comment)
 	if owner := p.ProjectOwner(slug, edge.ClassProduction); comment != owner {
 		t.Errorf("a distribution reads as owned by %q while the project claims %q, so the project is refused its own domain", comment, owner)
 	}

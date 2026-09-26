@@ -46,11 +46,11 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	plan, deployed, err := p.previewWildcardPlan(ctx, c, spec.BaseDomain)
+	distribution, deployed, err := p.previewWildcardSpec(ctx, c, spec.BaseDomain)
 	if err != nil {
 		return "", err
 	}
-	wildcardFront, err := reconcileWildcardDistribution(ctx, c, plan, wildcard, spec.Certificate)
+	wildcardFront, err := reconcileWildcardDistribution(ctx, c, distribution, wildcard, spec.Certificate)
 	if err != nil {
 		return "", err
 	}
@@ -60,20 +60,20 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	return wildcardFront.domainName, nil
 }
 
-func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distributionPlan, wildcard, certificate string) (front, error) {
-	existing, found, err := findDistribution(ctx, c, plan.name)
+func reconcileWildcardDistribution(ctx context.Context, c Clients, spec distributionSpec, wildcard, certificate string) (front, error) {
+	existing, found, err := findDistribution(ctx, c, spec.name)
 	if err != nil {
 		return front{}, err
 	}
 	if !found {
-		created, createErr := createDistribution(ctx, c, plan, []string{wildcard}, certificate)
+		created, createErr := createDistribution(ctx, c, spec, []string{wildcard}, certificate)
 		if createErr == nil {
 			return created, nil
 		}
 		if !distributionTaken(createErr) {
 			return front{}, createErr
 		}
-		raced, racedFound, findErr := findDistribution(ctx, c, plan.name)
+		raced, racedFound, findErr := findDistribution(ctx, c, spec.name)
 		if findErr != nil {
 			return front{}, findErr
 		}
@@ -82,7 +82,7 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distribu
 		}
 		existing = raced
 	}
-	if err := convergeWildcard(ctx, c, plan, existing.id, wildcard, certificate); err != nil {
+	if err := convergeWildcard(ctx, c, spec, existing.id, wildcard, certificate); err != nil {
 		return front{}, err
 	}
 	return existing, nil
@@ -103,8 +103,8 @@ func cloudFrontCertificate(wildcard, certificate string) error {
 	return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, and CloudFront reads certificates only from %s; this reconcile names one issued in %s, which CloudFront will not attach. Run `ocel domain use --preview %s` against this account to issue the wildcard certificate where CloudFront can read it", Kind, wildcard, certs.CloudFrontRegion, fields[3], strings.TrimPrefix(wildcard, "*."))
 }
 
-func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id, wildcard, certificate string) error {
-	if err := plan.ready(); err != nil {
+func convergeWildcard(ctx context.Context, c Clients, spec distributionSpec, id, wildcard, certificate string) error {
+	if err := spec.ready(); err != nil {
 		return err
 	}
 	current, etag, err := configOf(ctx, c, id)
@@ -117,22 +117,22 @@ func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id,
 	if hasWildcard && certificateOf(current) == certificate {
 		return nil
 	}
-	return putConfig(ctx, c, id, etag, plan.keeping(current).config([]string{wildcard}, certificate))
+	return putConfig(ctx, c, id, etag, spec.keeping(current).config([]string{wildcard}, certificate))
 }
 
-func (p *cloudFront) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {
+func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDomain string) (distributionSpec, bootstrap.Deployed, error) {
 	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
 	if err != nil {
-		return distributionPlan{}, bootstrap.Deployed{}, err
+		return distributionSpec{}, bootstrap.Deployed{}, err
 	}
 	if !deployed.Present {
-		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
+		return distributionSpec{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
 	set, err := edgeSetOf(deployed, edge.ClassPreview)
 	if err != nil {
-		return distributionPlan{}, bootstrap.Deployed{}, err
+		return distributionSpec{}, bootstrap.Deployed{}, err
 	}
-	return distributionPlan{
+	return distributionSpec{
 		name:          previewWildcardName(baseDomain),
 		assetOrigin:   assetOriginDomain(deployed.AssetBucket, c.Region),
 		function:      set.functionARN,
