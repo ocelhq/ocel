@@ -198,7 +198,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	}
 	dir := filepath.Dir(configPath)
 	if others := Counterparts(configPath); len(others) > 0 {
-		return nil, fmt.Errorf("%s holds %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and "))
+		return nil, fmt.Errorf("%s contains %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and "))
 	}
 
 	data, err := f.read(ctx, configPath)

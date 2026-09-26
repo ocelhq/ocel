@@ -43,7 +43,7 @@ func TestElect(t *testing.T) {
 		}
 	})
 
-	t.Run("a lockfile that carries no token is reclaimed and this process leads", func(t *testing.T) {
+	t.Run("a lockfile with no token is reclaimed and this process leads", func(t *testing.T) {
 		t.Parallel()
 
 		root := root(t)
@@ -135,7 +135,7 @@ func TestResultClaim(t *testing.T) {
 			t.Fatalf("devlock.Read: %v", err)
 		}
 		if got != lease {
-			t.Fatalf("lockfile holds %+v, want the claiming leader's lease %+v", got, lease)
+			t.Fatalf("lockfile contains %+v, want the claiming leader's lease %+v", got, lease)
 		}
 	})
 
@@ -145,7 +145,7 @@ func TestResultClaim(t *testing.T) {
 		root := root(t)
 		first, second := elect(t, root), elect(t, root)
 		if first.Role != Leader || second.Role != Leader {
-			t.Fatalf("roles = %v and %v, want both to be told they lead — that is the race Claim exists to settle", first.Role, second.Role)
+			t.Fatalf("roles = %v and %v, want both to be told they lead — that is the race Claim exists to decide", first.Role, second.Role)
 		}
 
 		if err := first.Claim(devlock.Lease{Addr: "127.0.0.1:1", Token: "first"}); err != nil {
@@ -160,7 +160,7 @@ func TestResultClaim(t *testing.T) {
 			t.Fatalf("devlock.Read: %v", err)
 		}
 		if got.Addr != "127.0.0.1:1" {
-			t.Fatalf("lockfile holds %+v, want the winner's address %q", got, "127.0.0.1:1")
+			t.Fatalf("lockfile contains %+v, want the winner's address %q", got, "127.0.0.1:1")
 		}
 	})
 
@@ -182,7 +182,7 @@ func TestResultClaim(t *testing.T) {
 			t.Fatalf("devlock.Read: %v", err)
 		}
 		if got.Addr != addr {
-			t.Fatalf("lockfile holds %+v, want the standing leader's address %q", got, addr)
+			t.Fatalf("lockfile contains %+v, want the current leader's address %q", got, addr)
 		}
 	})
 
@@ -214,7 +214,7 @@ func TestResultRelease(t *testing.T) {
 		}
 	})
 
-	t.Run("a follower releasing leaves the standing leader's claim alone", func(t *testing.T) {
+	t.Run("a follower releasing leaves the current leader's claim alone", func(t *testing.T) {
 		t.Parallel()
 
 		root := root(t)
@@ -232,7 +232,7 @@ func TestResultRelease(t *testing.T) {
 			t.Fatalf("devlock.Read after a follower released: %v", err)
 		}
 		if got.Addr != addr {
-			t.Fatalf("lockfile holds %+v, want the standing leader's address %q", got, addr)
+			t.Fatalf("lockfile contains %+v, want the current leader's address %q", got, addr)
 		}
 	})
 }

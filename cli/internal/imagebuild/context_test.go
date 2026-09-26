@@ -49,7 +49,7 @@ func mounted(t *testing.T, root string) []string {
 	return seen
 }
 
-func TestTheContextCarriesNoInstalledDependenciesNoHistoryAndNoEarlierBuild(t *testing.T) {
+func TestTheContextIncludesNoInstalledDependenciesNoHistoryAndNoEarlierBuild(t *testing.T) {
 	root := laidOut(t, map[string]string{
 		"package.json":                       `{"name":"root"}`,
 		"apps/web/server.js":                 "listen()\n",
@@ -60,14 +60,14 @@ func TestTheContextCarriesNoInstalledDependenciesNoHistoryAndNoEarlierBuild(t *t
 		"apps/web/" + constants.ProjectStateDirName + "/dist/x.js":        "stale\n",
 	})
 
-	carried := mounted(t, root)
+	files := mounted(t, root)
 
-	if want := []string{"apps/web/server.js", "package.json"}; !slices.Equal(carried, want) {
-		t.Errorf("the build context carries %v, want %v — installed dependencies, git history and an earlier build's output are none of the app's source", carried, want)
+	if want := []string{"apps/web/server.js", "package.json"}; !slices.Equal(files, want) {
+		t.Errorf("the build context contains %v, want %v — installed dependencies, git history and an earlier build's output are none of the app's source", files, want)
 	}
 }
 
-func TestThePlanAndTheContextAgreeOnWhatTheDaemonWillHold(t *testing.T) {
+func TestThePlanAndTheContextAgreeOnWhatTheDaemonWillReceive(t *testing.T) {
 	root := laidOut(t, map[string]string{
 		".dockerignore":                 "*.log\n!keep.log\nsecrets\n",
 		"package.json":                  `{"name":"root"}`,
@@ -78,7 +78,7 @@ func TestThePlanAndTheContextAgreeOnWhatTheDaemonWillHold(t *testing.T) {
 		"node_modules/express/index.js": "module.exports = {}\n",
 	})
 
-	carried := mounted(t, root)
+	files := mounted(t, root)
 	outside, err := outsideTheContext(root)
 	if err != nil {
 		t.Fatalf("outsideTheContext(%s) = %v", root, err)
@@ -92,18 +92,18 @@ func TestThePlanAndTheContextAgreeOnWhatTheDaemonWillHold(t *testing.T) {
 		"secrets/token.txt",
 		"node_modules/express/index.js",
 	} {
-		if walked := slices.Contains(carried, path); walked == outside(path) {
-			t.Errorf("the context %s %q and the plan filter %s it: a path the plan copies but the context does not carry fails the build at the daemon, and one the plan drops but the context holds is lost from the image",
-				said(walked), path, said(!outside(path)))
+		if walked := slices.Contains(files, path); walked == outside(path) {
+			t.Errorf("%q is a path the context %s and the plan filter %s: a path the plan copies but the context does not include fails the build at the daemon, and one the plan drops but the context includes is lost from the image",
+				path, said(walked), said(!outside(path)))
 		}
 	}
 }
 
-func said(carries bool) string {
-	if carries {
-		return "carries"
+func said(included bool) string {
+	if included {
+		return "includes"
 	}
-	return "excludes"
+	return "leaves out"
 }
 
 func TestTheContextHonoursTheDockerignoreBesideIt(t *testing.T) {
@@ -115,9 +115,9 @@ func TestTheContextHonoursTheDockerignoreBesideIt(t *testing.T) {
 		"secrets/token.txt": "shhh\n",
 	})
 
-	carried := mounted(t, root)
+	files := mounted(t, root)
 
-	if want := []string{".dockerignore", "package.json", "server.js"}; !slices.Equal(carried, want) {
-		t.Errorf("the build context carries %v, want %v — what a %s excludes never reaches the daemon", carried, want, DockerignoreName)
+	if want := []string{".dockerignore", "package.json", "server.js"}; !slices.Equal(files, want) {
+		t.Errorf("the build context contains %v, want %v — what a %s excludes never reaches the daemon", files, want, DockerignoreName)
 	}
 }

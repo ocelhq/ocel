@@ -247,7 +247,7 @@ func keptPassword(t *testing.T, state string) string {
 	t.Helper()
 	kept, err := filepath.Glob(filepath.Join(state, "*"))
 	if err != nil || len(kept) != 1 {
-		t.Fatalf("state holds %v (%v), want the one password file", kept, err)
+		t.Fatalf("state contains %v (%v), want the one password file", kept, err)
 	}
 	info, err := os.Stat(kept[0])
 	if err != nil {

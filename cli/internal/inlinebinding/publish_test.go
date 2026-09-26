@@ -13,20 +13,20 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-type heldRecord struct {
+type storedRecord struct {
 	owner   string
 	version uint64
 }
 
 type recordStore struct {
 	mu      sync.Mutex
-	records map[string]heldRecord
+	records map[string]storedRecord
 }
 
-func storeHolding(names ...string) *recordStore {
-	s := &recordStore{records: map[string]heldRecord{}}
+func storeWith(names ...string) *recordStore {
+	s := &recordStore{records: map[string]storedRecord{}}
 	for _, name := range names {
-		s.records[name] = heldRecord{owner: naming.InlineRecordOwner, version: 1}
+		s.records[name] = storedRecord{owner: naming.InlineRecordOwner, version: 1}
 	}
 	return s
 }
@@ -35,26 +35,26 @@ func (s *recordStore) SetBinding(_ context.Context, req *envvarsv1.SetBindingReq
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	name := req.GetBinding().GetName()
-	held := s.records[name]
-	held.owner, held.version = req.GetOwner(), held.version+1
-	s.records[name] = held
-	return &envvarsv1.SetBindingResponse{Version: held.version}, nil
+	record := s.records[name]
+	record.owner, record.version = req.GetOwner(), record.version+1
+	s.records[name] = record
+	return &envvarsv1.SetBindingResponse{Version: record.version}, nil
 }
 
 func (s *recordStore) RemoveBinding(_ context.Context, req *envvarsv1.RemoveBindingRequest) (*envvarsv1.RemoveBindingResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, held := s.records[req.GetName()]
+	_, ok := s.records[req.GetName()]
 	delete(s.records, req.GetName())
-	return &envvarsv1.RemoveBindingResponse{Removed: held}, nil
+	return &envvarsv1.RemoveBindingResponse{Removed: ok}, nil
 }
 
 func (s *recordStore) ListBindings(context.Context, *envvarsv1.ListBindingsRequest) (*envvarsv1.ListBindingsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	resp := &envvarsv1.ListBindingsResponse{}
-	for name, held := range s.records {
-		resp.Bindings = append(resp.Bindings, &envvarsv1.BindingSummary{Name: name, Owner: held.owner, Version: held.version})
+	for name, record := range s.records {
+		resp.Bindings = append(resp.Bindings, &envvarsv1.BindingSummary{Name: name, Owner: record.owner, Version: record.version})
 	}
 	return resp, nil
 }
@@ -85,7 +85,7 @@ func publishing(s *recordStore, name string) {
 
 func TestDeploy(t *testing.T) {
 	t.Run("a record no binding keeps any more is removed once the deploy succeeds", func(t *testing.T) {
-		store := storeHolding("ocel:postgres.orders", "ocel:bucket.uploads")
+		store := storeWith("ocel:postgres.orders", "ocel:bucket.uploads")
 		err := Deploy(context.Background(), store, production, []Record{kept("ocel:postgres.orders")}, func() error { return nil })
 		if err != nil {
 			t.Fatalf("Deploy: %v", err)
@@ -96,7 +96,7 @@ func TestDeploy(t *testing.T) {
 	})
 
 	t.Run("a failed deploy removes nothing", func(t *testing.T) {
-		store := storeHolding("ocel:postgres.orders", "ocel:bucket.uploads")
+		store := storeWith("ocel:postgres.orders", "ocel:bucket.uploads")
 		failed := errors.New("the deploy failed")
 		err := Deploy(context.Background(), store, production, []Record{kept("ocel:postgres.orders")}, func() error { return failed })
 		if !errors.Is(err, failed) {
@@ -108,7 +108,7 @@ func TestDeploy(t *testing.T) {
 	})
 
 	t.Run("a record another deploy published while this one ran is left to that deploy", func(t *testing.T) {
-		store := storeHolding("ocel:postgres.orders", "ocel:bucket.uploads")
+		store := storeWith("ocel:postgres.orders", "ocel:bucket.uploads")
 		err := Deploy(context.Background(), store, production, []Record{kept("ocel:postgres.orders")}, func() error {
 			publishing(store, "ocel:bucket.uploads")
 			publishing(store, "ocel:bucket.avatars")
@@ -123,8 +123,8 @@ func TestDeploy(t *testing.T) {
 	})
 
 	t.Run("a record some other publisher owns is never removed", func(t *testing.T) {
-		store := storeHolding()
-		store.records["warehouse"] = heldRecord{owner: "data-team", version: 1}
+		store := storeWith()
+		store.records["warehouse"] = storedRecord{owner: "data-team", version: 1}
 		if err := Deploy(context.Background(), store, production, nil, func() error { return nil }); err != nil {
 			t.Fatalf("Deploy: %v", err)
 		}

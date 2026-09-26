@@ -56,7 +56,7 @@ func TestDeployResult(t *testing.T) {
 			t.Errorf("tag = %q, want %q", got.Tag, "v9")
 		}
 		if len(got.Apps) == 0 || len(got.Apps[0].URLs) != 1 || got.Apps[0].URLs[0] != clitest.FakeAppURL {
-			t.Errorf("apps = %+v, want the first app to carry [%s]", got.Apps, clitest.FakeAppURL)
+			t.Errorf("apps = %+v, want the first app to have [%s]", got.Apps, clitest.FakeAppURL)
 		}
 		if len(got.Apps) != 1 || got.Apps[0].Name != "api" || got.Apps[0].BuildID != "bld_api_1" {
 			t.Errorf("apps = %+v, want one api app with build id bld_api_1", got.Apps)
@@ -112,7 +112,7 @@ func TestDeployResult(t *testing.T) {
 			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, clitest.FakePromotionID)
 		}
 		if len(got.Apps) == 0 || len(got.Apps[0].URLs) != 1 || got.Apps[0].URLs[0] != clitest.FakeAppURL {
-			t.Errorf("apps = %+v, want the first app to carry [%s]", got.Apps, clitest.FakeAppURL)
+			t.Errorf("apps = %+v, want the first app to have [%s]", got.Apps, clitest.FakeAppURL)
 		}
 	})
 }

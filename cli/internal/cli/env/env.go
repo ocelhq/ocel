@@ -47,7 +47,7 @@ func (o envOptions) checkDev() error {
 		return fmt.Errorf("--dev addresses the values `ocel dev` resolves, which are neither production nor a preview environment; pass --dev alone")
 	}
 	if o.folder != "" {
-		return fmt.Errorf("`ocel dev` spawns one child for the whole project, so a dev value is held under its key alone and --folder would name a scope nothing reads; drop --folder")
+		return fmt.Errorf("`ocel dev` spawns one child for the whole project, so a dev value is stored under its key alone and --folder would name a scope nothing reads; drop --folder")
 	}
 	return nil
 }
@@ -112,16 +112,16 @@ func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts 
 
 	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		rep := runui.Plain(deps.Presentation(stderr), stderr)
-		standing, err := preflight.Run(ctx, rep, runner, cfg, envTier(opts), "", nil, nil, hint)
+		status, err := preflight.Run(ctx, rep, runner, cfg, envTier(opts), "", nil, nil, hint)
 		if err != nil {
 			return err
 		}
 		if sealing != nil {
-			if err := offerVarsKey(ctx, deps, runner, cfg, opts, standing.GetBootstrap(), rep, sealing.stdin, stderr); err != nil {
+			if err := offerVarsKey(ctx, deps, runner, cfg, opts, status.GetBootstrap(), rep, sealing.stdin, stderr); err != nil {
 				return err
 			}
 		}
-		return drive(runner, cfg, standing)
+		return drive(runner, cfg, status)
 	})
 }
 
@@ -180,7 +180,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	if len(pairs) > 0 {
 		key = pairs[0].key
 	}
-	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, status *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -197,14 +197,14 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
-		held := envValues(runner, cfg.Slug, opts)
+		values := envValues(runner, cfg.Slug, opts)
 		for _, pair := range pairs {
 			at := envAddress(pair.key, opts)
-			seen, err := held.Version(ctx, at)
+			seen, err := values.Version(ctx, at)
 			if err != nil {
 				return err
 			}
-			metadata, err := held.Write(ctx, at, pair.value, &seen)
+			metadata, err := values.Write(ctx, at, pair.value, &seen)
 			if err != nil {
 				return staleCell(err, pair.key, opts)
 			}
@@ -357,18 +357,18 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 	if opts.dev {
 		return runEnvRmDev(ctx, deps, cwd, key, opts, stdout, stderr)
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, status *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		held := envValues(runner, cfg.Slug, opts)
+		values := envValues(runner, cfg.Slug, opts)
 		at := envAddress(key, opts)
-		seen, err := held.Version(ctx, at)
+		seen, err := values.Version(ctx, at)
 		if err != nil {
 			return err
 		}
-		deleted, err := held.Remove(ctx, at, &seen)
+		deleted, err := values.Remove(ctx, at, &seen)
 		if err != nil {
 			return staleCell(err, key, opts)
 		}
@@ -404,18 +404,18 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 	if err != nil {
 		return err
 	}
-	held := heldCells(listed.GetValues(), opts.environment)
-	for _, standing := range envgate.GroupStates(definitions, groups, held, opts.folder) {
-		if !touched[standing.Key] || len(standing.Missing) == 0 {
+	present := presentCells(listed.GetValues(), opts.environment)
+	for _, state := range envgate.GroupStates(definitions, groups, present, opts.folder) {
+		if !touched[state.Key] || len(state.Missing) == 0 {
 			continue
 		}
 		fmt.Fprintf(stdout, "%s: %d of %d set. Set together: %s\n",
-			standing.Key, len(standing.Set), len(standing.Set)+len(standing.Missing), strings.Join(standing.Missing, ", "))
+			state.Key, len(state.Set), len(state.Set)+len(state.Missing), strings.Join(state.Missing, ", "))
 	}
 	return nil
 }
 
-func heldCells(values []*envvarsv1.ValueMetadata, environment string) []envgate.Cell {
+func presentCells(values []*envvarsv1.ValueMetadata, environment string) []envgate.Cell {
 	var out []envgate.Cell
 	for _, value := range values {
 		coordinate := value.GetCoordinate()
@@ -436,7 +436,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, status *contractv1.PreflightResponse) error {
 		definitions, _, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
@@ -555,12 +555,12 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		orphans = orphans || orphaned
 	}
 	for _, group := range groups {
-		held := valuesIn(group.GetKey(), values, definitions)
-		if len(held) == 0 {
+		members := valuesIn(group.GetKey(), values, definitions)
+		if len(members) == 0 {
 			continue
 		}
 		rows = append(rows, listingRow{}, listingRow{headline: envgate.GroupHeadline(group.GetKey(), group.GetDescription())})
-		for _, v := range held {
+		for _, v := range members {
 			row, orphaned := valueRow(v, listingIndent, described, environments)
 			rows = append(rows, row)
 			orphans = orphans || orphaned

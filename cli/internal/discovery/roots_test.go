@@ -180,16 +180,16 @@ func TestRoots(t *testing.T) {
 	})
 }
 
-func TestHoldsJS(t *testing.T) {
-	t.Run("a declaration root written in JS holds JS", func(t *testing.T) {
+func TestHasJS(t *testing.T) {
+	t.Run("a declaration root written in JS contains JS", func(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 
-		held, err := HoldsJS(&projectconfig.Config{Dir: root})
+		hasJS, err := HasJS(&projectconfig.Config{Dir: root})
 		if err != nil {
 			t.Fatalf("HoldsJS: %v", err)
 		}
-		if !held {
+		if !hasJS {
 			t.Error("HoldsJS = false, want the ts declaration root read as JS")
 		}
 	})
@@ -199,11 +199,11 @@ func TestHoldsJS(t *testing.T) {
 		cfg := &projectconfig.Config{Dir: root}
 		cfg.Discovery.Paths = []string{"nowhere"}
 
-		held, err := HoldsJS(cfg)
+		hasJS, err := HasJS(cfg)
 		if err == nil {
-			t.Fatalf("HoldsJS = %v, nil error, want the unreadable roots reported", held)
+			t.Fatalf("HoldsJS = %v, nil error, want the unreadable roots reported", hasJS)
 		}
-		if held {
+		if hasJS {
 			t.Error("HoldsJS = true for roots it could not read")
 		}
 	})
@@ -355,7 +355,7 @@ func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T
 			write(t, filepath.Join(dir, "package.json"), "{}")
 
 			if got := LanguageOf(tc.framework, dir); got != tc.want {
-				t.Errorf("LanguageOf(%q) = %q, want %q — every runtime an app may declare says which language attribution reads it in, and a package.json beside it holds only what its tooling reads", tc.framework, got, tc.want)
+				t.Errorf("LanguageOf(%q) = %q, want %q — every runtime an app may declare says which language attribution reads it in, and a package.json beside it contains only what its tooling reads", tc.framework, got, tc.want)
 			}
 		})
 	}
@@ -419,8 +419,8 @@ func TestClientBundle(t *testing.T) {
 		{name: "a next app", framework: appbuild.FrameworkNext, want: true},
 		{name: "a node app", framework: appbuild.FrameworkNode, want: true},
 		{name: "a go app", framework: appbuild.FrameworkGo, manifest: "go.mod"},
-		{name: "a container app holding a package.json", manifest: "package.json", want: true},
-		{name: "a container app holding a go.mod", manifest: "go.mod"},
+		{name: "a container app with a package.json", manifest: "package.json", want: true},
+		{name: "a container app with a go.mod", manifest: "go.mod"},
 		{name: "a container app naming no language at all", manifest: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

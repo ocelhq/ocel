@@ -80,12 +80,12 @@ func assertProcessDead(t *testing.T, pid int) {
 func TestTeardownBound(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a grandchild holding the output pipe cannot make teardown hang", func(t *testing.T) {
+	t.Run("a grandchild keeping the output pipe open cannot make teardown hang", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
 		out := &syncBuffer{}
-		r, pidFile := spawnOrphan(t, ctx, "orphan-holds-pipe", Config{
+		r, pidFile := spawnOrphan(t, ctx, "orphan-keeps-pipe-open", Config{
 			Stdout:      out,
 			GracePeriod: 100 * time.Millisecond,
 			ReapTimeout: 200 * time.Millisecond,
@@ -100,7 +100,7 @@ func TestTeardownBound(t *testing.T) {
 
 		const bound = 3 * time.Second
 		if elapsed > bound {
-			t.Fatalf("Close() took %s, want it bounded well under %s even with a grandchild holding the pipe", elapsed, bound)
+			t.Fatalf("Close() took %s, want it bounded well under %s even with a grandchild keeping the pipe open", elapsed, bound)
 		}
 
 		if !processAlive(grandchildPid) {

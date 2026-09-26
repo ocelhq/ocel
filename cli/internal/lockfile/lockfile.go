@@ -31,11 +31,11 @@ func FromChecksums(version string, sums map[string]string) Lock {
 			continue
 		}
 		platform := providers.Platform{GOOS: parsed.GOOS, GOARCH: parsed.GOARCH}
-		held := lock.pinned(parsed.Kind)
-		pinned, known := held[parsed.Name]
+		kindPins := lock.pinned(parsed.Kind)
+		pinned, known := kindPins[parsed.Name]
 		if !known {
 			pinned = map[string]string{}
-			held[parsed.Name] = pinned
+			kindPins[parsed.Name] = pinned
 		}
 		pinned[platform.Dir()] = digest
 	}
@@ -50,8 +50,8 @@ func (l Lock) pinned(kind providers.Kind) map[string]map[string]string {
 }
 
 func (l Lock) Digest(kind providers.Kind, name, platform string) (string, bool) {
-	digest, held := l.pinned(kind)[name][platform]
-	return digest, held
+	digest, ok := l.pinned(kind)[name][platform]
+	return digest, ok
 }
 
 func (l Lock) Bytes() ([]byte, error) {

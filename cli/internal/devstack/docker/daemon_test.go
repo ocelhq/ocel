@@ -16,15 +16,15 @@ import (
 )
 
 type fakeDaemon struct {
-	mu      sync.Mutex
-	held    map[string]map[string]any
-	calls   []string
-	created []map[string]any
-	onStart func()
-	racedBy map[string]any
-	listed  []string
-	volumes []string
-	stuck   string
+	mu        sync.Mutex
+	inspected map[string]map[string]any
+	calls     []string
+	created   []map[string]any
+	onStart   func()
+	racedBy   map[string]any
+	listed    []string
+	volumes   []string
+	stuck     string
 }
 
 var versionPrefix = regexp.MustCompile(`^/v[0-9.]+`)
@@ -47,13 +47,13 @@ func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/_ping":
 		w.WriteHeader(http.StatusOK)
 	case strings.HasPrefix(path, "/images/"):
-		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "sha256:held"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "sha256:image"})
 	case r.Method == http.MethodPost && path == "/containers/create":
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		if f.racedBy != nil {
-			f.held[r.URL.Query().Get("name")] = f.racedBy
+			f.inspected[r.URL.Query().Get("name")] = f.racedBy
 			f.mu.Unlock()
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(map[string]any{"message": "Conflict. The container name is already in use"})
@@ -61,7 +61,7 @@ func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		f.created = append(f.created, body)
 		config := map[string]any{"Image": body["Image"], "Labels": body["Labels"]}
-		f.held["created"] = inspected("created", true, config)
+		f.inspected["created"] = inspected("created", true, config)
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "created"})
@@ -93,14 +93,14 @@ func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete:
 		f.mu.Lock()
-		delete(f.held, strings.TrimPrefix(path, "/containers/"))
+		delete(f.inspected, strings.TrimPrefix(path, "/containers/"))
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodGet && strings.HasSuffix(path, "/json"):
 		f.mu.Lock()
-		found, held := f.held[strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")]
+		found, ok := f.inspected[strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")]
 		f.mu.Unlock()
-		if !held {
+		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]any{"message": "No such container"})
 			return
@@ -124,8 +124,8 @@ func inspected(id string, running bool, config map[string]any) map[string]any {
 
 func openFake(t *testing.T, daemon *fakeDaemon) docker.Engine {
 	t.Helper()
-	if daemon.held == nil {
-		daemon.held = map[string]map[string]any{}
+	if daemon.inspected == nil {
+		daemon.inspected = map[string]map[string]any{}
 	}
 	server := httptest.NewServer(daemon)
 	t.Cleanup(server.Close)
@@ -177,7 +177,7 @@ func TestRunStartsWhatIsNotThereOnLoopback(t *testing.T) {
 }
 
 func TestRunAdoptsARunningContainerOfTheSameSpec(t *testing.T) {
-	daemon := &fakeDaemon{held: map[string]map[string]any{
+	daemon := &fakeDaemon{inspected: map[string]map[string]any{
 		spec.Name: inspected("theirs", true, map[string]any{"Image": spec.Image, "Labels": spec.Labels}),
 	}}
 	engine := openFake(t, daemon)
@@ -195,7 +195,7 @@ func TestRunAdoptsARunningContainerOfTheSameSpec(t *testing.T) {
 }
 
 func TestRunRefusesToReplaceARunningContainerOfAnotherSpec(t *testing.T) {
-	daemon := &fakeDaemon{held: map[string]map[string]any{
+	daemon := &fakeDaemon{inspected: map[string]map[string]any{
 		spec.Name: inspected("theirs", true, map[string]any{"Image": "postgres:16", "Labels": spec.Labels}),
 	}}
 	engine := openFake(t, daemon)
@@ -212,7 +212,7 @@ func TestRunRefusesToReplaceARunningContainerOfAnotherSpec(t *testing.T) {
 }
 
 func TestRunReplacesAContainerThatIsNoLongerRunning(t *testing.T) {
-	daemon := &fakeDaemon{held: map[string]map[string]any{
+	daemon := &fakeDaemon{inspected: map[string]map[string]any{
 		spec.Name: inspected("dead", false, map[string]any{"Image": spec.Image, "Labels": spec.Labels}),
 	}}
 	engine := openFake(t, daemon)

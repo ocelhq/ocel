@@ -52,7 +52,7 @@ func TestDNSRows(t *testing.T) {
 		}
 	})
 
-	t.Run("proxied records carry a column of their own", func(t *testing.T) {
+	t.Run("proxied records get a column of their own", func(t *testing.T) {
 		t.Parallel()
 
 		proxied := &progressv1.DnsRecord{Name: "shop.app.com", Type: "AAAA", Value: "100::", Proxied: true}
@@ -155,7 +155,7 @@ func TestDNSManualRecordsProjection(t *testing.T) {
 			t.Fatalf("envelope names %v, want one record", records)
 		}
 		if records[0].GetName() != validation.GetName() || records[0].GetValue() != validation.GetValue() {
-			t.Errorf("record = %+v, want the fields carried through", records[0])
+			t.Errorf("record = %+v, want the fields passed through", records[0])
 		}
 		if strings.Contains(raw, "add this record") {
 			t.Errorf("json = %q, want the machine surface free of rendered English", raw)

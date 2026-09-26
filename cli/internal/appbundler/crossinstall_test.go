@@ -83,7 +83,7 @@ func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitect
 			argv := strings.Fields(readFile(t, npm.argv))
 			for _, want := range []string{"install", "--os=linux", "--cpu=" + cpu, "--libc=glibc", "--ignore-scripts"} {
 				if !strings.Contains(" "+strings.Join(argv, " ")+" ", " "+want+" ") {
-					t.Errorf("npm is run as %v, and it carries no %q: the build host's own platform package is what gets installed", argv, want)
+					t.Errorf("npm is run as %v, and it includes no %q: the build host's own platform package is what gets installed", argv, want)
 				}
 			}
 			var manifest struct {
@@ -129,7 +129,7 @@ func TestAPlatformPackageInstallThatFailsFailsTheBuild(t *testing.T) {
 
 	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
-		t.Fatal("Bundle succeeded, want a refusal rather than a function carrying the build host's platform package")
+		t.Fatal("Bundle succeeded, want a refusal rather than a function shipping the build host's platform package")
 	}
 	for _, want := range []string{"plat-dep", "not in this registry"} {
 		if !strings.Contains(err.Error(), want) {
@@ -144,7 +144,7 @@ func TestAPlatformPackageWithNoNpmToInstallItFailsTheBuild(t *testing.T) {
 
 	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
-		t.Fatal("Bundle succeeded, want a refusal rather than a function carrying the build host's platform package")
+		t.Fatal("Bundle succeeded, want a refusal rather than a function shipping the build host's platform package")
 	}
 	for _, want := range []string{"plat-dep", "npm"} {
 		if !strings.Contains(err.Error(), want) {
@@ -168,7 +168,7 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 
 	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
-		t.Fatal("Bundle succeeded, want a refusal: one function directory holds one plat-dep, so one of its importers would load a version it was not installed with")
+		t.Fatal("Bundle succeeded, want a refusal: one function directory contains one copy of a plat-dep, so one of its importers would load a version it was not installed with")
 	}
 	for _, want := range []string{"plat-dep", "1.2.3", "0.9.0"} {
 		if !strings.Contains(err.Error(), want) {
@@ -176,7 +176,7 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 		}
 	}
 	if _, err := os.Stat(npm.argv); err == nil {
-		t.Error("npm ran for packages the function directory cannot hold side by side")
+		t.Error("npm ran for packages the function directory cannot contain side by side")
 	}
 }
 
@@ -335,7 +335,7 @@ func TestAPlatformPackageInstallPinsWhatItDependsOnToTheVersionsTheAppInstalled(
 	}
 	want := map[string]any{"plat-dep@1.2.3": map[string]any{"helper-dep": map[string]any{".": "2.1.0", "deep-dep": "1.4.0"}}}
 	if got, _ := json.Marshal(manifest.Overrides); string(got) != string(must(json.Marshal(want))) {
-		t.Errorf("npm installs with overrides %s, want %s: what plat-dep depends on floats to whatever the registry holds today", got, must(json.Marshal(want)))
+		t.Errorf("npm installs with overrides %s, want %s: what plat-dep depends on floats to whatever the registry serves today", got, must(json.Marshal(want)))
 	}
 }
 
@@ -361,7 +361,7 @@ func TestAPlatformPackageKeepsItsOwnDotfilesAndLeavesNpmsBookkeepingBehind(t *te
 	}
 	for _, left := range []string{".package-lock.json", ".bin"} {
 		if _, err := os.Stat(filepath.Join(l.funcDir, nodeModulesDirName, left)); err == nil {
-			t.Errorf("the function carries npm's %s", left)
+			t.Errorf("the function contains npm's %s", left)
 		}
 	}
 	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {

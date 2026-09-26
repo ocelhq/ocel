@@ -382,7 +382,7 @@ func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
 	case err := <-waitDone:
 		exitErr := &exec.ExitError{}
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("session harness wait error = %v, want an *exec.ExitError carrying the CLI's exit code", err)
+			t.Fatalf("session harness wait error = %v, want an *exec.ExitError with the CLI's exit code", err)
 		}
 		if code := exitErr.ExitCode(); code != exitsig.InterruptCode {
 			t.Fatalf("CLI exit code = %d, want %d (forced exit on the second Ctrl-C)", code, exitsig.InterruptCode)

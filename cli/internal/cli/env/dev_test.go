@@ -42,12 +42,12 @@ func (c *fakeConsole) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if key != "" {
-			held, ok := c.values[key]
+			value, ok := c.values[key]
 			if !ok {
 				http.Error(w, `{"error":"Not found"}`, http.StatusNotFound)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(envstore.Value{Key: key, Value: held, UpdatedAt: 1_700_000_000_000})
+			_ = json.NewEncoder(w).Encode(envstore.Value{Key: key, Value: value, UpdatedAt: 1_700_000_000_000})
 			return
 		}
 		keys := make([]string, 0, len(c.values))
@@ -71,9 +71,9 @@ func (c *fakeConsole) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.values[key] = body.Value
 		_ = json.NewEncoder(w).Encode(map[string]any{"key": key, "size": len(body.Value)})
 	case http.MethodDelete:
-		_, held := c.values[key]
+		_, ok := c.values[key]
 		delete(c.values, key)
-		_ = json.NewEncoder(w).Encode(map[string]bool{"deleted": held})
+		_ = json.NewEncoder(w).Encode(map[string]bool{"deleted": ok})
 	default:
 		http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
 	}
@@ -111,7 +111,7 @@ func TestRunEnvDev(t *testing.T) {
 			t.Fatalf("runEnvSet --dev err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if console.values["LOG_LEVEL"] != "debug" {
-			t.Errorf("the console holds %v, want LOG_LEVEL=debug", console.values)
+			t.Errorf("the console stores %v, want LOG_LEVEL=debug", console.values)
 		}
 		if console.token != "tok" {
 			t.Errorf("the console saw token %q, want the logged-in access token", console.token)
@@ -143,7 +143,7 @@ func TestRunEnvDev(t *testing.T) {
 			}
 		})
 
-		t.Run("ls --dev names the key it holds", func(t *testing.T) {
+		t.Run("ls --dev names the key it stores", func(t *testing.T) {
 			var out bytes.Buffer
 			if err := runEnvLs(context.Background(), deps, root, envOptions{dev: true}, &out, &out); err != nil {
 				t.Fatalf("runEnvLs --dev err = %v; out=%s", err, out.String())
@@ -161,13 +161,13 @@ func TestRunEnvDev(t *testing.T) {
 			if err := runEnvRm(context.Background(), deps, root, "LOG_LEVEL", envOptions{dev: true}, &out, &out); err != nil {
 				t.Fatalf("runEnvRm --dev err = %v; out=%s", err, out.String())
 			}
-			if _, held := console.values["LOG_LEVEL"]; held {
-				t.Errorf("the console still holds %v after rm --dev", console.values)
+			if _, ok := console.values["LOG_LEVEL"]; ok {
+				t.Errorf("the console still stores %v after rm --dev", console.values)
 			}
 		})
 	})
 
-	t.Run("refuses a key no app declares, and the console holds nothing", func(t *testing.T) {
+	t.Run("refuses a key no app declares, and the console stores nothing", func(t *testing.T) {
 		root, deps, console := setUpDevFixture(t)
 
 		var stdout, stderr bytes.Buffer
@@ -179,7 +179,7 @@ func TestRunEnvDev(t *testing.T) {
 			t.Errorf("err = %v, want it to name the key and how to declare it", err)
 		}
 		if len(console.values) != 0 {
-			t.Errorf("the console holds %v, want the refused write not to land", console.values)
+			t.Errorf("the console stores %v, want the refused write not to land", console.values)
 		}
 	})
 
@@ -194,13 +194,13 @@ func TestRunEnvDev(t *testing.T) {
 		if err == nil {
 			t.Fatal("runEnvSet --dev unlinked err = nil, want a refusal")
 		}
-		want := "this project is not linked to a console, so nothing holds LOG_LEVEL. For `ocel dev`, put LOG_LEVEL=<VALUE> in .env; to share values with your team, run `ocel link`."
+		want := "this project is not linked to a console, so nothing stores LOG_LEVEL. For `ocel dev`, put LOG_LEVEL=<VALUE> in .env; to share values with your team, run `ocel link`."
 		if err.Error() != want {
 			t.Errorf("err = %q, want %q", err.Error(), want)
 		}
 	})
 
-	t.Run("refuses a key nothing holds without listing the store", func(t *testing.T) {
+	t.Run("refuses a key nothing stores without listing the store", func(t *testing.T) {
 		root, deps, console := setUpDevFixture(t)
 		console.paths = nil
 
@@ -273,7 +273,7 @@ func TestCheckDevWritable(t *testing.T) {
 			t.Errorf("err = %v, want it not to name a flag --dev refuses", err)
 		}
 		if !strings.Contains(err.Error(), ".env") {
-			t.Errorf("err = %v, want it to name .env as the way to hold a per-folder value", err)
+			t.Errorf("err = %v, want it to name .env as the way to store a per-folder value", err)
 		}
 	})
 

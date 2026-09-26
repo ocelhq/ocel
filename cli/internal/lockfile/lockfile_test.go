@@ -40,12 +40,12 @@ func TestChecksumsParseTheDigestOfEveryProviderArchive(t *testing.T) {
 	if got := sums["ocel-provider-aws_0.2.0_linux_amd64.tar.gz"]; got != "0003" {
 		t.Fatalf("digest = %q, want %q", got, "0003")
 	}
-	if _, held := sums["ocel_0.2.0_linux_amd64.tar.gz"]; !held {
+	if _, ok := sums["ocel_0.2.0_linux_amd64.tar.gz"]; !ok {
 		t.Fatal("the CLI's own archive was dropped; the parse reads the file, it does not filter it")
 	}
 }
 
-func TestTheLockHoldsEveryProviderOfTheVersionItPins(t *testing.T) {
+func TestTheLockListsEveryProviderOfTheVersionItPins(t *testing.T) {
 	t.Parallel()
 
 	sums, err := providers.ParseChecksums(strings.NewReader(releaseChecksums))
@@ -57,25 +57,25 @@ func TestTheLockHoldsEveryProviderOfTheVersionItPins(t *testing.T) {
 	if lock.CLI != "0.2.0" {
 		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, "0.2.0")
 	}
-	if got, held := lock.Digest(providers.KindProvider, "aws", "windows-amd64"); !held || got != "0005" {
-		t.Fatalf("Digest(aws, windows-amd64) = %q, %v, want %q, true", got, held, "0005")
+	if got, ok := lock.Digest(providers.KindProvider, "aws", "windows-amd64"); !ok || got != "0005" {
+		t.Fatalf("Digest(aws, windows-amd64) = %q, %v, want %q, true", got, ok, "0005")
 	}
 	if len(lock.Providers["aws"]) != 5 {
 		t.Fatalf("aws pins %d platforms, want the five the release ships", len(lock.Providers["aws"]))
 	}
-	if _, held := lock.Digest(providers.KindProvider, "aws", "linux-386"); held {
+	if _, ok := lock.Digest(providers.KindProvider, "aws", "linux-386"); ok {
 		t.Fatal("the lock pinned a platform the release does not ship")
 	}
-	if _, held := lock.Providers["ocel"]; held {
+	if _, ok := lock.Providers["ocel"]; ok {
 		t.Fatal("the CLI's own archive was pinned as a provider")
 	}
-	if got, held := lock.Digest(providers.KindConnector, "vps", "linux-arm64"); !held || got != "0008" {
-		t.Fatalf("Digest(connector, vps, linux-arm64) = %q, %v, want %q, true", got, held, "0008")
+	if got, ok := lock.Digest(providers.KindConnector, "vps", "linux-arm64"); !ok || got != "0008" {
+		t.Fatalf("Digest(connector, vps, linux-arm64) = %q, %v, want %q, true", got, ok, "0008")
 	}
-	if _, held := lock.Providers["vps"]; !held {
+	if _, ok := lock.Providers["vps"]; !ok {
 		t.Fatal("the vps provider and the vps connector share a name, and pinning one dropped the other")
 	}
-	if _, held := lock.Digest(providers.KindProvider, "vps", "linux-arm64"); held {
+	if _, ok := lock.Digest(providers.KindProvider, "vps", "linux-arm64"); ok {
 		t.Fatal("a connector archive was pinned as a provider")
 	}
 }
@@ -116,11 +116,11 @@ func TestTheLockReadsBackTheBytesItWrote(t *testing.T) {
 		t.Error("the lock does not end in a newline")
 	}
 
-	read, held, err := Read(dir)
+	read, found, err := Read(dir)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if !held {
+	if !found {
 		t.Fatal("Read found no lock where Write had just put one")
 	}
 	if a, b := rendered(t, read), rendered(t, written); string(a) != string(b) {
@@ -131,12 +131,12 @@ func TestTheLockReadsBackTheBytesItWrote(t *testing.T) {
 func TestNoLockReadsAsNoLock(t *testing.T) {
 	t.Parallel()
 
-	_, held, err := Read(t.TempDir())
+	_, found, err := Read(t.TempDir())
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if held {
-		t.Fatal("Read claimed a lock in a directory holding none")
+	if found {
+		t.Fatal("Read claimed a lock in a directory containing none")
 	}
 }
 
@@ -163,7 +163,7 @@ func TestTheLockIsWrittenInOneOrderWhateverOrderItWasBuiltIn(t *testing.T) {
 
 func TestAFailedWriteLeavesThePriorLockIntact(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root writes through a directory it holds no write bit on")
+		t.Skip("root writes through a directory it has no write bit on")
 	}
 
 	sums, err := providers.ParseChecksums(strings.NewReader(releaseChecksums))

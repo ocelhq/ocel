@@ -132,7 +132,7 @@ func TestDerive(t *testing.T) {
 			delete(edge, key)
 		}
 		if len(edge) != 0 {
-			t.Errorf("usage carries %v, want the binding's own fields joined rather than copied", edge)
+			t.Errorf("usage has %v, want the binding's own fields joined rather than copied", edge)
 		}
 	})
 
@@ -149,7 +149,7 @@ func TestDerive(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the deploy context", func(t *testing.T) {
+	t.Run("includes the deploy context", func(t *testing.T) {
 		t.Parallel()
 
 		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureBindings())

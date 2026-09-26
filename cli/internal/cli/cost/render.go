@@ -17,8 +17,8 @@ func render(stdout io.Writer, slug string, set *costv1.ResourceSet, estimates ma
 	fmt.Fprintf(stdout, "%s · %s profile · %s per month · rates %s\n\n", slug, profileName(profile), chosen.GetCurrency(), chosen.GetRatesVersion())
 
 	priced := make(map[string]*costv1.ResourceEstimate, len(chosen.GetResources()))
-	for _, held := range chosen.GetResources() {
-		priced[held.GetResource()] = held
+	for _, resource := range chosen.GetResources() {
+		priced[resource.GetResource()] = resource
 	}
 	byScope := make(map[string][]*costv1.Resource, len(set.GetScopes()))
 	for _, resource := range set.GetResources() {
@@ -49,8 +49,8 @@ func render(stdout io.Writer, slug string, set *costv1.ResourceSet, estimates ma
 	fmt.Fprintln(stdout)
 	fmt.Fprintf(stdout, "Fixed %s + usage %s = %s per month on the %s profile\n", money(chosen.GetMonthlyFixed()), money(chosen.GetMonthlyUsage()), sum(chosen.GetMonthlyFixed(), chosen.GetMonthlyUsage()), profileName(profile))
 	byProfile := make([]string, 0, len(estimates))
-	for _, held := range profiles() {
-		byProfile = append(byProfile, fmt.Sprintf("%s %s", profileName(held), money(estimates[held].GetMonthlyUsage())))
+	for _, profile := range profiles() {
+		byProfile = append(byProfile, fmt.Sprintf("%s %s", profileName(profile), money(estimates[profile].GetMonthlyUsage())))
 	}
 	fmt.Fprintf(stdout, "Usage by profile: %s\n", strings.Join(byProfile, " · "))
 	coverage := chosen.GetCoverage()
@@ -108,8 +108,8 @@ func sum(amounts ...string) string {
 		if amount == "" {
 			continue
 		}
-		if held, ok := new(big.Rat).SetString(amount); ok {
-			total.Add(total, held)
+		if parsed, ok := new(big.Rat).SetString(amount); ok {
+			total.Add(total, parsed)
 		}
 	}
 	return total.FloatString(2)

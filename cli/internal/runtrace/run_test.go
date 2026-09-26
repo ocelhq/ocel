@@ -42,7 +42,7 @@ func TestStartNamesArtifactsByTraceID(t *testing.T) {
 	}
 }
 
-func TestLogRecordCarriesTheVocabulary(t *testing.T) {
+func TestLogRecordUsesTheVocabulary(t *testing.T) {
 	dir := t.TempDir()
 	ctx, r, err := Start(context.Background(), dir, "ocel deploy")
 	if err != nil {

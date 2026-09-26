@@ -141,7 +141,7 @@ func fill(into io.Writer, body io.Reader) error {
 		return err
 	}
 	if spilled > archiveCeiling {
-		return fmt.Errorf("the archive holds a member larger than %d bytes", archiveCeiling)
+		return fmt.Errorf("the archive contains a member larger than %d bytes", archiveCeiling)
 	}
 	return nil
 }

@@ -98,7 +98,7 @@ func TestScan(t *testing.T) {
 		}
 	})
 
-	t.Run("it stands one function per app when nothing is built", func(t *testing.T) {
+	t.Run("it prices one function per app when nothing is built", func(t *testing.T) {
 		root, deps := scanFixture(t)
 		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 			return nil, appbuilder.ErrNoBuildOutput
@@ -114,7 +114,7 @@ func TestScan(t *testing.T) {
 		}
 	})
 
-	t.Run("it carries the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
+	t.Run("it includes the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
 		root, deps := scanFixture(t)
 		deps.Presentation = func(io.Writer) runui.Presentation {
 			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})

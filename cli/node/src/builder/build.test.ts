@@ -328,7 +328,7 @@ describe("serve descriptor", () => {
     expect(existsSync(path.join(appFuncDir(outDir, "api"), SERVE_DESCRIPTOR_FILE))).toBe(false);
   });
 
-  it("carries the hash of the function directory", async () => {
+  it("includes the hash of the function directory", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
@@ -373,7 +373,7 @@ describe("a node app is one server behind one origin", () => {
     expect(summaries[0]?.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
   });
 
-  it("carries the architecture the app asked for into the summary and its config", async () => {
+  it("passes the architecture the app asked for into the summary and its config", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
 

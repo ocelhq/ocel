@@ -122,7 +122,7 @@ func TestRunPreviewUp(t *testing.T) {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("--ref stands up the explicit ref's ephemeral", func(t *testing.T) {
+	t.Run("--ref provisions the explicit ref's ephemeral", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -641,7 +641,7 @@ func TestPreviewEnvironmentFlags(t *testing.T) {
 }
 
 func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testing.T) {
-	const why = "the provider refuses a global-preview account mismatch only for a preflight that carries a slug and no domains, " +
+	const why = "the provider refuses a global-preview account mismatch only for a preflight that includes a slug and no domains, " +
 		"because that is exactly a preview deploy landing on the shared wildcard; a teardown that starts sending a slug would be refused and strand its resources"
 
 	setUpPreview := func(t *testing.T) (root, journal string, deps cmddeps.Deps) {

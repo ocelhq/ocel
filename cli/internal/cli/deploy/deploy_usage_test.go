@@ -36,7 +36,7 @@ func TestDeployUsageEdges(t *testing.T) {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("a resource no app uses still provisions and carries no edge", func(t *testing.T) {
+	t.Run("a resource no app uses still provisions and has no edge", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
@@ -80,7 +80,7 @@ export async function late() {
 		}
 		combined := stdout.String() + stderr.String()
 		if !strings.Contains(combined, "apps/api/src/late.ts") {
-			t.Errorf("output = %q, want it to name the file holding the unresolvable import", combined)
+			t.Errorf("output = %q, want it to name the file containing the unresolvable import", combined)
 		}
 	})
 }

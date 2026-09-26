@@ -104,12 +104,12 @@ func (cell *FakeCell) target() *FakeCoordinate {
 
 func (s FakeStore) Resolve(tier environmentv1.Tier, cell *FakeCell) (string, error) {
 	if target := cell.target(); target != nil {
-		held := s[FakeCoordinateID(tier, target.proto())]
-		if held.LiveVersion() == 0 {
+		stored := s[FakeCoordinateID(tier, target.proto())]
+		if stored.LiveVersion() == 0 {
 			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
-				"%s/%s holds no value: vars: not found", target.Slug, target.Key))
+				"%s/%s has no value: vars: not found", target.Slug, target.Key))
 		}
-		cell = held
+		cell = stored
 	}
 	return cell.Versions[len(cell.Versions)-1].Value, nil
 }
@@ -240,7 +240,7 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 	}
 	if target.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"a reference resolves against the value %s sets for all environments; %q is an environment of the project holding the reference", target.GetKey(), target.GetEnvironment()))
+			"a reference resolves against the value %s sets for all environments; %q is an environment of the project that owns the reference", target.GetKey(), target.GetEnvironment()))
 	}
 	if CoordinateOf(at) == CoordinateOf(target) {
 		return nil, deepens(describeCoordinate(at) + " would reference itself")

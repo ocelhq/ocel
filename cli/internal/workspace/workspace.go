@@ -57,7 +57,7 @@ func (l Location) Rebase(context string) (Location, error) {
 	}
 	if !under(root, l.Root) {
 		return Location{}, fmt.Errorf(
-			"%s is neither %s nor a directory it sits under: an image is built from a context holding everything the install reads, so build.context may name the app's workspace root, a directory above it, or — for an app in no workspace — a directory above the app itself",
+			"%s is neither %s nor a directory it sits under: an image is built from a context containing everything the install reads, so build.context may name the app's workspace root, a directory above it, or — for an app in no workspace — a directory above the app itself",
 			root, l.Root,
 		)
 	}
@@ -94,7 +94,7 @@ func Locate(appDir string) (Location, error) {
 		return Location{}, err
 	}
 	root := dir
-	if !standsAlone(dir) {
+	if !isStandalone(dir) {
 		if enclosingRoot, ok := enclosing(dir); ok {
 			root = enclosingRoot
 		}
@@ -128,7 +128,7 @@ func locatedAt(dir, root string) (Location, error) {
 
 	if dep := workspaceDependency(app); dep != "" && located.Manager == Unknown {
 		return Location{}, fmt.Errorf(
-			"app %q depends on %q as %q, and %s holds no lockfile: the image installs the app's dependencies from one, and no installer resolves a workspace: range without it — install in %s so it writes a %s, %s, %s or %s, and commit what it writes",
+			"app %q depends on %q as %q, and %s contains no lockfile: the image installs the app's dependencies from one, and no installer resolves a workspace: range without it — install in %s so it writes a %s, %s, %s or %s, and commit what it writes",
 			appName(app, dir), dep, workspaceRange(app, dep), located.Root, located.Root,
 			pnpmLock, npmLock, yarnLock, bunLock,
 		)
@@ -172,7 +172,7 @@ func (l Location) Members() []string {
 	return members
 }
 
-func standsAlone(dir string) bool {
+func isStandalone(dir string) bool {
 	return regular(filepath.Join(dir, goModuleName)) || pythonProject(dir) || rustCrate(dir)
 }
 

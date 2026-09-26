@@ -94,11 +94,11 @@ func (s *deployFakeProviderServer) SetBinding(ctx context.Context, req *envvarsv
 	binding := req.GetBinding()
 	if binding.GetName() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(
-			"the binding carries no name; the name is what a consuming app binds to"))
+			"the binding has no name; the name is what a consuming app binds to"))
 	}
 	if naming.BindingTypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"binding %s carries no properties, so it has no type a consumer can resolve it against", binding.GetName()))
+			"binding %s has no properties, so it has no type a consumer can resolve it against", binding.GetName()))
 	}
 	if req.GetOwner() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(
@@ -115,16 +115,16 @@ func (s *deployFakeProviderServer) SetBinding(ctx context.Context, req *envvarsv
 		return nil, err
 	}
 	id := fakeBindingID(req.GetTier(), req.GetSlug(), req.GetEnvironment(), binding.GetName())
-	held := store[id]
-	if held != nil && held.Owner != req.GetOwner() {
+	stored := store[id]
+	if stored != nil && stored.Owner != req.GetOwner() {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"binding %s is already published by %s, so %s may not take it: one binding name belongs to one publisher",
-			binding.GetName(), held.Owner, req.GetOwner()))
+			binding.GetName(), stored.Owner, req.GetOwner()))
 	}
 
 	version := uint64(1)
-	if held != nil {
-		version = held.Version + 1
+	if stored != nil {
+		version = stored.Version + 1
 	}
 	wire, err := protojson.Marshal(binding)
 	if err != nil {
@@ -178,20 +178,20 @@ func (s *deployFakeProviderServer) ListBindings(ctx context.Context, req *envvar
 
 	resp := &envvarsv1.ListBindingsResponse{}
 	for _, id := range ids {
-		held := store[id]
-		if held.Tier != req.GetTier() || held.Slug != req.GetSlug() {
+		stored := store[id]
+		if stored.Tier != req.GetTier() || stored.Slug != req.GetSlug() {
 			continue
 		}
-		if held.Environment != req.GetEnvironment() && held.Environment != "" {
+		if stored.Environment != req.GetEnvironment() && stored.Environment != "" {
 			continue
 		}
 		resp.Bindings = append(resp.Bindings, &envvarsv1.BindingSummary{
-			Name:       held.Name,
-			Type:       held.Type,
-			Source:     held.Source,
-			Owner:      held.Owner,
-			Version:    held.Version,
-			Properties: naming.PropertyShapeMessages(held.Properties),
+			Name:       stored.Name,
+			Type:       stored.Type,
+			Source:     stored.Source,
+			Owner:      stored.Owner,
+			Version:    stored.Version,
+			Properties: naming.PropertyShapeMessages(stored.Properties),
 		})
 	}
 	return resp, nil
@@ -212,8 +212,8 @@ func FakeBindingRecords() ([]FakeBindingRecord, error) {
 	}
 	out := make([]FakeBindingRecord, 0, len(store))
 	for _, id := range slices.Sorted(maps.Keys(store)) {
-		held := store[id]
-		out = append(out, FakeBindingRecord{Tier: held.Tier, Environment: held.Environment, Name: held.Name, Owner: held.Owner, Wire: string(held.Wire)})
+		stored := store[id]
+		out = append(out, FakeBindingRecord{Tier: stored.Tier, Environment: stored.Environment, Name: stored.Name, Owner: stored.Owner, Wire: string(stored.Wire)})
 	}
 	return out, nil
 }

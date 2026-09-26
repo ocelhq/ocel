@@ -196,7 +196,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 
 	want := strings.Join([]string{
 		"Project  my-shop · ocel.config.ts",
-		"  ✓ node is needed — ocel.config.ts is TypeScript, this project holds JavaScript — node vX on PATH",
+		"  ✓ node is needed — ocel.config.ts is TypeScript, this project contains JavaScript — node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
 		"  ✓ provider aws " + version.Version + "",
 		"  ✓ provider default edge",
@@ -287,7 +287,7 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ✗ an apply never finished, so nothing recorded is a claim about what stands",
+		"  ✗ an apply never finished, so nothing recorded is a claim about what is provisioned",
 		"    → run `ocel bootstrap production` to plan the work that is left and finish it",
 		"1 problem.",
 	} {
@@ -545,10 +545,10 @@ func waitForFrame(t *testing.T, terminal *syncBuffer) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("the spinner drew nothing, so this run proves nothing about standing it down")
+	t.Fatal("the spinner drew nothing, so this run proves nothing about stopping it")
 }
 
-func TestDoctorStandsTheSpinnerDownWhileTheHostTrustAsks(t *testing.T) {
+func TestDoctorStopsTheSpinnerWhileTheHostTrustAsks(t *testing.T) {
 	var terminal syncBuffer
 	host := providerclient.Trust{Ask: terminalAsker{}, Out: &terminal}
 	spinner := runui.StartSpinner(runui.Presentation{Format: runui.FormatHuman, TTY: true, Width: 80}, &terminal, "Checking your setup")
@@ -559,7 +559,7 @@ func TestDoctorStandsTheSpinnerDownWhileTheHostTrustAsks(t *testing.T) {
 		t.Errorf("the trust asks through %#v on %#v, want the terminal the process was started on", trust.Ask, trust.Out)
 	}
 	if trust.Suspend == nil {
-		t.Fatal("the trust has no way to stand the spinner down while it asks, so the two share the terminal")
+		t.Fatal("the trust has no way to stop the spinner while it asks, so the two share the terminal")
 	}
 
 	waitForFrame(t, &terminal)

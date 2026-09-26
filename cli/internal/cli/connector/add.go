@@ -21,7 +21,7 @@ import (
 )
 
 func unfinished(err error) error {
-	return fmt.Errorf("%w; the console already holds this target, so running ocel connector add again finishes it", err)
+	return fmt.Errorf("%w; the console already has this target registered, so running ocel connector add again finishes it", err)
 }
 
 func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, link *consolelink.Link,
@@ -45,7 +45,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			return err
 		}
 
-		held, err := opts.console.Upsert(ctx, access, consoleconnector.Upsert{
+		registered, err := opts.console.Upsert(ctx, access, consoleconnector.Upsert{
 			Target: described.GetTargetFingerprint(),
 			Vendor: vendor,
 			Reach:  reachDial,
@@ -59,12 +59,12 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			return err
 		}
 		if len(binary) > providerclient.MaxMessageBytes {
-			return fmt.Errorf("the %s connector built for linux/%s is %d bytes, over the %d the provider channel carries in one message",
+			return fmt.Errorf("the %s connector built for linux/%s is %d bytes, over the %d the provider channel accepts in one message",
 				vendor, described.GetArch(), len(binary), providerclient.MaxMessageBytes)
 		}
 		config, err := json.Marshal(connectorkit.Config{
 			Console:        opts.apiURL,
-			ConnectorID:    held.ID,
+			ConnectorID:    registered.ID,
 			OrganizationID: link.OrganizationID,
 			Target:         described.GetTargetFingerprint(),
 			Grants:         opts.grants(),
@@ -95,7 +95,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 				"the provider installed the connector and named no address, so the console has nothing to dial"))
 		}
 
-		paired, err := opts.console.Address(ctx, access, held.ID, consoleconnector.Address{
+		paired, err := opts.console.Address(ctx, access, registered.ID, consoleconnector.Address{
 			URL:       at.GetUrl(),
 			PublicKey: at.GetPublicKey(),
 			Compute:   at.GetCompute(),

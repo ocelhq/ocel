@@ -22,7 +22,7 @@ const rustLinker = "rust-lld"
 func (c Compilation) compileRust(ctx context.Context) error {
 	manifest, err := os.Stat(filepath.Join(c.Source, cargoManifestFile))
 	if err != nil || !manifest.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with rust and %s holds no %s: an app is compiled from the crate rooted in its own directory", c.App, c.Source, cargoManifestFile)
+		return fmt.Errorf("app %q is built with rust and %s has no %s: an app is compiled from the crate rooted in its own directory", c.App, c.Source, cargoManifestFile)
 	}
 	target, runs := arch.RustTarget(c.Framework.Arch)
 	if !runs {

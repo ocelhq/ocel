@@ -70,7 +70,7 @@ func containerOnly(app projectconfig.App, compute string) error {
 	}
 	if app.Health != nil {
 		return fmt.Errorf(
-			"app %q configures a `health` check, and it runs on %q compute, which stands up no process to probe: `health` gates a container release and nothing else — give %q `compute: \"container\"`, or remove its `health`",
+			"app %q configures a `health` check, and it runs on %q compute, which runs no process to probe: `health` gates a container release and nothing else — give %q `compute: \"container\"`, or remove its `health`",
 			app.Name, compute, app.Name,
 		)
 	}

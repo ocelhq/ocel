@@ -114,7 +114,7 @@ func TestRemovingTheDockerfileIsTheWayBackToRailpack(t *testing.T) {
 func TestOnlyTheExactNameDockerfileSwitchesAnything(t *testing.T) {
 	t.Parallel()
 
-	for _, held := range []string{
+	for _, name := range []string{
 		"dockerfile",
 		"DOCKERFILE",
 		"Dockerfile.dev",
@@ -122,19 +122,19 @@ func TestOnlyTheExactNameDockerfileSwitchesAnything(t *testing.T) {
 		"docker/Dockerfile",
 		"src/Dockerfile",
 	} {
-		t.Run(held, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			dir := t.TempDir()
-			write(t, filepath.Join(dir, filepath.FromSlash(held)))
+			write(t, filepath.Join(dir, filepath.FromSlash(name)))
 
 			choice := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, dir)})
 
 			if choice.Dockerfile != "" {
-				t.Errorf("%s switched the build to %q, and only a file named exactly %s in the app's own directory does that", held, choice.Dockerfile, imagebuild.DockerfileName)
+				t.Errorf("%s switched the build to %q, and only a file named exactly %s in the app's own directory does that", name, choice.Dockerfile, imagebuild.DockerfileName)
 			}
 			if notice := choice.Notice(); notice != "" {
-				t.Errorf("%s announced %q, having switched nothing", held, notice)
+				t.Errorf("%s announced %q, having switched nothing", name, notice)
 			}
 		})
 	}
@@ -159,17 +159,17 @@ func TestASymlinkNamedDockerfileIsFollowedToWhatItPointsAt(t *testing.T) {
 	root := t.TempDir()
 	appDir := filepath.Join(root, "api")
 	write(t, filepath.Join(root, "shared", imagebuild.DockerfileName))
-	if err := os.MkdirAll(filepath.Join(appDir, "holder"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(appDir, "linking"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("to a directory", func(t *testing.T) {
-		linked := filepath.Join(appDir, "holder", imagebuild.DockerfileName)
+		linked := filepath.Join(appDir, "linking", imagebuild.DockerfileName)
 		if err := os.Symlink(filepath.Join(root, "shared"), linked); err != nil {
 			t.Skipf("this machine makes no symlinks: %v", err)
 		}
 
-		if got := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, filepath.Join(appDir, "holder"))}).Dockerfile; got != "" {
+		if got := chosen(t, imagebuild.App{Name: "web", Workspace: standalone(t, filepath.Join(appDir, "linking"))}).Dockerfile; got != "" {
 			t.Errorf("Choose() built from %q, and a link to a directory is no more a Dockerfile than the directory is — buildkit finds that out with an error nobody can read", got)
 		}
 	})

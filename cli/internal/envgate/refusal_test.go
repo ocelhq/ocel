@@ -114,7 +114,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 			}, "\n"),
 		},
 		{
-			name:     "the editor remedy carries the preview flag",
+			name:     "the editor remedy includes the preview flag",
 			problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", "")},
 			scope:    envgate.Scope{Apps: apps, Browser: true, Preview: true},
 			want: strings.Join([]string{

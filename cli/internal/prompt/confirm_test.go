@@ -121,7 +121,7 @@ func TestReadLineSecondCallWhileFirstStillAbandonedReturnsPromptly(t *testing.T)
 			t.Fatal("readLine() error = nil, want an error since a prior abandoned read still owns stdin")
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("readLine hung instead of returning an error while stdin is still held by an abandoned read")
+		t.Fatal("readLine hung instead of returning an error while an abandoned read is still reading stdin")
 	}
 }
 

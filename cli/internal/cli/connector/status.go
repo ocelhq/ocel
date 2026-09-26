@@ -20,7 +20,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 	if err != nil {
 		return err
 	}
-	held, err := opts.console.List(ctx, access)
+	registered, err := opts.console.List(ctx, access)
 	if err != nil {
 		return err
 	}
@@ -30,18 +30,18 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		if err != nil {
 			return err
 		}
-		held = slices.DeleteFunc(held, func(row consoleconnector.Connector) bool { return row.Target != fingerprint })
-		if len(held) == 0 {
-			fmt.Fprintf(stdout, "The console holds no connector for %s. Run `ocel connector add` to put one there.\n", bold(fingerprint))
+		registered = slices.DeleteFunc(registered, func(row consoleconnector.Connector) bool { return row.Target != fingerprint })
+		if len(registered) == 0 {
+			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", bold(fingerprint))
 			return nil
 		}
 	}
-	if len(held) == 0 {
+	if len(registered) == 0 {
 		fmt.Fprintln(stdout, "This organization has no connector. Run `ocel connector add` against a bootstrapped target to add one.")
 		return nil
 	}
 
-	slices.SortFunc(held, func(a, b consoleconnector.Connector) int {
+	slices.SortFunc(registered, func(a, b consoleconnector.Connector) int {
 		if a.Target < b.Target {
 			return -1
 		}
@@ -50,7 +50,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		}
 		return 0
 	})
-	for at, row := range held {
+	for at, row := range registered {
 		if at > 0 {
 			fmt.Fprintln(stdout)
 		}

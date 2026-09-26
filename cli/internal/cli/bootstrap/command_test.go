@@ -68,14 +68,14 @@ func TestBootstrapClassCommands(t *testing.T) {
 		}
 		for _, flag := range []string{"yes", "dry", "features", "force", "auto-heal"} {
 			if found.Flags().Lookup(flag) == nil {
-				t.Errorf("%s carries no --%s", found.Name(), flag)
+				t.Errorf("%s has no --%s", found.Name(), flag)
 			}
 		}
 	}
 
 	for _, gone := range []string{"preview", "destroy", "print-policy"} {
 		if cmd.Flags().Lookup(gone) != nil {
-			t.Errorf("bootstrap still carries --%s", gone)
+			t.Errorf("bootstrap still has --%s", gone)
 		}
 	}
 }

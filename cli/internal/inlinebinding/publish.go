@@ -30,7 +30,7 @@ func (c Coordinate) environment() string {
 }
 
 func Deploy(ctx context.Context, store Store, at Coordinate, records []Record, deploy func() error) error {
-	before, err := held(ctx, store, at)
+	before, err := publishedBindings(ctx, store, at)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func Deploy(ctx context.Context, store Store, at Coordinate, records []Record, d
 	if err := deploy(); err != nil {
 		return err
 	}
-	after, err := held(ctx, store, at)
+	after, err := publishedBindings(ctx, store, at)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func publish(ctx context.Context, store Store, at Coordinate, records []Record) 
 	return nil
 }
 
-func held(ctx context.Context, store Store, at Coordinate) (map[string]uint64, error) {
+func publishedBindings(ctx context.Context, store Store, at Coordinate) (map[string]uint64, error) {
 	listed, err := store.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug:        at.Slug,
 		Tier:        at.Tier,

@@ -286,7 +286,7 @@ export default {
 					t.Errorf("Registry.Username = %q, want %q", got, want)
 				}
 				if got, want := cfg.Registry.Password, "GHCR_TOKEN"; got != want {
-					t.Errorf("Registry.Password = %q, want %q, the name of the variable holding the secret", got, want)
+					t.Errorf("Registry.Password = %q, want %q, the name of the variable containing the secret", got, want)
 				}
 				if cfg.Registry.Namespace != "" {
 					t.Errorf("Registry.Namespace = %q, want none where the server names a host alone", cfg.Registry.Namespace)
@@ -294,7 +294,7 @@ export default {
 			},
 		},
 		{
-			name: "splits the namespace a registry server carries off the host",
+			name: "splits the namespace a registry server names off the host",
 			config: `
 export default {
   slug: "test-app",
@@ -607,7 +607,7 @@ export default {
 			},
 		},
 		{
-			name: "carries the bindings through in a deterministic order",
+			name: "passes the bindings through in a deterministic order",
 			config: `
 export default {
   slug: "test-app",
@@ -869,7 +869,7 @@ export default {
 			wantErr: []string{`app "api"`, "health.path"},
 		},
 		{
-			name: "rejects a health.path carrying a query the wire would refuse",
+			name: "rejects a health.path containing a query the wire would refuse",
 			config: `
 export default {
   slug: "test-app",
@@ -879,7 +879,7 @@ export default {
 			wantErr: []string{`app "api"`, "health.path", "?"},
 		},
 		{
-			name: "rejects a health.path carrying a fragment the wire would refuse",
+			name: "rejects a health.path containing a fragment the wire would refuse",
 			config: `
 export default {
   slug: "test-app",
@@ -992,7 +992,7 @@ export default {
 			wantErr: []string{"bindings.postgres", "empty name", "\"@<name>\""},
 		},
 		{
-			name: "rejects a published name carrying the key separator",
+			name: "rejects a published name containing the key separator",
 			config: `
 export default {
   slug: "test-app",
@@ -1132,7 +1132,7 @@ export default {
 			wantErr: []string{`invalid "registry"`, "server", "scheme"},
 		},
 		{
-			name: "rejects a registry server carrying credentials, without repeating them",
+			name: "rejects a registry server containing credentials, without repeating them",
 			config: `
 export default {
   slug: "test-app",
@@ -1143,7 +1143,7 @@ export default {
 			unspoken: []string{"ghp_16C7e42F292c6912E7710c838347Ae178B4a"},
 		},
 		{
-			name: "rejects a registry namespace no repository path can hold",
+			name: "rejects a registry namespace no repository path can contain",
 			config: `
 export default {
   slug: "test-app",
@@ -1267,7 +1267,7 @@ export default { slug: "test-app" };
 			t.Errorf("err = %q, want it to contain %q", message, "boom")
 		}
 		if !strings.Contains(message, "at ") && !strings.Contains(message, "config.mjs") {
-			t.Errorf("err = %q, want it to carry the node stack", message)
+			t.Errorf("err = %q, want it to include the node stack", message)
 		}
 	})
 
@@ -1341,7 +1341,7 @@ export default {
 		}
 	})
 
-	t.Run("rejects a slug carrying the field separator", func(t *testing.T) {
+	t.Run("rejects a slug containing the field separator", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()

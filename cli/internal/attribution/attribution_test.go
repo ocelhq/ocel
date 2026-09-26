@@ -251,14 +251,14 @@ func TestCompute(t *testing.T) {
 			t.Errorf("App = %q, want %q", unresolved.App, "worker")
 		}
 		if unresolved.File != "apps/worker/src/worker.ts" {
-			t.Errorf("File = %q, want the file holding the computed specifier", unresolved.File)
+			t.Errorf("File = %q, want the file containing the computed specifier", unresolved.File)
 		}
 		if !strings.Contains(err.Error(), "worker") || !strings.Contains(err.Error(), "apps/worker/src/worker.ts") {
 			t.Errorf("err = %v, want it to name the app and the file", err)
 		}
 	})
 
-	t.Run("a source carrying no line number fails closed", func(t *testing.T) {
+	t.Run("a source with no line number fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{

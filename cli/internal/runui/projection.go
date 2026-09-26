@@ -51,11 +51,11 @@ type block struct {
 }
 
 type projector struct {
-	present Presentation
-	tree    *stagePlan
-	blocks  map[string]*block
-	settled map[string]bool
-	open    []string
+	present  Presentation
+	tree     *stagePlan
+	blocks   map[string]*block
+	finished map[string]bool
+	open     []string
 
 	orphans    map[string][]blockLine
 	pending    []string
@@ -64,11 +64,11 @@ type projector struct {
 
 func newProjector(present Presentation) *projector {
 	return &projector{
-		present: present,
-		tree:    newStagePlan(),
-		blocks:  make(map[string]*block),
-		settled: make(map[string]bool),
-		orphans: make(map[string][]blockLine),
+		present:  present,
+		tree:     newStagePlan(),
+		blocks:   make(map[string]*block),
+		finished: make(map[string]bool),
+		orphans:  make(map[string][]blockLine),
 	}
 }
 
@@ -247,7 +247,7 @@ func (p *projector) stagePlan(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.StagePlanEvent)
 	for _, s := range ev.GetStages() {
 		p.tree.declare(s)
-		delete(p.settled, stageKey(s.GetId()))
+		delete(p.finished, stageKey(s.GetId()))
 	}
 	return p.adopt()
 }
@@ -303,7 +303,7 @@ func (p *projector) headline(id string) string {
 
 func (p *projector) phaseOf(id string) string {
 	for depth := 0; depth < maxTreeDepth && id != ""; depth++ {
-		if _, ok := p.blocks[id]; ok || (p.isPhase(id) && !p.settled[id]) {
+		if _, ok := p.blocks[id]; ok || (p.isPhase(id) && !p.finished[id]) {
 			return id
 		}
 		n, ok := p.tree.nodes[id]
@@ -327,7 +327,7 @@ func (p *projector) buffer(stageID []byte, text string, raw bool) []string {
 		return started
 	}
 	if id != "" {
-		p.hold(id, lines)
+		p.keepOrphan(id, lines)
 	}
 	return nil
 }
@@ -347,14 +347,14 @@ func indented(text string, raw bool) []blockLine {
 	return out
 }
 
-func (p *projector) hold(id string, lines []blockLine) {
+func (p *projector) keepOrphan(id string, lines []blockLine) {
 	if p.orphanLine >= maxOrphanLines {
 		return
 	}
 	if len(lines) > maxOrphanLines-p.orphanLine {
 		lines = lines[:maxOrphanLines-p.orphanLine]
 	}
-	if _, held := p.orphans[id]; !held {
+	if _, ok := p.orphans[id]; !ok {
 		p.pending = append(p.pending, id)
 	}
 	p.orphans[id] = append(p.orphans[id], lines...)
@@ -397,12 +397,12 @@ func (p *projector) log(m protoreflect.Message) []string {
 func (p *projector) span(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.SpanEvent)
 	id := stageKey(ev.GetSpanId())
-	if _, open := p.blocks[id]; !open && (p.settled[id] || !p.isPhase(id)) {
+	if _, open := p.blocks[id]; !open && (p.finished[id] || !p.isPhase(id)) {
 		return nil
 	}
 	b, started := p.openPhase(id)
 	failed := ev.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	return append(started, p.settle(b, spanDuration(ev), failed)...)
+	return append(started, p.closeBlock(b, spanDuration(ev), failed)...)
 }
 
 func spanDuration(ev *progressv1.SpanEvent) time.Duration {
@@ -415,7 +415,7 @@ func spanDuration(ev *progressv1.SpanEvent) time.Duration {
 
 func (p *projector) take(b *block, keepRaw bool) []string {
 	delete(p.blocks, b.id)
-	p.settled[b.id] = true
+	p.finished[b.id] = true
 	for i, id := range p.open {
 		if id == b.id {
 			p.open = append(p.open[:i], p.open[i+1:]...)
@@ -432,7 +432,7 @@ func (p *projector) take(b *block, keepRaw bool) []string {
 	return out
 }
 
-func (p *projector) settle(b *block, d time.Duration, failed bool) []string {
+func (p *projector) closeBlock(b *block, d time.Duration, failed bool) []string {
 	body := p.take(b, p.present.Verbose || failed)
 	head := fmt.Sprintf("%s %s  %s", okMark, p.headline(b.id), formatDuration(d))
 	if failed {

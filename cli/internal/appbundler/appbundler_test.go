@@ -119,7 +119,7 @@ func TestBundle(t *testing.T) {
 			names = append(names, entry.Name())
 		}
 		if len(names) != 2 {
-			t.Errorf("function directory holds %v, want only the bundle and %s", names, appbuild.FunctionConfigFile)
+			t.Errorf("function directory contains %v, want only the bundle and %s", names, appbuild.FunctionConfigFile)
 		}
 
 		var cfg appbuild.FunctionConfig
@@ -485,7 +485,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 	t.Parallel()
 
 	const addonPath = "node_modules/native-dep/build/Release/addon.node"
-	held := func(addon string) tree {
+	treeWith := func(addon string) tree {
 		return tree{
 			"package.json":                         appPkg,
 			"server.js":                            "import native from 'native-dep';\nconsole.log(native);\n",
@@ -503,7 +503,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 	t.Run("an addon built for the declared architecture is placed", func(t *testing.T) {
 		t.Parallel()
 
-		l := newLayout(t, held(elfAddon(arch.ARM64, "aarch64")))
+		l := newLayout(t, treeWith(elfAddon(arch.ARM64, "aarch64")))
 		if err := Bundle(context.Background(), on(l, arch.ARM64)); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
@@ -515,7 +515,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 	t.Run("an addon built for another architecture fails the build", func(t *testing.T) {
 		t.Parallel()
 
-		l := newLayout(t, held(elfAddon(arch.X8664, "amd64")))
+		l := newLayout(t, treeWith(elfAddon(arch.X8664, "amd64")))
 		err := Bundle(context.Background(), on(l, arch.ARM64))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
@@ -600,7 +600,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 	t.Run("an addon that is not a linux binary fails the build", func(t *testing.T) {
 		t.Parallel()
 
-		l := newLayout(t, held("\xcf\xfa\xed\xfe"+strings.Repeat("\x00", 28)))
+		l := newLayout(t, treeWith("\xcf\xfa\xed\xfe"+strings.Repeat("\x00", 28)))
 		err := Bundle(context.Background(), on(l, arch.X8664))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a mach-o addon refused as not linux")

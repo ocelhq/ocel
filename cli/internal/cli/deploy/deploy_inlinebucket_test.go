@@ -46,13 +46,13 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("deploy: %v\n%s", err, out)
 		}
-		held := records(t)
-		if len(held) != 1 || held[0].Name != "ocel:bucket.uploads" || held[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
-			t.Fatalf("records = %+v, want the inline bucket's record", held)
+		published := records(t)
+		if len(published) != 1 || published[0].Name != "ocel:bucket.uploads" || published[0].Tier != environmentv1.Tier_TIER_PRODUCTION {
+			t.Fatalf("records = %+v, want the inline bucket's record", published)
 		}
 		for _, want := range []string{`"endpoint":"https://abc.r2.cloudflarestorage.com"`, `"prefix":"uploads/"`, `"secretAccessKey":"r2-s3cret"`} {
-			if !strings.Contains(held[0].Wire, want) {
-				t.Errorf("record = %s, want it to carry %s", held[0].Wire, want)
+			if !strings.Contains(published[0].Wire, want) {
+				t.Errorf("record = %s, want it to contain %s", published[0].Wire, want)
 			}
 		}
 		sent, err := os.ReadFile(run.journal)
@@ -60,7 +60,7 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 			t.Fatal(err)
 		}
 		if strings.Contains(string(sent), "r2-s3cret") {
-			t.Errorf("the deploy request carries the store's secret key: %s", sent)
+			t.Errorf("the deploy request contains the store's secret key: %s", sent)
 		}
 	})
 
@@ -78,8 +78,8 @@ func TestDeployBindsAnInlineBucket(t *testing.T) {
 		if said := err.Error() + out; !strings.Contains(said, "bindings.bucket.uploads") || !strings.Contains(said, "https://acme.com") {
 			t.Errorf("refusal = %q, want the binding and the difference named", said)
 		}
-		if held := records(t); len(held) != 0 {
-			t.Errorf("records = %+v, want nothing kept", held)
+		if published := records(t); len(published) != 0 {
+			t.Errorf("records = %+v, want nothing kept", published)
 		}
 	})
 

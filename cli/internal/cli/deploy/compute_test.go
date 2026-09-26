@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T) {
+func TestAnAppOnlyItsUsagesNameGetsTheRuntimeItsURLIsWrittenFor(t *testing.T) {
 	t.Parallel()
 	usages := []attribution.Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}}
 
@@ -39,8 +39,8 @@ func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T)
 	})
 }
 
-func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
-	t.Run("an app the config names carries the compute resolved onto it", func(t *testing.T) {
+func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
+	t.Run("an app the config names has the compute resolved onto it", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		deps := clitest.NewDeps()
@@ -88,7 +88,7 @@ func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
 	}, "container", nil, nil)
 
 	if len(got) != 1 || got[0].Compute != "container" {
-		t.Errorf("toApps() = %+v, want the one attributed app carrying %q", got, "container")
+		t.Errorf("toApps() = %+v, want the one attributed app with %q", got, "container")
 	}
 }
 
@@ -103,7 +103,7 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 	for _, candidate := range manifest.GetApps() {
 		names = append(names, candidate.GetName())
 	}
-	t.Fatalf("manifest carries no app %q among its apps %q", app, names)
+	t.Fatalf("manifest has no app %q among its apps %q", app, names)
 	return ""
 }
 
@@ -130,7 +130,7 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 }
 
-func TestTheManifestCarriesWhichAppsBundleReadsTheClientURL(t *testing.T) {
+func TestTheManifestNamesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name     string
@@ -140,8 +140,8 @@ func TestTheManifestCarriesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 	}{
 		{name: "a next app", app: projectconfig.App{Name: "web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}}, want: true},
 		{name: "a go app", app: projectconfig.App{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}}, manifest: "go.mod"},
-		{name: "a container app holding a package.json", app: projectconfig.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
-		{name: "a container app holding a go.mod", app: projectconfig.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
+		{name: "a container app containing a package.json", app: projectconfig.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
+		{name: "a container app containing a go.mod", app: projectconfig.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -159,7 +159,7 @@ func TestTheManifestCarriesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 
 			got := toApps(root, []projectconfig.App{tc.app}, nil, "serverless", nil, nil)
 			if len(got) != 1 || got[0].ClientBundle != tc.want {
-				t.Errorf("toApps() = %+v, want ClientBundle %v: the provider reads it off the manifest, and a container app carries no runtime to read instead", got, tc.want)
+				t.Errorf("toApps() = %+v, want ClientBundle %v: the provider reads it off the manifest, and a container app has no runtime to read instead", got, tc.want)
 			}
 		})
 	}

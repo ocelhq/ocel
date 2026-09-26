@@ -196,11 +196,11 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		if len(cfg.Apps) > 0 {
 			return nil
 		}
-		holdsJS, err := discovery.HoldsJS(cfg)
+		hasJS, err := discovery.HasJS(cfg)
 		if err != nil {
 			return err
 		}
-		if !holdsJS {
+		if !hasJS {
 			return nil
 		}
 	}

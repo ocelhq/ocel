@@ -206,7 +206,7 @@ func TestAnInlineBucketIsRefusedWhereNoStoreCouldBeReached(t *testing.T) {
 	}
 }
 
-func TestAnInlineBindingIsBoundUnderANameNoPublisherHolds(t *testing.T) {
+func TestAnInlineBindingIsBoundUnderANameNoPublisherOwns(t *testing.T) {
 	_, err := resolveJSON(t, `{"slug":"shop","bindings":{"postgres":{"orders":"@`+naming.InlineRecordPrefix+`postgres.orders"}}}`)
 	if err == nil {
 		t.Fatal("resolved a binding to a record name reserved for inline bindings")

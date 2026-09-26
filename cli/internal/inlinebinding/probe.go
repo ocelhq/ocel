@@ -68,7 +68,7 @@ func ConnConfig(props *bindingsv1.PostgresProperties) (*pgconn.Config, error) {
 	if props.GetTlsCa() != "" && config.TLSConfig != nil {
 		roots := x509.NewCertPool()
 		if !roots.AppendCertsFromPEM([]byte(props.GetTlsCa())) {
-			return nil, errors.New("the CA holds no PEM certificate")
+			return nil, errors.New("the CA contains no PEM certificate")
 		}
 		config.TLSConfig.RootCAs = roots
 		for _, fallback := range config.Fallbacks {

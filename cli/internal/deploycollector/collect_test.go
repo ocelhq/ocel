@@ -171,10 +171,10 @@ export {};
 		t.Fatalf("unmarshal %q: %v", raw, err)
 	}
 	if want := []int{403, 403, 403, 200}; !slices.Equal(got, want) {
-		t.Errorf("statuses = %v, want %v: only the child holding the token, from the collector's own origin, may declare", got, want)
+		t.Errorf("statuses = %v, want %v: only the child with the token, from the collector's own origin, may declare", got, want)
 	}
 	if len(resources) != 1 {
-		t.Fatalf("Collect() returned %d resources, want only the one declare that carried the token: %+v", len(resources), resources)
+		t.Fatalf("Collect() returned %d resources, want only the one declare that sent the token: %+v", len(resources), resources)
 	}
 }
 
@@ -220,9 +220,9 @@ func TestAnSDKOfAnotherReleaseIsRefusedWithTheUpgradeThatFixesIt(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX-style fixture entrypoint")
 	}
-	held := version.Version
+	wanted := version.Version
 	version.Version = "0.0.3"
-	t.Cleanup(func() { version.Version = held })
+	t.Cleanup(func() { version.Version = wanted })
 
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `

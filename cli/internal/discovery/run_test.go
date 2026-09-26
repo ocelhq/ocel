@@ -67,7 +67,7 @@ func TestRunReportsTheActualErrorFromAThrowingDeclareFile(t *testing.T) {
 		t.Fatal("Run succeeded on a throwing declare file, want error")
 	}
 	if !strings.Contains(err.Error(), "resource declared twice: db") {
-		t.Errorf("error = %q, want it to carry the actual error the declare file threw", err)
+		t.Errorf("error = %q, want it to include the actual error the declare file threw", err)
 	}
 }
 

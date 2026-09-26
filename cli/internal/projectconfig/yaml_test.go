@@ -79,7 +79,7 @@ func TestResolveRefusesYAMLBesideAnotherFormOfOneBaseName(t *testing.T) {
 
 			_, err := Resolve(context.Background(), dir, YAMLFileName)
 			if err == nil {
-				t.Fatalf("resolved a directory holding %s and %s", YAMLFileName, other)
+				t.Fatalf("resolved a directory containing %s and %s", YAMLFileName, other)
 			}
 			for _, name := range []string{YAMLFileName, other} {
 				if !strings.Contains(err.Error(), name) {

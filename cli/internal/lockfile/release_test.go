@@ -34,20 +34,20 @@ func TestTheLockPinsWhatGoreleaserActuallyBuilt(t *testing.T) {
 		}
 	}
 	if version == "" {
-		t.Fatal("the release holds no archive the fetcher can name")
+		t.Fatal("the release contains no archive the fetcher can name")
 	}
 
 	lock := FromChecksums(version, sums)
 	if len(lock.Providers) == 0 {
-		t.Fatal("the release holds no provider the lock can pin")
+		t.Fatal("the release contains no provider the lock can pin")
 	}
 	if len(lock.Connectors) == 0 {
-		t.Fatal("the release holds no connector the lock can pin")
+		t.Fatal("the release contains no connector the lock can pin")
 	}
 	for _, kind := range providers.Kinds {
 		for name, pinned := range lock.pinned(kind) {
 			for _, platform := range kind.PlatformsFor(name) {
-				if _, held := pinned[platform.Dir()]; !held {
+				if _, ok := pinned[platform.Dir()]; !ok {
 					t.Errorf("the release ships no %s %s for %s", name, kind, platform.Dir())
 				}
 			}

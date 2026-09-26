@@ -70,7 +70,7 @@ func runFakeProvider() int {
 		os.Stdout.Write(bytes.Repeat([]byte("x"), 2*1024*1024))
 		fmt.Println()
 		select {}
-	case "orphan-holds-pipe":
+	case "orphan-keeps-pipe-open":
 		if err := spawnGrandchildSurvivor(true, true); err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider: spawn grandchild:", err)
 			return 1
@@ -87,7 +87,7 @@ func runFakeProvider() int {
 		signal.Notify(sig, syscall.SIGTERM)
 		deadline := time.Now().Add(10 * time.Second)
 		for time.Now().Before(deadline) {
-			fmt.Println("grandchild still holds the pipe")
+			fmt.Println("grandchild still has the pipe open")
 			time.Sleep(20 * time.Millisecond)
 		}
 		return 0
@@ -314,10 +314,10 @@ func alreadyRecorded(store, entry string, key provider.HostKey) bool {
 	return false
 }
 
-func spawnGrandchildSurvivor(holdPipe, ownGroup bool) error {
+func spawnGrandchildSurvivor(keepPipe, ownGroup bool) error {
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=grandchild-survivor")
-	if holdPipe {
+	if keepPipe {
 		cmd.Stdout = os.Stdout
 	}
 	if ownGroup {

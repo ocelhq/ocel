@@ -41,7 +41,7 @@ func TestTheTrustIsTheProcessTerminalNotTheProvidersLogStream(t *testing.T) {
 		t.Error("the trust offers on the provider's log stream, where nobody would read it")
 	}
 	if trust.Suspend == nil {
-		t.Error("the trust has no way to stand the live view down while it asks")
+		t.Error("the trust has no way to pause the live view while it asks")
 	}
 }
 
@@ -77,10 +77,10 @@ func waitForFrame(t *testing.T, terminal *syncBuffer) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("the spinner drew nothing, so this run proves nothing about standing it down")
+	t.Fatal("the spinner drew nothing, so this run proves nothing about pausing it")
 }
 
-func TestTheSpinnerAStreamHandsOutStandsTheLiveViewDown(t *testing.T) {
+func TestTheSpinnerAStreamHandsOutStopsTheLiveView(t *testing.T) {
 	var terminal syncBuffer
 	s := NewStream(&terminal, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	t.Cleanup(func() { _ = s.Close() })

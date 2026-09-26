@@ -123,7 +123,7 @@ func detectLanguage(dir string) (language, bool, error) {
 			manifests = append(manifests, l.manifest)
 		}
 		return language{}, false, fmt.Errorf(
-			"this directory holds %s, so it could be a %s project: name the one this is with `--lang %s`",
+			"this directory contains %s, so it could be a %s project: name the one this is with `--lang %s`",
 			strings.Join(manifests, " and "), strings.Join(names, " or "), names[0],
 		)
 	}
@@ -162,7 +162,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 		return fmt.Errorf("check for existing %s: %w", name, err)
 	}
 	if others := projectconfig.Counterparts(configPath); len(others) > 0 {
-		return fmt.Errorf("%s already holds %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
+		return fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
 	}
 
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
@@ -176,7 +176,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	if detected {
 		addSDK(ctx, deps, projectDir, lang, stdout, stderr)
 	} else {
-		fmt.Fprintf(stdout, "! No %s here — add the ocel SDK once this directory holds one.\n", strings.Join(manifestNames(), ", "))
+		fmt.Fprintf(stdout, "! No %s here — add the ocel SDK once this directory contains one.\n", strings.Join(manifestNames(), ", "))
 	}
 
 	fmt.Fprintln(stdout)

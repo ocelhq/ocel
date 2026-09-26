@@ -533,7 +533,7 @@ func awaitDomainStatus(ctx context.Context, client contractv1connect.ProviderSer
 	var failures int
 	var lastErr error
 	for {
-		if err := holdFor(ctx, jittered(every)); err != nil {
+		if err := sleepOrCancel(ctx, jittered(every)); err != nil {
 			return nil, err
 		}
 		every = min(every*2, domainWait.maxInterval)
@@ -573,7 +573,7 @@ func jittered(every time.Duration) time.Duration {
 	return every + time.Duration(rand.Float64()*float64(every)/4)
 }
 
-func holdFor(ctx context.Context, d time.Duration) error {
+func sleepOrCancel(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {

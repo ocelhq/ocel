@@ -70,11 +70,11 @@ var bindingsSetCmd = &cobra.Command{
 	Use:   "set",
 	Short: "Publish one binding, read as JSON on stdin",
 	Long: "Publish one binding, read as JSON on stdin.\n\n" +
-		"The binding is a common.bindings.v1.Binding in protobuf JSON, and it carries its own name, so " +
+		"The binding is a common.bindings.v1.Binding in protobuf JSON, and it includes its own name, so " +
 		"there is nothing to name on the command line:\n\n" +
 		"  ocel bindings set < binding.json\n\n" +
 		"A name belongs to whoever published it. Publishing over a name another publisher " +
-		"holds is refused rather than handing every app bound to that name another " +
+		"owns is refused rather than handing every app bound to that name another " +
 		"resource's values; pass --owner to publish as that publisher.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -97,7 +97,7 @@ var bindingsRmCmd = &cobra.Command{
 
 var bindingsLsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "List the published bindings, without revealing what they hold",
+	Short: "List the published bindings, without revealing what they contain",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
@@ -112,7 +112,7 @@ var bindingsGenerateCmd = &cobra.Command{
 	Long: "Write the transform types for the bindings published to one coordinate.\n\n" +
 		"Reads the records published to production, or to the preview coordinate --preview and " +
 		"--environment name, and writes " + bindingTypesFileName + " beside your ocel config. The file " +
-		"names each record and the properties it carries, so `bindings.<type>.<name>.<property>` in a transform " +
+		"names each record and the properties it has, so `bindings.<type>.<name>.<property>` in a transform " +
 		"is checked where it is written instead of at the deploy. Check it in, and run this again when " +
 		"what you publish changes.\n\n" +
 		"This reads the published records, so it logs in and runs the provider.",
@@ -127,7 +127,7 @@ var bindingsGenerateCmd = &cobra.Command{
 func init() {
 	for _, c := range []*cobra.Command{bindingsSetCmd, bindingsRmCmd, bindingsLsCmd, bindingsGenerateCmd} {
 		c.Flags().BoolVar(&bindingsOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
-		c.Flags().StringVar(&bindingsOpts.environment, "environment", "", "Address the binding this named preview environment holds instead of the one bound to all environments")
+		c.Flags().StringVar(&bindingsOpts.environment, "environment", "", "Address the binding this named preview environment has instead of the one bound to all environments")
 		bindingsCmd.AddCommand(c)
 	}
 	bindingsSetCmd.Flags().StringVar(&bindingsOpts.owner, "owner", defaultBindingOwner, "Publish under this publisher's name")

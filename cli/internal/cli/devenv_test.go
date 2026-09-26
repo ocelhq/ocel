@@ -226,7 +226,7 @@ func TestDevRefusal(t *testing.T) {
 
 		inFile := devRefusal(refusal, dotfileKeySet(map[string]string{"DATABASE_URL": "postgres://from-the-file"}), invocation{name: "dev"}).Error()
 		if strings.Contains(inFile, "set in this shell") {
-			t.Errorf("refusal = %q, want no shell hint for a key the file does hold", inFile)
+			t.Errorf("refusal = %q, want no shell hint for a key the file does contain", inFile)
 		}
 	})
 
@@ -639,7 +639,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		})
 	})
 
-	t.Run("it refuses when the dotfile does not hold a required value", func(t *testing.T) {
+	t.Run("it refuses when the dotfile does not contain a required value", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -1020,7 +1020,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 	})
 
-	t.Run("it refuses when the dotfile does not hold a required value", func(t *testing.T) {
+	t.Run("it refuses when the dotfile does not contain a required value", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -1156,8 +1156,8 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 		{name: "inside the go app", cwd: filepath.Join(root, "apps", "api", "cmd"), written: false},
 		{name: "inside an app whose path only shares a prefix with the next app's", cwd: filepath.Join(root, "apps", "web-hooks"), written: false},
 		{name: "inside the next app", cwd: filepath.Join(root, "apps", "web"), written: true},
-		{name: "inside a container app whose directory holds a package.json", cwd: filepath.Join(root, "apps", "store"), written: true},
-		{name: "inside a container app whose directory holds a go.mod", cwd: filepath.Join(root, "apps", "worker"), written: false},
+		{name: "inside a container app whose directory contains a package.json", cwd: filepath.Join(root, "apps", "store"), written: true},
+		{name: "inside a container app whose directory contains a go.mod", cwd: filepath.Join(root, "apps", "worker"), written: false},
 		{name: "at the project root, where no one app is the target", cwd: root, written: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -234,11 +234,11 @@ func showDestroyPlan(ui *runui.Session, slug string, preview bool, plan *planv1.
 	if preview {
 		return ui.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",
-			"– every preview variable value this project holds, including each preview's own overrides",
+			"– every preview variable value this project has, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 	}
 	return ui.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"– all stored assets belonging to this project",
-		"– every production variable value this project holds, and their history",
+		"– every production variable value this project has, and their history",
 		"This cannot be undone.")
 }

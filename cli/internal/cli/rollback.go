@@ -48,7 +48,7 @@ var rollbackCmd = &cobra.Command{
 
 func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.to, "to", "", "Roll back to a specific promotion id instead of the immediately previous one")
-	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
+	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion with this tag (mutually exclusive with --to)")
 	rollbackCmd.Flags().BoolVar(&rollbackOpts.dry, "dry", false, "Print what would be rolled back and stop, rolling back nothing")
 	cmddeps.Yes(rollbackCmd, &rollbackOpts.yes)
 }
@@ -147,7 +147,7 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 				return entry.GetPromotion(), nil
 			}
 		}
-		return nil, fmt.Errorf("no promotion %q in this project's production history, which holds %s: `ocel deployments ls` lists them all", to, promotionIDs(history))
+		return nil, fmt.Errorf("no promotion %q in this project's production history, which contains %s: `ocel deployments ls` lists them all", to, promotionIDs(history))
 	case tag != "":
 		var matched []*contractv1.Promotion
 		for _, entry := range history {
@@ -159,7 +159,7 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 		case 1:
 			return matched[0], nil
 		case 0:
-			return nil, fmt.Errorf("no promotion in this project's production history carries tag %q; the tags it holds are %s", tag, promotionTags(history))
+			return nil, fmt.Errorf("no promotion in this project's production history has tag %q; the tags it has are %s", tag, promotionTags(history))
 		default:
 			return nil, fmt.Errorf("tag %q is on %d promotions (%s), so it does not name one to roll back to: pass --to with the promotion id", tag, len(matched), strings.Join(idsOf(matched), ", "))
 		}

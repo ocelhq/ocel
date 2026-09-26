@@ -246,7 +246,7 @@ func normalizeRegistry(raw *configdoc.RegistryConfig) (*Registry, error) {
 	}
 	variable, ok := configdoc.SecretVariable(raw.Password)
 	if !ok {
-		return nil, errors.New("`password` is the environment variable holding the registry password or token, written as \"${REGISTRY_TOKEN}\", and a push authenticates, so there is no anonymous form to fall back to")
+		return nil, errors.New("`password` is the environment variable containing the registry password or token, written as \"${REGISTRY_TOKEN}\", and a push authenticates, so there is no anonymous form to fall back to")
 	}
 	return &Registry{
 		Server:    server,
@@ -264,7 +264,7 @@ func normalizeRegistryServer(server string) (string, string, error) {
 		return "", "", errors.New("`server` is a registry host and the namespace under it, such as \"ghcr.io/acme\", not a URL: drop the scheme")
 	}
 	if strings.Contains(server, "@") {
-		return "", "", errors.New("`server` carries credentials, and a registry password belongs in the environment `password` names, never in the config: write the host and namespace alone, such as \"ghcr.io/acme\"")
+		return "", "", errors.New("`server` contains credentials, and a registry password belongs in the environment `password` names, never in the config: write the host and namespace alone, such as \"ghcr.io/acme\"")
 	}
 	segments := strings.Split(server, "/")
 	host := segments[0]
@@ -353,7 +353,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 				return nil, fmt.Errorf("app %q: %w", a.Name, err)
 			}
 			if other, taken := boundFolders[a.Folder]; taken {
-				return nil, fmt.Errorf("apps %q and %q both bind folder %q — a folder holds one app's values, so two apps sharing one would defeat the divergence folders exist for", other, a.Name, a.Folder)
+				return nil, fmt.Errorf("apps %q and %q both bind folder %q — a folder stores one app's values, so two apps sharing one would defeat the divergence folders exist for", other, a.Name, a.Folder)
 			}
 			boundFolders[a.Folder] = a.Name
 		}
@@ -422,7 +422,7 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have %q probed at %q", a.Name, a.Health.Path, "/", a.Name, "/")
 	}
 	if path != "" && !appbuild.HealthCheckPath(path) {
-		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path carrying no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", a.Name, a.Health.Path, a.Name, "?", "#")
+		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path containing no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", a.Name, a.Health.Path, a.Name, "?", "#")
 	}
 	return &Health{Path: path}, nil
 }

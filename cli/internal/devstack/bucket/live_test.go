@@ -124,7 +124,7 @@ func TestDockerAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 			File:      &bucketv1.CompletedFile{Key: file["key"].(string), Name: file["name"].(string), Size: int64(file["size"].(float64)), MimeType: file["mimeType"].(string)},
 		})
 		if err != nil || !verified.GetValid() {
-			t.Fatalf("VerifyUploadSignature = %v, %v, want the callback's signature to hold", verified, err)
+			t.Fatalf("VerifyUploadSignature = %v, %v, want the callback's signature to verify", verified, err)
 		}
 	case <-time.After(time.Minute):
 		t.Fatal("the app was never told the upload finished")

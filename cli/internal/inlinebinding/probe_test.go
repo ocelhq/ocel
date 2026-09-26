@@ -63,7 +63,7 @@ func TestConnConfig(t *testing.T) {
 			t.Fatalf("ConnConfig: %v", err)
 		}
 		if config.Password != "p@ss:word/#?" || config.Port != 6543 {
-			t.Errorf("config password/port = %q/%d, want them carried exactly", config.Password, config.Port)
+			t.Errorf("config password/port = %q/%d, want them passed through exactly", config.Password, config.Port)
 		}
 		if config.TLSConfig == nil || config.TLSConfig.InsecureSkipVerify || config.TLSConfig.ServerName != "db.example.com" {
 			t.Fatalf("TLSConfig = %+v, want the hostname verified", config.TLSConfig)
@@ -76,7 +76,7 @@ func TestConnConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("a CA holding no certificate is refused", func(t *testing.T) {
+	t.Run("a CA containing no certificate is refused", func(t *testing.T) {
 		_, err := ConnConfig(&bindingsv1.PostgresProperties{Host: "db", Port: 5432, Database: "d", Username: "u", Password: "p", TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsCa: "not a pem"})
 		if err == nil {
 			t.Fatal("ConnConfig = nil error, want the CA refused")

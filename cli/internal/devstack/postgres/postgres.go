@@ -67,25 +67,25 @@ func (c *Component) Resolve(ctx context.Context, project string, resources []dec
 		if err != nil {
 			return nil, err
 		}
-		held, err := c.server(ctx, engine, project, version)
+		srv, err := c.server(ctx, engine, project, version)
 		if err != nil {
 			return nil, err
 		}
-		if err := ensureDatabase(ctx, engine, held, resource.Name); err != nil {
+		if err := ensureDatabase(ctx, engine, srv, resource.Name); err != nil {
 			return nil, err
 		}
-		bound, err := bind(resource, held)
+		bound, err := bind(resource, srv)
 		if err != nil {
 			return nil, err
 		}
-		bound.Origin = fmt.Sprintf("postgres:%s @ %s", version, held.container.Addr)
+		bound.Origin = fmt.Sprintf("postgres:%s @ %s", version, srv.container.Addr)
 		out = append(out, bound)
 	}
 	return out, nil
 }
 
 func (c *Component) server(ctx context.Context, engine docker.Engine, project, version string) (*server, error) {
-	held, running := c.servers[version]
+	srv, running := c.servers[version]
 	if !running {
 		password, err := c.password()
 		if err != nil {
@@ -105,29 +105,29 @@ func (c *Component) server(ctx context.Context, engine docker.Engine, project, v
 		if err != nil {
 			return nil, err
 		}
-		held = &server{container: container, password: password}
-		c.servers[version] = held
+		srv = &server{container: container, password: password}
+		c.servers[version] = srv
 	}
-	if !held.prepared {
-		if err := prepare(ctx, engine, held, version); err != nil {
+	if !srv.prepared {
+		if err := prepare(ctx, engine, srv, version); err != nil {
 			return nil, err
 		}
-		held.prepared = true
+		srv.prepared = true
 	}
-	return held, nil
+	return srv, nil
 }
 
-func prepare(ctx context.Context, engine docker.Engine, held *server, version string) error {
+func prepare(ctx context.Context, engine docker.Engine, srv *server, version string) error {
 	err := docker.WaitReady(ctx, readyIn, func(ctx context.Context) error {
-		_, err := engine.Exec(ctx, held.container.ID, "pg_isready", "-h", "127.0.0.1", "-U", superuser)
+		_, err := engine.Exec(ctx, srv.container.ID, "pg_isready", "-h", "127.0.0.1", "-U", superuser)
 		return err
 	})
 	if err != nil {
 		return fmt.Errorf("postgres %s never accepted a connection: %w", version, err)
 	}
-	statement := "ALTER USER " + superuser + " PASSWORD '" + held.password + "';\n"
-	if _, err := engine.ExecInput(ctx, held.container.ID, statement, "psql", "-U", superuser, "-v", "ON_ERROR_STOP=1"); err != nil {
-		return fmt.Errorf("set this project's postgres password: %s", strings.ReplaceAll(err.Error(), held.password, "<password>"))
+	statement := "ALTER USER " + superuser + " PASSWORD '" + srv.password + "';\n"
+	if _, err := engine.ExecInput(ctx, srv.container.ID, statement, "psql", "-U", superuser, "-v", "ON_ERROR_STOP=1"); err != nil {
+		return fmt.Errorf("set this project's postgres password: %s", strings.ReplaceAll(err.Error(), srv.password, "<password>"))
 	}
 	return nil
 }
@@ -137,7 +137,7 @@ func (c *Component) password() (string, error) {
 	for {
 		kept, err := os.ReadFile(path)
 		if err == nil && len(kept) == 0 {
-			return "", fmt.Errorf("%s holds no password: run `ocel dev --reset` to start this project's postgres over", path)
+			return "", fmt.Errorf("%s contains no password: run `ocel dev --reset` to start this project's postgres over", path)
 		}
 		if err == nil {
 			return string(kept), nil
@@ -177,22 +177,22 @@ func keepNewPassword(path string) error {
 	return nil
 }
 
-func ensureDatabase(ctx context.Context, engine docker.Engine, held *server, name string) error {
-	listed, err := engine.Exec(ctx, held.container.ID, "psql", "-U", superuser, "-tA", "-c", "SELECT datname FROM pg_database")
+func ensureDatabase(ctx context.Context, engine docker.Engine, srv *server, name string) error {
+	listed, err := engine.Exec(ctx, srv.container.ID, "psql", "-U", superuser, "-tA", "-c", "SELECT datname FROM pg_database")
 	if err != nil {
 		return fmt.Errorf("list postgres databases: %w", err)
 	}
 	if slices.Contains(strings.Split(strings.TrimSpace(listed), "\n"), name) {
 		return nil
 	}
-	if _, err := engine.Exec(ctx, held.container.ID, "createdb", "-U", superuser, "--", name); err != nil {
+	if _, err := engine.Exec(ctx, srv.container.ID, "createdb", "-U", superuser, "--", name); err != nil {
 		return fmt.Errorf("create the database for postgres %q: %w", name, err)
 	}
 	return nil
 }
 
-func bind(resource declare.Resource, held *server) (resolve.Resource, error) {
-	host, rawPort, err := net.SplitHostPort(held.container.Addr)
+func bind(resource declare.Resource, srv *server) (resolve.Resource, error) {
+	host, rawPort, err := net.SplitHostPort(srv.container.Addr)
 	if err != nil {
 		return resolve.Resource{}, err
 	}
@@ -203,7 +203,7 @@ func bind(resource declare.Resource, held *server) (resolve.Resource, error) {
 	return resolve.Bound(resource.Type, &bindingsv1.Binding{
 		Name: resource.Name,
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
-			Host: host, Port: int32(port), Database: resource.Name, Username: superuser, Password: held.password,
+			Host: host, Port: int32(port), Database: resource.Name, Username: superuser, Password: srv.password,
 		}},
 	})
 }
@@ -212,21 +212,21 @@ func (c *Component) Close(ctx context.Context, stop bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	held := c.servers
+	servers := c.servers
 	c.servers = map[string]*server{}
-	if !stop || len(held) == 0 {
+	if !stop || len(servers) == 0 {
 		return nil
 	}
 	engine, err := c.open(ctx)
 	if err != nil {
 		return err
 	}
-	stopping := make(chan error, len(held))
-	for _, one := range held {
+	stopping := make(chan error, len(servers))
+	for _, one := range servers {
 		go func() { stopping <- engine.Stop(ctx, one.container.ID) }()
 	}
 	var failed []error
-	for range held {
+	for range servers {
 		if err := <-stopping; err != nil {
 			failed = append(failed, err)
 		}

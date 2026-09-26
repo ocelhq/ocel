@@ -104,7 +104,7 @@ func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceTyp
 	}
 }
 
-func TestACallToTheDevServerThatCarriesNoSessionTokenIsRefused(t *testing.T) {
+func TestACallToTheDevServerWithNoSessionTokenIsRefused(t *testing.T) {
 	t.Parallel()
 
 	url := serve(t, newDevServer(&fakeStack{}))
@@ -214,7 +214,7 @@ func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
 	})
 }
 
-func TestTheSyncResultCarriesTheTokenTheAppReachesTheDevServerWith(t *testing.T) {
+func TestTheSyncResultIncludesTheTokenTheAppReachesTheDevServerWith(t *testing.T) {
 	t.Parallel()
 
 	s := newDevServer(&fakeStack{})
@@ -279,7 +279,7 @@ func TestSync(t *testing.T) {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
 		if len(stack.asked) != 1 || len(stack.asked[0]) != 2 {
-			t.Fatalf("the stack was asked %+v, want one call carrying both declarations", stack.asked)
+			t.Fatalf("the stack was asked %+v, want one call passing both declarations", stack.asked)
 		}
 		if main := stack.asked[0][0]; main.Name != "main" || main.Postgres == nil {
 			t.Errorf("the stack saw %+v, want main with its postgres config", main)
@@ -369,7 +369,7 @@ func TestSync(t *testing.T) {
 		}
 	})
 
-	t.Run("names a live key it holds no value for rather than resolving it", func(t *testing.T) {
+	t.Run("names a live key it has no value for rather than resolving it", func(t *testing.T) {
 		t.Parallel()
 		s := newDevServer(&fakeStack{})
 		s.UseValues(map[string]string{}, envgate.Scope{})

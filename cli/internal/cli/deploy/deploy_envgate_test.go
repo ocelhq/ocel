@@ -275,7 +275,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if (*got)[""]["POSTHOG_ID"] != "ph_owned_by_platform" {
-			t.Errorf("build environment = %v, want the value the other project holds", *got)
+			t.Errorf("build environment = %v, want the value the other project stores", *got)
 		}
 	})
 }
@@ -312,8 +312,8 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 			deploying string
 			want      string
 		}{
-			"the environment holding the override": {deploying: "staging", want: "ph_staging"},
-			"another preview":                      {deploying: "canary", want: "ph_shared"},
+			"the environment with the override": {deploying: "staging", want: "ph_staging"},
+			"another preview":                   {deploying: "canary", want: "ph_shared"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)

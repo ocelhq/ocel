@@ -30,7 +30,7 @@ func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	if ran {
-		t.Fatal("the node builder ran for a project holding no JavaScript")
+		t.Fatal("the node builder ran for a project with no JavaScript")
 	}
 }
 

@@ -204,12 +204,12 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		standing, err := preflightPreviewUp(ctx, deps, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
+		facts, err := preflightPreviewUp(ctx, deps, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
 		if err != nil {
 			return err
 		}
 
-		proceed, err := guardNewProject(ctx, ui, cfg, standing.knownSlugs)
+		proceed, err := guardNewProject(ctx, ui, cfg, facts.knownSlugs)
 		if err != nil || !proceed {
 			return err
 		}
@@ -231,9 +231,9 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 				}, scope)
 			},
 			command:        "ocel preview up",
-			compute:        standing.compute,
-			containerArchs: standing.containerArchs,
-			urls:           standing.urls,
+			compute:        facts.compute,
+			containerArchs: facts.containerArchs,
+			urls:           facts.urls,
 			ui:             ui,
 			enabled:        !opts.dry && browser,
 		}
@@ -332,7 +332,7 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	base := wildcard.GetBaseDomain()
 	if want, have := wildcard.GetEdgeScope(), id.GetEdgeScope(); want != "" && have != "" && want != have {
 		return fmt.Errorf("the global preview domain *.%s lives in edge account %s, but this deploy is authenticated to account %s: "+
-			"the wildcard can only be served from the account that holds it — "+
+			"the wildcard can only be served from the account that owns it — "+
 			"re-scope this run's edge credentials to %s, or declare this project's own domains.preview in %s",
 			base, want, have, want, configName)
 	}

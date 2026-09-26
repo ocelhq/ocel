@@ -243,7 +243,7 @@ func reportDotfile(stdout io.Writer, dir string, values map[string]string, advic
 	fmt.Fprintf(stdout, "dev delivers every value to the app in plaintext under its own name; a deploy keeps a sensitive value out of the function environment and a live one out of the artifact.\n")
 	fmt.Fprintln(stdout, advice)
 	if !gitIgnoresDotfile(dir) {
-		fmt.Fprintf(stdout, "%s is not matched by this project's .gitignore. Add it before committing — it holds values nothing else may see.\n", dotenv.FileName)
+		fmt.Fprintf(stdout, "%s is not matched by this project's .gitignore. Add it before committing — it contains values nothing else may see.\n", dotenv.FileName)
 	}
 }
 

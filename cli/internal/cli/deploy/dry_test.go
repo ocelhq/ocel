@@ -101,7 +101,7 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 		}
 	}
 	if strings.Contains(out, "is up") {
-		t.Errorf("stdout = %q, want a dry run to report a plan, never a preview standing up", out)
+		t.Errorf("stdout = %q, want a dry run to report a plan, never a preview being provisioned", out)
 	}
 	if !absent(t, deployresult.Path(root)) {
 		t.Error("a dry preview up wrote the deploy result, want a run that records nothing it did not do")
@@ -281,15 +281,15 @@ func projectFiles(t *testing.T, root string) map[string]string {
 func changedFiles(before, after map[string]string) []string {
 	var changed []string
 	for path, digest := range after {
-		switch was, held := before[path]; {
-		case !held:
+		switch was, ok := before[path]; {
+		case !ok:
 			changed = append(changed, path+" was written")
 		case was != digest:
 			changed = append(changed, path+" was rewritten")
 		}
 	}
 	for path := range before {
-		if _, held := after[path]; !held {
+		if _, ok := after[path]; !ok {
 			changed = append(changed, path+" was removed")
 		}
 	}

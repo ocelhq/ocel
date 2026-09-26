@@ -68,14 +68,14 @@ func Pin(ctx context.Context, projectDir string) error {
 }
 
 func pins(ctx context.Context, store *providers.Store, projectDir string, mode pinning) (lockfile.Lock, error) {
-	lock, held, err := lockfile.Read(projectDir)
+	lock, found, err := lockfile.Read(projectDir)
 	if err != nil {
 		return lockfile.Lock{}, err
 	}
-	if mode == pinInMemory && (!held || lock.CLI != store.Version) {
+	if mode == pinInMemory && (!found || lock.CLI != store.Version) {
 		return lockFromRelease(ctx, store)
 	}
-	if !held {
+	if !found {
 		return pin(ctx, store, projectDir)
 	}
 	if lock.CLI != store.Version {

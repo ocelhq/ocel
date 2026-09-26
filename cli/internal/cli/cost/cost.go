@@ -27,11 +27,11 @@ func newScanCommand(deps cmddeps.Deps) *cobra.Command {
 	var opts Options
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Estimate the monthly bill for what a deploy would stand up",
-		Long: "Estimate the monthly bill for what a deploy would stand up.\n\n" +
+		Short: "Estimate the monthly bill for what a deploy would provision",
+		Long: "Estimate the monthly bill for what a deploy would provision.\n\n" +
 			"Reads the project's config and declarations, asks the provider what a deploy would " +
 			"create and what each piece costs, and prints the estimate. Nothing is built and no " +
-			"credentials are read. Fixed costs stand whether or not traffic arrives; usage costs " +
+			"credentials are read. Fixed costs accrue whether or not traffic arrives; usage costs " +
 			"follow the profile, or the quantities a usage file sets per resource.",
 		Example: "  $ ocel cost scan\n" +
 			"  $ ocel cost scan --env preview --profile heavy\n" +

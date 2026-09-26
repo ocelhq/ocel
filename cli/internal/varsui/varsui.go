@@ -360,7 +360,7 @@ type otherResponse struct {
 
 func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Other == nil {
-		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s substrate to read", s.otherTier()))
+		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s store to read", s.otherTier()))
 		return
 	}
 	stored, err := s.opts.Other.List(r.Context())
@@ -436,7 +436,7 @@ type copyOutcome struct {
 
 func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Other == nil {
-		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s substrate to copy from", s.otherTier()))
+		fail(w, http.StatusNotFound, fmt.Errorf("this session has no %s store to copy from", s.otherTier()))
 		return
 	}
 	var req copyRequest

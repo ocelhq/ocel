@@ -89,12 +89,12 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		standing, err := preflightDeploy(ctx, deps, ui, runner, cfg, stdout, stdin)
+		facts, err := preflightDeploy(ctx, deps, ui, runner, cfg, stdout, stdin)
 		if err != nil {
 			return err
 		}
 
-		proceed, err := guardNewProject(ctx, ui, cfg, standing.knownSlugs)
+		proceed, err := guardNewProject(ctx, ui, cfg, facts.knownSlugs)
 		if err != nil || !proceed {
 			return err
 		}
@@ -115,9 +115,9 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 				}, scope)
 			},
 			command:        "ocel deploy",
-			compute:        standing.compute,
-			containerArchs: standing.containerArchs,
-			urls:           standing.urls,
+			compute:        facts.compute,
+			containerArchs: facts.containerArchs,
+			urls:           facts.urls,
 			ui:             ui,
 			enabled:        !opts.dry && browser,
 		}

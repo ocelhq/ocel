@@ -92,7 +92,7 @@ func (s *Store) Binary(ctx context.Context, kind Kind, name string, platform Pla
 	if s.Override != "" {
 		path := filepath.Join(s.Override, string(kind), name, s.Version, platform.Dir(), executable)
 		if _, err := os.Stat(path); err != nil {
-			return "", fmt.Errorf("%s is %s, which holds no %s %s %s for %s — build the binaries this CLI's own version needs, or unset %s to fetch them",
+			return "", fmt.Errorf("%s is %s, which contains no %s %s %s for %s — build the binaries this CLI's own version needs, or unset %s to fetch them",
 				OverrideEnvVar, s.Override, name, kind, s.Version, platform.Dir(), OverrideEnvVar)
 		}
 		return path, nil
@@ -178,11 +178,11 @@ func (s *Store) read(ctx context.Context, asset string) ([]byte, error) {
 	}
 	defer body.Close()
 
-	var held bytes.Buffer
-	if err := fill(&held, body); err != nil {
+	var downloaded bytes.Buffer
+	if err := fill(&downloaded, body); err != nil {
 		return nil, fmt.Errorf("download %s: %w", asset, err)
 	}
-	return held.Bytes(), nil
+	return downloaded.Bytes(), nil
 }
 
 func (s *Store) install(ctx context.Context, kind Kind, name string, platform Platform, digest, dir, executable string) error {
@@ -207,7 +207,7 @@ func (s *Store) install(ctx context.Context, kind Kind, name string, platform Pl
 	}
 	sum, err := hashFile(filepath.Join(unpacked, executable))
 	if err != nil {
-		return fmt.Errorf("%s holds no %s", asset, executable)
+		return fmt.Errorf("%s contains no %s", asset, executable)
 	}
 	record, err := os.OpenFile(filepath.Join(unpacked, installedDigestFile), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {

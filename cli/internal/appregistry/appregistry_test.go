@@ -91,7 +91,7 @@ func TestAProjectRegistryIsUsedWithoutAskingTheProvider(t *testing.T) {
 	}
 }
 
-func TestAProjectRegistryCarriesTheNamespaceItsImagesLandUnder(t *testing.T) {
+func TestAProjectRegistryIncludesTheNamespaceItsImagesLandUnder(t *testing.T) {
 	t.Setenv("GHCR_TOKEN", "hunter2")
 
 	target, _, err := Resolve(context.Background(), project(&projectconfig.Registry{
@@ -124,7 +124,7 @@ func TestAProviderNativeRegistryIsUsedWhenTheProjectNamesNone(t *testing.T) {
 	}
 	calls := native.calls()
 	if len(calls) != 1 || strings.Join(calls[0], ",") != "web,api" {
-		t.Errorf("the provider was asked %v, want one resolve carrying the repositories the deploy intends to push", calls)
+		t.Errorf("the provider was asked %v, want one resolve naming the repositories the deploy intends to push", calls)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestThePasswordIsReadWhereTheTargetIsBuiltAndNowhereEarlier(t *testing.T) {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	if target.Password != "the-one-the-push-uses" {
-		t.Errorf("Resolve() carried %q, want the value the variable holds when the target is built: a password held from the plan-time check is one the deploy cannot let the user correct", target.Password)
+		t.Errorf("Resolve() returned %q, want the value the variable has when the target is built: a password kept from the plan-time check is one the deploy cannot let the user correct", target.Password)
 	}
 }
 
@@ -278,7 +278,7 @@ func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *te
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	if target.Password != "from-dotenv" {
-		t.Errorf("Resolve() carried a password of %d bytes, want the value the project's .env holds", len(target.Password))
+		t.Errorf("Resolve() returned a password of %d bytes, want the value the project's .env sets", len(target.Password))
 	}
 }
 
@@ -295,6 +295,6 @@ func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	if target.Password != "from-shell" {
-		t.Error("Resolve() carried the .env's password, want the shell's: the shell wins, as it does for every ${} in the config")
+		t.Error("Resolve() returned the .env's password, want the shell's: the shell wins, as it does for every ${} in the config")
 	}
 }

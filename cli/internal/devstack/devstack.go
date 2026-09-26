@@ -94,14 +94,14 @@ func New(project string, env Env) *Stack {
 			return s.engine, nil
 		}
 		if s.lease == nil {
-			held, err := lease(env.StateDir)
+			lock, err := lease(env.StateDir)
 			if err != nil {
 				return nil, err
 			}
-			if shared, err := held.TryRLockContext(ctx, leasePollsAt); err != nil || !shared {
+			if shared, err := lock.TryRLockContext(ctx, leasePollsAt); err != nil || !shared {
 				return nil, fmt.Errorf("wait for this project's dev resources to finish stopping: %w", err)
 			}
-			s.lease = held
+			s.lease = lock
 		}
 		engine, err := open(ctx)
 		if err != nil {
@@ -228,18 +228,18 @@ func (s *Stack) lastOneOut() (bool, error) {
 }
 
 func Reset(ctx context.Context, open docker.Opener, stateDir, project string) error {
-	held, err := lease(stateDir)
+	lock, err := lease(stateDir)
 	if err != nil {
 		return err
 	}
-	alone, err := held.TryLock()
+	alone, err := lock.TryLock()
 	if err != nil {
 		return fmt.Errorf("claim this project's dev resources: %w", err)
 	}
 	if !alone {
 		return errors.New("another ocel command is using this project's dev resources: stop it, then run `ocel dev --reset` again")
 	}
-	defer func() { _ = held.Unlock() }()
+	defer func() { _ = lock.Unlock() }()
 
 	engine, err := open(ctx)
 	if err != nil {

@@ -332,7 +332,7 @@ func (c *Component) Close(ctx context.Context, stop bool) error {
 	if c.container == nil {
 		return nil
 	}
-	held := c.container
+	running := c.container
 	c.container = nil
 	if !stop {
 		return nil
@@ -341,5 +341,5 @@ func (c *Component) Close(ctx context.Context, stop bool) error {
 	if err != nil {
 		return err
 	}
-	return engine.Stop(ctx, held.ID)
+	return engine.Stop(ctx, running.ID)
 }

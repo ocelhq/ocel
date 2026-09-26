@@ -65,7 +65,7 @@ func onlyDocument(source []byte) (*yaml.Node, error) {
 			continue
 		}
 		if found != nil {
-			return nil, errors.New("holds more than one YAML document, and a config is one document")
+			return nil, errors.New("contains more than one YAML document, and a config is one document")
 		}
 		found = &document
 	}
@@ -107,29 +107,29 @@ func keepSourceText(node *yaml.Node, seen map[*yaml.Node]bool) {
 }
 
 func checkJSONable(path string, value any) error {
-	switch held := value.(type) {
+	switch typed := value.(type) {
 	case map[string]any:
-		for _, key := range slices.Sorted(maps.Keys(held)) {
-			if err := checkJSONable(configdoc.JoinPath(path, key), held[key]); err != nil {
+		for _, key := range slices.Sorted(maps.Keys(typed)) {
+			if err := checkJSONable(configdoc.JoinPath(path, key), typed[key]); err != nil {
 				return err
 			}
 		}
 	case map[any]any:
-		keys := make([]string, 0, len(held))
-		for key := range held {
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
 			keys = append(keys, fmt.Sprint(key))
 		}
 		slices.Sort(keys)
 		return fmt.Errorf("has the key %s under %s, and a config key must be a string — quote it", keys[0], configdoc.PathName(path))
 	case []any:
-		for i, item := range held {
+		for i, item := range typed {
 			if err := checkJSONable(configdoc.IndexPath(path, i), item); err != nil {
 				return err
 			}
 		}
 	case float64:
-		if math.IsInf(held, 0) || math.IsNaN(held) {
-			return fmt.Errorf("sets %s to %v, which a config cannot hold", configdoc.PathName(path), held)
+		if math.IsInf(typed, 0) || math.IsNaN(typed) {
+			return fmt.Errorf("sets %s to %v, which a config cannot represent", configdoc.PathName(path), typed)
 		}
 	}
 	return nil

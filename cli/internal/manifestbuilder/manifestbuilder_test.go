@@ -99,7 +99,7 @@ func synthFunctions() []Function {
 func TestBuild(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries slug", func(t *testing.T) {
+	t.Run("includes slug", func(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("acme-web", nil, nil, "serverless", nil, nil, nil, nil)
@@ -407,7 +407,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("carries domains", func(t *testing.T) {
+	t.Run("includes domains", func(t *testing.T) {
 		t.Parallel()
 
 		domains := map[string][]string{"production": {"app.acme.com", "www.acme.com"}}
@@ -454,7 +454,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("carries a function route id distinct from its logical name", func(t *testing.T) {
+	t.Run("includes a function route id distinct from its logical name", func(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
@@ -472,7 +472,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("carries apps sorted by name", func(t *testing.T) {
+	t.Run("includes apps sorted by name", func(t *testing.T) {
 		t.Parallel()
 
 		apps := []App{
@@ -606,7 +606,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("carries each app's own resolved variables", func(t *testing.T) {
+	t.Run("includes each app's own resolved variables", func(t *testing.T) {
 		t.Parallel()
 
 		variables := map[string][]Variable{
@@ -632,7 +632,7 @@ func TestBuild(t *testing.T) {
 
 		admin := byName["admin"]
 		if len(admin) != 2 {
-			t.Fatalf("admin carries %d variables, want 2", len(admin))
+			t.Fatalf("admin has %d variables, want 2", len(admin))
 		}
 		if admin[0].GetKey() != "POSTHOG_ID" || admin[1].GetKey() != "STRIPE_API_KEY" {
 			t.Errorf("admin variables = %s, %s, want them sorted by key", admin[0].GetKey(), admin[1].GetKey())
@@ -650,7 +650,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the app's folder binding", func(t *testing.T) {
+	t.Run("includes the app's folder binding", func(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{
@@ -673,7 +673,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("carries each variable's resolved folder", func(t *testing.T) {
+	t.Run("includes each variable's resolved folder", func(t *testing.T) {
 		t.Parallel()
 
 		variables := map[string][]Variable{
@@ -889,7 +889,7 @@ func TestBindBindings(t *testing.T) {
 		return Binding{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: name, External: external}
 	}
 
-	t.Run("a bound resource carries the name the record is published under", func(t *testing.T) {
+	t.Run("a bound resource keeps the name the record is published under", func(t *testing.T) {
 		t.Parallel()
 		manifest, err := Build("proj-1", nil, nil, "serverless", declarations, []Binding{postgres("main", "sst-pg-main")}, nil, nil)
 		if err != nil {
@@ -928,7 +928,7 @@ func TestBindBindings(t *testing.T) {
 		}
 		for _, want := range []string{"postgres", "bucket", "uploads"} {
 			if !strings.Contains(mismatch.Error(), want) {
-				t.Errorf("err = %v, want it to carry %q", mismatch, want)
+				t.Errorf("err = %v, want it to contain %q", mismatch, want)
 			}
 		}
 	})

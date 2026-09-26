@@ -52,7 +52,7 @@ func Compile(ctx context.Context, c Compilation) error {
 func (c Compilation) compileGo(ctx context.Context) error {
 	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
 	if err != nil || !module.Mode().IsRegular() {
-		return fmt.Errorf("app %q is built with go and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
+		return fmt.Errorf("app %q is built with go and %s has no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
 	}
 	goarch, runs := arch.GoArch(c.Framework.Arch)
 	if !runs {
@@ -116,7 +116,7 @@ func (c Compilation) validate() error {
 		return fmt.Errorf("package %s for app %q: %w", pkg, c.App, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("package %s for app %q is not a directory holding a main package", pkg, c.App)
+		return fmt.Errorf("package %s for app %q is not a directory containing a main package", pkg, c.App)
 	}
 	return nil
 }

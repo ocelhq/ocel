@@ -225,7 +225,7 @@ func normalizeInline(path string, record *configdoc.InlineRecord) (*Inline, erro
 		}
 		return &Inline{Bucket: bucket}, nil
 	}
-	return nil, fmt.Errorf("`%s` holds no record", path)
+	return nil, fmt.Errorf("`%s` contains no record", path)
 }
 
 var variableKey = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
@@ -275,7 +275,7 @@ func normalizePostgres(path string, raw *configdoc.PostgresBinding) (*PostgresIn
 		return &PostgresInline{URL: url}, nil
 	}
 	if raw.Host == nil && raw.Database == nil && raw.Username == nil && raw.Password == nil {
-		return nil, fmt.Errorf("`%s` holds no postgres record — give it url, or host, database, username and password", path)
+		return nil, fmt.Errorf("`%s` contains no postgres record — give it url, or host, database, username and password", path)
 	}
 	out := &PostgresInline{Port: raw.Port}
 	var err error

@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/livemachine"
 )
 
-func TestLiveADryRunOfAContainerAppCarriesTheDigestTheDaemonBuilt(t *testing.T) {
+func TestLiveADryRunOfAContainerAppSendsTheDigestTheDaemonBuilt(t *testing.T) {
 	vm := livemachine.Require(t)
 	vm.Engine(t)
 	vm.Forward(t)
@@ -39,7 +39,7 @@ export default {
 
 	ref := pinnedRefIn(t, stdout.String(), "ocel/"+clitest.FixtureSlug+"/api")
 	if _, err := vm.Attempt("docker image inspect " + ref); err != nil {
-		t.Errorf("the plan names %s and the daemon holds no image there, so the dry run rendered a coordinate no release could be pinned to: %v", ref, err)
+		t.Errorf("the plan names %s and the daemon has no image there, so the dry run rendered a coordinate no release could be pinned to: %v", ref, err)
 	}
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }

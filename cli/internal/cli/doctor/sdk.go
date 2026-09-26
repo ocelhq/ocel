@@ -116,8 +116,8 @@ func rustSDK(dir string) (declaredSDK, bool) {
 	}
 	for _, deps := range tables {
 		for name, spec := range deps {
-			if held, ok := crateSpec(name, spec); ok {
-				return declaredSDK{language: sdkversion.Rust, manifest: path, spec: held}, true
+			if crate, ok := crateSpec(name, spec); ok {
+				return declaredSDK{language: sdkversion.Rust, manifest: path, spec: crate}, true
 			}
 		}
 	}
@@ -125,17 +125,17 @@ func rustSDK(dir string) (declaredSDK, bool) {
 }
 
 func crateSpec(name string, spec any) (string, bool) {
-	switch held := spec.(type) {
+	switch typed := spec.(type) {
 	case string:
-		return held, name == "ocel-sdk"
+		return typed, name == "ocel-sdk"
 	case map[string]any:
-		if renamed, ok := held["package"].(string); ok {
+		if renamed, ok := typed["package"].(string); ok {
 			name = renamed
 		}
 		if name != "ocel-sdk" {
 			return "", false
 		}
-		version, _ := held["version"].(string)
+		version, _ := typed["version"].(string)
 		return version, true
 	}
 	return "", false

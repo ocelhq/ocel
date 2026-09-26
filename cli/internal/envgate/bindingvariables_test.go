@@ -87,7 +87,7 @@ func TestBindingVariables(t *testing.T) {
 
 		for _, definition := range g.Definitions() {
 			if definition.GetKey() == "ORDERS_PASSWORD" || definition.GetKey() == "ORDERS_HOST" {
-				t.Errorf("Definitions() holds %s, which would deliver it to the app", definition.GetKey())
+				t.Errorf("Definitions() contains %s, which would deliver it to the app", definition.GetKey())
 			}
 		}
 		resolved, err := g.Resolve(context.Background(), "api")

@@ -113,7 +113,7 @@ func recordedClientValue() clientenv.App {
 }
 
 func TestCollectAndBuildManifest(t *testing.T) {
-	t.Run("--prebuilt skips the build and carries the prebuilt tree's function", func(t *testing.T) {
+	t.Run("--prebuilt skips the build and deploys the prebuilt tree's function", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		deps := clitest.NewDeps()
@@ -131,7 +131,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		functions := manifest.GetFunctions()
 		if len(functions) != 1 {
-			t.Fatalf("manifest carries %d functions, want the prebuilt one: %+v", len(functions), functions)
+			t.Fatalf("manifest has %d functions, want the prebuilt one: %+v", len(functions), functions)
 		}
 		if got, want := functions[0].GetLogicalName(), "fn--api--index"; got != want {
 			t.Errorf("function logical name = %q, want %q", got, want)
@@ -175,7 +175,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 	})
 
-	t.Run("--prebuilt carries the id the output tree recorded for each app", func(t *testing.T) {
+	t.Run("--prebuilt passes the id the output tree recorded for each app", func(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
@@ -194,7 +194,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			for _, app := range apps {
 				ids = append(ids, app.GetDeploymentId())
 			}
-			t.Errorf("manifest apps carry deployments %q, want api alone carrying %q", ids, recorded)
+			t.Errorf("manifest apps have deployments %q, want api alone having %q", ids, recorded)
 		}
 	})
 

@@ -165,7 +165,7 @@ func pythonSDKEnvironment(t *testing.T) string {
 func TestPythonInterpreterPrefersTheVirtualenvBesideTheRunRoot(t *testing.T) {
 	runRoot := t.TempDir()
 	if got := PythonInterpreter(runRoot); got != "python3" {
-		t.Errorf("PythonInterpreter = %q, want the interpreter on PATH where the run root holds no virtualenv", got)
+		t.Errorf("PythonInterpreter = %q, want the interpreter on PATH where the run root has no virtualenv", got)
 	}
 
 	venv := filepath.Join(runRoot, ".venv", "bin", "python")

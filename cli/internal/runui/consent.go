@@ -65,7 +65,7 @@ func (s *Session) Guard(ctx context.Context, question string) (bool, error) {
 }
 
 func (s *Session) Consent(ctx context.Context, question string) (bool, error) {
-	if s.settled() {
+	if s.nothingToChange() {
 		return true, nil
 	}
 	resume := s.Suspend()
@@ -76,7 +76,7 @@ func (s *Session) Consent(ctx context.Context, question string) (bool, error) {
 }
 
 func (s *Session) ConsentByName(ctx context.Context, label, name string) (bool, error) {
-	if s.settled() {
+	if s.nothingToChange() {
 		return true, nil
 	}
 	resume := s.Suspend()
@@ -86,7 +86,7 @@ func (s *Session) ConsentByName(ctx context.Context, label, name string) (bool, 
 	})
 }
 
-func (s *Session) settled() bool {
+func (s *Session) nothingToChange() bool {
 	return len(s.shown.GetGroups()) > 0 && !Mutates(s.shown)
 }
 

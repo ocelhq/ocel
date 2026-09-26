@@ -99,7 +99,7 @@ func TestRunPermissions(t *testing.T) {
 		}
 	})
 
-	t.Run("it heads each group where the edge carries credentials of its own", func(t *testing.T) {
+	t.Run("it heads each group where the edge has credentials of its own", func(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 
 		var stdout, stderr bytes.Buffer
@@ -113,7 +113,7 @@ func TestRunPermissions(t *testing.T) {
 			"Account · Workers Scripts · Edit",
 		} {
 			if !strings.Contains(stdout.String(), want) {
-				t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
+				t.Errorf("stdout = %q, want it to include %q", stdout.String(), want)
 			}
 		}
 	})

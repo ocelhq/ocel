@@ -23,7 +23,7 @@ func TestBoundedCaptureAnnotate(t *testing.T) {
 		}
 		err := c.annotate(errors.New("exit status 1"))
 		if !strings.Contains(err.Error(), "STRIPE_API_KEY (project root)") {
-			t.Errorf("annotate() = %q, want it to carry the captured detail", err)
+			t.Errorf("annotate() = %q, want it to include the captured detail", err)
 		}
 		if !strings.Contains(err.Error(), "exit status 1") {
 			t.Errorf("annotate() = %q, want the original error preserved", err)

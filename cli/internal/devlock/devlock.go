@@ -13,7 +13,7 @@ import (
 
 const dirName = "dev-locks"
 
-var ErrMalformed = errors.New("the dev lock holds no address and token pair")
+var ErrMalformed = errors.New("the dev lock has no address and token pair")
 
 type Lease struct {
 	Addr  string

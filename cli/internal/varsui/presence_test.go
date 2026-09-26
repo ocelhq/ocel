@@ -33,7 +33,7 @@ func attend(t *testing.T, s *varsui.Session) context.CancelFunc {
 	}
 	if resp.StatusCode != http.StatusOK {
 		cancel()
-		t.Fatalf("GET /api/presence = %d, want 200 held open", resp.StatusCode)
+		t.Fatalf("GET /api/presence = %d, want 200 with the connection kept open", resp.StatusCode)
 	}
 	t.Cleanup(func() {
 		cancel()

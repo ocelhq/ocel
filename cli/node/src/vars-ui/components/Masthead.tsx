@@ -15,7 +15,7 @@ import {
 import { cn } from "../lib/utils";
 
 export function Masthead({ current }: { current: State }) {
-  const owed = owedCount(current);
+  const unfilled = owedCount(current);
   const recovery = current.recovery !== undefined;
   const pending = useValue(store.dirty).length;
   const isSaving = useValue(store.saving);
@@ -36,15 +36,15 @@ export function Masthead({ current }: { current: State }) {
           className={cn(
             role.body,
             "mt-2 inline-flex items-center gap-1.5",
-            owed === 0 ? "text-go" : "text-warn",
+            unfilled === 0 ? "text-go" : "text-warn",
           )}
         >
-          {owed === 0 ? (
+          {unfilled === 0 ? (
             <CheckCircleIcon weight="fill" className={glyph.control} />
           ) : (
             <WarningCircleIcon weight="fill" className={glyph.control} />
           )}
-          {tallyLine(owed)}
+          {tallyLine(unfilled)}
         </p>
       </div>
       {!recovery &&
@@ -54,7 +54,7 @@ export function Masthead({ current }: { current: State }) {
           </Button>
         ) : (
           <Button variant="outline" size="sm" disabled={busy} onClick={store.leave}>
-            {doneLabel(owed)}
+            {doneLabel(unfilled)}
           </Button>
         ))}
     </header>

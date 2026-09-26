@@ -96,7 +96,7 @@ func TestMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("carries a variable description", func(t *testing.T) {
+	t.Run("includes a variable description", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{})
 		definition := def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)
@@ -179,14 +179,14 @@ func TestMatrix(t *testing.T) {
 
 		r := row(t, g.Matrix(nil), "API_URL")
 		if !cell(t, r, "").Set {
-			t.Error("the root cell is unset, want it filled — the store holds a value for it")
+			t.Error("the root cell is unset, want it filled — the store has a value for it")
 		}
 		if cell(t, r, "/web").Set {
 			t.Error("the /web cell is filled, want it unset — nothing overrides the root there")
 		}
 	})
 
-	t.Run("a malformed value keeps its cell filled and carries the schema's complaint", func(t *testing.T) {
+	t.Run("a malformed value keeps its cell filled and includes the schema's complaint", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("API_URL", "", "not-a-url")
@@ -291,7 +291,7 @@ func TestMatrix(t *testing.T) {
 			t.Errorf("the /worker cell is %q, want %q — a column drawn for an override is required of nobody", c.State, envgate.CellOptional)
 		}
 		if want := []envgate.Override{{Environment: "pr-42", Version: 1}}; !reflect.DeepEqual(c.Overrides, want) {
-			t.Errorf("overrides = %+v, want %+v — the column exists to carry exactly this", c.Overrides, want)
+			t.Errorf("overrides = %+v, want %+v — the column exists to show exactly this", c.Overrides, want)
 		}
 
 		var refusal *envgate.Refusal
@@ -307,7 +307,7 @@ func TestMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("a cell carries the version a write against it must expect", func(t *testing.T) {
+	t.Run("a cell records the version a write against it must expect", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.setAt("API_URL", "", "https://root.example", 4)
@@ -341,7 +341,7 @@ func TestMatrix(t *testing.T) {
 
 		m := g.Matrix(nil)
 		if got := app(t, m, "web").Missing; len(got) != 0 {
-			t.Errorf("web is missing %+v, want it to resolve — the root backs API_URL and /web holds POSTHOG_ID", got)
+			t.Errorf("web is missing %+v, want it to resolve — the root backs API_URL and /web sets POSTHOG_ID", got)
 		}
 		want := []envgate.Cell{{Key: "POSTHOG_ID", Folder: "/admin"}}
 		if got := app(t, m, "admin").Missing; !reflect.DeepEqual(got, want) {
@@ -383,7 +383,7 @@ func TestMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("rows carry the class and scope that decide their cells", func(t *testing.T) {
+	t.Run("rows include the class and scope that decide their cells", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET), scoped("POSTHOG_ID", "/web"))
@@ -401,7 +401,7 @@ func TestMatrix(t *testing.T) {
 func TestForget(t *testing.T) {
 	t.Parallel()
 
-	t.Run("dropping a cell drops what discovery said about the value it held", func(t *testing.T) {
+	t.Run("dropping a cell drops what discovery said about the value it had", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("API_URL", "", "not-a-url")

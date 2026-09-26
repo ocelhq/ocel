@@ -94,7 +94,7 @@ func Roots(configDir string, paths []string) ([]Root, error) {
 			continue
 		}
 		if language == Rust {
-			return nil, fmt.Errorf("discovery: %s holds rust files, and a rust app declares from its own crate: delete the folder and derive ocel::Resources or ocel::Env on a struct in the crate", dir)
+			return nil, fmt.Errorf("discovery: %s contains rust files, and a rust app declares from its own crate: delete the folder and derive ocel::Resources or ocel::Env on a struct in the crate", dir)
 		}
 		roots = append(roots, Root{Dir: dir, Language: language})
 	}
@@ -137,7 +137,7 @@ func defaultRootDirs(configDir string) []string {
 	return []string{dir}
 }
 
-func HoldsJS(cfg *projectconfig.Config) (bool, error) {
+func HasJS(cfg *projectconfig.Config) (bool, error) {
 	if _, err := os.Stat(filepath.Join(cfg.Dir, "package.json")); err == nil {
 		return true, nil
 	}
@@ -205,7 +205,7 @@ func languageOf(dir string) (Language, error) {
 		}
 		found = append(found, language)
 		if len(found) > 1 {
-			return fmt.Errorf("discovery: %s mixes %s and %s files, and a discovery folder holds one language", dir, found[0], found[1])
+			return fmt.Errorf("discovery: %s mixes %s and %s files, and a discovery folder contains one language", dir, found[0], found[1])
 		}
 		return nil
 	})
@@ -218,7 +218,7 @@ func languageOf(dir string) (Language, error) {
 	return found[0], nil
 }
 
-func walkUp(configDir, dir string, holds func(at string) bool) (string, bool, error) {
+func walkUp(configDir, dir string, contains func(at string) bool) (string, bool, error) {
 	stop, err := filepath.Abs(configDir)
 	if err != nil {
 		return "", false, err
@@ -229,7 +229,7 @@ func walkUp(configDir, dir string, holds func(at string) bool) (string, bool, er
 	}
 
 	for {
-		if holds(at) {
+		if contains(at) {
 			return at, true, nil
 		}
 		parent := filepath.Dir(at)

@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func TestTheFixturesOfAnotherLanguageHoldNoJS(t *testing.T) {
+func TestTheFixturesOfAnotherLanguageHaveNoJS(t *testing.T) {
 	tried := 0
 	for _, dir := range fixturetest.Dirs(t) {
 		if fixturetest.IsNode(t, dir) {
@@ -16,12 +16,12 @@ func TestTheFixturesOfAnotherLanguageHoldNoJS(t *testing.T) {
 		}
 		tried++
 		t.Run(filepath.Base(filepath.Dir(dir))+"/"+filepath.Base(dir), func(t *testing.T) {
-			held, err := HoldsJS(&projectconfig.Config{Dir: dir})
+			hasJS, err := HasJS(&projectconfig.Config{Dir: dir})
 			if err != nil {
 				t.Fatalf("HoldsJS: %v", err)
 			}
-			if held {
-				t.Fatalf("%s holds js, and its own language is not js", dir)
+			if hasJS {
+				t.Fatalf("%s contains js, and its own language is not js", dir)
 			}
 		})
 	}

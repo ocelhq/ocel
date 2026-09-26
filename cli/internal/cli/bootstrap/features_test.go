@@ -83,7 +83,7 @@ func TestParseFeatureFlag(t *testing.T) {
 
 		_, err := parseFeatureFlag(featureCloudflareEdge, testCatalogue())
 		if err == nil {
-			t.Fatal("parseFeatureFlag accepted a feature without what it stands on")
+			t.Fatal("parseFeatureFlag accepted a feature without what it depends on")
 		}
 		if !strings.Contains(err.Error(), "--features isr,cloudflare-edge") {
 			t.Errorf("error %q does not name the full set to pass instead", err)
@@ -109,13 +109,13 @@ func TestParseRemoveFlag(t *testing.T) {
 func TestGoingFeatures(t *testing.T) {
 	t.Parallel()
 
-	standing := []string{featureISR, featureImageOptimization, featureCloudflareEdge}
-	got := goingFeatures(testCatalogue(), standing, []string{featureISR})
+	installed := []string{featureISR, featureImageOptimization, featureCloudflareEdge}
+	got := goingFeatures(testCatalogue(), installed, []string{featureISR})
 	if want := []string{featureISR, featureCloudflareEdge}; !reflect.DeepEqual(got, want) {
-		t.Errorf("goingFeatures = %v, want what stands on the named feature to go with it", got)
+		t.Errorf("goingFeatures = %v, want what depends on the named feature to go with it", got)
 	}
 	if got := goingFeatures(testCatalogue(), []string{featureISR}, []string{featureImageOptimization}); got != nil {
-		t.Errorf("goingFeatures = %v, want a name that is not standing to be nothing to remove", got)
+		t.Errorf("goingFeatures = %v, want a name that is not installed to be nothing to remove", got)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestAFeatureForAnotherEdgeIsStillOffered(t *testing.T) {
 
 	got := addableFeatures(testCatalogue(), nil, featureCloudFrontEdge)
 	if !slices.Contains(got, featureCloudflareEdge) {
-		t.Errorf("addableFeatures = %v, want a feature fronting a different edge left on offer: standing one up for a future project is the user's call", got)
+		t.Errorf("addableFeatures = %v, want a feature fronting a different edge left on offer: installing one for a future project is the user's call", got)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestPrintIncluded(t *testing.T) {
 		"To take one down: ocel bootstrap production --remove <name>",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("printIncluded = %q, want it to carry %q", got, want)
+			t.Errorf("printIncluded = %q, want it to contain %q", got, want)
 		}
 	}
 
@@ -196,7 +196,7 @@ func TestPrintRequired(t *testing.T) {
 		"Your edge is cloudfront. Change it in ocel.json.",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("printRequired = %q, want it to carry %q", got, want)
+			t.Errorf("printRequired = %q, want it to contain %q", got, want)
 		}
 	}
 
@@ -251,7 +251,7 @@ func TestThePickerSaysWhenThereIsNothingLeft(t *testing.T) {
 		t.Fatalf("pickFeatures = %v, %v, want an account with nothing left to add to skip the prompt", selected, err)
 	}
 	if !reflect.DeepEqual(applied, names) {
-		t.Errorf("pickFeatures = %v, want everything included carried through untouched", applied)
+		t.Errorf("pickFeatures = %v, want everything included passed through untouched", applied)
 	}
 	if !strings.Contains(out.String(), "Everything is already included.") {
 		t.Errorf("pickFeatures said %q, want it to say why it asked nothing", out.String())

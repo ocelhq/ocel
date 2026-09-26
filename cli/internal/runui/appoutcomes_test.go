@@ -19,12 +19,12 @@ func appOutcomesOf(t *testing.T, raw string) []string {
 	t.Helper()
 	var result *streamv1.RunResultEvent
 	for _, ev := range parseNDJSON(t, raw) {
-		if held := ev.GetResult(); held != nil {
-			result = held
+		if got := ev.GetResult(); got != nil {
+			result = got
 		}
 	}
 	if result == nil {
-		t.Fatalf("the stream %q carries no run result envelope", raw)
+		t.Fatalf("the stream %q contains no run result envelope", raw)
 	}
 	reported := make([]string, 0, len(result.GetApps()))
 	for _, app := range result.GetApps() {
@@ -33,7 +33,7 @@ func appOutcomesOf(t *testing.T, raw string) []string {
 	return reported
 }
 
-func TestRunResultCarriesTheProviderAppOutcomes(t *testing.T) {
+func TestRunResultIncludesTheProviderAppOutcomes(t *testing.T) {
 	cases := []struct {
 		name   string
 		apps   []*progressv1.AppResult
@@ -41,7 +41,7 @@ func TestRunResultCarriesTheProviderAppOutcomes(t *testing.T) {
 		want   []string
 	}{
 		{
-			name: "a deploy where every app stood up",
+			name: "a deploy where every app was provisioned",
 			apps: []*progressv1.AppResult{
 				{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
 				{App: "admin", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
@@ -52,10 +52,10 @@ func TestRunResultCarriesTheProviderAppOutcomes(t *testing.T) {
 		{
 			name: "a deploy one of whose apps failed",
 			apps: []*progressv1.AppResult{
-				{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED, Error: "the web stack would not stand up"},
+				{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED, Error: "the web stack failed to provision"},
 				{App: "admin", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
 			},
-			finish: func(s *Session) { s.Fail(errors.New("the web stack would not stand up")) },
+			finish: func(s *Session) { s.Fail(errors.New("the web stack failed to provision")) },
 			want:   []string{"web=APP_OUTCOME_FAILED", "admin=APP_OUTCOME_SUCCEEDED"},
 		},
 	}

@@ -32,15 +32,15 @@ type FakeConnectorLog struct {
 }
 
 func LoadFakeConnectorLog(path string) (FakeConnectorLog, error) {
-	var held FakeConnectorLog
+	var connectorLog FakeConnectorLog
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return held, nil
+		return connectorLog, nil
 	}
 	if err != nil {
-		return held, err
+		return connectorLog, err
 	}
-	return held, json.Unmarshal(raw, &held)
+	return connectorLog, json.Unmarshal(raw, &connectorLog)
 }
 
 func recordFakeConnector(change func(*FakeConnectorLog)) error {
@@ -48,12 +48,12 @@ func recordFakeConnector(change func(*FakeConnectorLog)) error {
 	if path == "" {
 		return nil
 	}
-	held, err := LoadFakeConnectorLog(path)
+	connectorLog, err := LoadFakeConnectorLog(path)
 	if err != nil {
 		return err
 	}
-	change(&held)
-	raw, err := json.Marshal(held)
+	change(&connectorLog)
+	raw, err := json.Marshal(connectorLog)
 	if err != nil {
 		return err
 	}
@@ -72,9 +72,9 @@ func (s *deployFakeProviderServer) DescribeConnectorTarget(context.Context, *con
 }
 
 func (s *deployFakeProviderServer) InstallConnector(_ context.Context, req *contractv1.InstallConnectorRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := recordFakeConnector(func(held *FakeConnectorLog) {
-		held.Installed, held.Binary, held.Version, held.ConfigJSON = true, req.GetBinary(), req.GetVersion(), req.GetConfigJson()
-		held.Compute = req.GetCompute()
+	if err := recordFakeConnector(func(connectorLog *FakeConnectorLog) {
+		connectorLog.Installed, connectorLog.Binary, connectorLog.Version, connectorLog.ConfigJSON = true, req.GetBinary(), req.GetVersion(), req.GetConfigJson()
+		connectorLog.Compute = req.GetCompute()
 	}); err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (s *deployFakeProviderServer) InstallConnector(_ context.Context, req *cont
 }
 
 func (s *deployFakeProviderServer) RemoveConnector(_ context.Context, _ *contractv1.RemoveConnectorRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := recordFakeConnector(func(held *FakeConnectorLog) { held.Removed = true }); err != nil {
+	if err := recordFakeConnector(func(connectorLog *FakeConnectorLog) { connectorLog.Removed = true }); err != nil {
 		return err
 	}
 	if err := declareFakeStages(stream); err != nil {

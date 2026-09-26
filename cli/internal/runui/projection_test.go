@@ -50,7 +50,7 @@ func TestTheSuccessResultIsTheURLsColoured(t *testing.T) {
 		"\x1b[2m" + blockIndent + "Details: run.log\x1b[22m",
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+			t.Errorf("projection =\n%q\nwant it to contain %q", got, want)
 		}
 	}
 }
@@ -65,7 +65,7 @@ func projectedResult(t *testing.T, apps ...*progressv1.AppResult) []string {
 	}}})
 }
 
-func TestTheSuccessResultLabelsEveryAppOnceTheProjectCarriesMoreThanOne(t *testing.T) {
+func TestTheSuccessResultLabelsEveryAppOnceTheProjectHasMoreThanOne(t *testing.T) {
 	t.Parallel()
 
 	got := projectedResult(t,
@@ -78,7 +78,7 @@ func TestTheSuccessResultLabelsEveryAppOnceTheProjectCarriesMoreThanOne(t *testi
 		blockIndent + "admin" + "  " + "\x1b[36mhttps://admin.shop.example\x1b[0m",
 	}
 	if !slices.Contains(got, want[0]) || !slices.Contains(got, want[1]) {
-		t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+		t.Errorf("projection =\n%q\nwant it to contain %q", got, want)
 	}
 }
 
@@ -92,11 +92,11 @@ func TestTheSuccessResultIndentsAnAppsSecondURLUnderTheFirst(t *testing.T) {
 
 	want := blockIndent + "     " + "  " + "\x1b[36mhttps://www.shop.example\x1b[0m"
 	if !slices.Contains(got, want) {
-		t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+		t.Errorf("projection =\n%q\nwant it to contain %q", got, want)
 	}
 }
 
-func TestTheSuccessResultCarriesTheNoteBesideTheURLsItPrinted(t *testing.T) {
+func TestTheSuccessResultPrintsTheNoteBesideTheURLsItPrinted(t *testing.T) {
 	t.Parallel()
 
 	notes := []string{
@@ -128,7 +128,7 @@ func TestTheSuccessResultSaysSoWhenAnAppAnswersNowhere(t *testing.T) {
 
 	want := blockIndent + "admin" + "  " + "\x1b[2mno public url\x1b[22m"
 	if !slices.Contains(got, want) {
-		t.Errorf("projection =\n%q\nwant it to carry %q", got, want)
+		t.Errorf("projection =\n%q\nwant it to contain %q", got, want)
 	}
 }
 

@@ -28,10 +28,10 @@ type devStore struct {
 
 func unlinked(key string) error {
 	if key == "" {
-		return fmt.Errorf("this project is not linked to a console, so nothing holds its dev values. For `ocel dev`, put KEY=VALUE lines in %s; to share values with your team, run `ocel link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
+		return fmt.Errorf("this project is not linked to a console, so nothing stores its dev values. For `ocel dev`, put KEY=VALUE lines in %s; to share values with your team, run `ocel link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
 			dotenv.FileName)
 	}
-	return fmt.Errorf("this project is not linked to a console, so nothing holds %s. For `ocel dev`, put %s=<VALUE> in %s; to share values with your team, run `ocel link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
+	return fmt.Errorf("this project is not linked to a console, so nothing stores %s. For `ocel dev`, put %s=<VALUE> in %s; to share values with your team, run `ocel link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
 		key, key, dotenv.FileName)
 }
 
@@ -96,7 +96,7 @@ func checkDevWritable(definitions []*resourcesv1.VariableDefinition, key string)
 		if len(scope) == 0 {
 			return nil
 		}
-		return fmt.Errorf("%s is scoped to %s, and a dev value carries no folder scope — `ocel dev` runs one child for the whole project. Put %s=<VALUE> in %s under the folder that needs it, or drop the scope where %s is declared so one dev value serves the project%s",
+		return fmt.Errorf("%s is scoped to %s, and a dev value has no folder scope — `ocel dev` runs one child for the whole project. Put %s=<VALUE> in %s under the folder that needs it, or drop the scope where %s is declared so one dev value serves the project%s",
 			key, strings.Join(scope, " and "), key, dotenv.FileName, key, descriptionLine(definition.GetDescription()))
 	}
 	return envgate.CheckWritable(definitions, key, "")
@@ -123,7 +123,7 @@ func runEnvGetDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 		if err != nil {
 			return err
 		}
-		held, err := store.client.Get(ctx, store.token, store.projectID, key)
+		stored, err := store.client.Get(ctx, store.token, store.projectID, key)
 		if errors.Is(err, envstore.ErrNoValue) {
 			return fmt.Errorf("no value is set for %s in dev; set one with `ocel env set %s=<VALUE> --dev`%s", key, key, descriptionLine(descriptions(definitions)[key]))
 		}
@@ -134,10 +134,10 @@ func runEnvGetDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 			if err := consentToReveal(definitions, key, opts, stderr); err != nil {
 				return err
 			}
-			fmt.Fprintln(stdout, held.Value)
+			fmt.Fprintln(stdout, stored.Value)
 			return nil
 		}
-		fmt.Fprintf(stdout, "%s for `ocel dev` — %d bytes, updated %s\n", key, len(held.Value), runui.EpochDate(held.UpdatedAt/1000))
+		fmt.Fprintf(stdout, "%s for `ocel dev` — %d bytes, updated %s\n", key, len(stored.Value), runui.EpochDate(stored.UpdatedAt/1000))
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})

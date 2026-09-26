@@ -83,39 +83,39 @@ func IsNotFound(err error) bool {
 const route = "/api/connectors"
 
 func (c *Client) List(ctx context.Context, accessToken string) ([]Connector, error) {
-	var held []Connector
-	if err := c.api.Get(ctx, route, accessToken, &held); err != nil {
+	var listed []Connector
+	if err := c.api.Get(ctx, route, accessToken, &listed); err != nil {
 		return nil, err
 	}
-	return held, nil
+	return listed, nil
 }
 
 func (c *Client) ByTarget(ctx context.Context, accessToken, fingerprint string) (*Connector, error) {
-	held, err := c.List(ctx, accessToken)
+	listed, err := c.List(ctx, accessToken)
 	if err != nil {
 		return nil, err
 	}
-	at := slices.IndexFunc(held, func(row Connector) bool { return row.Target == fingerprint })
+	at := slices.IndexFunc(listed, func(row Connector) bool { return row.Target == fingerprint })
 	if at < 0 {
 		return nil, nil
 	}
-	return &held[at], nil
+	return &listed[at], nil
 }
 
 func (c *Client) Upsert(ctx context.Context, accessToken string, taken Upsert) (*Connector, error) {
-	var held Connector
-	if err := c.api.Put(ctx, route, accessToken, taken, &held); err != nil {
+	var registered Connector
+	if err := c.api.Put(ctx, route, accessToken, taken, &registered); err != nil {
 		return nil, err
 	}
-	return &held, nil
+	return &registered, nil
 }
 
 func (c *Client) Address(ctx context.Context, accessToken, id string, at Address) (*Connector, error) {
-	var held Connector
-	if err := c.api.Patch(ctx, route+"/"+id, accessToken, at, &held); err != nil {
+	var registered Connector
+	if err := c.api.Patch(ctx, route+"/"+id, accessToken, at, &registered); err != nil {
 		return nil, err
 	}
-	return &held, nil
+	return &registered, nil
 }
 
 func (c *Client) Remove(ctx context.Context, accessToken, id string) error {

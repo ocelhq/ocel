@@ -82,7 +82,7 @@ trap 'rm -f "$script"' EXIT
 if curl -fsSL --connect-timeout 10 --retry 5 --retry-delay 2 --retry-all-errors https://get.docker.com -o "$script"; then
 sudo sh "$script"
 else
-echo 'https://get.docker.com is unreachable from this machine, so the distro package stands in' >&2
+echo 'https://get.docker.com is unreachable from this machine, so the distro package is installed instead' >&2
 sudo apt-get update
 sudo apt-get install -y docker.io
 fi

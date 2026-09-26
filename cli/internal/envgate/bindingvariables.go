@@ -36,7 +36,7 @@ func (s Scope) bindingDefinitions() []*resourcesv1.VariableDefinition {
 	var out []*resourcesv1.VariableDefinition
 	for _, bound := range s.Bindings {
 		for _, key := range bound.Keys {
-			if slices.ContainsFunc(out, func(held *resourcesv1.VariableDefinition) bool { return held.GetKey() == key }) {
+			if slices.ContainsFunc(out, func(existing *resourcesv1.VariableDefinition) bool { return existing.GetKey() == key }) {
 				continue
 			}
 			out = append(out, &resourcesv1.VariableDefinition{
@@ -56,7 +56,7 @@ func (s Scope) bindingGroups() []*resourcesv1.GroupDefinition {
 	definitions := s.bindingDefinitions()
 	out := make([]*resourcesv1.GroupDefinition, 0, len(s.Bindings))
 	for _, bound := range s.Bindings {
-		if !slices.ContainsFunc(definitions, func(held *resourcesv1.VariableDefinition) bool { return held.GetGroup() == bound.Group }) {
+		if !slices.ContainsFunc(definitions, func(existing *resourcesv1.VariableDefinition) bool { return existing.GetGroup() == bound.Group }) {
 			continue
 		}
 		out = append(out, &resourcesv1.GroupDefinition{
@@ -110,10 +110,10 @@ func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error
 	return nil
 }
 
-func unsetBindingVariables(definitions []*resourcesv1.VariableDefinition, held heldCells) []*resourcesv1.VariableProblem {
+func unsetBindingVariables(definitions []*resourcesv1.VariableDefinition, present presentCells) []*resourcesv1.VariableProblem {
 	var problems []*resourcesv1.VariableProblem
 	for _, definition := range definitions {
-		if held.has(Cell{Key: definition.GetKey()}) {
+		if present.has(Cell{Key: definition.GetKey()}) {
 			continue
 		}
 		problems = append(problems, &resourcesv1.VariableProblem{
@@ -135,11 +135,11 @@ func (g *Gate) ResolveBindingVariables(ctx context.Context) (map[string]string, 
 	}
 	out := make(map[string]string, len(cells))
 	for _, cell := range cells {
-		held := plaintext[cell]
-		if !held.found {
+		revealedValue := plaintext[cell]
+		if !revealedValue.found {
 			return nil, fmt.Errorf("%s, which %s reads, has no value here", cell.Key, sites(g.scope.readers(cell.Key)))
 		}
-		out[cell.Key] = held.value
+		out[cell.Key] = revealedValue.value
 	}
 	return out, nil
 }

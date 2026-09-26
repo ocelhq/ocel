@@ -30,7 +30,7 @@ func TestAGoProjectNeedsNoNode(t *testing.T) {
 	if reasons := nodeReasons(cfg); len(reasons) != 0 {
 		t.Fatalf("nodeReasons() = %v, want none", reasons)
 	}
-	if _, held := nodeCheck(context.Background(), cfg); held {
+	if _, applies := nodeCheck(context.Background(), cfg); applies {
 		t.Fatal("a Go project was checked for node")
 	}
 }
@@ -44,8 +44,8 @@ func TestATypeScriptConfigNeedsNodeAndSaysSo(t *testing.T) {
 		t.Fatalf("nodeReasons() = %v, want the TypeScript config named", reasons)
 	}
 
-	got, held := nodeCheck(context.Background(), cfg)
-	if !held {
+	got, applies := nodeCheck(context.Background(), cfg)
+	if !applies {
 		t.Fatal("a TypeScript config was not checked for node")
 	}
 	if !strings.Contains(got.text, "ocel.config.ts is TypeScript") {
@@ -60,7 +60,7 @@ func TestJavaScriptInTheProjectNeedsNode(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfg.Dir, "package.json"), []byte("{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project holds JavaScript") {
+	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project contains JavaScript") {
 		t.Fatalf("nodeReasons() = %v, want the JavaScript named", reasons)
 	}
 }
@@ -83,13 +83,13 @@ func TestConfiguredTransformsNeedNode(t *testing.T) {
 func TestNodeMissingFromPATHFailsOnlyWhereItIsNeeded(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	if _, held := nodeCheck(context.Background(), goProject(t, "ocel.json")); held {
+	if _, applies := nodeCheck(context.Background(), goProject(t, "ocel.json")); applies {
 		t.Fatal("a Go project failed over node it never runs")
 	}
 
-	got, held := nodeCheck(context.Background(), goProject(t, "ocel.config.ts"))
-	if !held || got.verdict != verdictFail {
-		t.Fatalf("nodeCheck() = %+v, %v, want a failure naming the missing node", got, held)
+	got, applies := nodeCheck(context.Background(), goProject(t, "ocel.config.ts"))
+	if !applies || got.verdict != verdictFail {
+		t.Fatalf("nodeCheck() = %+v, %v, want a failure naming the missing node", got, applies)
 	}
 	if !strings.Contains(got.text, "not on PATH") {
 		t.Fatalf("check text = %q, want it to say node is not on PATH", got.text)
