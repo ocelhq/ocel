@@ -1,18 +1,18 @@
-package provider_test
+package aws_test
 
 import (
 	"context"
 	"os"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	provider "github.com/ocelhq/ocel/platform/aws/provider"
+	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
@@ -24,7 +24,7 @@ const (
 
 type account struct {
 	endpoint string
-	aws      aws.Config
+	aws      awssdk.Config
 }
 
 func live(t *testing.T) account {
@@ -47,7 +47,7 @@ func live(t *testing.T) account {
 
 func (a account) boot(t *testing.T) providerkit.Bootstrap {
 	t.Helper()
-	p, err := provider.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": liveRegion}})
+	p, err := aws.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": liveRegion}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -77,7 +77,7 @@ func (a account) emptied(t *testing.T, classes ...providerkit.Class) providerkit
 func (a account) stackStatus(t *testing.T, name string) string {
 	t.Helper()
 	out, err := cloudformation.NewFromConfig(a.aws).DescribeStacks(context.Background(),
-		&cloudformation.DescribeStacksInput{StackName: aws.String(name)})
+		&cloudformation.DescribeStacksInput{StackName: awssdk.String(name)})
 	if err != nil {
 		return ""
 	}
@@ -89,21 +89,21 @@ func (a account) stackStatus(t *testing.T, name string) string {
 
 func (a account) bucketStands(t *testing.T, name string) bool {
 	t.Helper()
-	_, err := s3.NewFromConfig(a.aws).HeadBucket(context.Background(), &s3.HeadBucketInput{Bucket: aws.String(name)})
+	_, err := s3.NewFromConfig(a.aws).HeadBucket(context.Background(), &s3.HeadBucketInput{Bucket: awssdk.String(name)})
 	return err == nil
 }
 
 func (a account) tableStands(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := dynamodb.NewFromConfig(a.aws).DescribeTable(context.Background(),
-		&dynamodb.DescribeTableInput{TableName: aws.String(name)})
+		&dynamodb.DescribeTableInput{TableName: awssdk.String(name)})
 	return err == nil
 }
 
 func (a account) paramStands(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := ssm.NewFromConfig(a.aws).GetParameter(context.Background(),
-		&ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
+		&ssm.GetParameterInput{Name: awssdk.String(name), WithDecryption: awssdk.Bool(true)})
 	return err == nil
 }
 
