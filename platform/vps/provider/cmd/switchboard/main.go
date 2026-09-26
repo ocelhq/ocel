@@ -44,12 +44,12 @@ const (
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func run(ctx context.Context, argv []string, out, errs io.Writer) int {
+func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) int {
 	control := os.Getenv(controlEnv)
 	if control == "" {
 		control = switchboard.ControlSocket
@@ -89,6 +89,12 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 		return inodes(rest, out, errs)
 	case "holds":
 		return holds(rest, errs)
+	case "place":
+		return place(rest, in, errs)
+	case "unplace":
+		return unplace(rest, errs)
+	case "placed":
+		return placed(rest, out, errs)
 	default:
 		return usage(errs)
 	}
@@ -104,7 +110,10 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       inodes <path>... |")
-	fmt.Fprintln(errs, "       holds <socket> <path>")
+	fmt.Fprintln(errs, "       holds <socket> <path> |")
+	fmt.Fprintln(errs, "       place <path> < <file> |")
+	fmt.Fprintln(errs, "       unplace <path> |")
+	fmt.Fprintln(errs, "       placed <path>")
 	return exitRefused
 }
 

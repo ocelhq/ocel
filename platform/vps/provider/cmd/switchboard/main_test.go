@@ -25,8 +25,7 @@ import (
 
 func ran(t *testing.T, argv ...string) (int, string, string) {
 	t.Helper()
-	var out, errs strings.Builder
-	return run(t.Context(), argv, &out, &errs), out.String(), errs.String()
+	return fed(t, strings.NewReader(""), argv...)
 }
 
 func controlAt(t *testing.T) string {
@@ -131,7 +130,7 @@ func served(t *testing.T, table string, flags ...string) serving {
 	ctx, stop := context.WithCancel(t.Context())
 	stood.stop = stop
 	argv := append([]string{"serve", "--listen", stood.data, "--front", stood.front, "--admit", stood.admit, "--table", table}, flags...)
-	go func() { stood.done <- run(ctx, argv, io.Discard, stood.errs) }()
+	go func() { stood.done <- run(ctx, argv, strings.NewReader(""), io.Discard, stood.errs) }()
 	t.Cleanup(func() {
 		stop()
 		<-stood.done
@@ -265,7 +264,7 @@ func TestServeRefusesAnAdmitSocketItCannotTake(t *testing.T) {
 
 	var errs strings.Builder
 	unreachable := filepath.Join(t.TempDir(), "absent", "admit.sock")
-	if code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--admit", unreachable}, io.Discard, &errs); code != exitRefused {
+	if code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--admit", unreachable}, strings.NewReader(""), io.Discard, &errs); code != exitRefused {
 		t.Errorf("serve over an admit socket it cannot create = %d, %q, want %d", code, errs.String(), exitRefused)
 	}
 }
@@ -291,7 +290,7 @@ func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t 
 	stood := served(t, tableFile(t, nil))
 
 	var errs strings.Builder
-	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
+	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)}, strings.NewReader(""), io.Discard, &errs)
 	if code != exitRefused {
 		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", stood.control, code, exitRefused)
 	}
@@ -309,7 +308,7 @@ func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T
 	var errs [racing]strings.Builder
 	for at := range racing {
 		argv := []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", table}
-		go func() { exited <- run(ctx, argv, io.Discard, &errs[at]) }()
+		go func() { exited <- run(ctx, argv, strings.NewReader(""), io.Discard, &errs[at]) }()
 	}
 	refused := 0
 	t.Cleanup(func() {
