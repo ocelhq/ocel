@@ -3,6 +3,7 @@ package configdoc
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -23,25 +24,29 @@ type schemaProvider interface {
 type object = map[string]any
 
 func Schema() ([]byte, error) {
-	root := schemaOf(reflect.TypeOf(Document{}))
-	root["$schema"] = SchemaDialect
-	root["title"] = "Ocel project configuration"
-	return json.MarshalIndent(root, "", "  ")
+	return tagged(func() ([]byte, error) {
+		root := schemaOf(reflect.TypeOf(Document{}))
+		root["$schema"] = SchemaDialect
+		root["title"] = "Ocel project configuration"
+		return json.MarshalIndent(root, "", "  ")
+	})
 }
 
 func ProviderSchema[E, D ~string](id string, options any, edges []E, dns []D) ([]byte, error) {
 	if id == "" {
 		return nil, errors.New("a provider schema is titled after the provider it belongs to, and this one has no identifier")
 	}
-	shape := schemaOf(reflect.TypeOf(options))
-	shape["title"] = strings.ToUpper(id[:1]) + id[1:] + "ProviderOptions"
-	fragment := object{
-		"id":      id,
-		"options": shape,
-		"edges":   sortedIDs(edges),
-		"dns":     sortedIDs(dns),
-	}
-	return json.MarshalIndent(fragment, "", "  ")
+	return tagged(func() ([]byte, error) {
+		shape := schemaOf(reflect.TypeOf(options))
+		shape["title"] = strings.ToUpper(id[:1]) + id[1:] + "ProviderOptions"
+		fragment := object{
+			"id":      id,
+			"options": shape,
+			"edges":   sortedIDs(edges),
+			"dns":     sortedIDs(dns),
+		}
+		return json.MarshalIndent(fragment, "", "  ")
+	})
 }
 
 func sortedIDs[T ~string](ids []T) []any {
@@ -101,30 +106,52 @@ func schemaOf(target reflect.Type) object {
 func objectSchema(target reflect.Type) object {
 	fields := jsonFields(target)
 	properties := object{}
-	var required, unless []any
-	freeing := ""
+	var required, freed []any
+	freedBy := ""
 	for _, field := range fields {
 		properties[field.name] = fieldSchema(field)
 		switch {
 		case field.unless != "":
-			unless = append(unless, field.name)
-			freeing = field.unless
+			if freedBy != "" && field.unless != freedBy {
+				panic(tagError{fmt.Errorf("%s marks %q required unless %q, and %q required unless %q: the fields of one object are freed by one field",
+					target, freed[0], freedBy, field.name, field.unless)})
+			}
+			freed = append(freed, field.name)
+			freedBy = field.unless
 		case !field.optional:
 			required = append(required, field.name)
 		}
 	}
-	if freeing == "" {
+	if freedBy == "" {
 		return named(target, closedObject(properties, required))
 	}
-	spelled := object{}
-	for name, property := range properties {
-		spelled[name] = property
+	if _, ok := properties[freedBy]; !ok {
+		panic(tagError{fmt.Errorf("%s marks %q required unless %q, which is no field of it", target, freed[0], freedBy)})
 	}
-	spelled[freeing] = false
+	explicit := object{}
+	for name, property := range properties {
+		explicit[name] = property
+	}
+	explicit[freedBy] = false
 	return named(target, object{"oneOf": []any{
-		closedObject(properties, append(slices.Clone(required), freeing)),
-		closedObject(spelled, append(slices.Clone(required), unless...)),
+		closedObject(properties, append(slices.Clone(required), freedBy)),
+		closedObject(explicit, append(slices.Clone(required), freed...)),
 	}})
+}
+
+type tagError struct{ error }
+
+func tagged(generate func() ([]byte, error)) (generated []byte, err error) {
+	defer func() {
+		switch refused := recover().(type) {
+		case nil:
+		case tagError:
+			generated, err = nil, refused.error
+		default:
+			panic(refused)
+		}
+	}()
+	return generate()
 }
 
 func fieldSchema(field jsonField) object {
