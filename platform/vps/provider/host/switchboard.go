@@ -31,25 +31,11 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
 func switchboardStanding(binary []byte, front Front) boxContainer {
-	return placing(boardStanding(binary, front), destination(openFront(front, frontBox{})))
-}
-
-func placing(board boxContainer, file string) boxContainer {
-	if file == "" {
-		return board
-	}
-	dir := filepath.Dir(file)
-	board.binds = append(board.binds, dir+":"+dir)
-	board.env = append(board.env, switchboard.PlaceEnv+"="+dir)
-	return board
-}
-
-func boardStanding(binary []byte, front Front) boxContainer {
 	var relaying []string
 	if front.adopted() {
 		relaying = []string{"--relay-network", ProxyNetwork}
 	}
-	return boxContainer{
+	return boundToPlace(boxContainer{
 		name:  SwitchboardContainer,
 		image: SwitchboardImage,
 		command: append([]string{SwitchboardMounted, "serve",
@@ -73,7 +59,17 @@ func boardStanding(binary []byte, front Front) boxContainer {
 		unready: "answered nothing over its control socket in " + switchboard.ControlDir,
 		inodes:  []string{SwitchboardMounted, "inodes"},
 		joins:   true,
+	}, destination(openFront(front, frontBox{})))
+}
+
+func boundToPlace(board boxContainer, at string) boxContainer {
+	if at == "" {
+		return board
 	}
+	dir := filepath.Dir(at)
+	board.binds = append(board.binds, dir+":"+dir)
+	board.env = append(board.env, switchboard.PlaceEnv+"="+dir)
+	return board
 }
 
 func switchboardCommand(argv ...string) []string {
