@@ -19,6 +19,7 @@ import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
+import { engineSeries, unadopted } from "./engine";
 import { coveredNames, type Front, frontNamed, frontStep, stepCommand } from "./front";
 import { type Gateway, openGateway } from "./gateway";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
@@ -220,6 +221,11 @@ export class VpsTarget implements Target, ReleaseCycle {
     await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
     if (result.code !== 0) {
       throw exitedBadly(args, result);
+    }
+    const series = engineSeries(process.env);
+    const missed = series === undefined ? undefined : unadopted(log, series);
+    if (missed !== undefined) {
+      throw new Error(missed);
     }
     return {};
   }
