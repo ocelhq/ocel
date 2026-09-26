@@ -10,7 +10,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func TestFormattingAMessageCarryingARedactedFieldIsReported(t *testing.T) {
+func TestFormattingAMessageWithARedactedFieldIsReported(t *testing.T) {
 	analysistest.Run(t, ".", Analyzer, "./testdata/leak")
 }
 

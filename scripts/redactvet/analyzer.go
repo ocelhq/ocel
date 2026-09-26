@@ -16,30 +16,30 @@ import (
 
 var Analyzer = &analysis.Analyzer{
 	Name:      "redactvet",
-	Doc:       "reports formatting or JSON-encoding a protobuf message that carries a debug_redact field, which protobuf-go renders in clear",
+	Doc:       "reports formatting or JSON-encoding a protobuf message that has a debug_redact field, which protobuf-go renders in clear",
 	Run:       run,
-	FactTypes: []analysis.Fact{new(carriers)},
+	FactTypes: []analysis.Fact{new(redactingMessages)},
 }
 
-type carriers struct {
-	Messages []carrier
+type redactingMessages struct {
+	Messages []redactingMessage
 }
 
-type carrier struct {
+type redactingMessage struct {
 	Full string
 	Go   string
 }
 
-func (*carriers) AFact() {}
+func (*redactingMessages) AFact() {}
 
-func (r *carriers) String() string {
+func (r *redactingMessages) String() string {
 	names := make([]string, 0, len(r.Messages))
 	for _, m := range r.Messages {
 		if m.Go != "" {
 			names = append(names, m.Go)
 		}
 	}
-	return "carriers(" + strings.Join(names, ", ") + ")"
+	return "redactingMessages(" + strings.Join(names, ", ") + ")"
 }
 
 type sink int
@@ -70,7 +70,7 @@ func sinkOf(callee *types.Func) sink {
 }
 
 func run(pass *analysis.Pass) (any, error) {
-	if err := exportCarriers(pass); err != nil {
+	if err := exportRedactingMessages(pass); err != nil {
 		return nil, err
 	}
 	for _, file := range pass.Files {
@@ -115,7 +115,7 @@ func checkString(pass *analysis.Pass, sel *ast.SelectorExpr) {
 	if !ok {
 		return
 	}
-	if isCarrier(pass, method.Signature().Recv().Type()) {
+	if isRedacting(pass, method.Signature().Recv().Type()) {
 		report(pass, sel.X, selection.Recv())
 	}
 }
@@ -179,10 +179,10 @@ func fmtReaches(pass *analysis.Pass, t types.Type, top bool, r reach, seen map[v
 	}
 	if r == methodsCalled {
 		if method := renderer(t); method != nil {
-			return isCarrier(pass, method.Signature().Recv().Type())
+			return isRedacting(pass, method.Signature().Recv().Type())
 		}
 	}
-	if named, ok := types.Unalias(t).(*types.Named); ok && namesCarrier(pass, named.Obj()) {
+	if named, ok := types.Unalias(t).(*types.Named); ok && namesRedacting(pass, named.Obj()) {
 		return true
 	}
 	switch u := t.Underlying().(type) {
@@ -220,7 +220,7 @@ func jsonEncodes(pass *analysis.Pass, t types.Type, addressable bool, seen map[a
 		return false
 	}
 	seen[addressed{t, addressable}] = true
-	if isGenericMessage(t) || isCarrier(pass, t) {
+	if isGenericMessage(t) || isRedacting(pass, t) {
 		return true
 	}
 	if marshalsItself(t) || addressable && marshalsItself(types.NewPointer(t)) {
@@ -268,12 +268,12 @@ func marshalsItself(t types.Type) bool {
 	return methods.Lookup(nil, "MarshalJSON") != nil || methods.Lookup(nil, "MarshalText") != nil
 }
 
-func isCarrier(pass *analysis.Pass, t types.Type) bool {
+func isRedacting(pass *analysis.Pass, t types.Type) bool {
 	if pointer, ok := types.Unalias(t).(*types.Pointer); ok {
 		t = pointer.Elem()
 	}
 	named, ok := types.Unalias(t).(*types.Named)
-	return ok && namesCarrier(pass, named.Obj())
+	return ok && namesRedacting(pass, named.Obj())
 }
 
 func isGenericMessage(t types.Type) bool {
@@ -293,15 +293,15 @@ func renderer(t types.Type) *types.Func {
 	return nil
 }
 
-func namesCarrier(pass *analysis.Pass, obj *types.TypeName) bool {
+func namesRedacting(pass *analysis.Pass, obj *types.TypeName) bool {
 	if obj.Pkg() == nil {
 		return false
 	}
-	var fact carriers
+	var fact redactingMessages
 	if !pass.ImportPackageFact(obj.Pkg(), &fact) {
 		return false
 	}
-	return slices.ContainsFunc(fact.Messages, func(m carrier) bool { return m.Go == obj.Name() })
+	return slices.ContainsFunc(fact.Messages, func(m redactingMessage) bool { return m.Go == obj.Name() })
 }
 
 type message struct {
@@ -310,7 +310,7 @@ type message struct {
 	declared *types.Const
 }
 
-func exportCarriers(pass *analysis.Pass) error {
+func exportRedactingMessages(pass *analysis.Pass) error {
 	local := map[string]message{}
 	scope := pass.Pkg.Scope()
 	for _, name := range scope.Names() {
@@ -337,7 +337,7 @@ func exportCarriers(pass *analysis.Pass) error {
 
 	known := map[string]bool{}
 	for _, fact := range pass.AllPackageFacts() {
-		if r, ok := fact.Fact.(*carriers); ok {
+		if r, ok := fact.Fact.(*redactingMessages); ok {
 			for _, m := range r.Messages {
 				known[m.Full] = true
 			}
@@ -346,24 +346,24 @@ func exportCarriers(pass *analysis.Pass) error {
 	for changed := true; changed; {
 		changed = false
 		for full, m := range local {
-			if !known[full] && holdsRedactedField(m.desc, known) {
+			if !known[full] && hasRedactedField(m.desc, known) {
 				known[full] = true
 				changed = true
 			}
 		}
 	}
 
-	fact := &carriers{}
+	fact := &redactingMessages{}
 	for full, m := range local {
 		if !known[full] {
 			continue
 		}
-		fact.Messages = append(fact.Messages, carrier{Full: full, Go: m.goName})
+		fact.Messages = append(fact.Messages, redactingMessage{Full: full, Go: m.goName})
 		if _, named := scope.Lookup(m.goName).(*types.TypeName); m.goName != "" && !named {
-			pass.Reportf(m.declared.Pos(), "no Go type %s for %s, which carries a debug_redact field: protoc-gen-go no longer names messages the way redactvet expects", m.goName, full)
+			pass.Reportf(m.declared.Pos(), "no Go type %s for %s, which has a debug_redact field: protoc-gen-go no longer names messages the way redactvet expects", m.goName, full)
 		}
 	}
-	slices.SortFunc(fact.Messages, func(a, b carrier) int { return strings.Compare(a.Full, b.Full) })
+	slices.SortFunc(fact.Messages, func(a, b redactingMessage) int { return strings.Compare(a.Full, b.Full) })
 	if len(fact.Messages) > 0 {
 		pass.ExportPackageFact(fact)
 	}
@@ -386,7 +386,7 @@ func collectMessages(into map[string]message, declared *types.Const, prefix, goP
 	}
 }
 
-func holdsRedactedField(desc *descriptorpb.DescriptorProto, known map[string]bool) bool {
+func hasRedactedField(desc *descriptorpb.DescriptorProto, known map[string]bool) bool {
 	for _, field := range desc.GetField() {
 		if field.GetOptions().GetDebugRedact() || known[field.GetTypeName()] {
 			return true

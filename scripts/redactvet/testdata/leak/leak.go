@@ -44,28 +44,28 @@ func text(req *contractv1.DeployRequest) string {
 	return prototext.Format(req) // want `contractv1.DeployRequest renders`
 }
 
-type held struct {
+type requestPointer struct {
 	req *contractv1.DeployRequest
 }
 
-func wrapped(h held) error {
+func wrapped(h requestPointer) error {
 	return fmt.Errorf("deploy %v", h)
 }
 
-type heldByValue struct {
+type registryValue struct {
 	registry contractv1.ImageRegistry
 }
 
-func reflected(h heldByValue) string {
-	return fmt.Sprint(h) // want `heldByValue renders`
+func reflected(h registryValue) string {
+	return fmt.Sprint(h) // want `registryValue renders`
 }
 
-type heldInSlice struct {
+type registrySlice struct {
 	registries []contractv1.ImageRegistry
 }
 
-func reflectedElements(h *heldInSlice) string {
-	return fmt.Sprintf("%+v", h) // want `\*heldInSlice renders`
+func reflectedElements(h *registrySlice) string {
+	return fmt.Sprintf("%+v", h) // want `\*registrySlice renders`
 }
 
 type exposed struct {
@@ -144,13 +144,13 @@ func cloned(req *contractv1.DeployRequest) string {
 	return prototext.Format(proto.Clone(req)) // want `proto.Message renders`
 }
 
-type heldGeneric struct {
+type exposedGeneric struct {
 	Exposed proto.Message
 	sealed  proto.Message
 }
 
-func genericField(h heldGeneric) string {
-	return fmt.Sprint(h) // want `heldGeneric renders`
+func genericField(h exposedGeneric) string {
+	return fmt.Sprint(h) // want `exposedGeneric renders`
 }
 
 type sealedGeneric struct {
@@ -173,7 +173,7 @@ func streamed(w io.Writer, values map[string]*envvarsv1.RevealedValue) error {
 	return json.NewEncoder(w).Encode(values) // want `map\[string\]\*envvarsv1.RevealedValue encodes`
 }
 
-func followed(i indirect, h held, m proto.Message) ([]byte, error) {
+func followed(i indirect, h requestPointer, m proto.Message) ([]byte, error) {
 	if _, err := json.Marshal(h); err != nil {
 		return nil, err
 	}

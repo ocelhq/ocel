@@ -8,7 +8,7 @@ const DOWNLOADS = "https://github.com/ocelhq/ocel/releases/download";
 
 export function cask(version, checksums) {
   if (parse(version).channel !== "stable") {
-    throw new Error(`the tap carries stable releases only, not ${version}`);
+    throw new Error(`the tap publishes stable releases only, not ${version}`);
   }
   const sums = new Map(
     checksums

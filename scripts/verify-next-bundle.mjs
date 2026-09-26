@@ -180,7 +180,7 @@ function verifyDispatch(dispatch, bundles) {
     if (entry.kind === "prerender") {
       check(
         entry.edgeEntryKey === undefined,
-        `${where}: node-parented prerender carries edgeEntryKey ${JSON.stringify(entry.edgeEntryKey)} — the worker reads that as "cannot revalidate"`,
+        `${where}: node-parented prerender has edgeEntryKey ${JSON.stringify(entry.edgeEntryKey)} — the worker reads that as "cannot revalidate"`,
       );
     }
 

@@ -30,7 +30,7 @@ describe("cask", () => {
     assert.throws(() => cask("0.1.0", partial), /linux_arm64/);
   });
 
-  it("refuses a prerelease, which the tap never carries", () => {
+  it("refuses a prerelease, which the tap never publishes", () => {
     assert.throws(() => cask("0.1.0-rc.1", checksums), /stable/);
   });
 });

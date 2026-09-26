@@ -23,7 +23,7 @@ apt-get update -qq
 
 version=$(apt-cache madison docker-ce | awk -v series="5:$series." 'index($3, series) == 1 { print $3; exit }')
 [ -n "$version" ] || {
-    echo "vps-docker.sh: docker's apt repository holds no docker-ce $series.x for $ID $VERSION_CODENAME" >&2
+    echo "vps-docker.sh: docker's apt repository has no docker-ce $series.x for $ID $VERSION_CODENAME" >&2
     exit 1
 }
 apt-get install -y -qq "docker-ce=$version" "docker-ce-cli=$version" containerd.io >/dev/null
