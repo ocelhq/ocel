@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -19,7 +19,7 @@ func everything() RoutingTable {
 	table := storing()
 	table.Routes = []AppRoute{
 		{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
-		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + appbuild.InjectedPortText},
 	}
 	table.Grace = 12 * time.Second
 	table.Pins = []Pin{{Hostname: "shop.example.com", Path: caddy.PinsDir + "/shop"}}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -28,8 +28,8 @@ func twoBranchesOfOneApp() RoutingTable {
 		Grace:       DrainWindow,
 		PreviewBase: previewBase,
 		Routes: []AppRoute{
-			{RouteKey: previewKey("pr-7", "web"), Upstream: "shop-web-7:" + providerkit.InjectedPortText},
-			{RouteKey: previewKey("pr-9", "web"), Upstream: "shop-web-9:" + providerkit.InjectedPortText},
+			{RouteKey: previewKey("pr-7", "web"), Upstream: "shop-web-7:" + appbuild.InjectedPortText},
+			{RouteKey: previewKey("pr-9", "web"), Upstream: "shop-web-9:" + appbuild.InjectedPortText},
 		},
 		Claims: []HostClaim{
 			previewClaim("pr-7", "", "shop--pr-7."+previewBase),

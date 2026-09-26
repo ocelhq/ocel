@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -31,7 +32,7 @@ func previewPlan(label string) providerkit.StackPlan {
 			Functions: []providerkit.FunctionSpec{{
 				Name:      "fn--web--checkout",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
-				Framework: providerkit.Framework{Name: "nodejs", Arch: string(arch.X8664)},
+				Framework: appbuild.Framework{Name: "nodejs", Arch: string(arch.X8664)},
 			}},
 		},
 	}

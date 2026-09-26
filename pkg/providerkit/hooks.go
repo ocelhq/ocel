@@ -6,6 +6,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -31,6 +32,6 @@ type CostHooks struct {
 }
 
 type FunctionImageHooks struct {
-	ResolveBase func(ctx context.Context, framework Framework) (v1.Image, error)
-	ReadRuntime func(ctx context.Context, framework Framework) ([]byte, error)
+	ResolveBase func(ctx context.Context, framework appbuild.Framework) (v1.Image, error)
+	ReadRuntime func(ctx context.Context, framework appbuild.Framework) ([]byte, error)
 }

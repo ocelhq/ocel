@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
@@ -37,7 +38,7 @@ func (r *deployRun) imageFunctions(
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s's functions are run from images, and nothing this deploy carries names a registry to push them to", entry.App)
 	}
-	root := ArtifactRoot()
+	root := appbuild.ArtifactRoot()
 	var pushes []ImagePush
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
@@ -99,7 +100,7 @@ func (r *deployRun) imageFunction(
 	}, nil
 }
 
-func (r *deployRun) wrapFunction(ctx context.Context, name string, framework Framework, image v1.Image) (v1.Image, error) {
+func (r *deployRun) wrapFunction(ctx context.Context, name string, framework appbuild.Framework, image v1.Image) (v1.Image, error) {
 	goarch, known := arch.GoArch(framework.Arch)
 	if !known {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
@@ -124,7 +125,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework Fra
 func runtimeOverlay(
 	ctx context.Context,
 	hooks Hooks,
-	framework Framework,
+	framework appbuild.Framework,
 	name string,
 	overlay map[string][]byte,
 ) (map[string][]byte, error) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
@@ -65,7 +66,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	return []providerkit.AppContainer{{
 		Name:     app.App,
 		Physical: physical,
-		URL:      "http://" + physical + ":" + providerkit.InjectedPortText,
+		URL:      "http://" + physical + ":" + appbuild.InjectedPortText,
 		Image:    app.Image,
 	}}, nil
 }

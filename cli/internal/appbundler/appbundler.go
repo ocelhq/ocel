@@ -14,7 +14,7 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -40,7 +40,7 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 
 type Target struct {
 	App        string
-	Framework  providerkit.Framework
+	Framework  appbuild.Framework
 	Entrypoint string
 	FuncDir    string
 	AppDir     string
@@ -103,8 +103,8 @@ func Bundle(ctx context.Context, t Target) error {
 	return describeArtifact(t.App, t.Framework, HandlerFile, nil, t.FuncDir, t.AppDir)
 }
 
-func describeArtifact(app string, framework providerkit.Framework, handler string, command []string, funcDir, appDir string) error {
-	if err := writeJSON(filepath.Join(funcDir, providerkit.FunctionConfigFile), providerkit.FunctionConfig{
+func describeArtifact(app string, framework appbuild.Framework, handler string, command []string, funcDir, appDir string) error {
+	if err := writeJSON(filepath.Join(funcDir, appbuild.FunctionConfigFile), appbuild.FunctionConfig{
 		Framework: framework,
 		Handler:   handler,
 		Command:   command,

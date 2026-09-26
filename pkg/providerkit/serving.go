@@ -10,25 +10,10 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-const (
-	FrameworkNode = "node"
-	FrameworkNext = "next"
-	FrameworkGo   = "go"
-
-	FrameworkPython = "python"
-
-	FrameworkRust = "rust"
-)
-
-func Frameworks() []string {
-	return []string{FrameworkNode, FrameworkNext, FrameworkGo, FrameworkPython, FrameworkRust}
-}
-
-func KnownFramework(name string) bool { return slices.Contains(Frameworks(), name) }
 
 type ServingQuery struct {
 	Root              string
@@ -52,7 +37,7 @@ type ServingFacts struct {
 }
 
 func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
-	desc, present, err := ReadServeDescriptor(q.Root, q.App)
+	desc, present, err := appbuild.ReadServeDescriptor(q.Root, q.App)
 	if err != nil {
 		return ServingFacts{}, err
 	}
@@ -63,7 +48,7 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	if present {
 		facts.Entry = desc.Entry
 	}
-	if q.Framework == FrameworkNext {
+	if q.Framework == appbuild.FrameworkNext {
 		facts.ISR = &ISRPlan{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
@@ -101,7 +86,7 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*Routi
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build names no entry route; rebuild the app", q.App)
 	}
-	raw, err := os.ReadFile(filepath.Join(AppArtifactRoot(q.Root, q.App), edge.RoutingManifestFile))
+	raw, err := os.ReadFile(filepath.Join(appbuild.AppArtifactRoot(q.Root, q.App), edge.RoutingManifestFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build wrote no %s; rebuild the app", q.App, edge.RoutingManifestFile)

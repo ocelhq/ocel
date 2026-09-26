@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -69,7 +70,7 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        app,
-			Framework:  providerkit.FrameworkNext,
+			Framework:  appbuild.FrameworkNext,
 			Entry:      "fn--" + app + "--entry",
 			Deployment: "d1",
 			Functions: []providerkit.FunctionSpec{

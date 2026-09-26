@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
@@ -130,7 +131,7 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a container on this provider runs what a registry coordinate names and nothing else", app.App)
 	}
-	if !providerkit.HealthCheckPath(app.HealthCheckPath) {
+	if !appbuild.HealthCheckPath(app.HealthCheckPath) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, app.HealthCheckPath)
 	}

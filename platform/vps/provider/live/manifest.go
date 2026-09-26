@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -20,7 +20,7 @@ const (
 	SpacePath  = "/space"
 )
 
-const ProjectionDir = providerkit.ContainerLivePath
+const ProjectionDir = appbuild.ContainerLivePath
 
 const (
 	StoreSecretFolder  = "resources"

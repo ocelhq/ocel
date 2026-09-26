@@ -17,6 +17,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -254,7 +255,7 @@ func (b *barrierArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef,
 func builtFunction(t *testing.T, name string) string {
 	t.Helper()
 	path := "apps/web/functions/" + name + ".func"
-	dir := filepath.Join(providerkit.ArtifactRoot(), filepath.FromSlash(path))
+	dir := filepath.Join(appbuild.ArtifactRoot(), filepath.FromSlash(path))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

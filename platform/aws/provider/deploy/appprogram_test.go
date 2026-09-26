@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -34,7 +35,7 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        "web",
-			Framework:  providerkit.FrameworkNext,
+			Framework:  appbuild.FrameworkNext,
 			Entry:      "fn--web--entry",
 			Deployment: "d1",
 			Functions: []providerkit.FunctionSpec{

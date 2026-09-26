@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -97,7 +98,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	}
 	container := &run.GoogleCloudRunV2Container{
 		Image: s.image,
-		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: providerkit.InjectedPort}},
+		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: appbuild.InjectedPort}},
 		Env:   environmentOf(s.env),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
 			CpuIdle:         s.compute == providerkit.ComputeServerless,
@@ -112,7 +113,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if s.compute == providerkit.ComputeContainer {
 		scaling.MinInstanceCount = 1
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{
-			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: providerkit.InjectedPort},
+			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: appbuild.InjectedPort},
 		}
 	}
 	volumes, mounted := volumesOf(s.mounts)

@@ -10,13 +10,14 @@ import (
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) {
 	t.Helper()
-	dir := filepath.Join(providerkit.ArtifactRoot(), "apps", app)
+	dir := filepath.Join(appbuild.ArtifactRoot(), "apps", app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

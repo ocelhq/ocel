@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -118,7 +119,7 @@ func isrPlan(app, prefix string) providerkit.StackPlan {
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
 			App:       app,
-			Framework: providerkit.FrameworkNext,
+			Framework: appbuild.FrameworkNext,
 			ISR:       &providerkit.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
 		},
 	}

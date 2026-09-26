@@ -25,7 +25,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -413,7 +413,7 @@ func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping fun
 	t.Helper()
 
 	const beat = 500 * time.Millisecond
-	address := retiring + ":" + providerkit.InjectedPortText
+	address := retiring + ":" + appbuild.InjectedPortText
 	stop := make(chan struct{})
 	var mu sync.Mutex
 	watched := crossing{stopped: -1}

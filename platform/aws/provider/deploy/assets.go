@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -113,7 +113,7 @@ type assetUpload struct {
 }
 
 func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) (*assetSet, error) {
-	if framework != providerkit.FrameworkNext {
+	if framework != appbuild.FrameworkNext {
 		return nil, nil
 	}
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {

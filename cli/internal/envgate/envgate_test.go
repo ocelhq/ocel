@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 type fakeValues struct {
@@ -418,8 +418,8 @@ func TestDeclareEnv(t *testing.T) {
 			refused      bool
 		}{
 			{name: "an app with no client bundle", key: constants.AppURLEnvName, refused: true},
-			{name: "an app whose bundle reads it", clientBundle: true, key: providerkit.ClientURLEnvName, refused: true},
-			{name: "an app whose bundle never reads it", key: providerkit.ClientURLEnvName, refused: false},
+			{name: "an app whose bundle reads it", clientBundle: true, key: appbuild.ClientURLEnvName, refused: true},
+			{name: "an app whose bundle never reads it", key: appbuild.ClientURLEnvName, refused: false},
 		} {
 			t.Run(tc.key+" for "+tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -429,7 +429,7 @@ func TestDeclareEnv(t *testing.T) {
 					Definitions: []*resourcesv1.VariableDefinition{def(tc.key, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 				})
 				if refused := err != nil; refused != tc.refused {
-					t.Errorf("err = %v, want refused %v — ocel writes %s only for an app whose bundle reads it", err, tc.refused, providerkit.ClientURLEnvName)
+					t.Errorf("err = %v, want refused %v — ocel writes %s only for an app whose bundle reads it", err, tc.refused, appbuild.ClientURLEnvName)
 				}
 			})
 		}
@@ -455,7 +455,7 @@ func TestDeclareEnv(t *testing.T) {
 				g := prefetched(t, newFakeValues(), mixed)
 
 				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
-					Definitions: []*resourcesv1.VariableDefinition{scoped(providerkit.ClientURLEnvName, tc.folders...)},
+					Definitions: []*resourcesv1.VariableDefinition{scoped(appbuild.ClientURLEnvName, tc.folders...)},
 				})
 				if refused := err != nil; refused != tc.refused {
 					t.Errorf("err = %v, want refused %v — a declaration is refused for the apps its folders reach, not for the project", err, tc.refused)

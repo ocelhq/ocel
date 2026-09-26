@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -112,7 +113,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		}
 		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
 		builds.coords[name] = coord
-		if app.GetFramework().GetName() != providerkit.FrameworkNext {
+		if app.GetFramework().GetName() != appbuild.FrameworkNext {
 			continue
 		}
 		prefix := isrPrefixOf(coord)

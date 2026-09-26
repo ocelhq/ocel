@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
@@ -433,7 +433,7 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 	return append(env, extraEnv...)
 }
 
-func entrypointPath(a providerkit.FunctionConfig) string {
+func entrypointPath(a appbuild.FunctionConfig) string {
 	if a.Framework.Name == "next" {
 		return "/opt/ocel/next/entrypoint.mjs"
 	}

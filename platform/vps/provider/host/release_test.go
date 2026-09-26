@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -30,10 +30,10 @@ const (
 )
 
 var (
-	retired    = retiring + ":" + providerkit.InjectedPortText
-	flipTo     = physical + ":" + providerkit.InjectedPortText
-	apiRetired = apiRetiring + ":" + providerkit.InjectedPortText
-	apiFlipTo  = apiStanding + ":" + providerkit.InjectedPortText
+	retired    = retiring + ":" + appbuild.InjectedPortText
+	flipTo     = physical + ":" + appbuild.InjectedPortText
+	apiRetired = apiRetiring + ":" + appbuild.InjectedPortText
+	apiFlipTo  = apiStanding + ":" + appbuild.InjectedPortText
 )
 
 type watched struct {
@@ -1049,12 +1049,12 @@ func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
 	t.Parallel()
 
 	said := diagnosed(t,
-		session.Result{Code: 4, Stderr: physical + ":" + providerkit.InjectedPortText + " never answered /healthz within 30s"},
+		session.Result{Code: 4, Stderr: physical + ":" + appbuild.InjectedPortText + " never answered /healthz within 30s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0", "")
 
 	for what, wanted := range map[string]string{
 		"the verdict the helper reached":      "never answered",
-		"the exact target it probed":          physical + ":" + providerkit.InjectedPortText,
+		"the exact target it probed":          physical + ":" + appbuild.InjectedPortText,
 		"the path it probed":                  "/healthz",
 		"the config key that changes it":      healthKey,
 		"the deploy timeout that expired":     "30s",
@@ -1349,7 +1349,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t *testing.T) {
 	t.Parallel()
 
-	overtaking := "shop-web-overtaker:" + providerkit.InjectedPortText
+	overtaking := "shop-web-overtaker:" + appbuild.InjectedPortText
 	stood := benched(t, session.Result{}, session.Result{})
 	proxied := stood.answer
 	var once sync.Once

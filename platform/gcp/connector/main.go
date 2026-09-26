@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -31,7 +32,7 @@ func main() {
 }
 
 func served() string {
-	if port := os.Getenv(providerkit.InjectedPortName); port != "" {
+	if port := os.Getenv(appbuild.InjectedPortName); port != "" {
 		return port
 	}
 	return defaultPort

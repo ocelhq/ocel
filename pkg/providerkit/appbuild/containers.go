@@ -1,6 +1,9 @@
-package providerkit
+package appbuild
 
-import "regexp"
+import (
+	"regexp"
+	"strconv"
+)
 
 const PinnedImagePattern = `^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$`
 
@@ -18,3 +21,15 @@ func PinnedImage(imageRef string) bool {
 func HealthCheckPath(path string) bool {
 	return healthCheckPath.MatchString(path)
 }
+
+const (
+	InjectedPortName = "PORT"
+	InjectedPort     = 8080
+)
+
+var InjectedPortText = strconv.Itoa(InjectedPort)
+
+const (
+	ContainerRuntimePath = "/ocel/bin/runtime"
+	ContainerLivePath    = "/ocel/live"
+)

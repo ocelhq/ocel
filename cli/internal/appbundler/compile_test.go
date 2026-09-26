@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -33,7 +33,7 @@ func compiled(t *testing.T, pkg, arch string) (string, string) {
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: providerkit.Framework{Name: "go", Arch: arch},
+		Framework: appbuild.Framework{Name: "go", Arch: arch},
 		Source:    pkg,
 		FuncDir:   funcDir,
 		AppDir:    appDir,
@@ -83,15 +83,15 @@ func TestCompileDeclaresTheCommandTheArtifactIsServedBy(t *testing.T) {
 	t.Parallel()
 	appDir, funcDir := compiled(t, goModule(t), "x86_64")
 
-	var config providerkit.FunctionConfig
-	readJSON(t, filepath.Join(funcDir, providerkit.FunctionConfigFile), &config)
+	var config appbuild.FunctionConfig
+	readJSON(t, filepath.Join(funcDir, appbuild.FunctionConfigFile), &config)
 	if config.Handler != "web" {
 		t.Errorf("handler = %q, want the binary named after the app", config.Handler)
 	}
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Framework != (providerkit.Framework{Name: "go", Arch: "x86_64"}) {
+	if config.Framework != (appbuild.Framework{Name: "go", Arch: "x86_64"}) {
 		t.Errorf("runtime = %+v, want the go runtime at the architecture it was built for", config.Framework)
 	}
 	if config.App != "web" {
@@ -154,7 +154,7 @@ func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
 
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Framework:  providerkit.Framework{Name: "go", Arch: "x86_64"},
+		Framework:  appbuild.Framework{Name: "go", Arch: "x86_64"},
 		Source:     source,
 		Entrypoint: filepath.Join("cmd", "server"),
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
@@ -169,7 +169,7 @@ func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: providerkit.Framework{Name: "go", Arch: "riscv"},
+		Framework: appbuild.Framework{Name: "go", Arch: "riscv"},
 		Source:    goModule(t),
 		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
 		AppDir:    t.TempDir(),
@@ -187,7 +187,7 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 	}
 	err := Compile(context.Background(), Compilation{
 		App:       "web",
-		Framework: providerkit.Framework{Name: "go", Arch: "x86_64"},
+		Framework: appbuild.Framework{Name: "go", Arch: "x86_64"},
 		Source:    pkg,
 		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
 		AppDir:    t.TempDir(),

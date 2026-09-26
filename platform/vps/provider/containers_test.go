@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -59,7 +60,7 @@ func TestStandingAnAppUpEndsAtARunningLabelledContainerAndFlipsNothing(t *testin
 	if held.Name != "web" {
 		t.Errorf("the container is recorded under %q, want the app's own name", held.Name)
 	}
-	if held.Physical == "" || !strings.Contains(held.URL, held.Physical+":"+providerkit.InjectedPortText) {
+	if held.Physical == "" || !strings.Contains(held.URL, held.Physical+":"+appbuild.InjectedPortText) {
 		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", held.URL)
 	}
 	joined := strings.Join(machine.commands(), "\n")

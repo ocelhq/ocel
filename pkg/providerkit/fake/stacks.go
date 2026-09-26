@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -132,7 +133,7 @@ func (r *Stacks) State(ref providerkit.StackRef) providerkit.StackState {
 }
 
 func deliveredEdgeBundle(plan providerkit.StackPlan) string {
-	root := providerkit.AppArtifactRoot(providerkit.ArtifactRoot(), plan.App.App)
+	root := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), plan.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
 	}

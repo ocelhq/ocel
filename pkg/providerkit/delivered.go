@@ -4,21 +4,15 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-const (
-	InjectedPortName = "PORT"
-	InjectedPort     = 8080
-	ownedPrefix      = "OCEL_"
-)
-
-var InjectedPortText = strconv.Itoa(InjectedPort)
+const ownedPrefix = "OCEL_"
 
 func ResourceEnvName(kind BindingType, resource string) string {
 	return naming.ResourceEnvName(WireBindingType(kind), resource)
@@ -100,7 +94,7 @@ func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
 	var injected, served, owned []string
 	for _, key := range declaredNames(clientBundle, held) {
 		switch {
-		case key == InjectedPortName:
+		case key == appbuild.InjectedPortName:
 			injected = append(injected, key)
 		case key == HandlerName:
 			served = append(served, key)
@@ -116,7 +110,7 @@ func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
 	if len(injected) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares %s, and %s is the one name a provider running a container injects itself: it names the port the app is told to bind, so a value declared under it would either be lost or win and leave the release gated on a port nothing is listening on. Rename it",
-			app, strings.Join(injected, ", "), InjectedPortName)
+			app, strings.Join(injected, ", "), appbuild.InjectedPortName)
 	}
 	if len(owned) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
@@ -130,7 +124,7 @@ func declaredNames(clientBundle bool, held AppValues) []string {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, named := range []map[string]string{held.Plain, held.Sensitive} {
 		for key := range named {
-			if OcelWritten(clientBundle, key) {
+			if appbuild.IsOcelInjectedEnv(clientBundle, key) {
 				continue
 			}
 			names = append(names, key)

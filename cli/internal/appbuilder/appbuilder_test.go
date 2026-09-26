@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -64,7 +64,7 @@ func writePlan(t *testing.T, outDir string, summaries ...functionSummary) {
 	}
 }
 
-func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg providerkit.FunctionConfig) {
+func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg appbuild.FunctionConfig) {
 	t.Helper()
 	dir := filepath.Join(outDir, appsDirName, app, functionsDirName, funcRel)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -137,11 +137,11 @@ func TestBuild(t *testing.T) {
 			if err := json.Unmarshal(request, &gotReq); err != nil {
 				return err
 			}
-			writeFuncConfig(t, gotReq.OutDir, "api", "index.func", providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler", App: "api"})
-			writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler", App: "worker"})
+			writeFuncConfig(t, gotReq.OutDir, "api", "index.func", appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", App: "api"})
+			writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", App: "worker"})
 			writePlan(t, gotReq.OutDir,
-				functionSummary{Name: "api", Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"), Strategy: traceStrategy},
-				functionSummary{Name: "worker", Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "worker", "functions", "index.func"), Strategy: traceStrategy})
+				functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"), Strategy: traceStrategy},
+				functionSummary{Name: "worker", Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", ArtifactPath: filepath.Join("apps", "worker", "functions", "index.func"), Strategy: traceStrategy})
 			return nil
 		}}
 
@@ -216,7 +216,7 @@ func TestBuild(t *testing.T) {
 		root := t.TempDir()
 		writeBuilder(t, root)
 		writeFuncConfig(t, filepath.Join(root, constants.ProjectStateDirName, "output"), "stale", "index.func",
-			providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: "h", App: "stale"})
+			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "h", App: "stale"})
 
 		var gotReq builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
@@ -443,7 +443,7 @@ func TestBuild(t *testing.T) {
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
 			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName), functionSummary{
 				Name:         "api",
-				Framework:    providerkit.Framework{Name: "node"},
+				Framework:    appbuild.Framework{Name: "node"},
 				Handler:      "index.mjs",
 				ArtifactPath: filepath.Join("apps", "api", "functions", "index.func"),
 				Strategy:     bundleStrategy,
@@ -486,10 +486,10 @@ func TestBuild(t *testing.T) {
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
 			outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 			writeFuncConfig(t, outDir, "web", "index.func",
-				providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "server.js", App: "web"})
+				appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "server.js", App: "web"})
 			writePlan(t, outDir, functionSummary{
 				Name:         "web",
-				Framework:    providerkit.Framework{Name: "next"},
+				Framework:    appbuild.Framework{Name: "next"},
 				Handler:      "server.js",
 				ArtifactPath: filepath.Join("apps", "web", "functions", "index.func"),
 				Strategy:     traceStrategy,
@@ -537,21 +537,21 @@ func TestBuild(t *testing.T) {
 		{
 			name: "a strategy this build does not know",
 			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Framework: providerkit.Framework{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: "teleport"})
+				writePlan(t, outDir, functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: "teleport"})
 			},
 			wants: []string{"teleport"},
 		},
 		{
 			name: "a bundle with no entrypoint",
 			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Framework: providerkit.Framework{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: bundleStrategy})
+				writePlan(t, outDir, functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, ArtifactPath: "apps/api/functions/index.func", Strategy: bundleStrategy})
 			},
 			wants: []string{"entrypoint"},
 		},
 		{
 			name: "a bundle aimed outside the app layout",
 			plan: func(t *testing.T, outDir string) {
-				writePlan(t, outDir, functionSummary{Name: "api", Framework: providerkit.Framework{Name: "node"}, ArtifactPath: "elsewhere/index.func", Strategy: bundleStrategy, Entrypoint: filepath.Join(outDir, "server.js")})
+				writePlan(t, outDir, functionSummary{Name: "api", Framework: appbuild.Framework{Name: "node"}, ArtifactPath: "elsewhere/index.func", Strategy: bundleStrategy, Entrypoint: filepath.Join(outDir, "server.js")})
 			},
 			wants: []string{"elsewhere"},
 		},
@@ -880,9 +880,9 @@ func TestCollectFunctions(t *testing.T) {
 		root := t.TempDir()
 		outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 		writeFuncConfig(t, outDir, "web", "index.func",
-			providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-			providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
 
 		fns, err := CollectFunctions(root)
 		if err != nil {
@@ -916,9 +916,9 @@ func TestCollectFunctions(t *testing.T) {
 			name: "nested routes are collected without descending into a function's own tree",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
-					providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
 				writeFuncConfig(t, outDir, "web", "index.func",
-					providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
+					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "index.handler", App: "web"})
 				if err := os.MkdirAll(filepath.Join(outDir, appsDirName, "web", "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
 					t.Fatal(err)
 				}
@@ -933,7 +933,7 @@ func TestCollectFunctions(t *testing.T) {
 			setup: func(t *testing.T, outDir string) {
 				for _, app := range []string{"admin", "storefront"} {
 					writeFuncConfig(t, outDir, app, filepath.Join("api", "documents.func"),
-						providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: app})
+						appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: app})
 				}
 			},
 			want: []manifestbuilder.Function{
@@ -962,7 +962,7 @@ func TestCollectFunctions(t *testing.T) {
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "documents.func"),
-			providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: "web"})
+			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "route.js", ID: "/api/documents", App: "web"})
 
 		fns, err := collectFunctions(outDir)
 		if err != nil {
@@ -981,7 +981,7 @@ func TestCollectFunctions(t *testing.T) {
 
 		outDir := t.TempDir()
 		writeFuncConfig(t, outDir, "storefront", "index.func",
-			providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler", App: "storefront"})
+			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler", App: "storefront"})
 
 		fns, err := collectFunctions(outDir)
 		if err != nil {
@@ -1013,7 +1013,7 @@ func TestCollectFunctions(t *testing.T) {
 		{
 			name: "a config missing its framework errors",
 			setup: func(t *testing.T, outDir string) {
-				writeFuncConfig(t, outDir, "web", "api.func", providerkit.FunctionConfig{Handler: "index.handler", App: "web"})
+				writeFuncConfig(t, outDir, "web", "api.func", appbuild.FunctionConfig{Handler: "index.handler", App: "web"})
 			},
 			succeeded: "collectFunctions succeeded on config missing its framework, want error",
 			wants:     []string{"requires framework, handler, and app"},
@@ -1023,7 +1023,7 @@ func TestCollectFunctions(t *testing.T) {
 			name: "a config missing app errors",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", "index.func",
-					providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler"})
+					appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "index.handler"})
 			},
 			succeeded: "collectFunctions succeeded on config missing app, want error",
 			wants:     []string{"requires framework, handler, and app"},

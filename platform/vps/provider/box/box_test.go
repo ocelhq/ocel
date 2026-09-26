@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
@@ -352,7 +352,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + providerkit.InjectedPortText}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", stood.calls, want)
 	}
@@ -377,7 +377,7 @@ func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
 	want := []string{
 		"stand-up shop-api-1111", "head shop/api at " + imageFor("api", "b1"),
 		"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"),
-		"release api onto shop-api-1111:" + providerkit.InjectedPortText + ", web onto shop-web-1111:" + providerkit.InjectedPortText,
+		"release api onto shop-api-1111:" + appbuild.InjectedPortText + ", web onto shop-web-1111:" + appbuild.InjectedPortText,
 	}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container stands before one release flips them all, so a failure on either leaves the box on the promotion it was serving", stood.calls, want)
@@ -571,7 +571,7 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + providerkit.InjectedPortText}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", stood.calls, want)
 	}
@@ -705,7 +705,7 @@ func TestAHostnameBoundAfterAPromotionAnswersFromTheReleasedContainer(t *testing
 		t.Fatalf("the box claims %v, want %s among them", stood.claims, hostname)
 	}
 	claim := stood.claims[at]
-	want := "shop-web-1111:" + providerkit.InjectedPortText
+	want := "shop-web-1111:" + appbuild.InjectedPortText
 	if got := stood.upstream[host.RouteKey{Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App}]; got != want {
 		t.Errorf("%s is claimed onto a route that answers from %q, want %q: the release was promoted before the bind, and no later promotion comes to route it",
 			hostname, got, want)

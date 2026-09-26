@@ -11,7 +11,7 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 type Cell struct {
@@ -78,7 +78,7 @@ func (s Scope) Tier() environmentv1.Tier {
 func (s Scope) OcelWrites(key string, folders []string) bool {
 	return slices.ContainsFunc(s.Apps, func(app App) bool {
 		reached := len(folders) == 0 || slices.Contains(folders, app.Folder)
-		return reached && providerkit.OcelWritten(app.ClientBundle, key)
+		return reached && appbuild.IsOcelInjectedEnv(app.ClientBundle, key)
 	})
 }
 

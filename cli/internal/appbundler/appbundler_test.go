@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -62,7 +62,7 @@ func newLayout(t *testing.T, files tree) layout {
 func (l layout) target(entry string) Target {
 	return Target{
 		App:        "api",
-		Framework:  providerkit.Framework{Name: "node"},
+		Framework:  appbuild.Framework{Name: "node"},
 		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
 		FuncDir:    l.funcDir,
 		AppDir:     l.appDir,
@@ -119,16 +119,16 @@ func TestBundle(t *testing.T) {
 			names = append(names, entry.Name())
 		}
 		if len(names) != 2 {
-			t.Errorf("function directory holds %v, want only the bundle and %s", names, providerkit.FunctionConfigFile)
+			t.Errorf("function directory holds %v, want only the bundle and %s", names, appbuild.FunctionConfigFile)
 		}
 
-		var cfg providerkit.FunctionConfig
-		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, providerkit.FunctionConfigFile))), &cfg); err != nil {
+		var cfg appbuild.FunctionConfig
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, appbuild.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
+		want := appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
-			t.Errorf("%s = %+v, want %+v", providerkit.FunctionConfigFile, cfg, want)
+			t.Errorf("%s = %+v, want %+v", appbuild.FunctionConfigFile, cfg, want)
 		}
 
 		var descriptor edge.ServeDescriptor
@@ -361,7 +361,7 @@ func TestBundle(t *testing.T) {
 			name:  "an unnamed framework fails the build",
 			files: tree{"package.json": appPkg, "server.js": "console.log('hi');\n"},
 			entry: "server.js",
-			mut:   func(target *Target) { target.Framework = providerkit.Framework{} },
+			mut:   func(target *Target) { target.Framework = appbuild.Framework{} },
 			wants: []string{"framework"},
 		},
 		{

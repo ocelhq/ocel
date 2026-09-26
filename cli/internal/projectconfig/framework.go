@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
@@ -26,17 +27,17 @@ func detectFramework(dir string) (string, error) {
 	node := regularFile(filepath.Join(dir, nodeManifest))
 	named := make([]string, 0, 4)
 	if node {
-		named = append(named, providerkit.FrameworkNode)
+		named = append(named, appbuild.FrameworkNode)
 	}
 	if regularFile(filepath.Join(dir, goModule)) {
-		named = append(named, providerkit.FrameworkGo)
+		named = append(named, appbuild.FrameworkGo)
 	}
 	python := regularFile(filepath.Join(dir, pythonProject)) || regularFile(filepath.Join(dir, pythonRequirements))
 	if python {
-		named = append(named, providerkit.FrameworkPython)
+		named = append(named, appbuild.FrameworkPython)
 	}
 	if !node && !python && regularFile(filepath.Join(dir, rustManifest)) {
-		named = append(named, providerkit.FrameworkRust)
+		named = append(named, appbuild.FrameworkRust)
 	}
 	switch len(named) {
 	case 1:
@@ -48,13 +49,13 @@ func detectFramework(dir string) (string, error) {
 			return "", err
 		}
 		if next {
-			return providerkit.FrameworkNext, nil
+			return appbuild.FrameworkNext, nil
 		}
-		return providerkit.FrameworkNode, nil
+		return appbuild.FrameworkNode, nil
 	case 0:
 		return "", fmt.Errorf(
 			"nothing in %s says what this app is built with: it holds no %s, %s, %s, %s or %s, so set \"framework\" to one of %s",
-			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(providerkit.Frameworks()),
+			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(appbuild.Frameworks()),
 		)
 	default:
 		return "", fmt.Errorf(
@@ -99,8 +100,8 @@ func directory(path string) bool {
 
 func frameworkOf(app string, dir string, named string, compute string) (string, error) {
 	if named != "" {
-		if !providerkit.KnownFramework(named) {
-			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, quoted(providerkit.Frameworks()))
+		if !appbuild.KnownFramework(named) {
+			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, quoted(appbuild.Frameworks()))
 		}
 		return named, nil
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
@@ -103,7 +104,7 @@ func translateFunctionSpec(appFramework string, spec providerkit.FunctionSpec) (
 		handler = spec.Handler
 	}
 	memoryMB := defaultFunctionMemoryMB
-	if appFramework == providerkit.FrameworkNext {
+	if appFramework == appbuild.FrameworkNext {
 		memoryMB = nextBundleFunctionMemoryMB
 	}
 	if spec.Memory > 0 {
@@ -128,8 +129,8 @@ type execution struct {
 	Arch    string
 }
 
-func executionFor(framework providerkit.Framework) (execution, error) {
-	if framework.Name != "" && !providerkit.KnownFramework(framework.Name) {
+func executionFor(framework appbuild.Framework) (execution, error) {
+	if framework.Name != "" && !appbuild.KnownFramework(framework.Name) {
 		return execution{}, refusal.Refuse(refusal.CodeInvalid, "this provider has no framework named %q", framework.Name)
 	}
 	architecture := arch.Architecture(framework.Arch)
@@ -143,9 +144,9 @@ func executionFor(framework providerkit.Framework) (execution, error) {
 
 func managedRuntime(name string) string {
 	switch name {
-	case providerkit.FrameworkPython:
+	case appbuild.FrameworkPython:
 		return pythonFunctionRuntime
-	case "", providerkit.FrameworkNode, providerkit.FrameworkNext:
+	case "", appbuild.FrameworkNode, appbuild.FrameworkNext:
 		return defaultFunctionRuntime
 	}
 	return providedFunctionRuntime

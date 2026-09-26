@@ -3,7 +3,7 @@ package host
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -12,7 +12,7 @@ func storing() RoutingTable {
 	return RoutingTable{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
-			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
+			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + appbuild.InjectedPortText},
 			{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		},
 		Claims: []HostClaim{
@@ -39,7 +39,7 @@ func TestAStoreRouteIsNotAnAppTheProjectsOwnHostnameCouldBeAmbiguousBetween(t *t
 	t.Parallel()
 
 	state := storing()
-	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed("api"), Upstream: "shop-api-1:" + providerkit.InjectedPortText})
+	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed("api"), Upstream: "shop-api-1:" + appbuild.InjectedPortText})
 	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Fatal("two apps under one wide claim rendered, and whichever sorted first would answer for both")
 	}

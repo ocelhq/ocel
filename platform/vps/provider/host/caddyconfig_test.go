@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func releasing() RoutingTable {
 	return RoutingTable{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + appbuild.InjectedPortText}},
 	}
 }
 
@@ -23,7 +23,7 @@ func TestTheFrontProxysConfigHoldsStillThroughEveryReleaseAndDrainWindow(t *test
 	before.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	after := before
 	after.Grace = 3 * time.Second
-	after.Routes = []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-3333:" + providerkit.InjectedPortText}}
+	after.Routes = []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-3333:" + appbuild.InjectedPortText}}
 	if !bytes.Equal(mustRender(t, before), mustRender(t, after)) {
 		t.Error("a release that moves a route and drains for a different window renders the front proxy's config anew, and every reload drops requests on every hostname the box serves")
 	}
@@ -56,8 +56,8 @@ func TestARedeployThatChangesNothingRendersTheSameBytes(t *testing.T) {
 	t.Parallel()
 
 	scrambled := RoutingTable{Grace: 30 * time.Second, Routes: []AppRoute{
-		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + providerkit.InjectedPortText},
-		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
+		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + appbuild.InjectedPortText},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + appbuild.InjectedPortText},
 	}, Claims: []HostClaim{
 		{Hostname: "www.example.com", Owner: surface, Pointer: pointed, App: "web"},
 		{Hostname: claimed, Owner: surface, Pointer: pointed, App: "worker"},

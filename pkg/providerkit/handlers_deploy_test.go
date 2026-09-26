@@ -24,6 +24,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -587,7 +588,7 @@ func standsBootstrapped(t *testing.T, client contractv1connect.ProviderServiceCl
 
 func declaresNeed(t *testing.T, app string, need edge.Need) {
 	t.Helper()
-	dir := providerkit.AppArtifactRoot(providerkit.ArtifactRoot(), app)
+	dir := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

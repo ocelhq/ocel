@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 func rootDirs(t *testing.T, roots []Root, base string) []string {
@@ -344,11 +344,11 @@ func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T
 		framework string
 		want      Language
 	}{
-		{providerkit.FrameworkNode, JS},
-		{providerkit.FrameworkNext, JS},
-		{providerkit.FrameworkGo, Go},
-		{providerkit.FrameworkPython, Python},
-		{providerkit.FrameworkRust, Rust},
+		{appbuild.FrameworkNode, JS},
+		{appbuild.FrameworkNext, JS},
+		{appbuild.FrameworkGo, Go},
+		{appbuild.FrameworkPython, Python},
+		{appbuild.FrameworkRust, Rust},
 	} {
 		t.Run(tc.framework, func(t *testing.T) {
 			dir := t.TempDir()
@@ -416,9 +416,9 @@ func TestClientBundle(t *testing.T) {
 		manifest  string
 		want      bool
 	}{
-		{name: "a next app", framework: providerkit.FrameworkNext, want: true},
-		{name: "a node app", framework: providerkit.FrameworkNode, want: true},
-		{name: "a go app", framework: providerkit.FrameworkGo, manifest: "go.mod"},
+		{name: "a next app", framework: appbuild.FrameworkNext, want: true},
+		{name: "a node app", framework: appbuild.FrameworkNode, want: true},
+		{name: "a go app", framework: appbuild.FrameworkGo, manifest: "go.mod"},
 		{name: "a container app holding a package.json", manifest: "package.json", want: true},
 		{name: "a container app holding a go.mod", manifest: "go.mod"},
 		{name: "a container app naming no language at all", manifest: ""},
@@ -430,7 +430,7 @@ func TestClientBundle(t *testing.T) {
 			}
 
 			if got := ClientBundle(tc.framework, dir); got != tc.want {
-				t.Errorf("ClientBundle = %v, want %v: %s is written for an app whose bundle reads it", got, tc.want, providerkit.ClientURLEnvName)
+				t.Errorf("ClientBundle = %v, want %v: %s is written for an app whose bundle reads it", got, tc.want, appbuild.ClientURLEnvName)
 			}
 		})
 	}

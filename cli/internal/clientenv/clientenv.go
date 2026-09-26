@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 const specifier = "ocel/env/client"
@@ -289,8 +289,8 @@ func sourceOrUnknown(source string) string {
 
 func Offered(keys []Key, clientBundle bool) []Key {
 	keys = slices.Clone(keys)
-	if providerkit.OcelWritten(clientBundle, providerkit.ClientURLEnvName) {
-		keys = append(keys, Key{Name: providerkit.ClientURLEnvName})
+	if appbuild.IsOcelInjectedEnv(clientBundle, appbuild.ClientURLEnvName) {
+		keys = append(keys, Key{Name: appbuild.ClientURLEnvName})
 	}
 	slices.SortFunc(keys, func(a, b Key) int { return strings.Compare(a.Name, b.Name) })
 	return slices.CompactFunc(keys, func(a, b Key) bool { return a.Name == b.Name })

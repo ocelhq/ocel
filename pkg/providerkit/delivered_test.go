@@ -13,6 +13,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -234,11 +235,11 @@ func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t 
 	daemonHoldingTheBuiltImage(t, "amd64")
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, appbuild.ClientURLEnvName, "https://shop.example")
 
 	delivered := deliveredBy(t, req, nil)
 
-	for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
+	for _, key := range []string{constants.AppURLEnvName, appbuild.ClientURLEnvName} {
 		if got, want := delivered[key], "https://shop.example"; got != want {
 			t.Errorf("a container is handed %s=%q, want %q: ocel writes it for every app, so the guard on its own prefix must not refuse its own entry", key, got, want)
 		}
@@ -364,7 +365,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 		want         []string
 	}{
 		"an app whose bundle reads the client url": {clientBundle: true, want: []string{"REGION"}},
-		"an app whose bundle never reads it":       {want: []string{providerkit.ClientURLEnvName, "REGION"}},
+		"an app whose bundle never reads it":       {want: []string{appbuild.ClientURLEnvName, "REGION"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			builtProject(t)
@@ -374,7 +375,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 			req := namingARegistry(containerDeployRequest("/healthz"))
 			req.Manifest.Apps[0].ClientBundle = tc.clientBundle
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
-			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, appbuild.ClientURLEnvName, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
 
 			result, _ := deploy(t, client, req)
@@ -391,7 +392,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 				named = append(named, variable.Key)
 			}
 			if !slices.Equal(named, tc.want) {
-				t.Errorf("%s: the staged record names %v, want %v: ocel writes %s only for an app whose bundle reads it, so on any other it is the app's own value", name, named, tc.want, providerkit.ClientURLEnvName)
+				t.Errorf("%s: the staged record names %v, want %v: ocel writes %s only for an app whose bundle reads it, so on any other it is the app's own value", name, named, tc.want, appbuild.ClientURLEnvName)
 			}
 		})
 	}

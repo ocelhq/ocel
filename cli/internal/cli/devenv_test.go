@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -1095,7 +1096,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", node)
-		for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
+		for _, key := range []string{constants.AppURLEnvName, appbuild.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
 			}
@@ -1104,14 +1105,14 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 
 	t.Run("the browser's copy only where an app's bundle reads it", func(t *testing.T) {
 		t.Setenv("PORT", "")
-		dotfile := map[string]string{providerkit.ClientURLEnvName: "https://mine.example"}
+		dotfile := map[string]string{appbuild.ClientURLEnvName: "https://mine.example"}
 
 		got := resolvedEnv(nil, nil, dotfile, nil, runtimeAccess{}, "", envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 		if want := "http://localhost:3000"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q for every app", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
-		if want := "https://mine.example"; got[providerkit.ClientURLEnvName] != want {
-			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", providerkit.ClientURLEnvName, got[providerkit.ClientURLEnvName], want)
+		if want := "https://mine.example"; got[appbuild.ClientURLEnvName] != want {
+			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", appbuild.ClientURLEnvName, got[appbuild.ClientURLEnvName], want)
 		}
 	})
 
@@ -1138,9 +1139,9 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	t.Setenv("PORT", "")
 	root := t.TempDir()
 	cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{
-		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: projectconfig.Framework{Name: providerkit.FrameworkNext}},
-		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: projectconfig.Framework{Name: providerkit.FrameworkGo}},
-		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: projectconfig.Framework{Name: providerkit.FrameworkPython}},
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: projectconfig.Framework{Name: appbuild.FrameworkPython}},
 		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(providerkit.ComputeContainer)},
 		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(providerkit.ComputeContainer)},
 	}}
@@ -1161,8 +1162,8 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", targetScope(cfg, tc.cwd))
-			if _, written := got[providerkit.ClientURLEnvName]; written != tc.written {
-				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", providerkit.ClientURLEnvName, written, tc.written)
+			if _, written := got[appbuild.ClientURLEnvName]; written != tc.written {
+				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", appbuild.ClientURLEnvName, written, tc.written)
 			}
 		})
 	}

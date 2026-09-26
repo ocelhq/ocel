@@ -1,4 +1,4 @@
-package providerkit_test
+package appbuild_test
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 func TestAPinnedImageCarriesARegistryHostButNeverATag(t *testing.T) {
@@ -20,7 +20,7 @@ func TestAPinnedImageCarriesARegistryHostButNeverATag(t *testing.T) {
 		"localhost:5000/api" + digest,
 		"api" + digest,
 	} {
-		if !providerkit.PinnedImage(ref) {
+		if !appbuild.PinnedImage(ref) {
 			t.Errorf("PinnedImage(%q) = false, want an ordinary OCI reference admitted: a registry answering on a port is where a pushed image lives", ref)
 		}
 	}
@@ -34,7 +34,7 @@ func TestAPinnedImageCarriesARegistryHostButNeverATag(t *testing.T) {
 		"/ocel/api" + digest,
 		"ocel//api" + digest,
 	} {
-		if providerkit.PinnedImage(ref) {
+		if appbuild.PinnedImage(ref) {
 			t.Errorf("PinnedImage(%q) = true, want it refused: a tag repoints under a running release, so it never rides in the identity a release is pinned to", ref)
 		}
 	}
@@ -42,24 +42,24 @@ func TestAPinnedImageCarriesARegistryHostButNeverATag(t *testing.T) {
 
 func TestAProbedPathIsOnePathOffTheRootAndNothingElse(t *testing.T) {
 	for _, path := range []string{"/", "/healthz", "/up/ready", "/up-ready.json"} {
-		if !providerkit.HealthCheckPath(path) {
+		if !appbuild.HealthCheckPath(path) {
 			t.Errorf("HealthCheckPath(%q) = false, want a path off the app's root admitted", path)
 		}
 	}
 
 	for _, path := range []string{"", "healthz", "/up?ready=1", "/up#ready", "/up ready", "/up\tready", "/up\nready"} {
-		if providerkit.HealthCheckPath(path) {
+		if appbuild.HealthCheckPath(path) {
 			t.Errorf("HealthCheckPath(%q) = true, want it refused: a probe asks one path of the process and carries no query, fragment or whitespace to ask it with", path)
 		}
 	}
 }
 
 func TestTheWirePinAndTheKitPinTheSameImageIdentity(t *testing.T) {
-	assertFieldPattern(t, "image", providerkit.PinnedImagePattern)
+	assertFieldPattern(t, "image", appbuild.PinnedImagePattern)
 }
 
 func TestTheWirePinAndTheKitPinTheSameProbedPath(t *testing.T) {
-	assertFieldPattern(t, "health_check_path", providerkit.HealthCheckPathPattern)
+	assertFieldPattern(t, "health_check_path", appbuild.HealthCheckPathPattern)
 }
 
 func assertFieldPattern(t *testing.T, name, want string) {

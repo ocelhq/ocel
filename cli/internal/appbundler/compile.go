@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
@@ -18,7 +18,7 @@ const goModuleFile = "go.mod"
 
 type Compilation struct {
 	App            string
-	Framework      providerkit.Framework
+	Framework      appbuild.Framework
 	Source         string
 	Entrypoint     string
 	FuncDir        string
@@ -39,11 +39,11 @@ func Compile(ctx context.Context, c Compilation) error {
 		return err
 	}
 	switch c.Framework.Name {
-	case providerkit.FrameworkGo:
+	case appbuild.FrameworkGo:
 		return c.compileGo(ctx)
-	case providerkit.FrameworkPython:
+	case appbuild.FrameworkPython:
 		return c.vendorPython(ctx)
-	case providerkit.FrameworkRust:
+	case appbuild.FrameworkRust:
 		return c.compileRust(ctx)
 	}
 	return fmt.Errorf("app %q is built with %q, which is not built from its own source tree", c.App, c.Framework.Name)
@@ -104,10 +104,10 @@ func (c Compilation) validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("cannot compile: %s not stated", strings.Join(missing, ", "))
 	}
-	if c.Framework.Name == providerkit.FrameworkPython && c.Entrypoint != "" {
+	if c.Framework.Name == appbuild.FrameworkPython && c.Entrypoint != "" {
 		return fmt.Errorf("app %q is built with python and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
 	}
-	if c.Framework.Name == providerkit.FrameworkRust && c.Entrypoint != "" {
+	if c.Framework.Name == appbuild.FrameworkRust && c.Entrypoint != "" {
 		return fmt.Errorf("app %q is built with rust and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
 	}
 	pkg := c.pkg()

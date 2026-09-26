@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -411,10 +411,10 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 	manifest := manifestFor(t, "shop", "")
 	run := exec.Command("docker", "run", "--rm", "--pull", "never", "--network", "none",
 		"--mount", "type=bind,src="+socketDir+",dst="+vars.SocketDir+",readonly",
-		"--volume", runtimeBinary+":"+providerkit.ContainerRuntimePath+":ro",
+		"--volume", runtimeBinary+":"+appbuild.ContainerRuntimePath+":ro",
 		"--env", vars.EnvVar+"="+manifest,
-		"--env", providerkit.InjectedPortName+"="+providerkit.InjectedPortText,
-		testImage, providerkit.ContainerRuntimePath,
+		"--env", appbuild.InjectedPortName+"="+appbuild.InjectedPortText,
+		testImage, appbuild.ContainerRuntimePath,
 		"sh", "-c", `cat "$OCEL_LIVE_DIR/DATABASE_URL"; echo; echo "keys=$OCEL_LIVE_KEYS"`)
 	run.WaitDelay = 2 * time.Minute
 	said, err := run.CombinedOutput()

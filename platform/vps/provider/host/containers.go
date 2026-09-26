@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -207,7 +207,7 @@ func containerRun(spec Container, held handoff) []string {
 		argv = append(argv, "--mount", "type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly",
 			"--tmpfs", LiveDir+":"+liveDirTmpfs)
 	}
-	return append(argv, "--env", providerkit.InjectedPortName+"="+providerkit.InjectedPortText, spec.Image)
+	return append(argv, "--env", appbuild.InjectedPortName+"="+appbuild.InjectedPortText, spec.Image)
 }
 
 func LabelSelector(label string) string {

@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 const wrappedDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -83,7 +84,7 @@ func TestWrapContainerBootsTheImagesOwnCommandThroughTheRuntime(t *testing.T) {
 	}
 
 	config := configOf(t, wrapped)
-	if !slices.Equal(config.Entrypoint, []string{providerkit.ContainerRuntimePath}) {
+	if !slices.Equal(config.Entrypoint, []string{appbuild.ContainerRuntimePath}) {
 		t.Errorf("the wrapped image enters at %v, want the runtime alone: it is what the container boots through", config.Entrypoint)
 	}
 	if want := []string{"/bin/sh", "-c", "node server.js"}; !slices.Equal(config.Cmd, want) {
@@ -105,13 +106,13 @@ func TestWrapContainerCarriesTheRuntimeExecutableAtThePathItBootsFrom(t *testing
 		t.Fatalf("WrapContainer() = %v", err)
 	}
 
-	name := strings.TrimPrefix(providerkit.ContainerRuntimePath, "/")
+	name := strings.TrimPrefix(appbuild.ContainerRuntimePath, "/")
 	header, held := tarEntry(t, lastLayer(t, wrapped), name)
 	if !bytes.Equal(held, runtime) {
-		t.Errorf("the layer holds %q at %s, want the runtime it was handed", held, providerkit.ContainerRuntimePath)
+		t.Errorf("the layer holds %q at %s, want the runtime it was handed", held, appbuild.ContainerRuntimePath)
 	}
 	if header.Mode&0o111 == 0 || header.Mode != 0o755 {
-		t.Errorf("the layer holds %s at mode %o, want 0755: the entrypoint the container boots through must be executable", providerkit.ContainerRuntimePath, header.Mode)
+		t.Errorf("the layer holds %s at mode %o, want 0755: the entrypoint the container boots through must be executable", appbuild.ContainerRuntimePath, header.Mode)
 	}
 }
 
@@ -124,13 +125,13 @@ func TestWrapContainerCarriesALiveDirectoryAnyImageUserCanProjectInto(t *testing
 		t.Fatalf("WrapContainer() = %v", err)
 	}
 
-	name := strings.TrimPrefix(providerkit.ContainerLivePath, "/") + "/"
+	name := strings.TrimPrefix(appbuild.ContainerLivePath, "/") + "/"
 	header, _ := tarEntry(t, lastLayer(t, wrapped), name)
 	if header.Typeflag != tar.TypeDir {
-		t.Fatalf("the layer holds %s as type %q, want a directory the runtime projects live values into", providerkit.ContainerLivePath, header.Typeflag)
+		t.Fatalf("the layer holds %s as type %q, want a directory the runtime projects live values into", appbuild.ContainerLivePath, header.Typeflag)
 	}
 	if header.Mode != 0o1777 {
-		t.Errorf("the layer holds %s at mode %o, want 1777: an image that runs as its own user, or from scratch with no /tmp, still needs somewhere the runtime can write", providerkit.ContainerLivePath, header.Mode)
+		t.Errorf("the layer holds %s at mode %o, want 1777: an image that runs as its own user, or from scratch with no /tmp, still needs somewhere the runtime can write", appbuild.ContainerLivePath, header.Mode)
 	}
 }
 
