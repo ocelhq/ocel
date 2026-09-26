@@ -99,6 +99,10 @@ pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target
 scripts/ec2.sh destroy journey
 ```
 
+`scripts/gce.sh` takes the same commands and brings the box up on Compute Engine instead,
+in the project and zone (`OCEL_GCE_ZONE`, `europe-west1-b` when unset) gcloud is
+configured with, printing `OCEL_GCE_*` lines in place of `OCEL_EC2_*`.
+
 `pnpm --filter @ocel-tests/journeys sweep --target <target>` reclaims what a run that died
 left behind, and only projects the harness named.
 
@@ -121,9 +125,10 @@ pull request — one shot, the label comes off again as the run starts. From her
 `scripts/ec2.sh` spends a real account.
 
 `gcp` is not one of them: a real dispatch drives `aws` and `vps` only. The gcp lane runs
-against the floci-gcp emulator on a pull request that touches it, and against the real
-project once a night, in the `Nightly` workflow, which owns that project's namespace and takes it
-down again.
+against the floci-gcp emulator on a pull request that touches it, and nowhere real.
+
+The `Nightly` workflow drives the `vps` lane against a box it brings up with
+`scripts/gce.sh`, every night and on dispatch, and releases the commit a pass drove.
 
 Every known gap is one entry in `journeys/src/matrix/gaps.ts`: a slug, a reason,
 the issue that owns it when one does, and the lanes, variants, fixtures and tests it
@@ -179,7 +184,7 @@ mints, or the assume fails outright.
 The `gcp` lane on a pull request runs against the floci-gcp emulator, which serves one
 implicit Firestore database and no Firestore Admin API. The database row, its delete
 protection and the region check are therefore exercised only against a real project,
-which the `Nightly` workflow drives and which you can drive by hand:
+which you can drive by hand:
 
 ```bash
 gcloud auth application-default login
@@ -207,29 +212,30 @@ The run creates and destroys buckets, a Firestore database, a key ring and a sec
 that project, and schedules its KMS key material for destruction, so name a project you
 are willing to lose. Unset, and with no emulator answering, every `TestLive` skips.
 
-The `Nightly` workflow's `gcp journey` job runs the same two suites and then the `gcp`
-journey against that project, every night and on dispatch. It signs in over workload
-identity federation — no key is stored — and takes down the projects it deployed and the
-bootstrap under its namespace whether the run passed or not. A pass releases the commit
-it drove as a nightly.
+The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
+throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
+lane, so it needs no secrets of its own. The `Nightly` workflow's `vps journey` job brings
+its box up on Compute Engine with `scripts/gce.sh` instead, and drives every cell of every
+concern against it. Either job destroys its box when it ends, whether the journey passed or
+not, and the `Sweep` workflow reclaims, every six hours, any EC2 or Compute Engine box older
+than three hours that a run which died left behind. A nightly pass releases the commit it
+drove as a nightly.
 
-| name                  | kind | what it holds                                                                   |
-| --------------------- | ---- | ------------------------------------------------------------------------------- |
-| `GCP_WIF_PROVIDER`    | var  | the workload identity provider the job exchanges its GitHub token at, in full    |
-| `GCP_SERVICE_ACCOUNT` | var  | the email of the service account the job impersonates                            |
-| `GCP_LIVE_PROJECT`    | var  | the project the nightly bootstraps into and tears down                           |
-| `GCP_LIVE_REGION`     | var  | the region it deploys into; `europe-west1` when unset                            |
+The nightly signs in to Google Cloud over workload identity federation — no key is stored.
 
-The nightly runs under the fixed namespace `ocel-nightly`, not one per run: a key ring
-Google never deletes would otherwise be stranded every night, and a namespace long enough
-to carry a run id leaves no room for a service name inside Cloud Run's 49 characters.
+| name                  | kind | what it holds                                                                 |
+| --------------------- | ---- | ----------------------------------------------------------------------------- |
+| `GCP_WIF_PROVIDER`    | var  | the workload identity provider the job exchanges its GitHub token at, in full  |
+| `GCP_SERVICE_ACCOUNT` | var  | the email of the service account the job impersonates                          |
+| `GCP_LIVE_PROJECT`    | var  | the project the nightly brings its box up in                                   |
+| `GCP_VPS_ZONE`        | var  | the zone it brings the box up in; `europe-west1-b` when unset                  |
 
 Preparing the project is a human's one-time job:
 
-1. Create (or pick) the project, and enable the seven services a bootstrap reads:
-   `gcloud services enable firestore.googleapis.com storage.googleapis.com
-   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com
-   iam.googleapis.com run.googleapis.com --project <project>`.
+1. Create (or pick) the project, enable Compute Engine with
+   `gcloud services enable compute.googleapis.com --project <project>`, and keep its
+   `default` network: the box joins it, and `scripts/gce.sh` opens 22, 80 and 443 to the
+   box with a firewall rule of its own.
 2. Create a workload identity pool and a provider for GitHub's OIDC issuer
    (`https://token.actions.githubusercontent.com`), with the attribute condition pinning
    `assertion.repository` to this repository, and put the provider's full resource name
@@ -238,20 +244,9 @@ Preparing the project is a human's one-time job:
 3. Create a service account for the nightly, grant it
    `roles/iam.workloadIdentityUser` for that pool's principal set, and put its email in
    `GCP_SERVICE_ACCOUNT`.
-4. Grant that service account, on the project, what a deploy uses —
-   `roles/datastore.user`, `roles/storage.objectAdmin`,
-   `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
-   `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin` —
-   and what a bootstrap adds on top: `roles/datastore.owner`, `roles/storage.admin`,
-   `roles/cloudkms.admin`, `roles/secretmanager.admin`, `roles/artifactregistry.admin`,
-   `roles/iam.serviceAccountAdmin`. `ocel doctor` and the bootstrap's own preflight name
-   the exact permissions when one is missing.
-5. Make sure the org policy `constraints/iam.allowedPolicyMemberDomains` does not deny
-   `allUsers`: a deploy opens each service to the internet with `roles/run.invoker`, and
-   is refused outright where the policy forbids it.
-
-The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
-throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
-lane, so it needs no secrets of its own. The job destroys the box when it ends, whether the
-journey passed or not, and the nightly `Sweep` workflow reclaims any box older than three
-hours that a run which died left behind.
+4. Grant that service account, on the project, `roles/compute.instanceAdmin.v1` and
+   `roles/compute.securityAdmin`. The box runs with no service account of its own, so the
+   job needs no `roles/iam.serviceAccountUser`.
+5. Make sure neither `constraints/compute.requireOsLogin` nor
+   `constraints/compute.vmExternalIpAccess` is enforced on the project: the box takes its
+   SSH key from instance metadata and is reached on its public IP.
