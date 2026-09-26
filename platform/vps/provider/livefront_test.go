@@ -359,7 +359,11 @@ func bindsBehind(t *testing.T, d *vps.Provider, front string) {
 	if err := added.Err(); err != nil {
 		t.Fatalf("AddHostname() stream = %v", err)
 	}
-	if route := manual.Route(frontedHostname, manual.DefaultPort); !slices.Contains(said, route) {
+	route := manual.Route(frontedHostname, manual.DefaultPort)
+	if network := frontProxy(t, front).Manual.Network; network != "" {
+		route = manual.RouteOn(frontedHostname, manual.DefaultPort, network, "http://ocel-switchboard:8080")
+	}
+	if !slices.Contains(said, route) {
 		t.Errorf("the bind said %q, want %q", said, route)
 	}
 }

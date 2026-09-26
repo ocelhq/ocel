@@ -107,10 +107,15 @@ func (state RoutingTable) hostnames() []string {
 func (f Front) adopted() bool { return f != Front{} }
 
 func (h *Host) RouteBy(hostname string) string {
-	if h.proxyOption.Manual == nil {
+	byHand := h.proxyOption.Manual
+	switch {
+	case byHand == nil:
 		return ""
+	case byHand.Network == "":
+		return manual.Route(hostname, byHand.Port)
+	default:
+		return manual.RouteOn(hostname, byHand.Port, byHand.Network, "http://"+SwitchboardContainer+":"+switchboardPort)
 	}
-	return manual.Route(hostname, h.proxyOption.Manual.Port)
 }
 
 type userNetwork struct {

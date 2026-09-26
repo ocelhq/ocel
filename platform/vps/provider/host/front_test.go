@@ -176,6 +176,16 @@ func TestTheConnectorOnABoxYourProxyFrontsSaysWhatToRouteToIt(t *testing.T) {
 	}
 }
 
+func TestAProxyRoutedByHandOnItsOwnNetworkIsToldTheSwitchboardsNameOnIt(t *testing.T) {
+	t.Parallel()
+
+	got := New(nil, Keys{}, nil, routedOnANetwork()).RouteBy("shop.example.com")
+	want := "Route shop.example.com → http://ocel-switchboard:8080 on the coolify network, or http://127.0.0.1:8480 from the host (keep Host, set X-Forwarded-Proto)"
+	if got != want {
+		t.Errorf("RouteBy() = %q, want %q: a proxy in a container on coolify cannot reach the host's loopback", got, want)
+	}
+}
+
 func frontRecordItem(front Front, project string, class providerkit.Class) (Item, error) {
 	return frontRecord{Proxy: front.recorded(), Project: project, Class: class}.item()
 }
