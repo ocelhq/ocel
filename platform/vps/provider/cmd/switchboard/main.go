@@ -94,7 +94,7 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 	case "unplace":
 		return unplace(rest, errs)
 	case "placed":
-		return placed(rest, out, errs)
+		return digest(rest, out, errs)
 	default:
 		return usage(errs)
 	}
