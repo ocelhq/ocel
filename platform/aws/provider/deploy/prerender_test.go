@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -107,11 +108,11 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 	}
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
-		id, err := NewIdentity(app.GetDeploymentId(), cfg.Env, builds.baked[name].Fingerprint)
+		id, err := provider.NewBuild(app.GetDeploymentId(), cfg.Env, builds.baked[name].Fingerprint)
 		if err != nil {
 			t.Fatalf("deployment identity for %s: %v", name, err)
 		}
-		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
+		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, id.Release())
 		builds.coords[name] = coord
 		if app.GetFramework().GetName() != appbuild.FrameworkNext {
 			continue
@@ -186,7 +187,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *contractv1.Man
 }
 
 func releaseTokenFor(deploymentID string) string {
-	return releaseOf(deployedAs(deploymentID)).String()
+	return deployedAs(deploymentID).Release().String()
 }
 
 func storagePrefixFor(env, slug, app, deploymentID string) string {

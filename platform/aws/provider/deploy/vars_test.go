@@ -562,7 +562,7 @@ func TestFingerprintValues(t *testing.T) {
 		t.Parallel()
 
 		if strings.ContainsAny(first, "~ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-			t.Errorf("fingerprint %q is not lowercase hex; it must survive NewIdentity and a stack name", first)
+			t.Errorf("fingerprint %q is not lowercase hex; it must survive NewBuild and a stack name", first)
 		}
 	})
 }

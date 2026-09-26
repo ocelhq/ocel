@@ -45,9 +45,9 @@ type setManifest struct {
 func newSetManifest() *setManifest { return &setManifest{h: sha256.New()} }
 
 func (m *setManifest) add(bucket, key string, size int64) {
-	writeLenPrefixed(m.h, []byte(bucket))
-	writeLenPrefixed(m.h, []byte(key))
-	writeLenPrefixed(m.h, []byte(strconv.FormatInt(size, 10)))
+	provider.WriteLenPrefixed(m.h, []byte(bucket))
+	provider.WriteLenPrefixed(m.h, []byte(key))
+	provider.WriteLenPrefixed(m.h, []byte(strconv.FormatInt(size, 10)))
 	m.files++
 }
 

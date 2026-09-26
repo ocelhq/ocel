@@ -17,7 +17,7 @@ import (
 
 const (
 	identitySeparator = "~"
-	fingerprintHexLen = 12
+	FingerprintHexLen = 12
 )
 
 type Build struct {
@@ -37,7 +37,7 @@ func NewBuild(deploymentID, environment, values string) (Build, error) {
 	WriteLenPrefixed(h, []byte(values))
 	return Build{
 		deploymentID: deploymentID,
-		fingerprint:  hex.EncodeToString(h.Sum(nil))[:fingerprintHexLen],
+		fingerprint:  hex.EncodeToString(h.Sum(nil))[:FingerprintHexLen],
 	}, nil
 }
 
@@ -58,7 +58,7 @@ func FingerprintVariables(variables []*contractv1.ManifestVariable) string {
 		WriteLenPrefixed(h, []byte(variable.GetFolder()))
 		WriteLenPrefixed(h, []byte(strconv.FormatInt(variable.GetVersion(), 10)))
 	}
-	return hex.EncodeToString(h.Sum(nil))[:fingerprintHexLen]
+	return hex.EncodeToString(h.Sum(nil))[:FingerprintHexLen]
 }
 
 func ParseBuild(rendered string) (Build, error) {

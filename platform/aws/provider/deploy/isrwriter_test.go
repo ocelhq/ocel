@@ -115,7 +115,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 
 func isrSpec(app, prefix string) provider.StackSpec {
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
+		Ref:  provider.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, deployedAs(testDeploymentID).Release())},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
 			App:       app,

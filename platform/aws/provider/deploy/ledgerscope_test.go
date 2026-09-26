@@ -13,7 +13,7 @@ func TestLedgerScopeNamesTheProjectTheISRPrefixDoes(t *testing.T) {
 	t.Parallel()
 
 	for _, slug := range []string{"shop", "Shop Ltd", "shop_2", "SHOP--2"} {
-		coord := storageCoordinate("prod", slug, "web", releaseOf(deployedAs("BUILD1")))
+		coord := storageCoordinate("prod", slug, "web", deployedAs("BUILD1").Release())
 		project := strings.Split(isrPrefixOf(coord), naming.PathSeparator)[1]
 		want := string(edge.ClassProduction) + naming.PathSeparator + project
 
