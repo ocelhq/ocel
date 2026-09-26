@@ -6,12 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -39,26 +36,6 @@ func NewBuild(deploymentID, environment, values string) (Build, error) {
 		deploymentID: deploymentID,
 		fingerprint:  hex.EncodeToString(h.Sum(nil))[:FingerprintHexLen],
 	}, nil
-}
-
-func FingerprintVariables(variables []*contractv1.ManifestVariable) string {
-	if len(variables) == 0 {
-		return ""
-	}
-	ordered := slices.Clone(variables)
-	slices.SortFunc(ordered, func(a, b *contractv1.ManifestVariable) int {
-		if a.GetFolder() != b.GetFolder() {
-			return strings.Compare(a.GetFolder(), b.GetFolder())
-		}
-		return strings.Compare(a.GetKey(), b.GetKey())
-	})
-	h := sha256.New()
-	for _, variable := range ordered {
-		WriteLenPrefixed(h, []byte(variable.GetKey()))
-		WriteLenPrefixed(h, []byte(variable.GetFolder()))
-		WriteLenPrefixed(h, []byte(strconv.FormatInt(variable.GetVersion(), 10)))
-	}
-	return hex.EncodeToString(h.Sum(nil))[:FingerprintHexLen]
 }
 
 func ParseBuild(rendered string) (Build, error) {
