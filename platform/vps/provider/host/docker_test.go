@@ -48,7 +48,7 @@ func daemon(t *testing.T, held engine) string {
 version) `+answer+` ;;
 esac
 exit 0`)
-		write("dockerd", "printf 'Docker version %s, build 38b7060\\n' "+quoted(held.dockerd))
+		write(dockerDaemon, "printf 'Docker version %s, build 38b7060\\n' "+quoted(held.dockerd))
 	}
 	if held.snap {
 		write("snap", `[ "$1" = list ] && [ "$2" = docker ]`)
@@ -147,7 +147,7 @@ func TestTheReadNamesWhatKindOfDockerTheHostCarries(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		held engine
-		want string
+		want engineKind
 	}{
 		"docker's own packages":          {serving(), engineStandard},
 		"a masked docker.service":        {engine{installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"}, engineMasked},
@@ -519,8 +519,8 @@ func carrying(stood *bench, held Engine) {
 		if strings.Contains(command, "for p in") {
 			said := stood.rendered(command)
 			said.Stdout = strings.ReplaceAll(said.Stdout,
-				kindEngineHeld+"\t"+dockerEngine+"\t0\t"+engineStandard+"\t28.3.1\n",
-				kindEngineHeld+"\t"+dockerEngine+"\t0\t"+held.Kind+"\t"+held.Version+"\n")
+				engineFactsRow+"\t"+dockerEngine+"\t0\t"+string(engineStandard)+"\t28.3.1\n",
+				engineFactsRow+"\t"+dockerEngine+"\t0\t"+string(held.Kind)+"\t"+held.Version+"\n")
 			return said, true
 		}
 		if prior != nil {

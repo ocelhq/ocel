@@ -18,6 +18,7 @@ const (
 
 const (
 	dockerEngine = "docker"
+	dockerDaemon = "dockerd"
 	dockerUnit   = "docker.service"
 )
 
@@ -59,9 +60,8 @@ if [ "$backoff" -gt ` + strconv.Itoa(h.ceiling) + ` ]; then backoff=` + strconv.
 }
 
 const (
-	engineFact   = "engine=present\n"
-	unservedFact = "unserved"
-	unitFacts    = "active=active\nenabled=enabled\n"
+	engineFact = "engine=present\n"
+	unitFacts  = "active=active\nenabled=enabled\n"
 )
 
 func EngineItems() []Item {
@@ -169,28 +169,30 @@ func unitCommand(i Item) string {
 	return "set -e\nsystemctl daemon-reload\nsystemctl enable " + name + "\nsystemctl restart " + name
 }
 
-const kindEngineHeld = "probe:engine"
+const engineFactsRow = "probe:engine"
+
+type engineKind string
 
 const (
-	engineStandard = "standard"
-	engineMasked   = "masked"
-	engineSnap     = "snap"
-	engineRootless = "rootless"
-	engineUnserved = unservedFact
+	engineStandard engineKind = "standard"
+	engineMasked   engineKind = "masked"
+	engineSnap     engineKind = "snap"
+	engineRootless engineKind = "rootless"
+	engineUnserved engineKind = "unserved"
 )
 
 type Engine struct {
-	Kind    string
+	Kind    engineKind
 	Version string
 }
 
 func engineProbe() string {
 	return `held=''
-case "$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null)" in masked*) held=` + engineMasked + ` ;; esac
+case "$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null)" in masked*) held=` + string(engineMasked) + ` ;; esac
 version=''
 if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
 if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present
-elif ` + systemdAnswers + `; then engine=` + quoted(unservedFact) + `
+elif ` + systemdAnswers + `; then engine=` + quoted(string(engineUnserved)) + `
 else engine=''
 ` + unreadable(KindEngine, quoted(dockerEngine), `'systemctl did not answer: check systemctl status (ocel needs systemd)'`) + `
 fi
@@ -198,17 +200,17 @@ if [ -n "$engine" ]; then
 ` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner),
 		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
 if [ -n "$held" ]; then :
-elif [ "$engine" = present ]; then held=` + engineStandard + `
-elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then held=` + engineSnap + `
-elif pgrep -x rootlesskit >/dev/null 2>&1; then held=` + engineRootless + `
-elif pgrep -x dockerd >/dev/null 2>&1; then held=` + engineUnserved + `
+elif [ "$engine" = present ]; then held=` + string(engineStandard) + `
+elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then held=` + string(engineSnap) + `
+elif pgrep -x rootlesskit >/dev/null 2>&1; then held=` + string(engineRootless) + `
+elif pgrep -x ` + quoted(dockerDaemon) + ` >/dev/null 2>&1; then held=` + string(engineUnserved) + `
 fi
-version=$(timeout 10 docker version --format '{{.Server.Version}}' 2>/dev/null) || version=''
-[ -n "$version" ] || version=$(dockerd --version 2>/dev/null) || version=''
+version=$(timeout 10 ` + quoted(dockerEngine) + ` version --format '{{.Server.Version}}' 2>/dev/null) || version=''
+[ -n "$version" ] || version=$(` + quoted(dockerDaemon) + ` --version 2>/dev/null) || version=''
 fi
 fi
 if [ -n "$held" ]; then
-` + reports(quoted(kindEngineHeld), quoted(dockerEngine), "0", `"$held"`, `"$version"`) + `
+` + reports(quoted(engineFactsRow), quoted(dockerEngine), "0", `"$held"`, `"$version"`) + `
 fi`
 }
 
@@ -271,8 +273,8 @@ func (e Engine) release() (int, int, bool) {
 func readEngine(rendered string) Engine {
 	for line := range strings.Lines(rendered) {
 		columns := strings.Split(strings.TrimRight(line, "\r\n"), "\t")
-		if len(columns) == 5 && columns[0] == kindEngineHeld {
-			return Engine{Kind: columns[3], Version: engineVersion(columns[4])}
+		if len(columns) == 5 && columns[0] == engineFactsRow {
+			return Engine{Kind: engineKind(columns[3]), Version: engineVersion(columns[4])}
 		}
 	}
 	return Engine{}

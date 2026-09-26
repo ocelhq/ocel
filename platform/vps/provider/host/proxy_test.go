@@ -1106,7 +1106,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 	stood := settledOn(t, class)
 	for at, item := range stood.stands[class] {
 		if item.Kind == KindEngine {
-			stood.stands[class][at].Content = []byte("engine=" + unservedFact + "\n")
+			stood.stands[class][at].Content = []byte("engine=" + string(engineUnserved) + "\n")
 		}
 	}
 	stood.after = func(b *bench, command string) {

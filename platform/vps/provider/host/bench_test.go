@@ -242,7 +242,7 @@ func surveyed(items []Item) string {
 		}
 		rendered.WriteString("\n")
 		if item.ID() == engineItem().ID() {
-			fmt.Fprintf(&rendered, "%s\t%s\t0\t%s\t%s\n", kindEngineHeld, dockerEngine, engineStandard, "28.3.1")
+			fmt.Fprintf(&rendered, "%s\t%s\t0\t%s\t%s\n", engineFactsRow, dockerEngine, engineStandard, "28.3.1")
 		}
 	}
 	return rendered.String()
