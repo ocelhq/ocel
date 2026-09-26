@@ -101,12 +101,6 @@ func TraceParentFromContext(ctx context.Context) (string, bool) {
 	return traceparent, ok
 }
 
-// ValidTraceParent reports whether value is a well-formed W3C traceparent
-// header: version-traceid-parentid-flags, each a fixed-width lowercase hex
-// field, with neither the trace id nor the parent id all zeros. This is the
-// one place that parses the header, so both the CLI's outgoing interceptor
-// (via WithTraceParent) and the provider's incoming one reject a malformed
-// value the same way rather than propagating it.
 func ValidTraceParent(value string) bool {
 	fields := strings.Split(value, "-")
 	if len(fields) != 4 {
