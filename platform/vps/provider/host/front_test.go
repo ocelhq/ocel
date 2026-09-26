@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -501,5 +502,38 @@ func TestWhatABoxStandsFollowsWhetherItsProxyOwnsThePorts(t *testing.T) {
 		if recorded := front.recorded() != nil; recorded == owns {
 			t.Errorf("%s: the record names a proxy = %v, want one named only for a proxy that does not own the ports", name, recorded)
 		}
+	}
+}
+
+func TestAProxyThisOcelDoesNotServeYetIsRefusedNamedRatherThanRunAsOcelsOwn(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		front Front
+		named string
+	}{
+		"Coolify's Traefik": {front: coolifysTraefik(), named: "Coolify's Traefik"},
+		"your Caddy":        {front: Front{Caddy: &CaddyFront{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}}, named: "your Caddy"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			front := openFront(tc.front, frontBox{})
+			if _, builtin := front.(caddy.Builtin); builtin || front.Guarantees().OwnsPorts {
+				t.Fatalf("%s opens as %T, want it never run as ocel's own proxy on 80 and 443", name, front)
+			}
+			if file := front.File(); file != "" {
+				t.Errorf("%s names %s as its file, want none while it renders nothing, so no switchboard binds a directory for it", name, file)
+			}
+			ctx := context.Background()
+			_, rendered := front.Render(proxy.Spec{})
+			_, inspected := front.Inspect(ctx)
+			_, certified := front.Certificate(ctx, "shop.example.com")
+			for asked, err := range map[string]error{"Render": rendered, "Reload": front.Reload(ctx), "Inspect": inspected, "Certificate": certified} {
+				if err == nil || !strings.Contains(err.Error(), tc.named) || !strings.Contains(err.Error(), "not supported yet") {
+					t.Errorf("%s() on %s = %v, want it refused naming %s as not supported yet", asked, name, err, tc.named)
+				}
+			}
+		})
 	}
 }
