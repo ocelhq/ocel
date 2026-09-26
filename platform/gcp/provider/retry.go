@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -152,7 +152,7 @@ func waiting[T any](
 			return value, nil
 		}
 	}
-	return nothing, providerkit.Refuse(providerkit.CodeNotReady,
+	return nothing, refusal.Refuse(refusal.CodeNotReady,
 		"%s is still not done after %d attempts, and going on before it is leaves the work half made.\n"+
 			"It may still be provisioning: run the same command again once Google has caught up",
 		doing, held.attempts)

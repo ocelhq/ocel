@@ -3,7 +3,7 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -17,7 +17,7 @@ func (s cipher) stood(ctx context.Context) (ports.Cipher, error) {
 	return ports.Cipher{Clients: held.Workload()}, nil
 }
 
-func (s cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
+func (s cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
 	held, err := s.stood(ctx)
 	if err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func (s cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []
 	return held.Seal(ctx, at, plaintext)
 }
 
-func (s cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (s cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	held, err := s.stood(ctx)
 	if err != nil {
 		return nil, err

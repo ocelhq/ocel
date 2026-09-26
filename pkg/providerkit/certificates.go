@@ -22,7 +22,7 @@ type CertificateRequest struct {
 	Hostname string
 	Current  Certificate
 	Prove    func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
-	Progress Progress
+	Progress edge.Progress
 }
 
 type CertificateHealth struct {
@@ -41,17 +41,17 @@ type Certificates interface {
 
 	Inspect(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
 
-	Discard(ctx context.Context, cert Certificate, progress Progress) error
+	Discard(ctx context.Context, cert Certificate, progress edge.Progress) error
 }
 
-func discardCertificate(ctx context.Context, provider Provider, cert Certificate, progress Progress) error {
+func discardCertificate(ctx context.Context, provider Provider, cert Certificate, progress edge.Progress) error {
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
 	return provider.Certificates().Discard(ctx, cert, progress)
 }
 
-func retireCertificate(ctx context.Context, provider Provider, settle settlement, cert, holding Certificate, progress Progress) error {
+func retireCertificate(ctx context.Context, provider Provider, settle settlement, cert, holding Certificate, progress edge.Progress) error {
 	if !cert.Issued() || cert.ID == holding.ID {
 		return nil
 	}
@@ -73,7 +73,7 @@ type certification struct {
 	notes    []string
 }
 
-func (c certification) certify(ctx context.Context, hostname string, progress Progress) error {
+func (c certification) certify(ctx context.Context, hostname string, progress edge.Progress) error {
 	cert, err := c.provider.Certificates().Issue(ctx, CertificateRequest{
 		Kind:     c.settle.kind,
 		Hostname: hostname,
@@ -99,7 +99,7 @@ func (c certification) hold(ctx context.Context, cert Certificate) error {
 	return c.persist(ctx)
 }
 
-func (c certification) discardSuperseded(ctx context.Context, progress Progress) error {
+func (c certification) discardSuperseded(ctx context.Context, progress edge.Progress) error {
 	if len(c.settled.Superseded) == 0 {
 		return nil
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type hosting struct {
@@ -21,7 +22,7 @@ type hosting struct {
 
 	mu      sync.Mutex
 	asked   [][]string
-	classes []providerkit.Class
+	classes []edge.Class
 
 	target  providerkit.RegistryTarget
 	refusal error
@@ -33,7 +34,7 @@ func (h *hosting) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (h *hosting) EnsureImageRegistry(_ context.Context, class providerkit.Class, repositories []string) (providerkit.RegistryTarget, error) {
+func (h *hosting) EnsureImageRegistry(_ context.Context, class edge.Class, repositories []string) (providerkit.RegistryTarget, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.asked = append(h.asked, repositories)
@@ -41,7 +42,7 @@ func (h *hosting) EnsureImageRegistry(_ context.Context, class providerkit.Class
 	return h.target, h.refusal
 }
 
-func (h *hosting) asking() []providerkit.Class {
+func (h *hosting) asking() []edge.Class {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.classes
@@ -131,9 +132,9 @@ func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
 	}
 
 	asking := provider.asking()
-	if len(asking) != 1 || asking[0] != providerkit.ClassPreview {
+	if len(asking) != 1 || asking[0] != edge.ClassPreview {
 		t.Errorf("the provider resolved a registry for %v, want %v: a class keeps its images apart from the other class's",
-			asking, providerkit.ClassPreview)
+			asking, edge.ClassPreview)
 	}
 }
 

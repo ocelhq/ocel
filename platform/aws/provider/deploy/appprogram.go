@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -198,7 +199,7 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 		}
 		arn := r.cfg.RuntimeLayers[arch]
 		if arn == "" {
-			return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"this account's bootstrap publishes no %s runtime for this build's functions to boot through; re-run `%s`",
 				arch, providerkit.BootstrapCommand(r.cfg.Class))
 		}

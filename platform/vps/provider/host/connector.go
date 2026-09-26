@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -103,7 +104,7 @@ func readConnectorState(rendered string) (ConnectorState, error) {
 		}
 	}
 	if standing.Installed && standing.PublicKey == "" {
-		return ConnectorState{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return ConnectorState{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s answered no public key\nRemove the connector and add it again",
 			ConnectorBinary)
 	}
@@ -113,7 +114,7 @@ func readConnectorState(rendered string) (ConnectorState, error) {
 func keyPathed(config []byte) ([]byte, error) {
 	var named map[string]any
 	if err := json.Unmarshal(config, &named); err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the connector config is not an object: %s", err)
 	}
 	named["keyPath"] = ConnectorKey
@@ -124,7 +125,7 @@ func keyPathed(config []byte) ([]byte, error) {
 	return append(written, '\n'), nil
 }
 
-func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress providerkit.Progress) (ConnectorState, error) {
+func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress edge.Progress) (ConnectorState, error) {
 	written, err := keyPathed(config)
 	if err != nil {
 		return ConnectorState{}, err
@@ -158,7 +159,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	return c.Describe(ctx)
 }
 
-func (c *Connector) Remove(ctx context.Context, progress providerkit.Progress) error {
+func (c *Connector) Remove(ctx context.Context, progress edge.Progress) error {
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}

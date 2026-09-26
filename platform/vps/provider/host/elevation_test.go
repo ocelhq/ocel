@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -18,7 +20,7 @@ type sudoless struct {
 }
 
 func (c *sudoless) Preflight(context.Context) (session.Facts, error) {
-	return session.Facts{Systemd: true}, providerkit.Refuse(providerkit.CodeDenied,
+	return session.Facts{Systemd: true}, refusal.Refuse(refusal.CodeDenied,
 		"ocel-deploy@box.example can neither act as root nor run sudo without a password, and bootstrap writes as root throughout")
 }
 
@@ -36,12 +38,12 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (sessi
 		return session.Result{Stdout: "x86_64\n"}, nil
 	case command == frontReading():
 		return session.Result{Stdout: c.recorded}, nil
-	case c.stamped != "" && command == "cat "+quoted(StampPath(providerkit.ClassProduction)):
+	case c.stamped != "" && command == "cat "+quoted(StampPath(edge.ClassProduction)):
 		return session.Result{Stdout: c.stamped}, nil
 	case c.stamped != "" && strings.Contains(command, "for p in"):
-		return session.Result{Stdout: KindFile + "\t" + StampPath(providerkit.ClassProduction) + "\t644\troot\tabc\n" +
+		return session.Result{Stdout: KindFile + "\t" + StampPath(edge.ClassProduction) + "\t644\troot\tabc\n" +
 			KindFile + "\t" + FrontRecordPath + "\t644\troot\tdef\n" +
-			KindSealKey + "\t" + SealKeyPath(providerkit.ClassProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
+			KindSealKey + "\t" + SealKeyPath(edge.ClassProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
 	default:
 		return session.Result{}, nil
 	}
@@ -69,7 +71,7 @@ func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
 	conn := &sudoless{}
 	ctx := context.Background()
 
-	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(ctx, providerkit.ClassProduction)
+	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(ctx, edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Describe() = %v, want what this login can see of the host: the preflight reports bootstrap standing through Describe, and a Describe that demands root turns every deploy under %s into a refusal that carries no claims, no standing and no known slugs",
 			err, "ocel-deploy")
@@ -86,7 +88,7 @@ func TestReadingTheHostABootstrapWritesToStillNeedsRoot(t *testing.T) {
 	conn := &sudoless{}
 	ctx := context.Background()
 
-	_, err := hostFor(conn).Read(ctx, providerkit.ClassProduction)
+	_, err := hostFor(conn).Read(ctx, edge.ClassProduction)
 	if err == nil || !strings.Contains(err.Error(), "sudo") {
 		t.Fatalf("Read() = %v, want the refusal naming the grant this login lacks: an apply plans against what root can see, and a plan drawn from a narrower view writes over what it could not read",
 			err)
@@ -99,12 +101,12 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err := frontRecordItem(Front{}, "shop", providerkit.ClassProduction)
+	record, err := frontRecordItem(Front{}, "shop", edge.ClassProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conn.recorded = string(record.Content)
-	written := digests(append(Items(providerkit.ClassProduction, keys, ArchAMD64, Front{}), record))
+	written := digests(append(Items(edge.ClassProduction, keys, ArchAMD64, Front{}), record))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
 		Schema:  providerkit.BootstrapSchema,
@@ -122,7 +124,7 @@ func TestALoginThatCannotElevateSeesTheBootstrapThisBuildWroteAsCurrent(t *testi
 	conn := &sudoless{}
 	stampedBy(t, conn, func(map[string]string) {})
 
-	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), providerkit.ClassProduction)
+	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +146,7 @@ func TestALoginThatCannotElevateStillSeesABootstrapAnotherBuildWrote(t *testing.
 		}
 	})
 
-	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), providerkit.ClassProduction)
+	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatal(err)
 	}

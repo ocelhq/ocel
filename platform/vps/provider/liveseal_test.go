@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -25,7 +27,7 @@ func (vm machine) deploying(t *testing.T) *vps.Provider {
 	return p
 }
 
-func bootstrapped(t *testing.T, vm machine, class providerkit.Class) *vps.Provider {
+func bootstrapped(t *testing.T, vm machine, class edge.Class) *vps.Provider {
 	t.Helper()
 	p := vm.provider(t)
 	t.Cleanup(func() { closing(t, p) })
@@ -56,13 +58,13 @@ func dirties(t *testing.T, vm machine) {
 	})
 }
 
-func sealedAt(class providerkit.Class, name string) providerkit.SealScope {
-	return providerkit.SealScope{Project: "shop", Class: class, Env: "*", Folder: "/", Name: name}
+func sealedAt(class edge.Class, name string) records.SealScope {
+	return records.SealScope{Project: "shop", Class: class, Env: "*", Folder: "/", Name: name}
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 	vm := liveMachine(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, vm, class)
 
 	key := host.SealKeyPath(class)
@@ -79,7 +81,7 @@ func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 
 func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *testing.T) {
 	vm := liveMachine(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, vm, class)
 
 	ctx := context.Background()
@@ -109,7 +111,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 
 func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	vm := liveMachine(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	p := bootstrapped(t, vm, class)
 	dirties(t, vm)
 

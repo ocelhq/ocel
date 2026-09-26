@@ -3,7 +3,8 @@ package values
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 
 type Scope struct {
 	Project string
-	Class   ports.Class
+	Class   edge.Class
 }
 
 type Cell struct {
@@ -69,66 +70,66 @@ func plainFolder(folder string) string {
 	return folder
 }
 
-func Under(scope Scope, rest ...string) ports.RecordName {
-	return append(ports.RecordName{ports.RootValues, scope.Project, string(scope.Class)}, rest...)
+func Under(scope Scope, rest ...string) records.Name {
+	return append(records.Name{records.RootValues, scope.Project, string(scope.Class)}, rest...)
 }
 
-func cellsName(scope Scope) ports.RecordName { return Under(scope, "cells") }
+func cellsName(scope Scope) records.Name { return Under(scope, "cells") }
 
-func cellName(scope Scope, at Coordinate) ports.RecordName {
+func cellName(scope Scope, at Coordinate) records.Name {
 	at = at.canonical()
-	return Under(scope, "cells", ports.Escape(at.Folder), ports.Escape(at.Key), ports.Escape(at.Environment))
+	return Under(scope, "cells", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
 }
 
-func historyName(scope Scope, at Coordinate) ports.RecordName {
+func historyName(scope Scope, at Coordinate) records.Name {
 	at = at.canonical()
-	return Under(scope, "history", ports.Escape(at.Folder), ports.Escape(at.Key), ports.Escape(at.Environment))
+	return Under(scope, "history", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
 }
 
-func versionName(scope Scope, at Coordinate, version int64) ports.RecordName {
+func versionName(scope Scope, at Coordinate, version int64) records.Name {
 	return append(historyName(scope, at), fmt.Sprintf("%0*d", versionDigits, version))
 }
 
-func bindingsName(scope Scope) ports.RecordName { return Under(scope, "bindings") }
+func bindingsName(scope Scope) records.Name { return Under(scope, "bindings") }
 
-func bindingName(scope Scope, binding string) ports.RecordName {
-	return Under(scope, "bindings", ports.Escape(binding))
+func bindingName(scope Scope, binding string) records.Name {
+	return Under(scope, "bindings", records.Escape(binding))
 }
 
-func bindingRecordName(scope Scope, binding, environment string) ports.RecordName {
-	return append(bindingName(scope, binding), "records", ports.Escape(canonicalEnvironment(environment)))
+func bindingRecordName(scope Scope, binding, environment string) records.Name {
+	return append(bindingName(scope, binding), "records", records.Escape(canonicalEnvironment(environment)))
 }
 
-func bindingValueName(scope Scope, binding, environment string) ports.RecordName {
-	return append(bindingName(scope, binding), "values", ports.Escape(canonicalEnvironment(environment)))
+func bindingValueName(scope Scope, binding, environment string) records.Name {
+	return append(bindingName(scope, binding), "values", records.Escape(canonicalEnvironment(environment)))
 }
 
-func bindingOwnersName(scope Scope) ports.RecordName { return Under(scope, "bindingowners") }
+func bindingOwnersName(scope Scope) records.Name { return Under(scope, "bindingowners") }
 
-func bindingOwnerName(scope Scope, owner, environment string) ports.RecordName {
-	return Under(scope, "bindingowners", ports.Escape(owner), ports.Escape(canonicalEnvironment(environment)))
+func bindingOwnerName(scope Scope, owner, environment string) records.Name {
+	return Under(scope, "bindingowners", records.Escape(owner), records.Escape(canonicalEnvironment(environment)))
 }
 
-func Refs(scope Scope) ports.RecordName {
-	return ports.RecordName{ports.RootValueRefs, string(scope.Class), scope.Project}
+func Refs(scope Scope) records.Name {
+	return records.Name{records.RootValueRefs, string(scope.Class), scope.Project}
 }
 
-func refsName(target Scope, at Coordinate) ports.RecordName {
+func refsName(target Scope, at Coordinate) records.Name {
 	at = at.canonical()
-	return append(Refs(target), ports.Escape(at.Folder), ports.Escape(at.Key))
+	return append(Refs(target), records.Escape(at.Folder), records.Escape(at.Key))
 }
 
-func refName(target Scope, at Coordinate, from Scope, holds Coordinate) ports.RecordName {
+func refName(target Scope, at Coordinate, from Scope, holds Coordinate) records.Name {
 	holds = holds.canonical()
-	return append(refsName(target, at), from.Project, ports.Escape(holds.Folder), ports.Escape(holds.Key), ports.Escape(holds.Environment))
+	return append(refsName(target, at), from.Project, records.Escape(holds.Folder), records.Escape(holds.Key), records.Escape(holds.Environment))
 }
 
-func cellOf(name ports.RecordName) (Coordinate, bool) {
+func cellOf(name records.Name) (Coordinate, bool) {
 	if len(name) < 3 {
 		return Coordinate{}, false
 	}
 	tail := name[len(name)-3:]
-	folder, key, environment := ports.Unescape(tail[0]), ports.Unescape(tail[1]), ports.Unescape(tail[2])
+	folder, key, environment := records.Unescape(tail[0]), records.Unescape(tail[1]), records.Unescape(tail[2])
 	if folder == "" || key == "" || environment == "" {
 		return Coordinate{}, false
 	}

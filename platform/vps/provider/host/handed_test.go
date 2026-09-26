@@ -7,14 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func noted(stand *bench, answer string) {
 	imaged := stand.answer
 	stand.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(HandedNote(providerkit.ClassProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
+		if strings.Contains(command, quoted(HandedNote(edge.ClassProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
 			return session.Result{Stdout: answer}, true
 		}
 		if imaged != nil {
@@ -71,8 +72,8 @@ func TestAPromotionOfAnAppHandedABakedValueWhoseContainerIsGoneIsRefusedByName(t
 	imaging(stand, "false ")
 	noted(stand, "held\n"+`{"handed":["API_TOKEN"],"live":{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"}]}}`+"\n")
 	err := stand.host().StandUp(context.Background(), promoted())
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("a promotion of an app whose record declares no variable stood it up without the value its deploy baked in: %v\n%v", err, stand.commands())
 	}
 	for _, want := range []string{"API_TOKEN", "ocel deploy", physical} {
@@ -121,8 +122,8 @@ func TestAPromotionOfAContainerThisBoxHoldsNoNoteForIsRefusedRatherThanGuessedEm
 	imaging(stand, "false ")
 	noted(stand, "unknown\n")
 	err := stand.host().StandUp(context.Background(), promoted())
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("a promotion of a container nothing on this box describes stood it up: %v\n%v", err, stand.commands())
 	}
 	if !strings.Contains(err.Error(), "no note") || !strings.Contains(err.Error(), "ocel deploy") {

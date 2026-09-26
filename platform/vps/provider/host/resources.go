@@ -15,7 +15,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -24,7 +25,7 @@ const (
 	keptDir    = "kept"
 )
 
-func KeptPath(class providerkit.Class, name string) string {
+func KeptPath(class edge.Class, name string) string {
 	return StateDir(class) + "/" + keptDir + "/" + name
 }
 
@@ -37,14 +38,14 @@ func (h *Host) unhand(ctx context.Context, held handoff) error {
 	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
 	defer stop()
 	if _, err := h.owning(taking, "take back "+held.path, "rm -f "+quoted(held.path), nil); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"could not remove %s on %s, which holds a plaintext credential: %v",
 			held.path, h.named(), err)
 	}
 	return nil
 }
 
-func handedBack(class providerkit.Class, path string) string {
+func handedBack(class edge.Class, path string) string {
 	return "if [ \"$(id -u)\" -eq 0 ]; then chown -R --reference=" + quoted(StateDir(class)) + " " + quoted(path) + "; fi"
 }
 
@@ -66,7 +67,7 @@ func (h *Host) owning(ctx context.Context, what, command string, stdin []byte) (
 	return h.ran(ctx, what, command, fed(), elevation)
 }
 
-func keepCommand(class providerkit.Class, path string) string {
+func keepCommand(class edge.Class, path string) string {
 	dir := path[:strings.LastIndex(path, "/")]
 	return "set -e\n" +
 		"umask 077\n" +
@@ -79,7 +80,7 @@ func keepCommand(class providerkit.Class, path string) string {
 		"cat " + quoted(path)
 }
 
-func (h *Host) ForgetKept(ctx context.Context, class providerkit.Class, names []string) error {
+func (h *Host) ForgetKept(ctx context.Context, class edge.Class, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
@@ -92,7 +93,7 @@ func (h *Host) ForgetKept(ctx context.Context, class providerkit.Class, names []
 	return err
 }
 
-func (h *Host) Kept(ctx context.Context, class providerkit.Class, name string) ([]byte, error) {
+func (h *Host) Kept(ctx context.Context, class edge.Class, name string) ([]byte, error) {
 	said, err := h.owning(ctx, "read what is kept for "+name, keptCommand(KeptPath(class, name)), nil)
 	if err != nil {
 		return nil, err
@@ -100,7 +101,7 @@ func (h *Host) Kept(ctx context.Context, class providerkit.Class, name string) (
 	return unkept(name, said)
 }
 
-func (h *Host) KeepOnce(ctx context.Context, class providerkit.Class, name string, candidate []byte) ([]byte, error) {
+func (h *Host) KeepOnce(ctx context.Context, class edge.Class, name string, candidate []byte) ([]byte, error) {
 	fed := base64.StdEncoding.EncodeToString(candidate) + "\n"
 	said, err := h.owning(ctx, "keep what "+name+" is held to", keepCommand(class, KeptPath(class, name)), []byte(fed))
 	if err != nil {
@@ -112,7 +113,7 @@ func (h *Host) KeepOnce(ctx context.Context, class providerkit.Class, name strin
 func unkept(name, said string) ([]byte, error) {
 	kept, err := base64.StdEncoding.DecodeString(strings.TrimSpace(said))
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, refusal.Refuse(refusal.CodeDenied,
 			"the value kept for %s is %d undecodable bytes", name, len(said))
 	}
 	return kept, nil
@@ -134,7 +135,7 @@ type ResourceContainer struct {
 	Name     string
 	Project  string
 	Resource string
-	Class    providerkit.Class
+	Class    edge.Class
 
 	Image        string
 	Args         []string
@@ -190,7 +191,7 @@ func (r ResourceContainer) volume() string { return volumeName(r.Name, r.Volume.
 
 func (r ResourceContainer) VolumeName() string { return r.volume() }
 
-func volumesOf(class providerkit.Class, project, resource, name string) string {
+func volumesOf(class edge.Class, project, resource, name string) string {
 	return "docker volume ls --filter " + quoted("name=^"+name) +
 		" --filter " + quoted("label="+LabelClass+"="+string(class)) +
 		" --filter " + quoted("label="+LabelProject+"="+naming.Sanitize(project)) +
@@ -297,7 +298,7 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 	defer func() { err = errors.Join(err, h.unhand(ctx, held)) }()
 	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
 		swapCommand(spec, from, digest, held.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
 	}
@@ -356,7 +357,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	}
 	if from != "" {
 		if !strings.HasPrefix(said, "running ") {
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"%s holds version %s data, this deploy declares %s, and %s is not running to dump it\n"+
 					"Run `docker start %s` or set the version back to %s",
 				spec.Resource, from, spec.Volume.Generation, spec.Name, spec.Name, from)
@@ -400,7 +401,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 }
 
 type ResourceRef struct {
-	Class    providerkit.Class
+	Class    edge.Class
 	Project  string
 	Resource string
 	Name     string

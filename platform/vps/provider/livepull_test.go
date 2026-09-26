@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -184,7 +185,7 @@ func liveDigest(t *testing.T, target providerkit.RegistryTarget, coordinate stri
 
 func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 	_, _ = imported(t)
 
 	target := vm.registry(t)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -75,7 +76,7 @@ func (c credentials) Permissions(tier providerkit.CredentialTier) (edge.Credenti
 	case providerkit.TierDeploy:
 		return edge.CredentialDocument{Document: deployDocument()}, nil
 	default:
-		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
 			"unknown credential tier: want bootstrap or deploy")
 	}
 }

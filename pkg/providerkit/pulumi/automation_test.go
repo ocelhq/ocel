@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type program struct{ config auto.ConfigMap }
@@ -36,7 +38,7 @@ func plan() providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
-			Class:   providerkit.ClassProduction,
+			Class:   edge.ClassProduction,
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind: providerkit.StackInfra,
@@ -167,8 +169,8 @@ func TestWorkspaceRefusesAnAccessThatWouldWriteStateUnsealed(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := pulumi.New(pulumi.Config{Access: broken, Program: program{}.Run}).Workspace(plan())
-			var refusal providerkit.Refusal
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 				t.Fatalf("Workspace() with %s = %v, want a not-ready refusal", name, err)
 			}
 		})
@@ -304,12 +306,12 @@ func TestALockedStackReadsAsBusySoTheCLISaysToWaitRatherThanToRetry(t *testing.T
 	engine := &recordingEngine{err: errors.New("update failed: the stack is currently locked by 1 lock(s)")}
 	_, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		Run(context.Background(), plan(), nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Run() over a locked stack = %v, want a busy refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "pulumi cancel --stack "+plan().Ref.Name.String()) {
-		t.Errorf("the refusal reads %q, want it to name the command that releases the lock", refusal.Message)
+	if !strings.Contains(refused.Message, "pulumi cancel --stack "+plan().Ref.Name.String()) {
+		t.Errorf("the refusal reads %q, want it to name the command that releases the lock", refused.Message)
 	}
 }
 
@@ -335,8 +337,8 @@ func TestDestroyOfALockedStackReadsAsBusyToo(t *testing.T) {
 	engine := &recordingEngine{err: errors.New("destroy failed: the stack is currently locked by 1 lock(s)")}
 	err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		Destroy(context.Background(), plan().Ref, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Destroy() over a locked stack = %v, want a busy refusal", err)
 	}
 }

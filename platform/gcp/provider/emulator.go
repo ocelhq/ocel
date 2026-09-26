@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -16,7 +16,7 @@ func emulatorEndpoint() (string, error) {
 	if endpoint == "" || loopback(endpoint) {
 		return endpoint, nil
 	}
-	return "", providerkit.Refuse(providerkit.CodeInvalid,
+	return "", refusal.Refuse(refusal.CodeInvalid,
 		"%s names %s, and an emulator is addressed with no credentials at all: only a loopback address may be named there",
 		emulatorEndpointVariable, endpoint)
 }

@@ -25,6 +25,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -299,7 +301,7 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), providerkit.ClassProduction, "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,15 +376,15 @@ func (r refusingStacks) Stacks() providerkit.Stacks { return r.stacks }
 
 type halfBindingStacks struct{}
 
-func (halfBindingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
+func (halfBindingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, providerkit.StackResult{})
 }
 
-func (halfBindingStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
+func (halfBindingStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ edge.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, providerkit.StackResult{}), nil
 }
 
-func (halfBindingStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.StackResult, error) {
+func (halfBindingStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.StackResult, error) {
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
 		result.Bindings = append(result.Bindings, providerkit.Binding{
@@ -394,7 +396,7 @@ func (halfBindingStacks) Provision(_ context.Context, plan providerkit.StackPlan
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, providerkit.StackRef, providerkit.Progress) error {
+func (halfBindingStacks) Destroy(context.Context, providerkit.StackRef, edge.Progress) error {
 	return nil
 }
 
@@ -418,19 +420,19 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), providerkit.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), providerkit.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
+	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), edge.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
 		t.Errorf("the refused deploy recorded %v, want nothing written for a binding the kit would not accept", entries)
 	}
 }
 
 type countingCipher struct {
-	providerkit.Cipher
+	records.Cipher
 
 	mu     sync.Mutex
 	opened int
 }
 
-func (c *countingCipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (c *countingCipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	if at.Binding != "" {
 		c.mu.Lock()
 		c.opened++
@@ -450,7 +452,7 @@ type sealCounting struct {
 	cipher *countingCipher
 }
 
-func (s sealCounting) Cipher() providerkit.Cipher { return s.cipher }
+func (s sealCounting) Cipher() records.Cipher { return s.cipher }
 
 func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 	builtProject(t)
@@ -488,15 +490,15 @@ func (r *resolvingStacks) Resolved() []providerkit.Binding {
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *resolvingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
 	return r.inner.Plan(ctx, plan, progress)
 }
 
-func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (providerkit.Plan, error) {
 	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingStacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *resolvingStacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
 	result, err := r.inner.Provision(ctx, plan, progress)
 	if err != nil {
 		return result, err
@@ -519,7 +521,7 @@ func (r *resolvingStacks) Provision(ctx context.Context, plan providerkit.StackP
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (r *resolvingStacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	return r.inner.Destroy(ctx, ref, progress)
 }
 
@@ -911,7 +913,7 @@ func TestADeployDeclaringAWildcardForProductionIsRefusedBeforeItProvisionsAnythi
 	req := deployRequest()
 	req.Manifest.Domains[0].Hostnames = []string{"*.shop.example"}
 	_, _, err := deployStream(t, client, req)
-	if code, _ := providerkit.RefusedCode(err); code != providerkit.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
+	if code, _ := providerkit.RefusedCode(err); code != refusal.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
 		t.Fatalf("Deploy() = %v, want it refused as invalid: a wildcard belongs to domains.preview", err)
 	}
 	if plans := provider.FakeStacks().Plans(); len(plans) != 0 {
@@ -990,8 +992,8 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	refusal := "no load balancer stands in this project for shop.example: run `ocel bootstrap`"
-	provider.RefuseCertificates(providerkit.Refuse(providerkit.CodeNotReady, "%s", refusal))
+	reason := "no load balancer stands in this project for shop.example: run `ocel bootstrap`"
+	provider.RefuseCertificates(refusal.Refuse(refusal.CodeNotReady, "%s", reason))
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
@@ -999,7 +1001,7 @@ func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T)
 	if result.GetSuccess() {
 		t.Fatalf("Deploy() succeeded with the note %q, want it failed: a missing load balancer waits on `ocel bootstrap`, not on `ocel domain add`", noteOf(result))
 	}
-	if !strings.Contains(result.GetError(), refusal) {
+	if !strings.Contains(result.GetError(), reason) {
 		t.Errorf("Deploy() = %q, want the refusal's own remedy", result.GetError())
 	}
 	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
@@ -1011,7 +1013,7 @@ func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) 
 	builtProject(t)
 	client, provider := deployServed(t)
 	provider.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
-	provider.StallAfterProving(providerkit.Pending(providerkit.Refuse(providerkit.CodeNotReady, "the certificate is still validating")))
+	provider.StallAfterProving(providerkit.Pending(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")

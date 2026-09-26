@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type countingStore struct {
@@ -42,7 +44,9 @@ func (s *countingStore) Open(context.Context, ArtifactRef) (io.ReadCloser, error
 	return nil, os.ErrNotExist
 }
 
-func (s *countingStore) RemovePrefix(context.Context, Class, string, Progress) error { return nil }
+func (s *countingStore) RemovePrefix(context.Context, edge.Class, string, edge.Progress) error {
+	return nil
+}
 
 func uploadsOf(t *testing.T, count int) []Upload {
 	t.Helper()

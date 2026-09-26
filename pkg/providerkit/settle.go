@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -205,11 +206,11 @@ func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Ti
 		if outlasted != "" {
 			cause += ", and " + outlasted
 		}
-		return Pending(Refuse(CodeNotReady,
+		return Pending(refusal.Refuse(refusal.CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
 			hostname, s.kind, cause, waited))
 	}
-	return Pending(Refuse(CodeNotReady,
+	return Pending(refusal.Refuse(refusal.CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
 		hostname, serving, s.kind, waited))
 }

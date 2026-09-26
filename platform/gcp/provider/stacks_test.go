@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -16,7 +17,7 @@ func previewPlan(label string) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
-			Class:   providerkit.ClassPreview,
+			Class:   edge.ClassPreview,
 			Name:    naming.StackName{Env: "pr-7", App: "web"},
 		},
 		Kind: providerkit.StackApp,
@@ -71,7 +72,7 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 }
 
 type heard struct {
-	providerkit.Progress
+	edge.Progress
 	said []string
 }
 
@@ -93,7 +94,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 
 	production := &heard{}
 	plan := previewPlan("")
-	plan.Ref.Class = providerkit.ClassProduction
+	plan.Ref.Class = edge.ClassProduction
 	plan.Ref.Name = naming.StackName{Env: providerkit.ProductionEnv, App: "web"}
 	if _, err := p.ProvisionContainers(context.Background(), plan, production); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -121,7 +122,7 @@ func TestAProductionReleaseIsNamedNoDifferentlyForCarryingNoPreviewLabel(t *test
 	server := &runServer{}
 	p := server.open(t)
 	plan := previewPlan("")
-	plan.Ref.Class = providerkit.ClassProduction
+	plan.Ref.Class = edge.ClassProduction
 	plan.Ref.Name = naming.StackName{Env: providerkit.ProductionEnv, App: "web"}
 
 	containers, err := p.ProvisionContainers(context.Background(), plan, nil)
@@ -153,8 +154,8 @@ func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("carried() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
-		t.Errorf("carried() code = %v, want %v", code, providerkit.CodeInvalid)
+	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+		t.Errorf("carried() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Errorf("carried() = %v, want the name that would be displaced said", err)

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -108,7 +109,7 @@ func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *
 func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
@@ -121,7 +122,7 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *test
 		}
 	}
 
-	stood := machine(map[providerkit.Class][]Item{production: bootstrapped(t, production)})
+	stood := machine(map[edge.Class][]Item{production: bootstrapped(t, production)})
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
@@ -140,7 +141,7 @@ func TestTheDeployLoginIsToldItHasNoHandInTheAgent(t *testing.T) {
 	t.Parallel()
 
 	var named bool
-	for _, grant := range Grants(providerkit.ClassProduction) {
+	for _, grant := range Grants(edge.ClassProduction) {
 		if !strings.Contains(grant.Name, live.SocketPath) {
 			continue
 		}

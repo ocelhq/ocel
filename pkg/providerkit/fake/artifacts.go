@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Artifacts struct {
@@ -52,12 +54,12 @@ func (a *Artifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.Rea
 	defer a.mu.Unlock()
 	blob, ok := a.objects[ref]
 	if !ok {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "no artifact at %s", ref.Key)
+		return nil, refusal.Refuse(refusal.CodeInvalid, "no artifact at %s", ref.Key)
 	}
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, class providerkit.Class, prefix string, progress providerkit.Progress) error {
+func (a *Artifacts) RemovePrefix(_ context.Context, class edge.Class, prefix string, progress edge.Progress) error {
 	a.journal.note("remove-prefix " + prefix)
 	a.mu.Lock()
 	defer a.mu.Unlock()

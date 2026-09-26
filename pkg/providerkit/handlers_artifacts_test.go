@@ -36,7 +36,7 @@ func (p *packingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPacking, _ providerkit.Progress) (providerkit.AppPack, error) {
+func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPacking, _ edge.Progress) (providerkit.AppPack, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.packed = append(p.packed, packing)

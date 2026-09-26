@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const testPrefix = "prod/acme/web/BUILD1"
@@ -56,16 +57,16 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		storeOnly := base
 		storeOnly.CacheStoreBucket = "isr"
 		storeOnly.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
-		if err := checkISRWriterAgrees(providerkit.ClassProduction, storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
+		if err := checkISRWriterAgrees(edge.ClassProduction, storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
 			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
 
 		writerOnly := adoptISRWriter(t, base)
-		if err := checkISRWriterAgrees(providerkit.ClassProduction, writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
+		if err := checkISRWriterAgrees(edge.ClassProduction, writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 
-		pre := providerkit.DeployPreflight{Plan: providerkit.DeployPlan{Slug: "shop", Class: providerkit.ClassProduction, Env: "prod"}}
+		pre := providerkit.DeployPreflight{Plan: providerkit.DeployPlan{Slug: "shop", Class: edge.ClassProduction, Env: "prod"}}
 		if err := newStacks(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
 			t.Error("a bootstrap that disagrees with itself must fail preflight, before a byte of this deploy is uploaded")
 		}
@@ -113,7 +114,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 
 func isrPlan(app, prefix string) providerkit.StackPlan {
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "proj", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
+		Ref:  providerkit.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
 			App:       app,

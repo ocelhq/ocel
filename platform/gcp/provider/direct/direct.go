@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -14,11 +15,11 @@ import (
 const Kind edge.Kind = "direct"
 
 type Edge struct {
-	records providerkit.RecordStore
+	records records.Store
 	pins    pin.Pins
 }
 
-func New(records providerkit.RecordStore, pins pin.Pins) *Edge {
+func New(records records.Store, pins pin.Pins) *Edge {
 	return &Edge{records: records, pins: pins}
 }
 
@@ -45,7 +46,7 @@ func Surface(slug string, class edge.Class) string {
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack carries none", Kind)
 	}
 	next := prior
@@ -73,7 +74,7 @@ func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpe
 func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func unbindable(what string) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
 			"name the %q edge, which stands one load balancer up per bootstrap class at %s",
 		Kind, what, alb.Kind, alb.BaselineCost)

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 var bootstrapTools = []string{
@@ -105,7 +105,7 @@ func (s *Session) Preflight(ctx context.Context) (Facts, error) {
 func met(facts Facts, principal string) error {
 	for _, need := range Requirements() {
 		if !need.Met(facts) {
-			return providerkit.Refuse(providerkit.CodeDenied, "%s", need.Unmet(facts, principal))
+			return refusal.Refuse(refusal.CodeDenied, "%s", need.Unmet(facts, principal))
 		}
 	}
 	return nil

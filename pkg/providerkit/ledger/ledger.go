@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -26,17 +27,17 @@ func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 type Ledger struct {
-	records ports.RecordStore
+	records records.Store
 	scope   string
 }
 
 var _ edge.Ledger = (*Ledger)(nil)
 
-func New(records ports.RecordStore, class ports.Class, slug string) *Ledger {
+func New(records records.Store, class edge.Class, slug string) *Ledger {
 	return &Ledger{records: records, scope: Scope(class, slug)}
 }
 
-func Scope(class ports.Class, slug string) string {
+func Scope(class edge.Class, slug string) string {
 	if slug == "" {
 		return string(class)
 	}
@@ -45,35 +46,35 @@ func Scope(class ports.Class, slug string) string {
 
 func RecordKey(app, identity string) string { return "record:" + app + "/" + identity }
 
-func (l *Ledger) name(rest ...string) ports.RecordName {
-	return append(ports.RecordName{ports.RootLedger, l.scope}, rest...)
+func (l *Ledger) name(rest ...string) records.Name {
+	return append(records.Name{records.RootLedger, l.scope}, rest...)
 }
 
-func (l *Ledger) schemaName() ports.RecordName { return l.name("schema") }
+func (l *Ledger) schemaName() records.Name { return l.name("schema") }
 
-func (l *Ledger) sequenceName() ports.RecordName { return l.name("seq") }
+func (l *Ledger) sequenceName() records.Name { return l.name("seq") }
 
-func (l *Ledger) pointersName() ports.RecordName { return l.name("pointers") }
+func (l *Ledger) pointersName() records.Name { return l.name("pointers") }
 
-func (l *Ledger) pointerName(pointer string) ports.RecordName {
+func (l *Ledger) pointerName(pointer string) records.Name {
 	return l.name("pointers", pointer)
 }
 
-func (l *Ledger) promotionsName(pointer string) ports.RecordName {
+func (l *Ledger) promotionsName(pointer string) records.Name {
 	return l.name("promotions", pointer)
 }
 
-func (l *Ledger) promotionName(pointer, id string) ports.RecordName {
+func (l *Ledger) promotionName(pointer, id string) records.Name {
 	return l.name("promotions", pointer, id)
 }
 
-func (l *Ledger) recordsName() ports.RecordName { return l.name("records") }
+func (l *Ledger) recordsName() records.Name { return l.name("records") }
 
-func (l *Ledger) recordName(app, identity string) ports.RecordName {
+func (l *Ledger) recordName(app, identity string) records.Name {
 	return l.name("records", app, identity)
 }
 
-func (l *Ledger) tagName(tag string) ports.RecordName { return l.name("tags", tag) }
+func (l *Ledger) tagName(tag string) records.Name { return l.name("tags", tag) }
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
@@ -128,7 +129,7 @@ type tagRecord struct {
 }
 
 func (l *Ledger) EnsureSchema(ctx context.Context) error {
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.schemaName())
+	held, err := records.ReadOrEmpty(ctx, l.records, l.schemaName())
 	if err != nil {
 		return fmt.Errorf("read the deployments ledger schema for %s: %w", l.scope, err)
 	}
@@ -140,7 +141,7 @@ func (l *Ledger) EnsureSchema(ctx context.Context) error {
 }
 
 func (l *Ledger) SchemaVersion(ctx context.Context) (int, error) {
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.schemaName())
+	held, err := records.ReadOrEmpty(ctx, l.records, l.schemaName())
 	if err != nil {
 		return 0, fmt.Errorf("read the deployments ledger schema for %s: %w", l.scope, err)
 	}
@@ -158,7 +159,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) er
 	if record.App == "" || record.Identity == "" {
 		return fmt.Errorf("stage a deployment record: it names app %q and identity %q, and the ledger keys records by both", record.App, record.Identity)
 	}
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.recordName(record.App, record.Identity))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.recordName(record.App, record.Identity))
 	if err != nil {
 		return fmt.Errorf("read the deployment record for %s: %w", record.App, err)
 	}
@@ -174,7 +175,7 @@ func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) er
 }
 
 func (l *Ledger) Record(ctx context.Context, app, identity string) (edge.DeploymentRecord, bool, error) {
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.recordName(app, identity))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.recordName(app, identity))
 	if err != nil {
 		return edge.DeploymentRecord{}, false, fmt.Errorf("read the deployment record for %s/%s: %w", app, identity, err)
 	}
@@ -198,7 +199,7 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 	if err != nil {
 		return err
 	}
-	at, err := ports.ReadOrEmpty(ctx, l.records, l.pointerName(name))
+	at, err := records.ReadOrEmpty(ctx, l.records, l.pointerName(name))
 	if err != nil {
 		return fmt.Errorf("read what %s points at: %w", name, err)
 	}
@@ -206,7 +207,7 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 	if err != nil {
 		return err
 	}
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.promotionName(name, promotion.PromotionID))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.promotionName(name, promotion.PromotionID))
 	if err != nil {
 		return fmt.Errorf("read promotion %s: %w", promotion.PromotionID, err)
 	}
@@ -233,12 +234,12 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 	}
 	at.Bytes = flipped
 	if _, err := l.records.Write(ctx, at); err != nil {
-		if errors.Is(err, ports.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			holder, readErr := l.pointerAt(ctx, name)
 			if readErr != nil || holder == "" {
 				holder = "another promotion"
 			}
-			busy := ports.Refuse(ports.CodeBusy,
+			busy := refusal.Refuse(refusal.CodeBusy,
 				"point %s at promotion %s: %s now holds %s, so another deploy moved it while this one was promoting, and this deploy stopped rather than overwrite it. The release it staged is still recorded: reach it with `ocel rollback --to %s`, or re-run this deploy once the other one has finished",
 				name, promotion.PromotionID, holder, name, promotion.PromotionID)
 			if err := l.retract(ctx, name, promotion.PromotionID); err != nil {
@@ -256,7 +257,7 @@ func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) err
 	defer stop()
 	name := pointerOr(pointer)
 	for range casAttempts {
-		at, err := ports.ReadOrEmpty(ctx, l.records, l.pointerName(name))
+		at, err := records.ReadOrEmpty(ctx, l.records, l.pointerName(name))
 		if err != nil {
 			return fmt.Errorf("read what %s points at: %w", name, err)
 		}
@@ -276,7 +277,7 @@ func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) err
 				_, err = l.records.Write(ctx, at)
 			}
 		}
-		if errors.Is(err, ports.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
 		if err != nil {
@@ -291,7 +292,7 @@ func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error
 	ctx, stop := sparing(ctx)
 	defer stop()
 	for range casAttempts {
-		held, err := ports.ReadOrEmpty(ctx, l.records, l.promotionName(pointer, promotionID))
+		held, err := records.ReadOrEmpty(ctx, l.records, l.promotionName(pointer, promotionID))
 		if err != nil {
 			return fmt.Errorf("read promotion %s: %w", promotionID, err)
 		}
@@ -316,7 +317,7 @@ func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error
 			return fmt.Errorf("encode promotion %s: %w", promotionID, err)
 		}
 		if _, err := l.records.Write(ctx, held); err != nil {
-			if errors.Is(err, ports.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("take back promotion %s: %w", promotionID, err)
@@ -331,7 +332,7 @@ func (l *Ledger) freeTag(ctx context.Context, tag, promotionID string) error {
 		return nil
 	}
 	for range casAttempts {
-		held, err := ports.ReadOrEmpty(ctx, l.records, l.tagName(tag))
+		held, err := records.ReadOrEmpty(ctx, l.records, l.tagName(tag))
 		if err != nil {
 			return fmt.Errorf("read the tag %q: %w", tag, err)
 		}
@@ -346,10 +347,10 @@ func (l *Ledger) freeTag(ctx context.Context, tag, promotionID string) error {
 			return nil
 		}
 		err = l.records.Remove(ctx, held.Name, held.Revision)
-		if errors.Is(err, ports.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
 			continue
 		}
-		if err != nil && !errors.Is(err, ports.ErrNoRecord) {
+		if err != nil && !errors.Is(err, records.ErrNotFound) {
 			return fmt.Errorf("free the tag %q: %w", tag, err)
 		}
 		return nil
@@ -361,7 +362,7 @@ func (l *Ledger) claimTag(ctx context.Context, promotion edge.Promotion) (bool, 
 	if promotion.Tag == "" {
 		return false, nil
 	}
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.tagName(promotion.Tag))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.tagName(promotion.Tag))
 	if err != nil {
 		return false, fmt.Errorf("read the tag %q: %w", promotion.Tag, err)
 	}
@@ -379,8 +380,8 @@ func (l *Ledger) claimTag(ctx context.Context, promotion edge.Promotion) (bool, 
 	if err != nil {
 		return false, fmt.Errorf("encode the tag %q: %w", promotion.Tag, err)
 	}
-	if _, err := l.records.Write(ctx, ports.Record{Name: l.tagName(promotion.Tag), Bytes: encoded}); err != nil {
-		if errors.Is(err, ports.ErrStale) {
+	if _, err := l.records.Write(ctx, records.Record{Name: l.tagName(promotion.Tag), Bytes: encoded}); err != nil {
+		if errors.Is(err, records.ErrStale) {
 			return false, l.tagTaken(promotion, l.tagHolder(ctx, promotion.Tag))
 		}
 		return false, fmt.Errorf("claim the tag %q: %w", promotion.Tag, err)
@@ -389,7 +390,7 @@ func (l *Ledger) claimTag(ctx context.Context, promotion edge.Promotion) (bool, 
 }
 
 func (l *Ledger) tagHolder(ctx context.Context, tag string) string {
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.tagName(tag))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.tagName(tag))
 	if err != nil || len(held.Bytes) == 0 {
 		return ""
 	}
@@ -404,14 +405,14 @@ func (l *Ledger) tagTaken(promotion edge.Promotion, holder string) error {
 	if holder == "" {
 		holder = "another promotion"
 	}
-	return ports.Refuse(ports.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"promote %s: the tag %q already names promotion %s in this project, and a tag names one release so that `ocel rollback --tag %s` is unambiguous. Pick another tag, or roll back to %s instead",
 		promotion.PromotionID, promotion.Tag, holder, promotion.Tag, holder)
 }
 
 func (l *Ledger) nextSequence(ctx context.Context) (int64, error) {
 	for range casAttempts {
-		held, err := ports.ReadOrEmpty(ctx, l.records, l.sequenceName())
+		held, err := records.ReadOrEmpty(ctx, l.records, l.sequenceName())
 		if err != nil {
 			return 0, fmt.Errorf("read the promotion sequence for %s: %w", l.scope, err)
 		}
@@ -425,7 +426,7 @@ func (l *Ledger) nextSequence(ctx context.Context) (int64, error) {
 		}
 		held.Bytes = []byte(strconv.FormatInt(next, 10))
 		if _, err := l.records.Write(ctx, held); err != nil {
-			if errors.Is(err, ports.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return 0, fmt.Errorf("advance the promotion sequence for %s: %w", l.scope, err)
@@ -500,7 +501,7 @@ func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (edge.PruneR
 	if err := l.drop(ctx, name, rows, nil); err != nil {
 		return edge.PruneResult{}, err
 	}
-	if err := ports.Forget(ctx, l.records, l.pointerName(name)); err != nil {
+	if err := records.Forget(ctx, l.records, l.pointerName(name)); err != nil {
 		return edge.PruneResult{}, fmt.Errorf("forget pointer %s: %w", name, err)
 	}
 	surviving, err := l.recordKeys(ctx)
@@ -537,7 +538,7 @@ func (l *Ledger) Destroy(ctx context.Context) error {
 		return fmt.Errorf("read the deployments ledger for %s: %w", l.scope, err)
 	}
 	for _, record := range held {
-		if err := ports.Forget(ctx, l.records, record.Name); err != nil {
+		if err := records.Forget(ctx, l.records, record.Name); err != nil {
 			return fmt.Errorf("erase the deployments ledger for %s: %w", l.scope, err)
 		}
 	}
@@ -558,7 +559,7 @@ func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) e
 	}
 	at := l.name("invalidation")
 	for range casAttempts {
-		held, err := ports.ReadOrEmpty(ctx, l.records, at)
+		held, err := records.ReadOrEmpty(ctx, l.records, at)
 		if err != nil {
 			return fmt.Errorf("read the invalidation targets for %s: %w", l.scope, err)
 		}
@@ -582,7 +583,7 @@ func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) e
 		}
 		held.Bytes = encoded
 		if _, err := l.records.Write(ctx, held); err != nil {
-			if errors.Is(err, ports.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("record the invalidation targets for %s: %w", l.scope, err)
@@ -594,7 +595,7 @@ func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) e
 
 func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecord, held []string) error {
 	for _, row := range rows {
-		names := []ports.RecordName{l.promotionName(pointer, row.PromotionID)}
+		names := []records.Name{l.promotionName(pointer, row.PromotionID)}
 		for app, identity := range row.Builds {
 			if slices.Contains(held, RecordKey(app, identity)) {
 				continue
@@ -605,7 +606,7 @@ func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecor
 			names = append(names, l.tagName(row.Tag))
 		}
 		for _, name := range names {
-			if err := ports.Forget(ctx, l.records, name); err != nil {
+			if err := records.Forget(ctx, l.records, name); err != nil {
 				return fmt.Errorf("drop the promotions %s no longer keeps: %w", pointer, err)
 			}
 		}
@@ -618,7 +619,7 @@ func (l *Ledger) Holder(ctx context.Context, pointer string) (string, error) {
 }
 
 func (l *Ledger) pointerAt(ctx context.Context, pointer string) (string, error) {
-	held, err := ports.ReadOrEmpty(ctx, l.records, l.pointerName(pointer))
+	held, err := records.ReadOrEmpty(ctx, l.records, l.pointerName(pointer))
 	if err != nil {
 		return "", fmt.Errorf("read what %s points at: %w", pointer, err)
 	}
@@ -626,7 +627,7 @@ func (l *Ledger) pointerAt(ctx context.Context, pointer string) (string, error) 
 	return at.PromotionID, err
 }
 
-func pointerOf(pointer string, held ports.Record) (pointerRecord, error) {
+func pointerOf(pointer string, held records.Record) (pointerRecord, error) {
 	if len(held.Bytes) == 0 {
 		return pointerRecord{}, nil
 	}

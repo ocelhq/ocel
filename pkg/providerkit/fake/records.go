@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
 type Records struct {
@@ -16,31 +16,31 @@ type Records struct {
 
 	mu       sync.Mutex
 	seq      uint64
-	rows     map[string]providerkit.Record
+	rows     map[string]records.Record
 	refusals map[string]error
 }
 
 func NewRecords() *Records {
-	return &Records{rows: map[string]providerkit.Record{}, refusals: map[string]error{}}
+	return &Records{rows: map[string]records.Record{}, refusals: map[string]error{}}
 }
 
-func (r *Records) RefuseRemoval(name providerkit.RecordName, err error) {
+func (r *Records) RefuseRemoval(name records.Name, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.refusals[name.String()] = err
 }
 
-func (r *Records) Read(_ context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+func (r *Records) Read(_ context.Context, name records.Name) (records.Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	row, ok := r.rows[name.String()]
 	if !ok {
-		return providerkit.Record{}, providerkit.ErrNoRecord
+		return records.Record{}, records.ErrNotFound
 	}
 	return copyRecord(row), nil
 }
 
-func (r *Records) Write(_ context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (r *Records) Write(_ context.Context, record records.Record) (records.Revision, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := r.held(record); err != nil {
@@ -49,10 +49,10 @@ func (r *Records) Write(_ context.Context, record providerkit.Record) (providerk
 	return r.store(record), nil
 }
 
-func (r *Records) WritePair(_ context.Context, first, second providerkit.Record) error {
+func (r *Records) WritePair(_ context.Context, first, second records.Record) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, record := range []providerkit.Record{first, second} {
+	for _, record := range []records.Record{first, second} {
 		if err := r.held(record); err != nil {
 			return err
 		}
@@ -62,23 +62,23 @@ func (r *Records) WritePair(_ context.Context, first, second providerkit.Record)
 	return nil
 }
 
-func (r *Records) held(record providerkit.Record) error {
+func (r *Records) held(record records.Record) error {
 	prior, exists := r.rows[record.Name.String()]
 	if exists != (record.Revision != "") || (exists && prior.Revision != record.Revision) {
-		return providerkit.ErrStale
+		return records.ErrStale
 	}
 	return nil
 }
 
-func (r *Records) store(record providerkit.Record) providerkit.Revision {
+func (r *Records) store(record records.Record) records.Revision {
 	r.seq++
 	next := copyRecord(record)
-	next.Revision = providerkit.Revision(strconv.FormatUint(r.seq, 10))
+	next.Revision = records.Revision(strconv.FormatUint(r.seq, 10))
 	r.rows[record.Name.String()] = next
 	return next.Revision
 }
 
-func (r *Records) Remove(_ context.Context, name providerkit.RecordName, expected providerkit.Revision) error {
+func (r *Records) Remove(_ context.Context, name records.Name, expected records.Revision) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := name.String()
@@ -88,43 +88,43 @@ func (r *Records) Remove(_ context.Context, name providerkit.RecordName, expecte
 	}
 	row, ok := r.rows[key]
 	if !ok {
-		return providerkit.ErrNoRecord
+		return records.ErrNotFound
 	}
 	if row.Revision != expected {
-		return providerkit.ErrStale
+		return records.ErrStale
 	}
 	delete(r.rows, key)
 	return nil
 }
 
-func (r *Records) List(_ context.Context, under providerkit.RecordName) ([]providerkit.Record, error) {
+func (r *Records) List(_ context.Context, under records.Name) ([]records.Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	prefix := under.String()
-	found := make([]providerkit.Record, 0, len(r.rows))
+	found := make([]records.Record, 0, len(r.rows))
 	for key := range maps.Keys(r.rows) {
 		if key == prefix || strings.HasPrefix(key, prefix+"/") {
 			found = append(found, copyRecord(r.rows[key]))
 		}
 	}
-	slices.SortFunc(found, func(a, b providerkit.Record) int {
+	slices.SortFunc(found, func(a, b records.Record) int {
 		return strings.Compare(a.Name.String(), b.Name.String())
 	})
 	return found, nil
 }
 
-func (r *Records) Snapshot() map[string]providerkit.Revision {
+func (r *Records) Snapshot() map[string]records.Revision {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	held := make(map[string]providerkit.Revision, len(r.rows))
+	held := make(map[string]records.Revision, len(r.rows))
 	for key, row := range r.rows {
 		held[key] = row.Revision
 	}
 	return held
 }
 
-func copyRecord(row providerkit.Record) providerkit.Record {
-	return providerkit.Record{
+func copyRecord(row records.Record) records.Record {
+	return records.Record{
 		Name:     slices.Clone(row.Name),
 		Bytes:    slices.Clone(row.Bytes),
 		Revision: row.Revision,

@@ -25,7 +25,7 @@ type bench struct {
 	mu     sync.Mutex
 	dest   session.Destination
 	facts  session.Facts
-	stands map[providerkit.Class][]Item
+	stands map[edge.Class][]Item
 	ran    []string
 	fed    []string
 	dials  int
@@ -37,7 +37,7 @@ type bench struct {
 	after  func(b *bench, command string)
 }
 
-func machine(stands map[providerkit.Class][]Item) *bench {
+func machine(stands map[edge.Class][]Item) *bench {
 	return &bench{
 		dest: session.Destination{
 			Written:    "ocelbox",
@@ -74,7 +74,7 @@ func (b *bench) waits() []time.Duration {
 
 type recorder struct{ said *[]string }
 
-func saying(said *[]string) providerkit.Progress { return recorder{said: said} }
+func saying(said *[]string) edge.Progress { return recorder{said: said} }
 
 func (r recorder) Say(message string) { *r.said = append(*r.said, message) }
 
@@ -248,7 +248,7 @@ func surveyed(items []Item) string {
 	return rendered.String()
 }
 
-func bootstrapped(t *testing.T, class providerkit.Class) []Item {
+func bootstrapped(t *testing.T, class edge.Class) []Item {
 	t.Helper()
 	stamp, err := Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete}.item(class)
 	if err != nil {
@@ -260,9 +260,9 @@ func bootstrapped(t *testing.T, class providerkit.Class) []Item {
 func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	stood := machine(map[providerkit.Class][]Item{class: items})
+	stood := machine(map[edge.Class][]Item{class: items})
 
 	read, err := stood.host().Survey(context.Background(), class)
 	if err != nil {
@@ -275,13 +275,13 @@ func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
 	}
 }
 
-func settledOn(t *testing.T, class providerkit.Class) *bench {
+func settledOn(t *testing.T, class edge.Class) *bench {
 	t.Helper()
 	seeded := string(routingTableItem().Content)
 	return settledHolding(t, class, &seeded, nil)
 }
 
-func settledHolding(t *testing.T, class providerkit.Class, table, config *string) *bench {
+func settledHolding(t *testing.T, class edge.Class, table, config *string) *bench {
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
@@ -308,7 +308,7 @@ func settledHolding(t *testing.T, class providerkit.Class, table, config *string
 	if err != nil {
 		t.Fatal(err)
 	}
-	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp, record)})
+	stood := machine(map[edge.Class][]Item{class: append(standing, stamp, record)})
 	proxied := servesPair(stood, table, config)
 	stood.answer = func(command string) (session.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
@@ -322,7 +322,7 @@ func settledHolding(t *testing.T, class providerkit.Class, table, config *string
 func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 
 	described, err := NewBootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
@@ -341,7 +341,7 @@ func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) 
 func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	held := stood.answer
 	stood.answer = func(command string) (session.Result, bool) {
@@ -363,7 +363,7 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	held := stood.stands[class]
 	for at, item := range held {

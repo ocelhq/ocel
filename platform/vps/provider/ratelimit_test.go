@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -59,9 +60,9 @@ func TestABoxWhoseCaSaidNoNamesTheCeilingRatherThanRelayingTheAcmeError(t *testi
 	if err == nil {
 		t.Fatal("the box certified a hostname its own proxy is rate-limited out of ordering for, so the deploy finishes green and the preview never serves over https")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Fatalf("the refusal is %v, want %s: the ceiling refills on its own, so this is a wait rather than a mistake", err, providerkit.CodeBusy)
+	var rejection refusal.Refusal
+	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeBusy {
+		t.Fatalf("the refusal is %v, want %s: the ceiling refills on its own, so this is a wait rather than a mistake", err, refusal.CodeBusy)
 	}
 	said := err.Error()
 	for what, want := range map[string]string{

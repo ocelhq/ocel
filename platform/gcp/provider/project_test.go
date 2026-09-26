@@ -22,6 +22,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -99,14 +100,14 @@ func TestAProjectNeitherNamedNorAmbientIsRefusedNamingWhereItIsReadWhenTheCloudI
 	if err != nil {
 		t.Fatalf("New() with no project and nothing ambient = %v, want a provider: nothing has reached the cloud yet", err)
 	}
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err = p.Credentials().Whoami(context.Background())
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Whoami() with no project and nothing ambient = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Whoami() with no project and nothing ambient = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 	for _, named := range []string{"project", "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT", "gcloud"} {
-		if !strings.Contains(refusal.Message, named) {
-			t.Errorf("Whoami() refused with %q, want it to name %s among the places a project is read from", refusal.Message, named)
+		if !strings.Contains(refused.Message, named) {
+			t.Errorf("Whoami() refused with %q, want it to name %s among the places a project is read from", refused.Message, named)
 		}
 	}
 }
@@ -124,13 +125,13 @@ func TestAGcloudThatFailsIsNamedInTheRefusalRatherThanReadAsNamingNothing(t *tes
 	if err != nil {
 		t.Fatalf("New() = %v, want a provider: nothing has reached the cloud yet", err)
 	}
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	_, err = p.Credentials().Whoami(context.Background())
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Whoami() with a failing gcloud = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Whoami() with a failing gcloud = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refusal.Message, "the active account is not set") {
-		t.Errorf("Whoami() refused with %q, want gcloud's own failure in it: a gcloud that fails is not a gcloud that names nothing", refusal.Message)
+	if !strings.Contains(refused.Message, "the active account is not set") {
+		t.Errorf("Whoami() refused with %q, want gcloud's own failure in it: a gcloud that fails is not a gcloud that names nothing", refused.Message)
 	}
 }
 

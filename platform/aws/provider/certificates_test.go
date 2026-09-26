@@ -11,6 +11,7 @@ import (
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -22,7 +23,7 @@ type silentProgress struct{}
 func (silentProgress) Say(string)    {}
 func (silentProgress) Detail(string) {}
 
-func (silentProgress) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (silentProgress) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 type stubACM struct {
 	statuses  []string
@@ -114,8 +115,8 @@ func TestIssueRefusesAsNotReadyWhileACMIsStillValidating(t *testing.T) {
 	var proved []edge.Record
 
 	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", providerkit.Certificate{}, &proved))
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("issue() error = %v, want the run told to come back to it", err)
 	}
 	if _, pending := providerkit.LeftPending(err); !pending {

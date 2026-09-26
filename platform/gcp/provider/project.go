@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"golang.org/x/oauth2/google"
 )
 
@@ -38,13 +38,13 @@ func ambientProject(ctx context.Context) (string, error) {
 		return project, nil
 	}
 	if err != nil {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"option %q names no Google Cloud project and nothing around this run names one either: "+
 				"not the application default credentials, not %s, not %s, and gcloud could not say what its config holds: %s.\n"+
 				"Name it in the options, or run `gcloud config set project <id>`",
 			"project", projectVariable, cloudSDKVariable, err)
 	}
-	return "", providerkit.Refuse(providerkit.CodeInvalid,
+	return "", refusal.Refuse(refusal.CodeInvalid,
 		"option %q names no Google Cloud project and nothing around this run names one either: "+
 			"not the application default credentials, not %s, not %s, and not gcloud's own config.\n"+
 			"Name it in the options, or run `gcloud config set project <id>`",
@@ -52,7 +52,7 @@ func ambientProject(ctx context.Context) (string, error) {
 }
 
 func unnamedProject() error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"option %q names no Google Cloud project and neither %s nor %s does. "+
 			"A scan reads no credentials and runs no gcloud to find one, so name it in the options or in one of them",
 		"project", projectVariable, cloudSDKVariable)

@@ -24,6 +24,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const fakeProviderModeEnvVar = "OCEL_TEST_FAKE_PROVIDER_MODE"
@@ -168,7 +169,7 @@ func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.Config
 			return nil, providerkit.RefusalError(err)
 		}
 	case "refuse-config":
-		return nil, providerkit.RefusalError(providerkit.Refuse(providerkit.CodeInvalid, "this account is not bootstrapped for previews"))
+		return nil, providerkit.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this account is not bootstrapped for previews"))
 	}
 	return &contractv1.ConfigureResponse{}, nil
 }

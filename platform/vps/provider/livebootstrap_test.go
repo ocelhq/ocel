@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -66,7 +69,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +199,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +240,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -261,8 +264,8 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 	if err == nil {
 		t.Fatal("Apply() did work the plan the user consented to never carried")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var rejection refusal.Refusal
+	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
 		t.Fatalf("Apply() over a host that moved = %v, want a refusal the CLI can render as a re-plan", err)
 	}
 }
@@ -271,8 +274,8 @@ func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
 	p := liveMachine(t).provider(t)
 	defer closing(t, p)
 
-	name := providerkit.RecordName{providerkit.RootConformance, string(providerkit.ClassProduction), t.Name()}
-	if err := providerkit.Forget(context.Background(), p.Records(), name); err != nil {
+	name := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
+	if err := records.Forget(context.Background(), p.Records(), name); err != nil {
 		t.Fatalf("Forget() of a record nothing wrote = %v, want cleanup idempotent from the store's point of view", err)
 	}
 }

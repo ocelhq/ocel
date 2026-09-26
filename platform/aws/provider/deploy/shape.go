@@ -10,7 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -150,7 +152,7 @@ func (s costShape) container(scope string, app providerkit.AppEntry) {
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
-func (s costShape) substrate(scope string, class providerkit.Class) {
+func (s costShape) substrate(scope string, class edge.Class) {
 	s.plain(scope, tfECSCluster, SubstrateSlug, map[string]any{})
 	s.plain(scope, tfLoadBalancer, SubstrateSlug, map[string]any{"load_balancer_type": "application", "internal": true})
 	s.plain(scope, tfLogGroup, SubstrateSlug, map[string]any{"retention_in_days": substrateLogRetentionDays, "name": "/ocel/containers/" + string(class)})
@@ -237,7 +239,7 @@ func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string
 		return held, nil
 	}
 	if len(results) != len(candidates) {
-		return held, providerkit.Refuse(providerkit.CodeInvalid, "transforms returned %d results for %d resources", len(results), len(candidates))
+		return held, refusal.Refuse(refusal.CodeInvalid, "transforms returned %d results for %d resources", len(results), len(candidates))
 	}
 	unresolved := map[outputSite]bool{}
 	if err := walkOutputs(candidates, results, func(_ outputRef, at outputSite, authored any) (any, error) {
@@ -250,7 +252,7 @@ func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string
 		for _, key := range slices.Sorted(maps.Keys(results[i].Patches)) {
 			ref, constructed := candidate.names[key]
 			if !constructed {
-				return held, providerkit.Refuse(providerkit.CodeInvalid,
+				return held, refusal.Refuse(refusal.CodeInvalid,
 					"a transform patches %s's %s, and this deploy constructs no such resource for it", candidate.key.Name, key)
 			}
 			for field, value := range results[i].Patches[key] {

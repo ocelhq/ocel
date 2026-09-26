@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type backupBench struct {
@@ -291,7 +292,7 @@ func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	var missing []string
 	for _, item := range BackupItems() {
 		missing = append(missing, item.ID())

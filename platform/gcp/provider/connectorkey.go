@@ -12,7 +12,8 @@ import (
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -31,7 +32,7 @@ func connectorKeyMount(secret string) secretMount {
 func keyPathed(config []byte, path string) ([]byte, error) {
 	var named map[string]any
 	if err := json.Unmarshal(config, &named); err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the connector config this install carries is not an object: %s", err)
 	}
 	named["keyPath"] = path
@@ -72,7 +73,7 @@ func connectorPublicKeyOf(held *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) connectorKey(ctx context.Context, progress providerkit.Progress) (string, error) {
+func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (string, error) {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return "", err
@@ -166,7 +167,7 @@ func boundSecretMember(bindings []*secretmanager.Binding, role, member string, g
 	return append(bindings, &secretmanager.Binding{Role: role, Members: []string{member}}), true
 }
 
-func (p *Provider) takeConnectorKey(ctx context.Context, progress providerkit.Progress) error {
+func (p *Provider) takeConnectorKey(ctx context.Context, progress edge.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err

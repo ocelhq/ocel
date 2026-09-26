@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type countingStacks struct {
@@ -39,14 +39,14 @@ func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {
 		namespace: bootstrap.Namespace("ocel"),
 		stacks:    stacks,
 		now:       func() time.Time { return clock },
-		read:      map[kit.Class]readDeployment{},
+		read:      map[edge.Class]readDeployment{},
 	}
 	ctx := context.Background()
 
-	if _, err := held.Table(ctx, kit.ClassProduction); err != nil {
+	if _, err := held.Table(ctx, edge.ClassProduction); err != nil {
 		t.Fatalf("Table: %v", err)
 	}
-	if _, err := held.Table(ctx, kit.ClassProduction); err != nil {
+	if _, err := held.Table(ctx, edge.ClassProduction); err != nil {
 		t.Fatalf("Table again: %v", err)
 	}
 	if stacks.describes != 1 {
@@ -55,7 +55,7 @@ func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {
 
 	stacks.table = "ocel-state"
 	clock = clock.Add(deploymentsTTL)
-	table, err := held.Table(ctx, kit.ClassProduction)
+	table, err := held.Table(ctx, edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Table after the memo aged: %v", err)
 	}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -45,9 +45,9 @@ func TestRecordsForRefusesAnUnknownKind(t *testing.T) {
 	if err == nil {
 		t.Fatalf("RecordsFor(bogus) = %v, want a refusal", writer)
 	}
-	var refusal kit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != kit.CodeInvalid {
-		t.Fatalf("RecordsFor(bogus) error = %v, want a %s refusal", err, kit.CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("RecordsFor(bogus) error = %v, want a %s refusal", err, refusal.CodeInvalid)
 	}
 }
 
@@ -58,13 +58,13 @@ func TestRegistryRefusesRoute53UnderACloudflareEdge(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Open(route53) under a cloudflare edge = %v, want a refusal", writer)
 	}
-	var refusal kit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != kit.CodeInvalid {
-		t.Fatalf("Open(route53) under a cloudflare edge error = %v, want a %s refusal", err, kit.CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Open(route53) under a cloudflare edge error = %v, want a %s refusal", err, refusal.CodeInvalid)
 	}
 	want := "route53 cannot write the records a Cloudflare edge answers on — pair a cloudflare edge with cloudflare dns, or drop the edge"
-	if refusal.Message != want {
-		t.Fatalf("refusal = %q, want %q", refusal.Message, want)
+	if refused.Message != want {
+		t.Fatalf("refusal = %q, want %q", refused.Message, want)
 	}
 }
 

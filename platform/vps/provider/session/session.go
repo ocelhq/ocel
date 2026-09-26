@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -34,16 +35,16 @@ type Session struct {
 func Open(ctx context.Context, target Target) (*Session, error) {
 	dest, err := resolve(ctx, target)
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"ssh cannot make sense of %q: %s", target.Destination(), terse(err))
 	}
 	keys, err := offered(ctx, dest)
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"%s port %d did not answer within %s: %s", dest.Address, dest.Port, reach, terse(err))
 	}
 	if len(keys) == 0 {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"%s port %d offered no ssh host key", dest.Address, dest.Port)
 	}
 	anchor, trust := classify(dest, keys, recorded(ctx, dest))
@@ -75,7 +76,7 @@ func (s *Session) Run(ctx context.Context, command string) (string, error) {
 		return "", err
 	}
 	if result.Code != 0 {
-		return "", providerkit.Refuse(providerkit.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"%s over ssh: %s", s.dest.Principal(), terse(result.problem(command)))
 	}
 	return result.Stdout, nil
@@ -92,11 +93,11 @@ func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (
 			return Result{}, providerkit.RefuseHostTrust(*trust)
 		}
 	}
-	unreached := providerkit.CodeNotReady
+	unreached := refusal.CodeNotReady
 	if loginRefused(stderr) {
-		unreached = providerkit.CodeDenied
+		unreached = refusal.CodeDenied
 	}
-	return Result{}, providerkit.Refuse(unreached,
+	return Result{}, refusal.Refuse(unreached,
 		"%s over ssh: %s", s.dest.Principal(), terse(failure{err: err, stderr: stderr}))
 }
 

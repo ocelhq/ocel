@@ -32,7 +32,7 @@ func aBucket(t *testing.T, name string, public bool) resources.Instruction {
 		t.Fatal(err)
 	}
 	return resources.Instruction{
-		Ref: providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
+		Ref: providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Resource: providerkit.Resource{
 			Name: name, Type: providerkit.BindingBucket,
 			Bucket: &providerkit.BucketSpec{
@@ -151,7 +151,7 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, host.KeptPath(providerkit.ClassProduction, "prod-infra-store-s3")) {
+	if !strings.Contains(joined, host.KeptPath(edge.ClassProduction, "prod-infra-store-s3")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
 	for _, fed := range machine.carried() {
@@ -159,7 +159,7 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 			t.Fatalf("the store's root credential was carried to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
-	handed := host.EnvFile(providerkit.ClassProduction, "prod-infra-store-s3")
+	handed := host.EnvFile(edge.ClassProduction, "prod-infra-store-s3")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
 		t.Fatalf("the file the store's credential was handed over in is left standing on the box:\n%s", joined)
 	}
@@ -302,7 +302,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
-		providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: aStackName(t)},
+		providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
@@ -315,7 +315,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 func anInfraStack(t *testing.T) providerkit.StackRef {
 	t.Helper()
 	return providerkit.StackRef{
-		Project: "shop", Class: providerkit.ClassProduction, Name: naming.InfraStack("prod"),
+		Project: "shop", Class: edge.ClassProduction, Name: naming.InfraStack("prod"),
 	}
 }
 
@@ -395,7 +395,7 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
-		providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: aStackName(t)},
+		providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)

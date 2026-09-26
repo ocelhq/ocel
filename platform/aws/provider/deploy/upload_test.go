@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const bucketObjectType = "aws:s3/bucketObjectv2:BucketObjectv2"
@@ -59,7 +60,7 @@ func shipping(t *testing.T) providerkit.Upload {
 
 func shippingPlan(upload providerkit.Upload) providerkit.StackPlan {
 	return providerkit.StackPlan{
-		Ref:     providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
+		Ref:     providerkit.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind:    providerkit.StackInfra,
 		Uploads: []providerkit.Upload{upload},
 	}

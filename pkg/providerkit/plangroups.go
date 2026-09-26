@@ -46,7 +46,7 @@ func DeriveGroups(described BootstrapReading, catalogue []Feature, req Bootstrap
 	return groups
 }
 
-func baselineGroup(described BootstrapReading, stack BootstrapStack, class Class) ChangeGroup {
+func baselineGroup(described BootstrapReading, stack BootstrapStack, class edge.Class) ChangeGroup {
 	group := ChangeGroup{Kind: StackGroupKind, Name: stackName(stack, string(class)+" bootstrap")}
 	group.Action, group.Reason = standingAction(stack, described.Present)
 	return group

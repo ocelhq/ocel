@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestStaleOrBroken(t *testing.T) {
@@ -20,7 +21,7 @@ func TestStaleOrBroken(t *testing.T) {
 	})
 
 	t.Run("a refusal keeps what it says", func(t *testing.T) {
-		refusal := providerkit.RefusalError(providerkit.Refuse(providerkit.CodeBusy,
+		refusal := providerkit.RefusalError(refusal.Refuse(refusal.CodeBusy,
 			"the production bootstrap holds no key to seal a value under"))
 
 		err := staleOrBroken(refusal)

@@ -3,14 +3,13 @@ package alb
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheEdge(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(frontProgram(frontSpec{Names: frontNames(providerkit.ClassProduction)}))
+	seen, err := declared(frontProgram(frontSpec{Names: frontNames(edge.ClassProduction)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
 const (
@@ -183,7 +183,7 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 	if owner != OwnerOcel && record.Version > 0 && record.owner() != owner {
 		return 0, s.claimRefusal(scope, name, record.owner(), owner)
 	}
-	heldValue, err := ports.ReadOrEmpty(ctx, s.Records, bindingValueName(scope, name, environment))
+	heldValue, err := records.ReadOrEmpty(ctx, s.Records, bindingValueName(scope, name, environment))
 	if err != nil {
 		return 0, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
@@ -213,7 +213,7 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 }
 
 func (s Store) racedPair(err error, name string) error {
-	if errors.Is(err, ports.ErrStale) {
+	if errors.Is(err, records.ErrStale) {
 		return fmt.Errorf(
 			"binding %s was rewritten while this publish was writing it: another deploy of the same environment is racing this one — run them one after the other: %w",
 			name, ErrTornPair)
@@ -288,11 +288,11 @@ func (s Store) RemoveBindings(ctx context.Context, scope Scope, environment stri
 		}
 	}
 	if err := each(ctx, len(dropping), func(ctx context.Context, i int) error {
-		for _, name := range []ports.RecordName{
+		for _, name := range []records.Name{
 			bindingRecordName(scope, dropping[i], environment),
 			bindingValueName(scope, dropping[i], environment),
 		} {
-			if err := ports.Forget(ctx, s.Records, name); err != nil {
+			if err := records.Forget(ctx, s.Records, name); err != nil {
 				return fmt.Errorf("remove %s: %w", name, err)
 			}
 		}
@@ -432,11 +432,11 @@ func (s Store) ListBindings(ctx context.Context, scope Scope, environment string
 type pages struct {
 	store Store
 	scope Scope
-	held  map[string]ports.Record
+	held  map[string]records.Record
 }
 
 func (s Store) pages(scope Scope) *pages {
-	return &pages{store: s, scope: scope, held: map[string]ports.Record{}}
+	return &pages{store: s, scope: scope, held: map[string]records.Record{}}
 }
 
 func (p *pages) named(ctx context.Context, names []string) error {
@@ -450,7 +450,7 @@ func (p *pages) all(ctx context.Context) error {
 	return p.load(ctx, bindingsName(p.scope))
 }
 
-func (p *pages) load(ctx context.Context, under ports.RecordName) error {
+func (p *pages) load(ctx context.Context, under records.Name) error {
 	stored, err := p.store.Records.List(ctx, under)
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", p.scope.Project, err)
@@ -461,7 +461,7 @@ func (p *pages) load(ctx context.Context, under ports.RecordName) error {
 	return nil
 }
 
-func (p *pages) at(name ports.RecordName) ports.Record { return p.held[name.String()] }
+func (p *pages) at(name records.Name) records.Record { return p.held[name.String()] }
 
 func (s Store) PublishedNames(ctx context.Context, scope Scope, environment string) ([]string, error) {
 	held, err := s.Records.List(ctx, bindingOwnersName(scope))
@@ -470,7 +470,7 @@ func (s Store) PublishedNames(ctx context.Context, scope Scope, environment stri
 	}
 	names := map[string]bool{}
 	for _, record := range held {
-		at := ports.Unescape(record.Name[len(record.Name)-1])
+		at := records.Unescape(record.Name[len(record.Name)-1])
 		if !bindsTo(at, environment) {
 			continue
 		}
@@ -518,8 +518,8 @@ func (s Store) claims(ctx context.Context, scope Scope) (map[string][]claim, err
 		if len(record.Name) < 2 {
 			continue
 		}
-		owner := ports.Unescape(record.Name[len(record.Name)-2])
-		at := ports.Unescape(record.Name[len(record.Name)-1])
+		owner := records.Unescape(record.Name[len(record.Name)-2])
+		at := records.Unescape(record.Name[len(record.Name)-1])
 		var index ownerIndex
 		if err := json.Unmarshal(record.Bytes, &index); err != nil {
 			return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
@@ -569,7 +569,7 @@ func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment stri
 func (s Store) reindex(ctx context.Context, scope Scope, owner, environment string, apply func([]string) []string) error {
 	at := bindingOwnerName(scope, owner, environment)
 	for range bindingAttempts {
-		held, err := ports.ReadOrEmpty(ctx, s.Records, at)
+		held, err := records.ReadOrEmpty(ctx, s.Records, at)
 		if err != nil {
 			return fmt.Errorf("read %s's published bindings: %w", owner, err)
 		}
@@ -587,10 +587,10 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 
 		if len(kept) == 0 {
 			if err := s.Records.Remove(ctx, at, held.Revision); err != nil {
-				if errors.Is(err, ports.ErrStale) {
+				if errors.Is(err, records.ErrStale) {
 					continue
 				}
-				if !errors.Is(err, ports.ErrNoRecord) {
+				if !errors.Is(err, records.ErrNotFound) {
 					return fmt.Errorf("record %s's published bindings: %w", owner, err)
 				}
 			}
@@ -602,7 +602,7 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 		}
 		held.Bytes = encoded
 		if _, err := s.Records.Write(ctx, held); err != nil {
-			if errors.Is(err, ports.ErrStale) {
+			if errors.Is(err, records.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("record %s's published bindings: %w", owner, err)
@@ -615,19 +615,19 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 		scope.Project, bindingAttempts)
 }
 
-func (s Store) bindingRecordAt(ctx context.Context, scope Scope, environment, name string) (ports.Record, bindingRecord, error) {
-	held, err := ports.ReadOrEmpty(ctx, s.Records, bindingRecordName(scope, name, environment))
+func (s Store) bindingRecordAt(ctx context.Context, scope Scope, environment, name string) (records.Record, bindingRecord, error) {
+	held, err := records.ReadOrEmpty(ctx, s.Records, bindingRecordName(scope, name, environment))
 	if err != nil {
-		return ports.Record{}, bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
+		return records.Record{}, bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
 	}
 	record, err := decodeBindingRecord(name, held)
 	if err != nil {
-		return ports.Record{}, bindingRecord{}, err
+		return records.Record{}, bindingRecord{}, err
 	}
 	return held, record, nil
 }
 
-func decodeBindingRecord(name string, held ports.Record) (bindingRecord, error) {
+func decodeBindingRecord(name string, held records.Record) (bindingRecord, error) {
 	if len(held.Bytes) == 0 {
 		return bindingRecord{}, nil
 	}
@@ -638,7 +638,7 @@ func decodeBindingRecord(name string, held ports.Record) (bindingRecord, error) 
 	return record, nil
 }
 
-func decodeBindingValue(name string, held ports.Record) (bindingValue, error) {
+func decodeBindingValue(name string, held records.Record) (bindingValue, error) {
 	if len(held.Bytes) == 0 {
 		return bindingValue{}, nil
 	}
@@ -649,8 +649,8 @@ func decodeBindingValue(name string, held ports.Record) (bindingValue, error) {
 	return value, nil
 }
 
-func bindingCoordinate(scope Scope, environment, name string) ports.SealScope {
-	return ports.SealScope{
+func bindingCoordinate(scope Scope, environment, name string) records.SealScope {
+	return records.SealScope{
 		Project: scope.Project,
 		Class:   scope.Class,
 		Env:     canonicalEnvironment(environment),

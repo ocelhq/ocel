@@ -14,16 +14,17 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (h *VarsService) values(tier environmentv1.Tier) (values.Store, Class, error) {
+func (h *VarsService) values(tier environmentv1.Tier) (values.Store, edge.Class, error) {
 	vars, err := h.Source.Read()
 	if err != nil {
 		return values.Store{}, "", err
 	}
-	class := ClassProduction
+	class := edge.ClassProduction
 	if tier == environmentv1.Tier_TIER_PREVIEW {
-		class = ClassPreview
+		class = edge.ClassPreview
 	}
 	return values.Store{Records: vars.Records, Cipher: vars.Cipher}, class, nil
 }
@@ -83,7 +84,7 @@ func (h *VarsService) namedEnvironments(ctx context.Context, slug string) ([]str
 	if err != nil {
 		return nil, err
 	}
-	stacks, err := stackNames(ctx, vars.Records, ClassPreview, slug)
+	stacks, err := stackNames(ctx, vars.Records, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -338,7 +339,7 @@ func bindingTarget(tier environmentv1.Tier, environment string) error {
 	if environment != "" && tier != environmentv1.Tier_TIER_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"environment %q is named alongside class %q: an ocel coordinate is a class and, in %s, one preview environment; leave the environment off",
-			environment, ClassProduction, ClassPreview))
+			environment, edge.ClassProduction, edge.ClassPreview))
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type HostVerdict int
@@ -23,7 +24,7 @@ type HostCheck struct {
 }
 
 type HostCheckRequest struct {
-	Class     Class
+	Class     edge.Class
 	Hostnames []string
 }
 
@@ -54,7 +55,7 @@ func verdictProto(verdict HostVerdict) contractv1.HostCheck_Verdict {
 	}
 }
 
-func (h *handlers) hostChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.HostCheck {
+func (h *handlers) hostChecks(ctx context.Context, provider Provider, class edge.Class, hostnames []string) []*contractv1.HostCheck {
 	checkHost := provider.Hooks().CheckHost
 	if checkHost == nil {
 		return nil

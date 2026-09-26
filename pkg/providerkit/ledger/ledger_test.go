@@ -8,30 +8,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type store struct {
-	held   map[string]ports.Record
+	held   map[string]records.Record
 	rev    int
 	racing func(name string)
 }
 
-func newStore() *store { return &store{held: map[string]ports.Record{}} }
+func newStore() *store { return &store{held: map[string]records.Record{}} }
 
-func (s *store) Read(ctx context.Context, name ports.RecordName) (ports.Record, error) {
+func (s *store) Read(ctx context.Context, name records.Name) (records.Record, error) {
 	if err := ctx.Err(); err != nil {
-		return ports.Record{}, err
+		return records.Record{}, err
 	}
 	held, ok := s.held[name.String()]
 	if !ok {
-		return ports.Record{}, ports.ErrNoRecord
+		return records.Record{}, records.ErrNotFound
 	}
 	return held, nil
 }
 
-func (s *store) Write(ctx context.Context, record ports.Record) (ports.Revision, error) {
+func (s *store) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -39,17 +40,17 @@ func (s *store) Write(ctx context.Context, record ports.Record) (ports.Revision,
 		s.racing(record.Name.String())
 	}
 	if held := s.held[record.Name.String()]; held.Revision != record.Revision {
-		return "", ports.ErrStale
+		return "", records.ErrStale
 	}
 	s.rev++
-	record.Revision = ports.Revision(strconv.Itoa(s.rev))
+	record.Revision = records.Revision(strconv.Itoa(s.rev))
 	s.held[record.Name.String()] = record
 	return record.Revision, nil
 }
 
-func (s *store) WritePair(ctx context.Context, first, second ports.Record) error {
+func (s *store) WritePair(ctx context.Context, first, second records.Record) error {
 	if held := s.held[second.Name.String()]; held.Revision != second.Revision {
-		return ports.ErrStale
+		return records.ErrStale
 	}
 	if _, err := s.Write(ctx, first); err != nil {
 		return err
@@ -58,23 +59,23 @@ func (s *store) WritePair(ctx context.Context, first, second ports.Record) error
 	return err
 }
 
-func (s *store) Remove(ctx context.Context, name ports.RecordName, expected ports.Revision) error {
+func (s *store) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	held, ok := s.held[name.String()]
 	if !ok {
-		return ports.ErrNoRecord
+		return records.ErrNotFound
 	}
 	if held.Revision != expected {
-		return ports.ErrStale
+		return records.ErrStale
 	}
 	delete(s.held, name.String())
 	return nil
 }
 
-func (s *store) List(_ context.Context, under ports.RecordName) ([]ports.Record, error) {
-	var out []ports.Record
+func (s *store) List(_ context.Context, under records.Name) ([]records.Record, error) {
+	var out []records.Record
 	for key, record := range s.held {
 		if strings.HasPrefix(key, under.String()+"/") {
 			out = append(out, record)
@@ -85,18 +86,18 @@ func (s *store) List(_ context.Context, under ports.RecordName) ([]ports.Record,
 
 func fixture() (*Ledger, *store) {
 	records := newStore()
-	return New(records, ports.ClassProduction, "shop"), records
+	return New(records, edge.ClassProduction, "shop"), records
 }
 
 func TestNextSequenceRetriesPastAClaimerThatGotThereFirst(t *testing.T) {
-	l, records := fixture()
+	l, recordStore := fixture()
 	ctx := context.Background()
 
 	first, err := l.nextSequence(ctx)
 	if err != nil || first != 1 {
 		t.Fatalf("first sequence = %d, %v", first, err)
 	}
-	stale, err := ports.ReadOrEmpty(ctx, records, l.sequenceName())
+	stale, err := records.ReadOrEmpty(ctx, recordStore, l.sequenceName())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestNextSequenceRetriesPastAClaimerThatGotThereFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	stale.Bytes = []byte("99")
-	if _, err := records.Write(ctx, stale); !errors.Is(err, ports.ErrStale) {
+	if _, err := recordStore.Write(ctx, stale); !errors.Is(err, records.ErrStale) {
 		t.Fatalf("a write at a revision that moved = %v, want ErrStale", err)
 	}
 	third, err := l.nextSequence(ctx)
@@ -121,12 +122,12 @@ func TestClaimTagRefusesASecondClaimant(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p2", Tag: "live"})
-	var refusal ports.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != ports.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("a second claim on the same tag = %v, want the tag refused", err)
 	}
-	if !strings.Contains(refusal.Message, "p1") {
-		t.Fatalf("the refusal does not name the holder: %s", refusal.Message)
+	if !strings.Contains(refused.Message, "p1") {
+		t.Fatalf("the refusal does not name the holder: %s", refused.Message)
 	}
 }
 
@@ -161,8 +162,8 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 	}
 
 	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress())
-	var refusal ports.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != ports.CodeBusy {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("promote onto a moved pointer = %v, want a busy refusal", err)
 	}
 
@@ -535,8 +536,8 @@ func TestARollbackTakenBackKeepsTheTagItsReleaseAlreadyHeld(t *testing.T) {
 	if err := l.Unpromote(ctx, "p1", ""); err != nil {
 		t.Fatalf("Unpromote(p1) = %v", err)
 	}
-	var refusal ports.Refusal
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardProgress()); !errors.As(err, &refusal) || refusal.Code != ports.CodeInvalid {
+	var refused refusal.Refusal
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardProgress()); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Errorf("a new deploy tagged v1 = %v, want it refused: v1 still names p1, which served before the rollback onto it was taken back", err)
 	}
 }
@@ -565,27 +566,27 @@ func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
 }
 
 func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
-	l, records := fixture()
+	l, recordStore := fixture()
 	ctx := context.Background()
 	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 	pointer := l.pointerName(edge.DefaultPointer).String()
 	promotion := l.promotionName(edge.DefaultPointer, "p2").String()
-	records.racing = func(name string) {
+	recordStore.racing = func(name string) {
 		if name != promotion {
 			return
 		}
-		records.racing = nil
-		racer := ports.Record{Name: l.pointerName(edge.DefaultPointer), Bytes: []byte(`{"promotionId":"p9"}`), Revision: records.held[pointer].Revision}
-		if _, err := records.Write(ctx, racer); err != nil {
+		recordStore.racing = nil
+		racer := records.Record{Name: l.pointerName(edge.DefaultPointer), Bytes: []byte(`{"promotionId":"p9"}`), Revision: recordStore.held[pointer].Revision}
+		if _, err := recordStore.Write(ctx, racer); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress())
-	var refusal ports.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != ports.CodeBusy {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("promote onto a pointer another deploy moved after it was read = %v, want a busy refusal: the promotion records what it displaced, and a pointer that moved displaced something else", err)
 	}
 	if held := activeIn(t, l, ""); held != "p9" {

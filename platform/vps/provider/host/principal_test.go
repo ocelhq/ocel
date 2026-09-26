@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type account struct {
@@ -190,7 +190,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 	t.Parallel()
 
 	held := standing()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 	observed, _, err := readSurvey(sh(t, stubs(t, &held), survey(items, StampPath(class))))
 	if err != nil {

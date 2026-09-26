@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -96,7 +97,7 @@ func (c *clients) bindProjectRole(ctx context.Context, member, role string, cond
 	return fmt.Errorf("hold %s to %s on project %s: %w", member, role, c.project, refused)
 }
 
-func (c *clients) keyPolicy(ctx context.Context, class providerkit.Class) (*iampb.Policy, error) {
+func (c *clients) keyPolicy(ctx context.Context, class edge.Class) (*iampb.Policy, error) {
 	client, err := c.KMS()
 	if err != nil {
 		return nil, err
@@ -119,7 +120,7 @@ func (c *clients) keyPolicy(ctx context.Context, class providerkit.Class) (*iamp
 	return policy, nil
 }
 
-func (c *clients) keyRolesHeld(ctx context.Context, class providerkit.Class, member string, roles []string) (bool, error) {
+func (c *clients) keyRolesHeld(ctx context.Context, class edge.Class, member string, roles []string) (bool, error) {
 	policy, err := c.keyPolicy(ctx, class)
 	if err != nil || policy == nil {
 		return false, err
@@ -134,7 +135,7 @@ func (c *clients) keyRolesHeld(ctx context.Context, class providerkit.Class, mem
 	return true, nil
 }
 
-func (c *clients) bindKeyRoles(ctx context.Context, class providerkit.Class, member string, roles, wanted []string) (bool, error) {
+func (c *clients) bindKeyRoles(ctx context.Context, class edge.Class, member string, roles, wanted []string) (bool, error) {
 	policy, err := c.keyPolicy(ctx, class)
 	if err != nil || policy == nil {
 		return false, err

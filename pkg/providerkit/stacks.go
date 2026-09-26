@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type RecordedStack struct {
@@ -30,9 +32,9 @@ type StackEntry struct {
 	RecordedStack
 }
 
-func ReadStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName) (RecordedStack, bool, error) {
+func ReadStack(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) (RecordedStack, bool, error) {
 	name := StackRecord(class, slug, stack)
-	held, err := ReadOrEmpty(ctx, records, name)
+	held, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return RecordedStack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
@@ -46,9 +48,9 @@ func ReadStack(ctx context.Context, records RecordStore, class Class, slug strin
 	return recorded, true, nil
 }
 
-func WriteStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName, recorded RecordedStack) error {
+func WriteStack(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName, recorded RecordedStack) error {
 	name := StackRecord(class, slug, stack)
-	held, err := ReadOrEmpty(ctx, records, name)
+	held, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -56,17 +58,17 @@ func WriteStack(ctx context.Context, records RecordStore, class Class, slug stri
 	if held.Bytes, err = json.Marshal(recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := records.Write(ctx, held); err != nil {
+	if _, err := store.Write(ctx, held); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
 }
 
-func ForgetStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName) error {
-	return Forget(ctx, records, StackRecord(class, slug, stack))
+func ForgetStack(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) error {
+	return records.Forget(ctx, store, StackRecord(class, slug, stack))
 }
 
-func ReadStacks(ctx context.Context, records RecordStore, class Class, slug string) ([]StackEntry, error) {
+func ReadStacks(ctx context.Context, records records.Store, class edge.Class, slug string) ([]StackEntry, error) {
 	under := StacksRecord(class, slug)
 	held, err := records.List(ctx, under)
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
@@ -126,7 +126,7 @@ func (t *transformPatches) refuseUnclaimed() error {
 		return nil
 	}
 	slices.Sort(missed)
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"a transform patches %s, and this deploy stood up nothing to carry it; a patch that reaches no resource is a patch this deploy never honoured",
 		strings.Join(missed, ", "))
 }
@@ -169,7 +169,7 @@ func indexPatches(candidates []transformCandidate, results []transformkit.Result
 			patch := result.Patches[key]
 			ref, constructed := candidate.names[key]
 			if !constructed {
-				return nil, providerkit.Refuse(providerkit.CodeInvalid,
+				return nil, refusal.Refuse(refusal.CodeInvalid,
 					"a transform patches %s's %s, and this deploy constructs no such resource for it",
 					candidate.key.Name, key)
 			}
@@ -210,7 +210,7 @@ func mergeClaims(standing, over map[string]any, at, also string) (map[string]any
 	for _, field := range slices.Sorted(maps.Keys(over)) {
 		value := over[field]
 		if seen, taken := merged[field]; taken && !sameValue(seen, value) {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"%s and %s are the same underlying resource, and the transforms give its %s two different values; ocel shares it between them, so patch it once",
 				at, also, field)
 		}
@@ -238,12 +238,12 @@ func checkVPCConfig(logicalName string, patch map[string]any) error {
 	}
 	subnets, groups := namedCount(placed[lambdaVPCSubnetsField]), namedCount(placed[lambdaVPCSecurityGroups])
 	if subnets == 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"a transform places %s in a VPC with %d security groups and no subnets; a Lambda reaches a VPC through the subnets it is given, so name at least one",
 			logicalName, groups)
 	}
 	if groups == 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"a transform places %s in %d subnets with no security group; a Lambda in a VPC is refused without one, so name at least one",
 			logicalName, subnets)
 	}

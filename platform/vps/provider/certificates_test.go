@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -146,7 +147,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !asRefusal(err, &refusal) {
 		t.Fatalf("Issue() over a pin that covers something else = %v, want a refusal", err)
 	}
@@ -172,7 +173,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, "expired") {
 		t.Fatalf("Issue() over an expired pin = %v, want a refusal saying so: you placed it and you replace it", err)
 	}
@@ -325,7 +326,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 
 	_, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
 		providerkit.Certificate{ID: certs.PinHandle(elsewhere)})
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, caddy.PinsDir) {
 		t.Fatalf("Inspect() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)
 	}
@@ -336,7 +337,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 	}
 }
 
-func asRefusal(err error, refusal *providerkit.Refusal) bool { return errors.As(err, refusal) }
+func asRefusal(err error, refusal *refusal.Refusal) bool { return errors.As(err, refusal) }
 
 func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
 	t.Parallel()

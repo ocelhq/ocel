@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -89,7 +89,7 @@ func decodePatch(patch map[string]any, into any) error {
 }
 
 func unrenderable(kind, resource, surface string, why error) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"a transform patch to %s.%s.%s on %s is invalid: %v",
 		transformProvider, kind, surface, resource, why)
 }
@@ -128,14 +128,14 @@ func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, kind 
 				spec.Volume.Options = held.DriverOpts
 			}
 		default:
-			return spec, providerkit.Refuse(providerkit.CodeInvalid,
+			return spec, refusal.Refuse(refusal.CodeInvalid,
 				"a transform patches %s.%s.%s on %s; a box only patches %s and %s for a %s",
 				transformProvider, kind, surface, in.Resource.Name, surfaceContainer, surfaceVolume, kind)
 		}
 	}
 	for key, value := range results[0].Tags {
 		if strings.HasPrefix(key, ownLabelPrefix) {
-			return spec, providerkit.Refuse(providerkit.CodeInvalid,
+			return spec, refusal.Refuse(refusal.CodeInvalid,
 				"a transform tags %s with %s; the %s prefix is reserved: rename the tag",
 				in.Resource.Name, key, ownLabelPrefix)
 		}
@@ -154,7 +154,7 @@ func containerPatched(kind, resource string, spec host.ResourceContainer, patch 
 	}
 	if held.Image != "" {
 		if !pinnedImage.MatchString(held.Image) {
-			return spec, providerkit.Refuse(providerkit.CodeInvalid,
+			return spec, refusal.Refuse(refusal.CodeInvalid,
 				"a transform runs %s %s as unpinned image %q: pin it as <image>@sha256:<digest>",
 				kind, resource, held.Image)
 		}
@@ -162,7 +162,7 @@ func containerPatched(kind, resource string, spec host.ResourceContainer, patch 
 	}
 	for _, name := range slices.Sorted(maps.Keys(held.Env)) {
 		if slices.Contains(ownEnv[kind], name) {
-			return spec, providerkit.Refuse(providerkit.CodeInvalid,
+			return spec, refusal.Refuse(refusal.CodeInvalid,
 				"a transform sets %s %s's %s, which ocel owns: drop it",
 				kind, resource, name)
 		}

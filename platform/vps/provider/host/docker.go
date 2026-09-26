@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -135,7 +137,7 @@ tail -n ` + strconv.Itoa(engineTailLines) + ` "$log" >&2
 exit 1`
 }
 
-func (h *Host) installEngine(ctx context.Context, progress providerkit.Progress) error {
+func (h *Host) installEngine(ctx context.Context, progress edge.Progress) error {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
 		return err
@@ -228,22 +230,22 @@ func (r Reading) runnableEngine(named string) error {
 	case "":
 		return nil
 	case engineMasked:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s is masked\n"+
 				"Run `systemctl unmask %s` and run `%s`",
 			dockerUnit, named, dockerUnit, command)
 	case engineSnap:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"docker on %s is the snap package, which ocel does not run on\n"+
 				"Replace it with docker %s or later from docker's own packages; its containers do not carry over",
 			named, engineFloor)
 	case engineRootless:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"docker on %s runs rootless, and ocel needs the system daemon behind %s\n"+
 				"Install docker %s or later as the system daemon and run `%s`",
 			named, dockerUnit, engineFloor, command)
 	case engineUnserved:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"a docker daemon on %s runs outside %s, the system daemon ocel needs\n"+
 				"Install docker %s or later as the system daemon and run `%s`",
 			named, dockerUnit, engineFloor, command)
@@ -251,12 +253,12 @@ func (r Reading) runnableEngine(named string) error {
 	major, minor, read := held.release()
 	switch {
 	case !read:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"docker on %s reports no version ocel can read\n"+
 				"Check that `docker version` answers as root and run `%s`",
 			named, command)
 	case major < engineFloorMajor || (major == engineFloorMajor && minor < engineFloorMinor):
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"docker %s on %s is older than %s, the oldest ocel runs on\n"+
 				"Upgrade docker to %s or later and run `%s`",
 			held.Version, named, engineFloor, engineFloor, command)

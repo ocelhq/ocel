@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -75,7 +75,7 @@ func (h *Host) paired(ctx context.Context, pin Pin) error {
 		return err
 	}
 	if strings.TrimSpace(said) == pairMismatched {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the key at %s does not match the certificate at %s",
 			caddy.PinKey(pin.Path), caddy.PinCertificate(pin.Path))
 	}
@@ -84,7 +84,7 @@ func (h *Host) paired(ctx context.Context, pin Pin) error {
 
 func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
 	if _, pinned := caddy.Pinned(path); !pinned {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"pinned certificate %q is outside %s",
 			path, caddy.PinsDir)
 	}

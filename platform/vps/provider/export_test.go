@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -12,7 +13,7 @@ var ProviderOver = newProvider
 
 var MintStoreSecret = mintStoreSecret
 
-func StoreCoordinate(ref providerkit.StackRef) providerkit.SealScope { return storeCoordinate(ref) }
+func StoreCoordinate(ref providerkit.StackRef) records.SealScope { return storeCoordinate(ref) }
 
 func StoreName(ref providerkit.StackRef) string { return storeName(ref) }
 
@@ -26,7 +27,7 @@ func Elevating(inner providerkit.Bootstrap, gate func(context.Context) error) pr
 
 func (p *Provider) Host() *host.Host { return p.host }
 
-func (p *Provider) Recording(records providerkit.RecordStore) { p.records = records }
+func (p *Provider) Recording(records records.Store) { p.records = records }
 
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 

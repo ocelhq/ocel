@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -119,7 +119,7 @@ func TestAnInstallScriptThatNeverStandsIsRefusedWithABound(t *testing.T) {
 
 	dir, attempts := installer(t, 99)
 	stood, _ := installsOn(dir, &told{})
-	refused := refusal(t, stood.host().installEngine(context.Background(), nil), providerkit.CodeNotReady)
+	refused := refusalOf(t, stood.host().installEngine(context.Background(), nil), refusal.CodeNotReady)
 	ran, err := os.ReadFile(attempts)
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestAnInstallSudoRefusedIsNotTriedAgain(t *testing.T) {
 	stood.answer = func(command string) (session.Result, bool) {
 		return session.Result{Code: 1, Stderr: "sudo: a password is required"}, strings.Contains(command, dockerSource)
 	}
-	refusal(t, stood.host().installEngine(context.Background(), nil), providerkit.CodeDenied)
+	refusalOf(t, stood.host().installEngine(context.Background(), nil), refusal.CodeDenied)
 	tries := 0
 	for _, command := range stood.commands() {
 		if strings.Contains(command, dockerSource) {

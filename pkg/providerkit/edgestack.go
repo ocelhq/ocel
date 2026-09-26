@@ -7,16 +7,18 @@ import (
 	"slices"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type stackStore struct {
-	records RecordStore
-	name    RecordName
+	records records.Store
+	name    records.Name
 }
 
 func (s stackStore) read(ctx context.Context) (EdgeStackState, error) {
-	held, err := ReadOrEmpty(ctx, s.records, s.name)
+	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return EdgeStackState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
@@ -31,7 +33,7 @@ func (s stackStore) read(ctx context.Context) (EdgeStackState, error) {
 }
 
 func (s stackStore) write(ctx context.Context, state EdgeStackState) error {
-	held, err := ReadOrEmpty(ctx, s.records, s.name)
+	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
 	}
@@ -76,13 +78,13 @@ func dnsFor(provider Provider, front edge.Edge, sel *contractv1.EdgeSelection) (
 	return provider.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
 }
 
-func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel *contractv1.EdgeSelection) (*stackSession, error) {
+func (h *handlers) openStack(ctx context.Context, class edge.Class, slug string, sel *contractv1.EdgeSelection) (*stackSession, error) {
 	provider, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
 	if slug == "" {
-		return nil, Refuse(CodeInvalid, "this call names no project, and an edge stack belongs to one")
+		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and an edge stack belongs to one")
 	}
 	front, err := h.edgeFor(provider, sel)
 	if err != nil {
@@ -135,15 +137,15 @@ func (s *stackSession) on(kind edge.Kind) (edge.EdgeStack, error) {
 	return front.Open(s.state.Edge)
 }
 
-type noDeploy struct{ Refusal }
+type noDeploy struct{ refusal.Refusal }
 
 func (n noDeploy) Unwrap() error { return n.Refusal }
 
-func errNoDeploy(class Class) error {
-	if class == ClassPreview {
-		return noDeploy{Refusal{Code: CodeNotReady,
+func errNoDeploy(class edge.Class) error {
+	if class == edge.ClassPreview {
+		return noDeploy{refusal.Refusal{Code: refusal.CodeNotReady,
 			Message: "this project has no preview deploys yet; run `ocel preview` first"}}
 	}
-	return noDeploy{Refusal{Code: CodeNotReady,
+	return noDeploy{refusal.Refusal{Code: refusal.CodeNotReady,
 		Message: "this project has no production deploys yet; run `ocel deploy` first"}}
 }

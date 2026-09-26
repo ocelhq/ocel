@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -52,7 +52,7 @@ func Shape(ns Namespace, class string, features []string, options ...ShapeOption
 	for _, name := range features {
 		f, known := featureNamed(name)
 		if !known {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no bootstrap feature named %q", name)
+			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap feature named %q", name)
 		}
 		bodies = append(bodies, f.planned(in).body)
 	}

@@ -7,8 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
@@ -44,7 +45,7 @@ const webService = "ocel-shop-prod-web"
 func fronting(t *testing.T, pins *pinRecorder) edge.EdgeStack {
 	t.Helper()
 	front := direct.New(fake.NewRecords(), pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}, edge.StackState{})
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
@@ -112,10 +113,10 @@ func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *
 		t.Fatalf("PutStaged(b1) = %v", err)
 	}
 
-	var refusal providerkit.Refusal
+	var refused refusal.Refusal
 	err := promoted(t, stack, "p1", "b1")
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("Promote(p1) = %v, want an %s refusal: a promotion that pins nothing reports a rollback it did not perform", err, providerkit.CodeInvalid)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Promote(p1) = %v, want an %s refusal: a promotion that pins nothing reports a rollback it did not perform", err, refusal.CodeInvalid)
 	}
 	if got := pins.calls(); len(got) != 0 {
 		t.Errorf("the promotion pinned %v before refusing", got)
@@ -149,51 +150,51 @@ func TestAPromotionThatCannotPinLeavesTheLedgerPointingWhereItDid(t *testing.T) 
 }
 
 type staleAt struct {
-	providerkit.RecordStore
+	records.Store
 	at string
 }
 
-func (s staleAt) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (s staleAt) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if slices.Contains(record.Name, s.at) {
-		return "", providerkit.ErrStale
+		return "", records.ErrStale
 	}
-	return s.RecordStore.Write(ctx, record)
+	return s.Store.Write(ctx, record)
 }
 
 func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
 	t.Parallel()
 
 	pins := &pinRecorder{}
-	front := direct.New(staleAt{RecordStore: fake.NewRecords(), at: "pointers"}, pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}, edge.StackState{})
+	front := direct.New(staleAt{Store: fake.NewRecords(), at: "pointers"}, pins)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
 	staged(t, stack, "b1", "web-00001-abc")
 
-	var refusal providerkit.Refusal
-	if err := promoted(t, stack, "p1", "b1"); !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Fatalf("Promote(p1) while the pointer moved = %v, want a %s refusal", err, providerkit.CodeBusy)
+	var refused refusal.Refusal
+	if err := promoted(t, stack, "p1", "b1"); !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("Promote(p1) while the pointer moved = %v, want a %s refusal", err, refusal.CodeBusy)
 	}
 	if got := pins.calls(); len(got) != 0 {
 		t.Errorf("a promotion that lost the pointer pinned %v: Cloud Run then serves the loser while the ledger names the winner", got)
 	}
 }
 
-type honouring struct{ providerkit.RecordStore }
+type honouring struct{ records.Store }
 
-func (h honouring) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+func (h honouring) Read(ctx context.Context, name records.Name) (records.Record, error) {
 	if err := ctx.Err(); err != nil {
-		return providerkit.Record{}, err
+		return records.Record{}, err
 	}
-	return h.RecordStore.Read(ctx, name)
+	return h.Store.Read(ctx, name)
 }
 
-func (h honouring) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (h honouring) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return h.RecordStore.Write(ctx, record)
+	return h.Store.Write(ctx, record)
 }
 
 func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
@@ -201,7 +202,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 
 	pins := &pinRecorder{}
 	front := direct.New(honouring{fake.NewRecords()}, pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}, edge.StackState{})
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}

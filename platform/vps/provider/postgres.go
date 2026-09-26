@@ -9,7 +9,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -35,7 +38,7 @@ func postgresContainer(in resources.Instruction) (host.ResourceContainer, error)
 	}
 	image, pinned := constants.PostgresImage(version)
 	if !pinned {
-		return host.ResourceContainer{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return host.ResourceContainer{}, refusal.Refuse(refusal.CodeInvalid,
 			"postgres %s asks for version %q; supported: %s",
 			in.Resource.Name, version, strings.Join(constants.PostgresVersions(), ", "))
 	}
@@ -71,7 +74,7 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, progress providerkit.Progress) (providerkit.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, progress edge.Progress) (providerkit.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
 		return providerkit.Binding{}, err
@@ -108,7 +111,7 @@ func (p *Provider) held(ctx context.Context, in resources.Instruction, name stri
 }
 
 func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, name, folder, item string, mint func() (string, error)) (string, error) {
-	at := providerkit.SealScope{
+	at := records.SealScope{
 		Project: in.Ref.Project, Class: in.Ref.Class, Env: in.Ref.Name.String(),
 		Folder: folder, Binding: in.Resource.Name, Name: item,
 	}
@@ -134,7 +137,7 @@ func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, nam
 		return "", err
 	}
 	if len(opened) == 0 {
-		return "", providerkit.Refuse(providerkit.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the credential kept for %s is empty\nRemove %s on the box",
 			in.Resource.Name, host.KeptPath(in.Ref.Class, name))
 	}

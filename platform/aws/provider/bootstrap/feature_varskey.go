@@ -12,6 +12,7 @@ import (
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 var varsKeyFeature = feature{
@@ -117,7 +118,7 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class
 }
 
 func refuseBroughtKey(named, why string, args ...any) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s cannot hold this account's variables: %s.\nIts key policy must admit this principal and the app execution roles that read a value; ocel never edits a key policy it does not own",
 		named, fmt.Sprintf(why, args...))
 }

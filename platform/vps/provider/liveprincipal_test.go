@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -67,7 +68,7 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +97,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +148,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := vps.NewProvider(vps.Options{
 		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
 		DeployKey: named,
@@ -180,7 +181,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, taken := range []providerkit.Class{providerkit.ClassPreview, class} {
+	for _, taken := range []edge.Class{edge.ClassPreview, class} {
 		standing, err := reading.Describe(ctx, taken)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", taken, err)

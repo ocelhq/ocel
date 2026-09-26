@@ -9,7 +9,9 @@ import (
 	"net"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -18,11 +20,11 @@ const connectorCompute = providerkit.ComputeContainer
 
 func dialable(hostname string) error {
 	if hostname == "" {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"the ssh destination names no host")
 	}
 	if net.ParseIP(hostname) != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"the ssh host is the address %s; the connector needs a hostname\nPoint a hostname at %s and name it as the ssh host",
 			hostname, hostname)
 	}
@@ -51,7 +53,7 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 	}
 	key, err := hostKeyDigest(live.HostKey())
 	if err != nil {
-		return providerkit.ConnectorTarget{}, providerkit.Refuse(providerkit.CodeDenied,
+		return providerkit.ConnectorTarget{}, refusal.Refuse(refusal.CodeDenied,
 			"read this host's ssh key: %s", err)
 	}
 	ns, err := providerkit.NamespaceFromEnv()
@@ -89,7 +91,7 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 	return described, nil
 }
 
-func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall, progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
+func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall, progress edge.Progress) (providerkit.ConnectorAddress, error) {
 	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
@@ -116,7 +118,7 @@ func (p connector) Install(ctx context.Context, install providerkit.ConnectorIns
 	}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress providerkit.Progress) error {
+func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
 	if _, err := p.Session(ctx); err != nil {
 		return err
 	}

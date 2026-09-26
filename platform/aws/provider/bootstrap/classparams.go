@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -69,7 +69,7 @@ func originSecretIn(found map[string]string, name string) (OriginSecret, error) 
 	}
 	held, err := OriginSecretOf(raw)
 	if err != nil {
-		return OriginSecret{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return OriginSecret{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s holds something other than the origin secret bootstrap writes (%v): delete the parameter and re-run `ocel bootstrap` to mint a fresh one, then re-deploy every project in the class", name, err)
 	}
 	return held, nil

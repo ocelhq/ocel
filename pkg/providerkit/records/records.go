@@ -1,4 +1,4 @@
-package ports
+package records
 
 import (
 	"context"
@@ -9,21 +9,21 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type RecordStore interface {
-	Read(ctx context.Context, name RecordName) (Record, error)
+type Store interface {
+	Read(ctx context.Context, name Name) (Record, error)
 
 	Write(ctx context.Context, record Record) (Revision, error)
 
 	WritePair(ctx context.Context, first, second Record) error
 
-	Remove(ctx context.Context, name RecordName, expected Revision) error
+	Remove(ctx context.Context, name Name, expected Revision) error
 
-	List(ctx context.Context, under RecordName) ([]Record, error)
+	List(ctx context.Context, under Name) ([]Record, error)
 }
 
 var ErrStale = errors.New("the record moved since it was read")
 
-var ErrNoRecord = errors.New("no such record")
+var ErrNotFound = errors.New("no such record")
 
 const (
 	RootSchema       = "schema"
@@ -39,11 +39,11 @@ const (
 	RootConformance  = "conformance"
 )
 
-type RecordName []string
+type Name []string
 
-func (n RecordName) String() string { return strings.Join(n, "/") }
+func (n Name) String() string { return strings.Join(n, "/") }
 
-func (n RecordName) Under(prefix RecordName) (RecordName, bool) {
+func (n Name) Under(prefix Name) (Name, bool) {
 	if len(n) <= len(prefix) {
 		return nil, false
 	}
@@ -58,14 +58,14 @@ func (n RecordName) Under(prefix RecordName) (RecordName, bool) {
 type Revision string
 
 type Record struct {
-	Name     RecordName
+	Name     Name
 	Bytes    []byte
 	Revision Revision
 }
 
-func ReadOrEmpty(ctx context.Context, records RecordStore, name RecordName) (Record, error) {
-	held, err := records.Read(ctx, name)
-	if errors.Is(err, ErrNoRecord) {
+func ReadOrEmpty(ctx context.Context, store Store, name Name) (Record, error) {
+	held, err := store.Read(ctx, name)
+	if errors.Is(err, ErrNotFound) {
 		return Record{Name: name}, nil
 	}
 	if err != nil {
@@ -75,17 +75,17 @@ func ReadOrEmpty(ctx context.Context, records RecordStore, name RecordName) (Rec
 	return held, nil
 }
 
-func Forget(ctx context.Context, records RecordStore, name RecordName) error {
+func Forget(ctx context.Context, store Store, name Name) error {
 	for range forgetAttempts {
-		held, err := records.Read(ctx, name)
-		if errors.Is(err, ErrNoRecord) {
+		held, err := store.Read(ctx, name)
+		if errors.Is(err, ErrNotFound) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		err = records.Remove(ctx, name, held.Revision)
-		if err == nil || errors.Is(err, ErrNoRecord) {
+		err = store.Remove(ctx, name, held.Revision)
+		if err == nil || errors.Is(err, ErrNotFound) {
 			return nil
 		}
 		if !errors.Is(err, ErrStale) {
@@ -108,37 +108,9 @@ type Cipher interface {
 
 type SealScope struct {
 	Project string
-	Class   Class
+	Class   edge.Class
 	Env     string
 	Folder  string
 	Binding string
 	Name    string
-}
-
-type Class = edge.Class
-
-const (
-	ClassProduction = edge.ClassProduction
-	ClassPreview    = edge.ClassPreview
-)
-
-type Code string
-
-const (
-	CodeInvalid       Code = "invalid"
-	CodeNotReady      Code = "not-ready"
-	CodeDenied        Code = "denied"
-	CodeBusy          Code = "busy"
-	CodeUnknownOption Code = "unknown-option"
-)
-
-type Refusal struct {
-	Code    Code
-	Message string
-}
-
-func (r Refusal) Error() string { return r.Message }
-
-func Refuse(code Code, format string, args ...any) error {
-	return Refusal{Code: code, Message: fmt.Sprintf(format, args...)}
 }

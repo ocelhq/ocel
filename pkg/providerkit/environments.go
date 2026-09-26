@@ -9,6 +9,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ProductionEnv = "prod"
@@ -25,9 +28,9 @@ type EnvironmentMeta struct {
 	CreatedAt int64  `json:"created_at,omitempty"`
 }
 
-func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class, slug, env, label string) error {
+func recordEnvironmentMeta(ctx context.Context, store records.Store, class edge.Class, slug, env, label string) error {
 	name := EnvironmentRecord(class, slug, env)
-	held, err := ReadOrEmpty(ctx, records, name)
+	held, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -46,13 +49,13 @@ func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class
 	if held.Bytes, err = json.Marshal(meta); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := records.Write(ctx, held); err != nil {
+	if _, err := store.Write(ctx, held); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
 }
 
-func environmentMeta(ctx context.Context, records RecordStore, class Class, slug string) (map[string]EnvironmentMeta, error) {
+func environmentMeta(ctx context.Context, records records.Store, class edge.Class, slug string) (map[string]EnvironmentMeta, error) {
 	held, err := records.List(ctx, EnvironmentsRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
@@ -68,7 +71,7 @@ func environmentMeta(ctx context.Context, records RecordStore, class Class, slug
 	return meta, nil
 }
 
-func stackNames(ctx context.Context, records RecordStore, class Class, slug string) ([]naming.StackName, error) {
+func stackNames(ctx context.Context, records records.Store, class edge.Class, slug string) ([]naming.StackName, error) {
 	held, err := records.List(ctx, StacksRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
@@ -84,8 +87,8 @@ func stackNames(ctx context.Context, records RecordStore, class Class, slug stri
 	return names, nil
 }
 
-func previewEnvironments(ctx context.Context, records RecordStore, slug string) ([]Environment, error) {
-	stacks, err := stackNames(ctx, records, ClassPreview, slug)
+func previewEnvironments(ctx context.Context, records records.Store, slug string) ([]Environment, error) {
+	stacks, err := stackNames(ctx, records, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +104,7 @@ func previewEnvironments(ctx context.Context, records RecordStore, slug string) 
 		persisted[stack.Env] = persisted[stack.Env] || stack.IsInfra()
 	}
 	slices.Sort(identities)
-	meta, err := environmentMeta(ctx, records, ClassPreview, slug)
+	meta, err := environmentMeta(ctx, records, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -122,18 +125,18 @@ func envName(env *environmentv1.Environment) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if class == ClassProduction {
+	if class == edge.ClassProduction {
 		return ProductionEnv, nil
 	}
 	identity := env.GetIdentity()
 	if identity == "" {
-		return "", Refuse(CodeInvalid, "a preview environment is addressed by its identity, and this call names none")
+		return "", refusal.Refuse(refusal.CodeInvalid, "a preview environment is addressed by its identity, and this call names none")
 	}
 	if err := naming.Validate("preview name", identity); err != nil {
-		return "", Refuse(CodeInvalid, "%s", err.Error())
+		return "", refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
 	}
 	if identity == ProductionEnv {
-		return "", Refuse(CodeInvalid, "%q names production, so it is not a preview environment's identity", identity)
+		return "", refusal.Refuse(refusal.CodeInvalid, "%q names production, so it is not a preview environment's identity", identity)
 	}
 	return identity, nil
 }

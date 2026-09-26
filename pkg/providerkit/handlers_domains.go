@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -31,7 +32,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 	if err != nil {
 		return nil, err
 	}
-	session, err := h.openStack(ctx, ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +40,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress edge.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -49,13 +50,13 @@ func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequ
 	})
 }
 
-func (d *hostnames) add(ctx context.Context, progress Progress) error {
+func (d *hostnames) add(ctx context.Context, progress edge.Progress) error {
 	if len(d.configured) == 0 {
-		return Refuse(CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this project declares no domains.production, so there is no production hostname to add; declare one in the config and run this again — no command edits the config")
 	}
 	if d.host != "" && !slices.Contains(d.declared(), d.host) {
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s",
 			d.host, strings.Join(d.declared(), ", "))
 	}
@@ -64,7 +65,7 @@ func (d *hostnames) add(ctx context.Context, progress Progress) error {
 		return err
 	}
 	if !promoted {
-		return Refuse(CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has promoted no release yet, so nothing would answer at %s: `ocel deploy` promotes one and settles every hostname it declares",
 			strings.Join(hostnamesOf(d.addTargets()), ", "))
 	}
@@ -91,7 +92,7 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 	return slices.DeleteFunc(slices.Clone(d.configured), func(held ConfiguredHost) bool { return held.Hostname != d.host })
 }
 
-func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progress Progress) (bool, error) {
+func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progress edge.Progress) (bool, error) {
 	host := target.Hostname
 	settled := d.state.Host(host)
 	serving := settled.Serving()
@@ -157,7 +158,7 @@ func (d *hostnames) certification(host string, settled *Settled) certification {
 	}
 }
 
-func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, progress Progress) error {
+func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, progress edge.Progress) error {
 	if serving == "" || serving == d.settle.kind {
 		return nil
 	}
@@ -175,7 +176,7 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 }
 
 func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -184,7 +185,7 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 	})
 }
 
-func (d *hostnames) remove(ctx context.Context, progress Progress) error {
+func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
 	targets, err := d.removeTargets()
 	if err != nil {
 		return err
@@ -226,7 +227,7 @@ func (d *hostnames) removeTargets() ([]string, error) {
 	provisioned := d.state.Hostnames()
 	if d.host != "" {
 		if !slices.Contains(provisioned, d.host) {
-			return nil, Refuse(CodeInvalid, "this project serves no %q: it serves %s", d.host, provisionedList(provisioned))
+			return nil, refusal.Refuse(refusal.CodeInvalid, "this project serves no %q: it serves %s", d.host, provisionedList(provisioned))
 		}
 		return []string{d.host}, nil
 	}

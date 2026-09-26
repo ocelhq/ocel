@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -185,7 +185,7 @@ func (p *cloudFront) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, 
 	if serving == "" || serving == string(p.ns) {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"CloudFront hands %s to one distribution for the whole account, and the one standing reads its routes through the %s namespace's preview resolver, so every preview %s serves answers on it. Releasing it here would take those down. Run `ocel domain rm '%s' --preview` under %s instead",
 		edge.PreviewWildcard(baseDomain), serving, serving, edge.PreviewWildcard(baseDomain), serving)
 }

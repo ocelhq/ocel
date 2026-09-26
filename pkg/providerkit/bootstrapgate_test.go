@@ -13,6 +13,9 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recorder struct {
@@ -33,7 +36,7 @@ func (r *recorder) Detail(message string) {
 	r.details = append(r.details, message)
 }
 
-func (r *recorder) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (r *recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func (r *recorder) told() string {
 	r.mu.Lock()
@@ -52,7 +55,7 @@ func gated(t *testing.T, writer providerkit.WrittenBy) (providerkit.Gate, *fake.
 	}, provider
 }
 
-func bootstrapped(t *testing.T, provider *fake.Provider, class providerkit.Class, features ...string) {
+func bootstrapped(t *testing.T, provider *fake.Provider, class edge.Class, features ...string) {
 	t.Helper()
 
 	if err := provider.FakeBootstrap().Apply(context.Background(), providerkit.BootstrapRequest{
@@ -67,9 +70,9 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
-	state, err := gate.State(context.Background(), providerkit.ClassProduction)
+	state, err := gate.State(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("State() error = %v", err)
 	}
@@ -95,12 +98,12 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
-	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatalf("RecordBootstrap() error = %v", err)
 	}
-	state, err := gate.State(ctx, providerkit.ClassProduction)
+	state, err := gate.State(ctx, edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("State() error = %v", err)
 	}
@@ -108,7 +111,7 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 		t.Error("State().AutoHeal is off after the record said it is on")
 	}
 
-	held, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(providerkit.ClassProduction))
+	held, err := provider.Records().Read(ctx, providerkit.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
@@ -123,13 +126,13 @@ func TestAdmitRefusesABootstrapThatIsNotThere(t *testing.T) {
 
 	gate, _ := gated(t, "2.0.0")
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, nil, true, &recorder{})
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	_, err := gate.Admit(context.Background(), edge.ClassPreview, nil, true, &recorder{})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Admit() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "`ocel bootstrap preview`") {
-		t.Errorf("Admit() = %q, want it to name the command that creates the preview bootstrap", refusal.Message)
+	if !strings.Contains(refused.Message, "`ocel bootstrap preview`") {
+		t.Errorf("Admit() = %q, want it to name the command that creates the preview bootstrap", refused.Message)
 	}
 }
 
@@ -137,16 +140,16 @@ func TestAdmitRefusesASchemaThisBuildCannotRead(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, providerkit.ClassProduction)
+	bootstrapped(t, provider, edge.ClassProduction)
 	provider.FakeBootstrap().AtSchema(providerkit.BootstrapSchema + 1)
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, nil, true, &recorder{})
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	_, err := gate.Admit(context.Background(), edge.ClassProduction, nil, true, &recorder{})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Admit() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "Upgrade the Ocel CLI") {
-		t.Errorf("Admit() = %q, want it to say the CLI is behind the account", refusal.Message)
+	if !strings.Contains(refused.Message, "Upgrade the Ocel CLI") {
+		t.Errorf("Admit() = %q, want it to say the CLI is behind the account", refused.Message)
 	}
 }
 
@@ -154,19 +157,19 @@ func TestAdmitRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.
 	t.Parallel()
 
 	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassProduction, []string{fake.FeatureImages}, true, &recorder{})
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("Admit() = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	_, err := gate.Admit(context.Background(), edge.ClassProduction, []string{fake.FeatureImages}, true, &recorder{})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Admit() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	for _, want := range []string{
 		"lacks the features this project needs: " + fake.FeatureImages,
 		"`ocel bootstrap production --features " + fake.FeatureImages + "`",
 	} {
-		if !strings.Contains(refusal.Message, want) {
-			t.Errorf("Admit() = %q, want it to contain %q", refusal.Message, want)
+		if !strings.Contains(refused.Message, want) {
+			t.Errorf("Admit() = %q, want it to contain %q", refused.Message, want)
 		}
 	}
 }
@@ -177,14 +180,14 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	state, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, progress)
+	state, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress)
 	if err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
@@ -208,11 +211,11 @@ func TestAdmitLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealing(t *t
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
@@ -229,14 +232,14 @@ func TestAdmitAsksForNoHealingAndGetsNone(t *testing.T) {
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	state, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, false, progress)
+	state, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, false, progress)
 	if err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
@@ -257,14 +260,14 @@ func TestAdmitWillNotHealFromADevelopmentBuild(t *testing.T) {
 	ctx := context.Background()
 	gate, provider := gated(t, "dev+cafebabe")
 	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
@@ -281,16 +284,16 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
-	bootstrap.RefuseApply(providerkit.Refuse(providerkit.CodeDenied,
+	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied,
 		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("Admit() error = %v, want a refused heal to leave the run state", err)
 	}
 	if !strings.Contains(progress.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
@@ -322,15 +325,15 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
-	if err := gate.RecordBootstrap(ctx, providerkit.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, providerkit.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
 	bootstrap.Behind(fake.FeatureCache)
-	bootstrap.RefuseApply(providerkit.Refuse(providerkit.CodeDenied, ""))
+	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied, ""))
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, providerkit.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("Admit() error = %v, want a refused heal to leave the run state", err)
 	}
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
@@ -343,7 +346,7 @@ func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.
 
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, provider, class, fake.FeatureCache)
 	provider.FakeBootstrap().Halfway()
 
@@ -364,10 +367,10 @@ func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "1.0.0")
-	bootstrapped(t, provider, providerkit.ClassProduction)
+	bootstrapped(t, provider, edge.ClassProduction)
 	provider.FakeBootstrap().WrittenBy("2.0.0")
 
-	state, err := gate.State(context.Background(), providerkit.ClassProduction)
+	state, err := gate.State(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("State() error = %v", err)
 	}
@@ -385,16 +388,16 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 
-	occupancy, err := gate.Occupancy(ctx, providerkit.ClassPreview)
+	occupancy, err := gate.Occupancy(ctx, edge.ClassPreview)
 	if err != nil {
 		t.Fatalf("Occupancy() error = %v", err)
 	}
-	if err := occupancy.Refuse(providerkit.ClassPreview); err != nil {
+	if err := occupancy.Refuse(edge.ClassPreview); err != nil {
 		t.Fatalf("Refuse() over an empty account = %v, want nothing in the way", err)
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := provider.Records().Write(ctx, providerkit.Record{Name: providerkit.ProjectRecord(providerkit.ClassPreview, slug)}); err != nil {
+		if _, err := provider.Records().Write(ctx, records.Record{Name: providerkit.ProjectRecord(edge.ClassPreview, slug)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -402,24 +405,24 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Records().Write(ctx, providerkit.Record{
-		Name:  providerkit.WildcardRecord(providerkit.ClassPreview),
+	if _, err := provider.Records().Write(ctx, records.Record{
+		Name:  providerkit.WildcardRecord(edge.ClassPreview),
 		Bytes: wildcard,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	occupancy, err = gate.Occupancy(ctx, providerkit.ClassPreview)
+	occupancy, err = gate.Occupancy(ctx, edge.ClassPreview)
 	if err != nil {
 		t.Fatalf("Occupancy() error = %v", err)
 	}
 	if !slices.Equal(occupancy.Projects, []string{"blog", "shop"}) {
 		t.Errorf("Occupancy().Projects = %v, want both projects, sorted", occupancy.Projects)
 	}
-	var refusal providerkit.Refusal
-	err = occupancy.Refuse(providerkit.ClassPreview)
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("Refuse() = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	var refused refusal.Refusal
+	err = occupancy.Refuse(edge.ClassPreview)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Refuse() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	for _, want := range []string{
 		"2 project(s) are still deployed into it: blog, shop",
@@ -427,8 +430,8 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 		"*.previews.example.com",
 		"`ocel bootstrap destroy preview`",
 	} {
-		if !strings.Contains(refusal.Message, want) {
-			t.Errorf("Refuse() = %q, want it to contain %q", refusal.Message, want)
+		if !strings.Contains(refused.Message, want) {
+			t.Errorf("Refuse() = %q, want it to contain %q", refused.Message, want)
 		}
 	}
 }
@@ -436,21 +439,21 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
 	t.Parallel()
 
-	err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema+1, true, providerkit.ClassProduction)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("RefuseSchemaAhead() = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema+1, true, edge.ClassProduction)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("RefuseSchemaAhead() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refusal.Message, "ocel bootstrap destroy") {
-		t.Errorf("RefuseSchemaAhead() = %q, want it to name what drops the bootstrap", refusal.Message)
+	if !strings.Contains(refused.Message, "ocel bootstrap destroy") {
+		t.Errorf("RefuseSchemaAhead() = %q, want it to name what drops the bootstrap", refused.Message)
 	}
-	if strings.Contains(refusal.Message, "--force") {
-		t.Errorf("RefuseSchemaAhead() = %q, want no escape hatch offered", refusal.Message)
+	if strings.Contains(refused.Message, "--force") {
+		t.Errorf("RefuseSchemaAhead() = %q, want no escape hatch offered", refused.Message)
 	}
-	if got := strings.Count(refusal.Message, "\n"); got != 1 {
-		t.Errorf("RefuseSchemaAhead() = %q, want exactly two lines", refusal.Message)
+	if got := strings.Count(refused.Message, "\n"); got != 1 {
+		t.Errorf("RefuseSchemaAhead() = %q, want exactly two lines", refused.Message)
 	}
-	if err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema, true, providerkit.ClassProduction); err != nil {
+	if err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema, true, edge.ClassProduction); err != nil {
 		t.Errorf("RefuseSchemaAhead() at the schema this build writes = %v, want it admitted", err)
 	}
 }
@@ -459,10 +462,10 @@ func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, providerkit.ClassPreview)
+	bootstrapped(t, provider, edge.ClassPreview)
 
-	_, err := gate.Admit(context.Background(), providerkit.ClassPreview, []string{fake.FeatureImages}, true, &recorder{})
-	var refusal providerkit.Refusal
+	_, err := gate.Admit(context.Background(), edge.ClassPreview, []string{fake.FeatureImages}, true, &recorder{})
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Admit() = %v, want a refusal", err)
 	}

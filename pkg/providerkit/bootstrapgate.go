@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,13 +19,13 @@ const FeatureVarsKey = "vars-key"
 
 type Gate struct {
 	Bootstrap Bootstrap
-	Records   RecordStore
+	Records   records.Store
 	WrittenBy WrittenBy
 	Edge      edge.Kind
 }
 
 type BootstrapState struct {
-	Class      Class
+	Class      edge.Class
 	Present    bool
 	Stacks     []BootstrapStack
 	Features   []string
@@ -34,7 +36,7 @@ type BootstrapState struct {
 	Reading    any
 }
 
-func (g Gate) State(ctx context.Context, class Class) (BootstrapState, error) {
+func (g Gate) State(ctx context.Context, class edge.Class) (BootstrapState, error) {
 	described, err := g.Bootstrap.Describe(ctx, class)
 	if err != nil {
 		return BootstrapState{}, err
@@ -154,16 +156,16 @@ func (g Gate) refuseUnfronting(catalogue []Feature, named, removing []string) er
 		return nil
 	}
 	if slices.Contains(named, fronting) {
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s fronts this project's deploys, so this run will not remove it: point the project at another edge first",
 			fronting)
 	}
-	return Refuse(CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"removing %s takes %s down with it, and %s fronts this project's deploys: point the project at another edge first",
 		strings.Join(named, ", "), fronting, fronting)
 }
 
-func (i intent) request(class Class, req ApplyRequest, writer WrittenBy) BootstrapRequest {
+func (i intent) request(class edge.Class, req ApplyRequest, writer WrittenBy) BootstrapRequest {
 	return BootstrapRequest{
 		Class:      class,
 		Features:   i.requested,
@@ -174,7 +176,7 @@ func (i intent) request(class Class, req ApplyRequest, writer WrittenBy) Bootstr
 	}
 }
 
-func (g Gate) Plan(ctx context.Context, class Class, req ApplyRequest) (Plan, error) {
+func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (Plan, error) {
 	standing, err := g.State(ctx, class)
 	if err != nil {
 		return Plan{}, err
@@ -195,7 +197,7 @@ func (g Gate) PlanFrom(ctx context.Context, standing BootstrapState, req ApplyRe
 	return plan, g.noteDependents(ctx, class, plan.Groups)
 }
 
-func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGroup) error {
+func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []ChangeGroup) error {
 	var dropped []string
 	for _, group := range groups {
 		if group.Action == ActionDelete && group.Feature != "" {
@@ -222,7 +224,7 @@ func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGr
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyRequest, progress Progress) error {
+func (g Gate) Apply(ctx context.Context, shown Plan, class edge.Class, req ApplyRequest, progress edge.Progress) error {
 	standing, err := g.State(ctx, class)
 	if err != nil {
 		return err
@@ -255,7 +257,7 @@ func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyReque
 	return EnsureRecordSchema(ctx, g.Records, class)
 }
 
-func (g Gate) Remove(ctx context.Context, shown Plan, class Class, progress Progress) error {
+func (g Gate) Remove(ctx context.Context, shown Plan, class edge.Class, progress edge.Progress) error {
 	if err := g.Vacant(ctx, class); err != nil {
 		return err
 	}
@@ -271,10 +273,10 @@ func (g Gate) Remove(ctx context.Context, shown Plan, class Class, progress Prog
 	if err := g.Bootstrap.Remove(ctx, class, progress); err != nil {
 		return err
 	}
-	return Forget(ctx, g.Records, BootstrapRecord(class))
+	return records.Forget(ctx, g.Records, BootstrapRecord(class))
 }
 
-func (g Gate) Vacant(ctx context.Context, class Class) error {
+func (g Gate) Vacant(ctx context.Context, class edge.Class) error {
 	occupancy, err := g.Occupancy(ctx, class)
 	if err != nil {
 		return err
@@ -282,7 +284,7 @@ func (g Gate) Vacant(ctx context.Context, class Class) error {
 	return occupancy.Refuse(class)
 }
 
-func (g Gate) admitRemovals(ctx context.Context, class Class, removing []string, force bool) error {
+func (g Gate) admitRemovals(ctx context.Context, class edge.Class, removing []string, force bool) error {
 	if len(removing) == 0 || force {
 		return nil
 	}
@@ -294,12 +296,12 @@ func (g Gate) admitRemovals(ctx context.Context, class Class, removing []string,
 	if len(dependents) == 0 {
 		return nil
 	}
-	return Refuse(CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"removing %s would break %d project(s) already deployed here: %s — re-run with --force to remove it anyway, or leave it standing",
 		strings.Join(removing, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
-func (g Gate) RecordedFeatures(ctx context.Context, class Class) (map[string][]string, error) {
+func (g Gate) RecordedFeatures(ctx context.Context, class edge.Class) (map[string][]string, error) {
 	held, err := g.Records.List(ctx, ProjectsRecord(class))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
@@ -333,7 +335,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) Admit(ctx context.Context, class Class, required []string, heal bool, progress Progress) (BootstrapState, error) {
+func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapState, error) {
 	standing, err := g.State(ctx, class)
 	if err != nil {
 		return BootstrapState{}, err
@@ -363,12 +365,12 @@ func (s BootstrapState) lacking(required []string, command string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	return Refuse(CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"this account's Ocel bootstrap lacks the features this project needs: %s.\nRun `%s --features %s` and try again",
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, standing BootstrapState, required []string, progress Progress) bool {
+func (g Gate) heal(ctx context.Context, standing BootstrapState, required []string, progress edge.Progress) bool {
 	if !standing.AutoHeal || len(standing.healable(required)) == 0 {
 		return false
 	}
@@ -389,9 +391,9 @@ func (g Gate) heal(ctx context.Context, standing BootstrapState, required []stri
 		Heal:       true,
 		WrittenBy:  g.WrittenBy,
 	}, progress)
-	var refusal Refusal
-	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
-		detail(progress, denied(refusal))
+	var refused refusal.Refusal
+	if errors.As(err, &refused) && refused.Code == refusal.CodeDenied {
+		detail(progress, denied(refused))
 		return false
 	}
 	if err != nil {
@@ -401,7 +403,7 @@ func (g Gate) heal(ctx context.Context, standing BootstrapState, required []stri
 	return true
 }
 
-func denied(refusal Refusal) string {
+func denied(refusal refusal.Refusal) string {
 	said := "this run may not refresh what this bootstrap has fallen behind on, so it is left as it stands"
 	if refusal.Message == "" {
 		return said
@@ -409,8 +411,8 @@ func denied(refusal Refusal) string {
 	return said + ": " + refusal.Message
 }
 
-func (g Gate) autoHeal(ctx context.Context, class Class) (bool, error) {
-	held, err := ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
+func (g Gate) autoHeal(ctx context.Context, class edge.Class) (bool, error) {
+	held, err := records.ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
 	if err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
@@ -424,8 +426,8 @@ func (g Gate) autoHeal(ctx context.Context, class Class) (bool, error) {
 	return state.AutoHeal, nil
 }
 
-func (g Gate) RecordBootstrap(ctx context.Context, class Class, state BootstrapSettings) error {
-	held, err := ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
+func (g Gate) RecordBootstrap(ctx context.Context, class edge.Class, state BootstrapSettings) error {
+	held, err := records.ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
 	if err != nil {
 		return fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
@@ -444,7 +446,7 @@ type Occupancy struct {
 	Wildcard string
 }
 
-func (g Gate) Occupancy(ctx context.Context, class Class) (Occupancy, error) {
+func (g Gate) Occupancy(ctx context.Context, class edge.Class) (Occupancy, error) {
 	held, err := g.Records.List(ctx, ProjectsRecord(class))
 	if err != nil {
 		return Occupancy{}, fmt.Errorf("read the projects deployed here: %w", err)
@@ -460,7 +462,7 @@ func (g Gate) Occupancy(ctx context.Context, class Class) (Occupancy, error) {
 	slices.Sort(projects)
 	occupancy := Occupancy{Projects: slices.Compact(projects)}
 
-	wildcard, err := ReadOrEmpty(ctx, g.Records, WildcardRecord(class))
+	wildcard, err := records.ReadOrEmpty(ctx, g.Records, WildcardRecord(class))
 	if err != nil {
 		return Occupancy{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
 	}
@@ -474,7 +476,7 @@ func (g Gate) Occupancy(ctx context.Context, class Class) (Occupancy, error) {
 	return occupancy, nil
 }
 
-func (o Occupancy) Refuse(class Class) error {
+func (o Occupancy) Refuse(class edge.Class) error {
 	if len(o.Projects) == 0 && o.Wildcard == "" {
 		return nil
 	}
@@ -489,7 +491,7 @@ func (o Occupancy) Refuse(class Class) error {
 			"previews are still served on %s — release it with `ocel domain release --preview` first",
 			edge.PreviewWildcard(o.Wildcard)))
 	}
-	return Refuse(CodeNotReady, "the %s bootstrap is still in use, so `%s` will not remove it: %s",
+	return refusal.Refuse(refusal.CodeNotReady, "the %s bootstrap is still in use, so `%s` will not remove it: %s",
 		class, bootstrapDestroyCommand(class), strings.Join(reasons, "; "))
 }
 
@@ -518,66 +520,66 @@ func checkCompat(deployed int, present bool, required int) compatibility {
 func (c compatibility) explain(deployed, required int, command string) error {
 	switch c {
 	case needsBootstrapInit:
-		return Refuse(CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
+		return refusal.Refuse(refusal.CodeNotReady, "this account has no Ocel bootstrap.\nRun `%s` to create it, then try again", command)
 	case needsBootstrapUpgrade:
 		if deployed == 0 {
-			return Refuse(CodeNotReady, "this account's Ocel bootstrap predates schema tracking; this provider requires schema %d.\nRun `%s` to upgrade it, then try again", required, command)
+			return refusal.Refuse(refusal.CodeNotReady, "this account's Ocel bootstrap predates schema tracking; this provider requires schema %d.\nRun `%s` to upgrade it, then try again", required, command)
 		}
-		return Refuse(CodeNotReady, "this account's Ocel bootstrap is out of date: the account is at schema %d, this provider requires schema %d.\nRun `%s` to upgrade it, then try again", deployed, required, command)
+		return refusal.Refuse(refusal.CodeNotReady, "this account's Ocel bootstrap is out of date: the account is at schema %d, this provider requires schema %d.\nRun `%s` to upgrade it, then try again", deployed, required, command)
 	case needsCLIUpgrade:
-		return Refuse(CodeNotReady, "this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI and try again", deployed, required)
+		return refusal.Refuse(refusal.CodeNotReady, "this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI and try again", deployed, required)
 	default:
 		return nil
 	}
 }
 
-func CheckSchema(deployed int, present bool, class Class) error {
+func CheckSchema(deployed int, present bool, class edge.Class) error {
 	return checkCompat(deployed, present, BootstrapSchema).explain(deployed, BootstrapSchema, BootstrapCommand(class))
 }
 
-func RefuseSchemaAhead(deployed int, present bool, class Class) error {
+func RefuseSchemaAhead(deployed int, present bool, class edge.Class) error {
 	if checkCompat(deployed, present, BootstrapSchema) != needsCLIUpgrade {
 		return nil
 	}
 	return schemaAhead(deployed, class)
 }
 
-func schemaAhead(deployed int, class Class) error {
-	return Refuse(CodeNotReady,
+func schemaAhead(deployed int, class edge.Class) error {
+	return refusal.Refuse(refusal.CodeNotReady,
 		"this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI, or run `%s` and bootstrap it afresh — there is no way to write an older shape over a newer one",
 		deployed, BootstrapSchema, bootstrapDestroyCommand(class))
 }
 
-func BootstrapCommand(class Class) string {
-	if class == ClassPreview {
+func BootstrapCommand(class edge.Class) string {
+	if class == edge.ClassPreview {
 		return "ocel bootstrap preview"
 	}
 	return "ocel bootstrap production"
 }
 
-func BootstrapFeaturesCommand(class Class) string {
+func BootstrapFeaturesCommand(class edge.Class) string {
 	return BootstrapCommand(class) + " --features"
 }
 
-func BootstrapVarsKeyCommand(class Class) string {
+func BootstrapVarsKeyCommand(class edge.Class) string {
 	return BootstrapFeaturesCommand(class) + " " + FeatureVarsKey
 }
 
-func bootstrapDestroyCommand(class Class) string {
-	if class == ClassPreview {
+func bootstrapDestroyCommand(class edge.Class) string {
+	if class == edge.ClassPreview {
 		return "ocel bootstrap destroy preview"
 	}
 	return "ocel bootstrap destroy production"
 }
 
-func destroyCommand(class Class) string {
-	if class == ClassPreview {
+func destroyCommand(class edge.Class) string {
+	if class == edge.ClassPreview {
 		return "ocel destroy preview"
 	}
 	return "ocel destroy production"
 }
 
-func detail(progress Progress, message string) {
+func detail(progress edge.Progress, message string) {
 	if progress == nil {
 		return
 	}

@@ -10,24 +10,25 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type interceptedRecords struct {
-	providerkit.RecordStore
-	afterList func(under providerkit.RecordName)
+	records.Store
+	afterList func(under records.Name)
 }
 
-func (r *interceptedRecords) List(ctx context.Context, under providerkit.RecordName) ([]providerkit.Record, error) {
-	held, err := r.RecordStore.List(ctx, under)
+func (r *interceptedRecords) List(ctx context.Context, under records.Name) ([]records.Record, error) {
+	held, err := r.Store.List(ctx, under)
 	if r.afterList != nil {
 		r.afterList(under)
 	}
 	return held, err
 }
 
-func containerStacks(t *testing.T, records providerkit.RecordStore) (*Stacks, *mockedEngine, providerkit.StackPlan) {
+func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, providerkit.StackPlan) {
 	t.Helper()
 	cfg, plan := plannedContainerStack(t)
 	cfg.Records = records
@@ -48,17 +49,17 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 
 	ctx := context.Background()
 	shared := fake.NewRecords()
-	records := &interceptedRecords{RecordStore: shared}
-	stacks, engine, shop := containerStacks(t, records)
+	store := &interceptedRecords{Store: shared}
+	stacks, engine, shop := containerStacks(t, store)
 	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
 	other, _, blog := containerStacks(t, shared)
-	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	blog.Ref = providerkit.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
-	records.afterList = func(under providerkit.RecordName) {
-		if claimed || under.String() != consumersRecord(providerkit.ClassProduction).String() {
+	store.afterList = func(under records.Name) {
+		if claimed || under.String() != consumersRecord(edge.ClassProduction).String() {
 			return
 		}
 		claimed = true
@@ -74,11 +75,11 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 		t.Fatal("the concurrent claim never ran, so this test proved nothing")
 	}
 	for _, torn := range engine.torn() {
-		if torn == substrateRef(providerkit.ClassProduction).Name.String() {
+		if torn == substrateRef(edge.ClassProduction).Name.String() {
 			t.Fatal("the substrate was torn down under blog, which claimed it between shop's listing and its lease")
 		}
 	}
-	remaining, err := shared.List(ctx, consumersRecord(providerkit.ClassProduction))
+	remaining, err := shared.List(ctx, consumersRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	held, err := ports.ReadOrEmpty(ctx, shared, leaseRecord(providerkit.ClassProduction))
+	held, err := records.ReadOrEmpty(ctx, shared, leaseRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,13 +106,13 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	}
 
 	other, _, blog := containerStacks(t, shared)
-	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	blog.Ref = providerkit.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	_, err = other.Provision(ctx, blog, edge.DiscardProgress())
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Provision(blog) = %v, want the busy refusal a substrate on its way down earns", err)
 	}
-	remaining, err := shared.List(ctx, consumersRecord(providerkit.ClassProduction))
+	remaining, err := shared.List(ctx, consumersRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}

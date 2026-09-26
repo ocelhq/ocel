@@ -6,7 +6,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 type Cipher struct {
@@ -21,7 +22,7 @@ func NewCipher() *Cipher {
 	return &Cipher{key: key}
 }
 
-func (s *Cipher) Seal(_ context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
+func (s *Cipher) Seal(_ context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
 	gcm, err := s.gcm()
 	if err != nil {
 		return nil, err
@@ -33,18 +34,18 @@ func (s *Cipher) Seal(_ context.Context, at providerkit.SealScope, plaintext []b
 	return gcm.Seal(nonce, nonce, plaintext, at.AAD()), nil
 }
 
-func (s *Cipher) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (s *Cipher) Open(_ context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	gcm, err := s.gcm()
 	if err != nil {
 		return nil, err
 	}
 	if len(sealed) < gcm.NonceSize() {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "sealed value is truncated")
+		return nil, refusal.Refuse(refusal.CodeInvalid, "sealed value is truncated")
 	}
 	nonce, body := sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, body, at.AAD())
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied, "sealed value does not open at %s", at.AAD())
+		return nil, refusal.Refuse(refusal.CodeDenied, "sealed value does not open at %s", at.AAD())
 	}
 	return plaintext, nil
 }

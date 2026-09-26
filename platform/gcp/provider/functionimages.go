@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
@@ -58,7 +59,7 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework providerki
 	}
 	on, carried := p.bases[framework.Name]
 	if !carried {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"a function on Cloud Run is a container, and this provider carries no base image a %s function could run in: it carries one for %s",
 			framework.Name, strings.Join(slices.Sorted(maps.Keys(p.bases)), ", "))
 	}
@@ -106,7 +107,7 @@ func runsX8664(arch, what string) error {
 	if providerkit.Architecture(arch) == providerkit.ArchX8664 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is built for %s, and Cloud Run runs %s alone: build it for %s, or run it somewhere that offers %s",
 		what, providerkit.Architecture(arch), providerkit.ArchX8664, providerkit.ArchX8664, providerkit.Architecture(arch))
 }

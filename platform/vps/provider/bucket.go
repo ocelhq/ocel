@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -45,7 +47,7 @@ const storeHealthPath = "/health/ready"
 
 func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
 	pointer := edge.DefaultPointer
-	if ref.Class == providerkit.ClassPreview {
+	if ref.Class == edge.ClassPreview {
 		pointer = ref.Name.Env
 	}
 	return host.AppRoute{
@@ -173,7 +175,7 @@ func (s *liveStores) shaped(resource string, spec host.ResourceContainer) (host.
 		return spec, nil
 	}
 	if !reflect.DeepEqual(*s.spec, spec) {
-		return host.ResourceContainer{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return host.ResourceContainer{}, refusal.Refuse(refusal.CodeInvalid,
 			"buckets %s and %s shape the one store container differently\n"+
 				"Gate the `vps.bucket` rule on the environment, or patch both buckets the same way",
 			resource, s.shapedBy)
@@ -204,8 +206,8 @@ func (s *liveStores) once(name string, stand func() (storeCredential, error)) (s
 	return held, nil
 }
 
-func storeCoordinate(ref providerkit.StackRef) providerkit.SealScope {
-	return providerkit.SealScope{
+func storeCoordinate(ref providerkit.StackRef) records.SealScope {
+	return records.SealScope{
 		Project: ref.Project, Class: ref.Class, Env: storeRef(ref).Name.String(),
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}
@@ -235,14 +237,14 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 		return storeCredential{}, err
 	}
 	if len(opened) == 0 {
-		return storeCredential{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return storeCredential{}, refusal.Refuse(refusal.CodeNotReady,
 			"the credential kept for %s is empty\nRemove %s on the box",
 			name, host.KeptPath(ref.Class, name))
 	}
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, progress providerkit.Progress) (providerkit.Binding, error) {
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, progress edge.Progress) (providerkit.Binding, error) {
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
@@ -460,7 +462,7 @@ func corsOrigins(ref providerkit.StackRef, declared []string, claims []host.Host
 	return origins
 }
 
-func (p *Provider) holdOrigins(ctx context.Context, project string, class providerkit.Class) error {
+func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.Class) error {
 	entries, err := providerkit.ReadStacks(ctx, p.records, class, project)
 	if err != nil {
 		return err
@@ -509,7 +511,7 @@ func declaredPublic(spec *providerkit.BucketSpec) bool {
 	return spec != nil && spec.Public
 }
 
-func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error {
+func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress edge.Progress) error {
 	if err := p.dropBucket(ctx, ref, binding, progress); err != nil {
 		return err
 	}
@@ -517,7 +519,7 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 	return p.reconcileStore(ctx, ref, progress)
 }
 
-func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error {
+func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress edge.Progress) error {
 	store := storeName(ref)
 	held, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
@@ -548,7 +550,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, bin
 	})
 }
 
-func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	last, err := p.lastBucket(ctx, ref)
 	if err != nil || !last {
 		return err
@@ -575,7 +577,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bo
 	return true, nil
 }
 
-func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	store := storeName(ref)
 	if progress != nil {
 		progress.Say("Taking the store " + store + " down")

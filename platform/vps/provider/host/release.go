@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -71,10 +72,10 @@ func (u Unserved) Error() string { return u.Err.Error() }
 
 func (u Unserved) Unwrap() error { return u.Err }
 
-func (h *Host) Release(ctx context.Context, rel Release, progress providerkit.Progress) error {
+func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress) error {
 	for _, app := range rel.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
-			return Unserved{providerkit.Refuse(providerkit.CodeInvalid,
+			return Unserved{refusal.Refuse(refusal.CodeInvalid,
 				"release %s onto %s: no health check path\nSet %q in your project configuration",
 				app.App, h.named(), healthKey)}
 		}
@@ -138,7 +139,7 @@ func (h *Host) Release(ctx context.Context, rel Release, progress providerkit.Pr
 	return h.settle(ctx, rel, cut, progress, elevation)
 }
 
-func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress providerkit.Progress, elevation string) error {
+func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress edge.Progress, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -165,7 +166,7 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress pr
 	if len(failed) == 0 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: flipped onto %s, which now serve, but what follows the flip did not all finish:\n%s",
 		rel.apps(), h.named(), rel.names(), strings.Join(failed, "\n"))
 }
@@ -268,7 +269,7 @@ func (c cutover) back(standing RoutingTable) (RoutingTable, error) {
 	return standing, nil
 }
 
-func tellDrain(progress providerkit.Progress, said string) {
+func tellDrain(progress edge.Progress, said string) {
 	if progress == nil {
 		return
 	}
@@ -324,7 +325,7 @@ func (h *Host) pairHeld(ctx context.Context) (routingPair, error) {
 	}
 	lines := strings.SplitN(said, "\n", 3)
 	if len(lines) < 3 {
-		return routingPair{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s and %s on %s read back as %q, not one line for each", live.RoutingTable, ProxyConfig, h.named(), said)
 	}
 	var read [2][]byte
@@ -335,7 +336,7 @@ func (h *Host) pairHeld(ctx context.Context) (routingPair, error) {
 		}
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
-			return routingPair{}, providerkit.Refuse(providerkit.CodeNotReady,
+			return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
 				"%s and %s on %s read back undecodable: %v", live.RoutingTable, ProxyConfig, h.named(), err)
 		}
 		read[at] = decoded
@@ -349,7 +350,7 @@ func (h *Host) tableHeld(ctx context.Context) (routingPair, error) {
 		return routingPair{}, err
 	}
 	if held.table == nil {
-		return routingPair{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s is missing on %s\nRun `ocel bootstrap` for this box's class", live.RoutingTable, h.named())
 	}
 	return held, nil
@@ -450,7 +451,7 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 		if file == ProxyConfig {
 			seeded += " or " + ProxyConfig
 		}
-		return "", nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return "", nil, refusal.Refuse(refusal.CodeNotReady,
 			"%s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's class",
 			seeded, h.named())
 	default:
@@ -466,7 +467,7 @@ func routingFiles(file string) string {
 }
 
 func (h *Host) movedUnder(expected tableDigest, result session.Result) error {
-	return providerkit.Refuse(providerkit.CodeBusy,
+	return refusal.Refuse(refusal.CodeBusy,
 		"%s on %s changed during this deploy (%s, expected %s); nothing was written\nRun the deploy again",
 		live.RoutingTable, h.named(), strings.TrimSpace(result.Stderr), expected)
 }
@@ -475,7 +476,7 @@ func unelevated(refused, why error) error {
 	if refused == nil {
 		return why
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%v\ncould not elevate: %v", why, refused)
 }
 
@@ -562,8 +563,8 @@ func (h *Host) replace(ctx context.Context, expected tableDigest, at string, ren
 }
 
 func moved(err error) bool {
-	var refusal providerkit.Refusal
-	return errors.As(err, &refusal) && refusal.Code == providerkit.CodeBusy
+	var refused refusal.Refusal
+	return errors.As(err, &refused) && refused.Code == refusal.CodeBusy
 }
 
 func gateCommand(window time.Duration, gates []string) []string {
@@ -621,7 +622,7 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (set by %q)\nstate: %s\nlogs (last %s lines): %s",
 			app.gate(), rel.DeployTimeout, healthKey, state, appLogTail, logs)
 	}
-	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
+	return Unserved{refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
 		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel, elevation))}
 }
@@ -636,19 +637,19 @@ func (h *Host) overtaken(ctx context.Context, rel Release, why error, elevation 
 func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	code := providerkit.CodeNotReady
+	code := refusal.CodeNotReady
 	written := routingFiles(h.front.File())
 	rolled := written + " untouched"
 	if moved(why) {
-		code = providerkit.CodeBusy
+		code = refusal.CodeBusy
 	} else if restored, err := h.putBack(ctx, cut, elevation); err != nil {
-		return providerkit.Refuse(code,
+		return refusal.Refuse(code,
 			"release %s onto %s: could not write %s: %v\n%s not restored: %v\n%s left standing",
 			rel.apps(), h.named(), written, why, written, err, rel.names())
 	} else if restored {
 		rolled = written + " restored"
 	}
-	return Unserved{providerkit.Refuse(code,
+	return Unserved{refusal.Refuse(code,
 		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s%s",
 		rel.apps(), h.named(), written, why, rolled, h.discard(ctx, rel, elevation))}
 }
@@ -667,11 +668,11 @@ func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome,
 		verdict = "no reason given"
 	}
 	if _, err := h.putBack(ctx, cut, elevation); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"release %s onto %s: the flip helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left standing: %v",
 			rel.apps(), h.named(), outcome, verdict, rel.names(), err)
 	}
-	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
+	return Unserved{refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the flip helper %s; the previous release is still live\n%s%s",
 		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel, elevation))}
 }

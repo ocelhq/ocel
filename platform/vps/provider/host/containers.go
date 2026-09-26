@@ -11,7 +11,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -32,18 +34,18 @@ const (
 	membersFormat    = `{{range .Containers}}{{.Name}}{{"\n"}}{{end}}`
 )
 
-func AppNetwork(class providerkit.Class, project string) string {
+func AppNetwork(class edge.Class, project string) string {
 	return appNetworkPrefix + string(class) + "-" + naming.Sanitize(project)
 }
 
-func networkLabels(class providerkit.Class, project string) []string {
+func networkLabels(class edge.Class, project string) []string {
 	return []string{
 		"--label", LabelClass + "=" + string(class),
 		"--label", LabelProject + "=" + naming.Sanitize(project),
 	}
 }
 
-func networkCreating(class providerkit.Class, project string) string {
+func networkCreating(class edge.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	create := "docker network create " + words(networkLabels(class, project)) + " " + network
 	return "set -e\n" +
@@ -55,7 +57,7 @@ func networkCreating(class providerkit.Class, project string) string {
 		"fi"
 }
 
-func networkStanding(class providerkit.Class, project string) string {
+func networkStanding(class edge.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	return networkCreating(class, project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 && " +
@@ -65,7 +67,7 @@ func networkStanding(class providerkit.Class, project string) string {
 		"fi"
 }
 
-func networkForgetting(class providerkit.Class, project string) string {
+func networkForgetting(class edge.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
@@ -79,10 +81,10 @@ func (h *Host) join(ctx context.Context, spec Container, elevation string) error
 	return h.joining(ctx, spec.App, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation)
 }
 
-func (h *Host) joining(ctx context.Context, who string, class providerkit.Class, project, command, elevation string) error {
+func (h *Host) joining(ctx context.Context, who string, class edge.Class, project, command, elevation string) error {
 	_, said, err := h.spoke(ctx, "put "+who+" on "+AppNetwork(class, project), command, nil, elevation)
 	if err != nil && strings.Contains(said, poolExhausted) {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s has no subnet left for %s: %s\n"+
 				"Add `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]` to /etc/docker/daemon.json and restart docker",
 			h.named(), AppNetwork(class, project), said)
@@ -90,7 +92,7 @@ func (h *Host) joining(ctx context.Context, who string, class providerkit.Class,
 	return err
 }
 
-func (h *Host) ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error {
+func (h *Host) ForgetNetwork(ctx context.Context, class edge.Class, project string) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
@@ -149,7 +151,7 @@ type Container struct {
 	Project string
 	App     string
 	Image   string
-	Class   providerkit.Class
+	Class   edge.Class
 
 	Env        map[string]string
 	HealthPath string
@@ -280,17 +282,17 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		}
 		switch {
 		case known && len(note.Handed) > 0:
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"%s is gone from this box and was handed %s, which a promotion cannot carry\nRun `ocel deploy`",
 				spec.Name, strings.Join(note.Handed, ", "))
 		case known:
 			spec.Manifest = note.Live
 		case len(spec.Declared) > 0:
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"%s is gone from this box, %s declares %s, and no note of its values remains\nRun `ocel deploy`",
 				spec.Name, spec.App, strings.Join(spec.Declared, ", "))
 		default:
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"%s is gone from this box and no note of its values remains\nRun `ocel deploy`",
 				spec.Name)
 		}
@@ -320,7 +322,7 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	return stood
 }
 
-func (h *Host) TakeDown(ctx context.Context, class providerkit.Class, name string) error {
+func (h *Host) TakeDown(ctx context.Context, class edge.Class, name string) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err

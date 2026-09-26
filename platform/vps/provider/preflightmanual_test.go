@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -42,7 +43,7 @@ func preflightingByHand(machine *scripted) error {
 	return p.PreflightDeploy(context.Background(), providerkit.DeployPreflight{
 		Plan: providerkit.DeployPlan{
 			Slug:  "shop",
-			Class: providerkit.ClassProduction,
+			Class: edge.ClassProduction,
 			Apps:  []providerkit.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 	})

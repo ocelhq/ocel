@@ -7,23 +7,25 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) ([]providerkit.AppContainer, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
 	}
 	if strings.TrimSpace(app.Image) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image", app.App)
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s has no health check path", app.App)
 	}
 	physical := host.ContainerName(plan.Ref.Name.String(), app.App, app.Deployment, app.Image)
@@ -44,7 +46,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}
 	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
 		if _, taken := app.Values.Delivered[owned]; taken {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)
 		}
 	}
@@ -68,7 +70,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress edge.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
@@ -87,7 +89,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRe
 }
 
 func liveEnvironment(ref providerkit.StackRef) string {
-	if ref.Class == providerkit.ClassProduction {
+	if ref.Class == edge.ClassProduction {
 		return ""
 	}
 	return ref.Name.Env

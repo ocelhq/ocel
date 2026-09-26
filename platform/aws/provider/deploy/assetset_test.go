@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func createRequest(args assetSetArgs, planning bool) infer.CreateRequest[assetSetArgs] {
@@ -195,7 +196,7 @@ func TestAPlannedAssetSetPushesNothing(t *testing.T) {
 	pushed := 0
 	pending.hold("prod.web.rel-1", []assetSet{{
 		name: staticAssetSetName,
-		push: func(context.Context, providerkit.Progress) error { pushed++; return nil },
+		push: func(context.Context, edge.Progress) error { pushed++; return nil },
 	}}, nil)
 
 	resource := &assetSetResource{pending: pending}

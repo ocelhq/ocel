@@ -16,8 +16,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const lifecycleSlug = "ocel-aws-e2e"
@@ -158,7 +158,7 @@ func plain(rendered string) string {
 
 func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *testing.T) {
 	run := lifecycle(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	run.account.emptied(t, class)
 	ctx := context.Background()
 

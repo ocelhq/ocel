@@ -109,7 +109,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	b := planningBootstrapper(front)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassProduction,
+		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -162,7 +162,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	b := planningBootstrapper(front)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:  providerkit.ClassProduction,
+		Class:  edge.ClassProduction,
 		Remove: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -203,7 +203,7 @@ func TestPlanShowsAnEdgeFeatureStandingUpBehindAnotherFront(t *testing.T) {
 	b.Kinds = kindsOf(selected, standing)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassProduction,
+		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudFrontEdge, bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -230,7 +230,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	b.Kinds = kindsOf(selected, standing)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassProduction,
+		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudFrontEdge},
 		Remove:   []string{bootstrap.FeatureCloudflareEdge},
 	})
@@ -255,7 +255,7 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 	b := planningBootstrapper(&teardownEdge{})
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassProduction,
+		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -274,7 +274,7 @@ func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
 	b := planningBootstrapper(&planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")})
 
 	_, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassProduction,
+		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") {
@@ -334,7 +334,7 @@ func TestPlanAsksTheEdgeWhatItHandsThisAccountToHold(t *testing.T) {
 
 	front := &adoptingEdge{refusal: errors.New("CLOUDFLARE_API_TOKEN was rejected")}
 	_, err := planningBootstrapper(front).Plan(context.Background(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassProduction,
+		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN was rejected") {
@@ -351,7 +351,7 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 	b := standingBootstrapper(t, bootstrap.ClassProduction)
 	cfn, buckets, iamfake := b.CFN.(*teardownCFN), b.Buckets.(*teardownBuckets), b.IAM.(*teardownIAM)
 
-	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 
@@ -387,7 +387,7 @@ func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	b := standingBootstrapper(t, bootstrap.ClassPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
-	if err := b.Remove(context.Background(), providerkit.ClassPreview, nil); err != nil {
+	if err := b.Remove(context.Background(), edge.ClassPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if _, held := b.SSM.(*teardownSSM).params[passphraseParam]; !held {
@@ -563,7 +563,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	cfn := b.CFN.(*teardownCFN)
 	gate := providerkit.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
 
-	standing, err := gate.State(context.Background(), providerkit.ClassProduction)
+	standing, err := gate.State(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Standing: %v", err)
 	}

@@ -18,6 +18,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestTranslateFunctionSpec(t *testing.T) {
@@ -128,21 +129,21 @@ func TestExecutionFor(t *testing.T) {
 	t.Run("an architecture nothing runs on is refused by name", func(t *testing.T) {
 		t.Parallel()
 		_, err := executionFor(providerkit.Framework{Name: providerkit.FrameworkGo, Arch: "riscv"})
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-			t.Fatalf("executionFor(riscv) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+			t.Fatalf("executionFor(riscv) = %v, want a %s refusal", err, refusal.CodeInvalid)
 		}
-		if !strings.Contains(refusal.Error(), "riscv") {
-			t.Errorf("refusal %q does not name riscv", refusal.Error())
+		if !strings.Contains(refused.Error(), "riscv") {
+			t.Errorf("refusal %q does not name riscv", refused.Error())
 		}
 	})
 
 	t.Run("a runtime this provider does not have is refused", func(t *testing.T) {
 		t.Parallel()
 		_, err := executionFor(providerkit.Framework{Name: "deno"})
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-			t.Fatalf("executionFor(deno) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+			t.Fatalf("executionFor(deno) = %v, want a %s refusal", err, refusal.CodeInvalid)
 		}
 	})
 }

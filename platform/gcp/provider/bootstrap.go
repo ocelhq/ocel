@@ -22,6 +22,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -73,7 +75,7 @@ func (g bootstrapGate) stood(ctx context.Context) (bootstrap, error) {
 	return bootstrap{clients: held, fronts: g.p.Edges()}, nil
 }
 
-func (g bootstrapGate) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
+func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return providerkit.BootstrapReading{}, err
@@ -89,7 +91,7 @@ func (g bootstrapGate) Plan(ctx context.Context, req providerkit.BootstrapReques
 	return b.Plan(ctx, req)
 }
 
-func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return err
@@ -97,7 +99,7 @@ func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapReque
 	return b.Apply(ctx, req, progress)
 }
 
-func (g bootstrapGate) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -105,7 +107,7 @@ func (g bootstrapGate) PlanRemove(ctx context.Context, class providerkit.Class) 
 	return b.PlanRemove(ctx, class)
 }
 
-func (g bootstrapGate) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return err
@@ -118,7 +120,7 @@ type bootstrap struct {
 	fronts  providerkit.Edges
 }
 
-func (b bootstrap) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
+func (b bootstrap) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
 		return providerkit.BootstrapReading{}, err
@@ -217,11 +219,11 @@ func planned(read survey, items []item) []providerkit.Change {
 	return changes
 }
 
-func sharedWith(class providerkit.Class) string {
+func sharedWith(class edge.Class) string {
 	return fmt.Sprintf(reasonShared, siblingOf(class))
 }
 
-func (b bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (b bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	read, err := b.held(ctx, req)
 	if err != nil {
 		return err
@@ -273,7 +275,7 @@ func stampHolder(items []item, holder item) item {
 	return holder
 }
 
-func (b bootstrap) stand(ctx context.Context, read survey, held item, progress providerkit.Progress) error {
+func (b bootstrap) stand(ctx context.Context, read survey, held item, progress edge.Progress) error {
 	if mends := read.mends(held); mends != "" {
 		if err := b.mend(ctx, read, held); err != nil {
 			return err
@@ -322,7 +324,7 @@ func (b bootstrap) make(ctx context.Context, read survey, held item) error {
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, held.Name)
 	default:
-		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing stands up a %s", held.Kind)
+		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing stands up a %s", held.Kind)
 	}
 }
 
@@ -359,7 +361,7 @@ func (b bootstrap) stampRefusal(ctx context.Context, read survey, err error) err
 		return fmt.Errorf("write %s: %w", StampObject, err)
 	}
 	read.Stamp.Writer = b.writerNow(ctx, read)
-	return providerkit.Refuse(providerkit.CodeBusy,
+	return refusal.Refuse(refusal.CodeBusy,
 		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same class interleaving leave a stack neither of them describes.\n"+
 			"Wait for that run to finish, then try again",
 		writerNamed(read.Stamp.Writer), StampObject, read.Names.Bucket(read.Class))
@@ -576,7 +578,7 @@ func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 	return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, refused)
 }
 
-func (b bootstrap) takeAccount(ctx context.Context, class providerkit.Class, name string) error {
+func (b bootstrap) takeAccount(ctx context.Context, class edge.Class, name string) error {
 	if err := b.forgetReads(ctx, class); err != nil {
 		return err
 	}
@@ -711,7 +713,7 @@ func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey) er
 	if held.LocationId == read.Region {
 		return b.protectDatabase(ctx)
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"project %s already holds the %q Firestore database in %s and Firestore never moves one, "+
 			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
 			"Bootstrap this project in %s, or deploy into a project with no %q database",
@@ -762,7 +764,7 @@ type removal struct {
 	reason string
 }
 
-func (b bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -850,13 +852,13 @@ func removing(read survey, held item) removal {
 	return taking
 }
 
-func (b bootstrap) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
 	read, err := b.survey(ctx, class)
 	if err != nil {
 		return err
 	}
 	if read.stateOf != "" {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s still holds the state of %s, and removing the bucket a stack is recorded in strands what that stack stood up.\n"+
 				"Run `%s` in every project deployed here first",
 			read.Names.StateBucket(class), read.stateOf, destroyIn(class))
@@ -887,8 +889,8 @@ func (b bootstrap) Remove(ctx context.Context, class providerkit.Class, progress
 	return nil
 }
 
-func destroyIn(class providerkit.Class) string {
-	if class == providerkit.ClassPreview {
+func destroyIn(class edge.Class) string {
+	if class == edge.ClassPreview {
 		return "ocel destroy preview"
 	}
 	return "ocel destroy production"
@@ -909,7 +911,7 @@ func (b bootstrap) take(ctx context.Context, read survey, held item) error {
 	case KindServiceAccount:
 		return b.takeAccount(ctx, read.Class, held.Name)
 	default:
-		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
+		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
 	}
 }
 
@@ -1033,7 +1035,7 @@ func (b bootstrap) takeBucket(ctx context.Context, name string) error {
 	return nil
 }
 
-func say(progress providerkit.Progress, message string) {
+func say(progress edge.Progress, message string) {
 	if progress != nil {
 		progress.Say(message)
 	}

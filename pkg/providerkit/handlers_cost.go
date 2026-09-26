@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -89,7 +90,7 @@ func (h *handlers) Price(ctx context.Context, req *costv1.PriceRequest) (*costv1
 	estimated, err := cost.Estimate(ctx, req)
 	var usage *costkit.UsageError
 	if errors.As(err, &usage) {
-		return nil, RefusalError(Refuse(CodeInvalid, "%s", err))
+		return nil, RefusalError(refusal.Refuse(refusal.CodeInvalid, "%s", err))
 	}
 	if err != nil {
 		return nil, RefusalError(err)

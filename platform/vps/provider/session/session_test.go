@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestAMasterThatHasAlreadyIdledOutIsClosedWithoutComplaint(t *testing.T) {
@@ -58,9 +58,9 @@ const (
 	keyed    = "echo '203.0.113.10 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl'"
 )
 
-func refusedCode(t *testing.T, err error) providerkit.Code {
+func refusedCode(t *testing.T, err error) refusal.Code {
 	t.Helper()
-	var refused providerkit.Refusal
+	var refused refusal.Refusal
 	if !errors.As(err, &refused) {
 		t.Fatalf("%v is no refusal the CLI can render", err)
 	}
@@ -70,12 +70,12 @@ func refusedCode(t *testing.T, err error) providerkit.Code {
 func TestAHostThatCannotBeReachedIsNotReadyRatherThanDenied(t *testing.T) {
 	for name, tc := range map[string]struct {
 		resolving, scanning string
-		want                providerkit.Code
+		want                refusal.Code
 	}{
-		"a destination ssh cannot make sense of": {"echo 'command-line line 0: Bad configuration option: foo' >&2; exit 255", keyed, providerkit.CodeInvalid},
-		"a host no name resolves to":             {resolved, "echo 'getaddrinfo box.invalid: Name or service not known' >&2; exit 1", providerkit.CodeNotReady},
-		"a port that never answers":              {resolved, "echo 'connect to 203.0.113.10 port 22: Connection timed out' >&2; exit 1", providerkit.CodeNotReady},
-		"a port that answers with no host key":   {resolved, "exit 0", providerkit.CodeNotReady},
+		"a destination ssh cannot make sense of": {"echo 'command-line line 0: Bad configuration option: foo' >&2; exit 255", keyed, refusal.CodeInvalid},
+		"a host no name resolves to":             {resolved, "echo 'getaddrinfo box.invalid: Name or service not known' >&2; exit 1", refusal.CodeNotReady},
+		"a port that never answers":              {resolved, "echo 'connect to 203.0.113.10 port 22: Connection timed out' >&2; exit 1", refusal.CodeNotReady},
+		"a port that answers with no host key":   {resolved, "exit 0", refusal.CodeNotReady},
 	} {
 		t.Run(name, func(t *testing.T) {
 			sshSaying(t, tc.resolving, tc.scanning, "exit 0")
@@ -89,13 +89,13 @@ func TestAHostThatCannotBeReachedIsNotReadyRatherThanDenied(t *testing.T) {
 
 func TestSSHIsDeniedOnlyWhenTheHostRefusedTheLogin(t *testing.T) {
 	box := &Session{target: Target{Host: "203.0.113.10", User: "ubuntu"}, dest: Destination{User: "ubuntu", Written: "203.0.113.10"}}
-	for said, want := range map[string]providerkit.Code{
-		"ubuntu@203.0.113.10: Permission denied (publickey).":                                     providerkit.CodeDenied,
-		"Received disconnect from 203.0.113.10 port 22:2: Too many authentication failures":       providerkit.CodeDenied,
-		"ssh: connect to host 203.0.113.10 port 22: Connection refused":                           providerkit.CodeNotReady,
-		"ssh: connect to host 203.0.113.10 port 22: Connection timed out":                         providerkit.CodeNotReady,
-		"Connection to 203.0.113.10 closed by remote host.":                                       providerkit.CodeNotReady,
-		"kex_exchange_identification: read: Connection reset by peer\r\nConnection reset by peer": providerkit.CodeNotReady,
+	for said, want := range map[string]refusal.Code{
+		"ubuntu@203.0.113.10: Permission denied (publickey).":                                     refusal.CodeDenied,
+		"Received disconnect from 203.0.113.10 port 22:2: Too many authentication failures":       refusal.CodeDenied,
+		"ssh: connect to host 203.0.113.10 port 22: Connection refused":                           refusal.CodeNotReady,
+		"ssh: connect to host 203.0.113.10 port 22: Connection timed out":                         refusal.CodeNotReady,
+		"Connection to 203.0.113.10 closed by remote host.":                                       refusal.CodeNotReady,
+		"kex_exchange_identification: read: Connection reset by peer\r\nConnection reset by peer": refusal.CodeNotReady,
 	} {
 		sshSaying(t, resolved, keyed, "printf '%s\\n' "+quotedForTest(said)+" >&2; exit 255")
 		_, err := box.Stream(context.Background(), "true", nil)
@@ -115,8 +115,8 @@ func TestACommandTheHostRanAndThatFailedIsNeverDenied(t *testing.T) {
 	} {
 		sshSaying(t, resolved, keyed, "printf '%s\\n' "+quotedForTest(said)+" >&2; exit 1")
 		_, err := box.Run(context.Background(), "id -u")
-		if got := refusedCode(t, err); got != providerkit.CodeNotReady {
-			t.Errorf("a command that ran and said %q is refused %q, want %q: the host accepted the login, and what the command hit is no credential problem", said, got, providerkit.CodeNotReady)
+		if got := refusedCode(t, err); got != refusal.CodeNotReady {
+			t.Errorf("a command that ran and said %q is refused %q, want %q: the host accepted the login, and what the command hit is no credential problem", said, got, refusal.CodeNotReady)
 		}
 	}
 }

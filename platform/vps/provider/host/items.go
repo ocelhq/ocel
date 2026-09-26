@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -43,19 +43,19 @@ const rootOwner = "root"
 
 const stateOwner = deployUser
 
-func ClassDir(class providerkit.Class) string { return classRoot + "/" + string(class) }
+func ClassDir(class edge.Class) string { return classRoot + "/" + string(class) }
 
-func StampPath(class providerkit.Class) string { return ClassDir(class) + "/" + stampFile }
+func StampPath(class edge.Class) string { return ClassDir(class) + "/" + stampFile }
 
-func SealKeyPath(class providerkit.Class) string { return ClassDir(class) + "/" + sealKeyFile }
+func SealKeyPath(class edge.Class) string { return ClassDir(class) + "/" + sealKeyFile }
 
-func sudoersSeal(class providerkit.Class) string { return sudoersSealPrefix + string(class) }
+func sudoersSeal(class edge.Class) string { return sudoersSealPrefix + string(class) }
 
-func StateDir(class providerkit.Class) string { return stateRoot + "/" + string(class) }
+func StateDir(class edge.Class) string { return stateRoot + "/" + string(class) }
 
 func ReleasesDir() string { return releasesRoot }
 
-func RecordsDir(class providerkit.Class) string { return StateDir(class) + "/records" }
+func RecordsDir(class edge.Class) string { return StateDir(class) + "/records" }
 
 type Item struct {
 	Kind    string
@@ -63,7 +63,7 @@ type Item struct {
 	Mode    fs.FileMode
 	Owner   string
 	Content []byte
-	Class   providerkit.Class
+	Class   edge.Class
 	Watch   []string
 	Slow    bool
 	Note    string
@@ -72,14 +72,14 @@ type Item struct {
 	rendered *Item
 }
 
-func ClassItems(class providerkit.Class) []Item {
+func ClassItems(class edge.Class) []Item {
 	return []Item{
 		dir(classRoot, 0o755, rootOwner, ""),
 		dir(ClassDir(class), 0o755, rootOwner, ""),
 	}
 }
 
-func StorageItems(class providerkit.Class, keys []byte) []Item {
+func StorageItems(class edge.Class, keys []byte) []Item {
 	return []Item{
 		dir(helperRoot, 0o755, rootOwner, ""),
 		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "deploy records"},
@@ -97,7 +97,7 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 	}
 }
 
-func Items(class providerkit.Class, keys []byte, arch string, front Front) []Item {
+func Items(class edge.Class, keys []byte, arch string, front Front) []Item {
 	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), ProxyItems(arch, front), BackupItems())
 }
 

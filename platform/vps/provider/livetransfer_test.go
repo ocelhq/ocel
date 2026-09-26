@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -191,7 +192,7 @@ func wrappedAsADeployDoes(ctx context.Context, daemon providerkit.DockerHost, cl
 
 func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
 
@@ -232,7 +233,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 
 func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestASurveyLineCutShortIsRefusedRatherThanRead(t *testing.T) {
@@ -17,7 +17,7 @@ func TestASurveyLineCutShortIsRefusedRatherThanRead(t *testing.T) {
 		"a probe naming only a kind":  {kindUnreadable + "\t", "could not check"},
 	} {
 		_, _, err := readSurvey(probe.line + "\n")
-		var refusal providerkit.Refusal
+		var refusal refusal.Refusal
 		if !errors.As(err, &refusal) {
 			t.Errorf("readSurvey over %s = %v, want a refusal rather than a host read as carrying nothing", what, err)
 			continue

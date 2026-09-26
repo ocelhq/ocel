@@ -5,8 +5,10 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -63,12 +65,12 @@ func FromManifest(raw []byte) (*live.Values, error) {
 	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Cipher) *live.Values {
+func Over(manifest vars.Manifest, records records.Store, sealer records.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: values.View{
 			Records:     records,
 			Cipher:      sealer,
-			Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},
+			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),

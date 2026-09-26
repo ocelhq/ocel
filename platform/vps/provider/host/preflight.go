@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
@@ -27,15 +29,15 @@ func (h *Host) CheckEngine(ctx context.Context) error {
 		return nil
 	}
 	if deniedSocket(result.Stderr) {
-		return providerkit.Refuse(providerkit.CodeDenied,
+		return refusal.Refuse(refusal.CodeDenied,
 			"%s is refused by the docker socket: %s\n"+
 				"Add the login to the %q group; `ocel bootstrap %s` does it for %s",
-			h.named(), spoken(result), dockerGroup, providerkit.ClassProduction, deployUser)
+			h.named(), spoken(result), dockerGroup, edge.ClassProduction, deployUser)
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s cannot run docker: %s\n"+
 			"Run `ocel bootstrap %s` or install docker",
-		h.named(), spoken(result), providerkit.ClassProduction)
+		h.named(), spoken(result), edge.ClassProduction)
 }
 
 type Held struct {
@@ -134,7 +136,7 @@ func occupied(said string) (int64, bool) {
 }
 
 func unread(what, said string) error {
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"this host answered %q for %s", said, what)
 }
 
@@ -162,7 +164,7 @@ func (h *Host) CheckDisk(ctx context.Context, repositories []string) error {
 	if room.Free >= wanted {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s has %s free on %s; this deploy needs %s: %s\n"+
 			"Free space on %s",
 		h.named(), sized(room.Free), room.Root, sized(wanted), arithmetic(room), room.Root)
@@ -251,10 +253,10 @@ func (h *Host) answers(ctx context.Context, asked boxContainer, elevation string
 	if err := h.containerTrouble(asked.name, state); err != nil {
 		return err
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s on %s %s: %s\n"+
 			"Run `ocel bootstrap %s`",
-		asked.name, h.named(), asked.unready, spoken(result), providerkit.ClassProduction)
+		asked.name, h.named(), asked.unready, spoken(result), edge.ClassProduction)
 }
 
 const (
@@ -266,25 +268,25 @@ func (h *Host) containerTrouble(name, state string) error {
 	status := stateField(state, "Status")
 	switch {
 	case status == "":
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s: %s\n"+
 				"Run `ocel bootstrap %s`",
-			name, h.named(), state, providerkit.ClassProduction)
+			name, h.named(), state, edge.ClassProduction)
 	case status == proxyRestarting:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s keeps restarting: %s\n"+
 				"Check `docker logs %s`",
 			name, h.named(), state, name)
 	case status == proxyExited:
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s has exited: %s\n"+
 				"Run `docker start %s` or `ocel bootstrap %s`",
-			name, h.named(), state, name, providerkit.ClassProduction)
+			name, h.named(), state, name, edge.ClassProduction)
 	case status != "running":
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"%s on %s is %s, not running: %s\n"+
 				"Run `docker start %s` or `ocel bootstrap %s`",
-			name, h.named(), status, state, name, providerkit.ClassProduction)
+			name, h.named(), status, state, name, edge.ClassProduction)
 	}
 	return nil
 }
@@ -310,7 +312,7 @@ func (h *Host) ServingPortsHeld(ctx context.Context) error {
 	if len(found) == 0 {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s must hold ports %s: %s",
 		holder, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
 }
@@ -329,10 +331,10 @@ func (h *Host) ownProxyTrouble(ctx context.Context) ([]string, error) {
 		case held.ours:
 		case len(held.bound) > 0:
 			found = append(found, fmt.Sprintf("port %s is bound outside docker at %s; stop it and run `ocel bootstrap %s`",
-				held.port, strings.Join(listeners.Lines(held.bound), ", "), providerkit.ClassProduction))
+				held.port, strings.Join(listeners.Lines(held.bound), ", "), edge.ClassProduction))
 		default:
 			found = append(found, fmt.Sprintf("nothing holds port %s; run `ocel bootstrap %s`",
-				held.port, providerkit.ClassProduction))
+				held.port, edge.ClassProduction))
 		}
 	}
 	return found, nil
@@ -475,7 +477,7 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 	if len(stopped) > 0 {
 		freed = append([]string{"stop " + strings.Join(stopped, " and ")}, freed...)
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from %s, or %s and run `%s`\n"+
 			"See %s",

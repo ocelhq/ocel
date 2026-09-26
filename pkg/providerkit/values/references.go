@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
 type Reference struct {
@@ -98,7 +98,7 @@ func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate
 func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, target Target) error {
 	to := Scope{Project: target.Project, Class: scope.Class}
 	name := refName(to, Coordinate{Cell: target.Cell}, scope, at)
-	held, err := ports.ReadOrEmpty(ctx, s.Records, name)
+	held, err := records.ReadOrEmpty(ctx, s.Records, name)
 	if err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}
@@ -111,7 +111,7 @@ func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, t
 
 func (s Store) unindexReference(ctx context.Context, scope Scope, at Coordinate, target *Target) error {
 	to := Scope{Project: target.Project, Class: scope.Class}
-	if err := ports.Forget(ctx, s.Records, refName(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
+	if err := records.Forget(ctx, s.Records, refName(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
 		return fmt.Errorf("forget that %s references %s: %w", at, target, err)
 	}
 	return nil

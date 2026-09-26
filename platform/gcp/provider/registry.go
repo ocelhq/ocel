@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const registryUser = "oauth2accesstoken"
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, class providerkit.Class, _ []string) (providerkit.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ []string) (providerkit.RegistryTarget, error) {
 	if p.emulated() {
 		return providerkit.RegistryTarget{}, nil
 	}

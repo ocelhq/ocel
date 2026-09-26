@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -56,8 +56,8 @@ func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
 	for _, name := range names {
 		helperWrite(t, dir, name, "", "body of "+name)
 	}
-	records := live.Records{Root: dir}
-	held, err := records.Read(context.Background(), providerkit.RecordName{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"})
+	store := live.Records{Root: dir}
+	held, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"})
 	if err != nil {
 		t.Fatalf("Read() of what the helper wrote = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
 	if revision, _ := helperRead(t, dir, names[0]); string(held.Revision) != revision {
 		t.Errorf("Read() carries revision %q, and the helper says %q", held.Revision, revision)
 	}
-	listed, err := records.List(context.Background(), providerkit.RecordName{"values", "shop", "production", "cells"})
+	listed, err := store.List(context.Background(), records.Name{"values", "shop", "production", "cells"})
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want the two cells the helper wrote", listed, err)
 	}

@@ -3,7 +3,7 @@ package host
 import (
 	"encoding/json"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -19,7 +19,7 @@ type Stamp struct {
 	Digests map[string]string `json:"digests"`
 }
 
-func (s Stamp) item(class providerkit.Class) (Item, error) {
+func (s Stamp) item(class edge.Class) (Item, error) {
 	written, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return Item{}, err

@@ -17,8 +17,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -64,7 +66,7 @@ type substrate struct {
 }
 
 type substrateWork struct {
-	class    providerkit.Class
+	class    edge.Class
 	boundary string
 	tags     map[string]string
 	outputs  auto.OutputMap
@@ -72,15 +74,15 @@ type substrateWork struct {
 
 const cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 
-func substrateRef(class providerkit.Class) providerkit.StackRef {
+func substrateRef(class edge.Class) providerkit.StackRef {
 	return providerkit.StackRef{Project: SubstrateSlug, Class: class, Name: naming.InfraStack(string(class))}
 }
 
-func substrateName(class providerkit.Class, parts ...string) string {
+func substrateName(class edge.Class, parts ...string) string {
 	return naming.Join(naming.WordSeparator, append([]string{SubstrateSlug, string(class)}, parts...)...)
 }
 
-func substrateTags(class providerkit.Class) map[string]string {
+func substrateTags(class edge.Class) map[string]string {
 	return map[string]string{
 		"ocel:managed-by": "ocel",
 		"ocel:project":    SubstrateSlug,
@@ -89,15 +91,15 @@ func substrateTags(class providerkit.Class) map[string]string {
 	}
 }
 
-func consumersRecord(class providerkit.Class) ports.RecordName {
+func consumersRecord(class edge.Class) records.Name {
 	return append(providerkit.StacksRecord(class, SubstrateSlug), substrateConsumers)
 }
 
-func consumerRecord(ref providerkit.StackRef) ports.RecordName {
+func consumerRecord(ref providerkit.StackRef) records.Name {
 	return append(consumersRecord(ref.Class), ref.Project, ref.Name.String())
 }
 
-func leaseRecord(class providerkit.Class) ports.RecordName {
+func leaseRecord(class edge.Class) records.Name {
 	return append(providerkit.StacksRecord(class, SubstrateSlug), substrateLease)
 }
 
@@ -105,7 +107,7 @@ type lease struct {
 	Destroying bool `json:"destroying,omitempty"`
 }
 
-func leaseOf(record ports.Record) (lease, error) {
+func leaseOf(record records.Record) (lease, error) {
 	var held lease
 	if len(record.Bytes) == 0 {
 		return held, nil
@@ -116,7 +118,7 @@ func leaseOf(record ports.Record) (lease, error) {
 	return held, nil
 }
 
-func writeLease(ctx context.Context, records providerkit.RecordStore, record ports.Record, held lease) error {
+func writeLease(ctx context.Context, records records.Store, record records.Record, held lease) error {
 	encoded, err := json.Marshal(held)
 	if err != nil {
 		return fmt.Errorf("encode the container substrate lease: %w", err)
@@ -126,11 +128,11 @@ func writeLease(ctx context.Context, records providerkit.RecordStore, record por
 	return err
 }
 
-func (r *Stacks) substrateFor(ctx context.Context, class providerkit.Class) (*release, error) {
+func (r *Stacks) substrateFor(ctx context.Context, class edge.Class) (*release, error) {
 	return r.at(ctx, substrateRef(class), "")
 }
 
-func (r *Stacks) readSubstrate(ctx context.Context, class providerkit.Class) (substrate, bool, error) {
+func (r *Stacks) readSubstrate(ctx context.Context, class edge.Class) (substrate, bool, error) {
 	held, err := r.substrateFor(ctx, class)
 	if err != nil {
 		return substrate{}, false, err
@@ -150,7 +152,7 @@ func (r *Stacks) readSubstrate(ctx context.Context, class providerkit.Class) (su
 	return decoded, err == nil, err
 }
 
-func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (substrate, error) {
+func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (substrate, error) {
 	r.substrates.Lock()
 	defer r.substrates.Unlock()
 	class := ref.Class
@@ -210,9 +212,9 @@ func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) e
 	if err != nil {
 		return err
 	}
-	records := owner.cfg.Records
+	store := owner.cfg.Records
 	for range leaseAttempts {
-		held, err := ports.ReadOrEmpty(ctx, records, leaseRecord(ref.Class))
+		held, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
 		if err != nil {
 			return err
 		}
@@ -222,44 +224,44 @@ func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) e
 		}
 		if state.Destroying {
 			return errors.Join(
-				providerkit.Refuse(providerkit.CodeBusy,
+				refusal.Refuse(refusal.CodeBusy,
 					"the container substrate for the %s class is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will stand a fresh one up", ref.Class),
-				ports.Forget(ctx, records, consumerRecord(ref)))
+				records.Forget(ctx, store, consumerRecord(ref)))
 		}
-		record, err := ports.ReadOrEmpty(ctx, records, consumerRecord(ref))
+		record, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
 		if err != nil {
 			return err
 		}
 		record.Bytes = []byte("{}")
-		if _, err := records.Write(ctx, record); err != nil && !errors.Is(err, ports.ErrStale) {
+		if _, err := store.Write(ctx, record); err != nil && !errors.Is(err, records.ErrStale) {
 			return fmt.Errorf("record %s as a consumer of the container substrate: %w", ref.Name, err)
 		}
-		err = writeLease(ctx, records, held, state)
+		err = writeLease(ctx, store, held, state)
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, ports.ErrStale) {
+		if !errors.Is(err, records.ErrStale) {
 			return fmt.Errorf("hold the container substrate for %s: %w", ref.Name, err)
 		}
 	}
-	return providerkit.Refuse(providerkit.CodeBusy,
+	return refusal.Refuse(refusal.CodeBusy,
 		"the container substrate for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
 }
 
-func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.RecordStore, ref providerkit.StackRef, progress providerkit.Progress) error {
-	if records == nil {
+func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref providerkit.StackRef, progress edge.Progress) error {
+	if store == nil {
 		return nil
 	}
 	r.substrates.Lock()
 	defer r.substrates.Unlock()
-	held, err := ports.ReadOrEmpty(ctx, records, consumerRecord(ref))
+	held, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
 	if err != nil {
 		return err
 	}
 	if len(held.Bytes) == 0 {
 		return nil
 	}
-	leased, err := ports.ReadOrEmpty(ctx, records, leaseRecord(ref.Class))
+	leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
 	if err != nil {
 		return err
 	}
@@ -267,14 +269,14 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.Recor
 	if err != nil {
 		return err
 	}
-	if err := ports.Forget(ctx, records, consumerRecord(ref)); err != nil {
+	if err := records.Forget(ctx, store, consumerRecord(ref)); err != nil {
 		return err
 	}
 	owner, err := r.substrateFor(ctx, ref.Class)
 	if err != nil {
 		return err
 	}
-	remaining, err := records.List(ctx, consumersRecord(ref.Class))
+	remaining, err := store.List(ctx, consumersRecord(ref.Class))
 	if err != nil {
 		return err
 	}
@@ -282,8 +284,8 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.Recor
 		return nil
 	}
 	state.Destroying = true
-	if err := writeLease(ctx, records, leased, state); err != nil {
-		if errors.Is(err, ports.ErrStale) {
+	if err := writeLease(ctx, store, leased, state); err != nil {
+		if errors.Is(err, records.ErrStale) {
 			return nil
 		}
 		return fmt.Errorf("mark the container substrate for the %s class as going down: %w", ref.Class, err)
@@ -295,13 +297,13 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.Recor
 	if err := owner.automation.Destroy(ctx, substrate, progress); err != nil {
 		return fmt.Errorf("take down the container substrate for the %s class: %w", ref.Class, err)
 	}
-	if err := providerkit.ForgetStack(ctx, records, ref.Class, SubstrateSlug, substrate.Name); err != nil {
+	if err := providerkit.ForgetStack(ctx, store, ref.Class, SubstrateSlug, substrate.Name); err != nil {
 		return err
 	}
-	if err := ports.Forget(ctx, records, awsports.ContainerFrontRecord(ref.Class)); err != nil {
+	if err := records.Forget(ctx, store, awsports.ContainerFrontRecord(ref.Class)); err != nil {
 		return err
 	}
-	return ports.Forget(ctx, records, leaseRecord(ref.Class))
+	return records.Forget(ctx, store, leaseRecord(ref.Class))
 }
 
 func (w *substrateWork) run(ctx *pulumi.Context) error {

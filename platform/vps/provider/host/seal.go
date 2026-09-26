@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 //go:embed seal.py
@@ -29,11 +31,11 @@ type Seal struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
-func sealKey(class providerkit.Class) Item {
+func sealKey(class edge.Class) Item {
 	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class, Note: "seals secret values"}
 }
 
-func sealSudoers(class providerkit.Class) []byte {
+func sealSudoers(class edge.Class) []byte {
 	allowed := make([]string, 0, 2)
 	for _, verb := range []string{"seal", "open"} {
 		allowed = append(allowed, SealHelper+" "+string(class)+" "+verb+" *")
@@ -65,15 +67,15 @@ func (s sshSeal) Seal(ctx context.Context, what string, argv []string, stdin io.
 	return s.host.granted(ctx, what, argv, stdin)
 }
 
-func (s *Cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
+func (s *Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
 	return s.through(ctx, "seal", at, plaintext)
 }
 
-func (s *Cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
+func (s *Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
 	return s.through(ctx, "open", at, sealed)
 }
 
-func (s *Cipher) through(ctx context.Context, verb string, at providerkit.SealScope, body []byte) ([]byte, error) {
+func (s *Cipher) through(ctx context.Context, verb string, at records.SealScope, body []byte) ([]byte, error) {
 	argv, err := sealArgv(verb, at)
 	if err != nil {
 		return nil, err
@@ -85,15 +87,15 @@ func (s *Cipher) through(ctx context.Context, verb string, at providerkit.SealSc
 	}
 	written, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rendered))
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied,
+		return nil, refusal.Refuse(refusal.CodeDenied,
 			"the seal helper answered a %s with %d unreadable bytes", verb, len(rendered))
 	}
 	return written, nil
 }
 
-func sealArgv(verb string, at providerkit.SealScope) ([]string, error) {
+func sealArgv(verb string, at records.SealScope) ([]string, error) {
 	if at.Class == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s names no class", at.Name)
 	}
 	argv := []string{SealHelper, string(at.Class), verb}
@@ -105,7 +107,7 @@ func sealArgv(verb string, at providerkit.SealScope) ([]string, error) {
 		{"name", at.Name},
 	} {
 		if named[1] == "" && named[0] != "binding" {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"a value's coordinate names no %s", named[0])
 		}
 		argv = append(argv, "--"+named[0], named[1])
@@ -124,4 +126,4 @@ elif [ -f ` + name + " ]; then printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' " +
 fi`
 }
 
-var _ providerkit.Cipher = (*Cipher)(nil)
+var _ records.Cipher = (*Cipher)(nil)

@@ -12,6 +12,8 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -21,7 +23,7 @@ type artifacts struct {
 	p *Provider
 }
 
-func (a artifacts) bucket(ctx context.Context, class providerkit.Class) (*storage.BucketHandle, error) {
+func (a artifacts) bucket(ctx context.Context, class edge.Class) (*storage.BucketHandle, error) {
 	if class == "" {
 		return nil, ports.Classless("an artifact")
 	}
@@ -42,7 +44,7 @@ func objectName(ref providerkit.ArtifactRef) (string, error) {
 			return store + "/" + ref.Key, nil
 		}
 	}
-	return "", providerkit.Refuse(providerkit.CodeInvalid,
+	return "", refusal.Refuse(refusal.CodeInvalid,
 		"this provider keeps no %q store; it keeps %q, %q and %q",
 		ref.Bucket, providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache)
 }
@@ -97,16 +99,16 @@ func (a artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 	reader, err := object.NewReader(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrObjectNotExist) {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid, "no artifact at %s", object.ObjectName())
+			return nil, refusal.Refuse(refusal.CodeInvalid, "no artifact at %s", object.ObjectName())
 		}
 		return nil, a.storeless(ctx, ref.Class, fmt.Errorf("read %s: %w", object.ObjectName(), err))
 	}
 	return reader, nil
 }
 
-func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, progress providerkit.Progress) error {
+func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error {
 	if prefix == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"an empty prefix names every artifact this project keeps")
 	}
 	bucket, err := a.bucket(ctx, class)
@@ -153,10 +155,10 @@ func absent(err error) bool {
 	return errors.As(err, &answered) && answered.Code == http.StatusNotFound
 }
 
-func (a artifacts) storeless(ctx context.Context, class providerkit.Class, err error) error {
+func (a artifacts) storeless(ctx context.Context, class edge.Class, err error) error {
 	names, named := a.p.Names(ctx)
 	if named == nil && (errors.Is(err, storage.ErrBucketNotExist) || absent(err)) {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s bucket, so it has no %s artifact store yet.\nRun `%s` to create it, then try again",
 			names.Bucket(class), class, providerkit.BootstrapCommand(class))
 	}

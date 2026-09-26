@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -110,7 +111,7 @@ func TestTakingAContainerDownStopsItBeforeItIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	stand := machine(nil)
-	if err := stand.host().TakeDown(context.Background(), providerkit.ClassProduction, physical); err != nil {
+	if err := stand.host().TakeDown(context.Background(), edge.ClassProduction, physical); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
 	joined := strings.Join(stand.commands(), "\n")

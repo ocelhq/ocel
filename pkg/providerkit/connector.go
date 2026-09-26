@@ -4,6 +4,9 @@ import (
 	"context"
 	"slices"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ConnectorConfigEnvVar = "OCEL_CONNECTOR_CONFIG_JSON"
@@ -37,14 +40,14 @@ type ConnectorAddress struct {
 type Connector interface {
 	Target(ctx context.Context) (ConnectorTarget, error)
 
-	Install(ctx context.Context, install ConnectorInstall, progress Progress) (ConnectorAddress, error)
+	Install(ctx context.Context, install ConnectorInstall, progress edge.Progress) (ConnectorAddress, error)
 
-	Remove(ctx context.Context, progress Progress) error
+	Remove(ctx context.Context, progress edge.Progress) error
 }
 
 func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) {
 	if len(supported) == 0 {
-		return "", Refuse(CodeInvalid, "this target stands no connector, so it hands out no compute to run one on")
+		return "", refusal.Refuse(refusal.CodeInvalid, "this target stands no connector, so it hands out no compute to run one on")
 	}
 	if requested == "" {
 		return supported[0], nil
@@ -52,6 +55,6 @@ func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) 
 	if slices.Contains(supported, requested) {
 		return requested, nil
 	}
-	return "", Refuse(CodeInvalid, "this target runs the connector on %s; %s is not a compute it hands out",
+	return "", refusal.Refuse(refusal.CodeInvalid, "this target runs the connector on %s; %s is not a compute it hands out",
 		strings.Join(ComputeNames(supported), " or "), requested)
 }

@@ -166,7 +166,7 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 }
 
 func overrideEnvironment(cfg Config) string {
-	if cfg.Class != providerkit.ClassPreview {
+	if cfg.Class != edge.ClassPreview {
 		return ""
 	}
 	return cfg.Env

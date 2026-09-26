@@ -16,7 +16,7 @@ const (
 
 type Bootstrap struct {
 	mu       sync.Mutex
-	applied  map[providerkit.Class][]string
+	applied  map[edge.Class][]string
 	behind   map[string]bool
 	writer   string
 	schema   uint32
@@ -29,7 +29,7 @@ type Bootstrap struct {
 
 func NewBootstrap() *Bootstrap {
 	return &Bootstrap{
-		applied: map[providerkit.Class][]string{},
+		applied: map[edge.Class][]string{},
 		behind:  map[string]bool{},
 		writer:  "1.0.0",
 		schema:  providerkit.BootstrapSchema,
@@ -108,7 +108,7 @@ func (b *Bootstrap) Applied() []providerkit.BootstrapRequest {
 	return slices.Clone(b.requests)
 }
 
-func (b *Bootstrap) Describe(_ context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
+func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
@@ -123,7 +123,7 @@ func (b *Bootstrap) Describe(_ context.Context, class providerkit.Class) (provid
 	return described, nil
 }
 
-func stackNameOf(class providerkit.Class, feature string) string {
+func stackNameOf(class edge.Class, feature string) string {
 	name := "fake-" + string(class)
 	if feature != "" {
 		name += "-" + feature
@@ -131,7 +131,7 @@ func stackNameOf(class providerkit.Class, feature string) string {
 	return name
 }
 
-func (b *Bootstrap) stack(class providerkit.Class, feature string) providerkit.BootstrapStack {
+func (b *Bootstrap) stack(class edge.Class, feature string) providerkit.BootstrapStack {
 	return providerkit.BootstrapStack{
 		Name:          stackNameOf(class, feature),
 		Feature:       feature,
@@ -167,7 +167,7 @@ func (b *Bootstrap) named(described providerkit.BootstrapReading) providerkit.Bo
 	})
 }
 
-func (b *Bootstrap) Apply(_ context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (b *Bootstrap) Apply(_ context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.refusal != nil {
@@ -182,7 +182,7 @@ func (b *Bootstrap) Apply(_ context.Context, req providerkit.BootstrapRequest, p
 	return nil
 }
 
-func (b *Bootstrap) PlanRemove(_ context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (providerkit.Plan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
@@ -230,7 +230,7 @@ func (b *Bootstrap) standingEdges() []edge.Kind {
 	return []edge.Kind{b.front}
 }
 
-func (b *Bootstrap) Remove(_ context.Context, class providerkit.Class, progress providerkit.Progress) error {
+func (b *Bootstrap) Remove(_ context.Context, class edge.Class, progress edge.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.applied, class)

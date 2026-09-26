@@ -6,7 +6,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 //go:embed releases.sh
@@ -25,22 +26,22 @@ func Repository(imageRef string) (string, bool) {
 
 func Scope(project, app string) string { return naming.Sanitize(project) + "/" + app }
 
-func (h *Host) Promote(ctx context.Context, class providerkit.Class, project, app, imageRef string) error {
+func (h *Host) Promote(ctx context.Context, class edge.Class, project, app, imageRef string) error {
 	_, err := h.releases(ctx, "record "+imageRef+" as "+app+"'s release", "",
 		Scope(project, app), "promote", string(class), imageRef)
 	return err
 }
 
-func (h *Host) Forget(ctx context.Context, class providerkit.Class, project, app string) error {
+func (h *Host) Forget(ctx context.Context, class edge.Class, project, app string) error {
 	_, err := h.releases(ctx, "forget "+app+"'s releases", "",
 		Scope(project, app), "forget", string(class))
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress providerkit.Progress) error {
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress edge.Progress) error {
 	repository, named := Repository(imageRef)
 	if !named {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s runs %s, which names no repository and tag", app, imageRef)
 	}
 	elevation, err := h.reachDocker(ctx)

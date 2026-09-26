@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -19,7 +20,7 @@ func NewCredentials(region string) *Credentials { return &Credentials{region: re
 func (c *Credentials) Deny(hint string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.refusal = providerkit.Refuse(providerkit.CodeDenied, "%s", hint)
+	c.refusal = refusal.Refuse(refusal.CodeDenied, "%s", hint)
 }
 
 func (c *Credentials) Admit() {

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -135,7 +137,7 @@ func inventory(from *io.PipeReader, daemon, ref string) error {
 		lost = append(lost, digest)
 	}
 	sort.Strings(lost)
-	return Refuse(CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"the daemon at %s exported %s without %d of the blobs its manifest names (%s): the daemon no longer holds them, so the archive would load as an image with layers missing — rebuild the image and deploy again",
 		daemon, ref, len(lost), strings.Join(lost, ", "))
 }

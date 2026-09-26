@@ -112,7 +112,7 @@ func streamed(
 	stream *connect.ServerStream[progressv1.OperationEvent],
 	unit, title string,
 	phase progressv1.Phase,
-	do func(*eventStream, Progress) error,
+	do func(*eventStream, edge.Progress) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		if err := inUnit(sender, unit, title, phase, do); err != nil {
@@ -126,10 +126,10 @@ func inUnit(
 	sender *eventStream,
 	unit, title string,
 	phase progressv1.Phase,
-	do func(*eventStream, Progress) error,
+	do func(*eventStream, edge.Progress) error,
 ) error {
 	return newStageScope(sender).unit(UnitStage(unit, title), func(u *unitRun) error {
-		return u.phase(phase, func(progress Progress) error {
+		return u.phase(phase, func(progress edge.Progress) error {
 			return do(sender, progress)
 		})
 	})
@@ -145,7 +145,7 @@ type stageProgress struct {
 	stage  Stage
 }
 
-func newProgress(sender *eventStream, stage Stage) Progress {
+func newProgress(sender *eventStream, stage Stage) edge.Progress {
 	return &stageProgress{sender: sender, trace: newEventTrace(sender), stage: stage}
 }
 
@@ -157,7 +157,7 @@ func (r *stageProgress) Detail(message string) {
 	r.sender.send(logEvent(r.stage.ID, sanitizeMessage(message)))
 }
 
-func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...Attr) {
+func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...edge.Attr) {
 	r.trace.Span(newStageID(), r.stage.ID, sanitizeTitle(name), start, end, err, attrs...)
 }
 

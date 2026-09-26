@@ -13,7 +13,8 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type S3API interface {
@@ -31,7 +32,7 @@ type Artifacts struct {
 }
 
 type Stores interface {
-	Buckets(ctx context.Context, class kit.Class) (Buckets, error)
+	Buckets(ctx context.Context, class edge.Class) (Buckets, error)
 }
 
 type Buckets struct {
@@ -45,11 +46,11 @@ type CacheBucket struct {
 	S3   S3API
 }
 
-func (b Buckets) Buckets(context.Context, kit.Class) (Buckets, error) { return b, nil }
+func (b Buckets) Buckets(context.Context, edge.Class) (Buckets, error) { return b, nil }
 
-func (a Artifacts) buckets(ctx context.Context, class kit.Class) (Buckets, error) {
+func (a Artifacts) buckets(ctx context.Context, class edge.Class) (Buckets, error) {
 	if class == "" {
-		return Buckets{}, kit.Refuse(kit.CodeInvalid,
+		return Buckets{}, refusal.Refuse(refusal.CodeInvalid,
 			"an artifact names no class, and this account keeps each class's artifacts in the bootstrap that owns them")
 	}
 	if a.Stores == nil {
@@ -58,7 +59,7 @@ func (a Artifacts) buckets(ctx context.Context, class kit.Class) (Buckets, error
 	return a.Stores.Buckets(ctx, class)
 }
 
-func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (string, S3API, error) {
+func (a Artifacts) bucket(ctx context.Context, class edge.Class, store string) (string, S3API, error) {
 	held, err := a.buckets(ctx, class)
 	if err != nil {
 		return "", nil, err
@@ -71,19 +72,19 @@ func (a Artifacts) bucket(ctx context.Context, class kit.Class, store string) (s
 		name = held.Assets
 	case providerkit.StoreCache:
 		if len(held.Caches) > 1 {
-			return "", nil, kit.Refuse(kit.CodeInvalid,
+			return "", nil, refusal.Refuse(refusal.CodeInvalid,
 				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(held.Caches))
 		}
 		if len(held.Caches) == 1 {
 			name, client = held.Caches[0].Name, a.reach(held.Caches[0])
 		}
 	default:
-		return "", nil, kit.Refuse(kit.CodeInvalid,
+		return "", nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider keeps no %q store; it keeps %q, %q and %q",
 			store, providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache)
 	}
 	if name == "" {
-		return "", nil, kit.Refuse(kit.CodeNotReady,
+		return "", nil, refusal.Refuse(refusal.CodeNotReady,
 			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, providerkit.BootstrapCommand(class))
 	}
 	return name, client, nil
@@ -162,16 +163,16 @@ func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 	})
 	if err != nil {
 		if absent(err) {
-			return nil, kit.Refuse(kit.CodeInvalid, "no artifact at %s/%s", bucket, ref.Key)
+			return nil, refusal.Refuse(refusal.CodeInvalid, "no artifact at %s/%s", bucket, ref.Key)
 		}
 		return nil, fmt.Errorf("read %s/%s: %w", bucket, ref.Key, err)
 	}
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, progress providerkit.Progress) error {
+func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error {
 	if prefix == "" {
-		return kit.Refuse(kit.CodeInvalid, "an empty prefix names every artifact this account keeps")
+		return refusal.Refuse(refusal.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}
 	held, err := a.buckets(ctx, class)
 	if err != nil {

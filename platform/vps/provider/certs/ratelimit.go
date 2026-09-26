@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -160,7 +160,7 @@ func (r RateLimit) Spent(now time.Time) bool {
 }
 
 func (r RateLimit) Refusal(hostname string) error {
-	return providerkit.Refuse(providerkit.CodeBusy,
+	return refusal.Refuse(refusal.CodeBusy,
 		"the certificate authority will not issue for %s yet: %s; %s\n%s",
 		hostname, r.counted(), r.resets(), r.advice())
 }

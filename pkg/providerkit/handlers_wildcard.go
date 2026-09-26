@@ -14,12 +14,14 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type wildcards struct {
 	provider Provider
-	records  RecordStore
+	records  records.Store
 	held     Wildcard
 	sel      *contractv1.EdgeSelection
 	audience *eventStream
@@ -50,9 +52,9 @@ func (w *wildcards) settlement(front edge.Edge) (settlement, error) {
 	return s, nil
 }
 
-func readWildcard(ctx context.Context, records RecordStore) (Wildcard, error) {
-	name := WildcardRecord(ClassPreview)
-	record, err := ReadOrEmpty(ctx, records, name)
+func readWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
+	name := WildcardRecord(edge.ClassPreview)
+	record, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
@@ -67,8 +69,8 @@ func readWildcard(ctx context.Context, records RecordStore) (Wildcard, error) {
 }
 
 func (w *wildcards) save(ctx context.Context) error {
-	name := WildcardRecord(ClassPreview)
-	record, err := ReadOrEmpty(ctx, w.records, name)
+	name := WildcardRecord(edge.ClassPreview)
+	record, err := records.ReadOrEmpty(ctx, w.records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -82,7 +84,7 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress edge.Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -100,7 +102,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 	})
 }
 
-func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress Progress) error {
+func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress edge.Progress) error {
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
@@ -126,7 +128,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 
 	progress.Say("Reconciling the shared preview entry on " + wildcard)
 	program, err := edgeProgramFor(ctx, w.provider, front, EdgeProgramRequest{
-		Class:             ClassPreview,
+		Class:             edge.ClassPreview,
 		PreviewBaseDomain: base,
 	})
 	if err != nil {
@@ -191,7 +193,7 @@ func (w *wildcards) certification(settle settlement, notes ...string) certificat
 
 func (w *wildcards) claimable(front edge.Edge, base string) error {
 	if w.held.BaseDomain != "" && w.held.BaseDomain != base {
-		return Refuse(CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"this preview bootstrap already serves previews on %q: release it with `ocel domain release --preview` first, then use %q — every project on %q loses its preview hostnames the moment the bootstrap changes domain, so that is two deliberate commands",
 			w.held.BaseDomain, base, w.held.BaseDomain)
 	}
@@ -199,7 +201,7 @@ func (w *wildcards) claimable(front edge.Edge, base string) error {
 	if !held || holder == front.Kind() {
 		return nil
 	}
-	return Refuse(CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s is already held by the %s edge, and this project's edge is %s: reconciling it here would raise a second wildcard at the %s edge and leave the %s one standing with nothing left to name it — release it with `ocel domain release --preview` from a project on the %s edge first, then use it again from here",
 		w.held.Hostname(), holder, front.Kind(), front.Kind(), holder, holder)
 }
@@ -283,11 +285,11 @@ func (w *wildcards) served(ctx context.Context) ([]string, error) {
 	return ProjectsServedOnPreview(ctx, w.records, w.held.BaseDomain)
 }
 
-func ProjectsServedOnPreview(ctx context.Context, records RecordStore, baseDomain string) ([]string, error) {
+func ProjectsServedOnPreview(ctx context.Context, records records.Store, baseDomain string) ([]string, error) {
 	if baseDomain == "" {
 		return nil, nil
 	}
-	under := EdgeStacksRecord(ClassPreview)
+	under := EdgeStacksRecord(edge.ClassPreview)
 	held, err := records.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
@@ -336,7 +338,7 @@ func (w *wildcards) releasable(ctx context.Context) error {
 	if len(carrying) == 0 {
 		return nil
 	}
-	return Refuse(CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"%s still carries live preview pointers for %d project(s): %s — nothing would serve them the moment it is released. Remove one preview with `ocel preview rm`, or a project's whole preview footprint with `ocel destroy preview`, in each of them first",
 		w.held.Hostname(), len(carrying), strings.Join(carrying, ", "))
 }
@@ -344,7 +346,7 @@ func (w *wildcards) releasable(ctx context.Context) error {
 func (w *wildcards) holding() (edge.Edge, error) {
 	holder, held := w.held.Holder()
 	if !held {
-		return nil, Refuse(CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account records which edge holds %s, and tearing it down through a guessed edge would delete its certificate, its DNS records and the record itself while leaving the real wildcard entry standing with nothing left to name it: run `ocel domain use '%s' --preview` from the project whose edge raised it — that writes the edge down and changes nothing else — then release it",
 			w.held.Hostname(), w.held.Hostname())
 	}
@@ -419,7 +421,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
@@ -428,7 +430,7 @@ func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.Pr
 	})
 }
 
-func (w *wildcards) release(ctx context.Context, progress Progress) error {
+func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
 	if w.held.BaseDomain == "" {
 		progress.Say("This preview bootstrap has no global preview domain")
 		return nil
@@ -460,5 +462,5 @@ func (w *wildcards) release(ctx context.Context, progress Progress) error {
 			return err
 		}
 	}
-	return Forget(ctx, w.records, WildcardRecord(ClassPreview))
+	return records.Forget(ctx, w.records, WildcardRecord(edge.ClassPreview))
 }

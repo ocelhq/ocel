@@ -8,6 +8,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ImageKind = "image"
@@ -28,7 +30,7 @@ type ImageStore interface {
 
 	Has(ctx context.Context, push ImagePush) (bool, error)
 
-	Push(ctx context.Context, push ImagePush, progress Progress) error
+	Push(ctx context.Context, push ImagePush, progress edge.Progress) error
 }
 
 type ImagePlan struct {
@@ -61,7 +63,7 @@ func (p ImagePlan) Rows(ctx context.Context) ([]Change, error) {
 	return rows, nil
 }
 
-func (p ImagePlan) Ship(ctx context.Context, progress Progress) error {
+func (p ImagePlan) Ship(ctx context.Context, progress edge.Progress) error {
 	for _, push := range p.Pushes {
 		held, err := p.held(ctx, push)
 		if err != nil {
@@ -81,7 +83,7 @@ func (p ImagePlan) Ship(ctx context.Context, progress Progress) error {
 	return nil
 }
 
-func (p ImagePlan) push(ctx context.Context, push ImagePush, progress Progress) error {
+func (p ImagePlan) push(ctx context.Context, push ImagePush, progress edge.Progress) error {
 	if push.Wrap != nil {
 		if progress != nil {
 			progress.Detail("Wrapping the image in the ocel runtime")
@@ -107,7 +109,7 @@ func (p ImagePlan) ImageRef(app string) string {
 
 func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	if p.Store == nil {
-		return false, Refuse(CodeInvalid,
+		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is pushed to %s and this release carries nothing to push it with", push.App, push.ImageRef)
 	}
 	held, err := p.Store.Has(ctx, push)

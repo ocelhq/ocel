@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type connector struct{}
@@ -17,8 +18,8 @@ func (connector) Target(context.Context) (providerkit.ConnectorTarget, error) {
 	return providerkit.ConnectorTarget{}, errNoConnector
 }
 
-func (connector) Install(context.Context, providerkit.ConnectorInstall, providerkit.Progress) (providerkit.ConnectorAddress, error) {
+func (connector) Install(context.Context, providerkit.ConnectorInstall, edge.Progress) (providerkit.ConnectorAddress, error) {
 	return providerkit.ConnectorAddress{}, errNoConnector
 }
 
-func (connector) Remove(context.Context, providerkit.Progress) error { return errNoConnector }
+func (connector) Remove(context.Context, edge.Progress) error { return errNoConnector }

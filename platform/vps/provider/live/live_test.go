@@ -12,8 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func complete() Manifest {
@@ -66,7 +67,7 @@ func TestAManifestMissingWhatScopesTheStoreIsRefused(t *testing.T) {
 	}
 }
 
-func sealFor(t *testing.T, key []byte, at providerkit.SealScope, plaintext string) []byte {
+func sealFor(t *testing.T, key []byte, at records.SealScope, plaintext string) []byte {
 	t.Helper()
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -92,7 +93,7 @@ func aKey(t *testing.T) []byte {
 	return key
 }
 
-var bound = providerkit.SealScope{Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
+var bound = records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
 
 func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
 	t.Parallel()
@@ -133,7 +134,7 @@ func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
 		t.Fatalf("Open() = %q, %v", opened, err)
 	}
 	preview := bound
-	preview.Class = providerkit.ClassPreview
+	preview.Class = edge.ClassPreview
 	if _, err := vault.Open(context.Background(), preview, sealFor(t, key, preview, "hunter2")); err == nil {
 		t.Error("a preview value opened under the production key, and each class is sealed to its own")
 	}
@@ -142,7 +143,7 @@ func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
 	}
 }
 
-func writeRecord(t *testing.T, root string, name providerkit.RecordName, body string) {
+func writeRecord(t *testing.T, root string, name records.Name, body string) {
 	t.Helper()
 	class, encoded, err := Located(name)
 	if err != nil {
@@ -160,20 +161,20 @@ func writeRecord(t *testing.T, root string, name providerkit.RecordName, body st
 func TestTheRecordsAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	one := providerkit.RecordName{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"}
-	two := providerkit.RecordName{"values", "shop", "production", "cells", "/apps/web", "SESSION", "pr-7"}
+	one := records.Name{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"}
+	two := records.Name{"values", "shop", "production", "cells", "/apps/web", "SESSION", "pr-7"}
 	writeRecord(t, root, one, "one")
 	writeRecord(t, root, two, "two")
-	records := Records{Root: root}
+	store := Records{Root: root}
 
-	held, err := records.Read(context.Background(), one)
+	held, err := store.Read(context.Background(), one)
 	if err != nil || string(held.Bytes) != "one" || held.Revision == "" {
 		t.Fatalf("Read() = %+v, %v", held, err)
 	}
-	if _, err := records.Read(context.Background(), providerkit.RecordName{"values", "shop", "production", "cells", "/", "MISSING", "*"}); !errors.Is(err, providerkit.ErrNoRecord) {
-		t.Errorf("Read() of nothing = %v, want %v", err, providerkit.ErrNoRecord)
+	if _, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "MISSING", "*"}); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Read() of nothing = %v, want %v", err, records.ErrNotFound)
 	}
-	listed, err := records.List(context.Background(), providerkit.RecordName{"values", "shop", "production", "cells"})
+	listed, err := store.List(context.Background(), records.Name{"values", "shop", "production", "cells"})
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want both cells", listed, err)
 	}
@@ -182,21 +183,21 @@ func TestTheRecordsAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T)
 			t.Errorf("List() named %s, which nothing wrote", record.Name)
 		}
 	}
-	empty, err := records.List(context.Background(), providerkit.RecordName{"values", "other", "production", "cells"})
+	empty, err := store.List(context.Background(), records.Name{"values", "other", "production", "cells"})
 	if err != nil || len(empty) != 0 {
 		t.Errorf("List() under another project = %v, %v, want nothing", empty, err)
 	}
-	if _, err := records.Write(context.Background(), held); err == nil {
+	if _, err := store.Write(context.Background(), held); err == nil {
 		t.Error("the box-side records wrote something, and a deploy writes through the helper alone")
 	}
-	if err := records.Remove(context.Background(), one, held.Revision); err == nil {
+	if err := store.Remove(context.Background(), one, held.Revision); err == nil {
 		t.Error("the box-side records removed something")
 	}
 }
 
 func TestARecordNameRoundTripsThroughTheNameAFileAnswersTo(t *testing.T) {
 	t.Parallel()
-	for _, name := range []providerkit.RecordName{
+	for _, name := range []records.Name{
 		{"conformance", "production", "TestOne/sub", "leaf"},
 		{"values", "shop", "production", "/apps/web", "DATABASE_URL"},
 		{"ledger", "production/shop", ".hidden", ".."},

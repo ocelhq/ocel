@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -27,7 +29,7 @@ func coolifysTraefik() Front {
 func TestABoxFrontedByHandStandsNothingOfOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, routedByHand())
+	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, routedByHand())
 	for _, item := range items {
 		switch {
 		case item.Kind == KindContainer && item.Name == caddy.Container,
@@ -186,11 +188,11 @@ func TestAProxyRoutedByHandOnItsOwnNetworkIsToldTheSwitchboardsNameOnIt(t *testi
 	}
 }
 
-func frontRecordItem(front Front, project string, class providerkit.Class) (Item, error) {
+func frontRecordItem(front Front, project string, class edge.Class) (Item, error) {
 	return frontRecord{Proxy: front.recorded(), Project: project, Class: class}.item()
 }
 
-func recordOn(t *testing.T, stood *bench, class providerkit.Class, front Front, project string) {
+func recordOn(t *testing.T, stood *bench, class edge.Class, front Front, project string) {
 	t.Helper()
 	record, err := frontRecordItem(front, project, class)
 	if err != nil {
@@ -199,14 +201,14 @@ func recordOn(t *testing.T, stood *bench, class providerkit.Class, front Front, 
 	stood.stands[class] = append(unrecorded(stood, class), record)
 }
 
-func unrecorded(stood *bench, class providerkit.Class) []Item {
+func unrecorded(stood *bench, class edge.Class) []Item {
 	return slices.DeleteFunc(stood.stands[class], func(item Item) bool { return item.Name == FrontRecordPath })
 }
 
 func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
@@ -228,7 +230,7 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 func TestABootstrapLeavesARecordThatAgreesAsItStands(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassPreview
+	class := edge.ClassPreview
 	stood := settledOn(t, class)
 	recordOn(t, stood, class, Front{}, "blog")
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
@@ -243,11 +245,11 @@ func TestABootstrapLeavesARecordThatAgreesAsItStands(t *testing.T) {
 func TestABootstrapWhoseProxyTheBoxDoesNotRouteThroughIsRefusedWithWhatToWrite(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	recordOn(t, stood, class, routedByHand(), "blog")
 	_, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
-	refused := refusal(t, err, providerkit.CodeInvalid)
+	refused := refusalOf(t, err, refusal.CodeInvalid)
 	for _, wanted := range []string{"a proxy you route yourself", "set by blog/production", "add `\"proxy\": \"manual\"`"} {
 		if !strings.Contains(refused.Message, wanted) {
 			t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
@@ -332,9 +334,9 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stood := settledOn(t, providerkit.ClassPreview)
-			recordOn(t, stood, providerkit.ClassPreview, tc.recorded, "blog")
-			refused := refusal(t, stood.fronted(tc.ours).FrontAgrees(context.Background()), providerkit.CodeInvalid)
+			stood := settledOn(t, edge.ClassPreview)
+			recordOn(t, stood, edge.ClassPreview, tc.recorded, "blog")
+			refused := refusalOf(t, stood.fronted(tc.ours).FrontAgrees(context.Background()), refusal.CodeInvalid)
 			for _, wanted := range tc.wanted {
 				if !strings.Contains(refused.Message, wanted) {
 					t.Errorf("the refusal says %q, want %q in it", refused.Message, wanted)
@@ -347,8 +349,8 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 func TestADeployOntoABoxRecordedForItsOwnProxyGoesAhead(t *testing.T) {
 	t.Parallel()
 
-	stood := settledOn(t, providerkit.ClassProduction)
-	recordOn(t, stood, providerkit.ClassProduction, routedByHand(), "blog")
+	stood := settledOn(t, edge.ClassProduction)
+	recordOn(t, stood, edge.ClassProduction, routedByHand(), "blog")
 	if err := stood.fronted(routedByHand()).FrontAgrees(context.Background()); err != nil {
 		t.Errorf("FrontAgrees() = %v, want a box that routes the way this project says let through", err)
 	}
@@ -372,8 +374,8 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stood := settledOn(t, providerkit.ClassProduction)
-			recordOn(t, stood, providerkit.ClassProduction, tc.recorded, "blog")
+			stood := settledOn(t, edge.ClassProduction)
+			recordOn(t, stood, edge.ClassProduction, tc.recorded, "blog")
 			if err := stood.fronted(tc.ours).FrontAgrees(context.Background()); err != nil {
 				t.Errorf("FrontAgrees() = %v, want a preset and the values it fills agreed as one proxy", err)
 			}
@@ -390,9 +392,9 @@ func onAPort(front Front) Front {
 func TestADeployOntoABoxThatRecordsNoProxyIsSentToBootstrap(t *testing.T) {
 	t.Parallel()
 
-	stood := settledOn(t, providerkit.ClassProduction)
-	stood.stands[providerkit.ClassProduction] = unrecorded(stood, providerkit.ClassProduction)
-	refused := refusal(t, stood.host().FrontAgrees(context.Background()), providerkit.CodeNotReady)
+	stood := settledOn(t, edge.ClassProduction)
+	stood.stands[edge.ClassProduction] = unrecorded(stood, edge.ClassProduction)
+	refused := refusalOf(t, stood.host().FrontAgrees(context.Background()), refusal.CodeNotReady)
 	if !strings.Contains(refused.Message, FrontRecordPath) || !strings.Contains(refused.Message, "ocel bootstrap") {
 		t.Errorf("the refusal says %q, want it to name %s and the bootstrap that writes it", refused.Message, FrontRecordPath)
 	}
@@ -401,8 +403,8 @@ func TestADeployOntoABoxThatRecordsNoProxyIsSentToBootstrap(t *testing.T) {
 func TestTheLastClassToGoTakesTheRecordWithIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	recordOn(t, stood, class, Front{}, "shop")
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
@@ -429,14 +431,14 @@ func recordChange(t *testing.T, plan providerkit.Plan) providerkit.Change {
 func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedIsRefused(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
 	boot := NewBootstrap(stood.fronted(routedByHand()), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
 	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
-		refused := refusal(t, err, providerkit.CodeInvalid)
+		refused := refusalOf(t, err, refusal.CodeInvalid)
 		for _, wanted := range []string{"ocel's own proxy", "remove `\"proxy\"`"} {
 			if !strings.Contains(refused.Message, wanted) {
 				t.Errorf("%s refused with %q, want %q in it: %s stands on this box, so it is fronted by ocel's own proxy whether or not a record says so", step, refused.Message, wanted, caddy.Container)
@@ -455,7 +457,7 @@ func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedI
 func TestABootstrapOverADeletedRecordPlansItAsDriftAndWritesItBack(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
 	boot := NewBootstrap(stood.host(), testVendor, "shop")
@@ -486,7 +488,7 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
 	plan, err := NewBootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
+		providerkit.BootstrapRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("Plan() = %v, want a fresh box, where nothing of ocel's stands, free to take a proxy routed by hand", err)
 	}

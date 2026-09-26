@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func (r *deployRun) recordFunctionImage(logical, ref string) {
@@ -32,7 +33,7 @@ func (r *deployRun) imageFunctions(
 	routing *RoutingPlan,
 ) ([]ImagePush, error) {
 	if r.images == nil {
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s's functions are run from images, and nothing this deploy carries names a registry to push them to", entry.App)
 	}
 	root := ArtifactRoot()
@@ -100,7 +101,7 @@ func (r *deployRun) imageFunction(
 func (r *deployRun) wrapFunction(ctx context.Context, name string, framework Framework, image v1.Image) (v1.Image, error) {
 	arch, known := GoArch(framework.Arch)
 	if !known {
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s is built for %s, and this provider carries a container runtime for %s and %s alone",
 			name, framework.Arch, ArchX8664, ArchARM64)
 	}
@@ -109,7 +110,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework Fra
 		return nil, fmt.Errorf("read the runtime %s's function boots through: %w", name, err)
 	}
 	if len(body) == 0 {
-		return nil, Refuse(CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this provider carries no container runtime built for %s, and %s is built for it", arch, name)
 	}
 	wrapped, err := WrapContainer(image, body)
@@ -134,7 +135,7 @@ func runtimeOverlay(
 		return nil, fmt.Errorf("read the runtime %s boots through: %w", name, err)
 	}
 	if len(body) == 0 {
-		return nil, Refuse(CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this provider carries no runtime for a %s function to boot through, and %s is one", framework.Name, name)
 	}
 	carried := make(map[string][]byte, len(overlay)+1)

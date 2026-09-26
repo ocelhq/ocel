@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -40,11 +41,11 @@ func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
 	}
 	command := append(append([]string{}, file.Config.Entrypoint...), file.Config.Cmd...)
 	if len(command) == 0 {
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the image names neither an ENTRYPOINT nor a CMD, so there is nothing for the runtime to run in front of: give it one")
 	}
 	if len(runtime) == 0 {
-		return nil, Refuse(CodeNotReady, "this provider carries no runtime built for %s", file.Architecture)
+		return nil, refusal.Refuse(refusal.CodeNotReady, "this provider carries no runtime built for %s", file.Architecture)
 	}
 	packed, err := runtimeLayer(runtime)
 	if err != nil {
@@ -104,7 +105,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry) (ImagePush,
 	app, ref := entry.App, entry.Image
 	repository, digest, pinned := strings.Cut(ref, "@")
 	if !pinned || repository == "" || digest == "" {
-		return ImagePush{}, Refuse(CodeInvalid,
+		return ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s carries the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
 	}
 	arch, err := builtArchitecture(ctx, repository, digest)
@@ -116,7 +117,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry) (ImagePush,
 		return ImagePush{}, fmt.Errorf("read the architecture %s's container runs on: %w", app, err)
 	}
 	if arch != runs {
-		return ImagePush{}, Refuse(CodeInvalid,
+		return ImagePush{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %s's image is built for %s and the target runs %s, which cannot execute it: build it for %s, and drop any --platform its Dockerfile pins a FROM to",
 			app, ContainerPlatform(arch), ContainerPlatform(runs), ContainerPlatform(runs))
 	}
@@ -125,7 +126,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry) (ImagePush,
 		return ImagePush{}, fmt.Errorf("read the runtime %s's container boots through: %w", app, err)
 	}
 	if len(runtime) == 0 {
-		return ImagePush{}, Refuse(CodeNotReady,
+		return ImagePush{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider carries no container runtime built for %s, and %s's image is built for it", arch, app)
 	}
 	return ImagePush{

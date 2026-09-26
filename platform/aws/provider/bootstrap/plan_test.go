@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func planned(t *testing.T, stacks cfn.API, class string, req Request) []providerkit.ChangeGroup {
@@ -25,7 +26,7 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 		t.Fatalf("Read: %v", err)
 	}
 	deployed := read.Deployed
-	described := providerkit.BootstrapReading{Class: providerkit.Class(class), Present: deployed.Present}
+	described := providerkit.BootstrapReading{Class: edge.Class(class), Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
 			Name:          stack.Name,
@@ -37,7 +38,7 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 	}
 	groups, err := PlanChanges(ctx, stacks, read, req, providerkit.DeriveGroups(
 		NameStacks(defaultNamespace, described), Catalogue(),
-		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Remove: req.Remove}))
+		providerkit.BootstrapRequest{Class: edge.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}

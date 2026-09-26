@@ -42,7 +42,7 @@ func (p *Provider) ProgramEdge(_ context.Context, req providerkit.EdgeProgramReq
 	}, nil
 }
 
-func ProgramName(slug string, class providerkit.Class) string {
+func ProgramName(slug string, class edge.Class) string {
 	if slug == "" {
 		return ""
 	}

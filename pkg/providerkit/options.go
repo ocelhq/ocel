@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 type Options map[string]any
@@ -27,7 +28,7 @@ func RefuseTransforms(vendor Vendor, transforms []string) error {
 	for i, module := range transforms {
 		listed[i] = strconv.Quote(module)
 	}
-	return Refuse(CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"this project lists %s under \"transforms\" and the %s provider renders nothing a transform can patch; drop them, or deploy to a provider that does",
 		strings.Join(listed, ", "), vendor)
 }
@@ -36,23 +37,23 @@ func Decode[T any](vendor Vendor, options Options) (T, error) {
 	var into T
 	raw, err := json.Marshal(map[string]any(options))
 	if err != nil {
-		return into, Refuse(CodeInvalid, "options are not representable: %v", err)
+		return into, refusal.Refuse(refusal.CodeInvalid, "options are not representable: %v", err)
 	}
 	var spelled any
 	if err := json.Unmarshal(raw, &spelled); err != nil {
-		return into, Refuse(CodeInvalid, "options are not representable: %v", err)
+		return into, refusal.Refuse(refusal.CodeInvalid, "options are not representable: %v", err)
 	}
 	if err := checkOptions(vendor, into, spelled); err != nil {
 		var unknown configdoc.UnknownKeyError
 		if errors.As(err, &unknown) {
-			return into, Refuse(CodeUnknownOption, "%s", err)
+			return into, refusal.Refuse(refusal.CodeUnknownOption, "%s", err)
 		}
-		return into, Refuse(CodeInvalid, "%s", err)
+		return into, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&into); err != nil {
-		return into, Refuse(CodeInvalid, "%s", decodeProblem(err))
+		return into, refusal.Refuse(refusal.CodeInvalid, "%s", decodeProblem(err))
 	}
 	return into, nil
 }

@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -34,7 +35,7 @@ func (h *Host) sweep(ctx context.Context, elevation string) error {
 	return err
 }
 
-func EnvFile(class providerkit.Class, container string) string {
+func EnvFile(class edge.Class, container string) string {
 	return StateDir(class) + "/" + container + envFileSuffix
 }
 
@@ -44,7 +45,7 @@ const (
 	handedUnknown = "unknown"
 )
 
-func HandedNote(class providerkit.Class, container string) string {
+func HandedNote(class edge.Class, container string) string {
 	return StateDir(class) + "/" + handedDir + "/" + container
 }
 
@@ -68,7 +69,7 @@ func RenderNote(spec Container) ([]byte, error) {
 func ParseNote(raw []byte) (Note, error) {
 	var note Note
 	if err := json.Unmarshal(raw, &note); err != nil {
-		return Note{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return Note{}, refusal.Refuse(refusal.CodeNotReady,
 			"unreadable container values note: %v", err)
 	}
 	return note, nil
@@ -84,7 +85,7 @@ func (h *Host) note(ctx context.Context, spec Container) error {
 	return err
 }
 
-func handedCommand(class providerkit.Class, container string) string {
+func handedCommand(class edge.Class, container string) string {
 	note := quoted(HandedNote(class, container))
 	return "if [ -f " + note + " ]; then echo " + handedKnown + "; cat " + note + "; else echo " + handedUnknown + "; fi"
 }
@@ -119,19 +120,19 @@ func RenderEnvFile(env map[string]string) ([]byte, error) {
 func writable(key, value string) error {
 	switch {
 	case key == "":
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"a value is declared with an empty name")
 	case strings.ContainsAny(key, "\n\r"):
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the name %q contains a line break", key)
 	case strings.Contains(key, "="):
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the name %q contains %q", key, "=")
 	case strings.HasPrefix(key, "#"):
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the name %q begins with %q", key, "#")
 	case strings.ContainsAny(value, "\n\r"):
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the value of %s contains a line break", key)
 	}
 	return nil
@@ -184,7 +185,7 @@ func (h *Host) forget(ctx context.Context, held handoff) error {
 	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
 	defer stop()
 	if _, err := h.ran(taking, "take back "+held.path, "rm -f "+quoted(held.path), nil, ""); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"could not remove %s on %s, which holds this deploy's values in plaintext: %v",
 			held.path, h.named(), err)
 	}

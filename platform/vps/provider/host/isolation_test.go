@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -143,7 +143,7 @@ func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsOwed(t *t
 func TestNothingAContainerIsOwedIsTheKeyTheRecordsOrTheClassStateItself(t *testing.T) {
 	t.Parallel()
 
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for what, allowed := range owed() {
 			for _, path := range allowed {
 				for _, refused := range []string{ClassDir(class), RecordsDir(class), SealKeyPath(class)} {

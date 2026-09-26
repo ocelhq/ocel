@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	kit "github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -21,12 +23,12 @@ type ContainerFront struct {
 	Host      string `json:"host"`
 }
 
-func ContainerFrontRecord(class kit.Class) kit.RecordName {
+func ContainerFrontRecord(class edge.Class) records.Name {
 	return append(kit.StacksRecord(class, ContainersSlug), containerFrontRecord)
 }
 
-func ReadContainerFront(ctx context.Context, records kit.RecordStore, class kit.Class) (ContainerFront, bool, error) {
-	held, err := kit.ReadOrEmpty(ctx, records, ContainerFrontRecord(class))
+func ReadContainerFront(ctx context.Context, store records.Store, class edge.Class) (ContainerFront, bool, error) {
+	held, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(class))
 	if err != nil {
 		return ContainerFront{}, false, err
 	}
@@ -43,8 +45,8 @@ func ReadContainerFront(ctx context.Context, records kit.RecordStore, class kit.
 	return front, true, nil
 }
 
-func WriteContainerFront(ctx context.Context, records kit.RecordStore, class kit.Class, front ContainerFront) error {
-	held, err := kit.ReadOrEmpty(ctx, records, ContainerFrontRecord(class))
+func WriteContainerFront(ctx context.Context, store records.Store, class edge.Class, front ContainerFront) error {
+	held, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(class))
 	if err != nil {
 		return err
 	}
@@ -56,7 +58,7 @@ func WriteContainerFront(ctx context.Context, records kit.RecordStore, class kit
 		return nil
 	}
 	held.Bytes = encoded
-	if _, err := records.Write(ctx, held); err != nil {
+	if _, err := store.Write(ctx, held); err != nil {
 		return fmt.Errorf("record the container front the %s class answers behind: %w", class, err)
 	}
 	return nil

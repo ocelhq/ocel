@@ -22,7 +22,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -76,7 +78,7 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 }
 
 func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall,
-	progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
+	progress edge.Progress) (providerkit.ConnectorAddress, error) {
 	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
@@ -89,17 +91,17 @@ func (p connector) Install(ctx context.Context, install providerkit.ConnectorIns
 		return providerkit.ConnectorAddress{}, err
 	}
 	if len(install.Config) == 0 {
-		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid,
 			"this install carries no connector config, so nothing would name the console the service trusts")
 	}
 	if p.emulated() {
-		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
 			"this run talks to an emulator, which stands up no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
 	}
 
 	trust, err := connectorkit.ParseConfig(install.Config, "this install")
 	if err != nil {
-		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
+		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
 
 	image, err := p.pushedConnector(ctx, install.Binary, progress)
@@ -145,13 +147,13 @@ func (p connector) Install(ctx context.Context, install providerkit.ConnectorIns
 		return providerkit.ConnectorAddress{}, err
 	}
 	if released.url == "" {
-		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s stands and published no url, so the console has nothing to dial", names.Connector())
 	}
 	return providerkit.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress providerkit.Progress) error {
+func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
 	names, err := p.Names(ctx)
 	if err != nil {
 		return err
@@ -209,9 +211,9 @@ func connectorVersionOf(held *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress providerkit.Progress) (string, error) {
+func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress edge.Progress) (string, error) {
 	if len(binary) == 0 {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install carries no connector binary to put in an image")
 	}
 	base, err := p.based(ctx, staticImage)
@@ -227,7 +229,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 		return "", fmt.Errorf("read the digest of the connector image: %w", err)
 	}
 
-	at, err := p.EnsureImageRegistry(ctx, providerkit.ClassProduction, nil)
+	at, err := p.EnsureImageRegistry(ctx, edge.ClassProduction, nil)
 	if err != nil {
 		return "", err
 	}
@@ -236,7 +238,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	if err != nil {
 		return "", err
 	}
-	ref := names.RepositoryPath(p.options.Region, providerkit.ClassProduction) +
+	ref := names.RepositoryPath(p.options.Region, edge.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
 	push := providerkit.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
 
@@ -293,7 +295,7 @@ func connectorImage(base v1.Image, binary []byte) (v1.Image, error) {
 	return mutate.Config(appended, config)
 }
 
-func (p *Provider) standConnectorAccount(ctx context.Context, grants []string, progress providerkit.Progress) error {
+func (p *Provider) standConnectorAccount(ctx context.Context, grants []string, progress edge.Progress) error {
 	names, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -333,7 +335,7 @@ func keyRolesFor(grants []string) []string {
 	return roles
 }
 
-func (p *Provider) forgetConnectorGrants(ctx context.Context, progress providerkit.Progress) error {
+func (p *Provider) forgetConnectorGrants(ctx context.Context, progress edge.Progress) error {
 	return everyStep(
 		func() error { return p.bindConnectorProject(ctx, false) },
 		func() error { return p.bindConnectorKeys(ctx, nil, progress) },
@@ -352,14 +354,14 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 	return nil
 }
 
-func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress providerkit.Progress) error {
+func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress edge.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	var errs []error
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		changed, err := clients.bindKeyRoles(ctx, class, member, connectorKeyRoles, wanted)
 		if err != nil && len(wanted) > 0 {
 			return err
@@ -388,7 +390,7 @@ func boundMembers(members []string, member string, granting bool) ([]string, boo
 	}
 }
 
-func (p *Provider) takeConnectorAccount(ctx context.Context, progress providerkit.Progress) error {
+func (p *Provider) takeConnectorAccount(ctx context.Context, progress edge.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -408,7 +410,7 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, progress providerki
 	return nil
 }
 
-func (p *Provider) takeConnectorImages(ctx context.Context, progress providerkit.Progress) error {
+func (p *Provider) takeConnectorImages(ctx context.Context, progress edge.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -417,7 +419,7 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress providerkit
 	if err != nil {
 		return err
 	}
-	held := repositoryPath(clients, clients.Repository(providerkit.ClassProduction)) +
+	held := repositoryPath(clients, clients.Repository(edge.ClassProduction)) +
 		"/packages/" + connectorImageName
 	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
 		held).Context(ctx).Do); err != nil && !absent(err) {

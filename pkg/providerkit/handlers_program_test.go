@@ -133,8 +133,8 @@ func TestDeployCarriesTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program == nil {
 		t.Fatal("the stack carries no program, and the relay edge answers every request from an entry worker")
 	}
-	if spec.Program.Name != fake.ProgramName("shop", providerkit.ClassProduction) {
-		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", providerkit.ClassProduction))
+	if spec.Program.Name != fake.ProgramName("shop", edge.ClassProduction) {
+		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", edge.ClassProduction))
 	}
 	if spec.Program.Worker.Vars[fake.ProgramPreviewAppsVar] != "web" {
 		t.Errorf("Vars[%s] = %q, want the manifest's app names",
@@ -246,7 +246,7 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	state := readStack(t, provider, providerkit.ClassPreview, "shop")
+	state := readStack(t, provider, edge.ClassPreview, "shop")
 	if !state.Edge.ServedOnGlobalPreview("preview.acme.com") {
 		t.Errorf("the stack records %q, want the wildcard every preview of it is served on", state.Edge.GlobalPreview)
 	}
@@ -269,7 +269,7 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	state := readStack(t, provider, providerkit.ClassPreview, "shop")
+	state := readStack(t, provider, edge.ClassPreview, "shop")
 	if state.Edge.GlobalPreview != "" {
 		t.Errorf("the stack records %q, want nothing: this project serves its previews on a wildcard of its own", state.Edge.GlobalPreview)
 	}

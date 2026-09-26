@@ -32,8 +32,8 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	t.Helper()
 
 	vm := liveMachine(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
-	bootstrapped(t, vm, providerkit.ClassPreview)
+	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, edge.ClassPreview)
 	fixtures(t, vm)
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
@@ -90,7 +90,7 @@ func previewStack(t *testing.T, slug, app, pointer string) providerkit.StackRef 
 
 	return providerkit.StackRef{
 		Project: slug,
-		Class:   providerkit.ClassPreview,
+		Class:   edge.ClassPreview,
 		Name:    naming.AppStack(pointer, app, previewBuild(t, pointer).Release()),
 	}
 }
@@ -135,7 +135,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	if len(stood.Containers) != 1 {
 		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
 	}
-	if err := providerkit.WriteStack(ctx, p.Records(), providerkit.ClassPreview, slug, plan.Ref.Name, providerkit.RecordedStack{
+	if err := providerkit.WriteStack(ctx, p.Records(), edge.ClassPreview, slug, plan.Ref.Name, providerkit.RecordedStack{
 		Kind:       providerkit.StackApp,
 		App:        app,
 		Release:    build.Release().String(),
@@ -174,7 +174,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err := providerkit.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
-	infra := providerkit.StackRef{Project: teardownSlug, Class: providerkit.ClassPreview, Name: naming.InfraStack(pointer)}
+	infra := providerkit.StackRef{Project: teardownSlug, Class: edge.ClassPreview, Name: naming.InfraStack(pointer)}
 	if err := p.Stacks().Destroy(ctx, infra, spoken); err != nil {
 		t.Fatalf("Destroy(%s) = %v: an ephemeral preview stands up no infra stack, and teardown destroys one regardless", infra.Name, err)
 	}
@@ -291,7 +291,7 @@ func TestLiveTearingDownOneOfFourLivePreviewsSweepsNoLivePreviewsImage(t *testin
 	for at, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
 		previewUp(t, vm, p, stack, pointer, int64(at)+1)
 	}
-	held := windowOf(t, vm, teardownSlug, teardownApp, providerkit.ClassPreview)
+	held := windowOf(t, vm, teardownSlug, teardownApp, edge.ClassPreview)
 	if len(held) != 3 {
 		t.Fatalf("the box's preview window reads %v, and this test turns on it being full: past the third live preview of one app the container's ocel.ref label is the sole guard against sweeping a live one", held)
 	}

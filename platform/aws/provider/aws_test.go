@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -47,7 +48,7 @@ type stubBootstrap struct{ err error }
 
 func (stubBootstrap) Catalogue() []providerkit.Feature { return nil }
 
-func (stubBootstrap) Describe(context.Context, providerkit.Class) (providerkit.BootstrapReading, error) {
+func (stubBootstrap) Describe(context.Context, edge.Class) (providerkit.BootstrapReading, error) {
 	return providerkit.BootstrapReading{}, nil
 }
 
@@ -55,15 +56,15 @@ func (s stubBootstrap) Plan(context.Context, providerkit.BootstrapRequest) (prov
 	return providerkit.Plan{}, s.err
 }
 
-func (s stubBootstrap) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Progress) error {
+func (s stubBootstrap) Apply(context.Context, providerkit.BootstrapRequest, edge.Progress) error {
 	return s.err
 }
 
-func (stubBootstrap) PlanRemove(context.Context, providerkit.Class) (providerkit.Plan, error) {
+func (stubBootstrap) PlanRemove(context.Context, edge.Class) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (s stubBootstrap) Remove(context.Context, providerkit.Class, providerkit.Progress) error {
+func (s stubBootstrap) Remove(context.Context, edge.Class, edge.Progress) error {
 	return s.err
 }
 
@@ -82,12 +83,12 @@ func settledBy(t *testing.T, p *Provider) func() {
 
 func primed(t *testing.T, p *Provider, table string) {
 	t.Helper()
-	if _, err := p.deployed.resolve(providerkit.ClassProduction, func() (bootstrap.Deployed, error) {
+	if _, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{StateTable: table}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
+	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{Passphrase: table}, nil
 	}); err != nil {
 		t.Fatal(err)
@@ -96,13 +97,13 @@ func primed(t *testing.T, p *Provider, table string) {
 
 func standing(t *testing.T, p *Provider) (string, string) {
 	t.Helper()
-	held, err := p.deployed.resolve(providerkit.ClassProduction, func() (bootstrap.Deployed, error) {
+	held, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{StateTable: "after"}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	params, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
+	params, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{Passphrase: "after"}, nil
 	})
 	if err != nil {
@@ -116,7 +117,7 @@ func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
 	primed(t, p, "before")
 
 	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
-		Apply(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction}, nil); err != nil {
+		Apply(context.Background(), providerkit.BootstrapRequest{Class: edge.ClassProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -131,7 +132,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	primed(t, p, "before")
 
 	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
-		Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+		Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,7 +148,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 
 	refused := errors.New("refused")
 	if err := (settling{Bootstrap: stubBootstrap{err: refused}, settled: settledBy(t, p)}).
-		Apply(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction}, nil); !errors.Is(err, refused) {
+		Apply(context.Background(), providerkit.BootstrapRequest{Class: edge.ClassProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
 
@@ -179,7 +180,7 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 
 func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	wanted := classEdge{class: providerkit.ClassProduction, kind: cloudflare.Kind}
+	wanted := classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}
 	if _, err := p.params.resolve(wanted, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{Passphrase: string(cloudflare.Kind)}, nil
 	}); err != nil {
@@ -192,7 +193,7 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 		}
 	}
 
-	params, err := p.classParams(context.Background(), providerkit.ClassProduction, cloudflare.Kind)
+	params, err := p.classParams(context.Background(), edge.ClassProduction, cloudflare.Kind)
 	if err != nil {
 		t.Fatalf("classParams error = %v", err)
 	}
@@ -204,15 +205,15 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 
 func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	refusal := providerkit.Refuse(providerkit.CodeNotReady, "/ocel/origin/secret holds something other than the origin secret bootstrap writes")
-	if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
+	refusal := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret holds something other than the origin secret bootstrap writes")
+	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{OriginSecretErr: refusal}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	pre := providerkit.DeployPreflight{
-		Plan: providerkit.DeployPlan{Class: providerkit.ClassProduction},
+		Plan: providerkit.DeployPlan{Class: edge.ClassProduction},
 		Edge: cloudflare.Kind,
 	}
 	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refusal) {
@@ -222,7 +223,7 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 
 func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.deployed.resolve(providerkit.ClassProduction, func() (bootstrap.Deployed, error) {
+	if _, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{
 			ArtifactBucket: "functions",
 			AssetBucket:    "assets",
@@ -244,14 +245,14 @@ func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 		},
 		cloudfront.Kind: {Bucket: "cache-cloudfront"},
 	} {
-		if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: kind}, func() (bootstrap.ClassParams, error) {
+		if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: kind}, func() (bootstrap.ClassParams, error) {
 			return bootstrap.ClassParams{CacheStore: store}, nil
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	held, err := p.Buckets(context.Background(), providerkit.ClassProduction)
+	held, err := p.Buckets(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
@@ -280,7 +281,7 @@ func TestStandingWithoutAVarsKey(t *testing.T) {
 		VarsTable:      "vars-table",
 	}
 
-	if err := p.standing(held, providerkit.ClassProduction); err != nil {
+	if err := p.standing(held, edge.ClassProduction); err != nil {
 		t.Errorf("standing = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
 	}
 }

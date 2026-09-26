@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const storePage = 1000
@@ -132,11 +132,11 @@ func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run storeShel
 			continue
 		}
 		if answer.code == "000" {
-			return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"the store %s gave no answer asked to %s", spec.Store, call.what)
 		}
 		if !slices.Contains(call.allow, answer.code) {
-			return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"the store answered %s asked to %s", answer.code, call.what)
 		}
 	}
@@ -165,7 +165,7 @@ func uploadsIn(answer storeAnswer) ([]storedUpload, error) {
 	}
 	var listed uploadListing
 	if err := xml.Unmarshal(answer.body, &listed); err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"unreadable upload listing from the store: %v", err)
 	}
 	return listed.Uploads, nil
@@ -177,7 +177,7 @@ func objectsIn(answer storeAnswer) ([]string, error) {
 	}
 	var listed objectListing
 	if err := xml.Unmarshal(answer.body, &listed); err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"unreadable object listing from the store: %v", err)
 	}
 	keys := make([]string, 0, len(listed.Contents))
@@ -246,7 +246,7 @@ func removedBucket(spec BucketSpec, clock func() time.Time, run storeShell) erro
 		}
 		signature := heldSignature(keys, uploads)
 		if signature == held {
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return refusal.Refuse(refusal.CodeNotReady,
 				"bucket %s still holds %d objects and %d unfinished uploads after deletion",
 				spec.Bucket, len(keys), len(uploads))
 		}
@@ -255,7 +255,7 @@ func removedBucket(spec BucketSpec, clock func() time.Time, run storeShell) erro
 		if len(keys) > 0 {
 			call, err := deleteCall(keys)
 			if err != nil {
-				return providerkit.Refuse(providerkit.CodeInvalid,
+				return refusal.Refuse(refusal.CodeInvalid,
 					"cannot encode the deletion for bucket %s: %v", spec.Bucket, err)
 			}
 			calls = append(calls, call)

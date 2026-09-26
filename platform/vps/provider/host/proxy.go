@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -87,7 +87,7 @@ func Architecture(reported string) (string, error) {
 	case "aarch64", ArchARM64:
 		return ArchARM64, nil
 	default:
-		return "", providerkit.Refuse(providerkit.CodeDenied,
+		return "", refusal.Refuse(refusal.CodeDenied,
 			"this host's architecture %q is not %s or %s",
 			reported, ArchAMD64, ArchARM64)
 	}

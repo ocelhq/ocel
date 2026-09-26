@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -79,7 +81,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +240,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	refusal := refused(t, bootstrap.Apply(ctx,
 		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading, Unattended: true}, nil),
-		providerkit.CodeNotReady)
+		refusal.CodeNotReady)
 	if !strings.Contains(refusal.Message, engineName) {
 		t.Errorf("an unattended apply over a docker binary with no unit says %q, want it refused by name: nobody is there to consent to %s being run as root over an install that already stands",
 			refusal.Message, "https://get.docker.com")

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -106,12 +106,12 @@ func (k Keys) named() ([]byte, error) {
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"option %q names %s, which ocel cannot read: %s", "deployKey", path, err)
 	}
 	keys := authorized(raw)
 	if len(keys) == 0 {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"option %q names %s, which carries no public key", "deployKey", path)
 	}
 	return keys, nil
@@ -121,13 +121,13 @@ func resolved(path string) (string, error) {
 	if path == "~" || strings.HasPrefix(path, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", providerkit.Refuse(providerkit.CodeInvalid,
+			return "", refusal.Refuse(refusal.CodeInvalid,
 				"option %q names %s, and there is no home directory to resolve it: %s", "deployKey", path, err)
 		}
 		return filepath.Join(home, strings.TrimPrefix(path, "~")), nil
 	}
 	if !filepath.IsAbs(path) {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"option %q names %s, a relative path\nSpell it from / or ~/",
 			"deployKey", path)
 	}
@@ -177,7 +177,7 @@ func (h *Host) resolve(ctx context.Context) ([]byte, error) {
 	}
 	keys := authorized([]byte(result.Stdout))
 	if len(keys) == 0 {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s has no ~/.ssh/authorized_keys for %s to inherit\nName a public key file with the %q option",
 			h.named(), deployUser, "deployKey")
 	}

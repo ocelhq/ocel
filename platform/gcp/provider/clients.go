@@ -21,7 +21,7 @@ import (
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -69,7 +69,7 @@ func opened[T any](c *clients, held *memo[T], doing string, open func() (T, erro
 		return client, nil
 	}
 	var nothing T
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if errors.As(err, &refusal) {
 		return nothing, err
 	}

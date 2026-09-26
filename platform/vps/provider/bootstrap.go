@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) elevated(ctx context.Context) error {
@@ -20,7 +21,7 @@ type elevating struct {
 	elevated func(context.Context) error
 }
 
-func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
 	if !req.Heal {
 		if err := e.elevated(ctx); err != nil {
 			return err
@@ -29,7 +30,7 @@ func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 	return e.Bootstrap.Apply(ctx, req, progress)
 }
 
-func (e elevating) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+func (e elevating) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}

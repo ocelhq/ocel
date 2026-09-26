@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type mockedEngine struct {
@@ -74,7 +75,7 @@ func (e *mockedEngine) stacks() []string {
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
 
-func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Progress) (auto.OutputMap, error) {
+func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ edge.Progress) (auto.OutputMap, error) {
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {
 		monitor = e.mocks
@@ -94,7 +95,7 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	return e.outputs, nil
 }
 
-func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Progress) ([]providerkit.Change, error) {
+func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ edge.Progress) ([]providerkit.Change, error) {
 	if op == kitpulumi.OpDestroy {
 		rows := make([]providerkit.Change, 0, len(e.previewed))
 		for _, row := range e.previewed {
@@ -135,7 +136,7 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 	return p.inner.Call(args)
 }
 
-func (e *mockedEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Progress) error {
+func (e *mockedEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ edge.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.torndown = append(e.torndown, setup.Stack)
@@ -283,7 +284,7 @@ func (s *shippedArtifacts) Open(_ context.Context, ref providerkit.ArtifactRef) 
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, prefix string, _ providerkit.Progress) error {
+func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ edge.Class, prefix string, _ edge.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for at := range s.objects {
@@ -305,7 +306,7 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
 	result, err := conformingStacks(engine).Provision(context.Background(), providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
+		Ref:  providerkit.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
 			{Name: "c-postgres", Type: providerkit.BindingPostgres, Postgres: &providerkit.PostgresSpec{}},
@@ -364,7 +365,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
 	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
+		Ref:  providerkit.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
 			{Name: "c-bucket", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},

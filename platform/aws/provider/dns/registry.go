@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -47,12 +47,12 @@ func Kinds() []providerkit.DNSKind {
 
 func (r Registry) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
 	if kind == KindRoute53 && front == cloudflare.Kind {
-		return nil, kit.Refuse(kit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"route53 cannot write the records a Cloudflare edge answers on — pair a cloudflare edge with cloudflare dns, or drop the edge")
 	}
 	construct, ok := constructors[string(kind)]
 	if !ok {
-		return nil, kit.Refuse(kit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot write DNS records with %q; it writes them with %s", kind, strings.Join(SupportedKinds(), ", "))
 	}
 	return construct(r.Deps, zone)

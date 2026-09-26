@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type iamServer struct {
@@ -149,7 +149,7 @@ func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyA
 	t.Parallel()
 	server := standingIAM()
 	b := bootstrap{clients: server.open(t)}
-	read := survey{Class: providerkit.ClassProduction, Names: b.clients.Names}
+	read := survey{Class: edge.ClassProduction, Names: b.clients.Names}
 	ctx := context.Background()
 
 	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
@@ -174,7 +174,7 @@ func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyA
 		t.Errorf("the runtime account holds %s, and a runtime seals nothing", connectorSealingRole)
 	}
 
-	stands, err := b.accountStands(ctx, providerkit.ClassProduction, "ocel-production")
+	stands, err := b.accountStands(ctx, edge.ClassProduction, "ocel-production")
 	if err != nil {
 		t.Fatalf("accountStands() = %v", err)
 	}
@@ -195,7 +195,7 @@ func TestAnAccountThatMayNotReadIsSurveyedAsMendable(t *testing.T) {
 	server := standingIAM()
 	b := bootstrap{clients: server.open(t)}
 
-	stands, err := b.accountStands(context.Background(), providerkit.ClassProduction, "ocel-production")
+	stands, err := b.accountStands(context.Background(), edge.ClassProduction, "ocel-production")
 	if err != nil {
 		t.Fatalf("accountStands() = %v", err)
 	}
@@ -208,13 +208,13 @@ func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T
 	t.Parallel()
 	server := standingIAM()
 	b := bootstrap{clients: server.open(t)}
-	read := survey{Class: providerkit.ClassProduction, Names: b.clients.Names}
+	read := survey{Class: edge.ClassProduction, Names: b.clients.Names}
 	ctx := context.Background()
 	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := b.takeAccount(ctx, providerkit.ClassProduction, "ocel-production"); err != nil {
+	if err := b.takeAccount(ctx, edge.ClassProduction, "ocel-production"); err != nil {
 		t.Fatalf("takeAccount() = %v", err)
 	}
 	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"

@@ -10,25 +10,24 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type classEdge struct {
-	class providerkit.Class
+	class edge.Class
 	kind  edge.Kind
 }
 
 func (p *Provider) Region() string { return p.aws.Region }
 
-func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (bootstrap.Deployed, error) {
+func (p *Provider) bootstrapped(ctx context.Context, class edge.Class) (bootstrap.Deployed, error) {
 	return p.deployed.resolve(class, func() (bootstrap.Deployed, error) {
 		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, string(class))
 	})
 }
 
-func (p *Provider) classParams(ctx context.Context, class providerkit.Class, kind edge.Kind) (bootstrap.ClassParams, error) {
+func (p *Provider) classParams(ctx context.Context, class edge.Class, kind edge.Kind) (bootstrap.ClassParams, error) {
 	return p.params.resolve(classEdge{class: class, kind: kind}, func() (bootstrap.ClassParams, error) {
 		if kind == "" {
 			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(class))

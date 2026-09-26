@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -54,12 +54,12 @@ func Parse(what string, block []byte) (Leaf, error) {
 		}
 		parsed, err := x509.ParseCertificate(found.Bytes)
 		if err != nil {
-			return Leaf{}, providerkit.Refuse(providerkit.CodeInvalid,
+			return Leaf{}, refusal.Refuse(refusal.CodeInvalid,
 				"%s holds an unreadable certificate block: %v", what, err)
 		}
 		return Leaf{Domains: names(parsed), NotAfter: parsed.NotAfter}, nil
 	}
-	return Leaf{}, providerkit.Refuse(providerkit.CodeInvalid,
+	return Leaf{}, refusal.Refuse(refusal.CodeInvalid,
 		"%s has no pem certificate block", what)
 }
 
@@ -106,11 +106,11 @@ func (l Leaf) ExpiresAt() int64 {
 func Verify(path, hostname string, leaf Leaf, now time.Time) error {
 	switch {
 	case !leaf.Covers(hostname):
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the certificate pinned for %s at %s covers only %s",
 			hostname, path, strings.Join(leaf.Domains, ", "))
 	case leaf.Expired(now):
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the certificate pinned for %s at %s expired on %s\nReplace it",
 			hostname, path, leaf.NotAfter.UTC().Format(time.RFC3339))
 	default:

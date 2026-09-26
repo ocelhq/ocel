@@ -5,6 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) Hook(set func(*providerkit.Hooks)) *Provider {
@@ -15,8 +16,8 @@ func (p *Provider) Hook(set func(*providerkit.Hooks)) *Provider {
 }
 
 func (p *Provider) everyHook(hooks *providerkit.Hooks) {
-	hooks.WarmFunctions = func(context.Context, []string, providerkit.Progress) error { return nil }
-	hooks.EmbedCode = func(context.Context, string, providerkit.ArtifactRef, providerkit.Progress) error { return nil }
+	hooks.WarmFunctions = func(context.Context, []string, edge.Progress) error { return nil }
+	hooks.EmbedCode = func(context.Context, string, providerkit.ArtifactRef, edge.Progress) error { return nil }
 	hooks.InspectStack = p.InspectStack
 	hooks.VerifyGrants = func(context.Context, providerkit.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy

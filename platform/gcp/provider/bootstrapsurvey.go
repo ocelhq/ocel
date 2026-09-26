@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const enabledVersion = "ENABLED"
@@ -39,7 +41,7 @@ type stamp struct {
 }
 
 type survey struct {
-	Class      providerkit.Class
+	Class      edge.Class
 	Names      Names
 	Project    string
 	Region     string
@@ -67,7 +69,7 @@ func (s survey) current(items []item) bool {
 	return true
 }
 
-func (b bootstrap) survey(ctx context.Context, class providerkit.Class) (survey, error) {
+func (b bootstrap) survey(ctx context.Context, class edge.Class) (survey, error) {
 	read := survey{
 		Class:    class,
 		Names:    b.clients.Names,
@@ -167,7 +169,7 @@ type standing struct {
 	mends string
 }
 
-func (b bootstrap) stands(ctx context.Context, class providerkit.Class, held item) (standing, error) {
+func (b bootstrap) stands(ctx context.Context, class edge.Class, held item) (standing, error) {
 	switch held.Kind {
 	case KindDatabase:
 		return b.databaseStands(ctx)
@@ -184,7 +186,7 @@ func (b bootstrap) stands(ctx context.Context, class providerkit.Class, held ite
 	case KindServiceAccount:
 		return b.accountStands(ctx, class, held.Name)
 	}
-	return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
+	return standing{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 }
 
 func stood(held bool, err error) (standing, error) { return standing{held: held}, err }
@@ -334,7 +336,7 @@ func (b bootstrap) repositoryStands(ctx context.Context, name string) (standing,
 
 func repositoryStanding(name string, held *artifactregistry.Repository) (standing, error) {
 	if held.Format != dockerImages {
-		return standing{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return standing{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %s repository already stands and holds %s packages, and Artifact Registry never changes the format of one: "+
 				"Cloud Run runs %s images and nothing this bootstrap does would make it hold them.\n"+
 				"Delete that repository, or bootstrap under a namespace naming another in %s",
@@ -355,7 +357,7 @@ func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
 		policy.Condition.TagState == untaggedImages && policy.Condition.OlderThan == untaggedLifetime
 }
 
-func (b bootstrap) accountStands(ctx context.Context, class providerkit.Class, name string) (standing, error) {
+func (b bootstrap) accountStands(ctx context.Context, class edge.Class, name string) (standing, error) {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return standing{}, err

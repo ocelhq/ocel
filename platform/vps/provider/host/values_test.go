@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -15,7 +15,7 @@ const aManifest = `{"slug":"shop","class":"production","keys":[{"key":"DATABASE_
 
 func valued() Container {
 	spec := aContainer()
-	spec.Class = providerkit.ClassProduction
+	spec.Class = edge.ClassProduction
 	spec.Resolved = true
 	spec.Env = map[string]string{
 		"API_TOKEN": sensitiveValue,
@@ -28,7 +28,7 @@ func valued() Container {
 
 func promoted() Container {
 	spec := aContainer()
-	spec.Class = providerkit.ClassProduction
+	spec.Class = edge.ClassProduction
 	spec.Resolved = false
 	return spec
 }

@@ -10,14 +10,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type buckets struct {
 	removed []providerkit.Binding
 }
 
-func (b *buckets) ProvisionBucket(_ context.Context, in resources.Instruction, _ providerkit.Progress) (providerkit.Binding, error) {
+func (b *buckets) ProvisionBucket(_ context.Context, in resources.Instruction, _ edge.Progress) (providerkit.Binding, error) {
 	return providerkit.Binding{
 		Type:       providerkit.BindingBucket,
 		Name:       in.Resource.Name,
@@ -25,7 +28,7 @@ func (b *buckets) ProvisionBucket(_ context.Context, in resources.Instruction, _
 	}, nil
 }
 
-func (b *buckets) RemoveResource(_ context.Context, _ providerkit.StackRef, binding providerkit.Binding, _ providerkit.Progress) error {
+func (b *buckets) RemoveResource(_ context.Context, _ providerkit.StackRef, binding providerkit.Binding, _ edge.Progress) error {
 	b.removed = append(b.removed, binding)
 	return nil
 }
@@ -42,7 +45,7 @@ func (n neon) hooks() resources.Hooks {
 	return hooks
 }
 
-func (neon) ProvisionPostgres(_ context.Context, in resources.Instruction, _ providerkit.Progress) (providerkit.Binding, error) {
+func (neon) ProvisionPostgres(_ context.Context, in resources.Instruction, _ edge.Progress) (providerkit.Binding, error) {
 	return providerkit.Binding{
 		Type: providerkit.BindingPostgres,
 		Name: in.Resource.Name,
@@ -62,7 +65,7 @@ func (h halfBinding) hooks() resources.Hooks {
 	return resources.Hooks{ProvisionPostgres: h.ProvisionPostgres}
 }
 
-func (halfBinding) ProvisionPostgres(_ context.Context, in resources.Instruction, _ providerkit.Progress) (providerkit.Binding, error) {
+func (halfBinding) ProvisionPostgres(_ context.Context, in resources.Instruction, _ edge.Progress) (providerkit.Binding, error) {
 	return providerkit.Binding{
 		Type:       providerkit.BindingPostgres,
 		Name:       in.Resource.Name,
@@ -73,7 +76,7 @@ func (halfBinding) ProvisionPostgres(_ context.Context, in resources.Instruction
 func infraRef() providerkit.StackRef {
 	return providerkit.StackRef{
 		Project: "shop",
-		Class:   providerkit.ClassProduction,
+		Class:   edge.ClassProduction,
 		Name:    naming.InfraStack("prod"),
 	}
 }
@@ -132,12 +135,12 @@ func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Provision() of a primitive nothing serves = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, string(providerkit.BindingBucket)) {
-		t.Errorf("the refusal reads %q, want it to name what this provider does serve", refusal.Message)
+	if !strings.Contains(refused.Message, string(providerkit.BindingBucket)) {
+		t.Errorf("the refusal reads %q, want it to name what this provider does serve", refused.Message)
 	}
 }
 
@@ -149,8 +152,8 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Plan() of a primitive nothing serves = %v, want the refusal the provision would give", err)
 	}
 }
@@ -368,7 +371,7 @@ func (w *withFunctions) hooks() resources.Hooks {
 	return hooks
 }
 
-func (w *withFunctions) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.Function, error) {
+func (w *withFunctions) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.Function, error) {
 	var standing []providerkit.Function
 	for _, spec := range plan.App.Functions {
 		standing = append(standing, function(plan.Ref, spec.Name))
@@ -376,7 +379,7 @@ func (w *withFunctions) ProvisionFunctions(_ context.Context, plan providerkit.S
 	return standing, nil
 }
 
-func (w *withFunctions) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Progress) error {
+func (w *withFunctions) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ edge.Progress) error {
 	w.removed = append(w.removed, functions...)
 	return nil
 }
@@ -384,7 +387,7 @@ func (w *withFunctions) RemoveFunctions(_ context.Context, _ providerkit.StackRe
 func appRef() providerkit.StackRef {
 	return providerkit.StackRef{
 		Project: "shop",
-		Class:   providerkit.ClassProduction,
+		Class:   edge.ClassProduction,
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 }
@@ -393,7 +396,7 @@ func function(ref providerkit.StackRef, name string) providerkit.Function {
 	return providerkit.Function{Name: name, Physical: ref.Name.String() + "-" + name}
 }
 
-func recordFunctions(t *testing.T, records providerkit.RecordStore, ref providerkit.StackRef, names ...string) {
+func recordFunctions(t *testing.T, records records.Store, ref providerkit.StackRef, names ...string) {
 	t.Helper()
 
 	stack := providerkit.RecordedStack{Kind: providerkit.StackApp}
@@ -481,12 +484,12 @@ func (w *withContainers) hooks() resources.Hooks {
 	return hooks
 }
 
-func (w *withContainers) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (w *withContainers) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.AppContainer, error) {
 	w.stood = append(w.stood, plan)
 	return []providerkit.AppContainer{container(plan.Ref, plan.App.App)}, nil
 }
 
-func (w *withContainers) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Progress) error {
+func (w *withContainers) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ edge.Progress) error {
 	w.removed = append(w.removed, containers...)
 	return nil
 }
@@ -506,7 +509,7 @@ func containerApp(app string) *providerkit.AppPlan {
 	}
 }
 
-func recordContainers(t *testing.T, records providerkit.RecordStore, ref providerkit.StackRef, names ...string) {
+func recordContainers(t *testing.T, records records.Store, ref providerkit.StackRef, names ...string) {
 	t.Helper()
 
 	stack := providerkit.RecordedStack{Kind: providerkit.StackApp}
@@ -584,12 +587,12 @@ func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T)
 		Kind: providerkit.StackApp,
 		App:  containerApp("web"),
 	}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "Containers hooks") {
-		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "Containers hooks")
+	if !strings.Contains(refused.Message, "Containers hooks") {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refused.Message, "Containers hooks")
 	}
 }
 
@@ -603,12 +606,12 @@ func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T)
 		Kind: providerkit.StackApp,
 		App:  &providerkit.AppPlan{App: "web", Compute: providerkit.ComputeServerless},
 	}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Provision() of a serverless app on a provider that stands up none = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "Functions hooks") {
-		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "Functions hooks")
+	if !strings.Contains(refused.Message, "Functions hooks") {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refused.Message, "Functions hooks")
 	}
 }
 
@@ -622,8 +625,8 @@ func TestAnAppNamingNoComputeIsRefusedRatherThanAssumedServerless(t *testing.T) 
 		Kind: providerkit.StackApp,
 		App:  &providerkit.AppPlan{App: "web"},
 	}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Provision() of an app naming no compute = %v, want an invalid refusal", err)
 	}
 }
@@ -679,7 +682,7 @@ func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *test
 			Functions: []providerkit.FunctionSpec{{Name: "api"}},
 		},
 	}, nil)
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
 		t.Fatalf("Provision() over a recorded container nothing can take down = %v, want a refusal naming %s", err, "Containers hooks")
 	}
@@ -720,7 +723,7 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 	recordContainers(t, records, ref, "web")
 
 	err := resources.Stacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil)
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
 		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, "Containers hooks")
 	}
@@ -747,7 +750,7 @@ func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTak
 		Kind: providerkit.StackApp,
 		App:  containerApp("web"),
 	}, nil)
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
 		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, "Containers hooks")
 	}
@@ -771,8 +774,8 @@ func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T
 		Kind: providerkit.StackApp,
 		App:  &providerkit.AppPlan{App: "web"},
 	}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Provision() of an app naming no compute = %v, want an invalid refusal", err)
 	}
 	if len(own.removed) != 0 {
@@ -788,7 +791,7 @@ func (m misnaming) hooks() resources.Hooks {
 	return hooks
 }
 
-func (m misnaming) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (m misnaming) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.AppContainer, error) {
 	m.stood = append(m.stood, plan)
 	return []providerkit.AppContainer{container(plan.Ref, plan.App.App+"-svc")}, nil
 }
@@ -908,7 +911,7 @@ func (r *retaining) hooks() resources.Hooks {
 
 func (r *retaining) holds(imageRef string) bool { return r.holding[imageRef] }
 
-func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.AppContainer, error) {
+func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.AppContainer, error) {
 	if r.stood != nil {
 		if err := r.stood(); err != nil {
 			return nil, err
@@ -918,14 +921,14 @@ func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.Stac
 	return []providerkit.AppContainer{{Name: plan.App.App, Physical: plan.Ref.Name.String() + "-" + plan.App.App, Image: plan.App.Image}}, nil
 }
 
-func (r *retaining) RemoveContainers(_ context.Context, _ providerkit.StackRef, going []providerkit.AppContainer, _ providerkit.Progress) error {
+func (r *retaining) RemoveContainers(_ context.Context, _ providerkit.StackRef, going []providerkit.AppContainer, _ edge.Progress) error {
 	for _, container := range going {
 		r.taken = append(r.taken, container.Physical)
 	}
 	return nil
 }
 
-func (r *retaining) ProvisionBucket(ctx context.Context, in resources.Instruction, progress providerkit.Progress) (providerkit.Binding, error) {
+func (r *retaining) ProvisionBucket(ctx context.Context, in resources.Instruction, progress edge.Progress) (providerkit.Binding, error) {
 	if r.served != nil {
 		if err := r.served(in); err != nil {
 			return providerkit.Binding{}, err
@@ -934,7 +937,7 @@ func (r *retaining) ProvisionBucket(ctx context.Context, in resources.Instructio
 	return r.buckets.ProvisionBucket(ctx, in, progress)
 }
 
-func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ providerkit.Progress) error {
+func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ edge.Progress) error {
 	r.swept = append(r.swept, app+" "+imageRef)
 	if r.sweeping != nil {
 		if err := r.sweeping(); err != nil {
@@ -949,7 +952,7 @@ func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, a
 	return nil
 }
 
-func (r *retaining) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Progress) error {
+func (r *retaining) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ edge.Progress) error {
 	if r.forgetting != nil {
 		if err := r.forgetting(); err != nil {
 			return err
@@ -965,7 +968,7 @@ func (r refusingImages) Has(context.Context, providerkit.ImagePush) (bool, error
 
 func (refusingImages) Destination() string { return "the refusing registry" }
 
-func (r refusingImages) Push(context.Context, providerkit.ImagePush, providerkit.Progress) error {
+func (r refusingImages) Push(context.Context, providerkit.ImagePush, edge.Progress) error {
 	return r.err
 }
 
@@ -1018,23 +1021,23 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 
 type unreadable struct{ *fake.Records }
 
-func (unreadable) Read(context.Context, providerkit.RecordName) (providerkit.Record, error) {
-	return providerkit.Record{}, errors.New("this login reads no record tier")
+func (unreadable) Read(context.Context, records.Name) (records.Record, error) {
+	return records.Record{}, errors.New("this login reads no record tier")
 }
 
 func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) {
 	t.Parallel()
 
-	for name, breaking := range map[string]func() (providerkit.RecordStore, providerkit.StackPlan){
-		"the record cannot be read": func() (providerkit.RecordStore, providerkit.StackPlan) {
+	for name, breaking := range map[string]func() (records.Store, providerkit.StackPlan){
+		"the record cannot be read": func() (records.Store, providerkit.StackPlan) {
 			return unreadable{fake.NewRecords()}, containerPlan()
 		},
-		"a resource names a primitive this provider never serves": func() (providerkit.RecordStore, providerkit.StackPlan) {
+		"a resource names a primitive this provider never serves": func() (records.Store, providerkit.StackPlan) {
 			plan := containerPlan()
 			plan.Resources = []providerkit.Resource{{Name: "ledger", Type: providerkit.BindingPostgres}}
 			return fake.NewRecords(), plan
 		},
-		"the app names a compute nothing stands up": func() (providerkit.RecordStore, providerkit.StackPlan) {
+		"the app names a compute nothing stands up": func() (records.Store, providerkit.StackPlan) {
 			plan := containerPlan()
 			plan.App.Compute = providerkit.Compute("steam")
 			return fake.NewRecords(), plan

@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -151,7 +151,7 @@ func (c *Caddy) written() host.CaddyFront {
 }
 
 func unsupported(key string) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"option `\"proxy\": { %q: … }` is not supported yet; route to ocel yourself with `\"proxy\": %q`", key, proxyManual)
 }
 
@@ -160,7 +160,7 @@ func (p *Proxy) usable(certificates map[string]string) error {
 		return nil
 	}
 	if len(certificates) > 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"options %q and %q are both set: your proxy serves certificates; configure them there", "certificates", "proxy")
 	}
 	switch {
@@ -212,7 +212,7 @@ func presetKnown(at, preset string, known []string) error {
 	for _, name := range known {
 		quoted = append(quoted, strconv.Quote(name))
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"option %q names %q, which is none of %s", at+".preset", preset, strings.Join(quoted, ", "))
 }
 
@@ -220,13 +220,13 @@ func needs(at, field, filled string) error {
 	if filled != "" {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"option %q names no %q: write one, or a %q that fills it", at, field, "preset")
 }
 
 func reachedOnce(at, writtenNetwork string, writtenPort int) error {
 	if writtenNetwork != "" && writtenPort != 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"option %q sets both %q and %q: the proxy reaches the switchboard by one of them", at, "network", "port")
 	}
 	return reaching(at, writtenNetwork, writtenPort)
@@ -236,10 +236,10 @@ var dockerNetworkName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 
 func reaching(at, network string, port int) error {
 	if port < 0 || port > 65535 {
-		return providerkit.Refuse(providerkit.CodeInvalid, "option %q names %d, which is outside 1-65535", at+".port", port)
+		return refusal.Refuse(refusal.CodeInvalid, "option %q names %d, which is outside 1-65535", at+".port", port)
 	}
 	if network != "" && !dockerNetworkName.MatchString(network) {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"option %q names %q, which is no docker network name: letters, digits, _, . and -, starting with a letter or digit", at+".network", network)
 	}
 	return nil

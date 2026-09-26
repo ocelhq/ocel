@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -44,12 +45,12 @@ func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
 		},
 	}}}
 	err := providerkit.RefuseGrowth(shown, grown)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("RefuseGrowth() over work the plan never showed = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "docker") {
-		t.Errorf("the refusal reads %q, want it to name the row that moved", refusal.Message)
+	if !strings.Contains(refused.Message, "docker") {
+		t.Errorf("the refusal reads %q, want it to name the row that moved", refused.Message)
 	}
 }
 
@@ -78,10 +79,10 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
 	req := providerkit.ApplyRequest{Features: []string{fake.FeatureCache}}
-	shown, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	shown, err := gate.Plan(ctx, edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -91,13 +92,13 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 
 	provider.FakeBootstrap().Behind(fake.FeatureCache)
 
-	err = gate.Apply(ctx, shown, providerkit.ClassProduction, req, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	err = gate.Apply(ctx, shown, edge.ClassProduction, req, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Apply() over work that appeared after the plan was drawn = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, fake.FeatureCache) {
-		t.Errorf("the refusal reads %q, want it to name what moved under the plan", refusal.Message)
+	if !strings.Contains(refused.Message, fake.FeatureCache) {
+		t.Errorf("the refusal reads %q, want it to name what moved under the plan", refused.Message)
 	}
 }
 
@@ -108,11 +109,11 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	gate, provider := gated(t, "1.2.3")
 
 	req := providerkit.ApplyRequest{Features: []string{fake.FeatureCache}}
-	shown, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	shown, err := gate.Plan(ctx, edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if err := gate.Apply(ctx, shown, providerkit.ClassProduction, req, nil); err != nil {
+	if err := gate.Apply(ctx, shown, edge.ClassProduction, req, nil); err != nil {
 		t.Fatalf("Apply() of the plan it was shown = %v, want it applied", err)
 	}
 	if len(provider.FakeBootstrap().Applied()) == 0 {
@@ -136,7 +137,7 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 	t.Parallel()
 
 	gate, _ := gated(t, "1.2.3")
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureImages},
 	})
 	if err != nil {
@@ -162,10 +163,10 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 	provider.FakeBootstrap().Behind(fake.FeatureImages)
 
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureImages},
 	})
 	if err != nil {
@@ -188,11 +189,11 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 	recordProject(t, provider, "shop", fake.FeatureImages)
 
 	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
-	plan, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	plan, err := gate.Plan(ctx, edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v, want a plan that shows the removal rather than refusing it", err)
 	}
@@ -203,7 +204,7 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	if !strings.Contains(removed.Reason, "shop") {
 		t.Errorf("the images group reads %q, want it to name the project deployed against it", removed.Reason)
 	}
-	if err := gate.Apply(ctx, plan, providerkit.ClassProduction, req, nil); err == nil {
+	if err := gate.Apply(ctx, plan, edge.ClassProduction, req, nil); err == nil {
 		t.Error("Apply() took the removal the plan warned about without --force")
 	}
 }
@@ -213,9 +214,9 @@ func TestPlanLeavesAStandingFeatureNoRunNamed(t *testing.T) {
 
 	ctx := context.Background()
 	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	plan, err := gate.Plan(ctx, providerkit.ClassProduction, providerkit.ApplyRequest{Features: []string{fake.FeatureCache}})
+	plan, err := gate.Plan(ctx, edge.ClassProduction, providerkit.ApplyRequest{Features: []string{fake.FeatureCache}})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -231,9 +232,9 @@ func TestPlanRefusesToEnsureAndRemoveTheSameFeature(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
-	_, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	_, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureCache},
 		Remove:   []string{fake.FeatureCache},
 	})
@@ -436,7 +437,7 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	t.Parallel()
 
 	described := providerkit.BootstrapReading{
-		Class:   providerkit.ClassPreview,
+		Class:   edge.ClassPreview,
 		Present: true,
 		Stacks: []providerkit.BootstrapStack{
 			{Name: "core", Present: true, Schema: providerkit.BootstrapSchema, DigestCurrent: true},
@@ -444,7 +445,7 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 		},
 	}
 	groups := providerkit.DeriveGroups(described, fake.NewBootstrap().Catalogue(), providerkit.BootstrapRequest{
-		Class:    providerkit.ClassPreview,
+		Class:    edge.ClassPreview,
 		Features: []string{fake.FeatureCache},
 		Remove:   []string{fake.FeatureImages},
 	})

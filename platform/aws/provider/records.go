@@ -3,10 +3,10 @@ package aws
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) Table(ctx context.Context, class providerkit.Class) (string, error) {
+func (p *Provider) Table(ctx context.Context, class edge.Class) (string, error) {
 	held, err := p.bootstrapped(ctx, class)
 	if err != nil {
 		return "", err
@@ -14,7 +14,7 @@ func (p *Provider) Table(ctx context.Context, class providerkit.Class) (string, 
 	return held.StateTable, nil
 }
 
-func (p *Provider) ValuesTable(ctx context.Context, class providerkit.Class) (string, error) {
+func (p *Provider) ValuesTable(ctx context.Context, class edge.Class) (string, error) {
 	held, err := p.bootstrapped(ctx, class)
 	if err != nil {
 		return "", err

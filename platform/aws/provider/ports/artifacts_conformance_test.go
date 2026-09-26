@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	"github.com/ocelhq/ocel/platform/aws/provider/ports"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type fakeS3 struct {
@@ -90,7 +91,7 @@ type classBuckets struct {
 	cache     ports.S3API
 }
 
-func (b classBuckets) Buckets(_ context.Context, class providerkit.Class) (ports.Buckets, error) {
+func (b classBuckets) Buckets(_ context.Context, class edge.Class) (ports.Buckets, error) {
 	held := ports.Buckets{
 		Functions: "ocel-artifacts-" + string(class),
 		Assets:    "ocel-assets-" + string(class),
@@ -102,13 +103,13 @@ func (b classBuckets) Buckets(_ context.Context, class providerkit.Class) (ports
 }
 
 func providerkitCacheRef() providerkit.ArtifactRef {
-	return providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreCache, Key: "shop/prod/web/cache.json"}
+	return providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreCache, Key: "shop/prod/web/cache.json"}
 }
 
 func everyStoreRef() []providerkit.ArtifactRef {
 	return []providerkit.ArtifactRef{
-		{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
-		{Class: providerkit.ClassProduction, Bucket: providerkit.StoreAssets, Key: "shop/prod/web/static/app.js"},
+		{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+		{Class: edge.ClassProduction, Bucket: providerkit.StoreAssets, Key: "shop/prod/web/static/app.js"},
 		providerkitCacheRef(),
 	}
 }
@@ -137,7 +138,7 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.RemovePrefix(ctx, providerkit.ClassProduction, "shop/prod/", nil); err != nil {
+	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 	for _, ref := range everyStoreRef() {
@@ -162,7 +163,7 @@ func TestACacheStoreOffTheAccountsEndpointIsSweptThroughItsOwnClient(t *testing.
 	if _, held := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Class), ref.Key)]; !held {
 		t.Fatal("Put() wrote the cache artifact through the account's own client, not the store's")
 	}
-	if err := store.RemovePrefix(ctx, providerkit.ClassProduction, "shop/prod/", nil); err != nil {
+	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 	if len(elsewhere.objects) != 0 {
@@ -180,7 +181,7 @@ func TestASweepOfACacheStoreAlreadyTornDownIsNoWork(t *testing.T) {
 	t.Parallel()
 
 	store := ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{cache: goneS3{newFakeS3()}}}
-	if err := store.RemovePrefix(context.Background(), providerkit.ClassProduction, "shop/prod/", nil); err != nil {
+	if err := store.RemovePrefix(context.Background(), edge.ClassProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() over a cache bucket already gone = %v, want the destroy to carry on", err)
 	}
 }

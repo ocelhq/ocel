@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/target"
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const connectorCompute = providerkit.ComputeServerless
@@ -55,7 +56,7 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 }
 
 func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall,
-	progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
+	progress edge.Progress) (providerkit.ConnectorAddress, error) {
 	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
@@ -71,7 +72,7 @@ func (p connector) Install(ctx context.Context, install providerkit.ConnectorIns
 	return providerkit.ConnectorAddress{URL: standing.URL, PublicKey: standing.PublicKey, Compute: compute}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress providerkit.Progress) error {
+func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
 	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, saying(progress))
 }
 

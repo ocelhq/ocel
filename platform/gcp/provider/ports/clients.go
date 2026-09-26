@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const (
@@ -79,7 +80,7 @@ func Opened[T any](c *Clients, held *memo[T], doing string, open func() (T, erro
 		return client, nil
 	}
 	var nothing T
-	var refusal providerkit.Refusal
+	var refusal refusal.Refusal
 	if errors.As(err, &refusal) {
 		return nothing, err
 	}
@@ -87,7 +88,7 @@ func Opened[T any](c *Clients, held *memo[T], doing string, open func() (T, erro
 }
 
 func Unauthenticated() error {
-	return providerkit.Refuse(providerkit.CodeDenied, "%s", credentialHint)
+	return refusal.Refuse(refusal.CodeDenied, "%s", credentialHint)
 }
 
 func (c *Clients) Firestore() (*firestore.Client, error) {
@@ -138,6 +139,6 @@ func HostPort(endpoint string) string {
 }
 
 func Classless(what any) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s names no class, and this project keeps each class's state apart from the other class's", what)
 }

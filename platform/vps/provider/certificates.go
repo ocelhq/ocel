@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -40,8 +41,8 @@ func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequ
 }
 
 func refused(err error) bool {
-	var refusal providerkit.Refusal
-	return errors.As(err, &refusal) && refusal.Code == providerkit.CodeBusy
+	var rejection refusal.Refusal
+	return errors.As(err, &rejection) && rejection.Code == refusal.CodeBusy
 }
 
 func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
@@ -58,14 +59,14 @@ func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string,
 	}
 	served, ok := certs.Serving(cert.ID)
 	if !ok {
-		return providerkit.CertificateHealth{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return providerkit.CertificateHealth{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s is bound to %q, which is neither %s<hostname> nor %s<path>",
 			hostname, cert.ID, certs.ProxyScheme, certs.PinScheme)
 	}
 	return p.servedHealth(ctx, served, hostname, health)
 }
 
-func (p certificates) Discard(context.Context, providerkit.Certificate, providerkit.Progress) error {
+func (p certificates) Discard(context.Context, providerkit.Certificate, edge.Progress) error {
 	return nil
 }
 

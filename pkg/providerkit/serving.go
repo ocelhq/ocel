@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -181,12 +182,12 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*Routi
 		return nil, nil
 	}
 	if desc.Entry == "" {
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build names no entry route; rebuild the app", q.App)
 	}
 	raw, err := os.ReadFile(filepath.Join(AppArtifactRoot(q.Root, q.App), edge.RoutingManifestFile))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, Refuse(CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares edge routing but its build wrote no %s; rebuild the app", q.App, edge.RoutingManifestFile)
 	}
 	if err != nil {

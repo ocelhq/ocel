@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type engineReport struct {
@@ -130,7 +131,7 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 func TestAContainerHoldingAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")

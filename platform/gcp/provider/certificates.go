@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -108,7 +109,7 @@ func (p *Provider) authorized(
 		return nil, fmt.Errorf("read the dns authorization for %s: %w", req.Hostname, err)
 	}
 	if held.DnsResourceRecord == nil {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"the dns authorization for %s carries no record to write, and ownership of a domain is proved by writing the one Certificate Manager names",
 			req.Hostname)
 	}
@@ -181,7 +182,7 @@ func (p *Provider) issued(
 		func(held *certmanager.Certificate) bool {
 			return held != nil && held.Managed != nil && held.Managed.State != certificateProvisioning
 		})
-	if code, _ := providerkit.RefusedCode(err); code == providerkit.CodeNotReady {
+	if code, _ := providerkit.RefusedCode(err); code == refusal.CodeNotReady {
 		return providerkit.Pending(err)
 	}
 	if err != nil {
@@ -190,7 +191,7 @@ func (p *Provider) issued(
 	if settled.Managed.State == certificateActive {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"Certificate Manager gave up on the certificate for %s: %s.\n"+
 			"The authorization record has to resolve from the public internet before Google will issue: check it, then bind the hostname again",
 		req.Hostname, provisioningIssue(settled))
@@ -287,7 +288,7 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	return bound, nil
 }
 
-func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress providerkit.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress edge.Progress) error {
 	if !cert.Issued() {
 		return nil
 	}
@@ -347,7 +348,7 @@ func (p *Provider) awaitCertificates(
 		return err
 	}
 	if settled.Error != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
+		return refusal.Refuse(refusal.CodeNotReady,
 			"Certificate Manager refused to %s: %s", doing, settled.Error.Message)
 	}
 	return nil

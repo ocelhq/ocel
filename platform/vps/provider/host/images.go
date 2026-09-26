@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const dockerReach = "docker version"
@@ -24,7 +25,7 @@ func (h *Host) reachDocker(ctx context.Context) (string, error) {
 	}
 	if result.Code != 0 {
 		if !deniedSocket(result.Stderr) {
-			return "", providerkit.Refuse(providerkit.CodeNotReady,
+			return "", refusal.Refuse(refusal.CodeNotReady,
 				"%s cannot run docker: %s",
 				h.named(), spoken(result))
 		}
@@ -75,7 +76,7 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 		return "", err
 	}
 	if !held {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s pulled from %s but holds no %s: %s",
 			h.named(), target.Server, imageRef, strings.TrimSpace(said))
 	}
@@ -128,7 +129,7 @@ func LoginStands(target providerkit.RegistryTarget) error {
 	if target.Password == "" || target.Username != "" {
 		return nil
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return refusal.Refuse(refusal.CodeInvalid,
 		"%s has a password but no username\nSet `username` beside `password` in the project's `registry`", target.Server)
 }
 
@@ -158,7 +159,7 @@ func pull(target providerkit.RegistryTarget, imageRef, digest string) (string, e
 
 func pinnedTo(imageRef, digest string) (string, error) {
 	if digest == "" {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s pins no digest",
 			imageRef)
 	}
@@ -184,7 +185,7 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 		return "", err
 	}
 	if !held {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s loaded the image but holds no %s: %s\nengine state:\n%s",
 			h.named(), imageRef, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
 	}

@@ -6,28 +6,30 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 
-	records := vm.deploying(t).Records()
-	name := providerkit.ProjectRecord(providerkit.ClassProduction, "records-induction")
+	store := vm.deploying(t).Records()
+	name := providerkit.ProjectRecord(edge.ClassProduction, "records-induction")
 	ctx := context.Background()
 
-	held, err := providerkit.ReadOrEmpty(ctx, records, name)
+	held, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		t.Fatalf("read %s as %s = %v, want the tier a bootstrap wrote as root readable by the login every deploy runs as: the whole deploy path reads before it writes, so a tier this login cannot open is a box nothing can deploy to",
 			name, deployLogin, err)
 	}
 	held.Bytes = []byte(`{}`)
-	if _, err := records.Write(ctx, held); err != nil {
+	if _, err := store.Write(ctx, held); err != nil {
 		t.Fatalf("write %s as %s = %v, want the record tier a bootstrap wrote as root writable by the login every deploy runs as", name, deployLogin, err)
 	}
-	read, err := records.Read(ctx, name)
+	read, err := store.Read(ctx, name)
 	if err != nil {
 		t.Fatalf("read back %s as %s = %v", name, deployLogin, err)
 	}
@@ -39,7 +41,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 
 	const victim = "/tmp/records-victim"
 	vm.ssh(t, "sudo install -m 0644 -o root -g root /etc/hostname "+victim)
@@ -48,7 +50,7 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 		t.Fatalf("%s reads %q before the helper is driven at all, so nothing it reads afterwards is a claim about what the helper did", victim, held)
 	}
 
-	tier := host.RecordsDir(providerkit.ClassProduction)
+	tier := host.RecordsDir(edge.ClassProduction)
 	lock := tier + "/.lock"
 	vm.sshAs(t, deployLogin, "rm -f "+quote(lock)+" && ln -sf "+victim+" "+quote(lock))
 	if held := strings.TrimSpace(vm.ssh(t, "sudo readlink "+quote(lock))); held != victim {
@@ -77,7 +79,7 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 func TestLiveARecordAHelperCouldNotHandOverIsARecordItNeverFlipped(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
-	bootstrapped(t, vm, providerkit.ClassProduction)
+	bootstrapped(t, vm, edge.ClassProduction)
 
 	const failing = "/tmp/records-failing"
 	vm.ssh(t, "sudo install -d -m 0755 "+failing)

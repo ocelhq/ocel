@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -18,7 +18,7 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	stacks := stacking(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	prefixes := map[string]string{}
 	for _, target := range []alb.Target{
 		{Class: class},
@@ -45,7 +45,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, plan := stacks.config(stacks.p.resolved, alb.Target{Class: providerkit.ClassProduction}, "secret", nil)
+	front, plan := stacks.config(stacks.p.resolved, alb.Target{Class: edge.ClassProduction}, "secret", nil)
 	if front.Refresh == nil || !front.Refresh(plan.Ref, kitpulumi.OpProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by holding " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the class back to unrouted")

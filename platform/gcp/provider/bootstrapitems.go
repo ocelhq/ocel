@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Kind string
@@ -45,7 +46,7 @@ func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
 func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
 
-func stackItems(names Names, class providerkit.Class, emulated bool) []item {
+func stackItems(names Names, class edge.Class, emulated bool) []item {
 	items := []item{
 		{
 			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
@@ -79,14 +80,14 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 	return slices.DeleteFunc(items, func(held item) bool { return !provisioned(held.Kind, emulated) })
 }
 
-func parameterItems(names Names, class providerkit.Class) []item {
+func parameterItems(names Names, class edge.Class) []item {
 	return []item{{
 		Kind: KindSecret, Name: names.PassphraseSecret(class),
 		Note: "the passphrase this class's state is encrypted under, minted here and never written over",
 	}}
 }
 
-func bootstrapItems(names Names, class providerkit.Class, emulated bool) []item {
+func bootstrapItems(names Names, class edge.Class, emulated bool) []item {
 	return slices.Concat(stackItems(names, class, emulated), parameterItems(names, class))
 }
 
@@ -99,9 +100,9 @@ func digestOf(namespace providerkit.Namespace, items []item) string {
 	return hex.EncodeToString(sum.Sum(nil))
 }
 
-func siblingOf(class providerkit.Class) providerkit.Class {
-	if class == providerkit.ClassProduction {
-		return providerkit.ClassPreview
+func siblingOf(class edge.Class) edge.Class {
+	if class == edge.ClassProduction {
+		return edge.ClassPreview
 	}
-	return providerkit.ClassProduction
+	return edge.ClassProduction
 }

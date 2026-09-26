@@ -12,6 +12,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -88,12 +90,12 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	return m.refuse("StandUp")
 }
 
-func (m *machine) ForgetNetwork(_ context.Context, class providerkit.Class, project string) error {
+func (m *machine) ForgetNetwork(_ context.Context, class edge.Class, project string) error {
 	m.calls = append(m.calls, "forget network "+string(class)+"/"+project)
 	return m.refuse("ForgetNetwork")
 }
 
-func (m *machine) Promote(_ context.Context, _ providerkit.Class, project, app, coordinate string) error {
+func (m *machine) Promote(_ context.Context, _ edge.Class, project, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
@@ -107,7 +109,7 @@ func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) 
 	return m.upstream[key], nil
 }
 
-func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Progress) error {
+func (m *machine) Release(_ context.Context, rel host.Release, _ edge.Progress) error {
 	if len(rel.Apps) == 0 {
 		return nil
 	}
@@ -204,11 +206,11 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
-func edgeOver(m *machine, records providerkit.RecordStore) *box.Edge {
+func edgeOver(m *machine, records records.Store) *box.Edge {
 	return box.New(m, m.HoldOrigins, records, sshScope)
 }
 
-func (m *machine) HoldOrigins(_ context.Context, project string, class providerkit.Class) error {
+func (m *machine) HoldOrigins(_ context.Context, project string, class edge.Class) error {
 	m.calls = append(m.calls, "hold origins "+project+"/"+string(class))
 	return m.refuse("HoldOrigins")
 }
@@ -223,7 +225,7 @@ func (m *machine) InstallPreviewEntry(_ context.Context, base string) error {
 		return err
 	}
 	if m.previewBase != "" && m.previewBase != base {
-		return providerkit.Refuse(providerkit.CodeBusy,
+		return refusal.Refuse(refusal.CodeBusy,
 			"this box already answers previews on %s", edge.PreviewWildcard(m.previewBase))
 	}
 	m.previewBase = base
@@ -387,10 +389,10 @@ func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.
 
 	for what, refuse := range map[string]func(*machine){
 		"a container that would not stand": func(m *machine) {
-			m.refuseOn("StandUp", providerkit.Refuse(providerkit.CodeNotReady, "docker run failed"))
+			m.refuseOn("StandUp", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
 		},
 		"a release the box kept off": func(m *machine) {
-			m.refuseOn("Release", host.Unserved{Err: providerkit.Refuse(providerkit.CodeNotReady, "the gate exited 4; the previous release is still live")})
+			m.refuseOn("Release", host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
 		},
 	} {
 		t.Run(what, func(t *testing.T) {
@@ -423,7 +425,7 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	stood.refuseOn("Release", providerkit.Refuse(providerkit.CodeNotReady, "flipped onto shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
+	stood.refuseOn("Release", refusal.Refuse(refusal.CodeNotReady, "flipped onto shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
 
 	if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
 		t.Fatal("a promotion whose retiree would not stop after the flip reported success")
@@ -433,27 +435,27 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	}
 }
 
-type honouring struct{ providerkit.RecordStore }
+type honouring struct{ records.Store }
 
-func (h honouring) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+func (h honouring) Read(ctx context.Context, name records.Name) (records.Record, error) {
 	if err := ctx.Err(); err != nil {
-		return providerkit.Record{}, err
+		return records.Record{}, err
 	}
-	return h.RecordStore.Read(ctx, name)
+	return h.Store.Read(ctx, name)
 }
 
-func (h honouring) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (h honouring) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return h.RecordStore.Write(ctx, record)
+	return h.Store.Write(ctx, record)
 }
 
-func (h honouring) Remove(ctx context.Context, name providerkit.RecordName, expected providerkit.Revision) error {
+func (h honouring) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return h.RecordStore.Remove(ctx, name, expected)
+	return h.Store.Remove(ctx, name, expected)
 }
 
 func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T) {
@@ -476,7 +478,7 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 	defer cancel()
 	stood.releasing = func(host.Release) error {
 		cancel()
-		return host.Unserved{Err: providerkit.Refuse(providerkit.CodeNotReady, "the gate was interrupted; the previous release is still live")}
+		return host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate was interrupted; the previous release is still live")}
 	}
 
 	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", edge.DiscardProgress()); err == nil {
@@ -576,22 +578,22 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 }
 
 type staleAt struct {
-	providerkit.RecordStore
+	records.Store
 	at string
 }
 
-func (s staleAt) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (s staleAt) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if slices.Contains(record.Name, s.at) {
-		return "", providerkit.ErrStale
+		return "", records.ErrStale
 	}
-	return s.RecordStore.Write(ctx, record)
+	return s.Store.Write(ctx, record)
 }
 
 func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	t.Parallel()
 
 	stood := aMachine()
-	front := edgeOver(stood, staleAt{RecordStore: fake.NewRecords(), at: "pointers"})
+	front := edgeOver(stood, staleAt{Store: fake.NewRecords(), at: "pointers"})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -606,9 +608,9 @@ func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	if err == nil {
 		t.Fatal("Promote succeeded while the pointer moved under it")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Errorf("Promote refused with %v, want %s: the deploy that lost the race is told another one moved the pointer", err, providerkit.CodeBusy)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("Promote refused with %v, want %s: the deploy that lost the race is told another one moved the pointer", err, refusal.CodeBusy)
 	}
 	if len(stood.calls) != 0 {
 		t.Errorf("a deploy that lost the pointer still reached the box (%v); the flip rewrites the whole box's proxy configuration, so a deploy that lost the race would retire a live app's route on its way past", stood.calls)
@@ -977,8 +979,8 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	if err == nil {
 		t.Fatal("a rollback onto an image this box has swept succeeded, and docker run would then reach for a registry")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Errorf("the rollback failed with %v, want a refusal naming what is missing rather than docker's own error", err)
 	}
 	if !strings.Contains(err.Error(), "Deploy again") {
@@ -1027,7 +1029,7 @@ type reported struct{ lines []string }
 func (r *reported) Say(message string)    { r.lines = append(r.lines, message) }
 func (r *reported) Detail(message string) { r.lines = append(r.lines, message) }
 
-func (r *reported) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (r *reported) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func TestAPromotionSaysItIsStandingTheContainerBackUpBeforeItStandsIt(t *testing.T) {
 	t.Parallel()

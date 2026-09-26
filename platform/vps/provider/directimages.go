@@ -9,6 +9,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -31,15 +33,15 @@ func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 	return l.host.HoldsImage(ctx, push.ImageRef)
 }
 
-func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
+func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, progress edge.Progress) error {
 	if push.Built == nil {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s: this release carries no built image to load onto the box", push.App)
 	}
 	return l.load(ctx, push, progress)
 }
 
-func (l loaded) load(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
+func (l loaded) load(ctx context.Context, push providerkit.ImagePush, progress edge.Progress) error {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
 		return fmt.Errorf("%q is not a valid image tag: %w", push.ImageRef, err)

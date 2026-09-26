@@ -16,12 +16,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type BucketSpec struct {
 	Store    string
-	Class    providerkit.Class
+	Class    edge.Class
 	Endpoint string
 	Region   string
 
@@ -257,7 +258,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 	}
 	calls, err := spec.calls()
 	if err != nil {
-		return BucketState{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return BucketState{}, refusal.Refuse(refusal.CodeInvalid,
 			"cannot encode bucket %s: %v", spec.Bucket, err)
 	}
 	now := time.Now().UTC()
@@ -268,7 +269,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 				return h.ran(ctx, what, script, nil, elevation)
 			})
 			if err != nil {
-				return BucketState{}, providerkit.Refuse(providerkit.CodeNotReady,
+				return BucketState{}, refusal.Refuse(refusal.CodeNotReady,
 					"could not %s on %s: %v", call.what, h.named(), err)
 			}
 			standing.ExpiresUploads = slices.Contains(storeTook, taken[call.name].code)
@@ -279,7 +280,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 			return BucketState{}, fmt.Errorf("sign %s: %w", call.what, err)
 		}
 		if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
-			return BucketState{}, providerkit.Refuse(providerkit.CodeNotReady,
+			return BucketState{}, refusal.Refuse(refusal.CodeNotReady,
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}
 	}
@@ -293,7 +294,7 @@ func (h *Host) HoldOrigins(ctx context.Context, spec BucketSpec) error {
 	}
 	call, err := spec.corsCall()
 	if err != nil {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"bucket %s cannot be described to the store: %v", spec.Bucket, err)
 	}
 	req, err := spec.signed(call, time.Now().UTC())
@@ -301,13 +302,13 @@ func (h *Host) HoldOrigins(ctx context.Context, spec BucketSpec) error {
 		return fmt.Errorf("sign %s: %w", call.what, err)
 	}
 	if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady, "could not %s on %s: %v", call.what, h.named(), err)
+		return refusal.Refuse(refusal.CodeNotReady, "could not %s on %s: %v", call.what, h.named(), err)
 	}
 	return nil
 }
 
 type BucketRef struct {
-	Class   providerkit.Class
+	Class   edge.Class
 	Project string
 	Store   string
 	Bucket  string

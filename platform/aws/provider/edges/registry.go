@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -43,7 +43,7 @@ var _ providerkit.Edges = Registry{}
 func (r Registry) Open(kind edge.Kind) (edge.Edge, error) {
 	construct, ok := constructors[kind]
 	if !ok {
-		return nil, kit.Refuse(kit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge; it supports %s", kind, supportedList())
 	}
 	return construct(r.Deps), nil

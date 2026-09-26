@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -27,7 +28,7 @@ type Provider struct {
 	aws        aws.Config
 	namespace  bootstrap.Namespace
 
-	deployed memo[providerkit.Class, bootstrap.Deployed]
+	deployed memo[edge.Class, bootstrap.Deployed]
 	params   memo[classEdge, bootstrap.ClassParams]
 	account  memo[struct{}, string]
 
@@ -101,11 +102,11 @@ func (p *Provider) Artifacts() providerkit.ArtifactStore {
 	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}
 }
 
-func (p *Provider) Records() providerkit.RecordStore {
+func (p *Provider) Records() records.Store {
 	return awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
 }
 
-func (p *Provider) Cipher() providerkit.Cipher {
+func (p *Provider) Cipher() records.Cipher {
 	return awsports.Cipher{KMS: kms.NewFromConfig(p.aws), Keys: p}
 }
 

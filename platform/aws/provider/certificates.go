@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -25,7 +26,7 @@ func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequ
 	}
 	held, err := certificates.ACM.Pinned(ctx, req.Hostname, pinned)
 	if err != nil {
-		return providerkit.Certificate{}, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
+		return providerkit.Certificate{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
 	return providerkit.Certificate{ID: held.ARN}, nil
 }
@@ -101,7 +102,7 @@ func waiting(err error) error {
 	if !certs.Pending(err) {
 		return err
 	}
-	return providerkit.Pending(providerkit.Refuse(providerkit.CodeNotReady, "%s", err))
+	return providerkit.Pending(refusal.Refuse(refusal.CodeNotReady, "%s", err))
 }
 
 func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
@@ -138,7 +139,7 @@ func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname stri
 	return health, nil
 }
 
-func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress providerkit.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress edge.Progress) error {
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
@@ -146,7 +147,7 @@ func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate,
 	return certs.DiscardACMFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, progress.Say)
 }
 
-func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress providerkit.Progress) (certs.Certificates, error) {
+func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress edge.Progress) (certs.Certificates, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {

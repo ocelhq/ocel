@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
@@ -45,7 +46,7 @@ func (r *deployRun) deliver(entry AppEntry, held AppValues) map[string]string {
 }
 
 func (r *deployRun) refuseUnsetSecret(app, key string) error {
-	return Refuse(CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"app %s declares %s as a secret and nothing is stored for it in %s: a container is handed the value the deploy resolved, so an unset secret is refused here rather than at the app's first read. Set it with `ocel env set %s <value>`",
 		app, key, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), key)
 }
@@ -108,17 +109,17 @@ func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
 		}
 	}
 	if len(served) > 0 {
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares %s, and %s is the name a function's image sets to the file its runtime serves: a value declared under it would take the place of the app's own entrypoint and leave the release gated on a function that never boots. Rename it",
 			app, strings.Join(served, ", "), HandlerName)
 	}
 	if len(injected) > 0 {
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares %s, and %s is the one name a provider running a container injects itself: it names the port the app is told to bind, so a value declared under it would either be lost or win and leave the release gated on a port nothing is listening on. Rename it",
 			app, strings.Join(injected, ", "), InjectedPortName)
 	}
 	if len(owned) > 0 {
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares %s, and a container is handed every value it declares under that value's own bare name: %s is the prefix ocel delivers its own entries under, so a value named that way would sit beside — or on top of — a bound resource's record. Rename it",
 			app, strings.Join(owned, ", "), ownedPrefix)
 	}

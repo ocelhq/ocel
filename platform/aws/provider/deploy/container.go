@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -89,7 +90,7 @@ func fargateCPUArchitecture(declared string) string {
 func ContainerArch(app, declared string) (string, error) {
 	runs, known := providerkit.GoArch(declared)
 	if !known {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
+		return "", refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares arch %q, and a container runs on %s or %s alone", app, declared, providerkit.ArchX8664, providerkit.ArchARM64)
 	}
 	return runs, nil
@@ -125,19 +126,19 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	if strings.TrimSpace(app.Image) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a container on this provider runs what a registry coordinate names and nothing else", app.App)
 	}
 	if !providerkit.HealthCheckPath(app.HealthCheckPath) {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, app.HealthCheckPath)
 	}
 	if r.cfg.OriginSecret == "" {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", providerkit.BootstrapCommand(plan.Ref.Class))
 	}
 	if r.cfg.AppBoundaryARN == "" {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, providerkit.BootstrapCommand(plan.Ref.Class))
 	}
 	policies, err := planBindingPolicies(app.Grants)
@@ -247,7 +248,7 @@ func (r *release) placeRule(ctx context.Context, work *containerWork) error {
 		return err
 	}
 	if work.priority = rulePriority(work.physical(), taken); work.priority == 0 {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"the container front for the %s class holds a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Class, work.app)
 	}
 	return nil
@@ -278,7 +279,7 @@ func containerEnv(app string, values providerkit.AppValues, originSecret, previo
 	}
 	maps.Copy(env, values.Injected())
 	if _, set := env[containerPortEnv]; set {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s sets %s, and a container on this provider listens on %s, which it is handed as %s: drop the value and read the port from the environment",
 			app, containerPortEnv, containerPort, containerPortEnv)
 	}
@@ -512,7 +513,7 @@ func runsContainer(plan providerkit.StackPlan) bool {
 	return plan.App != nil && plan.App.Compute == providerkit.ComputeContainer
 }
 
-func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
 	work, err := r.checkContainer(plan)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -535,7 +536,7 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 	return result, nil
 }
 
-func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, progress edge.Progress) (providerkit.StackResult, error) {
 	var err error
 	for attempt := range rulePlacements {
 		if err = r.placeRule(ctx, work); err != nil {
@@ -556,14 +557,14 @@ func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, 
 	return providerkit.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
-func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
 	return r.releaseSubstrate(ctx, r.cfg.Records, ref, progress)
 }
 
-func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
 	held, present, err := r.readSubstrate(ctx, plan.Ref.Class)
 	if err != nil {
 		return providerkit.Plan{}, err

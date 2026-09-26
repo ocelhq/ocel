@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -102,7 +103,7 @@ func holdingBuckets(t *testing.T, provider *vps.Provider, stack naming.StackName
 	}
 	recorded := providerkit.RecordedStack{Kind: providerkit.StackApp, App: "web", Bindings: bindings}
 	if err := providerkit.WriteStack(context.Background(), records,
-		providerkit.ClassProduction, "shop", stack, recorded); err != nil {
+		edge.ClassProduction, "shop", stack, recorded); err != nil {
 		t.Fatal(err)
 	}
 	provider.Recording(records)
@@ -127,7 +128,7 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 	binding := standingBucket(t, machine, provider, "uploads")
 	holdingBuckets(t, provider, stack, "uploads")
 
-	ref := providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack}
+	ref := providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	if err := provider.RemoveResource(context.Background(), ref, binding, nil); err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
@@ -157,7 +158,7 @@ func TestAStoreStillHoldingABucketIsLeftStanding(t *testing.T) {
 	binding := standingBucket(t, machine, provider, "uploads")
 	holdingBuckets(t, provider, stack, "uploads", "assets")
 
-	ref := providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack}
+	ref := providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	if err := provider.RemoveResource(context.Background(), ref, binding, nil); err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
@@ -177,7 +178,7 @@ func TestATeardownThatStoppedHalfwayIsRunAgainWithoutComplaint(t *testing.T) {
 	binding := standingBucket(t, machine, provider, "uploads")
 	holdingBuckets(t, provider, stack, "uploads")
 
-	ref := providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack}
+	ref := providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	for again := range 2 {
 		if err := provider.RemoveResource(context.Background(), ref, binding, nil); err != nil {
 			t.Fatalf("RemoveResource(bucket) run %d = %v", again+1, err)
@@ -190,7 +191,7 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 
 	machine := &box{kept: sealedRootKey()}
 	stack := aStackName(t)
-	ref := providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack}
+	ref := providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	own := host.StoreAccountKey(naming.InfraStack(ref.Name.Env).String(), "web")
 
 	stopped := over(machine)
@@ -236,7 +237,7 @@ func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 	standingBucket(t, machine, provider, "uploads")
 	holdingBuckets(t, provider, stack, "uploads")
 
-	ref := providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack}
+	ref := providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	err := provider.RemoveContainers(context.Background(), ref,
 		[]providerkit.AppContainer{{Name: "web", Physical: "prod-web-r0a1b2c3d-web"}}, nil)
 	if err != nil {

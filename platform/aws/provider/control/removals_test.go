@@ -97,7 +97,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
 	b := removingBootstrapper(t, bootstrap.ClassPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassPreview)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassPreview)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 	delete(b.CFN.(*teardownCFN).present, coreStackName)
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 	b.Edge = &teardownEdge{}
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
 
 	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 	b.Edges = registryOf(selected, standing, unused)
 	b.Kinds = kindsOf(selected, standing, unused)
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
 	severed(t, b, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	b, _, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
 	severed(t, b, bootstrap.ClassProduction)
 
-	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if len(standing.torndown) == 0 {
@@ -347,7 +347,7 @@ func TestRemoveTearsDownEveryEdgeThePlanShowed(t *testing.T) {
 
 	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
 
-	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	for _, front := range []*planningEdge{selected, standing} {
@@ -365,7 +365,7 @@ func TestRemoveLeavesAloneAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 	b.Edges = registryOf(selected, standing, unused)
 	b.Kinds = kindsOf(selected, standing, unused)
 
-	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if len(unused.torndown) != 0 {
@@ -378,7 +378,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}

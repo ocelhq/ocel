@@ -4,7 +4,7 @@ import (
 	_ "embed"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 //go:embed backups.sh
@@ -26,7 +26,7 @@ const (
 	BackupVolume   = "vol"
 )
 
-func BackupsDir(class providerkit.Class, container string) string {
+func BackupsDir(class edge.Class, container string) string {
 	return StateDir(class) + "/" + backupsDir + "/" + container
 }
 
@@ -85,10 +85,10 @@ func backupRemovals() []removal {
 	}
 }
 
-func dumpCommand(class providerkit.Class, container, database string) string {
+func dumpCommand(class edge.Class, container, database string) string {
 	return words([]string{BackupsHelper, string(class), "dump", container, database})
 }
 
-func restoreCommand(class providerkit.Class, container, database, file string) string {
+func restoreCommand(class edge.Class, container, database, file string) string {
 	return words([]string{BackupsHelper, string(class), "restore", container, database, file})
 }

@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -56,13 +57,13 @@ type Host struct {
 
 	mu        sync.Mutex
 	principal string
-	tiers     map[providerkit.Class]bool
+	tiers     map[edge.Class]bool
 
 	pause func(context.Context, time.Duration) error
 }
 
 func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[providerkit.Class]bool{}, pause: waited}
+	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[edge.Class]bool{}, pause: waited}
 	h.front = openFront(front, frontBox{h})
 	return h
 }
@@ -82,7 +83,7 @@ func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
 
 func (h *Host) PinFor(hostname string) string { return Covering(h.pins, hostname) }
 
-func (h *Host) holds(ctx context.Context, class providerkit.Class) (bool, error) {
+func (h *Host) holds(ctx context.Context, class edge.Class) (bool, error) {
 	h.mu.Lock()
 	stood := h.tiers[class]
 	h.mu.Unlock()
@@ -138,7 +139,7 @@ func (h *Host) Address(ctx context.Context) (string, error) {
 	}
 	address := live.Destination().Address
 	if address == "" {
-		return "", providerkit.Refuse(providerkit.CodeNotReady,
+		return "", refusal.Refuse(refusal.CodeNotReady,
 			"%s resolves to no address", h.named())
 	}
 	return address, nil
@@ -304,11 +305,11 @@ const saidLines = 4
 func unstarted(code int) bool { return code == 126 || code == 127 }
 
 func (h *Host) refuse(what string, result session.Result, elevation string) error {
-	failed := providerkit.CodeNotReady
+	failed := refusal.CodeNotReady
 	if elevation != "" && sudoRefused(result) {
-		failed = providerkit.CodeDenied
+		failed = refusal.CodeDenied
 	}
-	return providerkit.Refuse(failed, "%s on %s: %s", what, h.named(), spoken(result))
+	return refusal.Refuse(failed, "%s on %s: %s", what, h.named(), spoken(result))
 }
 
 var sudoRefusals = []string{"sudo: a password is required", "is not in the sudoers file", "is not allowed to execute"}
@@ -355,14 +356,14 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		return err == nil, err
 	case KindUnit:
 		if taken.path != LiveService && taken.path != LiveSocketUnit && taken.path != BackupsTimer {
-			return false, providerkit.Refuse(providerkit.CodeInvalid,
+			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%s %s is not ocel's to remove", taken.kind, taken.path)
 		}
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindDir, KindFile, KindSealKey, KindProxyConfig, KindRoutingTable:
 		if !strings.HasPrefix(taken.path, "/") {
-			return false, providerkit.Refuse(providerkit.CodeInvalid,
+			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%q is not an absolute path", taken.path)
 		}
 		rendered, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
@@ -371,13 +372,13 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		}
 		return err == nil, err
 	default:
-		return false, providerkit.Refuse(providerkit.CodeInvalid,
+		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s %s is not ocel's to remove", taken.kind, taken.path)
 	}
 }
 
 type Reading struct {
-	Class    providerkit.Class
+	Class    edge.Class
 	Present  bool
 	Keys     []byte
 	Arch     string
@@ -424,7 +425,7 @@ func (r Reading) settled() bool {
 	return true
 }
 
-func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, error) {
+func (h *Host) Read(ctx context.Context, class edge.Class) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {
 		return Reading{}, err
@@ -432,7 +433,7 @@ func (h *Host) Read(ctx context.Context, class providerkit.Class) (Reading, erro
 	return h.read(ctx, class, keys, drawing{ask: h.run})
 }
 
-func (h *Host) Observe(ctx context.Context, class providerkit.Class) (Reading, error) {
+func (h *Host) Observe(ctx context.Context, class edge.Class) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {
 		return Reading{}, err
@@ -446,7 +447,7 @@ func (h *Host) Observe(ctx context.Context, class providerkit.Class) (Reading, e
 	return read, nil
 }
 
-func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error) {
+func (h *Host) Own(ctx context.Context, class edge.Class) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {
 		return Reading{}, err
@@ -454,11 +455,11 @@ func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error
 	return h.read(ctx, class, keys, drawing{ask: h.reach, owner: true})
 }
 
-func (h *Host) Survey(ctx context.Context, class providerkit.Class) (Reading, error) {
+func (h *Host) Survey(ctx context.Context, class edge.Class) (Reading, error) {
 	return h.observing(ctx, class, nil, drawing{ask: h.run})
 }
 
-func (h *Host) observing(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
+func (h *Host) observing(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		arch = ArchAMD64
@@ -466,7 +467,7 @@ func (h *Host) observing(ctx context.Context, class providerkit.Class, keys []by
 	return h.surveyed(ctx, class, keys, arch, drawn)
 }
 
-func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
+func (h *Host) observe(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		return Reading{}, err
@@ -474,7 +475,7 @@ func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte
 	return h.surveyed(ctx, class, keys, arch, drawn)
 }
 
-func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
+func (h *Host) surveyed(ctx context.Context, class edge.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
 	surveying := Items(class, keys, arch, h.proxyOption)
 	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
@@ -490,7 +491,7 @@ func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byt
 	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
 }
 
-func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
+func (h *Host) read(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
 	read, err := h.observe(ctx, class, keys, drawn)
 	if err != nil {
 		return Reading{}, err
@@ -506,20 +507,20 @@ func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, d
 	return read, nil
 }
 
-func (h *Host) readStamp(ctx context.Context, class providerkit.Class, ask asking) (Stamp, error) {
+func (h *Host) readStamp(ctx context.Context, class edge.Class, ask asking) (Stamp, error) {
 	rendered, err := ask(ctx, "read the stamp", "cat "+quoted(StampPath(class)), nil)
 	if err != nil {
 		return Stamp{}, err
 	}
 	var stamp Stamp
 	if err := json.Unmarshal([]byte(rendered), &stamp); err != nil {
-		return Stamp{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return Stamp{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s is not a stamp this ocel can read: %s", StampPath(class), err)
 	}
 	return stamp, nil
 }
 
-func (h *Host) Stamp(ctx context.Context, class providerkit.Class, stamp Stamp) error {
+func (h *Host) Stamp(ctx context.Context, class edge.Class, stamp Stamp) error {
 	item, err := stamp.item(class)
 	if err != nil {
 		return err
@@ -584,7 +585,7 @@ func remainder(columns []string, separator, absent string) string {
 const unnamedPath = "(unnamed)"
 
 func couldNotLook(columns []string) error {
-	return providerkit.Refuse(providerkit.CodeNotReady,
+	return refusal.Refuse(refusal.CodeNotReady,
 		"could not check %s %s on this host: %s",
 		column(columns, 3, "path"),
 		column(columns, 1, unnamedPath),
@@ -593,7 +594,7 @@ func couldNotLook(columns []string) error {
 
 func pointedAway(columns []string) error {
 	named := column(columns, 1, unnamedPath)
-	return providerkit.Refuse(providerkit.CodeDenied,
+	return refusal.Refuse(refusal.CodeDenied,
 		"%s is a symbolic link to %s\n"+
 			"Put a real directory or file at %s",
 		named, remainder(columns, "\t", "an unreadable target"), named)
@@ -622,12 +623,12 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 		}
 		sealed := columns[0] == KindSealKey
 		if (sealed && len(columns) != 6) || (!sealed && len(columns) != 5) {
-			return nil, Seal{}, providerkit.Refuse(providerkit.CodeDenied,
+			return nil, Seal{}, refusal.Refuse(refusal.CodeDenied,
 				"the host answered a survey line ocel cannot read: %q", line)
 		}
 		parsed, err := mode(columns[2])
 		if err != nil {
-			return nil, Seal{}, providerkit.Refuse(providerkit.CodeDenied,
+			return nil, Seal{}, refusal.Refuse(refusal.CodeDenied,
 				"the host reported %q as the mode of %s", columns[2], columns[1])
 		}
 		content := columns[4]

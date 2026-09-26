@@ -13,7 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const sealClass = "production"
@@ -93,7 +95,7 @@ func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
 	}
 }
 
-var bound = providerkit.SealScope{
+var bound = records.SealScope{
 	Project: "shop",
 	Class:   sealClass,
 	Env:     "*",
@@ -103,7 +105,7 @@ var bound = providerkit.SealScope{
 
 var aCoordinate = sealFlags(bound)
 
-func sealFlags(at providerkit.SealScope) []string {
+func sealFlags(at records.SealScope) []string {
 	argv, err := sealArgv("seal", at)
 	if err != nil {
 		panic(err)
@@ -136,7 +138,7 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Errorf("open answered %q, want %q", got, plaintext)
 	}
 
-	for name, moved := range map[string]providerkit.SealScope{
+	for name, moved := range map[string]records.SealScope{
 		"another project":     {Project: "other", Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Name: bound.Name},
 		"another environment": {Project: bound.Project, Class: bound.Class, Env: "staging", Folder: bound.Folder, Name: bound.Name},
 		"another folder":      {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: "/a/b", Name: bound.Name},
@@ -213,7 +215,7 @@ func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 
 	key := written(items, KindSealKey, SealKeyPath(class))
@@ -240,7 +242,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 
 	var lines []Item
 	for _, item := range items {
@@ -260,7 +262,7 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) 
 	if want := deployUser + " ALL=(root) NOPASSWD: " + SealHelper + " production seal *, " + SealHelper + " production open *"; written != want {
 		t.Errorf("the fragment reads %q, want %q: one helper, the class it seals under, the two verbs a deploy uses and no path beside it", written, want)
 	}
-	if fragment.Name != sudoersSeal(providerkit.ClassProduction) || strings.ContainsAny(strings.TrimPrefix(fragment.Name, sudoersRoot+"/"), ".~") {
+	if fragment.Name != sudoersSeal(edge.ClassProduction) || strings.ContainsAny(strings.TrimPrefix(fragment.Name, sudoersRoot+"/"), ".~") {
 		t.Errorf("the fragment stands at %q, want one file per class under %s whose name sudo will read: sudoers.d skips names carrying '.' or '~'", fragment.Name, sudoersRoot)
 	}
 	if at(items, principal().Name) > at(items, fragment.Name) {
@@ -271,7 +273,7 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) 
 func TestTheSurveyReadsTheKeysFingerprintWithoutReadingTheKey(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	fingerprint := "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 	rendered := KindSealKey + "\t" + SealKeyPath(class) + "\t400\troot\t" + fingerprint + "\t2026-08-26T09:00:00Z\n"
 
@@ -295,7 +297,7 @@ func TestTheSurveyTheHostRunsAnswersForAKeyThatStandsAndSaysNothingForOneThatDoe
 
 	root := sealDir(t)
 	key := filepath.Join(root, sealClass, "seal.key")
-	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: owning(t), Class: providerkit.ClassProduction}
+	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: owning(t), Class: edge.ClassProduction}
 
 	if rendered := sh(t, t.TempDir(), sealSurvey(item)); strings.TrimSpace(rendered) != "" {
 		t.Fatalf("the survey answered %q where no key stands", rendered)
@@ -341,7 +343,7 @@ func TestWritingAKeyThatStandsReassertsItsPostureAndMintsNothing(t *testing.T) {
 		executable(t, filepath.Join(stubbed, name), body)
 	}
 
-	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: rootOwner, Class: providerkit.ClassProduction}
+	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: rootOwner, Class: edge.ClassProduction}
 	sh(t, stubbed, item.command())
 
 	log := ran(t, stubbed)
@@ -367,7 +369,7 @@ func owning(t *testing.T) string {
 func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	observed := digests(Items(class, keys, ArchAMD64, Front{}))
 	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
@@ -390,7 +392,7 @@ func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.
 func TestAnApplyOverAReplacedKeyRefusesRatherThanRestampingIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
 	stamped := Stamp{State: StateComplete, Seal: minted}
 
@@ -412,12 +414,12 @@ func TestAnApplyOverAReplacedKeyRefusesRatherThanRestampingIt(t *testing.T) {
 		"a key taken from beneath the stamp": {Class: class, Present: true, Stamp: stamped},
 	} {
 		err := read.adopting()
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Fatalf("%s = %v, want a refusal: adopting it silently is every sealed value unopenable and nothing said", name, err)
 		}
-		if !strings.Contains(refusal.Message, minted.Fingerprint) {
-			t.Errorf("%s refuses with %q, which never names the key the stamp records", name, refusal.Message)
+		if !strings.Contains(refused.Message, minted.Fingerprint) {
+			t.Errorf("%s refuses with %q, which never names the key the stamp records", name, refused.Message)
 		}
 	}
 }
@@ -425,7 +427,7 @@ func TestAnApplyOverAReplacedKeyRefusesRatherThanRestampingIt(t *testing.T) {
 func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	held := digests(Items(production, keys, ArchAMD64, Front{}))
 
@@ -465,9 +467,9 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	t.Parallel()
 
-	at := providerkit.SealScope{
+	at := records.SealScope{
 		Project: "shop",
-		Class:   providerkit.ClassProduction,
+		Class:   edge.ClassProduction,
 		Env:     "*",
 		Folder:  "/apps/web",
 		Binding: "db",
@@ -513,8 +515,8 @@ func handed(argv []string, flag string) string {
 func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 	t.Parallel()
 
-	argv, err := sealArgv("seal", providerkit.SealScope{
-		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL",
+	argv, err := sealArgv("seal", records.SealScope{
+		Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL",
 	})
 	if err != nil {
 		t.Fatalf("sealArgv() = %v", err)
@@ -522,7 +524,7 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 
 	ran := "sudo -n " + words(argv)
 	if strings.Contains(ran, "sh -c") {
-		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal(providerkit.ClassProduction), SealHelper)
+		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal(edge.ClassProduction), SealHelper)
 	}
 	if want := "sudo -n " + quoted(SealHelper) + " "; !strings.HasPrefix(ran, want) {
 		t.Errorf("the deploy login runs %q, want it to begin %q: sudo matches the command it is handed, and nothing else runs", ran, want)
@@ -532,9 +534,9 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testing.T) {
 	t.Parallel()
 
-	_, err := sealArgv("seal", providerkit.SealScope{Project: "shop", Name: "DATABASE_URL"})
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	_, err := sealArgv("seal", records.SealScope{Project: "shop", Name: "DATABASE_URL"})
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("sealing at a coordinate naming no class = %v, want a refusal: a key is minted per class", err)
 	}
 }
@@ -542,20 +544,20 @@ func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testi
 func TestACoordinateMissingAnyPartButTheBindingIsRefused(t *testing.T) {
 	t.Parallel()
 
-	whole := providerkit.SealScope{
-		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Binding: "db", Name: "DATABASE_URL",
+	whole := records.SealScope{
+		Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Binding: "db", Name: "DATABASE_URL",
 	}
-	for name, blanked := range map[string]func(*providerkit.SealScope){
-		"project": func(at *providerkit.SealScope) { at.Project = "" },
-		"env":     func(at *providerkit.SealScope) { at.Env = "" },
-		"folder":  func(at *providerkit.SealScope) { at.Folder = "" },
-		"name":    func(at *providerkit.SealScope) { at.Name = "" },
+	for name, blanked := range map[string]func(*records.SealScope){
+		"project": func(at *records.SealScope) { at.Project = "" },
+		"env":     func(at *records.SealScope) { at.Env = "" },
+		"folder":  func(at *records.SealScope) { at.Folder = "" },
+		"name":    func(at *records.SealScope) { at.Name = "" },
 	} {
 		at := whole
 		blanked(&at)
 		_, err := sealArgv("seal", at)
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("sealing at a coordinate naming no %s = %v, want a refusal: the coordinate is what a value is bound to", name, err)
 		}
 	}

@@ -9,6 +9,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -46,7 +48,7 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 
 func NewProvider(options Options) (*Provider, error) {
 	if strings.TrimSpace(options.Region) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"option %q names no region, and a project spans them all: name the one this deploy runs in", "region")
 	}
 	endpoint, err := emulatorEndpoint()
@@ -114,9 +116,9 @@ func (p *Provider) Stacks() providerkit.Stacks {
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
 
-func (p *Provider) Records() providerkit.RecordStore { return records{p: p} }
+func (p *Provider) Records() records.Store { return recordStore{p: p} }
 
-func (p *Provider) Cipher() providerkit.Cipher { return cipher{p: p} }
+func (p *Provider) Cipher() records.Cipher { return cipher{p: p} }
 
 func (p *Provider) Credentials() providerkit.Credentials {
 	return Credentials{

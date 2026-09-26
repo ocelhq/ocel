@@ -8,6 +8,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 type Resource struct {
@@ -71,18 +72,18 @@ func RequiredProperties(t BindingType) []string {
 
 func VerifyProperties(binding Binding) error {
 	if binding.Name == "" {
-		return Refuse(CodeInvalid, "a %s binding came back with no name, and a consuming app binds to the name", binding.Type)
+		return refusal.Refuse(refusal.CodeInvalid, "a %s binding came back with no name, and a consuming app binds to the name", binding.Type)
 	}
 	for _, name := range RequiredProperties(binding.Type) {
 		if binding.Properties[name] == "" {
-			return Refuse(CodeInvalid,
+			return refusal.Refuse(refusal.CodeInvalid,
 				"binding %s came back without %q: every %s binding carries %v, and an app binds a client to the whole set",
 				binding.Name, name, binding.Type, RequiredProperties(binding.Type))
 		}
 	}
 	if binding.Type == BindingPostgres {
 		if _, err := strconv.Atoi(binding.Properties[PropertyPort]); err != nil {
-			return Refuse(CodeInvalid, "binding %s came back with port %q, which is not a port number",
+			return refusal.Refuse(refusal.CodeInvalid, "binding %s came back with port %q, which is not a port number",
 				binding.Name, binding.Properties[PropertyPort])
 		}
 	}
@@ -117,7 +118,7 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 		}
 		custom, err := structpb.NewStruct(fields)
 		if err != nil {
-			return nil, Refuse(CodeInvalid, "binding %s carries properties no record can hold: %v", binding.Name, err)
+			return nil, refusal.Refuse(refusal.CodeInvalid, "binding %s carries properties no record can hold: %v", binding.Name, err)
 		}
 		message.Properties = &bindingsv1.Binding_Custom{Custom: custom}
 	}
@@ -213,11 +214,11 @@ func manifestResource(held *contractv1.ManifestResource) (Resource, error) {
 		declared = name
 	}
 	if name == "" {
-		return Resource{}, Refuse(CodeInvalid, "this manifest declares a resource with no name, and a binding is bound by name")
+		return Resource{}, refusal.Refuse(refusal.CodeInvalid, "this manifest declares a resource with no name, and a binding is bound by name")
 	}
 	kind, known := resourceTypes[held.GetResource().GetType()]
 	if !known {
-		return Resource{}, Refuse(CodeInvalid, "resource %s declares no type, so nothing knows what to stand up for it", name)
+		return Resource{}, refusal.Refuse(refusal.CodeInvalid, "resource %s declares no type, so nothing knows what to stand up for it", name)
 	}
 	resource := Resource{Name: name, Declared: declared, Type: kind, Binding: held.GetBinding()}
 	switch {

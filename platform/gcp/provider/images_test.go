@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type handedToken string
@@ -36,7 +37,7 @@ func names(t *testing.T, p *Provider) Names {
 func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 	p := pushing(t, "")
 
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		target, err := p.EnsureImageRegistry(context.Background(), class, []string{"web"})
 		if err != nil {
 			t.Fatalf("ImageRegistry(%s) = %v", class, err)
@@ -54,7 +55,7 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy holds", class, target.Password)
 		}
 	}
-	if p.resolved.Repository(providerkit.ClassProduction) == p.resolved.Repository(providerkit.ClassPreview) {
+	if p.resolved.Repository(edge.ClassProduction) == p.resolved.Repository(edge.ClassPreview) {
 		t.Error("both classes push to one repository, and a class keeps its images apart from the other class's")
 	}
 }
@@ -62,12 +63,12 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *testing.T) {
 	p := pushing(t, "")
 
-	target, err := p.EnsureImageRegistry(context.Background(), providerkit.ClassProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(context.Background(), edge.ClassProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	coordinate := target.ImageRef("web", "sha256-abc")
-	want := p.resolved.RepositoryPath("europe-west1", providerkit.ClassProduction) + "/web:sha256-abc"
+	want := p.resolved.RepositoryPath("europe-west1", edge.ClassProduction) + "/web:sha256-abc"
 	if coordinate != want {
 		t.Errorf("an image lands at %q, want %q", coordinate, want)
 	}
@@ -85,7 +86,7 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 		t.Errorf("OpenDirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
 	}
 
-	target, err := emulated.EnsureImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
+	target, err := emulated.EnsureImageRegistry(ctx, edge.ClassProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 	ctx := context.Background()
 	p := pushing(t, "")
 
-	target, err := p.EnsureImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(ctx, edge.ClassProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}

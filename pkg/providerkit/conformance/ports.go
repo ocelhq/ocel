@@ -15,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -59,35 +61,35 @@ func bootstrapOf(t *testing.T, provider providerkit.Provider) providerkit.Bootst
 	return bootstrap
 }
 
-func under(t *testing.T, rest ...string) providerkit.RecordName {
-	return in(providerkit.ClassProduction, t, rest...)
+func under(t *testing.T, rest ...string) records.Name {
+	return in(edge.ClassProduction, t, rest...)
 }
 
-func in(class providerkit.Class, t *testing.T, rest ...string) providerkit.RecordName {
-	return append(providerkit.RecordName{providerkit.RootConformance, string(class), t.Name()}, rest...)
+func in(class edge.Class, t *testing.T, rest ...string) records.Name {
+	return append(records.Name{records.RootConformance, string(class), t.Name()}, rest...)
 }
 
-func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
+func RunRecordStore(t *testing.T, store records.Store) {
 	t.Helper()
 
 	ctx := context.Background()
 
 	t.Run("an unwritten name is no record", func(t *testing.T) {
-		if _, err := records.Read(ctx, under(t, "never-written")); !errors.Is(err, providerkit.ErrNoRecord) {
-			t.Fatalf("Read() of a name never written = %v, want ErrNoRecord", err)
+		if _, err := store.Read(ctx, under(t, "never-written")); !errors.Is(err, records.ErrNotFound) {
+			t.Fatalf("Read() of a name never written = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("a first write claims the name", func(t *testing.T) {
 		name := under(t, "claimed")
-		revision, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("one")})
+		revision, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")})
 		if err != nil {
 			t.Fatalf("Write() of a new record = %v, want it stored", err)
 		}
 		if revision == "" {
 			t.Fatal("Write() returned an empty revision, and a compare-and-set has nothing to compare")
 		}
-		held, err := records.Read(ctx, name)
+		held, err := store.Read(ctx, name)
 		if err != nil || !bytes.Equal(held.Bytes, []byte("one")) {
 			t.Fatalf("Read() = %q, %v, want the bytes just written", held.Bytes, err)
 		}
@@ -98,46 +100,46 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 
 	t.Run("a second write at the same name must name a revision", func(t *testing.T) {
 		name := under(t, "occupied")
-		if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("one")}); err != nil {
+		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("two")}); !errors.Is(err, providerkit.ErrStale) {
+		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("two")}); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("Write() at a taken name with no revision = %v, want ErrStale", err)
 		}
 	})
 
 	t.Run("a write at the revision read wins and a later one loses", func(t *testing.T) {
 		name := under(t, "compared")
-		if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("one")}); err != nil {
+		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")}); err != nil {
 			t.Fatal(err)
 		}
-		held, err := records.Read(ctx, name)
+		held, err := store.Read(ctx, name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		held.Bytes = []byte("two")
-		if _, err := records.Write(ctx, held); err != nil {
+		if _, err := store.Write(ctx, held); err != nil {
 			t.Fatalf("Write() at the revision read = %v, want it stored", err)
 		}
 		held.Bytes = []byte("three")
-		if _, err := records.Write(ctx, held); !errors.Is(err, providerkit.ErrStale) {
+		if _, err := store.Write(ctx, held); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("a second write at a revision that moved = %v, want ErrStale", err)
 		}
 	})
 
 	t.Run("a pair lands whole or not at all", func(t *testing.T) {
 		record, value := under(t, "pair", "record"), under(t, "pair", "value")
-		if err := records.WritePair(ctx,
-			providerkit.Record{Name: record, Bytes: []byte("one")},
-			providerkit.Record{Name: value, Bytes: []byte("one")},
+		if err := store.WritePair(ctx,
+			records.Record{Name: record, Bytes: []byte("one")},
+			records.Record{Name: value, Bytes: []byte("one")},
 		); err != nil {
 			t.Fatalf("WritePair() of two new records = %v, want both stored", err)
 		}
-		held, err := records.Read(ctx, record)
+		held, err := store.Read(ctx, record)
 		if err != nil {
 			t.Fatal(err)
 		}
-		beside, err := records.Read(ctx, value)
+		beside, err := store.Read(ctx, value)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,11 +147,11 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 		moved := beside
 		moved.Revision = "a revision nobody wrote"
 		held.Bytes, moved.Bytes = []byte("two"), []byte("two")
-		if err := records.WritePair(ctx, held, moved); !errors.Is(err, providerkit.ErrStale) {
+		if err := store.WritePair(ctx, held, moved); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("WritePair() where one half moved = %v, want ErrStale", err)
 		}
-		for _, name := range []providerkit.RecordName{record, value} {
-			stood, err := records.Read(ctx, name)
+		for _, name := range []records.Name{record, value} {
+			stood, err := store.Read(ctx, name)
 			if err != nil || !bytes.Equal(stood.Bytes, []byte("one")) {
 				t.Fatalf("Read(%s) after a refused pair write = %q, %v, want the bytes from the write that landed", name, stood.Bytes, err)
 			}
@@ -158,54 +160,54 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 
 	t.Run("a removal names the revision it read", func(t *testing.T) {
 		name := under(t, "removed")
-		revision, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte("one")})
+		revision, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := records.Remove(ctx, name, "a revision nobody wrote"); !errors.Is(err, providerkit.ErrStale) {
+		if err := store.Remove(ctx, name, "a revision nobody wrote"); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("Remove() at a revision that never held = %v, want ErrStale", err)
 		}
-		if err := records.Remove(ctx, name, revision); err != nil {
+		if err := store.Remove(ctx, name, revision); err != nil {
 			t.Fatalf("Remove() at the revision held = %v, want it gone", err)
 		}
-		if _, err := records.Read(ctx, name); !errors.Is(err, providerkit.ErrNoRecord) {
-			t.Fatalf("Read() after Remove() = %v, want ErrNoRecord", err)
+		if _, err := store.Read(ctx, name); !errors.Is(err, records.ErrNotFound) {
+			t.Fatalf("Read() after Remove() = %v, want ErrNotFound", err)
 		}
 	})
 
 	t.Run("one class's records are not the other's", func(t *testing.T) {
-		production, preview := in(providerkit.ClassProduction, t, "held"), in(providerkit.ClassPreview, t, "held")
-		if _, err := records.Write(ctx, providerkit.Record{Name: production, Bytes: []byte("production")}); err != nil {
+		production, preview := in(edge.ClassProduction, t, "held"), in(edge.ClassPreview, t, "held")
+		if _, err := store.Write(ctx, records.Record{Name: production, Bytes: []byte("production")}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := records.Read(ctx, preview); !errors.Is(err, providerkit.ErrNoRecord) {
-			t.Fatalf("Read() of the preview name after only production was written = %v, want ErrNoRecord", err)
+		if _, err := store.Read(ctx, preview); !errors.Is(err, records.ErrNotFound) {
+			t.Fatalf("Read() of the preview name after only production was written = %v, want ErrNotFound", err)
 		}
-		if _, err := records.Write(ctx, providerkit.Record{Name: preview, Bytes: []byte("preview")}); err != nil {
+		if _, err := store.Write(ctx, records.Record{Name: preview, Bytes: []byte("preview")}); err != nil {
 			t.Fatal(err)
 		}
-		held, err := records.Read(ctx, production)
+		held, err := store.Read(ctx, production)
 		if err != nil || string(held.Bytes) != "production" {
 			t.Fatalf("Read() of the production name = %q, %v, want the production bytes untouched", held.Bytes, err)
 		}
 	})
 
 	t.Run("List answers with everything under a prefix", func(t *testing.T) {
-		leaves := []providerkit.RecordName{
+		leaves := []records.Name{
 			under(t, "tree", "a"),
 			under(t, "tree", "b", "one"),
 			under(t, "tree", "b", "two"),
 		}
 		for _, name := range leaves {
-			if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte(name.String())}); err != nil {
+			if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte(name.String())}); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if _, err := records.Write(ctx, providerkit.Record{Name: under(t, "treeish"), Bytes: []byte("not under it")}); err != nil {
+		if _, err := store.Write(ctx, records.Record{Name: under(t, "treeish"), Bytes: []byte("not under it")}); err != nil {
 			t.Fatal(err)
 		}
 
-		held, err := records.List(ctx, under(t, "tree"))
+		held, err := store.List(ctx, under(t, "tree"))
 		if err != nil {
 			t.Fatalf("List() = %v", err)
 		}
@@ -221,42 +223,42 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 			}
 		}
 
-		deeper, err := records.List(ctx, under(t, "tree", "b"))
+		deeper, err := store.List(ctx, under(t, "tree", "b"))
 		if err != nil || len(deeper) != 2 {
 			t.Fatalf("List() of a deeper prefix returned %d records, %v, want 2", len(deeper), err)
 		}
 
-		whole, err := records.List(ctx, under(t))
+		whole, err := store.List(ctx, under(t))
 		if err != nil || len(whole) != len(leaves)+1 {
 			t.Fatalf("List() at the name this suite roots itself at returned %d records, %v, want the %d written beneath it", len(whole), err, len(leaves)+1)
 		}
 	})
 
 	t.Run("every prefix the kit reads a whole subtree at is one this store can answer", func(t *testing.T) {
-		scope := values.Scope{Project: "conformance", Class: providerkit.ClassProduction}
-		for _, name := range []providerkit.RecordName{
-			providerkit.ProjectsRecord(providerkit.ClassProduction),
-			providerkit.StacksRecord(providerkit.ClassProduction, scope.Project),
-			providerkit.EdgeStacksRecord(providerkit.ClassProduction),
-			providerkit.LedgerRecord(ledger.Scope(providerkit.ClassProduction, scope.Project)),
+		scope := values.Scope{Project: "conformance", Class: edge.ClassProduction}
+		for _, name := range []records.Name{
+			providerkit.ProjectsRecord(edge.ClassProduction),
+			providerkit.StacksRecord(edge.ClassProduction, scope.Project),
+			providerkit.EdgeStacksRecord(edge.ClassProduction),
+			providerkit.LedgerRecord(ledger.Scope(edge.ClassProduction, scope.Project)),
 			values.Under(scope),
 			values.Refs(scope),
 		} {
-			if _, err := records.List(ctx, name); err != nil {
+			if _, err := store.List(ctx, name); err != nil {
 				t.Errorf("List(%s) = %v, want a store that partitions no deeper than the kit reads", name, err)
 			}
 		}
 	})
 }
 
-func RunCipher(t *testing.T, cipher providerkit.Cipher) {
+func RunCipher(t *testing.T, cipher records.Cipher) {
 	t.Helper()
 
 	ctx := context.Background()
 
-	at := providerkit.SealScope{
+	at := records.SealScope{
 		Project: "shop",
-		Class:   providerkit.ClassProduction,
+		Class:   edge.ClassProduction,
 		Env:     "*",
 		Folder:  "/",
 		Name:    "DATABASE_URL",
@@ -279,9 +281,9 @@ func RunCipher(t *testing.T, cipher providerkit.Cipher) {
 		t.Fatalf("Open() = %q, want %q", opened, plaintext)
 	}
 
-	for name, moved := range map[string]providerkit.SealScope{
+	for name, moved := range map[string]records.SealScope{
 		"another project":     {Project: "other", Class: at.Class, Env: at.Env, Folder: at.Folder, Name: at.Name},
-		"another class":       {Project: at.Project, Class: providerkit.ClassPreview, Env: at.Env, Folder: at.Folder, Name: at.Name},
+		"another class":       {Project: at.Project, Class: edge.ClassPreview, Env: at.Env, Folder: at.Folder, Name: at.Name},
 		"another environment": {Project: at.Project, Class: at.Class, Env: "staging", Folder: at.Folder, Name: at.Name},
 		"another folder":      {Project: at.Project, Class: at.Class, Env: at.Env, Folder: "/apps/web", Name: at.Name},
 		"another key":         {Project: at.Project, Class: at.Class, Env: at.Env, Folder: at.Folder, Name: "API_KEY"},
@@ -330,7 +332,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 	})
 
 	t.Run("Describe answers for the class it was asked about", func(t *testing.T) {
-		for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 			described, err := bootstrap.Describe(ctx, class)
 			if err != nil {
 				t.Fatalf("Describe(%s) = %v", class, err)
@@ -347,7 +349,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 	})
 
 	t.Run("Plan answers for the request Apply would be given", func(t *testing.T) {
-		class := providerkit.ClassProduction
+		class := edge.ClassProduction
 		described, err := bootstrap.Describe(ctx, class)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", class, err)
@@ -388,7 +390,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 		if len(wanted) == 0 {
 			t.Skipf("the %q edge stands no feature of this provider up, so nothing can be dropped", kind)
 		}
-		class := providerkit.ClassProduction
+		class := edge.ClassProduction
 		drop := wanted
 		plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, Remove: drop})
 		if err != nil {
@@ -413,7 +415,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 	})
 
 	t.Run("what Apply stands up, Describe reports and Remove takes down", func(t *testing.T) {
-		class := providerkit.ClassPreview
+		class := edge.ClassPreview
 		raising, err := ordered(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
@@ -466,7 +468,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 	})
 
 	t.Run("Apply takes a drop in delete order", func(t *testing.T) {
-		class := providerkit.ClassPreview
+		class := edge.ClassPreview
 		levels, err := providerkit.FeatureLevels(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
@@ -540,11 +542,11 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 	t.Run("Whoami either says who this is or refuses as denied", func(t *testing.T) {
 		identity, err := credentials.Whoami(ctx)
 		if err != nil {
-			var refusal providerkit.Refusal
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeDenied {
-				t.Fatalf("Whoami() failed with %v, want a Refusal carrying %s so the CLI can render a credential problem", err, providerkit.CodeDenied)
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+				t.Fatalf("Whoami() failed with %v, want a Refusal carrying %s so the CLI can render a credential problem", err, refusal.CodeDenied)
 			}
-			if refusal.Message == "" {
+			if refused.Message == "" {
 				t.Error("Whoami() refused with no message, so the CLI has nothing to tell the user")
 			}
 			return
@@ -563,7 +565,7 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 		for _, tier := range []providerkit.CredentialTier{providerkit.TierBootstrap, providerkit.TierDeploy} {
 			if err := permissionsRendered(credentials, tier); err != nil {
 				t.Errorf("Permissions(%s) = %v, want the permissions that tier needs or a %s refusal saying there are none to render yet",
-					tier, err, providerkit.CodeNotReady)
+					tier, err, refusal.CodeNotReady)
 			}
 		}
 	})
@@ -571,8 +573,8 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 
 func permissionsRendered(credentials providerkit.Credentials, tier providerkit.CredentialTier) error {
 	_, err := credentials.Permissions(tier)
-	var refusal providerkit.Refusal
-	if errors.As(err, &refusal) && refusal.Code == providerkit.CodeNotReady {
+	var refused refusal.Refusal
+	if errors.As(err, &refused) && refused.Code == refusal.CodeNotReady {
 		return nil
 	}
 	return err
@@ -582,7 +584,7 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 	t.Helper()
 
 	ctx := context.Background()
-	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	ref := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
 
 	if !facts.StoresArtifacts {
@@ -646,14 +648,14 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 
 	t.Run("RemovePrefix of one class leaves the other class's artifacts", func(t *testing.T) {
 		key := "conformance/" + t.Name() + "/bundle.zip"
-		production := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: ref.Bucket, Key: key}
-		preview := providerkit.ArtifactRef{Class: providerkit.ClassPreview, Bucket: ref.Bucket, Key: key}
+		production := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: ref.Bucket, Key: key}
+		preview := providerkit.ArtifactRef{Class: edge.ClassPreview, Bucket: ref.Bucket, Key: key}
 		for _, at := range []providerkit.ArtifactRef{production, preview} {
 			if err := artifacts.Put(ctx, at, bytes.NewReader(body)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := artifacts.RemovePrefix(ctx, providerkit.ClassPreview, "conformance/"+t.Name()+"/", nil); err != nil {
+		if err := artifacts.RemovePrefix(ctx, edge.ClassPreview, "conformance/"+t.Name()+"/", nil); err != nil {
 			t.Fatalf("RemovePrefix() = %v", err)
 		}
 		opened, err := artifacts.Open(ctx, production)
@@ -676,21 +678,21 @@ func runStorelessArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore
 	ctx := context.Background()
 
 	t.Run("Put refuses rather than accepting a write nothing will ever read back", func(t *testing.T) {
-		var refusal providerkit.Refusal
+		var refused refusal.Refusal
 		err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact")))
-		if !errors.As(err, &refusal) {
+		if !errors.As(err, &refused) {
 			t.Fatalf("Put() into a provider that keeps no artifacts = %v, want a refusal: a store that reports a write it loses is worse than one that has none", err)
 		}
-		if refusal.Code != providerkit.CodeInvalid {
-			t.Errorf("Put() refused with %q, want %q so the CLI renders it as the caller's mistake", refusal.Code, providerkit.CodeInvalid)
+		if refused.Code != refusal.CodeInvalid {
+			t.Errorf("Put() refused with %q, want %q so the CLI renders it as the caller's mistake", refused.Code, refusal.CodeInvalid)
 		}
-		if refusal.Message == "" {
+		if refused.Message == "" {
 			t.Error("Put() refused with no message, so the CLI has nothing to tell the user")
 		}
 	})
 
 	t.Run("Open refuses rather than answering empty", func(t *testing.T) {
-		var refusal providerkit.Refusal
+		var refusal refusal.Refusal
 		opened, err := artifacts.Open(ctx, ref)
 		if !errors.As(err, &refusal) {
 			if err == nil {
@@ -711,7 +713,7 @@ func runStorelessArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore
 	})
 
 	t.Run("RemovePrefix of any prefix, including one nothing wrote under, is nil", func(t *testing.T) {
-		for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 			for _, prefix := range []string{"conformance/" + t.Name() + "/", "conformance/" + t.Name() + "/nothing-here/"} {
 				if err := artifacts.RemovePrefix(ctx, class, prefix, nil); err != nil {
 					t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", class, prefix, err)
@@ -764,7 +766,7 @@ func (c *countedImages) Destination() string { return "the counted store" }
 
 func (c *countedImages) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
 
-func (c *countedImages) Push(_ context.Context, _ providerkit.ImagePush, _ providerkit.Progress) error {
+func (c *countedImages) Push(_ context.Context, _ providerkit.ImagePush, _ edge.Progress) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pushed++
@@ -793,13 +795,13 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks, artifacts providerkit.ArtifactStore, records providerkit.RecordStore) {
+func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks, artifacts providerkit.ArtifactStore, records records.Store) {
 	t.Helper()
 
 	ctx := context.Background()
 	ref := providerkit.StackRef{
 		Project: "conformance",
-		Class:   providerkit.ClassPreview,
+		Class:   edge.ClassPreview,
 		Name:    naming.InfraStack("conformance"),
 	}
 
@@ -1008,15 +1010,15 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 			}
 			t.Skip("this provider stands up a resource of any type, so there is no unserved primitive to refuse")
 		}
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) {
 			t.Fatalf("Provision() of a primitive this provider does not serve failed with %v, want a Refusal the CLI can render", err)
 		}
 		if !slices.Contains(
-			[]providerkit.Code{providerkit.CodeInvalid, providerkit.CodeNotReady, providerkit.CodeDenied, providerkit.CodeBusy},
-			refusal.Code,
+			[]refusal.Code{refusal.CodeInvalid, refusal.CodeNotReady, refusal.CodeDenied, refusal.CodeBusy},
+			refused.Code,
 		) {
-			t.Errorf("Provision() refused with code %q, which is none the kit maps", refusal.Code)
+			t.Errorf("Provision() refused with code %q, which is none the kit maps", refused.Code)
 		}
 		if planned, err := stacks.Plan(ctx, unserved, nil); err == nil {
 			t.Errorf("Plan() showed %+v for a release its own provision refuses, and the plan is the diff the apply runs", planned.Groups)

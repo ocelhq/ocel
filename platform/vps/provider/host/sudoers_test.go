@@ -4,21 +4,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestEachClassIsWhitelistedOnItsOwnSudoersLineNamingItsClassAlone(t *testing.T) {
 	t.Parallel()
 
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		fragment := written(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), KindFile, sudoersSeal(class))
 		if fragment.Name == "" {
 			t.Fatalf("bootstrapping %s writes no sudoers line of its own", class)
 		}
 		line := string(fragment.Content)
-		other := string(providerkit.ClassProduction)
-		if class == providerkit.ClassProduction {
-			other = string(providerkit.ClassPreview)
+		other := string(edge.ClassProduction)
+		if class == edge.ClassProduction {
+			other = string(edge.ClassPreview)
 		}
 		for _, banned := range []string{" " + other + " ", " init", SealHelper + ","} {
 			if strings.Contains(line, banned) {

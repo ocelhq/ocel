@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -206,9 +207,9 @@ func TestAHostnameAnotherSurfaceHoldsIsRefusedRatherThanTakenOffIt(t *testing.T)
 	if err == nil {
 		t.Fatal("a second project bound a hostname the first one already holds, and the first project's site then answers nothing with no deploy of its own having failed")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Errorf("the second claim failed with %v, want %s naming who holds it", err, providerkit.CodeBusy)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("the second claim failed with %v, want %s naming who holds it", err, refusal.CodeBusy)
 	}
 	if !strings.Contains(err.Error(), surface) {
 		t.Errorf("the second claim is refused with\n%s\nand never names the surface that already holds %s, which is where the user has to unbind it", err, claimed)
@@ -265,7 +266,7 @@ func refusingSudo(t *testing.T) *claimBench {
 	t.Helper()
 
 	stood := claimingBox(t, routed())
-	stood.floor = providerkit.Refuse(providerkit.CodeNotReady,
+	stood.floor = refusal.Refuse(refusal.CodeNotReady,
 		"ada cannot run sudo without a password on ocelbox, and every write ocel makes here needs it")
 	return stood
 }
@@ -467,9 +468,9 @@ func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
 	if err == nil {
 		t.Fatal("a project running two apps rendered both of them matching every hostname it claims; reverse_proxy is terminal and the routes are written in name order, so api answers shop.example.com and web is configuration nothing on this box ever reaches")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Errorf("the render failed with %v, want %s", err, providerkit.CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("the render failed with %v, want %s", err, refusal.CodeInvalid)
 	}
 	for _, named := range []string{"api", "web", claimed} {
 		if !strings.Contains(err.Error(), named) {
@@ -535,9 +536,9 @@ func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFix
 	if err == nil {
 		t.Fatal("a project running two apps and claiming a hostname project-wide rendered both routes matching it")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("the render failed with %v, want %s", err, providerkit.CodeInvalid)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("the render failed with %v, want %s", err, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "domains.production") {
 		t.Errorf("the refusal is\n%s\nand never names domains.production: the config form that fixes this is declaring the hostname under the app, and a refusal that does not say so reads as a box that cannot serve multi-app projects", err)
@@ -661,9 +662,9 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 	if err == nil {
 		t.Fatal("a claim composed onto a configuration another deploy kept replacing was written anyway")
 	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
-		t.Errorf("the write was refused with %v, want %s: this file is the whole box's, every writer renders it whole, and the loser must be told rather than drop the winner's routes", err, providerkit.CodeBusy)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Errorf("the write was refused with %v, want %s: this file is the whole box's, every writer renders it whole, and the loser must be told rather than drop the winner's routes", err, refusal.CodeBusy)
 	}
 	if stood.held != string(moved) {
 		t.Errorf("%s was left as\n%s\nwant what the deploy that moved it wrote: the write stages beside the file and checks the digest before it moves anything into place", ProxyConfig, stood.held)
@@ -678,8 +679,8 @@ func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 
 	stood := claimingBox(t, routed())
 	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: "*.preview.acme.com", Owner: surface, Pointer: pointed}})
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("ClaimHosts() of a wildcard = %v, want a refusal: a claim is a hostname the proxy orders one certificate for over http-01, and a wildcard is a match every hostname pointed at this box falls under", err)
 	}
 	if stood.count(loadsSwitchboard) > 0 || strings.Contains(stood.held, "*.preview") {

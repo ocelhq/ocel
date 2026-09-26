@@ -8,6 +8,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -19,7 +20,7 @@ func againstAProject(t *testing.T) *gcp.Provider {
 	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 }
 
-func repositoryHeld(t *testing.T, p *gcp.Provider, class providerkit.Class) *artifactregistry.Repository {
+func repositoryHeld(t *testing.T, p *gcp.Provider, class edge.Class) *artifactregistry.Repository {
 	t.Helper()
 
 	ctx := context.Background()
@@ -37,7 +38,7 @@ func repositoryHeld(t *testing.T, p *gcp.Provider, class providerkit.Class) *art
 
 func TestProjectTheImageRepositoryStandsWhereTheDeployPushesTo(t *testing.T) {
 	p := againstAProject(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrapped(t, p, class)
 
 	held := repositoryHeld(t, p, class)
@@ -62,7 +63,7 @@ func TestProjectTheImageRepositoryStandsWhereTheDeployPushesTo(t *testing.T) {
 
 func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBootstrap(t *testing.T) {
 	p := againstAProject(t)
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()

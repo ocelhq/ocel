@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -46,7 +47,7 @@ func sweepPlan(t *testing.T, tag string) providerkit.StackPlan {
 	}
 	sum := sha256.Sum256([]byte(tag))
 	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: sweepProject, Class: providerkit.ClassProduction, Name: stack},
+		Ref:  providerkit.StackRef{Project: sweepProject, Class: edge.ClassProduction, Name: stack},
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
 			App:             sweepApp,
@@ -65,7 +66,7 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	}
 }
 
-func windowOf(t *testing.T, vm machine, project, app string, class providerkit.Class) []string {
+func windowOf(t *testing.T, vm machine, project, app string, class edge.Class) []string {
 	t.Helper()
 	held := strings.TrimSpace(vm.sshAs(t, deployLogin,
 		"cat "+host.ReleasesDir()+"/"+project+"/"+app+"/"+string(class)))
@@ -94,14 +95,14 @@ func TestLiveTheWindowKeepsThreeAndMovesARepeatedRefToTheHead(t *testing.T) {
 	for _, tag := range []string{"r1", "r2", "r3", "r4"} {
 		sweepsUp(t, p, tag)
 	}
-	held := windowOf(t, vm, sweepProject, sweepApp, providerkit.ClassProduction)
+	held := windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
 	want := []string{sweepAt("r4"), sweepAt("r3"), sweepAt("r2")}
 	if strings.Join(held, ",") != strings.Join(want, ",") {
 		t.Fatalf("the box's window reads %v, want %v: three deep, most recently served first", held, want)
 	}
 
 	sweepsUp(t, p, "r2")
-	held = windowOf(t, vm, sweepProject, sweepApp, providerkit.ClassProduction)
+	held = windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
 	want = []string{sweepAt("r2"), sweepAt("r4"), sweepAt("r3")}
 	if strings.Join(held, ",") != strings.Join(want, ",") {
 		t.Errorf("the box's window reads %v, want %v: a ref already held moves to the head and evicts nothing", held, want)

@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -209,14 +211,14 @@ func TestADaemonSystemdDoesNotRunIsRefusedRatherThanInstalledOver(t *testing.T) 
 	if _, stood := observed[unitItem().ID()]; stood {
 		t.Errorf("the probe read %s on a host whose docker binary carries no unit file", unitItem().ID())
 	}
-	read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: observed, Engine: engineHeld(t, held)}
+	read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: observed, Engine: engineHeld(t, held)}
 	if !read.standing(KindEngine, dockerEngine) {
 		t.Fatalf("the probe read no engine on a host carrying a docker binary, and an unattended run would fetch %s and run it as root over an install that is already there", dockerSource)
 	}
 	if read.current(engineItem()) {
 		t.Fatalf("a docker binary with no %s reads as serving, and apply would enable a unit that does not exist, on every run, forever", dockerUnit)
 	}
-	refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady)
+	refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady)
 	if !strings.Contains(refused.Message, dockerUnit) || !strings.Contains(refused.Message, "ocel bootstrap production") {
 		t.Errorf("a docker daemon no %s runs is refused with %q, want it to name the unit ocel needs and the bootstrap to run after", dockerUnit, refused.Message)
 	}
@@ -232,7 +234,7 @@ func TestAnInstallLeftHalfDoneIsInstalledAgainRatherThanRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
+			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
 			if err := read.runnableEngine("ada@ocelbox"); err != nil {
 				t.Fatalf("runnableEngine() = %v, and an install interrupted before docker.service landed could never be finished by ocel", err)
 			}
@@ -263,7 +265,7 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *te
 			if observed[engineItem().ID()] != engineItem().Digest() {
 				t.Error("the probe calls an installed engine absent, and the plan would fetch the install script over a host that already has one")
 			}
-			read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: observed}
+			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: observed}
 			if !read.standing(KindUnit, dockerUnit) {
 				t.Fatalf("the probe read no unit on a host whose docker.service is %s", name)
 			}
@@ -277,7 +279,7 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *te
 func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	idle := digest(KindUnit, dockerUnit, 0, rootOwner, contentSum([]byte("active=inactive\nenabled=disabled\n")))
 	read := Reading{Arch: ArchAMD64, Class: class, Engine: Engine{Kind: engineStandard, Version: "28.3.1"}, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
@@ -310,7 +312,7 @@ func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.
 func TestTheEngineCanOnlyEverBePresentOrAbsent(t *testing.T) {
 	t.Parallel()
 
-	stood := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: map[string]string{
+	stood := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 	}}
 	if !stood.current(engineItem()) {
@@ -324,7 +326,7 @@ func TestTheEngineCanOnlyEverBePresentOrAbsent(t *testing.T) {
 func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	var claim Grant
 	for _, grant := range Grants(class) {
 		if grant.Name == "membership of the "+dockerGroup+" group" {
@@ -351,7 +353,7 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	t.Parallel()
 
-	changes := planned(Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: map[string]string{}})
+	changes := planned(Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{}})
 	engine := planFor(changes, engineItem().ID())
 	if engine.Action != providerkit.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
@@ -369,7 +371,7 @@ func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
@@ -400,7 +402,7 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 func TestAHostCarryingNothingButTheEngineHasNothingToDestroy(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	engine := digests(EngineItems())
 	taken := removing(Reading{Arch: ArchAMD64, Class: production, Observed: engine}, Reading{Arch: ArchAMD64, Class: preview, Observed: engine}, appsStanding{})
 	if len(taken) != 0 {
@@ -443,7 +445,7 @@ func quickest(t *testing.T, changes []providerkit.Change) {
 func TestAnApplyOverAnAdoptedEngineNeverInstallsDockerAndStillStartsItsUnit(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	for at, item := range stood.stands[class] {
 		if item.ID() == unitItem().ID() {
@@ -485,8 +487,8 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Class: providerkit.ClassProduction, Engine: tc.held}
-			if refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady); refused.Message != tc.want {
+			read := Reading{Class: edge.ClassProduction, Engine: tc.held}
+			if refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady); refused.Message != tc.want {
 				t.Errorf("the refusal reads\n%s\nwant\n%s", refused.Message, tc.want)
 			}
 		})
@@ -504,11 +506,11 @@ func TestAnEngineAtOrPastTheFloorAndNoEngineAtAllAreLetThrough(t *testing.T) {
 		{Kind: engineStandard, Version: "29.8.0"},
 		{Kind: engineStandard, Version: "30.0.0-rc.1"},
 	} {
-		if err := (Reading{Class: providerkit.ClassProduction, Engine: held}).runnableEngine("ada@ocelbox"); err != nil {
+		if err := (Reading{Class: edge.ClassProduction, Engine: held}).runnableEngine("ada@ocelbox"); err != nil {
 			t.Errorf("an engine read as %+v = %v, want it let through", held, err)
 		}
 	}
-	if err := (Reading{Class: providerkit.ClassProduction, Engine: Engine{Kind: engineStandard, Version: "27.5.1"}}).runnableEngine("ada@ocelbox"); err == nil {
+	if err := (Reading{Class: edge.ClassProduction, Engine: Engine{Kind: engineStandard, Version: "27.5.1"}}).runnableEngine("ada@ocelbox"); err == nil {
 		t.Error("docker 27.5.1 is let through, one minor release below the floor")
 	}
 }
@@ -533,7 +535,7 @@ func carrying(stood *bench, held Engine) {
 func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
+	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return item.Name == ClassDir(class) })
 	carrying(stood, Engine{Kind: engineStandard, Version: "26.1.4"})
@@ -542,7 +544,7 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
 	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
-		if refused := refusal(t, err, providerkit.CodeNotReady); !strings.Contains(refused.Message, "docker 26.1.4") {
+		if refused := refusalOf(t, err, refusal.CodeNotReady); !strings.Contains(refused.Message, "docker 26.1.4") {
 			t.Errorf("%s refused with %q, want it to name the docker it will not run on", step, refused.Message)
 		}
 	}
@@ -563,8 +565,8 @@ func TestAMaskedDockerServiceStopsThePlanRatherThanWedgingItOnAnEnableThatNeverT
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
-			refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady)
+			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
+			refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady)
 			if !strings.Contains(refused.Message, "systemctl unmask "+dockerUnit) {
 				t.Errorf("a masked %s is refused with %q, want the unmask to run named: apply would otherwise run `systemctl enable --now` against it on every run, forever", dockerUnit, refused.Message)
 			}
@@ -578,15 +580,15 @@ func TestAWriteThatFailsIsDeniedOnlyWhenSudoRefusedTheLogin(t *testing.T) {
 	for name, tc := range map[string]struct {
 		root bool
 		said string
-		want providerkit.Code
+		want refusal.Code
 	}{
-		"sudo asking a password":             {said: "sudo: a password is required", want: providerkit.CodeDenied},
-		"a login sudoers never names":        {said: "ada is not in the sudoers file.  This incident will be reported.", want: providerkit.CodeDenied},
-		"a command sudoers does not grant":   {said: "Sorry, user ada is not allowed to execute '/bin/sh -c install' as root on ocelbox.", want: providerkit.CodeDenied},
-		"a path the elevated write can't be": {said: "install: cannot create directory '/srv/ocel': Permission denied", want: providerkit.CodeNotReady},
-		"a runtime the kernel refuses":       {said: "docker: Error response from daemon: failed to create task for container: operation not permitted", want: providerkit.CodeNotReady},
-		"an install whose mirror stalled":    {said: "E: Failed to fetch https://download.docker.com/linux/ubuntu/dists/noble/InRelease  Connection timed out\nE: Some index files failed to download.", want: providerkit.CodeNotReady},
-		"root, which sudo never elevated":    {root: true, said: "sudo: a password is required", want: providerkit.CodeNotReady},
+		"sudo asking a password":             {said: "sudo: a password is required", want: refusal.CodeDenied},
+		"a login sudoers never names":        {said: "ada is not in the sudoers file.  This incident will be reported.", want: refusal.CodeDenied},
+		"a command sudoers does not grant":   {said: "Sorry, user ada is not allowed to execute '/bin/sh -c install' as root on ocelbox.", want: refusal.CodeDenied},
+		"a path the elevated write can't be": {said: "install: cannot create directory '/srv/ocel': Permission denied", want: refusal.CodeNotReady},
+		"a runtime the kernel refuses":       {said: "docker: Error response from daemon: failed to create task for container: operation not permitted", want: refusal.CodeNotReady},
+		"an install whose mirror stalled":    {said: "E: Failed to fetch https://download.docker.com/linux/ubuntu/dists/noble/InRelease  Connection timed out\nE: Some index files failed to download.", want: refusal.CodeNotReady},
+		"root, which sudo never elevated":    {root: true, said: "sudo: a password is required", want: refusal.CodeNotReady},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -597,7 +599,7 @@ func TestAWriteThatFailsIsDeniedOnlyWhenSudoRefusedTheLogin(t *testing.T) {
 				return session.Result{Code: 1, Stderr: tc.said}, strings.Contains(command, "install -d")
 			}
 			item := Item{Kind: KindDir, Name: "/srv/ocel", Mode: 0o755, Owner: rootOwner}
-			if refused := refusal(t, stood.host().Install(context.Background(), item), tc.want); !strings.Contains(refused.Message, strings.Split(tc.said, "\n")[0]) {
+			if refused := refusalOf(t, stood.host().Install(context.Background(), item), tc.want); !strings.Contains(refused.Message, strings.Split(tc.said, "\n")[0]) {
 				t.Errorf("the refusal reads %q, want what the host said in it", refused.Message)
 			}
 		})

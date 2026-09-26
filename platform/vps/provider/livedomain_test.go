@@ -15,6 +15,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -52,7 +53,7 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	held, err := providerkit.ReadOrEmpty(ctx, p.Records(), providerkit.EdgeStackRecord(providerkit.ClassProduction, slug))
+	held, err := records.ReadOrEmpty(ctx, p.Records(), providerkit.EdgeStackRecord(edge.ClassProduction, slug))
 	if err != nil {
 		t.Fatalf("read the edge stack record standing on this box: %v", err)
 	}

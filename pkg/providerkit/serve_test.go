@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestServeNeedsAConstructor(t *testing.T) {
@@ -86,7 +87,7 @@ func TestSessionTurnsARefusedConstructionIntoInvalidArgument(t *testing.T) {
 	t.Parallel()
 
 	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) {
-		return nil, Refuse(CodeInvalid, "unknown option \"regoin\"")
+		return nil, refusal.Refuse(refusal.CodeInvalid, "unknown option \"regoin\"")
 	}}}
 
 	err := s.configure(context.Background(), Settings{Options: Options{"regoin": "typo"}})

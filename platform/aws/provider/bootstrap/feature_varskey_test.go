@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const broughtKeyARN = "arn:aws:kms:eu-west-1:123456789012:key/brought-1234"
@@ -176,8 +176,8 @@ func TestVarsKeyValidation(t *testing.T) {
 			if err == nil {
 				t.Fatal("validateBroughtKey = nil, want a refusal")
 			}
-			var refusal providerkit.Refusal
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Fatalf("validateBroughtKey = %v, want a CodeInvalid refusal", err)
 			}
 			if !strings.Contains(err.Error(), broughtKeyARN) {

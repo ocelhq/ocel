@@ -7,6 +7,8 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type daemonImages struct{}
@@ -34,9 +36,9 @@ func (daemonImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	return true, nil
 }
 
-func (daemonImages) Push(ctx context.Context, push ImagePush, _ Progress) error {
+func (daemonImages) Push(ctx context.Context, push ImagePush, _ edge.Progress) error {
 	if push.Built == nil {
-		return Refuse(CodeInvalid,
+		return refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is written straight into the local docker daemon, and this release carries no image it was built into", push.App)
 	}
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)

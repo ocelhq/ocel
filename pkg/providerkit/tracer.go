@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type StageID [naming.StageIDLen]byte
@@ -143,28 +144,28 @@ var attributeKeys = map[string]progressv1.AttributeKey{
 
 func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }
 
-func AttrApp(name string) Attr {
-	return Attr{Key: AttrKeyApp, Value: name}
+func AttrApp(name string) edge.Attr {
+	return edge.Attr{Key: AttrKeyApp, Value: name}
 }
 
-func AttrResourceCount(n int) Attr {
-	return Attr{Key: AttrKeyResourceCount, Value: strconv.Itoa(n)}
+func AttrResourceCount(n int) edge.Attr {
+	return edge.Attr{Key: AttrKeyResourceCount, Value: strconv.Itoa(n)}
 }
 
-func AttrBytes(n int64) Attr {
-	return Attr{Key: AttrKeyBytes, Value: strconv.FormatInt(n, 10)}
+func AttrBytes(n int64) edge.Attr {
+	return edge.Attr{Key: AttrKeyBytes, Value: strconv.FormatInt(n, 10)}
 }
 
-func AttrDurationMS(d time.Duration) Attr {
-	return Attr{Key: AttrKeyDurationMS, Value: strconv.FormatInt(d.Milliseconds(), 10)}
+func AttrDurationMS(d time.Duration) edge.Attr {
+	return edge.Attr{Key: AttrKeyDurationMS, Value: strconv.FormatInt(d.Milliseconds(), 10)}
 }
 
-func AttrResourceType(typ string) Attr {
-	return Attr{Key: AttrKeyResourceType, Value: typ}
+func AttrResourceType(typ string) edge.Attr {
+	return edge.Attr{Key: AttrKeyResourceType, Value: typ}
 }
 
-func AttrResourceName(name string) Attr {
-	return Attr{Key: AttrKeyResourceName, Value: name}
+func AttrResourceName(name string) edge.Attr {
+	return edge.Attr{Key: AttrKeyResourceName, Value: name}
 }
 
 const (
@@ -227,7 +228,7 @@ type unitRun struct {
 	stage Stage
 }
 
-func (u *unitRun) phase(phase progressv1.Phase, do func(Progress) error) error {
+func (u *unitRun) phase(phase progressv1.Phase, do func(edge.Progress) error) error {
 	working := PhaseStage(u.stage.Name, phase)
 	u.scope.declare(working)
 	start := time.Now()
@@ -262,11 +263,11 @@ func (t *eventTrace) DeclareStages(stages ...Stage) {
 	})
 }
 
-func (t *eventTrace) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr) {
+func (t *eventTrace) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...edge.Attr) {
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
-		attrs = append(attrs, Attr{Key: AttrKeyErrorKind, Value: ClassifyError(err)})
+		attrs = append(attrs, edge.Attr{Key: AttrKeyErrorKind, Value: ClassifyError(err)})
 	}
 
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))

@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -18,7 +21,7 @@ type said struct{ lines []string }
 func (s *said) Say(message string)    { s.lines = append(s.lines, message) }
 func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
 
-func (s *said) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (s *said) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func (s *said) at(fragment string) int {
 	return slices.IndexFunc(s.lines, func(line string) bool { return strings.Contains(line, fragment) })
@@ -27,8 +30,8 @@ func (s *said) at(fragment string) int {
 func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	progress := &said{}
 
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
@@ -60,8 +63,8 @@ func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -81,8 +84,8 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	stood.after = func(b *bench, command string) {
 		if !strings.HasSuffix(command, quoted(classRoot)) {
 			return
@@ -104,11 +107,11 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 	t.Parallel()
 
-	class, beside := providerkit.ClassProduction, providerkit.ClassPreview
-	truncated := func(class providerkit.Class) Item {
+	class, beside := edge.ClassProduction, edge.ClassPreview
+	truncated := func(class edge.Class) Item {
 		return Item{Kind: KindFile, Name: StampPath(class), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
 	}
-	stood := machine(map[providerkit.Class][]Item{
+	stood := machine(map[edge.Class][]Item{
 		class:  append(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), truncated(class)),
 		beside: {truncated(beside)},
 	})
@@ -136,8 +139,8 @@ func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 		"a name rooted at nothing":                     taking(KindDir, dockerEngine, ""),
 	} {
 		_, err := held.remove(context.Background(), taken)
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("Remove(%s) = %v, want a refusal: rm -rf is not the fallback for anything ocel was not asked about", name, err)
 		}
 	}
@@ -149,8 +152,8 @@ func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 func TestADeployLoginSomethingStillHoldsDoesNotStrandTheDestroy(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	stood.answer = func(command string) (session.Result, bool) {
 		if !strings.HasPrefix(command, "userdel ") || strings.Contains(command, " -f ") {
 			return session.Result{}, false
@@ -169,8 +172,8 @@ func TestADeployLoginSomethingStillHoldsDoesNotStrandTheDestroy(t *testing.T) {
 func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -193,8 +196,8 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
@@ -231,8 +234,8 @@ func TestForgettingARecordOnAHostThatCarriesNoStoreIsAlreadyForgotten(t *testing
 	t.Parallel()
 
 	stood := machine(nil)
-	name := providerkit.RecordName{providerkit.RootConformance, string(providerkit.ClassProduction), t.Name()}
-	if err := providerkit.Forget(context.Background(), NewRecords(stood.host()), name); err != nil {
+	name := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
+	if err := records.Forget(context.Background(), NewRecords(stood.host()), name); err != nil {
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
 	for _, command := range stood.commands() {
@@ -245,8 +248,8 @@ func TestForgettingARecordOnAHostThatCarriesNoStoreIsAlreadyForgotten(t *testing
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 
-	class := providerkit.ClassProduction
-	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
+	class := edge.ClassProduction
+	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
@@ -276,7 +279,7 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *testing.T) {
 	t.Parallel()
 
-	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
+	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
@@ -301,7 +304,7 @@ func TestPlanRemovalOfAHostCarryingNothingPlansNothing(t *testing.T) {
 	t.Parallel()
 
 	stood := machine(nil)
-	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), providerkit.ClassProduction)
+	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}

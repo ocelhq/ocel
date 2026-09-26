@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var errResourceOperationFailed = errors.New("resource operation failed")
@@ -166,7 +167,7 @@ func awaitTrace(result <-chan engineTrace, grace time.Duration) engineTrace {
 	}
 }
 
-func reportTrace(progress providerkit.Progress, trace engineTrace, runErr error) {
+func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 	if progress == nil || (trace.ResourceCount == 0 && runErr == nil) {
 		return
 	}
@@ -181,7 +182,7 @@ func reportTrace(progress providerkit.Progress, trace engineTrace, runErr error)
 		if s.Failed {
 			standoutErr = errResourceOperationFailed
 		}
-		attrs := []providerkit.Attr{providerkit.AttrDurationMS(s.End.Sub(s.Start))}
+		attrs := []edge.Attr{providerkit.AttrDurationMS(s.End.Sub(s.Start))}
 		if s.Type != "" {
 			attrs = append(attrs, providerkit.AttrResourceType(s.Type))
 		}

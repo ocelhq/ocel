@@ -14,6 +14,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -100,12 +101,12 @@ func TestPreflightNamesNoContainerArchitectureForAProviderThatWrapsNone(t *testi
 func TestACredentialProblemSaysWhatWentWrongByTheRefusalsCode(t *testing.T) {
 	t.Parallel()
 
-	for code, want := range map[providerkit.Code]string{
-		providerkit.CodeDenied:   "could not authenticate",
-		providerkit.CodeNotReady: "could not reach",
-		providerkit.CodeInvalid:  "misconfigured",
+	for code, want := range map[refusal.Code]string{
+		refusal.CodeDenied:   "could not authenticate",
+		refusal.CodeNotReady: "could not reach",
+		refusal.CodeInvalid:  "misconfigured",
 	} {
-		refused := providerkit.Refuse(code, "ada@box port 22 said so\nFix it")
+		refused := refusal.Refuse(code, "ada@box port 22 said so\nFix it")
 		problem := providerkit.CredentialProblemProto(fake.Vendor, refused)
 		if problem.GetMessage() != want {
 			t.Errorf("a %q refusal reads %q, want %q: a host that never answered refused no credential", code, problem.GetMessage(), want)
@@ -271,8 +272,8 @@ func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *tes
 
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
-		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction, Bound: []string{"acme.com"}},
+	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Bound: []string{"acme.com"}},
 	})
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 
@@ -295,8 +296,8 @@ func TestPreflightDoesNotRefuseAHostnameThisProjectAlreadyClaimsButNeverRecorded
 
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
-		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction},
+	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction},
 	})
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 

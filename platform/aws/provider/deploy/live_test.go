@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -49,7 +50,7 @@ func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contra
 }
 
 func previewOf(cfg Config, identity string) Config {
-	cfg.Class, cfg.Env = providerkit.ClassPreview, identity
+	cfg.Class, cfg.Env = edge.ClassPreview, identity
 	return cfg
 }
 
@@ -115,7 +116,7 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 
 		production := liveConfig()
-		production.Class, production.Env = providerkit.ClassProduction, providerkit.ProductionEnv
+		production.Class, production.Env = edge.ClassProduction, providerkit.ProductionEnv
 
 		for _, tc := range []struct {
 			name string

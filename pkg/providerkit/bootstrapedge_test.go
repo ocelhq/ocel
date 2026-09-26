@@ -24,7 +24,7 @@ func fronting(t *testing.T, kind edge.Kind) (providerkit.Gate, *fake.Provider) {
 func planFeatures(t *testing.T, gate providerkit.Gate, req providerkit.ApplyRequest) []string {
 	t.Helper()
 
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, req)
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
@@ -63,9 +63,9 @@ func TestAStandingEdgeFeatureLeftOutIsKept(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindRelay)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{})
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
@@ -80,9 +80,9 @@ func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Remove: []string{fake.FeatureImages},
 	})
 	if err != nil {
@@ -103,9 +103,9 @@ func TestAnUnrequestedStandingEdgeFeatureIsKept(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureCache, fake.FeatureImages},
 	})
 	if err != nil {
@@ -122,11 +122,11 @@ func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 	recordProject(t, provider, "shop", fake.FeatureImages)
 
 	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
-	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, req)
+	plan, err := gate.Plan(context.Background(), edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
@@ -139,7 +139,7 @@ func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
 	if reason == "" {
 		t.Fatalf("removing %s says nothing about the projects deployed against it", fake.FeatureImages)
 	}
-	if err := gate.Apply(context.Background(), plan, providerkit.ClassProduction, req, nil); err == nil {
+	if err := gate.Apply(context.Background(), plan, edge.ClassProduction, req, nil); err == nil {
 		t.Fatal("removing an edge feature a deployed project needs was admitted, want it refused")
 	}
 }
@@ -148,9 +148,9 @@ func TestRemovingTheFeatureTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindRelay)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	_, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	_, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Remove: []string{fake.FeatureImages},
 	})
 	if err == nil {
@@ -168,9 +168,9 @@ func TestRemovingWhatTheFrontingFeatureStandsOnIsRefusedByName(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindRelay)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
-	_, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
+	_, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Remove: []string{fake.FeatureCache},
 	})
 	if err == nil {
@@ -188,15 +188,15 @@ func TestRemovingAnEdgeFeatureThatFrontsNothingHereGoesAhead(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	ctx := context.Background()
 	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
-	plan, err := gate.Plan(ctx, providerkit.ClassProduction, req)
+	plan, err := gate.Plan(ctx, edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
-	if err := gate.Apply(ctx, plan, providerkit.ClassProduction, req, nil); err != nil {
+	if err := gate.Apply(ctx, plan, edge.ClassProduction, req, nil); err != nil {
 		t.Fatalf("removing an edge feature no project here fronts with: %v", err)
 	}
 }

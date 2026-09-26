@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func preflightConfig() Config {
@@ -21,7 +22,7 @@ func preflightConfig() Config {
 func preflightPlan() providerkit.DeployPlan {
 	return providerkit.DeployPlan{
 		Slug:  "shop",
-		Class: providerkit.ClassProduction,
+		Class: edge.ClassProduction,
 		Env:   "prod",
 		Apps:  []providerkit.AppEntry{{App: "web"}, {App: "docs"}},
 	}

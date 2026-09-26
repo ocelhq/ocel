@@ -15,6 +15,7 @@ import (
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -58,7 +59,7 @@ func (a account) boot(t *testing.T) providerkit.Bootstrap {
 	return boot
 }
 
-func (a account) emptied(t *testing.T, classes ...providerkit.Class) providerkit.Bootstrap {
+func (a account) emptied(t *testing.T, classes ...edge.Class) providerkit.Bootstrap {
 	t.Helper()
 	boot := a.boot(t)
 	ctx := context.Background()
