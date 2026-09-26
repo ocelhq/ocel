@@ -297,33 +297,21 @@ func TestAForeignListenerOnAServingPortIsRefusedByName(t *testing.T) {
 	}
 }
 
-func TestAProcessOutsideDockerOnAServingPortIsRefusedByName(t *testing.T) {
+func TestAProcessOutsideDockerOnAServingPortIsRefusedByWhereItIsBound(t *testing.T) {
 	t.Parallel()
 
-	err := preflighting(boxSaying(map[string]answer{
-		"publish=" + caddy.HTTPPort: {stdout: "\n"},
-		"cat /proc/net/tcp\n": {stdout: socketTable(80) +
-			listeners.SocketsMark + "\n/proc/812/fd socket:[1]\n" + listeners.NamesMark + "\n/proc/812/comm:nginx\n"},
-	}))
-	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy onto a box where nginx holds port 80")
-	}
-	for _, want := range []string{"nginx", "0.0.0.0:80"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it: the process holding the port is named, and where", err, want)
-		}
-	}
-}
-
-func TestAProcessOutsideDockerTheLoginCannotNameIsRefusedByWhereItIsBound(t *testing.T) {
-	t.Parallel()
-
-	err := preflighting(boxSaying(map[string]answer{
+	machine := boxSaying(map[string]answer{
 		"publish=" + caddy.HTTPPort: {stdout: "\n"},
 		"cat /proc/net/tcp\n":       {stdout: socketTable(80)},
-	}))
-	if err == nil || !strings.Contains(err.Error(), "bound outside docker at 0.0.0.0:80") {
-		t.Errorf("PreflightDeploy() = %v, want the port named by where it is bound when no process can be read", err)
+	})
+	err := preflighting(machine)
+	if err == nil || !strings.Contains(err.Error(), "port 80 is bound outside docker at 0.0.0.0:80") {
+		t.Errorf("PreflightDeploy() = %v, want the port named by where it is bound", err)
+	}
+	for _, command := range machine.ran {
+		if strings.Contains(command, listeners.SocketsMark) {
+			t.Errorf("the deploy preflight walked every process on the box for the one behind the port:\n%s\nand the deploy login cannot read root's or www-data's descriptors, so it never names nginx", command)
+		}
 	}
 }
 
