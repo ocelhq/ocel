@@ -21,7 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -53,7 +53,7 @@ func main() {
 func run(addr, region, config, keyParameter string) error {
 	ctx := context.Background()
 
-	trust, err := connectorkit.ReadConfig(config)
+	trust, err := connectorserver.ReadConfig(config)
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func run(addr, region, config, keyParameter string) error {
 		read:      map[edge.Class]readDeployment{},
 	}
 
-	spec := connectorkit.Spec{
+	spec := connectorserver.Spec{
 		Config:     trust,
 		Version:    version,
 		Vendor:     "aws",
@@ -101,10 +101,10 @@ func run(addr, region, config, keyParameter string) error {
 	}
 
 	if os.Getenv(runtimeAPIEnvVar) == "" {
-		return connectorkit.Serve(spec)
+		return connectorserver.Serve(spec)
 	}
 
-	mux, err := connectorkit.Mux(spec)
+	mux, err := connectorserver.Mux(spec)
 	if err != nil {
 		return err
 	}
@@ -118,30 +118,30 @@ type keyReader interface {
 	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 }
 
-func keyed(ctx context.Context, store keyReader, name string) (connectorkit.Identity, error) {
+func keyed(ctx context.Context, store keyReader, name string) (connectorserver.Identity, error) {
 	stored, err := store.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
 	if err != nil {
-		return connectorkit.Identity{}, fmt.Errorf("read the connector's key from %s: %w", name, err)
+		return connectorserver.Identity{}, fmt.Errorf("read the connector's key from %s: %w", name, err)
 	}
 	return identityOf(aws.ToString(stored.Parameter.Value))
 }
 
-func identityOf(value string) (connectorkit.Identity, error) {
+func identityOf(value string) (connectorserver.Identity, error) {
 	seed, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value))
 	if err != nil {
-		return connectorkit.Identity{}, fmt.Errorf("the connector's key is not base64: %w", err)
+		return connectorserver.Identity{}, fmt.Errorf("the connector's key is not base64: %w", err)
 	}
-	return connectorkit.IdentityFromSeed(seed)
+	return connectorserver.IdentityFromSeed(seed)
 }
 
 type proxy interface {
 	ProxyWithContext(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error)
 }
 
-func invoked(spec connectorkit.Spec, serve proxy) func(context.Context, json.RawMessage) (any, error) {
+func invoked(spec connectorserver.Spec, serve proxy) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, raw json.RawMessage) (any, error) {
 		if woken(raw) {
-			status, err := connectorkit.Heartbeat(ctx, spec)
+			status, err := connectorserver.Heartbeat(ctx, spec)
 			if err != nil {
 				return nil, err
 			}

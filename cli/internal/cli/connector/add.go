@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/version"
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -62,7 +62,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			return fmt.Errorf("the %s connector built for linux/%s is %d bytes, over the %d the provider channel accepts in one message",
 				vendor, described.GetArch(), len(binary), providerclient.MaxMessageBytes)
 		}
-		config, err := json.Marshal(connectorkit.Config{
+		config, err := json.Marshal(connectorserver.Config{
 			Console:        opts.apiURL,
 			ConnectorID:    registered.ID,
 			OrganizationID: link.OrganizationID,

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/platform/vps/connector/hostports"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -33,7 +33,7 @@ func run(listen, config string, printing, reporting bool) error {
 		return nil
 	}
 	if printing {
-		key, err := connectorkit.PublicKey(config)
+		key, err := connectorserver.PublicKey(config)
 		if err != nil {
 			return err
 		}
@@ -41,7 +41,7 @@ func run(listen, config string, printing, reporting bool) error {
 		return nil
 	}
 
-	trust, err := connectorkit.ReadConfig(config)
+	trust, err := connectorserver.ReadConfig(config)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func run(listen, config string, printing, reporting bool) error {
 		return fmt.Errorf("%s names no target ssh host key fingerprint\nReinstall the connector to write it", config)
 	}
 
-	return connectorkit.Serve(connectorkit.Spec{
+	return connectorserver.Serve(connectorserver.Spec{
 		Config:     trust,
 		Version:    version,
 		Vendor:     "vps",

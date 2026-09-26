@@ -1,4 +1,4 @@
-package connectorkit
+package connectorserver
 
 import (
 	"bytes"
@@ -74,7 +74,7 @@ func beatFor(spec Spec) (*beat, error) {
 // requests. Serve beats on its own; this is for the hosts that cannot.
 func Heartbeat(ctx context.Context, spec Spec) (int, error) {
 	if !spec.Identity.HasKey() {
-		return 0, errors.New("connectorkit: this connector has no identity, so it has nothing to sign a heartbeat with")
+		return 0, errors.New("connectorserver: this connector has no identity, so it has nothing to sign a heartbeat with")
 	}
 	beating, err := beatFor(spec)
 	if err != nil {
