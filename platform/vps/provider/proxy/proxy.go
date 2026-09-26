@@ -12,7 +12,7 @@ type Proxy interface {
 	File() string
 	Unrendered(config []byte, permission Permission) string
 	Reload(ctx context.Context) error
-	Inspect(ctx context.Context) (Standing, error)
+	Inspect(ctx context.Context) (Checks, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
 }
 
@@ -45,7 +45,7 @@ type Pin struct {
 	Path     string
 }
 
-type Standing []provider.HostCheck
+type Checks []provider.HostCheck
 
 type Certificate struct {
 	Renewal string

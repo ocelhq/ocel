@@ -23,9 +23,9 @@ func complete() Manifest {
 
 func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
 	t.Parallel()
-	held := complete()
-	held.Keys = nil
-	rendered, err := Render(held)
+	manifest := complete()
+	manifest.Keys = nil
+	rendered, err := Render(manifest)
 	if err != nil || rendered != nil {
 		t.Errorf("Render() = %q, %v, want nothing: a container with no live value boots with no manifest and dials no socket", rendered, err)
 	}
@@ -33,10 +33,10 @@ func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
 
 func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	t.Parallel()
-	held := complete()
-	held.Class, held.Environment = "preview", "pr-7"
-	held.Keys = append(held.Keys, live.Key{Key: "SESSION", Folder: "/web"})
-	rendered, err := Render(held)
+	manifest := complete()
+	manifest.Class, manifest.Environment = "preview", "pr-7"
+	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION", Folder: "/web"})
+	rendered, err := Render(manifest)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
 	}
@@ -46,7 +46,7 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	}
 	if parsed.Slug != "shop" || parsed.Class != "preview" || parsed.Environment != "pr-7" ||
 		len(parsed.Keys) != 2 || parsed.Keys[1].Folder != "/web" {
-		t.Errorf("Parse(Render()) = %+v, want %+v", parsed, held)
+		t.Errorf("Parse(Render()) = %+v, want %+v", parsed, manifest)
 	}
 }
 
@@ -58,9 +58,9 @@ func TestAManifestMissingWhatScopesTheStoreIsRefused(t *testing.T) {
 		"a class nothing is called": func(m *Manifest) { m.Class = "staging" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			held := complete()
-			sabotage(&held)
-			if _, err := Render(held); err == nil {
+			manifest := complete()
+			sabotage(&manifest)
+			if _, err := Render(manifest); err == nil {
 				t.Errorf("Render() without %s = nil, want a refusal: the agent would look for the value under no scope at all", name)
 			}
 		})
@@ -167,9 +167,9 @@ func TestTheRecordsAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T)
 	writeRecord(t, root, two, "two")
 	store := Records{Root: root}
 
-	held, err := store.Read(context.Background(), one)
-	if err != nil || string(held.Bytes) != "one" || held.Revision == "" {
-		t.Fatalf("Read() = %+v, %v", held, err)
+	read, err := store.Read(context.Background(), one)
+	if err != nil || string(read.Bytes) != "one" || read.Revision == "" {
+		t.Fatalf("Read() = %+v, %v", read, err)
 	}
 	if _, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "MISSING", "*"}); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Read() of nothing = %v, want %v", err, records.ErrNotFound)
@@ -187,10 +187,10 @@ func TestTheRecordsAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T)
 	if err != nil || len(empty) != 0 {
 		t.Errorf("List() under another project = %v, %v, want nothing", empty, err)
 	}
-	if _, err := store.Write(context.Background(), held); err == nil {
+	if _, err := store.Write(context.Background(), read); err == nil {
 		t.Error("the box-side records wrote something, and a deploy writes through the helper alone")
 	}
-	if err := store.Remove(context.Background(), one, held.Revision); err == nil {
+	if err := store.Remove(context.Background(), one, read.Revision); err == nil {
 		t.Error("the box-side records removed something")
 	}
 }

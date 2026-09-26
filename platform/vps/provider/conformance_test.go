@@ -86,7 +86,7 @@ func TestVPSProvider(t *testing.T) {
 	})
 }
 
-func TestTheProviderCarriesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
+func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
@@ -114,7 +114,7 @@ func TestTheProviderCarriesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) 
 		t.Error("the box's hooks leave PreflightDeploy nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
 	}
 	if hooks.CheckHost == nil {
-		t.Error("the box's hooks leave CheckHost nil, and `doctor` calls Preflight and DescribeBootstrap and nothing else: with no standing port there is nowhere for a verdict about the life of the box to arrive")
+		t.Error("the box's hooks leave CheckHost nil, and `doctor` calls Preflight and DescribeBootstrap and nothing else: with no permanent port there is nowhere for a verdict about the life of the box to arrive")
 	}
 }
 

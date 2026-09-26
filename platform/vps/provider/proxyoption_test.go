@@ -21,11 +21,11 @@ func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 		options provider.Options
 		want    *vps.Proxy
 	}{
-		"left out, ocel runs its own":        {options: provider.Options{"ssh": "prod"}, want: nil},
-		"manual as a shorthand":              {options: proxied("manual"), want: &vps.Proxy{Manual: &vps.Manual{}}},
-		"manual as an object with no port":   {options: proxied(map[string]any{"manual": map[string]any{}}), want: &vps.Proxy{Manual: &vps.Manual{}}},
-		"manual as an object naming a port":  {options: proxied(map[string]any{"manual": map[string]any{"port": 9000}}), want: &vps.Proxy{Manual: &vps.Manual{Port: 9000}}},
-		"manual held null inside its object": {options: proxied(map[string]any{"manual": nil}), want: &vps.Proxy{Manual: &vps.Manual{}}},
+		"left out, ocel runs its own":          {options: provider.Options{"ssh": "prod"}, want: nil},
+		"manual as a shorthand":                {options: proxied("manual"), want: &vps.Proxy{Manual: &vps.Manual{}}},
+		"manual as an object with no port":     {options: proxied(map[string]any{"manual": map[string]any{}}), want: &vps.Proxy{Manual: &vps.Manual{}}},
+		"manual as an object naming a port":    {options: proxied(map[string]any{"manual": map[string]any{"port": 9000}}), want: &vps.Proxy{Manual: &vps.Manual{Port: 9000}}},
+		"manual set to null inside its object": {options: proxied(map[string]any{"manual": nil}), want: &vps.Proxy{Manual: &vps.Manual{}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -74,18 +74,18 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 	gated := vps.Elevating(inner, unelevated)
 
 	if _, err := gated.Plan(ctx, provider.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
-		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap standing and known slugs",
+		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap state and known slugs",
 			err)
 	}
 	if _, err := gated.PlanRemove(ctx, edge.ClassProduction); err != nil {
 		t.Fatalf("PlanRemove() = %v, want the removal plan drawn for a login that may not run it", err)
 	}
 	if inner.planned != 2 {
-		t.Errorf("the host was planned against %+v, want both questions carried through", *inner)
+		t.Errorf("the host was planned against %+v, want both questions passed through", *inner)
 	}
 }
 
-func TestAHealIsNotHeldToWhatABootstrapNeeds(t *testing.T) {
+func TestAHealDoesNotNeedWhatABootstrapNeeds(t *testing.T) {
 	t.Parallel()
 
 	inner := &reached{}
@@ -94,12 +94,12 @@ func TestAHealIsNotHeldToWhatABootstrapNeeds(t *testing.T) {
 	healing := provider.BootstrapRequest{Class: edge.ClassProduction, Heal: true}
 
 	if _, err := gated.Plan(ctx, healing); err != nil {
-		t.Fatalf("Plan(heal) = %v, want it planned: heal reasserts only what the deploy login already owns, and that login holds no passwordless sudo by design", err)
+		t.Fatalf("Plan(heal) = %v, want it planned: heal reasserts only what the deploy login already owns, and that login has no passwordless sudo by design", err)
 	}
 	if err := gated.Apply(ctx, healing, nil); err != nil {
 		t.Fatalf("Apply(heal) = %v, want the deploy login's own tier reasserted without asking for root", err)
 	}
 	if inner.planned != 1 || inner.applied != 1 {
-		t.Errorf("the host was reached %+v, want the heal carried through once each", *inner)
+		t.Errorf("the host was reached %+v, want the heal passed through once each", *inner)
 	}
 }

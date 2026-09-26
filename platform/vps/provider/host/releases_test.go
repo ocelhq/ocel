@@ -57,11 +57,11 @@ func promote(t *testing.T, root, scope, class, ref string) {
 
 func window(t *testing.T, root, scope, class string) []string {
 	t.Helper()
-	held, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(scope), class))
+	contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(scope), class))
 	if err != nil {
 		t.Fatal(err)
 	}
-	trimmed := strings.TrimRight(string(held), "\n")
+	trimmed := strings.TrimRight(string(contents), "\n")
 	if trimmed == "" {
 		return nil
 	}
@@ -75,10 +75,10 @@ func TestTheWindowKeepsThreeMostRecentlyServedFirst(t *testing.T) {
 	for _, ref := range []string{"ocel/shop/web:one", "ocel/shop/web:two", "ocel/shop/web:three", "ocel/shop/web:four"} {
 		promote(t, root, "shop/web", "production", ref)
 	}
-	held := window(t, root, "shop/web", "production")
+	got := window(t, root, "shop/web", "production")
 	want := []string{"ocel/shop/web:four", "ocel/shop/web:three", "ocel/shop/web:two"}
-	if strings.Join(held, ",") != strings.Join(want, ",") {
-		t.Errorf("the window holds %v, want %v: the head is the most recently served and the fourth ref evicts the first", held, want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("the window lists %v, want %v: the head is the most recently served and the fourth ref evicts the first", got, want)
 	}
 }
 
@@ -89,10 +89,10 @@ func TestARepeatedRefMovesToTheHeadRatherThanConsumingASlot(t *testing.T) {
 	for _, ref := range []string{"ocel/shop/web:a", "ocel/shop/web:b", "ocel/shop/web:c", "ocel/shop/web:a"} {
 		promote(t, root, "shop/web", "production", ref)
 	}
-	held := window(t, root, "shop/web", "production")
+	got := window(t, root, "shop/web", "production")
 	want := []string{"ocel/shop/web:a", "ocel/shop/web:c", "ocel/shop/web:b"}
-	if strings.Join(held, ",") != strings.Join(want, ",") {
-		t.Errorf("the window holds %v, want %v: re-promoting a retained ref moves it to the head and evicts nothing", held, want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("the window lists %v, want %v: re-promoting a retained ref moves it to the head and evicts nothing", got, want)
 	}
 }
 
@@ -102,16 +102,16 @@ func TestTheWindowFileNeverGrows(t *testing.T) {
 	root := releasesDir(t)
 	for i := range 50 {
 		promote(t, root, "shop/web", "production", "ocel/shop/web:r"+strconv.Itoa(i))
-		if held := window(t, root, "shop/web", "production"); len(held) > 3 {
-			t.Fatalf("after %d promotes the window holds %d refs, and a file that grows is a read whose size is a function of history", i+1, len(held))
+		if got := window(t, root, "shop/web", "production"); len(got) > 3 {
+			t.Fatalf("after %d promotes the window lists %d refs, and a file that grows is a read whose size is a function of history", i+1, len(got))
 		}
 	}
 	alone := releasesDir(t)
 	for range 50 {
 		promote(t, alone, "shop/web", "production", "ocel/shop/web:same")
 	}
-	if held := window(t, alone, "shop/web", "production"); len(held) != 1 || held[0] != "ocel/shop/web:same" {
-		t.Errorf("fifty promotes of one ref left %v, want that ref alone: the window is not an append log", held)
+	if got := window(t, alone, "shop/web", "production"); len(got) != 1 || got[0] != "ocel/shop/web:same" {
+		t.Errorf("fifty promotes of one ref left %v, want that ref alone: the window is not an append log", got)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestAPromoteRenamesAndLeavesNothingHalfWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(staged) != 0 {
-		t.Errorf("%v stands where the helper stages, and a write that renames leaves nothing behind", staged)
+		t.Errorf("%v remains where the helper stages, and a write that renames leaves nothing behind", staged)
 	}
 }
 
@@ -169,10 +169,10 @@ func TestConcurrentPromotesOfOneClassLoseNoUpdate(t *testing.T) {
 				t.Fatalf("promote %s exited: %v", refs[at], err)
 			}
 		}
-		held := window(t, root, "shop/web", "production")
-		slices.Sort(held)
-		if !slices.Equal(held, refs) {
-			t.Fatalf("round %d left the window holding %v, want all of %v: promote reads the window, prepends and renames, and two of those interleaving without the lock drops whichever landed first", round, held, refs)
+		got := window(t, root, "shop/web", "production")
+		slices.Sort(got)
+		if !slices.Equal(got, refs) {
+			t.Fatalf("round %d left the window listing %v, want all of %v: promote reads the window, prepends and renames, and two of those interleaving without the lock drops whichever landed first", round, got, refs)
 		}
 	}
 }
@@ -223,11 +223,11 @@ func TestAPromoteKilledMidWriteTakesItsStagingFileWithIt(t *testing.T) {
 	}
 	_ = cmd.Wait()
 	if left := staging(t, root); len(left) != 0 {
-		t.Errorf("%v stands after the helper was killed, and a cli whose ssh channel dies delivers exactly this: a trap on EXIT alone never runs, so every interrupted deploy leaves a file no later run removes", left)
+		t.Errorf("%v remains after the helper was killed, and a cli whose ssh channel dies delivers exactly this: a trap on EXIT alone never runs, so every interrupted deploy leaves a file no later run removes", left)
 	}
 }
 
-func TestOneAppsSlowWriteNeverHoldsAnotherAppUp(t *testing.T) {
+func TestOneAppsSlowWriteNeverBlocksAnotherApp(t *testing.T) {
 	root := releasesDir(t)
 	script := filepath.Join(t.TempDir(), "releases")
 	if err := os.WriteFile(script, releasesScript, 0o755); err != nil {
@@ -280,14 +280,14 @@ func TestAPromoteReclaimsTheStagingFilesOfHelpersNoLongerRunning(t *testing.T) {
 	}
 	promote(t, root, "shop/web", "production", "ocel/shop/web:one")
 	if _, err := os.Stat(dead); !os.IsNotExist(err) {
-		t.Errorf("%s stands after a later run held the lock (%v), and nothing else on this box ever sweeps it", dead, err)
+		t.Errorf("%s remains after a later run held the lock (%v), and nothing else on this box ever sweeps it", dead, err)
 	}
 	if _, err := os.Stat(live); err != nil {
 		t.Errorf("the sweep took %s, whose helper is still running: a staging file is only stale once its writer is gone", live)
 	}
 }
 
-func TestForgettingAClassLeavesTheBoxAsItStoodBeforeTheFirstPromote(t *testing.T) {
+func TestForgettingAClassLeavesTheBoxAsItWasBeforeTheFirstPromote(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
@@ -297,12 +297,12 @@ func TestForgettingAClassLeavesTheBoxAsItStoodBeforeTheFirstPromote(t *testing.T
 	}
 	for _, left := range []string{filepath.Join(root, "shop", "web"), filepath.Join(root, "shop")} {
 		if _, err := os.Stat(left); !os.IsNotExist(err) {
-			t.Errorf("%s stands after the last class was forgotten (%v), and a teardown reclaims the bytes its own deploys wrote", left, err)
+			t.Errorf("%s remains after the last class was forgotten (%v), and a teardown reclaims the bytes its own deploys wrote", left, err)
 		}
 	}
 }
 
-func TestForgettingOneClassLeavesTheOthersStanding(t *testing.T) {
+func TestForgettingOneClassLeavesTheOthersInPlace(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
@@ -311,8 +311,8 @@ func TestForgettingOneClassLeavesTheOthersStanding(t *testing.T) {
 	if _, code := releases(t, root, "", "shop/web", "forget", "preview"); code != 0 {
 		t.Fatalf("forget exited %d", code)
 	}
-	if held := window(t, root, "shop/web", "production"); len(held) != 1 || held[0] != "ocel/shop/web:live" {
-		t.Errorf("forgetting preview left production holding %v, and one class's teardown is never another's", held)
+	if got := window(t, root, "shop/web", "production"); len(got) != 1 || got[0] != "ocel/shop/web:live" {
+		t.Errorf("forgetting preview left production listing %v, and one class's teardown is never another's", got)
 	}
 }
 
@@ -343,11 +343,11 @@ func TestTheHelperRefusesAScopeThatIsNotOneProjectAndOneApp(t *testing.T) {
 			t.Errorf("promote as %q wrote %q to stdout", scope, rendered)
 		}
 	}
-	held, err := os.ReadDir(root)
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range held {
+	for _, entry := range entries {
 		if entry.IsDir() {
 			t.Errorf("a refused scope wrote the window %q, and the gate is what stops a name reaching the filesystem at all", entry.Name())
 		}
@@ -399,11 +399,11 @@ func TestARefOnlyARunningContainerNamesIsNeverRemoved(t *testing.T) {
 		t.Fatalf("reconcile exited %d", code)
 	}
 	if swept(rendered) != "ocel/shop/web:orphan" {
-		t.Errorf("reconcile removed %q, want ocel/shop/web:orphan alone: a ref no window names is still held by the container serving it", swept(rendered))
+		t.Errorf("reconcile removed %q, want ocel/shop/web:orphan alone: a ref no window names is still used by the container serving it", swept(rendered))
 	}
 }
 
-func TestAContainerCarryingTheAppLabelAndNoRefStopsTheSweep(t *testing.T) {
+func TestAContainerWithTheAppLabelAndNoRefStopsTheSweep(t *testing.T) {
 	root := releasesDir(t)
 	promote(t, root, "shop/web", "production", "ocel/shop/web:named")
 
@@ -442,7 +442,7 @@ func TestASecondReconcileRemovesNothing(t *testing.T) {
 
 func TestARefusedRemovalIsLeftForTheNextRun(t *testing.T) {
 	root := releasesDir(t)
-	dock := fakeDocker(t, nil, []string{"ocel/shop/web:held"})
+	dock := fakeDocker(t, nil, []string{"ocel/shop/web:refused"})
 	dock.refuse(t)
 
 	rendered, code := dock.reconcile(t, root, "shop/web", "ocel/shop/web")
@@ -452,12 +452,12 @@ func TestARefusedRemovalIsLeftForTheNextRun(t *testing.T) {
 	if rendered != "" {
 		t.Errorf("reconcile reported %q removed, and a daemon that refused removed nothing", rendered)
 	}
-	if !strings.Contains(dock.log(t), "rmi ocel/shop/web:held") {
+	if !strings.Contains(dock.log(t), "rmi ocel/shop/web:refused") {
 		t.Error("reconcile never asked for the removal at all")
 	}
 }
 
-func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppStanding(t *testing.T) {
+func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppInPlace(t *testing.T) {
 	root := releasesDir(t)
 	promote(t, root, "shop/web", "production", "ocel/shop/web:live")
 	promote(t, root, "blog/web", "production", "ocel/blog/web:live")
@@ -474,8 +474,8 @@ func TestOneProjectsTeardownLeavesAnotherProjectsImagesOfTheSameAppStanding(t *t
 	if swept(rendered) != "ocel/shop/web:live" {
 		t.Errorf("shop's teardown removed %q, want ocel/shop/web:live alone: two projects that each name an app web shared one repository and one window, and shop's sweep took blog's image out from under a load still importing it", swept(rendered))
 	}
-	if held := window(t, root, "blog/web", "production"); strings.Join(held, ",") != "ocel/blog/web:next,ocel/blog/web:live" {
-		t.Errorf("blog's window reads %v after shop was torn down, want both refs it promoted", held)
+	if got := window(t, root, "blog/web", "production"); strings.Join(got, ",") != "ocel/blog/web:next,ocel/blog/web:live" {
+		t.Errorf("blog's window reads %v after shop was torn down, want both refs it promoted", got)
 	}
 	if strings.Contains(dock.log(t), "rmi ocel/blog") {
 		t.Errorf("shop's sweep asked the daemon to remove a blog image:\n%s", dock.log(t))
@@ -543,11 +543,11 @@ func (d dockerStub) refuse(t *testing.T) {
 
 func (d dockerStub) log(t *testing.T) string {
 	t.Helper()
-	held, err := os.ReadFile(filepath.Join(d.dir, "log"))
+	logged, err := os.ReadFile(filepath.Join(d.dir, "log"))
 	if err != nil {
 		t.Fatalf("the sweep ran no docker command at all: %v", err)
 	}
-	return string(held)
+	return string(logged)
 }
 
 func (d dockerStub) listed(t *testing.T) string {

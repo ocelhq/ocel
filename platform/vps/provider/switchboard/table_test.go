@@ -150,7 +150,7 @@ func TestAnUnclaimedHostnameThePreviewEntryAndItsProbeAreAllRefused(t *testing.T
 	}
 }
 
-func TestATableCarryingEveryKindOfRowOcelWritesIsRead(t *testing.T) {
+func TestATableWithEveryKindOfRowOcelWritesIsRead(t *testing.T) {
 	t.Parallel()
 
 	mustRead(t, `{"grace":"12s",
@@ -166,24 +166,24 @@ func TestATableOcelCouldNotHaveWrittenIsRefusedWhole(t *testing.T) {
 
 	const web = `{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"shop-web-1:3000"}`
 	for what, document := range map[string]string{
-		"a field ocel never writes":           `{"grace":"30s","upstreams":[]}`,
-		"a grace that is not a duration":      `{"grace":"soon"}`,
-		"no grace at all":                     `{}`,
-		"a claim naming no pointer":           `{"grace":"30s","claims":[{"owner":"o","hostname":"a.example.com","pointer":""}]}`,
-		"a claim naming no owner":             `{"grace":"30s","claims":[{"owner":"","hostname":"a.example.com","pointer":"p"}]}`,
-		"a claim naming no hostname":          `{"grace":"30s","claims":[{"owner":"o","hostname":"","pointer":"p"}]}`,
-		"a wildcard claim":                    `{"grace":"30s","claims":[{"owner":"o","hostname":"*.example.com","pointer":"p"}]}`,
-		"a claim holding the separator":       `{"grace":"30s","claims":[{"owner":"o/x","hostname":"a.example.com","pointer":"p"}]}`,
-		"a claimed app holding the separator": `{"grace":"30s","claims":[{"owner":"o","hostname":"a.example.com","pointer":"p","app":"w/x"}]}`,
-		"a route naming no app":               `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"","upstream":"a:1"}]}`,
-		"a route holding the separator":       `{"grace":"30s","routes":[{"owner":"o","pointer":"p/x","app":"web","upstream":"a:1"}]}`,
-		"a route naming no upstream":          `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":""}]}`,
-		"a route whose upstream has no port":  `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"shop-web-1"}]}`,
-		"a route whose port is not a port":    `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"shop-web-1:99999"}]}`,
-		"a route naming a health path":        `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"a:1","health":"/up"}]}`,
-		"a preview base of one label":         `{"grace":"30s","routes":[` + web + `],"preview":"localhost"}`,
-		"a preview base no dns label spells":  `{"grace":"30s","preview":"pre_view.example.com"}`,
-		"two tables":                          `{"grace":"30s"}{"grace":"30s"}`,
+		"a field ocel never writes":              `{"grace":"30s","upstreams":[]}`,
+		"a grace that is not a duration":         `{"grace":"soon"}`,
+		"no grace at all":                        `{}`,
+		"a claim naming no pointer":              `{"grace":"30s","claims":[{"owner":"o","hostname":"a.example.com","pointer":""}]}`,
+		"a claim naming no owner":                `{"grace":"30s","claims":[{"owner":"","hostname":"a.example.com","pointer":"p"}]}`,
+		"a claim naming no hostname":             `{"grace":"30s","claims":[{"owner":"o","hostname":"","pointer":"p"}]}`,
+		"a wildcard claim":                       `{"grace":"30s","claims":[{"owner":"o","hostname":"*.example.com","pointer":"p"}]}`,
+		"a claim containing the separator":       `{"grace":"30s","claims":[{"owner":"o/x","hostname":"a.example.com","pointer":"p"}]}`,
+		"a claimed app containing the separator": `{"grace":"30s","claims":[{"owner":"o","hostname":"a.example.com","pointer":"p","app":"w/x"}]}`,
+		"a route naming no app":                  `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"","upstream":"a:1"}]}`,
+		"a route containing the separator":       `{"grace":"30s","routes":[{"owner":"o","pointer":"p/x","app":"web","upstream":"a:1"}]}`,
+		"a route naming no upstream":             `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":""}]}`,
+		"a route whose upstream has no port":     `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"shop-web-1"}]}`,
+		"a route whose port is not a port":       `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"shop-web-1:99999"}]}`,
+		"a route naming a health path":           `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"a:1","health":"/up"}]}`,
+		"a preview base of one label":            `{"grace":"30s","routes":[` + web + `],"preview":"localhost"}`,
+		"a preview base no dns label spells":     `{"grace":"30s","preview":"pre_view.example.com"}`,
+		"two tables":                             `{"grace":"30s"}{"grace":"30s"}`,
 	} {
 		if _, err := switchboard.Read([]byte(document)); err == nil {
 			t.Errorf("a table with %s was read, want it refused: %s", what, document)

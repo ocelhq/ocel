@@ -44,7 +44,7 @@ func TestTheTableAdmitsEveryNameTheBoxAnswersWithACertificateAndNoOther(t *testi
 		"a preview hostname nothing claims":      "pr-7.preview.example.com",
 		"the preview wildcard itself":            edge.PreviewWildcard("preview.example.com"),
 		"the preview base":                       "preview.example.com",
-		"a claimed hostname carrying a port":     "shop.example.com:443",
+		"a claimed hostname with a port":         "shop.example.com:443",
 		"a claimed hostname with a trailing dot": "shop.example.com.",
 		"nothing":                                "",
 	} {
@@ -132,7 +132,7 @@ func TestTheFrontProxyIsAnsweredWhetherAHostnameIsAdmittedAndNothingElseIs(t *te
 	t.Parallel()
 
 	web := backend(t, "web")
-	board, _ := standing(t, routing(t, map[string]string{"shop.example.com": web}))
+	board, _ := served(t, routing(t, map[string]string{"shop.example.com": web}))
 	at, front := admitting(t, board)
 
 	if said := asked(t, front, http.MethodGet, at+switchboard.AdmitPath+"?domain=shop.example.com"); said != http.StatusOK {
@@ -155,7 +155,7 @@ func TestTheFrontProxyIsAnsweredWhetherAHostnameIsAdmittedAndNothingElseIs(t *te
 	elsewhere := httptest.NewServer(board.Admit())
 	t.Cleanup(elsewhere.Close)
 	if said := asked(t, http.DefaultClient, http.MethodGet, elsewhere.URL+switchboard.AdmitPath+"?domain=shop.example.com"); said != http.StatusForbidden {
-		t.Errorf("a peer that did not arrive over the admit socket was answered %d for a claimed hostname, want 403: only the front proxy holds that socket", said)
+		t.Errorf("a peer that did not arrive over the admit socket was answered %d for a claimed hostname, want 403: only the front proxy can reach that socket", said)
 	}
 }
 
@@ -163,7 +163,7 @@ func TestALoadedTableIsWhatTheNextAdmissionReads(t *testing.T) {
 	t.Parallel()
 
 	web := backend(t, "web")
-	board, _ := standing(t, routing(t, map[string]string{"shop.example.com": web}))
+	board, _ := served(t, routing(t, map[string]string{"shop.example.com": web}))
 	at, front := admitting(t, board)
 	path := filepath.Join(t.TempDir(), "routing.json")
 	if err := os.WriteFile(path, routing(t, map[string]string{"blog.example.com": web}), 0o600); err != nil {
@@ -181,13 +181,13 @@ func TestALoadedTableIsWhatTheNextAdmissionReads(t *testing.T) {
 	}
 }
 
-type held struct {
+type stalledListener struct {
 	net.Listener
 	answering chan struct{}
 	release   chan struct{}
 }
 
-func (l held) Accept() (net.Conn, error) {
+func (l stalledListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
 		return nil, err
@@ -214,13 +214,15 @@ func TestShutdownFinishesAnAnswerTheAdmissionHadAlreadyBegun(t *testing.T) {
 	t.Parallel()
 
 	web := backend(t, "web")
-	board, _ := standing(t, routing(t, map[string]string{"shop.example.com": web}))
+	board, _ := served(t, routing(t, map[string]string{"shop.example.com": web}))
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	answering, release := make(chan struct{}), make(chan struct{})
-	go func() { _ = board.ServeAdmit(held{Listener: listener, answering: answering, release: release}) }()
+	go func() {
+		_ = board.ServeAdmit(stalledListener{Listener: listener, answering: answering, release: release})
+	}()
 	asking, err := net.Dial("tcp", listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)

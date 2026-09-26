@@ -43,7 +43,7 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 		t.Errorf("the service unit reads:\n%s\nand names a user: the agent reads the class key, which is root's alone", service)
 	}
 	if !strings.HasPrefix(live.SocketPath, live.SocketDir+"/") || live.SocketDir == ConnectorRun || strings.HasPrefix(live.SocketDir, ConnectorRun+"/") {
-		t.Errorf("the socket stands at %s, under %s, which %s owns and could rename out from under every container", live.SocketPath, live.SocketDir, deployUser)
+		t.Errorf("the socket is at %s, under %s, which %s owns and could rename out from under every container", live.SocketPath, live.SocketDir, deployUser)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *test
 	}
 	socket, service := at(KindUnit, LiveSocketUnit), at(KindUnit, LiveService)
 	if socket < 0 || service < 0 || socket > service {
-		t.Fatalf("the socket unit stands at %d and the service at %d: a restarted service takes the socket systemd already holds", socket, service)
+		t.Fatalf("the socket unit is at %d and the service at %d: a restarted service takes the socket systemd already owns", socket, service)
 	}
 	for _, unit := range []int{socket, service} {
 		for _, watched := range items[unit].Watch {
@@ -92,7 +92,7 @@ func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *
 				t.Errorf("the %s for %s is built for %s", what, arch, binary.Machine)
 			}
 			if section := binary.Section(".interp"); section != nil {
-				t.Errorf("the %s for %s asks for a dynamic loader, and it runs in images that may carry none", what, arch)
+				t.Errorf("the %s for %s asks for a dynamic loader, and it runs in images that may ship none", what, arch)
 			}
 		}
 	}
@@ -111,22 +111,22 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *test
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	for _, name := range []string{LiveService, LiveSocketUnit, LiveBinary, liveUnitFile, liveSocketFile} {
-		if kept := removalOf(removing(standing, beside, appsStanding{}), name); kept.action == provider.ActionDelete {
+		if kept := removalOf(removing(current, beside, appsPresent{}), name); kept.action == provider.ActionDelete {
 			t.Errorf("destroying one class takes %s, and the sibling class's containers still read their values through it", name)
 		}
-		if gone := removalOf(removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{}), name); gone.action != provider.ActionDelete {
+		if gone := removalOf(removing(current, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.action != provider.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q", name, gone.action)
 		}
 	}
 
-	stood := machine(map[edge.Class][]Item{production: bootstrapped(t, production)})
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
+	box := machine(map[edge.Class][]Item{production: bootstrapped(t, production)})
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	taken := strings.Join(stood.commands(), "\n")
+	taken := strings.Join(box.commands(), "\n")
 	for _, unit := range []string{LiveService, LiveSocketUnit} {
 		if !strings.Contains(taken, "systemctl disable --now "+quoted(unit)) {
 			t.Errorf("the last destroy never stopped %s:\n%s", unit, taken)

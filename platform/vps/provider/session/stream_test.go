@@ -32,7 +32,7 @@ func TestACommandRunsWhileItsInputIsStillArriving(t *testing.T) {
 		t.Skip("the transfer feeds a posix shell")
 	}
 	marker := filepath.Join(t.TempDir(), "started")
-	feed := &awaiting{marker: marker, said: strings.NewReader("carried")}
+	feed := &awaiting{marker: marker, said: strings.NewReader("streamed")}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -41,8 +41,8 @@ func TestACommandRunsWhileItsInputIsStillArriving(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("run() = code %d, %v (%s)", code, err, stderr)
 	}
-	if stdout != "carried" {
-		t.Errorf("the command read %q, want %q", stdout, "carried")
+	if stdout != "streamed" {
+		t.Errorf("the command read %q, want %q", stdout, "streamed")
 	}
 }
 

@@ -37,11 +37,11 @@ func bootstrapped(t *testing.T, vm machine, class edge.Class) *vps.Provider {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	standing, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe(%s) = %v", class, err)
 	}
-	if standing.Present && !standing.Unfinished && standing.Stacks[0].DigestCurrent {
+	if described.Present && !described.Unfinished && described.Stacks[0].DigestCurrent {
 		return p
 	}
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
@@ -69,10 +69,10 @@ func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 
 	key := host.SealKeyPath(class)
 	if posture := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%a %U %s' "+key)); posture != "400 root 32" {
-		t.Errorf("%s stands as %q, want `400 root 32`: 32 bytes of this machine's own randomness, readable by root and nothing beside", key, posture)
+		t.Errorf("%s is %q, want `400 root 32`: 32 bytes of this machine's own randomness, readable by root and nothing beside", key, posture)
 	}
 	if rendered, err := vm.attempt(deployLogin, "cat "+key); err == nil {
-		t.Errorf("%s read %s and got %q, so every value on this host is sealed to bytes the deploy login holds", deployLogin, key, rendered)
+		t.Errorf("%s read %s and got %q, so every value on this host is sealed to bytes the deploy login can read", deployLogin, key, rendered)
 	}
 	if rendered, err := vm.attempt(deployLogin, "sudo -n cat "+key); err == nil {
 		t.Errorf("%s read %s through sudo and got %q, so the sudoers line grants more than the helper", deployLogin, key, rendered)
@@ -93,7 +93,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Fatalf("%s sealed nothing through the helper it is whitelisted on: %v", deployLogin, err)
 	}
 	if bytes.Contains(written, []byte(sealed)) {
-		t.Fatal("Seal() answered a value carrying the plaintext it was handed")
+		t.Fatal("Seal() answered a value containing the plaintext it was handed")
 	}
 
 	opened, err := cipher.Open(ctx, at, written)
@@ -120,17 +120,17 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	standing, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !standing.Stacks[0].DigestCurrent {
+	if !described.Stacks[0].DigestCurrent {
 		t.Fatal("Describe() after an apply that finished is not current, so nothing below is about the key")
 	}
 
 	key := host.SealKeyPath(class)
 	if _, err := vm.attempt(deployLogin, "sudo -n "+host.SealHelper+" "+string(class)+" init"); err == nil {
-		t.Errorf("a second init over a standing key exited 0, and every value sealed to %s went with it", key)
+		t.Errorf("a second init over an existing key exited 0, and every value sealed to %s went with it", key)
 	}
 
 	vm.ssh(t, "sudo rm -f "+key)

@@ -74,7 +74,7 @@ type ConnectorState struct {
 }
 
 func (c *Connector) Describe(ctx context.Context) (ConnectorState, error) {
-	rendered, err := c.host.run(ctx, "ask this host what connector it carries", connectorSurvey(), nil)
+	rendered, err := c.host.run(ctx, "ask this host what connector it has installed", connectorSurvey(), nil)
 	if err != nil {
 		return ConnectorState{}, err
 	}
@@ -90,7 +90,7 @@ func connectorSurvey() string {
 }
 
 func readConnectorState(rendered string) (ConnectorState, error) {
-	standing := ConnectorState{}
+	current := ConnectorState{}
 	for line := range strings.SplitSeq(strings.TrimSpace(rendered), "\n") {
 		key, value, named := strings.Cut(strings.TrimSpace(line), "=")
 		if !named {
@@ -98,17 +98,17 @@ func readConnectorState(rendered string) (ConnectorState, error) {
 		}
 		switch key {
 		case "version":
-			standing.Installed, standing.Version = true, value
+			current.Installed, current.Version = true, value
 		case "key":
-			standing.PublicKey = value
+			current.PublicKey = value
 		}
 	}
-	if standing.Installed && standing.PublicKey == "" {
+	if current.Installed && current.PublicKey == "" {
 		return ConnectorState{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s answered no public key\nRemove the connector and add it again",
 			ConnectorBinary)
 	}
-	return standing, nil
+	return current, nil
 }
 
 func keyPathed(config []byte) ([]byte, error) {
@@ -131,7 +131,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 		return ConnectorState{}, err
 	}
 	items := ConnectorItems(binary, written)
-	rendered, err := c.host.run(ctx, "survey the connector this host carries", survey(items), nil)
+	rendered, err := c.host.run(ctx, "survey the connector this host has installed", survey(items), nil)
 	if err != nil {
 		return ConnectorState{}, err
 	}
@@ -141,7 +141,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	}
 	for _, item := range items {
 		if observed[item.ID()] == item.Digest() {
-			say(progress, item.ID()+": "+reasonStanding)
+			say(progress, item.ID()+": "+reasonCurrent)
 			continue
 		}
 		if err := c.host.Install(ctx, item); err != nil {

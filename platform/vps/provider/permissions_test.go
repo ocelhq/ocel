@@ -28,7 +28,7 @@ func TestBothDocumentsAreBareStringsAShellCanPipe(t *testing.T) {
 
 	for _, tier := range []edge.CredentialTier{edge.TierBootstrap, edge.TierDeploy} {
 		if heading := rendered(t, tier).Heading; heading != "" {
-			t.Errorf("the %s document is headed %q, and a host holds one credential set, not several", tier, heading)
+			t.Errorf("the %s document is headed %q, and a host has one credential set, not several", tier, heading)
 		}
 	}
 }
@@ -40,19 +40,19 @@ func TestTheBootstrapDocumentNamesEveryRequirementPreflightChecks(t *testing.T) 
 	for _, need := range session.Requirements() {
 		for _, want := range []string{need.Name, need.Detail} {
 			if !strings.Contains(document, want) {
-				t.Errorf("the bootstrap document does not carry %q, so it says less than preflight demands:\n%s", want, document)
+				t.Errorf("the bootstrap document does not include %q, so it says less than preflight demands:\n%s", want, document)
 			}
 		}
 	}
 }
 
-func TestTheBootstrapDocumentCarriesTheSudoersFragmentTheLoginNeeds(t *testing.T) {
+func TestTheBootstrapDocumentIncludesTheSudoersFragmentTheLoginNeeds(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, edge.TierBootstrap).Document
 	for _, want := range []string{"/etc/sudoers.d/", "NOPASSWD:", "deployer ALL="} {
 		if !strings.Contains(document, want) {
-			t.Errorf("the bootstrap document does not carry %q, and it is what a human is meant to paste:\n%s", want, document)
+			t.Errorf("the bootstrap document does not include %q, and it is what a human is meant to paste:\n%s", want, document)
 		}
 	}
 }
@@ -66,7 +66,7 @@ func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(document.Document, "<login>") {
-		t.Errorf("the bootstrap document for a host named by an ssh_config alias reads:\n%s\nwant the sudoers line to stand for whatever login that alias resolves to", document.Document)
+		t.Errorf("the bootstrap document for a host named by an ssh_config alias reads:\n%s\nwant the sudoers line to name whatever login that alias resolves to", document.Document)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 		for _, grant := range host.Grants(class) {
 			for _, want := range []string{grant.Name, grant.Detail} {
 				if !strings.Contains(document, want) {
-					t.Errorf("the deploy document does not carry %q, so it claims less than a bootstrap hands out:\n%s", want, document)
+					t.Errorf("the deploy document does not include %q, so it claims less than a bootstrap hands out:\n%s", want, document)
 				}
 			}
 		}
@@ -140,11 +140,11 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 		t.Errorf("the document describes membership of %s as:\n%s\nand never says the group is root on the machine under another name", group, claim.Detail)
 	}
 	if document := rendered(t, edge.TierDeploy).Document; !strings.Contains(document, claim.Detail) {
-		t.Errorf("the document does not carry the %s grant word for word:\n%s", group, document)
+		t.Errorf("the document does not include the %s grant word for word:\n%s", group, document)
 	}
 }
 
-func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.T) {
+func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, edge.TierDeploy).Document
@@ -153,7 +153,7 @@ func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.
 			continue
 		}
 		if !strings.Contains(document, strings.TrimSpace(string(item.Content))) {
-			t.Errorf("a bootstrap writes %s and the document never prints the line it holds:\n%s", item.Name, document)
+			t.Errorf("a bootstrap writes %s and the document never prints the line it contains:\n%s", item.Name, document)
 		}
 		return
 	}
@@ -166,7 +166,7 @@ func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T)
 	document := rendered(t, edge.TierDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if !strings.Contains(document, host.SealKeyPath(class)) {
-			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never holds:\n%s",
+			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never reads:\n%s",
 				host.SealKeyPath(class), document)
 		}
 	}

@@ -36,11 +36,11 @@ func loopback(verb string, argv []string, errs io.Writer) (string, string, bool)
 }
 
 func handshake(at, hostname string) (*tls.Conn, error) {
-	held, err := net.DialTimeout("tcp", at, servingTimeout)
+	conn, err := net.DialTimeout("tcp", at, servingTimeout)
 	if err != nil {
 		return nil, err
 	}
-	spoken := tls.Client(held, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})
+	spoken := tls.Client(conn, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})
 	if err := spoken.SetDeadline(time.Now().Add(servingTimeout)); err != nil {
 		_ = spoken.Close()
 		return nil, err
@@ -66,8 +66,8 @@ func leaf(argv []string, out, errs io.Writer) int {
 	case err != nil && declined(err):
 		fmt.Fprintf(errs, "%s: %s served no certificate for %s: %v\n", switchboard.Name, at, hostname, err)
 		return exitNotServingYet
-	case err != nil && held(err):
-		fmt.Fprintf(errs, "%s: %s held the handshake for %s past %s, still ordering its certificate: %v\n", switchboard.Name, at, hostname, servingTimeout, err)
+	case err != nil && timedOut(err):
+		fmt.Fprintf(errs, "%s: %s kept the handshake for %s open past %s, still ordering its certificate: %v\n", switchboard.Name, at, hostname, servingTimeout, err)
 		return exitNotServingYet
 	case err != nil:
 		fmt.Fprintf(errs, "%s: tls handshake for %s failed: %v\n", switchboard.Name, hostname, err)
@@ -161,7 +161,7 @@ func serves(chain []*x509.Certificate, hostname string, now time.Time) error {
 		return fmt.Errorf("the certificate served is for %s, not this name", strings.Join(served.DNSNames, ", "))
 	}
 	if now.Before(served.NotBefore) || now.After(served.NotAfter) {
-		return fmt.Errorf("the certificate served holds from %s until %s, and it is %s",
+		return fmt.Errorf("the certificate served is valid from %s until %s, and it is %s",
 			served.NotBefore.UTC().Format(time.RFC3339), served.NotAfter.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
 	}
 	return nil
@@ -172,7 +172,7 @@ func declined(err error) bool {
 	return errors.As(err, &refused) && refused.Op == "remote error"
 }
 
-func held(err error) bool {
+func timedOut(err error) bool {
 	var stalled net.Error
 	return errors.As(err, &stalled) && stalled.Timeout()
 }

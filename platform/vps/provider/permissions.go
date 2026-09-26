@@ -24,7 +24,7 @@ func bootstrapDocument(login string) string {
 
 func deployDocument() string {
 	var written strings.Builder
-	written.WriteString("A bootstrapped host runs every deploy as " + host.DeployUser() + ", which holds:\n")
+	written.WriteString("A bootstrapped host runs every deploy as " + host.DeployUser() + ", which is granted:\n")
 	for _, grant := range deployGrants() {
 		written.WriteString("\n  " + grant.Name + "\n    " + grant.Detail + "\n")
 	}

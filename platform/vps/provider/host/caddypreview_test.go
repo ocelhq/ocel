@@ -42,7 +42,7 @@ func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 		"a name the probe overflows":    strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
 	} {
 		if _, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
-			t.Errorf("a preview entry on base %q (%s) renders, and the switchboard admits its probe for a certificate: a name no CA can ever issue for is an order that fails on every handshake for as long as the base stands",
+			t.Errorf("a preview entry on base %q (%s) renders, and the switchboard admits its probe for a certificate: a name no CA can ever issue for is an order that fails on every handshake for as long as the base is in place",
 				base, what)
 		}
 	}
@@ -52,7 +52,7 @@ func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 		}
 	}
 	if err := PreviewBaseUsable(""); err == nil {
-		t.Error("an empty base is a usable one, and the route it would install carries no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
+		t.Error("an empty base is a usable one, and the route it would install has no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
 	}
 }
 
@@ -64,7 +64,7 @@ func TestThePreviewEntryReadsBackAsTheBaseThatRenderedIt(t *testing.T) {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if read.PreviewBase != previewBase {
-		t.Fatalf("the preview base reads back as %q, want %q: this file is the only thing that answers whether the shared preview entry stands", read.PreviewBase, previewBase)
+		t.Fatalf("the preview base reads back as %q, want %q: this file is the only thing that answers whether the shared preview entry is installed", read.PreviewBase, previewBase)
 	}
 	if !slices.Equal(read.Routes, previewing().Routes) || !slices.Equal(read.Claims, previewing().Claims) {
 		t.Errorf("the preview entry cost the box its routes (%v) or its claims (%v)", read.Routes, read.Claims)
@@ -94,14 +94,14 @@ func TestAnUnclaimedHostnameUnderThePreviewBaseIsToldNothingAboutTheBox(t *testi
 }
 
 func TestARealProxyOrdersForThePreviewProbeAndNeverForTheWildcardOrAnUnclaimedPreview(t *testing.T) {
-	stood, _ := probedBox(t, previewing(), issuedByNobody(t, mustRender(t, previewing())))
+	rig, _ := probedBox(t, previewing(), issuedByNobody(t, mustRender(t, previewing())))
 
 	wildcard := edge.PreviewWildcard(previewBase)
 	probe := edge.ProbeHostname(wildcard)
 	unclaimed := "pr-7." + previewBase
-	stood.handshake(unclaimed)
-	stood.handshake(probe)
-	logs := stood.ordered(t, probe)
+	rig.handshake(unclaimed)
+	rig.handshake(probe)
+	logs := rig.ordered(t, probe)
 	if managed(logs, onDemandOrder, unclaimed) {
 		t.Errorf("the proxy ordered for %s, a preview hostname nothing claims: the wildcard record sends every name under the base here, and each one would be an order against the base's allowance:\n%s", unclaimed, logs)
 	}
@@ -120,103 +120,103 @@ func TestInstallingThePreviewEntryLoadsItOntoTheSwitchboardAndTakingItDownUnload
 	t.Parallel()
 
 	ctx := context.Background()
-	stood := claimingBox(t, routed())
-	if err := stood.host().InstallPreviewEntry(ctx, previewBase); err != nil {
+	rig := claimingBox(t, routed())
+	if err := rig.host().InstallPreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(rig.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.PreviewBase != previewBase {
-		t.Fatalf("%s answers previews on %q after the install, want %q", ProxyConfig, held.PreviewBase, previewBase)
+	if table.PreviewBase != previewBase {
+		t.Fatalf("%s answers previews on %q after the install, want %q", ProxyConfig, table.PreviewBase, previewBase)
 	}
-	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) {
-		t.Errorf("the preview entry was written and never loaded, so the switchboard admits no probe for a certificate and answers no preview hostname at all: %v", stood.commands())
+	if !slices.ContainsFunc(rig.commands(), loadsSwitchboard) {
+		t.Errorf("the preview entry was written and never loaded, so the switchboard admits no probe for a certificate and answers no preview hostname at all: %v", rig.commands())
 	}
-	if slices.ContainsFunc(stood.commands(), reloadsFront) {
-		t.Errorf("the preview entry reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, stood.commands())
+	if slices.ContainsFunc(rig.commands(), reloadsFront) {
+		t.Errorf("the preview entry reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, rig.commands())
 	}
 
-	if err := stood.host().RemovePreviewEntry(ctx, previewBase); err != nil {
+	if err := rig.host().RemovePreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("RemovePreviewEntry() = %v", err)
 	}
-	if held, err = ReadRoutingTable([]byte(stood.held)); err != nil {
+	if table, err = ReadRoutingTable([]byte(rig.recorded)); err != nil {
 		t.Fatal(err)
 	}
-	if held.PreviewBase != "" {
-		t.Errorf("%s still answers previews on %q after the release", ProxyConfig, held.PreviewBase)
+	if table.PreviewBase != "" {
+		t.Errorf("%s still answers previews on %q after the release", ProxyConfig, table.PreviewBase)
 	}
 }
 
 func TestInstallingThePreviewEntryTwiceWritesTheProxyOnce(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, previewing())
-	if err := stood.host().InstallPreviewEntry(context.Background(), previewBase); err != nil {
+	rig := claimingBox(t, previewing())
+	if err := rig.host().InstallPreviewEntry(context.Background(), previewBase); err != nil {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
-	for _, command := range stood.commands() {
+	for _, command := range rig.commands() {
 		if writesProxy(command) || loadsSwitchboard(command) || reloadsFront(command) {
-			t.Errorf("a preview entry already standing rewrote and reloaded the proxy (%q); every reload is a whole-box config post", command)
+			t.Errorf("a preview entry already installed rewrote and reloaded the proxy (%q); every reload is a whole-box config post", command)
 		}
 	}
 }
 
-func TestReleasingThePreviewBaseIsRefusedWhileHostnamesUnderItStillStand(t *testing.T) {
+func TestReleasingThePreviewBaseIsRefusedWhileHostnamesUnderItAreStillClaimed(t *testing.T) {
 	t.Parallel()
 
 	claimed := "shop--pr-7." + previewBase
 	state := previewing()
 	state.Claims = append(slices.Clone(state.Claims), previewClaim("pr-7", "", claimed))
-	stood := claimingBox(t, state)
+	rig := claimingBox(t, state)
 
-	err := stood.host().RemovePreviewEntry(context.Background(), previewBase)
+	err := rig.host().RemovePreviewEntry(context.Background(), previewBase)
 	if err == nil {
 		t.Fatal("the base was released with preview hostnames still claimed under it: the catch-all goes and the claims stay, so their routes keep answering and the proxy keeps renewing a certificate for each of them against a base nothing owns, and the next base raised beside them installs a second catch-all over sites that are still live")
 	}
 	if !strings.Contains(err.Error(), claimed) {
-		t.Errorf("the refusal reads %q and names none of the hostnames standing in the way", err)
+		t.Errorf("the refusal reads %q and names none of the claimed hostnames in the way", err)
 	}
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(rig.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.PreviewBase != previewBase {
-		t.Errorf("%s answers previews on %q after a refused release, want %q", ProxyConfig, held.PreviewBase, previewBase)
+	if table.PreviewBase != previewBase {
+		t.Errorf("%s answers previews on %q after a refused release, want %q", ProxyConfig, table.PreviewBase, previewBase)
 	}
 }
 
 func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, previewing())
-	err := stood.host().InstallPreviewEntry(context.Background(), "previews.example.org")
+	rig := claimingBox(t, previewing())
+	err := rig.host().InstallPreviewEntry(context.Background(), "previews.example.org")
 	if err == nil {
 		t.Fatal("a second preview base was installed over the first, and every live preview on this box is a hostname under the base it was raised on")
 	}
 	if !strings.Contains(err.Error(), edge.PreviewWildcard(previewBase)) {
-		t.Errorf("the refusal reads %q and never names the wildcard already standing", err)
+		t.Errorf("the refusal reads %q and never names the wildcard already installed", err)
 	}
 }
 
 func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAll(t *testing.T) {
 	state := routed()
 	state.PreviewBase = internalBase
-	stood, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
+	rig, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	probe := edge.ProbeHostname(edge.PreviewWildcard(internalBase))
-	stood.handshake(probe)
+	rig.handshake(probe)
 	const obtained = "certificate obtained successfully"
 	var logs string
 	for range 100 {
-		if logs = logsOf(stood.name); managed(logs, obtained, probe) {
+		if logs = logsOf(rig.name); managed(logs, obtained, probe) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	if !managed(logs, obtained, probe) {
-		t.Fatalf("the proxy holds no certificate for %s after a handshake asked for it, so nothing here was decided after the issuance decision and every absence below is read off a window that never reached one:\n%s", probe, logs)
+		t.Fatalf("the proxy has no certificate for %s after a handshake asked for it, so nothing here was decided after the issuance decision and every absence below is read off a window that never reached one:\n%s", probe, logs)
 	}
 	if strings.Contains(logs, unreachableCA) {
 		t.Errorf("a hostname under %s was taken to an acme issuer rather than caddy's internal one: what keeps this package off a public CA is that a name no public CA will issue for is managed internally, and this config points the catch-all at a directory that answers nothing precisely so the wrong answer costs a failed order rather than a real one:\n%s",
@@ -288,7 +288,7 @@ func elsewhere(t *testing.T, state RoutingTable) string {
 	return strings.ReplaceAll(string(mustRender(t, state)), caddy.PermissionEndpoint(SwitchboardPermission.Path), "http://203.0.113.99/admit")
 }
 
-func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingElseItsConfigHolds(t *testing.T) {
+func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingElseItsConfigContains(t *testing.T) {
 	t.Parallel()
 
 	for what, box := range map[string]struct {
@@ -303,10 +303,10 @@ func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingEls
 		"a proxy asking a permission endpoint that is not ours": {config: elsewhere(t, previewing()), refused: true},
 		"a proxy somebody pointed at a config loader":           {config: loadingFrom(t, previewing()), refused: true},
 	} {
-		stood := claimingBox(t, previewing())
+		rig := claimingBox(t, previewing())
 		config := box.config
-		stood.answer = servesPair(stood.bench, &stood.held, &config)
-		_, err := NewBootstrap(stood.host(), testVendor, "shop").described(context.Background(), standingHost())
+		rig.answer = servesPair(rig.bench, &rig.recorded, &config)
+		_, err := NewBootstrap(rig.host(), testVendor, "shop").described(context.Background(), currentHost())
 		if refused := err != nil; refused != box.refused {
 			t.Errorf("describing %s = %v: a config that may order a certificate without the switchboard's word spends the box's CA allowance on any name pointed at it, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
 		}
@@ -316,10 +316,10 @@ func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingEls
 	}
 }
 
-func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesUnguardedOnDemandTls(t *testing.T) {
+func TestDescribingABoxBeforeItHasARoutingTableStillRefusesUnguardedOnDemandTls(t *testing.T) {
 	t.Parallel()
 
-	read := standingHost()
+	read := currentHost()
 	delete(read.Observed, routingTableItem().ID())
 	for what, box := range map[string]struct {
 		config  string
@@ -328,13 +328,13 @@ func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesUnguardedOnDemandTl
 		"a proxy an older ocel wrote":                      {config: olderRendering(t, routed())},
 		"a proxy somebody added an unguarded on-demand to": {config: onDemandOn(t, routed()), refused: true},
 	} {
-		stood := machine(nil)
+		rig := machine(nil)
 		absent := ""
 		config := box.config
-		stood.answer = servesPair(stood, &absent, &config)
-		_, err := NewBootstrap(stood.host(), testVendor, "shop").described(context.Background(), read)
+		rig.answer = servesPair(rig, &absent, &config)
+		_, err := NewBootstrap(rig.host(), testVendor, "shop").described(context.Background(), read)
 		if refused := err != nil; refused != box.refused {
-			t.Errorf("describing a box bootstrapped before its routing table, holding %s = %v, want it described so the plan can seed the table, unless its proxy may order without the switchboard's word", what, err)
+			t.Errorf("describing a box bootstrapped before its routing table, running %s = %v, want it described so the plan can seed the table, unless its proxy may order without the switchboard's word", what, err)
 		}
 	}
 }

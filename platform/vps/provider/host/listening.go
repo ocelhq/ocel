@@ -14,14 +14,14 @@ import (
 const listenerCommand = "cat " + listeners.TCPPath + "\n" +
 	"if [ -e " + listeners.TCP6Path + " ]; then cat " + listeners.TCP6Path + "; fi"
 
-const holdersCommand = listenerCommand + "\n" +
+const ownersCommand = listenerCommand + "\n" +
 	"echo '" + listeners.SocketsMark + "'\n" +
 	`find /proc/[0-9]*/fd -lname 'socket:\[*' -printf '%h %l\n' 2>/dev/null || true` + "\n" +
 	"echo '" + listeners.NamesMark + "'\n" +
 	`grep -H '' /proc/[0-9]*/comm 2>/dev/null || true`
 
-func (h *Host) portHolders(ctx context.Context, elevation string) ([]listeners.Listener, error) {
-	said, err := h.ran(ctx, "read what listens on this host and what holds it", holdersCommand, nil, elevation)
+func (h *Host) portOwners(ctx context.Context, elevation string) ([]listeners.Listener, error) {
+	said, err := h.ran(ctx, "read what listens on this host and which process owns it", ownersCommand, nil, elevation)
 	if err != nil {
 		return nil, err
 	}
@@ -55,9 +55,9 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 func publishers(said string) []string { return strings.Fields(said) }
 
 func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) provider.HostCheck {
-	board := switchboardStanding(nil, h.proxyOption)
+	board := switchboardBox(nil, h.proxyOption)
 	check := provider.HostCheck{Subject: board.name, Verdict: provider.HostFail,
-		Fix: "run `" + provider.BootstrapCommand(class) + "` to stand it again"}
+		Fix: "run `" + provider.BootstrapCommand(class) + "` to start it again"}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		check.Finding = fmt.Sprintf("ask the engine about %s: %v", board.name, err)
@@ -72,7 +72,7 @@ func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) provider.
 		check.Verdict, check.Fix = provider.HostPass, ""
 		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.name, switchboard.ControlDir)
 		if at, restored := h.restoredAt(ctx, elevation); restored {
-			check.Finding += fmt.Sprintf("; a deploy stood it again at %s after it was removed, as a prune removes it whenever it is stopped", at)
+			check.Finding += fmt.Sprintf("; a deploy started it again at %s after it was removed, as a prune removes it whenever it is stopped", at)
 		}
 		return check
 	}

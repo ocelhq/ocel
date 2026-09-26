@@ -17,5 +17,5 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 }
 
 func (p *Provider) box() *box.Edge {
-	return box.New(p.host, p.holdOrigins, p.records, p.options.SSH.session().Destination())
+	return box.New(p.host, p.applyOrigins, p.records, p.options.SSH.session().Destination())
 }

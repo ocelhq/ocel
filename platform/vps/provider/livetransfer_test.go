@@ -52,7 +52,7 @@ func rootfs(t *testing.T) []byte {
 	t.Helper()
 	var raw bytes.Buffer
 	written := tar.NewWriter(&raw)
-	body := []byte("the image ocel carried\n")
+	body := []byte("the image ocel moved\n")
 	if err := written.WriteHeader(&tar.Header{Name: "ocel-live-transfer", Mode: 0o644, Size: int64(len(body))}); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func localDaemon(t *testing.T) (images.DockerHost, *http.Client) {
 	t.Helper()
 	daemon, err := images.DockerHostFromEnv()
 	if err != nil {
-		t.Fatalf("no docker daemon this machine can name, and the image a transfer carries is read out of one: %v", err)
+		t.Fatalf("no docker daemon this machine can name, and the image a transfer moves is read out of one: %v", err)
 	}
 	transport := daemon.Transport()
 	t.Cleanup(transport.CloseIdleConnections)
@@ -101,7 +101,7 @@ func keepsImagesInContainerd(t *testing.T, daemon images.DockerHost, client *htt
 		}
 	}
 	t.Fatalf("the daemon at %s keeps images in its %s store, and a build the cli accepts always comes out of a containerd one: "+
-		"exporting from a classic store here carries an archive production never carries, and the load onto the machine's own classic store "+
+		"exporting from a classic store here produces an archive production never produces, and the load onto the machine's own classic store "+
 		"would prove a transition that never happens: turn the containerd image store on (\"features\": {\"containerd-snapshotter\": true} "+
 		"in /etc/docker/daemon.json) or point %s at a daemon that has it",
 		daemon.Address, info.Driver, images.DockerHostEnv)
@@ -191,7 +191,7 @@ func wrappedAsADeployDoes(ctx context.Context, daemon images.DockerHost, client 
 	return wrapped, discard, nil
 }
 
-func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
+func TestLiveAnImageIsMovedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
 	vm := liveMachine(t)
 	bootstrapped(t, vm, edge.ClassProduction)
 	daemon, client := imported(t)
@@ -209,12 +209,12 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 	}
 	push := transferPush(daemon, client, runtime)
 
-	held, err := store.Has(ctx, push)
+	present, err := store.Has(ctx, push)
 	if err != nil {
-		t.Fatalf("Has() over a machine that holds nothing = %v", err)
+		t.Fatalf("Has() over a machine that has nothing = %v", err)
 	}
-	if held {
-		t.Fatalf("the machine claims %s before anything carried it, so the transfer cannot be proven here", coordinate)
+	if present {
+		t.Fatalf("the machine claims %s before anything moved it, so the transfer cannot be proven here", coordinate)
 	}
 
 	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
@@ -224,7 +224,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 
 	named := strings.TrimSpace(vm.sshAs(t, deployLogin, "docker image ls --format '{{.Repository}}:{{.Tag}}' "+coordinate))
 	if named != coordinate {
-		t.Errorf("the machine's daemon names the carried image %q, want %q: release, rollback and retention pin that coordinate and nothing else",
+		t.Errorf("the machine's daemon names the moved image %q, want %q: release, rollback and retention pin that coordinate and nothing else",
 			named, coordinate)
 	}
 	if _, err := vm.attempt(deployLogin, "docker image inspect "+coordinate); err != nil {
@@ -232,7 +232,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 	}
 }
 
-func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) {
+func TestLiveARedeployOfAnUnchangedAppSendsTheImageNoSecondTime(t *testing.T) {
 	vm := liveMachine(t)
 	bootstrapped(t, vm, edge.ClassProduction)
 	daemon, client := imported(t)
@@ -260,10 +260,10 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 		t.Fatalf("Rows() = %v", err)
 	}
 	if len(rows) != 1 || rows[0].Action != provider.ActionKeep {
-		t.Errorf("the plan shows %v for an image the machine already holds, want one %q row", rows, provider.ActionKeep)
+		t.Errorf("the plan shows %v for an image the machine already has, want one %q row", rows, provider.ActionKeep)
 	}
 	if err := plan.PushMissing(ctx, nil); err != nil {
-		t.Fatalf("a second Ship over a machine that already holds the digest = %v: the image is gone from this machine's daemon, so the transfer was attempted rather than skipped", err)
+		t.Fatalf("a second Ship over a machine that already has the digest = %v: the image is gone from this machine's daemon, so the transfer was attempted rather than skipped", err)
 	}
 	if _, err := vm.attempt(deployLogin, "docker image inspect "+coordinate); err != nil {
 		t.Errorf("the redeploy left the machine without the image it already had: %v", err)

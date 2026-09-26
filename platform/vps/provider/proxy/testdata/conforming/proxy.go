@@ -18,9 +18,8 @@ func (c *Conforming) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c *Conforming) Reload(context.Context) error { return nil }
 
-func (c *Conforming) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (c *Conforming) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (c *Conforming) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

@@ -55,26 +55,26 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	held, err := records.ReadOrEmpty(ctx, p.Records(), stackrecords.EdgeStackRecord(edge.ClassProduction, slug))
+	record, err := records.ReadOrEmpty(ctx, p.Records(), stackrecords.EdgeStackRecord(edge.ClassProduction, slug))
 	if err != nil {
-		t.Fatalf("read the edge stack record standing on this box: %v", err)
+		t.Fatalf("read the edge stack record current on this box: %v", err)
 	}
-	held.Bytes = body
-	if _, err := p.Records().Write(ctx, held); err != nil {
+	record.Bytes = body
+	if _, err := p.Records().Write(ctx, record); err != nil {
 		t.Fatalf("record the edge stack the kit opens: %v", err)
 	}
 }
 
-type owed struct {
+type manualRecords struct {
 	records []*progressv1.DnsRecord
 	notes   []string
 }
 
-func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (owed, []string, *progressv1.ResultEvent) {
+func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.OperationEvent]) (manualRecords, []string, *progressv1.ResultEvent) {
 	t.Helper()
 	defer stream.Close()
 
-	var asked owed
+	var asked manualRecords
 	var said []string
 	var result *progressv1.ResultEvent
 	for stream.Receive() {
@@ -113,7 +113,7 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	promotes(t, stack, "p-one", "one", standsUp(t, p, "one"), 1)
+	promotes(t, stack, "p-one", "one", provisioned(t, p, "one"), 1)
 	recorded(t, p, domainSlug, stack.State())
 
 	return vm, p, overTheContract(t, p), liveHostname
@@ -144,7 +144,7 @@ func TestLiveDomainAddOwesAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t 
 	}
 	asked, _, result := drained(t, stream)
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("AddHostname() = %v, want the hostname settled", result.GetError())
+		t.Fatalf("AddHostname() = %v, want the hostname bound", result.GetError())
 	}
 
 	address, err := p.Host().Address(context.Background())
@@ -152,30 +152,30 @@ func TestLiveDomainAddOwesAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t 
 		t.Fatal(err)
 	}
 	if len(asked.records) != 1 {
-		t.Fatalf("the run owed %d records for one hostname: %v", len(asked.records), asked.records)
+		t.Fatalf("the run asked for %d manual records for one hostname: %v", len(asked.records), asked.records)
 	}
-	owedRecord := asked.records[0]
-	if owedRecord.GetType() != string(edge.RecordTypeA) || owedRecord.GetValue() != address || owedRecord.GetName() != hostname {
-		t.Errorf("the record owed is %s %s %s, want an A record pointing %s at the address of the machine the user bought",
-			owedRecord.GetName(), owedRecord.GetType(), owedRecord.GetValue(), hostname)
+	manual := asked.records[0]
+	if manual.GetType() != string(edge.RecordTypeA) || manual.GetValue() != address || manual.GetName() != hostname {
+		t.Errorf("the manual record is %s %s %s, want an A record pointing %s at the address of the machine the user bought",
+			manual.GetName(), manual.GetType(), manual.GetValue(), hostname)
 	}
-	if owedRecord.GetProxied() {
-		t.Error("the owed record asks for a proxied record, and a box is answered by its own address")
+	if manual.GetProxied() {
+		t.Error("the manual record asks for a proxied record, and a box is answered by its own address")
 	}
 	if !strings.Contains(strings.Join(asked.notes, "\n"), "wrote none of them") {
-		t.Errorf("the owed records came with %v, want the run to say ocel wrote none of them: nothing here writes DNS unless a writer is configured", asked.notes)
+		t.Errorf("the manual records came with %v, want the run to say ocel wrote none of them: nothing here writes DNS unless a writer is configured", asked.notes)
 	}
 
 	if served := vm.asks(t, hostname, "/"); served != "one" {
 		t.Errorf("the box answered %q for the hostname it just bound, want the release the project serves", served)
 	}
 	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName) {
-		t.Errorf("the box answered the bound hostname with\n%s\nwant %s: %s, which is what the settle reads to decide this edge serves it",
+		t.Errorf("the box answered the bound hostname with\n%s\nwant %s: %s, which is what the serving check reads to decide this edge serves it",
 			head, edge.HeaderEdge, switchboard.EdgeName)
 	}
 }
 
-func TestLiveDomainStatusNamesTheRecordsOwedTheCertificateHandleAndWhoRenewsIt(t *testing.T) {
+func TestLiveDomainStatusNamesTheManualRecordsTheCertificateHandleAndWhoRenewsIt(t *testing.T) {
 	_, _, client, hostname := servingTheBox(t)
 
 	req := &contractv1.HostnameRequest{
@@ -188,7 +188,7 @@ func TestLiveDomainStatusNamesTheRecordsOwedTheCertificateHandleAndWhoRenewsIt(t
 		t.Fatalf("AddHostname() = %v", err)
 	}
 	if _, _, result := drained(t, stream); result == nil || !result.GetSuccess() {
-		t.Fatalf("AddHostname() = %v, want the hostname settled", result.GetError())
+		t.Fatalf("AddHostname() = %v, want the hostname bound", result.GetError())
 	}
 
 	resp, err := client.GetHostnameStatus(context.Background(), req)
@@ -196,7 +196,7 @@ func TestLiveDomainStatusNamesTheRecordsOwedTheCertificateHandleAndWhoRenewsIt(t
 		t.Fatalf("GetHostnameStatus() = %v", err)
 	}
 	if len(resp.GetHostnames()) != 1 {
-		t.Fatalf("the status carries %d rows for one declared hostname: %v", len(resp.GetHostnames()), resp.GetHostnames())
+		t.Fatalf("the status has %d rows for one declared hostname: %v", len(resp.GetHostnames()), resp.GetHostnames())
 	}
 	row := resp.GetHostnames()[0]
 	if row.GetHostname() != hostname || !row.GetDeclared() {
@@ -231,7 +231,7 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 		t.Fatalf("AddHostname() = %v", err)
 	}
 	if _, _, result := drained(t, stream); result == nil || !result.GetSuccess() {
-		t.Fatalf("AddHostname() = %v, want the hostname settled", result.GetError())
+		t.Fatalf("AddHostname() = %v, want the hostname bound", result.GetError())
 	}
 
 	gone, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
@@ -257,8 +257,8 @@ func TestLiveDomainRmStopsTheHostnameServingAndLeavesNothingOfItLoaded(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held, err := owner.DomainOwner(context.Background(), hostname); err != nil || held != "" {
-		t.Errorf("DomainOwner(%s) = %q, %v, want nothing claiming a hostname the project gave back", hostname, held, err)
+	if claimant, err := owner.DomainOwner(context.Background(), hostname); err != nil || claimant != "" {
+		t.Errorf("DomainOwner(%s) = %q, %v, want nothing claiming a hostname the project gave back", hostname, claimant, err)
 	}
 }
 
@@ -275,7 +275,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 		t.Fatalf("AddHostname() = %v", err)
 	}
 	if _, _, result := drained(t, stream); result == nil || !result.GetSuccess() {
-		t.Fatalf("AddHostname() = %v, want the hostname settled", result.GetError())
+		t.Fatalf("AddHostname() = %v, want the hostname bound", result.GetError())
 	}
 
 	gone, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
@@ -290,10 +290,10 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 		t.Fatalf("RemoveHostname() = %v, want the hostname given back", result.GetError())
 	}
 
-	held := provider.Certificate{ID: certs.ProxyHandle(hostname)}
-	if err := p.Certificates().Discard(context.Background(), held, edge.DiscardProgress()); err != nil {
-		t.Errorf("DiscardCertificate(%s) = %v, want nil: ocel places no key material on a box so it holds authority to remove none, and the retained certificate is what makes a re-bind free against the CA's per-week ceiling",
-			held.ID, err)
+	retained := provider.Certificate{ID: certs.ProxyHandle(hostname)}
+	if err := p.Certificates().Discard(context.Background(), retained, edge.DiscardProgress()); err != nil {
+		t.Errorf("DiscardCertificate(%s) = %v, want nil: ocel places no key material on a box so it has authority to remove none, and the retained certificate is what makes a re-bind free against the CA's per-week ceiling",
+			retained.ID, err)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		t.Fatalf("AddHostname() = %v", err)
 	}
 	if _, _, result := drained(t, stream); result == nil || !result.GetSuccess() {
-		t.Fatalf("AddHostname() = %v, want the hostname settled", result.GetError())
+		t.Fatalf("AddHostname() = %v, want the hostname bound", result.GetError())
 	}
 
 	other, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
@@ -330,7 +330,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 			hostname, claims[0].GetStatus())
 	}
 	if want := boxedge.Surface(domainSlug, edge.ClassProduction); claims[0].GetOwner() != want {
-		t.Errorf("the claim on %s names %q, want %q: the refusal has to name who holds it or there is nothing to act on",
+		t.Errorf("the claim on %s names %q, want %q: the refusal has to name who owns it or there is nothing to act on",
 			hostname, claims[0].GetOwner(), want)
 	}
 	if claims[1].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED || claims[1].GetOwner() != "" {
@@ -346,9 +346,9 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 	if err != nil {
 		t.Fatalf("Preflight() = %v", err)
 	}
-	if held := mine.GetDomainClaims(); len(held) != 1 || held[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
-		t.Errorf("the project that bound %s reads its own hostname as %v, want it unclaimed: every redeploy after a `domain add` would otherwise be refused for holding its own domain",
-			hostname, held)
+	if own := mine.GetDomainClaims(); len(own) != 1 || own[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
+		t.Errorf("the project that bound %s reads its own hostname as %v, want it unclaimed: every redeploy after a `domain add` would otherwise be refused for owning its own domain",
+			hostname, own)
 	}
 }
 

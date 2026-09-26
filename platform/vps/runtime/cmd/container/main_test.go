@@ -39,7 +39,7 @@ func answering(t *testing.T, values map[string]string) string {
 	return socket
 }
 
-func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToCarry(t *testing.T) {
+func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToShip(t *testing.T) {
 	socket := answering(t, map[string]string{"DATABASE_URL": "postgres://app:hunter2@db/orders"})
 	manifest, err := vars.Render(vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err != nil {
@@ -49,12 +49,12 @@ func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToCarry(t *te
 
 	values, err := resolve(context.Background(), string(manifest), socket, dir)
 	if err != nil {
-		t.Fatalf("resolve() = %v, want the values projected into a directory that did not exist: an image built from scratch carries no /tmp", err)
+		t.Fatalf("resolve() = %v, want the values projected into a directory that did not exist: an image built from scratch has no /tmp", err)
 	}
 
 	read, err := os.ReadFile(filepath.Join(dir, "DATABASE_URL"))
 	if err != nil {
-		t.Fatalf("the projection holds no DATABASE_URL: %v", err)
+		t.Fatalf("the projection contains no DATABASE_URL: %v", err)
 	}
 	if string(read) != "postgres://app:hunter2@db/orders" {
 		t.Errorf("the projection reads DATABASE_URL as %q", read)
@@ -162,7 +162,7 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = served.Close() })
 	if len(served.Env) == 0 {
-		t.Fatal("proxying() stood nothing up, and the app reaches its bound bucket only through the proxy")
+		t.Fatal("proxying() started nothing, and the app reaches its bound bucket only through the proxy")
 	}
 	for _, entry := range served.Env {
 		if strings.Contains(entry, "r2-s3cr3t") {
@@ -191,7 +191,7 @@ func TestAProxiedBindingWithNoStoreCredentialIsRefused(t *testing.T) {
 		t.Fatalf("resolve() = %v", err)
 	}
 	if _, err := proxying(manifest, values, socket, "127.0.0.1:1"); err == nil {
-		t.Error("proxying() stood a proxy up with no credential to reach the store with, which would fail every write instead of the deploy")
+		t.Error("proxying() started a proxy with no credential to reach the store with, which would fail every write instead of the deploy")
 	}
 }
 

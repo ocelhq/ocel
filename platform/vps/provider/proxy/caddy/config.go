@@ -151,15 +151,15 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if err := json.Unmarshal(baseline, &seeded); err != nil {
 		return nil, fmt.Errorf("the baseline caddy config is not json: %w", err)
 	}
-	front, held := seeded.Apps.HTTP.Servers[serverName]
-	if !held {
+	front, declared := seeded.Apps.HTTP.Servers[serverName]
+	if !declared {
 		return nil, fmt.Errorf("the baseline caddy config declares no %s server", serverName)
 	}
 	if strings.TrimSpace(spec.Upstream) == "" {
 		return nil, errors.New("a proxy spec names no upstream to forward to")
 	}
 	if strings.TrimSpace(spec.Edge) == "" {
-		return nil, errors.New("a proxy spec names no edge for the proxy's answers to carry")
+		return nil, errors.New("a proxy spec names no edge for the proxy's answers to name")
 	}
 	if strings.TrimSpace(spec.Permission.Dial) == "" || !strings.HasPrefix(spec.Permission.Path, "/") {
 		return nil, errors.New("a proxy spec names no endpoint to ask whether a hostname may be issued a certificate")
@@ -228,7 +228,7 @@ func loaded(pins []proxy.Pin) (*certificates, []connectionPolicy, error) {
 		if strings.TrimSpace(pin.Hostname) == "" {
 			return nil, nil, fmt.Errorf("the certificate pinned at %q names no hostname it serves", pin.Path)
 		}
-		if !slices.ContainsFunc(files, func(held loadFile) bool { return held.Tags[0] == mounted }) {
+		if !slices.ContainsFunc(files, func(file loadFile) bool { return file.Tags[0] == mounted }) {
 			files = append(files, loadFile{Certificate: PinCertificate(mounted), Key: PinKey(mounted), Tags: []string{mounted}})
 		}
 		selecting = append(selecting, connectionPolicy{
@@ -303,10 +303,10 @@ func unrendered(rendered []byte, permission proxy.Permission) string {
 	return ""
 }
 
-func sameJSON(held json.RawMessage, want any) bool {
+func sameJSON(current json.RawMessage, want any) bool {
 	var read, wanted any
 	written, err := json.Marshal(want)
-	if err != nil || json.Unmarshal(held, &read) != nil || json.Unmarshal(written, &wanted) != nil {
+	if err != nil || json.Unmarshal(current, &read) != nil || json.Unmarshal(written, &wanted) != nil {
 		return false
 	}
 	return reflect.DeepEqual(read, wanted)

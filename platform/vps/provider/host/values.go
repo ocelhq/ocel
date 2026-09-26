@@ -41,7 +41,7 @@ func EnvFile(class edge.Class, container string) string {
 
 const (
 	handedDir     = "handed"
-	handedKnown   = "held"
+	handedKnown   = "known"
 	handedUnknown = "unknown"
 )
 
@@ -158,15 +158,15 @@ func handing(spec Container) (handoff, error) {
 	if err != nil {
 		return handoff{}, err
 	}
-	held := handoff{digest: digest}
+	delivery := handoff{digest: digest}
 	if len(env) > 0 {
-		held.path = EnvFile(spec.Class, spec.Name)
+		delivery.path = EnvFile(spec.Class, spec.Name)
 	}
-	return held, nil
+	return delivery, nil
 }
 
-func (h *Host) hand(ctx context.Context, held handoff, spec Container) error {
-	if held.path == "" {
+func (h *Host) hand(ctx context.Context, delivery handoff, spec Container) error {
+	if delivery.path == "" {
 		return nil
 	}
 	rendered, err := RenderEnvFile(spec.delivered())
@@ -174,20 +174,20 @@ func (h *Host) hand(ctx context.Context, held handoff, spec Container) error {
 		return err
 	}
 	_, err = h.ran(ctx, "write the values "+spec.App+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(held.path), bytes.NewReader(rendered), "")
+		"install -m 0600 /dev/stdin "+quoted(delivery.path), bytes.NewReader(rendered), "")
 	return err
 }
 
-func (h *Host) forget(ctx context.Context, held handoff) error {
-	if held.path == "" {
+func (h *Host) forget(ctx context.Context, delivery handoff) error {
+	if delivery.path == "" {
 		return nil
 	}
 	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
 	defer stop()
-	if _, err := h.ran(taking, "take back "+held.path, "rm -f "+quoted(held.path), nil, ""); err != nil {
+	if _, err := h.ran(taking, "take back "+delivery.path, "rm -f "+quoted(delivery.path), nil, ""); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"could not remove %s on %s, which holds this deploy's values in plaintext: %v",
-			held.path, h.named(), err)
+			"could not remove %s on %s, which has this deploy's values in plaintext: %v",
+			delivery.path, h.named(), err)
 	}
 	return nil
 }

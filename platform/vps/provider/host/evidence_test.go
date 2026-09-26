@@ -14,10 +14,10 @@ func inspecting() map[string]string {
 		"what a release that fell over captures as evidence":                     stateCommand(physical),
 		"what a release that fell over captures as logs":                         logCommand(physical),
 		"what a proxy that did not come up reports":                              frontProxy().rising(3),
-		"what a switchboard that did not come up reports":                        switchboardStanding(nil, Front{}).rising(3),
+		"what a switchboard that did not come up reports":                        switchboardBox(nil, Front{}).rising(3),
 		"what a bootstrap probes the proxy with":                                 frontProxy().probe(),
 		"what a preflight reads the proxy's state with":                          stateCommand(caddy.Container),
-		"what doctor reads a switchboard a deploy stood again with":              restoredCommand(),
+		"what doctor reads a switchboard a deploy started again with":            restoredCommand(),
 		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
 	}
 }
@@ -49,10 +49,10 @@ func TestEveryInspectOnTheEvidencePathNamesTheFieldsItReads(t *testing.T) {
 func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.T) {
 	t.Parallel()
 
-	held := inspecting()
-	held["the fact template a bootstrap compares the proxy against"] = ContainerFactTemplate
-	held["what a preflight reads the disk headroom with"] = headroomCommand([]string{"ocel-shop-web"})
-	for what, command := range held {
+	commands := inspecting()
+	commands["the fact template a bootstrap compares the proxy against"] = ContainerFactTemplate
+	commands["what a preflight reads the disk headroom with"] = headroomCommand([]string{"ocel-shop-web"})
+	for what, command := range commands {
 		for _, leak := range []string{".Config.Env", ".Env}}", "{{json .}}", "--format '{{.}}'"} {
 			if strings.Contains(command, leak) {
 				t.Errorf("%s reads %q, and %s prints every value the container was handed", what, command, leak)
@@ -74,17 +74,17 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 func inspectRosters() map[string][]string {
 	return map[string][]string{
 		"docker inspect":         {"probe", "restoredCommand", "restoring", "rising", "runningCommand", "servingCommand", "stateCommand"},
-		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding", "networksStanding"},
-		"docker image inspect":   {"imageHeld"},
+		"docker network inspect": {"command", "joinNetworkScript", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networksPresent"},
+		"docker image inspect":   {"imagePulled"},
 	}
 }
 
-func TestEveryInspectThisPackageRunsIsHeldToTheSelectorRules(t *testing.T) {
+func TestEveryInspectThisPackageRunsIsBoundByTheSelectorRules(t *testing.T) {
 	t.Parallel()
 
 	for marker, roster := range inspectRosters() {
 		rendered(t, marker, roster,
-			"an inspect rendered somewhere this bench does not read is held to none of the rules in this file, and a bare one prints every value a container was handed")
+			"an inspect rendered somewhere this bench does not read is bound by none of the rules in this file, and a bare one prints every value a container was handed")
 	}
 }
 
@@ -100,10 +100,10 @@ func TestEveryInspectThisPackageRunsIsOneOfTheFlavoursThoseRostersCover(t *testi
 
 	found := sites(t, "inspect")
 	if len(found) == 0 {
-		t.Fatal("no source in this package renders an inspect at all, so the partition this bench holds them to proves nothing")
+		t.Fatal("no source in this package renders an inspect at all, so the partition this bench checks them against proves nothing")
 	}
 	if !slices.Equal(found, covered) {
-		t.Errorf("this package renders inspects in %v and the rosters above reach %v: an inspect of a kind no roster names is held to none of the rules in this file, and the per-marker rosters cannot see that it exists",
+		t.Errorf("this package renders inspects in %v and the rosters above reach %v: an inspect of a kind no roster names is bound by none of the rules in this file, and the per-marker rosters cannot see that it exists",
 			found, covered)
 	}
 }
@@ -116,38 +116,38 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
 		"what a destroy removes the proxy network with":       {removal{kind: KindNetwork, path: ProxyNetwork}.command(), ProxyNetwork},
-		"what a deploy puts a project's network up with":      {networkStanding(valued().Class, valued().Project), project},
+		"what a deploy puts a project's network up with":      {joinNetworkScript(valued().Class, valued().Project), project},
 		"what a resource puts a project's network up with":    {networkCreating(valued().Class, valued().Project), project},
 		"what a teardown takes a project's network down with": {networkForgetting(valued().Class, valued().Project), project},
 		"what a switchboard write finds your proxy's network with": {
-			switchboardStanding(nil, Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}).networksStanding(), "coolify",
+			switchboardBox(nil, Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}).networksPresent(), "coolify",
 		},
 	}
 	if len(networking) != len(inspectRosters()["docker network inspect"]) {
-		t.Fatalf("this bench reads %d network inspects and the package renders %d, so what it does not read is held to nothing",
+		t.Fatalf("this bench reads %d network inspects and the package renders %d, so what it does not read is checked against nothing",
 			len(networking), len(inspectRosters()["docker network inspect"]))
 	}
-	for what, held := range networking {
+	for what, site := range networking {
 		inspects := 0
-		for line := range strings.Lines(held.command) {
+		for line := range strings.Lines(site.command) {
 			for _, ask := range strings.Split(line, "docker network inspect ")[1:] {
 				inspects++
 				ask, _, _ = strings.Cut(ask, "|")
-				if !strings.Contains(ask, quoted(held.network)) {
-					t.Errorf("%s runs %q, which inspects something other than %s by name", what, strings.TrimSpace(line), held.network)
+				if !strings.Contains(ask, quoted(site.network)) {
+					t.Errorf("%s runs %q, which inspects something other than %s by name", what, strings.TrimSpace(line), site.network)
 				}
 				if strings.Contains(ask, "--type container") || strings.Contains(ask, caddy.Container) || strings.Contains(ask, SwitchboardContainer) {
-					t.Errorf("%s runs %q and inspects a container: a network inspect is exempt from naming its fields because a network carries no value a container was handed, and one that reaches a container is not",
+					t.Errorf("%s runs %q and inspects a container: a network inspect is exempt from naming its fields because a network has no value a container was handed, and one that reaches a container is not",
 						what, strings.TrimSpace(line))
 				}
 				if format, formatted := strings.CutPrefix(ask, "--format "); formatted && !strings.HasPrefix(format, quoted(membersFormat)) {
-					t.Errorf("%s runs %q with a format other than the container names on the network, and a network inspect that prints more prints what those containers hold",
+					t.Errorf("%s runs %q with a format other than the container names on the network, and a network inspect that prints more prints what those containers were handed",
 						what, strings.TrimSpace(line))
 				}
 			}
 		}
 		if inspects == 0 {
-			t.Fatalf("%s runs %q, which inspects no network at all, so this guard is reading a command that does nothing", what, held.command)
+			t.Fatalf("%s runs %q, which inspects no network at all, so this guard is reading a command that does nothing", what, site.command)
 		}
 	}
 }

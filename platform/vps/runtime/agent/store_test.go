@@ -26,18 +26,18 @@ import (
 )
 
 type memRecords struct {
-	mu   sync.Mutex
-	held map[string]records.Record
+	mu      sync.Mutex
+	records map[string]records.Record
 }
 
 func (m *memRecords) Read(_ context.Context, name records.Name) (records.Record, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	held, ok := m.held[name.String()]
+	stored, ok := m.records[name.String()]
 	if !ok {
 		return records.Record{}, records.ErrNotFound
 	}
-	return held, nil
+	return stored, nil
 }
 
 func (m *memRecords) Write(_ context.Context, record records.Record) (records.Revision, error) {
@@ -47,10 +47,10 @@ func (m *memRecords) Write(_ context.Context, record records.Record) (records.Re
 }
 
 func (m *memRecords) put(record records.Record) (records.Revision, error) {
-	if m.held == nil {
-		m.held = map[string]records.Record{}
+	if m.records == nil {
+		m.records = map[string]records.Record{}
 	}
-	if held, ok := m.held[record.Name.String()]; ok && held.Revision != record.Revision {
+	if stored, ok := m.records[record.Name.String()]; ok && stored.Revision != record.Revision {
 		return "", records.ErrStale
 	}
 	minted := make([]byte, 16)
@@ -58,7 +58,7 @@ func (m *memRecords) put(record records.Record) (records.Revision, error) {
 		return "", err
 	}
 	record.Revision = records.Revision(hex.EncodeToString(minted))
-	m.held[record.Name.String()] = record
+	m.records[record.Name.String()] = record
 	return record.Revision, nil
 }
 
@@ -75,7 +75,7 @@ func (m *memRecords) WritePair(_ context.Context, first, second records.Record) 
 func (m *memRecords) Remove(_ context.Context, name records.Name, _ records.Revision) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.held, name.String())
+	delete(m.records, name.String())
 	return nil
 }
 
@@ -83,7 +83,7 @@ func (m *memRecords) List(_ context.Context, under records.Name) ([]records.Reco
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []records.Record
-	for _, record := range m.held {
+	for _, record := range m.records {
 		if _, beneath := record.Name.Under(under); beneath {
 			out = append(out, record)
 		}
@@ -163,7 +163,7 @@ func (b *box) dump(t *testing.T) {
 	t.Helper()
 	b.records.mu.Lock()
 	defer b.records.mu.Unlock()
-	for _, record := range b.records.held {
+	for _, record := range b.records.records {
 		class, encoded, err := vars.Located(record.Name)
 		if err != nil {
 			t.Fatal(err)
@@ -234,8 +234,8 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if held := resolved[vars.StorePublicKey]; held != "" {
-		t.Errorf("Resolve() handed %q as the store's public address on a box claiming nothing for it", held)
+	if address := resolved[vars.StorePublicKey]; address != "" {
+		t.Errorf("Resolve() handed %q as the store's public address on a box claiming nothing for it", address)
 	}
 }
 
@@ -260,7 +260,7 @@ func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t
 	if resolved["DATABASE_URL"] != "postgres://class-wide" || resolved["SESSION"] != "s3cret" {
 		t.Errorf("Resolve() = %v, want the class-wide value and the folder's", resolved)
 	}
-	if _, held := resolved["MISSING"]; held {
+	if _, found := resolved["MISSING"]; found {
 		t.Errorf("Resolve() handed back MISSING, which nothing stored: the runtime is what says it is unset")
 	}
 	preview, err := b.resolver().Resolve(context.Background(), vars.Manifest{
@@ -402,8 +402,8 @@ func TestAPublicBucketIsDeliveredTheAddressTheBoxClaimsForItNow(t *testing.T) {
 	b := aBox(t, t.TempDir())
 	bindings := aBucketBinding(t, b, true)
 
-	held := resolvedBucket(t, b, bindings)
-	if got, want := held.GetPublicBaseUrl(), "https://storage.shop.example.com/shop-prod-uploads"; got != want {
+	bucket := resolvedBucket(t, b, bindings)
+	if got, want := bucket.GetPublicBaseUrl(), "https://storage.shop.example.com/shop-prod-uploads"; got != want {
 		t.Errorf("publicBaseUrl = %q, want %q: a public bucket's address is whatever the box claims for its store right now", got, want)
 	}
 }
@@ -413,7 +413,7 @@ func TestABucketThatWasNeverDeclaredPublicIsDeliveredNoPublicAddress(t *testing.
 	b := aBox(t, t.TempDir())
 	bindings := aBucketBinding(t, b, false)
 
-	if held := resolvedBucket(t, b, bindings).GetPublicBaseUrl(); held != "" {
-		t.Errorf("publicBaseUrl = %q on a bucket nothing serves anonymously, so every url it hands out would be refused", held)
+	if address := resolvedBucket(t, b, bindings).GetPublicBaseUrl(); address != "" {
+		t.Errorf("publicBaseUrl = %q on a bucket nothing serves anonymously, so every url it hands out would be refused", address)
 	}
 }

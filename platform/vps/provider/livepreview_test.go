@@ -80,7 +80,7 @@ func TestLiveThePreviewProbeIsOrderedOnItsFirstHandshakeAndTheWildcardNever(t *t
 
 	logs := vm.proxyLogSince(t, spoken)
 	if !strings.Contains(logs, probe) {
-		t.Fatalf("the proxy said nothing about %s after a handshake asked for it, so this window carries no order to read an absence out of:\n%s", probe, logs)
+		t.Fatalf("the proxy said nothing about %s after a handshake asked for it, so this window contains no order to read an absence out of:\n%s", probe, logs)
 	}
 	if strings.Contains(logs, wildcard) {
 		t.Errorf("the proxy names %s in what it logged since the entry was installed:\n%s\nA wildcard subject needs dns-01 at every ca, so an order for it fails on every attempt.", wildcard, logs)
@@ -115,11 +115,11 @@ func TestLiveEveryHostnameNothingClaimsUnderOrBesideTheBaseIsTheBoxsOwnRefusal(t
 
 	previewEntryOn(t, vm)
 	for what, hostname := range map[string]string{
-		"one label under the base":             "pr-7." + livePreviewBase,
-		"one label carrying the app separator": "shop--pr-7--web." + livePreviewBase,
-		"two labels under the base":            "pr-7.api." + livePreviewBase,
-		"the base itself":                      livePreviewBase,
-		"a hostname outside the base":          "pr-7.preview.example.invalid",
+		"one label under the base":               "pr-7." + livePreviewBase,
+		"one label containing the app separator": "shop--pr-7--web." + livePreviewBase,
+		"two labels under the base":              "pr-7.api." + livePreviewBase,
+		"the base itself":                        livePreviewBase,
+		"a hostname outside the base":            "pr-7.preview.example.invalid",
 	} {
 		if status := vm.asksFor(t, hostname); status != http.StatusNotFound {
 			t.Errorf("%s (%s) was answered %d, want the switchboard's 404: a hostname nothing on this box claims is told nothing about it", what, hostname, status)
@@ -127,7 +127,7 @@ func TestLiveEveryHostnameNothingClaimsUnderOrBesideTheBaseIsTheBoxsOwnRefusal(t
 	}
 }
 
-func TestLiveTheWildcardIsOwnedByThePreviewEntryOnlyWhileItsRouteStands(t *testing.T) {
+func TestLiveTheWildcardIsOwnedByThePreviewEntryOnlyWhileItsRouteExists(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
@@ -153,13 +153,13 @@ func TestLiveTheWildcardIsOwnedByThePreviewEntryOnlyWhileItsRouteStands(t *testi
 func nestedIn(t *testing.T, read map[string]any, path ...string) any {
 	t.Helper()
 
-	var held any = read
+	var at any = read
 	for _, step := range path {
-		carried, ok := held.(map[string]any)
+		object, ok := at.(map[string]any)
 		if !ok {
-			t.Fatalf("the loaded configuration carries nothing at %s", strings.Join(path, "."))
+			t.Fatalf("the loaded configuration has nothing at %s", strings.Join(path, "."))
 		}
-		held = carried[step]
+		at = object[step]
 	}
-	return held
+	return at
 }

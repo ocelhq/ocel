@@ -17,7 +17,7 @@ type pulled struct {
 }
 
 func (p *Provider) OpenRegistryImages(_ context.Context, target images.Registry) (images.Store, error) {
-	if err := host.LoginStands(target); err != nil {
+	if err := host.CheckLogin(target); err != nil {
 		return nil, err
 	}
 	return pulled{
@@ -35,15 +35,15 @@ func (p pulled) GoString() string { return p.String() }
 func (p pulled) Destination() string { return p.at }
 
 func (p pulled) Has(ctx context.Context, push images.Push) (bool, error) {
-	return p.host.HoldsImage(ctx, push.ImageRef)
+	return p.host.HasImage(ctx, push.ImageRef)
 }
 
 func (p pulled) Push(ctx context.Context, push images.Push, progress edge.Progress) error {
-	held, err := p.from.Has(ctx, push)
+	present, err := p.from.Has(ctx, push)
 	if err != nil {
 		return err
 	}
-	if !held {
+	if !present {
 		if err := p.from.Push(ctx, push, progress); err != nil {
 			return err
 		}

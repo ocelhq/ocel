@@ -19,11 +19,11 @@ func TestInodesNamesTheDeviceAndInodeOfEachPathItIsHanded(t *testing.T) {
 	}
 	var want []string
 	for _, path := range []string{dir, table} {
-		var held syscall.Stat_t
-		if err := syscall.Stat(path, &held); err != nil {
+		var info syscall.Stat_t
+		if err := syscall.Stat(path, &info); err != nil {
 			t.Fatal(err)
 		}
-		want = append(want, fmt.Sprintf("%s %d:%d", path, held.Dev, held.Ino))
+		want = append(want, fmt.Sprintf("%s %d:%d", path, info.Dev, info.Ino))
 	}
 
 	code, out, errs := ran(t, "inodes", dir, table)

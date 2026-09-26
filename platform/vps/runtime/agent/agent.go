@@ -139,12 +139,12 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (vars.Manifest, bool) {
-	held, _ := r.Context().Value(peerKey{}).(peer)
-	if held.err != nil {
-		http.Error(w, "the caller could not be identified: "+held.err.Error(), http.StatusForbidden)
+	caller, _ := r.Context().Value(peerKey{}).(peer)
+	if caller.err != nil {
+		http.Error(w, "the caller could not be identified: "+caller.err.Error(), http.StatusForbidden)
 		return vars.Manifest{}, false
 	}
-	container, err := s.containerOf(held.pid)
+	container, err := s.containerOf(caller.pid)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return vars.Manifest{}, false
@@ -157,7 +157,7 @@ func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (vars.Manife
 		return vars.Manifest{}, false
 	}
 	if raw == "" {
-		http.Error(w, "the caller's container carries no live-value manifest", http.StatusNotFound)
+		http.Error(w, "the caller's container has no live-value manifest", http.StatusNotFound)
 		return vars.Manifest{}, false
 	}
 	manifest, err := vars.Parse([]byte(raw))
@@ -173,12 +173,12 @@ func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (vars.Manife
 }
 
 func (s *Server) measure(w http.ResponseWriter, r *http.Request) {
-	manifest, held := s.manifestOf(w, r)
-	if !held {
+	manifest, ok := s.manifestOf(w, r)
+	if !ok {
 		return
 	}
 	if manifest.Store == nil || manifest.Store.Volume == "" || s.Space == nil {
-		http.Error(w, "the caller's container names no store volume this box holds", http.StatusNotFound)
+		http.Error(w, "the caller's container names no store volume this box has", http.StatusNotFound)
 		return
 	}
 	free, total, err := s.Space.Space(r.Context(), manifest.Store.Volume)
@@ -191,8 +191,8 @@ func (s *Server) measure(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
-	manifest, held := s.manifestOf(w, r)
-	if !held {
+	manifest, ok := s.manifestOf(w, r)
+	if !ok {
 		return
 	}
 	resolved, err := s.Resolve.Resolve(r.Context(), manifest)
@@ -384,12 +384,12 @@ func published(answer map[string]string, bindings []live.Binding, base string) {
 		if binding.Type != bindingsv1.BindingType_BINDING_TYPE_BUCKET {
 			continue
 		}
-		held, ok := answer[binding.Key]
+		encoded, ok := answer[binding.Key]
 		if !ok {
 			continue
 		}
 		record := &bindingsv1.Binding{}
-		if err := protojson.Unmarshal([]byte(held), record); err != nil {
+		if err := protojson.Unmarshal([]byte(encoded), record); err != nil {
 			continue
 		}
 		properties := record.GetBucket()

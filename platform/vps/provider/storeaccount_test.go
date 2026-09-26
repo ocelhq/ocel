@@ -18,7 +18,7 @@ func TestAnAppReachesTheStoreUnderAnAccountOfItsOwn(t *testing.T) {
 
 	own := host.StoreAccountKey(manifest.Store.Env, "web")
 	if manifest.Store.AccessKeyID != own {
-		t.Errorf("the app reaches the store as %q, want the account %q this app alone holds: the root credential reaches every bucket on the box",
+		t.Errorf("the app reaches the store as %q, want the account %q this app alone owns: the root credential reaches every bucket on the box",
 			manifest.Store.AccessKeyID, own)
 	}
 
@@ -41,7 +41,7 @@ func fedBy(t *testing.T, machine *box, needle string) string {
 	return string(decoded)
 }
 
-func TestAnAppsStoreAccountIsHeldToTheBucketsItBinds(t *testing.T) {
+func TestAnAppsStoreAccountIsLimitedToTheBucketsItBinds(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
@@ -49,9 +49,9 @@ func TestAnAppsStoreAccountIsHeldToTheBucketsItBinds(t *testing.T) {
 
 	policy := fedBy(t, machine, "add-service-account")
 	for what, named := range map[string]string{
-		"the bucket the app binds":      "prod-web-r0a1b2c3d-uploads",
-		"the store's own sessions":      constants.StoreSessionsBucket(),
-		"a policy naming what it holds": "arn:aws:s3:::",
+		"the bucket the app binds":        "prod-web-r0a1b2c3d-uploads",
+		"the store's own sessions":        constants.StoreSessionsBucket(),
+		"a policy naming what it reaches": "arn:aws:s3:::",
 	} {
 		if !strings.Contains(policy, named) {
 			t.Errorf("the account is granted without %s:\n%s", what, policy)

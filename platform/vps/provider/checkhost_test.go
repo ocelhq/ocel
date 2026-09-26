@@ -21,12 +21,12 @@ const boxAddress = "203.0.113.10"
 
 func stubResolver(answers map[string][]string) vps.Lookup {
 	return func(_ context.Context, hostname string) ([]netip.Addr, error) {
-		held, known := answers[hostname]
+		records, known := answers[hostname]
 		if !known {
 			return nil, &net.DNSError{Err: "no such host", Name: hostname, IsNotFound: true}
 		}
-		addrs := make([]netip.Addr, 0, len(held))
-		for _, written := range held {
+		addrs := make([]netip.Addr, 0, len(records))
+		for _, written := range records {
 			addrs = append(addrs, netip.MustParseAddr(written))
 		}
 		return addrs, nil
@@ -51,7 +51,7 @@ func TestAHostnameThatResolvesToThisBoxPasses(t *testing.T) {
 		t.Errorf("finding = %q, want the address it resolved to named", check.Finding)
 	}
 	if check.Fix != "" {
-		t.Errorf("a hostname that already points here carries the fix %q", check.Fix)
+		t.Errorf("a hostname that already points here has the fix %q", check.Fix)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestAHostnameThatDoesNotResolveNeedsAManualRecordRatherThanBeingBroken(t *t
 		t.Errorf("finding = %q, want it to say what record to add rather than call it broken", check.Finding)
 	}
 	if check.Fix == "" {
-		t.Error("a hostname whose record is still to be added carries no fix, and the fix is the whole point of saying so")
+		t.Error("a hostname whose record is still to be added has no fix, and the fix is the whole point of saying so")
 	}
 }
 
@@ -100,7 +100,7 @@ func TestAHostnameThatResolvesOnlyToLoopbackNeedsAManualRecordRatherThanBeingPoi
 	check := vps.DNSVerdict(context.Background(), stubResolver(answers), "shop.localhost", boxAddress)
 
 	if check.Verdict != provider.HostNeedsAction {
-		t.Fatalf("verdict = %v (%q), want it needing action: a loopback answer is the one every machine gives for itself, so it points nowhere else and no zone holds a record to correct", check.Verdict, check.Finding)
+		t.Fatalf("verdict = %v (%q), want it needing action: a loopback answer is the one every machine gives for itself, so it points nowhere else and no zone has a record to correct", check.Verdict, check.Finding)
 	}
 	for _, want := range []string{"127.0.0.1", "::1", boxAddress, "add a record"} {
 		if !strings.Contains(check.Finding, want) {
@@ -108,7 +108,7 @@ func TestAHostnameThatResolvesOnlyToLoopbackNeedsAManualRecordRatherThanBeingPoi
 		}
 	}
 	if check.Fix == "" {
-		t.Error("a hostname whose record is still to be added carries no fix, and the fix is the whole point of saying so")
+		t.Error("a hostname whose record is still to be added has no fix, and the fix is the whole point of saying so")
 	}
 }
 
@@ -120,7 +120,7 @@ func TestAHostnameThatResolvesToLoopbackBesideAnotherMachineIsPointedElsewhere(t
 	check := vps.DNSVerdict(context.Background(), stubResolver(answers), "shop.example.com", boxAddress)
 
 	if check.Verdict != provider.HostFail {
-		t.Fatalf("verdict = %v (%q), want a failure: a record that names another machine is wrong however many loopback answers stand beside it", check.Verdict, check.Finding)
+		t.Fatalf("verdict = %v (%q), want a failure: a record that names another machine is wrong however many loopback answers appear beside it", check.Verdict, check.Finding)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestTheReachVerdictClaimsOnePathInAndNeverTheInternet(t *testing.T) {
 		t.Fatalf("verdict = %v (%q), want a pass where the dial succeeded", check.Verdict, check.Finding)
 	}
 	if check.Finding == "" {
-		t.Fatal("the passing reach verdict says nothing, so there is no wording to hold to what it can prove")
+		t.Fatal("the passing reach verdict says nothing, so there is no wording to check against what it can prove")
 	}
 	if strings.Contains(check.Finding, "reachable") {
 		t.Errorf("finding = %q, and a check that says reachable and means reachable from here would be cited when a certificate silently fails to renew", check.Finding)
@@ -200,7 +200,7 @@ func TestTheReachVerdictFailsWhenNothingAnsweredAndNamesTheFirewall(t *testing.T
 	}
 }
 
-func standingOver(machine *scripted) []provider.HostCheck {
+func checksOver(machine *scripted) []provider.HostCheck {
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
@@ -241,7 +241,7 @@ func adminCheck(t *testing.T, checks []provider.HostCheck) provider.HostCheck {
 func TestNothingOnTheStockAdminPortInsideTheProxyPasses(t *testing.T) {
 	t.Parallel()
 
-	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable(80, 443)}})))
+	check := adminCheck(t, checksOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable(80, 443)}})))
 	if check.Verdict != provider.HostPass {
 		t.Fatalf("verdict = %v (%q), want a pass where nothing is bound on %s", check.Verdict, check.Finding, adminPort)
 	}
@@ -253,7 +253,7 @@ func TestNothingOnTheStockAdminPortInsideTheProxyPasses(t *testing.T) {
 func TestTheStockAdminPortBoundInsideTheProxyFails(t *testing.T) {
 	t.Parallel()
 
-	check := adminCheck(t, standingOver(boxSaying(map[string]answer{
+	check := adminCheck(t, checksOver(boxSaying(map[string]answer{
 		"/proc/net/tcp &&": {stdout: socketTable(80, caddy.AdminPort)},
 	})))
 	if check.Verdict != provider.HostFail {
@@ -270,7 +270,7 @@ func TestTheStockAdminPortBoundInsideTheProxyFails(t *testing.T) {
 func TestAProxyThatCouldNotBeReadIsNotReadAsACleanNamespace(t *testing.T) {
 	t.Parallel()
 
-	check := adminCheck(t, standingOver(boxSaying(map[string]answer{
+	check := adminCheck(t, checksOver(boxSaying(map[string]answer{
 		"/proc/net/tcp &&": {code: 1, stderr: "Error: No such container: " + caddy.Container},
 	})))
 	if check.Verdict == provider.HostPass {
@@ -292,7 +292,7 @@ func boardCheck(t *testing.T, checks []provider.HostCheck) provider.HostCheck {
 func TestASwitchboardRunningAndAnsweringOverItsControlSocketPasses(t *testing.T) {
 	t.Parallel()
 
-	check := boardCheck(t, standingOver(boxSaying(nil)))
+	check := boardCheck(t, checksOver(boxSaying(nil)))
 	if check.Verdict != provider.HostPass {
 		t.Fatalf("verdict = %v (%q), want a pass where the switchboard runs and answers", check.Verdict, check.Finding)
 	}
@@ -301,24 +301,24 @@ func TestASwitchboardRunningAndAnsweringOverItsControlSocketPasses(t *testing.T)
 	}
 }
 
-func TestASwitchboardADeployStoodAgainPassesAndSaysWhenAndWhy(t *testing.T) {
+func TestASwitchboardADeployRestartedPassesAndSaysWhenAndWhy(t *testing.T) {
 	t.Parallel()
 
-	check := boardCheck(t, standingOver(ahead(boxSaying(nil), "ocel.restored", answer{stdout: "deploy 2026-09-26T23:51:04.18Z\n"})))
+	check := boardCheck(t, checksOver(ahead(boxSaying(nil), "ocel.restored", answer{stdout: "deploy 2026-09-26T23:51:04.18Z\n"})))
 	if check.Verdict != provider.HostPass {
 		t.Fatalf("verdict = %v (%q), want a pass: it runs and answers", check.Verdict, check.Finding)
 	}
-	for _, wanted := range []string{"control socket", "a deploy stood it again", "2026-09-26T23:51:04.18Z", "prune"} {
+	for _, wanted := range []string{"control socket", "a deploy started it again", "2026-09-26T23:51:04.18Z", "prune"} {
 		if !strings.Contains(check.Finding, wanted) {
 			t.Errorf("finding = %q, want %q in it: a switchboard something removed is worth knowing about even once it is back", check.Finding, wanted)
 		}
 	}
 }
 
-func TestASwitchboardBootstrapStoodSaysNothingOfBeingStoodAgain(t *testing.T) {
+func TestASwitchboardBootstrapStartedSaysNothingOfBeingRestarted(t *testing.T) {
 	t.Parallel()
 
-	check := boardCheck(t, standingOver(ahead(boxSaying(nil), "ocel.restored", answer{stdout: " 2026-09-01T08:00:00Z\n"})))
+	check := boardCheck(t, checksOver(ahead(boxSaying(nil), "ocel.restored", answer{stdout: " 2026-09-01T08:00:00Z\n"})))
 	if check.Verdict != provider.HostPass || strings.Contains(check.Finding, "again") {
 		t.Errorf("check = %v %q, want a plain pass", check.Verdict, check.Finding)
 	}
@@ -344,7 +344,7 @@ func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testin
 			"docker inspect": {stdout: runningState},
 		}, "answered nothing"},
 	} {
-		check := boardCheck(t, standingOver(boxSaying(state.script)))
+		check := boardCheck(t, checksOver(boxSaying(state.script)))
 		if check.Verdict != provider.HostFail {
 			t.Errorf("a switchboard %s = %v (%q), want a failure: nothing the box serves is routed without it", what, check.Verdict, check.Finding)
 		}
@@ -352,7 +352,7 @@ func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testin
 			t.Errorf("a switchboard %s is found %q, want %q in it", what, check.Finding, state.wanted)
 		}
 		if !strings.Contains(check.Fix, "bootstrap") {
-			t.Errorf("a switchboard %s carries the fix %q, want the bootstrap that stands it again named", what, check.Fix)
+			t.Errorf("a switchboard %s has the fix %q, want the bootstrap that starts it again named", what, check.Fix)
 		}
 	}
 }
@@ -360,9 +360,9 @@ func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testin
 type addressless struct{ *scripted }
 
 func (a addressless) Destination() session.Destination {
-	held := a.scripted.Destination()
-	held.Address = ""
-	return held
+	destination := a.scripted.Destination()
+	destination.Address = ""
+	return destination
 }
 
 func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
@@ -377,7 +377,7 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 		Hostnames: []string{"shop.example.com"},
 	})
 	if err != nil {
-		t.Fatalf("CheckHost() = %v, and this same rpc runs on every `ocel deploy`: a standing concern is a report and never a gate", err)
+		t.Fatalf("CheckHost() = %v, and this same rpc runs on every `ocel deploy`: a concern about the box as it is now is a report and never a gate", err)
 	}
 	if len(checks) == 0 {
 		t.Fatal("CheckHost() answered nothing at all over a box whose address could not be read, and an empty report is read as a box with nothing wrong")
@@ -395,15 +395,15 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
 	t.Parallel()
 
-	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable()}})))
+	check := adminCheck(t, checksOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable()}})))
 	if check.Verdict != provider.HostFail {
-		t.Fatalf("verdict = %v (%q), want a failure: a running proxy always holds %s and %s, so a namespace naming nothing is one this box never read rather than one with a clean admin port",
+		t.Fatalf("verdict = %v (%q), want a failure: a running proxy always listens on %s and %s, so a namespace naming nothing is one this box never read rather than one with a clean admin port",
 			check.Verdict, check.Finding, caddy.HTTPPort, "443")
 	}
 	if !strings.Contains(check.Finding, "no listening sockets") {
 		t.Errorf("finding = %q, want it to say the proxy named nothing rather than to report the admin port clean", check.Finding)
 	}
 	if check.Fix == "" {
-		t.Error("a proxy that named no socket carries no fix, and there is nothing for an operator to do with the finding alone")
+		t.Error("a proxy that named no socket has no fix, and there is nothing for an operator to do with the finding alone")
 	}
 }

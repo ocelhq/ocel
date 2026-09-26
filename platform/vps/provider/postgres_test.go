@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const standingPassword = "5f1c0d7e9a3b48264c5d6e7f8091a2b3c4d5e6f708192a3b"
+const recordedPassword = "5f1c0d7e9a3b48264c5d6e7f8091a2b3c4d5e6f708192a3b"
 
 func aPostgres(t *testing.T, version string) resources.ProvisionRequest {
 	t.Helper()
@@ -32,8 +32,8 @@ func aPostgres(t *testing.T, version string) resources.ProvisionRequest {
 	}
 }
 
-func holdingAPostgres(machine *box) {
-	sealed := fakeSeal + base64.StdEncoding.EncodeToString([]byte(standingPassword))
+func withRecordedPostgres(machine *box) {
+	sealed := fakeSeal + base64.StdEncoding.EncodeToString([]byte(recordedPassword))
 	machine.kept = base64.StdEncoding.EncodeToString([]byte(sealed)) + "\n"
 }
 
@@ -45,7 +45,7 @@ func TestAProviderOverABoxServesPostgres(t *testing.T) {
 	}
 }
 
-func TestADeclaredPostgresStandsUpAsOneContainerOnlyItsProjectReaches(t *testing.T) {
+func TestADeclaredPostgresRunsAsOneContainerOnlyItsProjectReaches(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -69,9 +69,9 @@ func TestADeclaredPostgresStandsUpAsOneContainerOnlyItsProjectReaches(t *testing
 	joined := strings.Join(machine.commands(), "\n")
 	run := machine.at("'docker' 'run'")
 	if run < 0 {
-		t.Fatalf("nothing was stood up:\n%s", joined)
+		t.Fatalf("nothing was started:\n%s", joined)
 	}
-	stood := machine.commands()[run]
+	runCommand := machine.commands()[run]
 	for _, want := range []string{
 		"'--network' 'ocel-production-shop'",
 		"ocel.class=production",
@@ -82,13 +82,13 @@ func TestADeclaredPostgresStandsUpAsOneContainerOnlyItsProjectReaches(t *testing
 		"@sha256:",
 		binding.Properties[provider.PropertyHost],
 	} {
-		if !strings.Contains(stood, want) {
-			t.Errorf("the container was stood up without %q:\n%s", want, stood)
+		if !strings.Contains(runCommand, want) {
+			t.Errorf("the container was started without %q:\n%s", want, runCommand)
 		}
 	}
 	for _, published := range []string{"--publish", "'-p'"} {
-		if strings.Contains(stood, published) {
-			t.Errorf("the container publishes a port on the box, and a database only its project's network reaches is the whole boundary:\n%s", stood)
+		if strings.Contains(runCommand, published) {
+			t.Errorf("the container publishes a port on the box, and a database only its project's network reaches is the whole boundary:\n%s", runCommand)
 		}
 	}
 }
@@ -110,7 +110,7 @@ func TestAPostgresPasswordNeverRidesACommandLine(t *testing.T) {
 			t.Fatalf("the password rode a command line, where the box's process table and every refusal quote it:\n%s", command)
 		}
 	}
-	if !slices.ContainsFunc(machine.carried(), func(fed string) bool { return strings.Contains(fed, password) }) {
+	if !slices.ContainsFunc(machine.feeds(), func(fed string) bool { return strings.Contains(fed, password) }) {
 		t.Error("the password reached the box on no stdin, so the container was handed none")
 	}
 }
@@ -126,14 +126,14 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 	password := binding.Properties[provider.PropertyPassword]
 	keeping := machine.at("/kept/")
 	if keeping < 0 {
-		t.Fatalf("nothing was kept on the box, so the next deploy mints a password the standing server was never handed:\n%s",
+		t.Fatalf("nothing was kept on the box, so the next deploy mints a password the running server was never handed:\n%s",
 			strings.Join(machine.commands(), "\n"))
 	}
 	for at, command := range machine.commands() {
 		if !strings.Contains(command, "/kept/") {
 			continue
 		}
-		fed := machine.carried()[at]
+		fed := machine.feeds()[at]
 		raw, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(fed))
 		if strings.Contains(fed, password) || strings.Contains(string(raw), password) {
 			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(edge.ClassProduction, "prod-web-r0a1b2c3d-main-pg"))
@@ -150,13 +150,13 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 	}
 }
 
-func TestAPostgresVersionNoImageIsPinnedForIsRefusedBeforeAnythingStands(t *testing.T) {
+func TestAPostgresVersionNoImageIsPinnedForIsRefusedBeforeAnythingStarts(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
 	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "9"), nil)
 	if err == nil {
-		t.Fatal("a postgres 9 stood up, and nothing pins an image for it")
+		t.Fatal("a postgres 9 started, and nothing pins an image for it")
 	}
 	for _, want := range []string{"main", `"9"`, "14, 15, 16, 17"} {
 		if !strings.Contains(err.Error(), want) {
@@ -168,17 +168,17 @@ func TestAPostgresVersionNoImageIsPinnedForIsRefusedBeforeAnythingStands(t *test
 	}
 }
 
-func TestASecondDeployBindsToThePasswordTheStandingPostgresWasHanded(t *testing.T) {
+func TestASecondDeployBindsToThePasswordTheRunningPostgresWasHanded(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	holdingAPostgres(machine)
+	withRecordedPostgres(machine)
 	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if got := binding.Properties[provider.PropertyPassword]; got != standingPassword {
-		t.Errorf("the binding carries a password the standing server was never handed, and every app bound to it is locked out")
+	if got := binding.Properties[provider.PropertyPassword]; got != recordedPassword {
+		t.Errorf("the binding includes a password the running server was never handed, and every app bound to it is locked out")
 	}
 }
 
@@ -186,7 +186,7 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 	t.Parallel()
 
 	machine := &box{}
-	holdingAPostgres(machine)
+	withRecordedPostgres(machine)
 	machine.refuses = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "'docker' 'run'") {
 			return session.Result{Code: 125, Stderr: `docker: Error response from daemon: Conflict. The container name "/prod-web-r0a1b2c3d-main-pg" is already in use by container "9f2c"`}, true
@@ -195,13 +195,13 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 	}
 	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
-		t.Fatalf("Postgres() = %v, and two deploys standing one postgres up at once end up sharing it", err)
+		t.Fatalf("Postgres() = %v, and two deploys starting one postgres at once end up sharing it", err)
 	}
-	if got := binding.Properties[provider.PropertyPassword]; got != standingPassword {
+	if got := binding.Properties[provider.PropertyPassword]; got != recordedPassword {
 		t.Error("the deploy that lost the name bound to a password the server that won was never handed")
 	}
 	if strings.Contains(strings.Join(machine.commands(), "\n"), "docker rm") {
-		t.Error("the deploy that lost the name removed a container, and the only one standing is the winner's")
+		t.Error("the deploy that lost the name removed a container, and the only one running is the winner's")
 	}
 }
 
@@ -222,7 +222,7 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
 	if !strings.Contains(joined, "docker rm") || !strings.Contains(joined, name) {
-		t.Errorf("a teardown ran %q and left the server standing", joined)
+		t.Errorf("a teardown ran %q and left the server running", joined)
 	}
 	if !strings.Contains(joined, "docker volume rm") {
 		t.Errorf("a teardown ran %q and left the data on the box, where no later deploy reclaims it", joined)
@@ -238,7 +238,7 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	}
 }
 
-func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
+func TestARemovalReachesOnlyTheServerItsOwnStackProvisioned(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -255,14 +255,14 @@ func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
 		t.Errorf("a removal took its target from the record it was handed and ran %q: the name is the stack's and the resource's, and a record naming another container removes that one", joined)
 	}
 	if !strings.Contains(joined, "prod-web-r0a1b2c3d-main-pg") {
-		t.Errorf("a removal ran %q and never reached the server this stack stood up for main", joined)
+		t.Errorf("a removal ran %q and never reached the server this stack provisioned for main", joined)
 	}
 }
 
 const takenDump = "/var/lib/ocel/production/backups/prod-web-r0a1b2c3d-main-pg/20260919T000000Z.dump"
 
-func heldByAnotherMajor(machine *box, state string) {
-	holdingAPostgres(machine)
+func volumeOfAnotherMajor(machine *box, state string) {
+	withRecordedPostgres(machine)
 	machine.refuses = func(command string) (session.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
@@ -280,12 +280,12 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 	t.Parallel()
 
 	machine := &box{}
-	heldByAnotherMajor(machine, "running")
+	volumeOfAnotherMajor(machine, "running")
 	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if got := binding.Properties[provider.PropertyPassword]; got != standingPassword {
+	if got := binding.Properties[provider.PropertyPassword]; got != recordedPassword {
 		t.Error("the upgraded server is bound under another password, and every app bound to the old one is locked out")
 	}
 	dumped := machine.at("'dump'")
@@ -321,7 +321,7 @@ func TestAStoppedPostgresUnderAnotherMajorIsRefusedBecauseNothingCanBeDumpedFrom
 	t.Parallel()
 
 	machine := &box{}
-	heldByAnotherMajor(machine, "exited")
+	volumeOfAnotherMajor(machine, "exited")
 	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err == nil {
 		t.Fatal("a server that is not running was upgraded, and there was nothing to dump its data from")
@@ -359,9 +359,9 @@ func TestAPostgresDeclaringNoVersionRunsTheOneEverySdkDeclaresByDefault(t *testi
 	if _, err := over(machine).ProvisionPostgres(context.Background(), in, nil); err != nil {
 		t.Fatalf("Postgres() of a resource naming no version = %v, and a version is a preference, not something a deploy is refused for leaving out", err)
 	}
-	stood := machine.commands()[machine.at("'docker' 'run'")]
-	if !strings.Contains(stood, "postgres:17.") {
-		t.Errorf("a postgres naming no version was stood up as:\n%s\nwant the major every sdk declares when the app names none", stood)
+	runCommand := machine.commands()[machine.at("'docker' 'run'")]
+	if !strings.Contains(runCommand, "postgres:17.") {
+		t.Errorf("a postgres naming no version was started as:\n%s\nwant the major every sdk declares when the app names none", runCommand)
 	}
 }
 
@@ -381,7 +381,7 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 		t.Fatalf("Postgres() as a login with sudo that does not own the state directory = %v, and a bootstrap login deploys as readily as the deploy login does", err)
 	}
 	if binding.Properties[provider.PropertyPassword] == "" {
-		t.Error("the binding carries no password")
+		t.Error("the binding includes no password")
 	}
 	kept := machine.commands()[len(machine.commands())-1]
 	for _, command := range machine.commands() {

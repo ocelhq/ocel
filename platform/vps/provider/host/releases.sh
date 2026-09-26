@@ -30,7 +30,7 @@ app=${scope#*/}
 root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
 [ -d "$root" ] || abort "$root is missing; run ocel bootstrap"
 
-hold() {
+lock() {
 	mkdir -p "$root/$project/$app"
 	exec 9<"$root/$project/$app"
 	flock -x 9
@@ -69,7 +69,7 @@ promote)
 	'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
 	esac
 	coordinate "$ref"
-	hold
+	lock
 	file="$root/$project/$app/$class"
 	: >>"$file"
 	{
@@ -84,7 +84,7 @@ forget)
 	case $class in
 	'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
 	esac
-	hold
+	lock
 	rm -f "$root/$project/$app/$class"
 	rmdir "$root/$project/$app" 2>/dev/null || true
 	rmdir "$root/$project" 2>/dev/null || true
@@ -93,7 +93,7 @@ reconcile)
 	[ $# -eq 1 ] || usage
 	repository=$1
 	coordinate "$repository"
-	hold
+	lock
 
 	: >"$scratch".desired
 	if [ -d "$root/$project/$app" ]; then

@@ -92,11 +92,11 @@ func TestAnUpgradedConnectionIsPassedThroughBothWays(t *testing.T) {
 	t.Parallel()
 
 	web := echoing(t, "web")
-	_, at := standing(t, routing(t, map[string]string{"shop.example.com": web}))
+	_, at := served(t, routing(t, map[string]string{"shop.example.com": web}))
 
-	held := upgrading(t, at, "shop.example.com")
+	upgraded := upgrading(t, at, "shop.example.com")
 	for _, word := range []string{"one", "two", "three"} {
-		if said, err := held.exchange(word); err != nil || said != "web "+word {
+		if said, err := upgraded.exchange(word); err != nil || said != "web "+word {
 			t.Fatalf("the upgraded connection answered %q, %v to %q, want the upstream echoing it", said, err, word)
 		}
 	}
@@ -106,7 +106,7 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 	t.Parallel()
 
 	blue, green := echoing(t, "blue"), echoing(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 	opened := upgrading(t, at, "shop.example.com")
 
 	var told drains
@@ -148,7 +148,7 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 	}
 }
 
-func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverCarried(t *testing.T) {
+func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverPassedThrough(t *testing.T) {
 	t.Parallel()
 
 	arrived, release := make(chan struct{}, 1), make(chan struct{})
@@ -164,7 +164,7 @@ func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverCarried(t *tes
 		}
 	})
 	green := echoing(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 
 	conn, err := net.Dial("tcp", at)
 	if err != nil {
@@ -180,7 +180,7 @@ func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverCarried(t *tes
 		t.Fatal(err)
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 1"}) {
-		t.Fatalf("the flip told %v, want the pending upgrade still held when the ceiling passed", lines)
+		t.Fatalf("the flip told %v, want the pending upgrade still in flight when the ceiling passed", lines)
 	}
 	close(release)
 
@@ -191,7 +191,7 @@ func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverCarried(t *tes
 	}
 	late := socket{conn: conn, reader: reader}
 	if said, err := late.exchange("late"); err == nil {
-		t.Errorf("an upgrade the retiree answered after its drain expired still carried %q, want the ceiling to have cut it before it ever upgraded", said)
+		t.Errorf("an upgrade the retiree answered after its drain expired still passed %q through, want the ceiling to have cut it before it ever upgraded", said)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestAnExpiredDrainLeavesOpenTheSocketsOfAnUpstreamTheLiveTableStillRoutes(t
 	t.Parallel()
 
 	blue := echoing(t, "blue")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 	opened := upgrading(t, at, "shop.example.com")
 
 	var told drains
@@ -224,7 +224,7 @@ func TestAStreamedResponseReachesTheClientAsEachEventIsFlushedRatherThanWhenItEn
 	}))
 	t.Cleanup(server.Close)
 	t.Cleanup(func() { close(release) })
-	_, at := standing(t, routing(t, map[string]string{"shop.example.com": strings.TrimPrefix(server.URL, "http://")}))
+	_, at := served(t, routing(t, map[string]string{"shop.example.com": strings.TrimPrefix(server.URL, "http://")}))
 
 	request, err := http.NewRequest(http.MethodGet, "http://"+at+"/events", nil)
 	if err != nil {
@@ -247,7 +247,7 @@ func TestAStreamedResponseReachesTheClientAsEachEventIsFlushedRatherThanWhenItEn
 			t.Errorf("the stream's first line read %q, want the first event", said)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("the first event never reached the client while the upstream held the stream open: a buffered event stream is a dead one")
+		t.Fatal("the first event never reached the client while the upstream kept the stream open: a buffered event stream is a dead one")
 	}
 }
 

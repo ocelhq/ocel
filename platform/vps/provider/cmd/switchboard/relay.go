@@ -34,28 +34,28 @@ func relayOf(ctx context.Context, relaying, networks []string) ([]netip.Prefix, 
 	}
 	for _, network := range networks {
 		asking, stop := context.WithTimeout(ctx, networkLookup)
-		held, err := networkHeld(asking, network, systemResolve, net.InterfaceAddrs)
+		onNetwork, err := networkPrefixes(asking, network, systemResolve, net.InterfaceAddrs)
 		stop()
 		if err != nil {
 			return nil, err
 		}
-		relayed = append(relayed, held...)
+		relayed = append(relayed, onNetwork...)
 	}
 	return relayed, nil
 }
 
-func networkHeld(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
-	held, err := heldOn(ctx, network, resolve, addresses)
+func networkPrefixes(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
+	prefixes, err := prefixesOn(ctx, network, resolve, addresses)
 	if err != nil {
 		return nil, fmt.Errorf("--relay-network %w", err)
 	}
-	for i, prefix := range held {
-		held[i] = prefix.Masked()
+	for i, prefix := range prefixes {
+		prefixes[i] = prefix.Masked()
 	}
-	return held, nil
+	return prefixes, nil
 }
 
-func heldOn(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
+func prefixesOn(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
 	if network == "" {
 		return nil, fmt.Errorf("names no network")
 	}
@@ -67,12 +67,12 @@ func heldOn(ctx context.Context, network string, resolve resolving, addresses fu
 	for i, addr := range resolved {
 		resolved[i] = addr.Unmap()
 	}
-	held, err := addresses()
+	interfaceAddrs, err := addresses()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", network, err)
 	}
 	var prefixes []netip.Prefix
-	for _, addr := range held {
+	for _, addr := range interfaceAddrs {
 		interfaced, ok := addr.(*net.IPNet)
 		if !ok {
 			continue
@@ -85,7 +85,7 @@ func heldOn(ctx context.Context, network string, resolve resolving, addresses fu
 		prefixes = append(prefixes, netip.PrefixFrom(ip.Unmap(), bits))
 	}
 	if len(prefixes) == 0 {
-		return nil, fmt.Errorf("%s: %s resolves to %v, which no interface of this switchboard holds", network, named, resolved)
+		return nil, fmt.Errorf("%s: %s resolves to %v, which no interface of this switchboard has", network, named, resolved)
 	}
 	return prefixes, nil
 }

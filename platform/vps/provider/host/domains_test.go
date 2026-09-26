@@ -23,16 +23,16 @@ const (
 
 type claimBench struct {
 	*bench
-	held string
+	recorded string
 }
 
 func claimingBox(t *testing.T, state RoutingTable) *claimBench {
 	t.Helper()
 
 	mustRender(t, state)
-	stood := &claimBench{bench: machine(nil), held: string(mustWrite(t, state))}
-	stood.answer = servesProxy(stood.bench, &stood.held)
-	return stood
+	box := &claimBench{bench: machine(nil), recorded: string(mustWrite(t, state))}
+	box.answer = servesProxy(box.bench, &box.recorded)
+	return box
 }
 
 func routed() RoutingTable {
@@ -68,7 +68,7 @@ func TestAClaimedHostnameIsAdmittedForACertificateAndAnsweredByTheAppItsSurfaceR
 		t.Errorf("the switchboard answers %s from %q (%v), want the app its surface runs on %s", claimed, upstream, ok, state.Routes[0].Upstream)
 	}
 	if !admittedBy(t, state)(claimed) {
-		t.Errorf("the switchboard refuses the front proxy a certificate for %s: a hostname it holds no certificate for is one https never reaches", claimed)
+		t.Errorf("the switchboard refuses the front proxy a certificate for %s: a hostname it has no certificate for is one https never reaches", claimed)
 	}
 	unrouted := state
 	unrouted.Routes = nil
@@ -93,30 +93,30 @@ func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "shop.example.com" + switchboard.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
 	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
-		t.Errorf("a hostname carrying %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", switchboard.ClaimSeparator)
+		t.Errorf("a hostname containing %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", switchboard.ClaimSeparator)
 	}
 }
 
 func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, routed())
-	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	box := claimingBox(t, routed())
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
-		t.Errorf("%s holds claims %v after the claim, want %q claimed by %q", ProxyConfig, held.Claims, claimed, surface)
+	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
+		t.Errorf("%s contains claims %v after the claim, want %q claimed by %q", ProxyConfig, table.Claims, claimed, surface)
 	}
-	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) {
-		t.Errorf("the claim was written and never loaded, so the switchboard answers a hostname nothing on this box says it claims, and refuses the front proxy its certificate: %v", stood.commands())
+	if !slices.ContainsFunc(box.commands(), loadsSwitchboard) {
+		t.Errorf("the claim was written and never loaded, so the switchboard answers a hostname nothing on this box says it claims, and refuses the front proxy its certificate: %v", box.commands())
 	}
-	if slices.ContainsFunc(stood.commands(), reloadsFront) {
-		t.Errorf("the claim reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, stood.commands())
+	if slices.ContainsFunc(box.commands(), reloadsFront) {
+		t.Errorf("the claim reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, box.commands())
 	}
 }
 
@@ -125,13 +125,13 @@ func TestClaimingAHostnameTwiceWritesTheProxyOnce(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
-	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	box := claimingBox(t, state)
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	for _, command := range stood.commands() {
+	for _, command := range box.commands() {
 		if writesProxy(command) || loadsSwitchboard(command) || reloadsFront(command) {
-			t.Errorf("a claim already standing rewrote and reloaded the proxy (%q); every reload is a whole-box config post and re-posting one that changes nothing is a window for nothing", command)
+			t.Errorf("a claim already in place rewrote and reloaded the proxy (%q); every reload is a whole-box config post and re-posting one that changes nothing is a window for nothing", command)
 		}
 	}
 }
@@ -139,9 +139,9 @@ func TestClaimingAHostnameTwiceWritesTheProxyOnce(t *testing.T) {
 func TestAPinTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T) {
 	t.Parallel()
 
-	stood, h := pinning(t)
-	previous := stood.held
-	stood.broke = func(command string) error {
+	box, h := pinning(t)
+	previous := box.recorded
+	box.broke = func(command string) error {
 		if reloadsFront(command) {
 			return errors.New("the proxy would not take it")
 		}
@@ -149,10 +149,10 @@ func TestAPinTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T) 
 	}
 
 	if err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err == nil {
-		t.Fatal("ClaimHosts() succeeded against a proxy that refused the pin it carried in")
+		t.Fatal("ClaimHosts() succeeded against a proxy that refused the pin it sent")
 	}
-	if stood.held != previous {
-		t.Errorf("%s was left carrying a config the running proxy refused, and this host restarts its proxy onto this file rather than onto what it last loaded:\n%s", ProxyConfig, stood.held)
+	if box.recorded != previous {
+		t.Errorf("%s was left containing a config the running proxy refused, and this host restarts its proxy onto this file rather than onto what it last loaded:\n%s", ProxyConfig, box.recorded)
 	}
 }
 
@@ -161,80 +161,80 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
-	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
+	box := claimingBox(t, state)
+	if err := box.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{{Hostname: "other.example.com", Owner: surface, Pointer: pointed}}) {
-		t.Errorf("the claims left are %v, want the one the disclaim never named", held.Claims)
+	if !slices.Equal(table.Claims, []HostClaim{{Hostname: "other.example.com", Owner: surface, Pointer: pointed}}) {
+		t.Errorf("the claims left are %v, want the one the disclaim never named", table.Claims)
 	}
 }
 
-func TestDisclaimingASurfaceTakesEveryHostnameItHoldsAndNoOneElses(t *testing.T) {
+func TestDisclaimingASurfaceTakesEveryHostnameItOwnsAndNoOneElses(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
 	kept := HostClaim{Hostname: "kept.example.com", Owner: otherSurface, Pointer: pointed}
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, kept, {Hostname: "other.example.com", Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
-	if err := stood.host().DisclaimSurface(context.Background(), surface); err != nil {
+	box := claimingBox(t, state)
+	if err := box.host().DisclaimSurface(context.Background(), surface); err != nil {
 		t.Fatalf("DisclaimSurface() = %v", err)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{kept}) {
-		t.Errorf("the claims left are %v, want only %v: a torn-down surface answers for nothing, and every hostname it held has to come back into circulation without a shell on this box", held.Claims, kept)
+	if !slices.Equal(table.Claims, []HostClaim{kept}) {
+		t.Errorf("the claims left are %v, want only %v: a torn-down surface answers for nothing, and every hostname it owned has to come back into circulation without a shell on this box", table.Claims, kept)
 	}
 }
 
-func TestAHostnameAnotherSurfaceHoldsIsRefusedRatherThanTakenOffIt(t *testing.T) {
+func TestAHostnameAnotherSurfaceOwnsIsRefusedRatherThanTakenOffIt(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
-	standing := stood.held
+	box := claimingBox(t, state)
+	before := box.recorded
 
-	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}})
+	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}})
 	if err == nil {
-		t.Fatal("a second project bound a hostname the first one already holds, and the first project's site then answers nothing with no deploy of its own having failed")
+		t.Fatal("a second project bound a hostname the first one already owns, and the first project's site then answers nothing with no deploy of its own having failed")
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
-		t.Errorf("the second claim failed with %v, want %s naming who holds it", err, refusal.CodeBusy)
+		t.Errorf("the second claim failed with %v, want %s naming who owns it", err, refusal.CodeBusy)
 	}
 	if !strings.Contains(err.Error(), surface) {
-		t.Errorf("the second claim is refused with\n%s\nand never names the surface that already holds %s, which is where the user has to unbind it", err, claimed)
+		t.Errorf("the second claim is refused with\n%s\nand never names the surface that already owns %s, which is where the user has to unbind it", err, claimed)
 	}
-	if stood.held != standing {
-		t.Errorf("%s was rewritten by a claim that was refused:\n%s", ProxyConfig, stood.held)
+	if box.recorded != before {
+		t.Errorf("%s was rewritten by a claim that was refused:\n%s", ProxyConfig, box.recorded)
 	}
 }
 
-func TestUnbindingAHostnameAnotherSurfaceNowHoldsLeavesItWhereItIs(t *testing.T) {
+func TestUnbindingAHostnameAnotherSurfaceNowOwnsLeavesItWhereItIs(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}
-	stood := claimingBox(t, state)
+	box := claimingBox(t, state)
 
-	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
+	if err := box.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, state.Claims) {
-		t.Errorf("the claims left are %v, want %v: %s was rebound to another project since, and an unbind or a destroy here takes that project's hostname off the box", held.Claims, state.Claims, claimed)
+	if !slices.Equal(table.Claims, state.Claims) {
+		t.Errorf("the claims left are %v, want %v: %s was rebound to another project since, and an unbind or a destroy here takes that project's hostname off the box", table.Claims, state.Claims, claimed)
 	}
 }
 
@@ -243,67 +243,67 @@ func TestAHostnameItsOwnerReleasesIsFreeForTheNextSurfaceToTake(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
+	box := claimingBox(t, state)
 	ctx := context.Background()
 
-	if err := stood.host().DisclaimHost(ctx, claimed, surface); err != nil {
+	if err := box.host().DisclaimHost(ctx, claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
-	if err := stood.host().ClaimHosts(ctx, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}); err != nil {
+	if err := box.host().ClaimHosts(ctx, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() by the surface it was released for = %v: a hostname one project unbinds is a hostname another can bind, and a box that keeps refusing it has taken the name out of circulation for good", err)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}) {
-		t.Errorf("the claims left are %v, want %s held by %s alone", held.Claims, claimed, otherSurface)
+	if !slices.Equal(table.Claims, []HostClaim{{Hostname: claimed, Owner: otherSurface, Pointer: pointed}}) {
+		t.Errorf("the claims left are %v, want %s owned by %s alone", table.Claims, claimed, otherSurface)
 	}
 }
 
 func refusingSudo(t *testing.T) *claimBench {
 	t.Helper()
 
-	stood := claimingBox(t, routed())
-	stood.floor = refusal.Refuse(refusal.CodeNotReady,
+	box := claimingBox(t, routed())
+	box.floor = refusal.Refuse(refusal.CodeNotReady,
 		"ada cannot run sudo without a password on ocelbox, and every write ocel makes here needs it")
-	return stood
+	return box
 }
 
 func TestALoginThatCannotElevateStillWritesAProxyConfigItOwns(t *testing.T) {
 	t.Parallel()
 
-	stood := refusingSudo(t)
-	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	box := refusingSudo(t)
+	if err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts = %v; a deploy login that owns %s writes it without sudo, and that is how a box provisioned for a non-root login works rather than a state to refuse", err, ProxyConfig)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(held.Claims, HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed}) {
-		t.Errorf("the claims on the box are %v, want %s among them", held.Claims, claimed)
+	if !slices.Contains(table.Claims, HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed}) {
+		t.Errorf("the claims on the box are %v, want %s among them", table.Claims, claimed)
 	}
-	if at := stood.at(`IFS= read -r written`); at < 0 || strings.HasPrefix(stood.commands()[at], "sudo") {
-		t.Errorf("the write went out as %v, want one unelevated command", stood.commands())
+	if at := box.at(`IFS= read -r written`); at < 0 || strings.HasPrefix(box.commands()[at], "sudo") {
+		t.Errorf("the write went out as %v, want one unelevated command", box.commands())
 	}
 }
 
 func TestAWriteThisLoginCannotMakeNamesTheElevationItWasRefused(t *testing.T) {
 	t.Parallel()
 
-	stood := refusingSudo(t)
-	answering := stood.answer
-	stood.answer = func(command string) (session.Result, bool) {
+	box := refusingSudo(t)
+	answering := box.answer
+	box.answer = func(command string) (session.Result, bool) {
 		if writesProxy(command) {
 			return session.Result{Code: 1, Stderr: "cannot create " + ProxyConfig + ".XXXXXX: Permission denied"}, true
 		}
 		return answering(command)
 	}
 
-	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a claim this login could neither write nor elevate to write reported success")
 	}
@@ -315,14 +315,14 @@ func TestAWriteThisLoginCannotMakeNamesTheElevationItWasRefused(t *testing.T) {
 	}
 }
 
-func TestTheClaimsThisBoxHoldsAreReadFromWhatTheProxyWasGiven(t *testing.T) {
+func TestTheClaimsOnThisBoxAreReadFromWhatTheProxyWasGiven(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
+	box := claimingBox(t, state)
 
-	read, err := stood.host().Claims(context.Background())
+	read, err := box.host().Claims(context.Background())
 	if err != nil {
 		t.Fatalf("Claims() = %v", err)
 	}
@@ -334,15 +334,15 @@ func TestTheClaimsThisBoxHoldsAreReadFromWhatTheProxyWasGiven(t *testing.T) {
 func TestWhatServesAnAppIsTheUpstreamItsRouteNames(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, routed())
-	upstream, err := stood.host().Serving(context.Background(), keyed("web"))
+	box := claimingBox(t, routed())
+	upstream, err := box.host().Serving(context.Background(), keyed("web"))
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
 	if upstream != "shop-web-2222:"+appbuild.InjectedPortText {
 		t.Errorf("Serving(web) = %q, want the upstream its route names: a release retires what is serving, and retiring the wrong name drains nothing and stops something live", upstream)
 	}
-	absent, err := stood.host().Serving(context.Background(), keyed("api"))
+	absent, err := box.host().Serving(context.Background(), keyed("api"))
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
@@ -356,23 +356,23 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := claimingBox(t, state)
+	box := claimingBox(t, state)
 
 	rel := Release{
 		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: "shop-web-3333:" + appbuild.InjectedPortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}
-	if err := stood.host().Release(context.Background(), rel, nil); err != nil {
+	if err := box.host().Release(context.Background(), rel, nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(held.Claims, state.Claims) {
-		t.Errorf("the claims left after a release are %v, want the %v that stood before it: a deploy renders this file whole and a hostname dropped there is a hostname nothing on this box claims", held.Claims, state.Claims)
+	if !slices.Equal(table.Claims, state.Claims) {
+		t.Errorf("the claims left after a release are %v, want the %v that were there before it: a deploy renders this file whole and a hostname dropped there is a hostname nothing on this box claims", table.Claims, state.Claims)
 	}
 }
 
@@ -410,9 +410,9 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxKeepTheirOwnRoutes(t *testing.T
 func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, twoProjects())
+	box := claimingBox(t, twoProjects())
 	blog := RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
-	if err := stood.host().Release(context.Background(), Release{
+	if err := box.host().Release(context.Background(), Release{
 		Apps:          []AppRelease{{RouteKey: blog, Target: "blog-web-4444:" + appbuild.InjectedPortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
@@ -420,16 +420,16 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 		t.Fatalf("Release() = %v", err)
 	}
 
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := slices.IndexFunc(held.Routes, func(route AppRoute) bool { return route.RouteKey == keyed("web") })
-	if at < 0 || held.Routes[at].Upstream != "shop-web-2222:"+appbuild.InjectedPortText {
-		t.Errorf("after a deploy of %s the routes read %v; the other project's app is named web too, and its live container is what a deploy that took its route would then stop", otherSurface, held.Routes)
+	at := slices.IndexFunc(table.Routes, func(route AppRoute) bool { return route.RouteKey == keyed("web") })
+	if at < 0 || table.Routes[at].Upstream != "shop-web-2222:"+appbuild.InjectedPortText {
+		t.Errorf("after a deploy of %s the routes read %v; the other project's app is named web too, and its live container is what a deploy that took its route would then stop", otherSurface, table.Routes)
 	}
-	if stood.at("docker stop "+quoted("shop-web-2222")) >= 0 {
-		t.Errorf("the deploy stopped another project's live container: %v", stood.commands())
+	if box.at("docker stop "+quoted("shop-web-2222")) >= 0 {
+		t.Errorf("the deploy stopped another project's live container: %v", box.commands())
 	}
 }
 
@@ -490,7 +490,7 @@ func TestAHostnameDeclaredUnderOneAppOfAMultiAppSurfaceReachesThatAppAlone(t *te
 	}
 }
 
-func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackCarryingThatApp(t *testing.T) {
+func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackWithThatApp(t *testing.T) {
 	t.Parallel()
 
 	state := twoApps()
@@ -507,7 +507,7 @@ func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackCarryingThatApp(t *testing
 		return strings.Compare(a.Hostname, b.Hostname)
 	})
 	if !slices.Equal(read.Claims, want) {
-		t.Errorf("the claims read back as %v, want %v: the rendered configuration is the box's only record of which app a hostname was declared under, so an app it does not carry is one the next deploy cannot restore", read.Claims, want)
+		t.Errorf("the claims read back as %v, want %v: the rendered configuration is the box's only record of which app a hostname was declared under, so an app it does not record is one the next deploy cannot restore", read.Claims, want)
 	}
 }
 
@@ -517,7 +517,7 @@ func TestAProjectWideClaimStillNamesNoAppOnTheWireItIsWrittenTo(t *testing.T) {
 	wide := routed()
 	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	if written := string(mustWrite(t, wide)); strings.Contains(written, `"app":""`) || strings.Count(written, `"app"`) != len(wide.Routes) {
-		t.Errorf("a project-wide claim is written as\n%s\nwant it carrying no app at all", written)
+		t.Errorf("a project-wide claim is written as\n%s\nwant it naming no app at all", written)
 	}
 	attributed := routed()
 	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"}}
@@ -608,16 +608,16 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndForwardsThemToTheSwitchb
 func TestARouteOnlyOneSurfaceOwnsIsTakenByThatSurfaceAlone(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, twoProjects())
-	if err := stood.host().UnroutePointer(context.Background(), surface, pointed); err != nil {
+	box := claimingBox(t, twoProjects())
+	if err := box.host().UnroutePointer(context.Background(), surface, pointed); err != nil {
 		t.Fatalf("UnroutePointer() = %v", err)
 	}
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(held.Routes) != 1 || held.Routes[0].Owner != otherSurface {
-		t.Errorf("the routes left are %v, want the other project's alone", held.Routes)
+	if len(table.Routes) != 1 || table.Routes[0].Owner != otherSurface {
+		t.Errorf("the routes left are %v, want the other project's alone", table.Routes)
 	}
 }
 
@@ -629,36 +629,36 @@ func TestATornDownSurfaceLeavesNoRouteForwardingToARemovedContainer(t *testing.T
 		RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: "worker"},
 		Upstream: "shop-worker-5555:" + appbuild.InjectedPortText,
 	})
-	stood := claimingBox(t, state)
-	if err := stood.host().UnrouteSurface(context.Background(), surface); err != nil {
+	box := claimingBox(t, state)
+	if err := box.host().UnrouteSurface(context.Background(), surface); err != nil {
 		t.Fatalf("UnrouteSurface() = %v", err)
 	}
-	held, err := ReadRoutingTable([]byte(stood.held))
+	table, err := ReadRoutingTable([]byte(box.recorded))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(held.Routes) != 1 || held.Routes[0].Owner != otherSurface {
-		t.Errorf("the routes left after a teardown of %s are %v; every container it ran is gone, and a route left behind forwards to nothing forever", surface, held.Routes)
+	if len(table.Routes) != 1 || table.Routes[0].Owner != otherSurface {
+		t.Errorf("the routes left after a teardown of %s are %v; every container it ran is gone, and a route left behind forwards to nothing forever", surface, table.Routes)
 	}
 }
 
 func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherThanPosted(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, routed())
+	box := claimingBox(t, routed())
 	moved := mustWrite(t, twoProjects())
-	proxied := servesProxy(stood.bench, &stood.held)
-	stood.answer = func(command string) (session.Result, bool) {
+	proxied := servesProxy(box.bench, &box.recorded)
+	box.answer = func(command string) (session.Result, bool) {
 		if !writesProxy(command) {
 			return proxied(command)
 		}
-		stood.mu.Lock()
-		stood.held = string(moved)
-		stood.mu.Unlock()
+		box.mu.Lock()
+		box.recorded = string(moved)
+		box.mu.Unlock()
 		return session.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
 	}
 
-	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("a claim composed onto a configuration another deploy kept replacing was written anyway")
 	}
@@ -666,42 +666,42 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("the write was refused with %v, want %s: this file is the whole box's, every writer renders it whole, and the loser must be told rather than drop the winner's routes", err, refusal.CodeBusy)
 	}
-	if stood.held != string(moved) {
-		t.Errorf("%s was left as\n%s\nwant what the deploy that moved it wrote: the write stages beside the file and checks the digest before it moves anything into place", ProxyConfig, stood.held)
+	if box.recorded != string(moved) {
+		t.Errorf("%s was left as\n%s\nwant what the deploy that moved it wrote: the write stages beside the file and checks the digest before it moves anything into place", ProxyConfig, box.recorded)
 	}
-	if slices.ContainsFunc(stood.commands(), func(command string) bool { return loadsSwitchboard(command) || reloadsFront(command) }) {
-		t.Errorf("a write that was refused still posted a configuration to the running proxy: %v", stood.commands())
+	if slices.ContainsFunc(box.commands(), func(command string) bool { return loadsSwitchboard(command) || reloadsFront(command) }) {
+		t.Errorf("a write that was refused still posted a configuration to the running proxy: %v", box.commands())
 	}
 }
 
 func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, routed())
-	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: "*.preview.acme.com", Owner: surface, Pointer: pointed}})
+	box := claimingBox(t, routed())
+	err := box.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: "*.preview.acme.com", Owner: surface, Pointer: pointed}})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("ClaimHosts() of a wildcard = %v, want a refusal: a claim is a hostname the proxy orders one certificate for over http-01, and a wildcard is a match every hostname pointed at this box falls under", err)
 	}
-	if stood.count(loadsSwitchboard) > 0 || strings.Contains(stood.held, "*.preview") {
-		t.Errorf("a refused wildcard claim still reached the proxy: %v", stood.commands())
+	if box.count(loadsSwitchboard) > 0 || strings.Contains(box.recorded, "*.preview") {
+		t.Errorf("a refused wildcard claim still reached the proxy: %v", box.commands())
 	}
 }
 
 func flippingBox(t *testing.T, config *string, flipped func(at int) session.Result) *claimBench {
 	t.Helper()
 
-	stood := claimingBox(t, routed())
-	proxied := servesPair(stood.bench, &stood.held, config)
+	box := claimingBox(t, routed())
+	proxied := servesPair(box.bench, &box.recorded, config)
 	flips := 0
-	stood.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (session.Result, bool) {
 		if reloadsFront(command) {
 			flips++
 			return flipped(flips), true
 		}
 		return proxied(command)
 	}
-	return stood
+	return box
 }
 
 func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testing.T) {
@@ -709,22 +709,22 @@ func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testi
 
 	older := olderRendering(t, routed())
 	config := older
-	stood := flippingBox(t, &config, func(at int) session.Result {
+	box := flippingBox(t, &config, func(at int) session.Result {
 		if at == 1 {
 			return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 		}
 		return session.Result{}
 	})
-	table := stood.held
+	table := box.recorded
 
-	if err := stood.host().rerender(context.Background()); err == nil {
+	if err := box.host().rerender(context.Background()); err == nil {
 		t.Fatal("rerender() over a reload that failed = nil, want the failure")
 	}
-	if stood.held != table || config != older {
-		t.Errorf("a reload that failed left\n%s\n%s\nwant both files byte for byte as they stood: the rendering it failed to reload stays on disk as if current, the next write skips it, and the proxy loads it on its next restart",
-			stood.held, config)
+	if box.recorded != table || config != older {
+		t.Errorf("a reload that failed left\n%s\n%s\nwant both files byte for byte as they were: the rendering it failed to reload stays on disk as if current, the next write skips it, and the proxy loads it on its next restart",
+			box.recorded, config)
 	}
-	commands := stood.commands()
+	commands := box.commands()
 	restored := -1
 	for at, command := range commands {
 		if writesProxy(command) {
@@ -740,10 +740,10 @@ func TestAReloadThatFailsTwiceSaysTheProxyMayServeWhatTheFilesNoLongerRecord(t *
 	t.Parallel()
 
 	config := olderRendering(t, routed())
-	stood := flippingBox(t, &config, func(int) session.Result {
+	box := flippingBox(t, &config, func(int) session.Result {
 		return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
 	})
-	err := stood.host().rerender(context.Background())
+	err := box.host().rerender(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "may still serve") {
 		t.Errorf("rerender() over a reload that failed and a reload back that failed too = %v, want it to say the proxy may still serve what the restored files no longer record", err)
 	}

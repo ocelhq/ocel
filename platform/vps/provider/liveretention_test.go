@@ -26,7 +26,7 @@ func onABoxSweeping(t *testing.T, tags ...string) (machine, *vps.Provider) {
 	t.Helper()
 	vm, p := onABoxServingContainers(t)
 	for _, tag := range tags {
-		if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+sweepAt(tag)+" >/dev/null 2>&1 && echo held || echo gone")) == "held" {
+		if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+sweepAt(tag)+" >/dev/null 2>&1 && echo present || echo gone")) == "present" {
 			continue
 		}
 		vm.feeds(t, "sudo docker build -q -t "+sweepAt(tag)+" - >/dev/null",
@@ -68,12 +68,12 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 
 func windowOf(t *testing.T, vm machine, project, app string, class edge.Class) []string {
 	t.Helper()
-	held := strings.TrimSpace(vm.sshAs(t, deployLogin,
+	listed := strings.TrimSpace(vm.sshAs(t, deployLogin,
 		"cat "+host.ReleasesDir()+"/"+project+"/"+app+"/"+string(class)))
-	if held == "" {
+	if listed == "" {
 		return nil
 	}
-	return strings.Split(held, "\n")
+	return strings.Split(listed, "\n")
 }
 
 func sweepImages(t *testing.T, vm machine) string {
@@ -95,38 +95,38 @@ func TestLiveTheWindowKeepsThreeAndMovesARepeatedRefToTheHead(t *testing.T) {
 	for _, tag := range []string{"r1", "r2", "r3", "r4"} {
 		sweepsUp(t, p, tag)
 	}
-	held := windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
+	window := windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
 	want := []string{sweepAt("r4"), sweepAt("r3"), sweepAt("r2")}
-	if strings.Join(held, ",") != strings.Join(want, ",") {
-		t.Fatalf("the box's window reads %v, want %v: three deep, most recently served first", held, want)
+	if strings.Join(window, ",") != strings.Join(want, ",") {
+		t.Fatalf("the box's window reads %v, want %v: three deep, most recently served first", window, want)
 	}
 
 	sweepsUp(t, p, "r2")
-	held = windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
+	window = windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
 	want = []string{sweepAt("r2"), sweepAt("r4"), sweepAt("r3")}
-	if strings.Join(held, ",") != strings.Join(want, ",") {
-		t.Errorf("the box's window reads %v, want %v: a ref already held moves to the head and evicts nothing", held, want)
+	if strings.Join(window, ",") != strings.Join(want, ",") {
+		t.Errorf("the box's window reads %v, want %v: a ref already in the window moves to the head and evicts nothing", window, want)
 	}
 }
 
 func TestLiveAReconcileNeverTakesTheImageUnderARunningContainer(t *testing.T) {
-	vm, p := onABoxSweeping(t, "r1", "held", "orphan")
+	vm, p := onABoxSweeping(t, "r1", "served", "orphan")
 
 	sweepsUp(t, p, "r1")
-	vm.ssh(t, "sudo docker run -d --name live-retention-held"+
+	vm.ssh(t, "sudo docker run -d --name live-retention-served"+
 		" --label "+host.LabelApp+"="+sweepApp+
 		" --label "+host.LabelProject+"="+sweepProject+
-		" --label "+host.LabelRef+"="+sweepAt("held")+
-		" "+sweepAt("held"))
-	t.Cleanup(func() { vm.ssh(t, "sudo docker rm -f live-retention-held >/dev/null 2>&1 || true") })
+		" --label "+host.LabelRef+"="+sweepAt("served")+
+		" "+sweepAt("served"))
+	t.Cleanup(func() { vm.ssh(t, "sudo docker rm -f live-retention-served >/dev/null 2>&1 || true") })
 
 	sweeping(t, p, "r1")
 
-	if !strings.Contains(sweepImages(t, vm), sweepAt("held")) {
-		t.Errorf("the sweep took %s out from under the container serving it, and the label union is what makes a deploy that dies after the swap survivable", sweepAt("held"))
+	if !strings.Contains(sweepImages(t, vm), sweepAt("served")) {
+		t.Errorf("the sweep took %s out from under the container serving it, and the label union is what makes a deploy that dies after the swap survivable", sweepAt("served"))
 	}
 	if strings.Contains(sweepImages(t, vm), sweepAt("orphan")) {
-		t.Errorf("the sweep left %s standing, which no window and no container names", sweepAt("orphan"))
+		t.Errorf("the sweep left %s in place, which no window and no container names", sweepAt("orphan"))
 	}
 }
 
@@ -135,14 +135,14 @@ func TestLiveASecondReconcileRemovesNothing(t *testing.T) {
 
 	sweepsUp(t, p, "r1")
 	sweeping(t, p, "r1")
-	settled := sweepImages(t, vm)
+	swept := sweepImages(t, vm)
 	sweeping(t, p, "r1")
 
-	if again := sweepImages(t, vm); again != settled {
-		t.Errorf("a second reconcile with no deploy between left %q, want %q: reconcile is a pure function of the window, the running containers and the listing", again, settled)
+	if again := sweepImages(t, vm); again != swept {
+		t.Errorf("a second reconcile with no deploy between left %q, want %q: reconcile is a pure function of the window, the running containers and the listing", again, swept)
 	}
-	if strings.Contains(settled, sweepAt("orphan")) {
-		t.Errorf("the first reconcile removed nothing at all, so the second proves nothing: %q", settled)
+	if strings.Contains(swept, sweepAt("orphan")) {
+		t.Errorf("the first reconcile removed nothing at all, so the second proves nothing: %q", swept)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 	stacks := p.Stacks()
 	_, err := stacks.Provision(context.Background(), spec, nil)
 	if err == nil {
-		t.Fatal("Provision() of an app carrying no health path succeeded, and this test needs the failure path")
+		t.Fatal("Provision() of an app with no health path succeeded, and this test needs the failure path")
 	}
 	if !strings.Contains(err.Error(), "health check path") {
 		t.Fatalf("Provision() = %v, which is not the failure this test induces: a release that fell over somewhere earlier proves nothing about the release that leaked an image", err)

@@ -18,37 +18,37 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-type socketHeld struct {
-	port   int
-	holder string
+type socketOwner struct {
+	port  int
+	owner string
 }
 
-func socketsSaid(held ...socketHeld) string {
+func socketsSaid(owners ...socketOwner) string {
 	var table, sockets, names strings.Builder
 	table.WriteString("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n")
-	for at, one := range held {
+	for at, one := range owners {
 		inode := 40000 + at
 		fmt.Fprintf(&table, "   %d: 00000000:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 %d 1 0000000000000000 100 0 0 10 0\n",
 			at, one.port, inode)
-		if one.holder == "" {
+		if one.owner == "" {
 			continue
 		}
 		fmt.Fprintf(&sockets, "/proc/%d/fd socket:[%d]\n", 700+at, inode)
-		fmt.Fprintf(&names, "/proc/%d/comm:%s\n", 700+at, one.holder)
+		fmt.Fprintf(&names, "/proc/%d/comm:%s\n", 700+at, one.owner)
 	}
 	return table.String() + listeners.SocketsMark + "\n" + sockets.String() + listeners.NamesMark + "\n" + names.String()
 }
 
-func portsHeldOn(stood *bench, published map[string]string, held ...socketHeld) {
-	prior := stood.answer
-	stood.answer = func(command string) (session.Result, bool) {
+func portsOwnedOn(rig *bench, published map[string]string, owners ...socketOwner) {
+	prior := rig.answer
+	rig.answer = func(command string) (session.Result, bool) {
 		for port, names := range published {
 			if strings.Contains(command, "publish="+port) {
 				return session.Result{Stdout: names}, true
 			}
 		}
-		if strings.HasPrefix(command, holdersCommand) {
-			return session.Result{Stdout: socketsSaid(held...)}, true
+		if strings.HasPrefix(command, ownersCommand) {
+			return session.Result{Stdout: socketsSaid(owners...)}, true
 		}
 		if prior != nil {
 			return prior(command)
@@ -66,20 +66,20 @@ func freshBox() *bench {
 }
 
 func withDocker() *bench {
-	stood := machine(map[edge.Class][]Item{edge.ClassProduction: EngineItems()})
-	stood.answer = func(command string) (session.Result, bool) {
+	rig := machine(map[edge.Class][]Item{edge.ClassProduction: EngineItems()})
+	rig.answer = func(command string) (session.Result, bool) {
 		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
-	return stood
+	return rig
 }
 
 const behindYourOwnProxy = "See https://ocel.dev/docs/providers/vps#behind-your-own-proxy"
 
-func refusedBeforeWriting(t *testing.T, stood *bench, front Front, want string) {
+func refusedBeforeWriting(t *testing.T, rig *bench, front Front, want string) {
 	t.Helper()
 
 	class := edge.ClassProduction
-	boot := NewBootstrap(stood.fronted(front), testVendor, "shop")
+	boot := NewBootstrap(rig.fronted(front), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
 	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
@@ -87,20 +87,20 @@ func refusedBeforeWriting(t *testing.T, stood *bench, front Front, want string) 
 			t.Errorf("%s refused with\n%s\nwant\n%s", step, refused.Message, want)
 		}
 	}
-	for _, command := range stood.commands() {
+	for _, command := range rig.commands() {
 		if strings.HasPrefix(command, "install ") || strings.Contains(command, dockerSource) || strings.Contains(command, "docker run") {
 			t.Errorf("the refused bootstrap still wrote: %s", command)
 		}
 	}
 }
 
-func TestABootstrapOverAProcessHoldingTheServingPortsNamesItAndStopsBeforeItsFirstWrite(t *testing.T) {
+func TestABootstrapOverAProcessListeningOnTheServingPortsNamesItAndStopsBeforeItsFirstWrite(t *testing.T) {
 	t.Parallel()
 
-	stood := freshBox()
-	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "nginx"})
-	refusedBeforeWriting(t, stood, Front{},
-		"nginx holds :80 and :443, where ocel's own proxy serves\n"+
+	rig := freshBox()
+	portsOwnedOn(rig, nil, socketOwner{80, "nginx"}, socketOwner{443, "nginx"})
+	refusedBeforeWriting(t, rig, Front{},
+		"nginx listens on :80 and :443, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from nginx, or stop nginx and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
 }
@@ -108,21 +108,21 @@ func TestABootstrapOverAProcessHoldingTheServingPortsNamesItAndStopsBeforeItsFir
 func TestABootstrapOverAContainerPublishingAServingPortNamesTheContainer(t *testing.T) {
 	t.Parallel()
 
-	stood := withDocker()
-	portsHeldOn(stood, map[string]string{caddy.HTTPPort: "\n", "443": "web\n"}, socketHeld{443, "docker-proxy"})
-	refusedBeforeWriting(t, stood, Front{},
+	rig := withDocker()
+	portsOwnedOn(rig, map[string]string{caddy.HTTPPort: "\n", "443": "web\n"}, socketOwner{443, "docker-proxy"})
+	refusedBeforeWriting(t, rig, Front{},
 		"container web publishes :443, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from web, or run `docker rm -f web` and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
 }
 
-func TestABootstrapNamesEveryHolderOfTheServingPortsInOneRefusal(t *testing.T) {
+func TestABootstrapNamesEveryOwnerOfTheServingPortsInOneRefusal(t *testing.T) {
 	t.Parallel()
 
-	stood := freshBox()
-	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "apache2"})
-	refusedBeforeWriting(t, stood, Front{},
-		"nginx holds :80 and apache2 holds :443, where ocel's own proxy serves\n"+
+	rig := freshBox()
+	portsOwnedOn(rig, nil, socketOwner{80, "nginx"}, socketOwner{443, "apache2"})
+	refusedBeforeWriting(t, rig, Front{},
+		"nginx listens on :80 and apache2 listens on :443, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from nginx and apache2, or stop nginx and apache2 and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
 }
@@ -130,10 +130,10 @@ func TestABootstrapNamesEveryHolderOfTheServingPortsInOneRefusal(t *testing.T) {
 func TestABootstrapOverASocketNoProcessCanBeNamedForSaysWhereItIsBound(t *testing.T) {
 	t.Parallel()
 
-	stood := freshBox()
-	portsHeldOn(stood, nil, socketHeld{80, ""})
-	refusedBeforeWriting(t, stood, Front{},
-		"the process at 0.0.0.0:80 holds :80, where ocel's own proxy serves\n"+
+	rig := freshBox()
+	portsOwnedOn(rig, nil, socketOwner{80, ""})
+	refusedBeforeWriting(t, rig, Front{},
+		"the process at 0.0.0.0:80 listens on :80, where ocel's own proxy serves\n"+
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from the process at 0.0.0.0:80, or stop the process at 0.0.0.0:80 and run `ocel bootstrap production`\n"+
 			behindYourOwnProxy)
 }
@@ -142,32 +142,32 @@ func TestABootstrapWhoseServingPortsAreFreeOrOcelsOwnGoesAhead(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	for name, stood := range map[string]*bench{
+	for name, rig := range map[string]*bench{
 		"a fresh box":                   freshBox(),
-		"a box ocel's own proxy fronts": settledOn(t, class),
+		"a box ocel's own proxy fronts": bootstrappedOn(t, class),
 	} {
-		portsHeldOn(stood, map[string]string{caddy.HTTPPort: caddy.Container + "\n", "443": caddy.Container + "\n"})
-		if _, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Class: class}); err != nil {
+		portsOwnedOn(rig, map[string]string{caddy.HTTPPort: caddy.Container + "\n", "443": caddy.Container + "\n"})
+		if _, err := NewBootstrap(rig.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Class: class}); err != nil {
 			t.Errorf("%s: Plan() = %v, want the bootstrap let through", name, err)
 		}
 	}
 }
 
-func TestABootstrapBehindYourOwnProxyLeavesWhatHoldsTheServingPortsAlone(t *testing.T) {
+func TestABootstrapBehindYourOwnProxyLeavesWhatOwnsTheServingPortsAlone(t *testing.T) {
 	t.Parallel()
 
-	stood := freshBox()
-	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "nginx"})
-	if _, err := NewBootstrap(stood.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
+	rig := freshBox()
+	portsOwnedOn(rig, nil, socketOwner{80, "nginx"}, socketOwner{443, "nginx"})
+	if _, err := NewBootstrap(rig.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
 		provider.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
 		t.Fatalf("Plan() = %v, want a box routed by hand free to keep its own proxy on 80 and 443", err)
 	}
-	if slices.ContainsFunc(stood.commands(), func(command string) bool { return strings.HasPrefix(command, holdersCommand) }) {
-		t.Error("a bootstrap behind your own proxy asked what holds the serving ports, and it holds them by design")
+	if slices.ContainsFunc(rig.commands(), func(command string) bool { return strings.HasPrefix(command, ownersCommand) }) {
+		t.Error("a bootstrap behind your own proxy asked what owns the serving ports, and your proxy owns them by design")
 	}
 }
 
-func TestTheHoldersReadNamesTheProcessBehindASocketOnThisMachine(t *testing.T) {
+func TestTheOwnersReadNamesTheProcessBehindASocketOnThisMachine(t *testing.T) {
 	t.Parallel()
 
 	listening, err := net.Listen("tcp", "127.0.0.1:0")
@@ -177,24 +177,24 @@ func TestTheHoldersReadNamesTheProcessBehindASocketOnThisMachine(t *testing.T) {
 	t.Cleanup(func() { listening.Close() })
 	port := listening.Addr().(*net.TCPAddr).Port
 
-	said, err := exec.Command("/bin/sh", "-c", holdersCommand).Output()
+	said, err := exec.Command("/bin/sh", "-c", ownersCommand).Output()
 	if err != nil {
-		t.Fatalf("the holders read on this machine = %v", err)
+		t.Fatalf("the owners read on this machine = %v", err)
 	}
-	held, err := listeners.Parse(strings.NewReader(string(said)))
+	found, err := listeners.Parse(strings.NewReader(string(said)))
 	if err != nil {
-		t.Fatalf("the holders read on this machine parses as %v, so the kernel, find and grep write something the parser never expected", err)
+		t.Fatalf("the owners read on this machine parses as %v, so the kernel, find and grep write something the parser never expected", err)
 	}
 	comm, err := os.ReadFile("/proc/self/comm")
 	if err != nil {
 		t.Skipf("this machine has no /proc to name a process from: %v", err)
 	}
-	if got, want := listeners.Holders(listeners.On(held, port)), []string{strings.TrimSpace(string(comm))}; !slices.Equal(got, want) {
-		t.Errorf("the socket this test holds on :%d is named %v, want %v", port, got, want)
+	if got, want := listeners.Owners(listeners.On(found, port)), []string{strings.TrimSpace(string(comm))}; !slices.Equal(got, want) {
+		t.Errorf("the socket this test binds on :%d is named %v, want %v", port, got, want)
 	}
 }
 
-func heldByAProcessNamed(t *testing.T, name string) int {
+func listenedByAProcessNamed(t *testing.T, name string) int {
 	t.Helper()
 	listening, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -206,9 +206,9 @@ func heldByAProcessNamed(t *testing.T, name string) int {
 		t.Fatal(err)
 	}
 	defer socket.Close()
-	child := exec.Command("/bin/sh", "-c", `printf '%s' "$1" >/proc/$$/comm && echo named && read held`, "sh", name)
+	child := exec.Command("/bin/sh", "-c", `printf '%s' "$1" >/proc/$$/comm && echo named && read line`, "sh", name)
 	child.ExtraFiles = []*os.File{socket}
-	held, err := child.StdinPipe()
+	stdin, err := child.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func heldByAProcessNamed(t *testing.T, name string) int {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		held.Close()
+		stdin.Close()
 		child.Wait()
 	})
 	if _, err := fmt.Fscanln(said, new(string)); err != nil {
@@ -229,7 +229,7 @@ func heldByAProcessNamed(t *testing.T, name string) int {
 	return listening.Addr().(*net.TCPAddr).Port
 }
 
-func TestTheHoldersReadNamesAProcessNamedLikeItsOwnLinesAsThatProcessAlone(t *testing.T) {
+func TestTheOwnersReadNamesAProcessNamedLikeItsOwnLinesAsThatProcessAlone(t *testing.T) {
 	t.Parallel()
 
 	comm, err := os.ReadFile("/proc/self/comm")
@@ -237,19 +237,19 @@ func TestTheHoldersReadNamesAProcessNamedLikeItsOwnLinesAsThatProcessAlone(t *te
 		t.Skipf("this machine has no /proc to name a process from: %v", err)
 	}
 	for _, name := range []string{"x\n" + listeners.SocketsMark, "\n/proc/1/comm:X"} {
-		port := heldByAProcessNamed(t, name)
-		said, err := exec.Command("/bin/sh", "-c", holdersCommand).Output()
+		port := listenedByAProcessNamed(t, name)
+		said, err := exec.Command("/bin/sh", "-c", ownersCommand).Output()
 		if err != nil {
-			t.Fatalf("the holders read on this machine = %v", err)
+			t.Fatalf("the owners read on this machine = %v", err)
 		}
-		held, err := listeners.Parse(strings.NewReader(string(said)))
+		found, err := listeners.Parse(strings.NewReader(string(said)))
 		if err != nil {
-			t.Fatalf("the holders read parses as %v over a process named %q", err, name)
+			t.Fatalf("the owners read parses as %v over a process named %q", err, name)
 		}
 		want := []string{strings.TrimSpace(string(comm)), strings.ReplaceAll(name, "\n", `\n`)}
 		slices.Sort(want)
-		if got := listeners.Holders(listeners.On(held, port)); !slices.Equal(got, want) {
-			t.Errorf("the socket on :%d held by this test and a process named %q is named %q, want %q", port, name, got, want)
+		if got := listeners.Owners(listeners.On(found, port)); !slices.Equal(got, want) {
+			t.Errorf("the socket on :%d bound by this test and a process named %q is named %q, want %q", port, name, got, want)
 		}
 	}
 }

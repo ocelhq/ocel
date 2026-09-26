@@ -14,19 +14,19 @@ func httpsBinds(ctx context.Context, spelled string, resolve resolving, addresse
 	}
 	addr, err := netip.ParseAddr(host)
 	if host == "" || err == nil && addr.WithZone("").Unmap().IsUnspecified() {
-		return nil, fmt.Errorf("--https-listen %q binds every interface the switchboard holds, each project network among them; name one address or a docker network", spelled)
+		return nil, fmt.Errorf("--https-listen %q binds every interface the switchboard has, each project network among them; name one address or a docker network", spelled)
 	}
 	if err == nil {
 		return []string{spelled}, nil
 	}
 	asking, stop := context.WithTimeout(ctx, networkLookup)
 	defer stop()
-	held, err := heldOn(asking, host, resolve, addresses)
+	prefixes, err := prefixesOn(asking, host, resolve, addresses)
 	if err != nil {
 		return nil, fmt.Errorf("--https-listen %w", err)
 	}
-	binds := make([]string, 0, len(held))
-	for _, prefix := range held {
+	binds := make([]string, 0, len(prefixes))
+	for _, prefix := range prefixes {
 		binds = append(binds, net.JoinHostPort(prefix.Addr().String(), port))
 	}
 	return binds, nil

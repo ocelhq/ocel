@@ -24,7 +24,7 @@ func TestTheEngineInstallRunsNothingItHasNotHashedAndPinsTheVersionItInstalls(t 
 		t.Errorf("a script that does not hash as pinned is run anyway:\n%s", command)
 	}
 	if !strings.Contains(command, "VERSION="+dockerVersion+` sh "$script"`) {
-		t.Errorf("the script is run with no VERSION, so it installs whatever docker's stable channel holds that day rather than %s:\n%s", dockerVersion, command)
+		t.Errorf("the script is run with no VERSION, so it installs whatever docker's stable channel ships that day rather than %s:\n%s", dockerVersion, command)
 	}
 	if len(dockerScriptSum) != 64 || strings.Trim(dockerScriptSum, "0123456789abcdef") != "" {
 		t.Errorf("%q is no sha256 hex digest", dockerScriptSum)

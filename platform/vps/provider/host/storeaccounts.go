@@ -22,7 +22,7 @@ const (
 	StoreSecretMax = 40
 )
 
-func StoreSecretHeld(secret string) error {
+func CheckStoreSecret(secret string) error {
 	if len(secret) < StoreSecretMin || len(secret) > StoreSecretMax {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"a store account secret is %d characters; the store takes %d to %d",
@@ -85,29 +85,29 @@ func accountPolicy(buckets []string, sessions string) ([]byte, error) {
 }
 
 func (a StoreAccount) calls() ([]adminCall, error) {
-	if err := StoreSecretHeld(a.SecretKey); err != nil {
+	if err := CheckStoreSecret(a.SecretKey); err != nil {
 		return nil, err
 	}
 	policy, err := accountPolicy(a.Buckets, a.Sessions)
 	if err != nil {
 		return nil, err
 	}
-	var held any
-	if err := json.Unmarshal(policy, &held); err != nil {
+	var document any
+	if err := json.Unmarshal(policy, &document); err != nil {
 		return nil, err
 	}
 	added, err := json.Marshal(map[string]any{
 		"targetUser": a.RootKeyID,
 		"accessKey":  a.AccessKeyID,
 		"secretKey":  a.SecretKey,
-		"policy":     held,
+		"policy":     document,
 	})
 	if err != nil {
 		return nil, err
 	}
 	updated, err := json.Marshal(map[string]any{
 		"newSecretKey": a.SecretKey,
-		"newPolicy":    held,
+		"newPolicy":    document,
 	})
 	if err != nil {
 		return nil, err

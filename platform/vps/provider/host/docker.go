@@ -33,7 +33,7 @@ const (
 
 const engineInstallTries = 3
 
-type hold struct {
+type retryBackoff struct {
 	counter string
 	base    int
 	ceiling int
@@ -41,18 +41,18 @@ type hold struct {
 }
 
 var (
-	engineInstallHold = hold{base: 15, ceiling: 60, spread: 15}
-	pullHold          = hold{counter: "at", base: 2, ceiling: 30, spread: 5}
+	engineInstallBackoff = retryBackoff{base: 15, ceiling: 60, spread: 15}
+	scriptPullBackoff    = retryBackoff{counter: "at", base: 2, ceiling: 30, spread: 5}
 )
 
-func (h hold) after(try int) time.Duration {
+func (h retryBackoff) after(try int) time.Duration {
 	backoff := min(h.base<<(try-1), h.ceiling)
 	return time.Duration(backoff+rand.IntN(h.spread)) * time.Second
 }
 
-func (h hold) start() string { return "backoff=" + strconv.Itoa(h.base) + "\n" }
+func (h retryBackoff) start() string { return "backoff=" + strconv.Itoa(h.base) + "\n" }
 
-func (h hold) again() string {
+func (h retryBackoff) again() string {
 	return `jitter=$(awk -v seed=$$ -v n="$` + h.counter + `" -v spread=` + strconv.Itoa(h.spread) + ` 'BEGIN{srand(seed+n);print int(rand()*spread)}' 2>/dev/null || echo 0)
 [ -n "$jitter" ] || jitter=0
 sleep $((backoff + jitter))
@@ -157,7 +157,7 @@ func (h *Host) installEngine(ctx context.Context, progress edge.Progress) error 
 				progress.Detail(line)
 			}
 		}
-		if err := h.pause(ctx, engineInstallHold.after(try)); err != nil {
+		if err := h.pause(ctx, engineInstallBackoff.after(try)); err != nil {
 			return err
 		}
 	}
@@ -189,8 +189,8 @@ type Engine struct {
 }
 
 func engineProbe() string {
-	return `held=''
-case "$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null)" in masked*) held=` + string(engineMasked) + ` ;; esac
+	return `kind=''
+case "$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null)" in masked*) kind=` + string(engineMasked) + ` ;; esac
 version=''
 if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
 if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present
@@ -201,18 +201,18 @@ fi
 if [ -n "$engine" ]; then
 ` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner),
 		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
-if [ -n "$held" ]; then :
-elif [ "$engine" = present ]; then held=` + string(engineStandard) + `
-elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then held=` + string(engineSnap) + `
-elif pgrep -x rootlesskit >/dev/null 2>&1; then held=` + string(engineRootless) + `
-elif pgrep -x ` + quoted(dockerDaemon) + ` >/dev/null 2>&1; then held=` + string(engineUnserved) + `
+if [ -n "$kind" ]; then :
+elif [ "$engine" = present ]; then kind=` + string(engineStandard) + `
+elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then kind=` + string(engineSnap) + `
+elif pgrep -x rootlesskit >/dev/null 2>&1; then kind=` + string(engineRootless) + `
+elif pgrep -x ` + quoted(dockerDaemon) + ` >/dev/null 2>&1; then kind=` + string(engineUnserved) + `
 fi
 version=$(timeout 10 ` + quoted(dockerEngine) + ` version --format '{{.Server.Version}}' 2>/dev/null) || version=''
 [ -n "$version" ] || version=$(` + quoted(dockerDaemon) + ` --version 2>/dev/null) || version=''
 fi
 fi
-if [ -n "$held" ]; then
-` + reports(quoted(engineFactsRow), quoted(dockerEngine), "0", `"$held"`, `"$version"`) + `
+if [ -n "$kind" ]; then
+` + reports(quoted(engineFactsRow), quoted(dockerEngine), "0", `"$kind"`, `"$version"`) + `
 fi`
 }
 
@@ -225,8 +225,8 @@ var engineFloor = strconv.Itoa(engineFloorMajor) + "." + strconv.Itoa(engineFloo
 
 func (r Reading) runnableEngine(named string) error {
 	command := provider.BootstrapCommand(r.Class)
-	held := r.Engine
-	switch held.Kind {
+	current := r.Engine
+	switch current.Kind {
 	case "":
 		return nil
 	case engineMasked:
@@ -237,7 +237,7 @@ func (r Reading) runnableEngine(named string) error {
 	case engineSnap:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"docker on %s is the snap package, which ocel does not run on\n"+
-				"Replace it with docker %s or later from docker's own packages; its containers do not carry over",
+				"Replace it with docker %s or later from docker's own packages; its containers do not move over",
 			named, engineFloor)
 	case engineRootless:
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -250,7 +250,7 @@ func (r Reading) runnableEngine(named string) error {
 				"Install docker %s or later as the system daemon and run `%s`",
 			named, dockerUnit, engineFloor, command)
 	}
-	major, minor, read := held.release()
+	major, minor, read := current.release()
 	switch {
 	case !read:
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -261,7 +261,7 @@ func (r Reading) runnableEngine(named string) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"docker %s on %s is older than %s, the oldest ocel runs on\n"+
 				"Upgrade docker to %s or later and run `%s`",
-			held.Version, named, engineFloor, engineFloor, command)
+			current.Version, named, engineFloor, engineFloor, command)
 	}
 	return nil
 }

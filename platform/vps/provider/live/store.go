@@ -69,7 +69,7 @@ func (r Records) List(_ context.Context, under records.Name) ([]records.Record, 
 		return nil, err
 	}
 	dir := RecordsDir(r.Root, class)
-	var held []records.Record
+	var found []records.Record
 	err = filepath.WalkDir(filepath.Join(dir, encoded), func(path string, entry fs.DirEntry, err error) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
@@ -96,13 +96,13 @@ func (r Records) List(_ context.Context, under records.Name) ([]records.Record, 
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		held = append(held, records.Record{Name: name, Bytes: body, Revision: revision})
+		found = append(found, records.Record{Name: name, Bytes: body, Revision: revision})
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return held, nil
+	return found, nil
 }
 
 func (Records) Write(context.Context, records.Record) (records.Revision, error) {
@@ -120,7 +120,7 @@ func (Records) Remove(context.Context, records.Name, records.Revision) error {
 func row(raw string) (records.Revision, []byte, error) {
 	revision, encoded, split := strings.Cut(strings.TrimRight(raw, "\n"), "\n")
 	if !split || revision == "" {
-		return "", nil, errors.New("the record on disk carries no revision line")
+		return "", nil, errors.New("the record on disk has no revision line")
 	}
 	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
 	if err != nil {

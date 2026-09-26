@@ -184,7 +184,7 @@ func liveDigest(t *testing.T, target images.Registry, coordinate string) string 
 	return digest
 }
 
-func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
+func TestLiveTheMachinePullsTheImageAndIsLeftWithNoCredential(t *testing.T) {
 	vm := liveMachine(t)
 	bootstrapped(t, vm, edge.ClassProduction)
 	_, _ = imported(t)
@@ -211,10 +211,10 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 
 	rows, err := plan.Rows(ctx)
 	if err != nil {
-		t.Fatalf("Rows() over a machine holding nothing = %v", err)
+		t.Fatalf("Rows() over a machine that has nothing = %v", err)
 	}
 	if len(rows) != 1 || rows[0].Action != provider.ActionCreate {
-		t.Fatalf("the plan shows %v before anything carried the image, want one %q row", rows, provider.ActionCreate)
+		t.Fatalf("the plan shows %v before anything moved the image, want one %q row", rows, provider.ActionCreate)
 	}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("PushMissing() through a registry the machine can reach = %v", err)
@@ -222,30 +222,30 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 
 	named := strings.TrimSpace(vm.sshAs(t, deployLogin, "docker image ls --format '{{.Repository}}:{{.Tag}}' "+coordinate))
 	if named != coordinate {
-		t.Errorf("the machine's daemon names the pulled image %q, want %q: release, rollback and retention pin that coordinate whichever path carried it",
+		t.Errorf("the machine's daemon names the pulled image %q, want %q: release, rollback and retention pin that coordinate whichever path moved it",
 			named, coordinate)
 	}
 
 	for _, home := range []string{"/home/" + deployLogin, "/root"} {
 		if _, err := vm.attempt(vm.user, "sudo test ! -e "+home+"/.docker/config.json"); err != nil {
-			t.Errorf("%s/.docker/config.json stands after the pull, so the registry credential is resident on the machine", home)
+			t.Errorf("%s/.docker/config.json still exists after the pull, so the registry credential is resident on the machine", home)
 		}
 	}
-	held, err := vm.feeding(vm.user, target.Password+"\n", "sudo grep -rlF -f - /tmp /home /root /var/log 2>/dev/null")
-	if strings.TrimSpace(held) != "" {
-		t.Errorf("the registry password is written into %q on the machine", strings.TrimSpace(held))
+	found, err := vm.feeding(vm.user, target.Password+"\n", "sudo grep -rlF -f - /tmp /home /root /var/log 2>/dev/null")
+	if strings.TrimSpace(found) != "" {
+		t.Errorf("the registry password is written into %q on the machine", strings.TrimSpace(found))
 	} else if err == nil {
 		t.Error("grep found the registry password somewhere on the machine and named nothing")
 	}
 
 	after, err := plan.Rows(ctx)
 	if err != nil {
-		t.Fatalf("Rows() over a machine that holds the digest = %v", err)
+		t.Fatalf("Rows() over a machine that has the digest = %v", err)
 	}
 	if len(after) != 1 || after[0].Action != provider.ActionKeep {
 		t.Errorf("the plan shows %v for an image the machine already pulled, want one %q row", after, provider.ActionKeep)
 	}
 	if err := plan.PushMissing(ctx, nil); err != nil {
-		t.Fatalf("a second Ship over a machine that already holds the digest = %v", err)
+		t.Fatalf("a second Ship over a machine that already has the digest = %v", err)
 	}
 }

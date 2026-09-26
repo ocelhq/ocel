@@ -22,9 +22,8 @@ func (*Grouped) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Grouped) Reload(context.Context) error { return nil }
 
-func (*Grouped) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (*Grouped) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (*Grouped) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

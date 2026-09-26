@@ -31,11 +31,11 @@ func systemLookup(ctx context.Context, hostname string) ([]netip.Addr, error) {
 }
 
 func systemReach(ctx context.Context, address string) error {
-	held, err := (&net.Dialer{Timeout: reachTimeout}).DialContext(ctx, "tcp", address)
+	conn, err := (&net.Dialer{Timeout: reachTimeout}).DialContext(ctx, "tcp", address)
 	if err != nil {
 		return err
 	}
-	return held.Close()
+	return conn.Close()
 }
 
 func (p *Provider) lookup() Lookup {

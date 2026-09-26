@@ -45,27 +45,27 @@ func over(machine *box) *vps.Provider {
 	)
 }
 
-func TestStandingAnAppUpEndsAtARunningLabelledContainerAndFlipsNothing(t *testing.T) {
+func TestStartingAnAppEndsAtARunningLabelledContainerAndFlipsNothing(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	standing, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if len(standing) != 1 {
-		t.Fatalf("ProvisionContainers() stood up %v, want the one app the spec carries", standing)
+	if len(started) != 1 {
+		t.Fatalf("ProvisionContainers() started %v, want the one app the spec names", started)
 	}
-	held := standing[0]
-	if held.Name != "web" {
-		t.Errorf("the container is recorded under %q, want the app's own name", held.Name)
+	container := started[0]
+	if container.Name != "web" {
+		t.Errorf("the container is recorded under %q, want the app's own name", container.Name)
 	}
-	if held.Physical == "" || !strings.Contains(held.URL, held.Physical+":"+appbuild.InjectedPortText) {
-		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", held.URL)
+	if container.Physical == "" || !strings.Contains(container.URL, container.Physical+":"+appbuild.InjectedPortText) {
+		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", container.URL)
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if strings.Contains(joined, host.SwitchboardMounted) || strings.Contains(joined, host.ProxyConfig) {
-		t.Errorf("standing a container up reached the proxy:\n%s\nreleases end at a running container, and the flip is a separate call", joined)
+		t.Errorf("starting a container reached the proxy:\n%s\nreleases end at a running container, and the flip is a separate call", joined)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestTwoReleasesOfOneAppNeverShareAContainerName(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first[0].Physical == second[0].Physical {
-		t.Errorf("two releases stood up as %q, and the drain counts in-flight requests per dial address", first[0].Physical)
+		t.Errorf("two releases started as %q, and the drain counts in-flight requests per dial address", first[0].Physical)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestAnAppWithNoHealthPathIsRefusedRatherThanGivenOneThisProviderChose(t *te
 	pathless.HealthCheckPath = ""
 	_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, pathless), nil)
 	if err == nil {
-		t.Fatal("an app carrying no health path stood up, and the gate would then probe a path the user was never shown")
+		t.Fatal("an app with no health path started, and the gate would then probe a path the user was never shown")
 	}
 	if !strings.Contains(err.Error(), "health") {
 		t.Errorf("the refusal reads %q and never names what is missing", err)
@@ -112,6 +112,6 @@ func TestARemovedStackTakesItsContainersWithIt(t *testing.T) {
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if !strings.Contains(joined, "docker rm") || !strings.Contains(joined, "shop-prod-web-01234567") {
-		t.Errorf("a destroy ran %q and left the container standing", joined)
+		t.Errorf("a destroy ran %q and left the container running", joined)
 	}
 }

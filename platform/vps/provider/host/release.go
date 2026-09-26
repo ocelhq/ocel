@@ -30,7 +30,7 @@ type Release struct {
 	Apps          []AppRelease
 	DeployTimeout time.Duration
 	DrainTimeout  time.Duration
-	Holding       func(ctx context.Context) error
+	StillActive   func(ctx context.Context) error
 }
 
 type AppRelease struct {
@@ -103,14 +103,14 @@ func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress)
 
 	var cut cutover
 	var overtaken error
-	shaped, err := h.composeRouting(ctx, func(standing RoutingTable) (RoutingTable, error) {
-		if rel.Holding != nil {
-			if overtaken = rel.Holding(ctx); overtaken != nil {
-				return standing, overtaken
+	shaped, err := h.composeRouting(ctx, func(current RoutingTable) (RoutingTable, error) {
+		if rel.StillActive != nil {
+			if overtaken = rel.StillActive(ctx); overtaken != nil {
+				return current, overtaken
 			}
 		}
-		cut = cutting(rel, standing)
-		return cut.routed(standing), nil
+		cut = cutting(rel, current)
+		return cut.routed(current), nil
 	})
 	if err != nil {
 		if overtaken != nil {
@@ -136,14 +136,14 @@ func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress)
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
 	tellDrain(progress, flipped.Stdout)
-	return h.settle(ctx, rel, cut, progress, elevation)
+	return h.stopRetired(ctx, rel, cut, progress, elevation)
 }
 
-func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress edge.Progress, elevation string) error {
+func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progress edge.Progress, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
-	idle, err := h.unheld(ctx, cut.retiring, elevation)
+	idle, err := h.idleUpstreams(ctx, cut.retiring, elevation)
 	if err != nil {
 		for _, retiree := range cut.retiring {
 			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), err))
@@ -157,9 +157,9 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress ed
 			refused[retiree] = err
 		}
 	}
-	settled := h.stopped(ctx, unstopped, elevation)
+	confirmed := h.stopped(ctx, unstopped, elevation)
 	for _, retiree := range unstopped {
-		if !slices.Contains(settled, retiree) {
+		if !slices.Contains(confirmed, retiree) {
 			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), refused[retiree]))
 		}
 	}
@@ -171,11 +171,11 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress ed
 		rel.apps(), h.named(), rel.names(), strings.Join(failed, "\n"))
 }
 
-func (h *Host) unheld(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
+func (h *Host) idleUpstreams(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
 	if len(upstreams) == 0 {
 		return nil, nil
 	}
-	said, err := h.ran(ctx, "ask the proxy whether a route or a drain still holds "+listed(upstreams, containerOf),
+	said, err := h.ran(ctx, "ask the proxy whether a route or a drain still uses "+listed(upstreams, containerOf),
 		words(idleCommand(upstreams)), nil, elevation)
 	if err != nil {
 		return nil, err
@@ -227,15 +227,15 @@ type cutover struct {
 	retiring []string
 }
 
-func cutting(rel Release, standing RoutingTable) cutover {
+func cutting(rel Release, table RoutingTable) cutover {
 	cut := cutover{rel: rel}
 	for _, app := range rel.Apps {
-		at := slices.IndexFunc(standing.Routes, func(route AppRoute) bool { return route.RouteKey == app.RouteKey })
+		at := slices.IndexFunc(table.Routes, func(route AppRoute) bool { return route.RouteKey == app.RouteKey })
 		if at < 0 {
 			continue
 		}
-		cut.prior = append(cut.prior, standing.Routes[at])
-		if upstream := standing.Routes[at].Upstream; upstream != app.Target {
+		cut.prior = append(cut.prior, table.Routes[at])
+		if upstream := table.Routes[at].Upstream; upstream != app.Target {
 			cut.retiring = append(cut.retiring, upstream)
 		}
 	}
@@ -246,27 +246,27 @@ func cutting(rel Release, standing RoutingTable) cutover {
 
 func (c cutover) composed() bool { return len(c.rel.Apps) > 0 }
 
-func (c cutover) routed(standing RoutingTable) RoutingTable {
-	standing.Grace = c.rel.DrainTimeout
+func (c cutover) routed(table RoutingTable) RoutingTable {
+	table.Grace = c.rel.DrainTimeout
 	for _, app := range c.rel.Apps {
-		standing.Routes = Routing(standing.Routes, app.route())
+		table.Routes = Routing(table.Routes, app.route())
 	}
-	return standing
+	return table
 }
 
-func (c cutover) back(standing RoutingTable) (RoutingTable, error) {
+func (c cutover) back(table RoutingTable) (RoutingTable, error) {
 	for _, app := range c.rel.Apps {
 		ours := func(route AppRoute) bool { return route.RouteKey == app.RouteKey }
-		at := slices.IndexFunc(standing.Routes, ours)
-		if at < 0 || standing.Routes[at].Upstream != app.Target {
+		at := slices.IndexFunc(table.Routes, ours)
+		if at < 0 || table.Routes[at].Upstream != app.Target {
 			continue
 		}
-		standing.Routes = Unrouting(standing.Routes, ours)
+		table.Routes = Unrouting(table.Routes, ours)
 		if was := slices.IndexFunc(c.prior, ours); was >= 0 {
-			standing.Routes = append(standing.Routes, c.prior[was])
+			table.Routes = append(table.Routes, c.prior[was])
 		}
 	}
-	return standing, nil
+	return table, nil
 }
 
 func tellDrain(progress edge.Progress, said string) {
@@ -277,7 +277,7 @@ func tellDrain(progress edge.Progress, said string) {
 		fields := strings.Fields(line)
 		switch {
 		case len(fields) == 3 && fields[0] == switchboard.DrainExpired:
-			progress.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s",
+			progress.Detail(fmt.Sprintf("%s still had %s request(s) in flight when the drain window closed: %s",
 				fields[1], fields[2], drainCeiling))
 		case len(fields) == 2 && fields[0] == switchboard.Drained:
 			progress.Detail(containerOf(fields[1]) + " reported nothing in flight")
@@ -306,19 +306,19 @@ func routingLocked(mode string) string {
 }
 
 func pairReading() string {
-	held := func(path string) string {
+	printed := func(path string) string {
 		at := quoted(path)
 		return "if [ -f " + at + " ]; then printf '+'; base64 < " + at + " | tr -d '\\n'; fi; printf '\\n'"
 	}
 	return strings.Join([]string{
 		"set -e",
 		strings.TrimSuffix(routingLocked("-s"), "\n"),
-		held(live.RoutingTable),
-		held(ProxyConfig),
+		printed(live.RoutingTable),
+		printed(ProxyConfig),
 	}, "\n")
 }
 
-func (h *Host) pairHeld(ctx context.Context) (routingPair, error) {
+func (h *Host) currentPair(ctx context.Context) (routingPair, error) {
 	said, err := h.reach(ctx, "read "+live.RoutingTable+" and "+ProxyConfig, pairReading(), nil)
 	if err != nil {
 		return routingPair{}, err
@@ -330,8 +330,8 @@ func (h *Host) pairHeld(ctx context.Context) (routingPair, error) {
 	}
 	var read [2][]byte
 	for at, line := range lines[:2] {
-		encoded, held := strings.CutPrefix(line, "+")
-		if !held {
+		encoded, present := strings.CutPrefix(line, "+")
+		if !present {
 			continue
 		}
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
@@ -344,16 +344,16 @@ func (h *Host) pairHeld(ctx context.Context) (routingPair, error) {
 	return routingPair{table: read[0], config: read[1]}, nil
 }
 
-func (h *Host) tableHeld(ctx context.Context) (routingPair, error) {
-	held, err := h.pairHeld(ctx)
+func (h *Host) currentTable(ctx context.Context) (routingPair, error) {
+	pair, err := h.currentPair(ctx)
 	if err != nil {
 		return routingPair{}, err
 	}
-	if held.table == nil {
+	if pair.table == nil {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s is missing on %s\nRun `ocel bootstrap` for this box's class", live.RoutingTable, h.named())
 	}
-	return held, nil
+	return pair, nil
 }
 
 const routingRewrites = 5
@@ -370,20 +370,20 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 	rewrites := 0
 	at := destination(h.front)
 	for {
-		held, err := h.tableHeld(ctx)
+		pair, err := h.currentTable(ctx)
 		if err != nil {
 			return composed{}, err
 		}
-		standing, err := ReadRoutingTable(held.table)
+		table, err := ReadRoutingTable(pair.table)
 		if err != nil {
 			return composed{}, err
 		}
-		shaped := composed{restoring: held, written: held.digest()}
-		next, err := compose(standing)
+		shaped := composed{restoring: pair, written: pair.digest()}
+		next, err := compose(table)
 		if err != nil {
 			return shaped, err
 		}
-		before, err := WriteRoutingTable(standing)
+		before, err := WriteRoutingTable(table)
 		if err != nil {
 			return shaped, err
 		}
@@ -391,11 +391,11 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
-		rendered, err := RenderProxyConfig(h.front, standing)
+		rendered, err := RenderProxyConfig(h.front, table)
 		if err != nil {
 			return shaped, err
 		}
-		fresh := bytes.Equal(held.config, rendered)
+		fresh := bytes.Equal(pair.config, rendered)
 		if at != "" {
 			sum, err := h.destinationSum(ctx, at)
 			if err != nil {
@@ -408,14 +408,14 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		}
 		if bytes.Equal(before, after) && at != "" {
 			shaped.reloading = true
-			err = h.replace(ctx, held.digest(), at, rendered)
+			err = h.replace(ctx, pair.digest(), at, rendered)
 		} else {
 			var admitted []byte
 			if admitted, err = RenderProxyConfig(h.front, next); err != nil {
 				return shaped, err
 			}
 			shaped.reloading = !bytes.Equal(shaped.restoring.config, admitted) || at != "" && !fresh
-			shaped.written, shaped.failedPlace, err = h.writePair(ctx, held.digest(), routingPair{table: after, config: admitted}, shaped.reloading)
+			shaped.written, shaped.failedPlace, err = h.writePair(ctx, pair.digest(), routingPair{table: after, config: admitted}, shaped.reloading)
 			shaped.changed = true
 		}
 		rewrites++
@@ -520,8 +520,8 @@ func stagedWrite(expected tableDigest, file string) string {
 
 func comparedUnder(expected tableDigest) []string {
 	return []string{
-		`held=$(sha256sum ` + quoted(live.RoutingTable) + ` | cut -d' ' -f1)`,
-		`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
+		`current=$(sha256sum ` + quoted(live.RoutingTable) + ` | cut -d' ' -f1)`,
+		`if [ "$current" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$current" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
 	}
 }
 
@@ -644,7 +644,7 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 		code = refusal.CodeBusy
 	} else if restored, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(code,
-			"release %s onto %s: could not write %s: %v\n%s not restored: %v\n%s left standing",
+			"release %s onto %s: could not write %s: %v\n%s not restored: %v\n%s left running",
 			rel.apps(), h.named(), written, why, written, err, rel.names())
 	} else if restored {
 		rolled = written + " restored"
@@ -669,7 +669,7 @@ func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome,
 	}
 	if _, err := h.putBack(ctx, cut, elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"release %s onto %s: the flip helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left standing: %v",
+			"release %s onto %s: the flip helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left running: %v",
 			rel.apps(), h.named(), outcome, verdict, rel.names(), err)
 	}
 	return Unserved{refusal.Refuse(refusal.CodeNotReady,
@@ -695,9 +695,9 @@ func (h *Host) discard(ctx context.Context, rel Release, elevation string) strin
 	for _, app := range rel.Apps {
 		targets = append(targets, app.Target)
 	}
-	idle, err := h.unheld(ctx, targets, elevation)
+	idle, err := h.idleUpstreams(ctx, targets, elevation)
 	if err != nil {
-		return fmt.Sprintf("\n%s left standing: %v", rel.names(), err)
+		return fmt.Sprintf("\n%s left running: %v", rel.names(), err)
 	}
 	var left strings.Builder
 	for _, app := range rel.Apps {
@@ -705,7 +705,7 @@ func (h *Host) discard(ctx context.Context, rel Release, elevation string) strin
 			continue
 		}
 		if err := h.RemoveContainer(ctx, app.name()); err != nil {
-			fmt.Fprintf(&left, "\n%s left standing: %v", app.name(), err)
+			fmt.Fprintf(&left, "\n%s left running: %v", app.name(), err)
 			continue
 		}
 		fmt.Fprintf(&left, "\n%s removed", app.name())

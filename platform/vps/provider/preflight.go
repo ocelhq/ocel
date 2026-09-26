@@ -21,7 +21,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 	return refusing([]error{
 		p.host.CheckDisk(ctx, repositories(pre.Deploy)),
 		p.host.CheckProxy(ctx),
-		p.host.ServingPortsHeld(ctx),
+		p.host.ProxyOwnsServingPorts(ctx),
 	})
 }
 

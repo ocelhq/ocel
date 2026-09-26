@@ -59,10 +59,10 @@ flock -x 9
 fileof() { printf '%s/%s.rec' "$dir" "$1"; }
 
 readrev() {
-	held=
+	current=
 	[ -f "$1" ] || return 0
-	held=$(head -n1 "$1")
-	[ -n "$held" ] || abort "$1 names no revision"
+	current=$(head -n1 "$1")
+	[ -n "$current" ] || abort "$1 names no revision"
 }
 
 mint() {
@@ -112,7 +112,7 @@ write)
 	f=$(fileof "$1")
 	ours "$f"
 	readrev "$f"
-	[ "$held" = "$2" ] || exit 4
+	[ "$current" = "$2" ] || exit 4
 	body=$(cat)
 	checked "$body"
 	mint
@@ -127,11 +127,11 @@ pair)
 	ours "$first"
 	ours "$second"
 	readrev "$first"
-	[ "$held" = "$2" ] || exit 4
+	[ "$current" = "$2" ] || exit 4
 	readrev "$second"
-	[ "$held" = "$4" ] || exit 4
-	IFS= read -r one || abort "a pair carried one body, want two"
-	IFS= read -r two || abort "a pair carried one body, want two"
+	[ "$current" = "$4" ] || exit 4
+	IFS= read -r one || abort "a pair sent one body, want two"
+	IFS= read -r two || abort "a pair sent one body, want two"
 	checked "$one"
 	checked "$two"
 	mint
@@ -151,7 +151,7 @@ remove)
 	ours "$f"
 	[ -f "$f" ] || exit 3
 	readrev "$f"
-	[ "$held" = "$2" ] || exit 4
+	[ "$current" = "$2" ] || exit 4
 	rm -f "$f"
 	prune "$f"
 	echo removed

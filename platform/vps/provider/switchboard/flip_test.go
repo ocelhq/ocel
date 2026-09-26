@@ -35,32 +35,32 @@ func (d *drains) lines() []string {
 	return slices.Clone(d.told)
 }
 
-type holding struct {
+type stallingBackend struct {
 	address string
 	arrived chan struct{}
 	release chan struct{}
 }
 
-func holdingBackend(t *testing.T, name string) holding {
+func aStallingBackend(t *testing.T, name string) stallingBackend {
 	t.Helper()
-	held := holding{arrived: make(chan struct{}, 16), release: make(chan struct{})}
+	stalling := stallingBackend{arrived: make(chan struct{}, 16), release: make(chan struct{})}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/held" {
-			held.arrived <- struct{}{}
-			<-held.release
+		if r.URL.Path == "/stall" {
+			stalling.arrived <- struct{}{}
+			<-stalling.release
 		}
 		_, _ = io.WriteString(w, name)
 	}))
 	t.Cleanup(server.Close)
 	t.Cleanup(func() {
 		select {
-		case <-held.release:
+		case <-stalling.release:
 		default:
-			close(held.release)
+			close(stalling.release)
 		}
 	})
-	held.address = strings.TrimPrefix(server.URL, "http://")
-	return held
+	stalling.address = strings.TrimPrefix(server.URL, "http://")
+	return stalling
 }
 
 func asking(at, host, path string) {
@@ -80,7 +80,7 @@ func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByT
 
 	for _, keepAlive := range []bool{true, false} {
 		blue, green := backend(t, "blue"), backend(t, "green")
-		board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+		board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 		flipped := tableAt(t, routing(t, map[string]string{"shop.example.com": green}))
 
 		client := &http.Client{Transport: &http.Transport{DisableKeepAlives: !keepAlive, MaxIdleConnsPerHost: 16}}
@@ -147,11 +147,11 @@ func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByT
 func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *testing.T) {
 	t.Parallel()
 
-	blue, green := holdingBackend(t, "blue"), backend(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue.address}))
+	blue, green := aStallingBackend(t, "blue"), backend(t, "green")
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue.address}))
 
-	held := make(chan answered, 1)
-	go func() { held <- ask(t, http.DefaultClient, at, "shop.example.com", "/held") }()
+	stalled := make(chan answered, 1)
+	go func() { stalled <- ask(t, http.DefaultClient, at, "shop.example.com", "/stall") }()
 	<-blue.arrived
 
 	var told drains
@@ -169,8 +169,8 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	switchedTo(t, at, "shop.example.com", "green")
 	released.Store(true)
 	close(blue.release)
-	if said := <-held; said.status != http.StatusOK || said.body != "blue" {
-		t.Errorf("the held request answered %d %q, want the retiree's own 200 once it returned", said.status, said.body)
+	if said := <-stalled; said.status != http.StatusOK || said.body != "blue" {
+		t.Errorf("the stalled request answered %d %q, want the retiree's own 200 once it returned", said.status, said.body)
 	}
 	select {
 	case err := <-flipped:
@@ -190,13 +190,13 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	}
 }
 
-func TestADrainWhoseCeilingPassesFirstNamesTheRetireeAndWhatItStillHeld(t *testing.T) {
+func TestADrainWhoseCeilingPassesFirstNamesTheRetireeAndWhatItStillHadInFlight(t *testing.T) {
 	t.Parallel()
 
-	blue, green := holdingBackend(t, "blue"), backend(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue.address}))
+	blue, green := aStallingBackend(t, "blue"), backend(t, "green")
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue.address}))
 	for range 2 {
-		go asking(at, "shop.example.com", "/held")
+		go asking(at, "shop.example.com", "/stall")
 		<-blue.arrived
 	}
 
@@ -217,7 +217,7 @@ func TestAFlipThatCannotReadItsTableRetiresNothingAndSwitchesNothing(t *testing.
 	t.Parallel()
 
 	blue := backend(t, "blue")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 
 	var told drains
 	if err := board.Flip(t.Context(), tableAt(t, []byte(`{"grace":"soon"}`)), []string{blue}, time.Second, told.tell); err == nil {
@@ -236,7 +236,7 @@ func TestAFlipThatCannotReadItsTableRetiresNothingAndSwitchesNothing(t *testing.
 		t.Errorf("Idle(%s) = %v, %v after refused flips, want it still routed", blue, idle, err)
 	}
 	if idle, err := board.Idle([]string{"blue"}); err == nil {
-		t.Errorf("Idle(blue) = %v, want it refused: an address with no port keys no route and no drain, so it would read as idle whatever holds it", idle)
+		t.Errorf("Idle(blue) = %v, want it refused: an address with no port keys no route and no drain, so it would read as idle whatever listens on it", idle)
 	}
 }
 
@@ -257,20 +257,20 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	t.Cleanup(retiree.Close)
 	t.Cleanup(func() { close(release) })
 	blue, green := strings.TrimPrefix(retiree.URL, "http://"), backend(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 
-	held := make(chan answered, 1)
+	stalled := make(chan answered, 1)
 	go func() {
-		request, _ := http.NewRequest(http.MethodGet, "http://"+at+"/held", nil)
+		request, _ := http.NewRequest(http.MethodGet, "http://"+at+"/stall", nil)
 		request.Host = "shop.example.com"
 		said, err := http.DefaultClient.Do(request)
 		if err != nil {
-			held <- answered{}
+			stalled <- answered{}
 			return
 		}
 		defer said.Body.Close()
 		body, _ := io.ReadAll(said.Body)
-		held <- answered{status: said.StatusCode, body: string(body)}
+		stalled <- answered{status: said.StatusCode, body: string(body)}
 	}()
 	request, err := http.NewRequest(http.MethodGet, "http://"+at+"/events", nil)
 	if err != nil {
@@ -297,12 +297,12 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 		t.Errorf("the flip told %v, want %s %s 2", lines, switchboard.DrainExpired, blue)
 	}
 	select {
-	case said := <-held:
+	case said := <-stalled:
 		if said.status == http.StatusOK && said.body == "blue" {
-			t.Errorf("the request held across the ceiling answered the retiree's own 200, want it cut")
+			t.Errorf("the request left open across the ceiling answered the retiree's own 200, want it cut")
 		}
 	case <-time.After(5 * time.Second):
-		t.Error("the request held across the ceiling is still open, want it cut once the drain expired")
+		t.Error("the request left open across the ceiling is still open, want it cut once the drain expired")
 	}
 	rest := make(chan error, 1)
 	go func() {
@@ -312,16 +312,16 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	select {
 	case <-rest:
 	case <-time.After(5 * time.Second):
-		t.Error("the stream held across the ceiling is still open, want it cut once the drain expired")
+		t.Error("the stream left open across the ceiling is still open, want it cut once the drain expired")
 	}
 }
 
 func TestAFlipCutShortAfterItsFirstDrainLineEndsItsAnswerIncomplete(t *testing.T) {
 	t.Parallel()
 
-	blue, green := holdingBackend(t, "blue"), backend(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue.address}))
-	go asking(at, "shop.example.com", "/held")
+	blue, green := aStallingBackend(t, "blue"), backend(t, "green")
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue.address}))
+	go asking(at, "shop.example.com", "/stall")
 	<-blue.arrived
 
 	stopping, stop := context.WithCancel(t.Context())
@@ -370,14 +370,14 @@ func TestARetireeKeepsNoConnectionFromTheSwitchboardOnceItHasDrained(t *testing.
 	retiree.Start()
 	t.Cleanup(retiree.Close)
 	blue, green := strings.TrimPrefix(retiree.URL, "http://"), backend(t, "green")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 	for range 3 {
 		if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.body != "blue" {
 			t.Fatalf("shop.example.com answered %q before the flip, want blue", said.body)
 		}
 	}
 	if open.Load() == 0 {
-		t.Fatal("the switchboard holds no connection to blue after asking it, want one kept alive for the next request")
+		t.Fatal("the switchboard has no connection open to blue after asking it, want one kept alive for the next request")
 	}
 
 	var told drains
@@ -388,7 +388,7 @@ func TestARetireeKeepsNoConnectionFromTheSwitchboardOnceItHasDrained(t *testing.
 		select {
 		case <-closed:
 		case <-time.After(5 * time.Second):
-			t.Fatalf("the switchboard still holds %d connections to %s after it drained, want none left to keep the retired container open", open.Load(), blue)
+			t.Fatalf("the switchboard still has %d connections open to %s after it drained, want none left to keep the retired container open", open.Load(), blue)
 		}
 	}
 }

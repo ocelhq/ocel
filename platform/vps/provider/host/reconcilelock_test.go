@@ -72,8 +72,8 @@ func TestAReconcileWaitsForTheLockAPromoteOfTheSameAppHoldsAndForNoOtherApps(t *
 	case <-time.After(5 * time.Second):
 		t.Fatal("web's reconcile never finished after the promote released its lock")
 	}
-	if held := window(t, root, "shop/web", "production"); !slices.Equal(held, []string{"ocel/shop/web:one"}) {
-		t.Errorf("the window holds %v after the promote landed, want the one ref it wrote", held)
+	if refs := window(t, root, "shop/web", "production"); !slices.Equal(refs, []string{"ocel/shop/web:one"}) {
+		t.Errorf("the window has %v after the promote landed, want the one ref it wrote", refs)
 	}
 	if log := dock.log(t); !strings.Contains(log, "rmi ocel/shop/web:gone") || strings.Contains(log, "rmi ocel/shop/web:one") {
 		t.Errorf("the sweep ran\n%s\nwant ocel/shop/web:gone removed and the ref the promote landed kept: a reconcile that waits for the lock reads the window the promote wrote", log)

@@ -57,15 +57,15 @@ func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
 		helperWrite(t, dir, name, "", "body of "+name)
 	}
 	store := live.Records{Root: dir}
-	held, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"})
+	record, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"})
 	if err != nil {
 		t.Fatalf("Read() of what the helper wrote = %v", err)
 	}
-	if string(held.Bytes) != "body of "+names[0] {
-		t.Errorf("Read() = %q, want what the helper wrote", held.Bytes)
+	if string(record.Bytes) != "body of "+names[0] {
+		t.Errorf("Read() = %q, want what the helper wrote", record.Bytes)
 	}
-	if revision, _ := helperRead(t, dir, names[0]); string(held.Revision) != revision {
-		t.Errorf("Read() carries revision %q, and the helper says %q", held.Revision, revision)
+	if revision, _ := helperRead(t, dir, names[0]); string(record.Revision) != revision {
+		t.Errorf("Read() returns revision %q, and the helper says %q", record.Revision, revision)
 	}
 	listed, err := store.List(context.Background(), records.Name{"values", "shop", "production", "cells"})
 	if err != nil || len(listed) != 2 {

@@ -61,7 +61,7 @@ func (e signedStore) at(key, query string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (e signedStore) held() credential {
+func (e signedStore) asCredential() credential {
 	return credential{AccessKeyID: e.AccessKeyID, SecretKey: e.SecretKey, Region: e.Region}
 }
 
@@ -79,7 +79,7 @@ func (e signedStore) call(name, method, key, query string, headers map[string]st
 		req.Header.Set(header, value)
 	}
 	payload := sha256.Sum256(body)
-	signRequest(req, e.held(), hex.EncodeToString(payload[:]), now)
+	signRequest(req, e.asCredential(), hex.EncodeToString(payload[:]), now)
 
 	sent := map[string]string{}
 	for _, header := range sortedHeaderNames(req.Header) {
@@ -97,7 +97,7 @@ func probeScript(calls []probeCall) string {
 		"tmp=$(mktemp -d)\n" +
 		"trap 'rm -rf \"$tmp\"' EXIT\n")
 	for i, call := range calls {
-		held := "\"$tmp/" + strconv.Itoa(i) + "\""
+		output := "\"$tmp/" + strconv.Itoa(i) + "\""
 		argv := []string{"curl", "--silent", "--show-error", "--location",
 			"--write-out", "%{http_code}", "--request", call.method}
 		for _, header := range sortedHeaderNames(http.Header(headerOf(call.headers))) {
@@ -116,19 +116,19 @@ func probeScript(calls []probeCall) string {
 			fed = "printf '%s' " + quoted(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
 		}
 		written.WriteString("answered=$(" + fed + words(argv) +
-			" --output " + held + " 2>/dev/null || printf 'no-answer')\n")
+			" --output " + output + " 2>/dev/null || printf 'no-answer')\n")
 		written.WriteString("printf '%s=%s\\n' " + quoted(call.name) + " \"$answered\"\n")
 		if call.capture {
 			written.WriteString("printf '%s.body=%s\\n' " + quoted(call.name) +
-				" \"$(base64 " + held + " 2>/dev/null | tr -d '\\n')\"\n")
+				" \"$(base64 " + output + " 2>/dev/null | tr -d '\\n')\"\n")
 		}
 	}
 	return written.String()
 }
 
-func headerOf(held map[string]string) map[string][]string {
-	out := make(map[string][]string, len(held))
-	for name, value := range held {
+func headerOf(headers map[string]string) map[string][]string {
+	out := make(map[string][]string, len(headers))
+	for name, value := range headers {
 		out[name] = []string{value}
 	}
 	return out

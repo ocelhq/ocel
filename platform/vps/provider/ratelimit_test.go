@@ -96,7 +96,7 @@ func TestACeilingTheCaSaysHasResetIsNotRefusedAgain(t *testing.T) {
 	passed := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 	p := certifying(boxWhoseProxyWasRefused(refusedBy(passed)))
 	if err := certificateRefusal(t, p, "pr-9.preview.acme.com"); err != nil {
-		t.Errorf("certifying after the reset the CA named = %v: the proxy's log keeps what it said for as long as the container stands, so a refusal that never expires locks the box out of its own previews", err)
+		t.Errorf("certifying after the reset the CA named = %v: the proxy's log keeps what it said for as long as the container exists, so a refusal that never expires locks the box out of its own previews", err)
 	}
 }
 

@@ -22,9 +22,8 @@ func (Ignored) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Ignored) Reload(context.Context) error { return nil }
 
-func (Ignored) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (Ignored) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (Ignored) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

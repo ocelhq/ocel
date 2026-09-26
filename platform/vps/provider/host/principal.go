@@ -46,8 +46,8 @@ func (l login) described() []byte {
 }
 
 func principal() Item {
-	held := deployLogin()
-	return Item{Kind: KindUser, Name: held.name, Owner: held.name, Content: held.described(), Note: "deploy login"}
+	deploy := deployLogin()
+	return Item{Kind: KindUser, Name: deploy.name, Owner: deploy.name, Content: deploy.described(), Note: "deploy login"}
 }
 
 func (l login) joined(flag string) string {
@@ -77,13 +77,13 @@ func (l login) command() string {
 func (l login) survey() string {
 	membership := ""
 	if l.group != "" {
-		membership = "if id -nG " + quoted(l.name) + " 2>/dev/null | tr ' ' '\\n' | grep -qx " + quoted(l.group) + "; then held=" + quoted(l.group) + "; fi\n"
+		membership = "if id -nG " + quoted(l.name) + " 2>/dev/null | tr ' ' '\\n' | grep -qx " + quoted(l.group) + "; then member=" + quoted(l.group) + "; fi\n"
 	}
 	return `if entry=$(getent passwd ` + quoted(l.name) + ` 2>/dev/null); then found=0; else found=$?; fi
 if [ "$found" -ne 0 ] && [ "$found" -ne ` + strconv.Itoa(getentNoSuchKey) + ` ]; then
 ` + unreadable(KindUser, quoted(l.name), `"getent passwd exited $found"`) + `
 elif [ "$found" -eq 0 ]; then
-held=''
+member=''
 ` + membership + `line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
 if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + quoted("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
 password=''
@@ -91,7 +91,7 @@ if [ -n "$line" ] && [ "$(printf '%s' "$line" | cut -d: -f2)" = ` + quoted(locke
 elif [ -n "$line" ]; then password=unlocked
 fi
 if [ -n "$password" ]; then
-sum=$(printf 'shell=%s\nhome=%s\ngroup=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$held" "$password" | sha256sum | cut -d' ' -f1)
+sum=$(printf 'shell=%s\nhome=%s\ngroup=%s\npassword=%s\n' "$(printf '%s' "$entry" | cut -d: -f7)" "$(printf '%s' "$entry" | cut -d: -f6)" "$member" "$password" | sha256sum | cut -d' ' -f1)
 ` + reports(quoted(KindUser), quoted(l.name), "0", quoted(l.name), `"$sum"`) + `
 fi
 fi`
@@ -112,7 +112,7 @@ func (k Keys) named() ([]byte, error) {
 	keys := authorized(raw)
 	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"option %q names %s, which carries no public key", "deployKey", path)
+			"option %q names %s, which contains no public key", "deployKey", path)
 	}
 	return keys, nil
 }
@@ -150,16 +150,16 @@ func authorized(raw []byte) []byte {
 }
 
 func (h *Host) keys(ctx context.Context) ([]byte, error) {
-	h.holding.Lock()
-	defer h.holding.Unlock()
-	if h.held != nil {
-		return h.held, nil
+	h.keying.Lock()
+	defer h.keying.Unlock()
+	if h.keyed != nil {
+		return h.keyed, nil
 	}
 	keys, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
-	h.held = keys
+	h.keyed = keys
 	return keys, nil
 }
 

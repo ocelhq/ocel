@@ -60,7 +60,7 @@ func TestEveryPresetFillsInHowItsHostToolRunsItsProxy(t *testing.T) {
 	}
 }
 
-func TestAFieldWrittenBesideAPresetOverridesItAndTheRestStand(t *testing.T) {
+func TestAFieldWrittenBesideAPresetOverridesItAndTheRestApply(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -168,11 +168,11 @@ func TestAProxyMissingWhatItNeedsIsRefusedNamingTheField(t *testing.T) {
 			proxy:   map[string]any{"traefik": map[string]any{}},
 			mention: []string{`"proxy.traefik"`, `"directory"`, `"preset"`},
 		},
-		"a Traefik held null inside its object": {
+		"a Traefik set to null inside its object": {
 			proxy:   map[string]any{"traefik": nil},
 			mention: []string{`"proxy.traefik"`, `"directory"`, `"preset"`},
 		},
-		"a Caddy held null inside its object": {
+		"a Caddy set to null inside its object": {
 			proxy:   map[string]any{"caddy": nil},
 			mention: []string{`"proxy.caddy"`, `"directory"`, `"preset"`},
 		},

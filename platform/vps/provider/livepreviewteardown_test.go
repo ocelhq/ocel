@@ -100,7 +100,7 @@ func previewStack(t *testing.T, slug, app, pointer string) provider.StackRef {
 func (vm machine) ships(t *testing.T, pointer string) {
 	t.Helper()
 
-	if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+teardownAt(pointer)+" >/dev/null 2>&1 && echo held || echo gone")) == "held" {
+	if strings.TrimSpace(vm.ssh(t, "sudo docker image inspect "+teardownAt(pointer)+" >/dev/null 2>&1 && echo present || echo gone")) == "present" {
 		return
 	}
 	vm.feeds(t, "sudo docker build -q -t "+teardownAt(pointer)+" - >/dev/null",
@@ -130,19 +130,19 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 			HealthCheckPath: healthPath,
 		},
 	}
-	stood, err := p.Stacks().Provision(ctx, spec, nil)
+	provisioned, err := p.Stacks().Provision(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("Provision(%s) = %v", pointer, err)
 	}
-	if len(stood.Containers) != 1 {
-		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
+	if len(provisioned.Containers) != 1 {
+		t.Fatalf("Provision(%s) started %v", pointer, provisioned.Containers)
 	}
 	if err := stackrecords.Write(ctx, p.Records(), edge.ClassPreview, slug, spec.Ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),
 		Build:      build.String(),
-		Containers: stood.Containers,
+		Containers: provisioned.Containers,
 		WrittenBy:  provider.WrittenByVersion(""),
 	}); err != nil {
 		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
@@ -152,7 +152,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		Build:      build.String(),
 		Entry:      "/",
 		Image:      image,
-		Physical:   stood.Containers[0].Physical,
+		Physical:   provisioned.Containers[0].Physical,
 		HealthPath: healthPath,
 	}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", pointer, err)
@@ -178,7 +178,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	}
 	infra := provider.StackRef{Project: teardownSlug, Class: edge.ClassPreview, Name: naming.InfraStack(pointer)}
 	if err := p.Stacks().Destroy(ctx, infra, spoken); err != nil {
-		t.Fatalf("Destroy(%s) = %v: an ephemeral preview stands up no infra stack, and teardown destroys one regardless", infra.Name, err)
+		t.Fatalf("Destroy(%s) = %v: an ephemeral preview provisions no infra stack, and teardown destroys one regardless", infra.Name, err)
 	}
 	return spoken
 }
@@ -186,12 +186,12 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 func (vm machine) plants(t *testing.T, hostname string) string {
 	t.Helper()
 
-	held := host.ProxyData + "/caddy/certificates/" + liveIssuer + "/" + hostname
-	vm.ssh(t, "sudo install -d -m 700 "+quote(held))
+	dir := host.ProxyData + "/caddy/certificates/" + liveIssuer + "/" + hostname
+	vm.ssh(t, "sudo install -d -m 700 "+quote(dir))
 	for _, suffix := range []string{".crt", ".key", ".json"} {
-		vm.ssh(t, "printf %s "+quote(hostname)+" | sudo tee "+quote(held+"/"+hostname+suffix)+" >/dev/null")
+		vm.ssh(t, "printf %s "+quote(hostname)+" | sudo tee "+quote(dir+"/"+hostname+suffix)+" >/dev/null")
 	}
-	return held
+	return dir
 }
 
 func (vm machine) certificates(t *testing.T) string {
@@ -244,7 +244,7 @@ func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndKeepsItsCertificate
 		t.Fatalf("%s is not in the proxy's store, and this test needs the pair a box obtains for every preview hostname it terminates", planted)
 	}
 	if !strings.Contains(vm.teardownImages(t), teardownAt("pr-7")) {
-		t.Fatalf("the box holds no image for the preview it is serving: %q", vm.teardownImages(t))
+		t.Fatalf("the box has no image for the preview it is serving: %q", vm.teardownImages(t))
 	}
 
 	previewRemove(t, p, stack, "pr-7")
@@ -252,19 +252,19 @@ func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndKeepsItsCertificate
 	if routed := vm.routedHosts(t); slices.Contains(routed, hostname) {
 		t.Errorf("the proxy still routes %s after its preview came down: %v", hostname, routed)
 	}
-	if held := vm.certificates(t); !strings.Contains(held, hostname) {
-		t.Errorf("the proxy's store no longer holds a subject for %s:\n%s\nCaddy keeps the pair in memory after its storage is gone, and orders a new one for a cached name it cannot find in storage without asking the switchboard, so a teardown that takes the pair opens that order at the renewal point", hostname, held)
+	if stored := vm.certificates(t); !strings.Contains(stored, hostname) {
+		t.Errorf("the proxy's store no longer has a subject for %s:\n%s\nCaddy keeps the pair in memory after its storage is gone, and orders a new one for a cached name it cannot find in storage without asking the switchboard, so a teardown that takes the pair opens that order at the renewal point", hostname, stored)
 	}
 	if status := vm.asksFor(t, hostname); status != 404 {
 		t.Errorf("%s was answered %d after its preview came down, want the switchboard's 404", hostname, status)
 	}
-	if held := vm.teardownImages(t); strings.Contains(held, teardownAt("pr-7")) {
-		t.Errorf("the box still holds %s: %q. The sweep is a deploy's final act, and this box may never be deployed to again", teardownAt("pr-7"), held)
+	if images := vm.teardownImages(t); strings.Contains(images, teardownAt("pr-7")) {
+		t.Errorf("the box still has %s: %q. The sweep is a deploy's final act, and this box may never be deployed to again", teardownAt("pr-7"), images)
 	}
 	answered := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: "+hostname)+" http://"+caddy.Container+"/")
 	if !strings.Contains(answered, "404") ||
 		!strings.Contains(strings.ToLower(answered), strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName) {
-		t.Errorf("%s was answered\n%s\nafter its preview came down, want the catch-all's 404 carrying %s: %s. A 404 from a route this teardown was meant to remove reads the same on the status line alone",
+		t.Errorf("%s was answered\n%s\nafter its preview came down, want the catch-all's 404 with %s: %s. A 404 from a route this teardown was meant to remove reads the same on the status line alone",
 			hostname, answered, edge.HeaderEdge, switchboard.EdgeName)
 	}
 	if wildcard := edge.PreviewWildcard(livePreviewBase); !slices.Contains(vm.routedHosts(t), wildcard) {
@@ -278,12 +278,12 @@ func TestLiveTearingDownAPreviewTwiceRefusesNothingAndTakesNothingMore(t *testin
 	previewUp(t, vm, p, stack, "pr-7", 1)
 	vm.plants(t, teardownHostname("pr-7"))
 	previewRemove(t, p, stack, "pr-7")
-	settled := vm.certificates(t) + "\n" + vm.teardownImages(t)
+	firstTeardown := vm.certificates(t) + "\n" + vm.teardownImages(t)
 
 	previewRemove(t, p, stack, "pr-7")
 
-	if again := vm.certificates(t) + "\n" + vm.teardownImages(t); again != settled {
-		t.Errorf("a second teardown left %q, want %q: `ocel preview rm` is retried on every failure, and a destroy that refuses a stack with nothing behind it strands whatever was reclaimed before it", again, settled)
+	if again := vm.certificates(t) + "\n" + vm.teardownImages(t); again != firstTeardown {
+		t.Errorf("a second teardown left %q, want %q: `ocel preview rm` is retried on every failure, and a destroy that refuses a stack with nothing behind it strands whatever was reclaimed before it", again, firstTeardown)
 	}
 }
 
@@ -293,23 +293,23 @@ func TestLiveTearingDownOneOfFourLivePreviewsSweepsNoLivePreviewsImage(t *testin
 	for at, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
 		previewUp(t, vm, p, stack, pointer, int64(at)+1)
 	}
-	held := windowOf(t, vm, teardownSlug, teardownApp, edge.ClassPreview)
-	if len(held) != 3 {
-		t.Fatalf("the box's preview window reads %v, and this test turns on it being full: past the third live preview of one app the container's ocel.ref label is the sole guard against sweeping a live one", held)
+	window := windowOf(t, vm, teardownSlug, teardownApp, edge.ClassPreview)
+	if len(window) != 3 {
+		t.Fatalf("the box's preview window reads %v, and this test turns on it being full: past the third live preview of one app the container's ocel.ref label is the sole guard against sweeping a live one", window)
 	}
-	if slices.Contains(held, teardownAt("pr-1")) {
-		t.Fatalf("the window still names %s after four previews of one app, so no live preview here is guarded by its label alone and the regression this test exists for cannot happen: %v", teardownAt("pr-1"), held)
+	if slices.Contains(window, teardownAt("pr-1")) {
+		t.Fatalf("the window still names %s after four previews of one app, so no live preview here is guarded by its label alone and the regression this test exists for cannot happen: %v", teardownAt("pr-1"), window)
 	}
 
 	previewRemove(t, p, stack, "pr-2")
 
-	standing := vm.teardownImages(t)
+	images := vm.teardownImages(t)
 	for _, pointer := range []string{"pr-1", "pr-3", "pr-4"} {
-		if !strings.Contains(standing, teardownAt(pointer)) {
-			t.Errorf("%s went with another branch's teardown and %s is still up: %q", teardownAt(pointer), pointer, standing)
+		if !strings.Contains(images, teardownAt(pointer)) {
+			t.Errorf("%s went with another branch's teardown and %s is still up: %q", teardownAt(pointer), pointer, images)
 		}
 	}
-	if strings.Contains(standing, teardownAt("pr-2")) {
-		t.Errorf("the teardown left %s on the box: %q", teardownAt("pr-2"), standing)
+	if strings.Contains(images, teardownAt("pr-2")) {
+		t.Errorf("the teardown left %s on the box: %q", teardownAt("pr-2"), images)
 	}
 }

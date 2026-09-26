@@ -25,15 +25,15 @@ func TestQueryPresigningMatchesThePublishedExample(t *testing.T) {
 	if !strings.HasSuffix(signed, "X-Amz-Signature="+want) {
 		t.Fatalf("presigned url = %q, want it to end in the published signature %s", signed, want)
 	}
-	for _, held := range []string{
+	for _, wanted := range []string{
 		"X-Amz-Algorithm=AWS4-HMAC-SHA256",
 		"X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
 		"X-Amz-Date=20130524T000000Z",
 		"X-Amz-Expires=86400",
 		"X-Amz-SignedHeaders=host",
 	} {
-		if !strings.Contains(signed, held) {
-			t.Errorf("presigned url = %q, want it to carry %s", signed, held)
+		if !strings.Contains(signed, wanted) {
+			t.Errorf("presigned url = %q, want it to include %s", signed, wanted)
 		}
 	}
 }

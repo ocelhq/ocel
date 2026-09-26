@@ -44,9 +44,9 @@ func (s *said) removed(kind, path string) int {
 	return slices.Index(s.lines, "removed "+kind+" "+path)
 }
 
-func (vm machine) stands(t *testing.T, path string) bool {
+func (vm machine) exists(t *testing.T, path string) bool {
 	t.Helper()
-	return strings.TrimSpace(vm.ssh(t, "sudo test -e "+path+" && echo standing || echo gone")) == "standing"
+	return strings.TrimSpace(vm.ssh(t, "sudo test -e "+path+" && echo present || echo gone")) == "present"
 }
 
 func (vm machine) running(t *testing.T, container string) bool {
@@ -63,13 +63,13 @@ func (vm machine) runs(t *testing.T, container string) {
 	}
 }
 
-func (vm machine) holds(t *testing.T, image string) string {
+func (vm machine) imageID(t *testing.T, image string) string {
 	t.Helper()
-	held := vm.inspects(t, "image", image, "{{.Id}}")
-	if held == "" {
-		t.Fatalf("this machine holds no %s, so what a destroy leaves of the images on it cannot be proven", image)
+	id := vm.inspects(t, "image", image, "{{.Id}}")
+	if id == "" {
+		t.Fatalf("this machine has no %s, so what a destroy leaves of the images on it cannot be proven", image)
 	}
-	return held
+	return id
 }
 
 func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testing.T) {
@@ -89,7 +89,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
-	decoy := vm.holds(t, decoyImage)
+	decoy := vm.imageID(t, decoyImage)
 
 	removal, err := bootstrap.PlanRemove(ctx, class)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 }
 
-func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing.T) {
+func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
@@ -191,7 +191,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	beside := onlyGroup(t, first)
 	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
 		if planned := planFor(beside, singleton); planned.Action == provider.ActionDelete {
-			t.Errorf("destroying %s plans %s as %q while %s still stands on this host", production, singleton, planned.Action, preview)
+			t.Errorf("destroying %s plans %s as %q while %s still exists on this host", production, singleton, planned.Action, preview)
 		}
 	}
 	if planned := planFor(beside, sealGrant(production)); planned.Action != provider.ActionDelete {
@@ -202,30 +202,30 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Fatalf("Remove(%s) = %v", production, err)
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
-		if !vm.stands(t, singleton) {
+		if !vm.exists(t, singleton) {
 			t.Errorf("%s went with the %s class, and %s is a tenant of this machine that still deploys through it", singleton, production, preview)
 		}
 	}
-	if vm.stands(t, sealGrant(production)) {
-		t.Errorf("%s stands after the class it grants over was destroyed, and a grant over nothing is one nobody revokes", sealGrant(production))
+	if vm.exists(t, sealGrant(production)) {
+		t.Errorf("%s still exists after the class it grants over was destroyed, and a grant over nothing is one nobody revokes", sealGrant(production))
 	}
 	if entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); entry == "" {
 		t.Errorf("%s went with the %s class, and the %s sibling deploys as it", deployLogin, production, preview)
 	}
 	for _, gone := range []string{host.ClassDir(production), host.StateDir(production)} {
-		if vm.stands(t, gone) {
-			t.Errorf("%s stands after the class that owns it was destroyed", gone)
+		if vm.exists(t, gone) {
+			t.Errorf("%s still exists after the class that owns it was destroyed", gone)
 		}
 	}
-	standing, err := bootstrap.Describe(ctx, preview)
+	described, err := bootstrap.Describe(ctx, preview)
 	if err != nil {
 		t.Fatalf("Describe(%s) after destroying its sibling = %v", preview, err)
 	}
-	if len(standing.Stacks) != 1 {
-		t.Fatalf("Describe(%s) carries %d stacks after its sibling was destroyed, want the one this host stands up", preview, len(standing.Stacks))
+	if len(described.Stacks) != 1 {
+		t.Fatalf("Describe(%s) has %d stacks after its sibling was destroyed, want the one this host installs", preview, len(described.Stacks))
 	}
-	if !standing.Present || !standing.Stacks[0].DigestCurrent {
-		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a class untouched by a destroy beside it", preview, standing.Stacks)
+	if !described.Present || !described.Stacks[0].DigestCurrent {
+		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a class untouched by a destroy beside it", preview, described.Stacks)
 	}
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the first destroy", workload)
@@ -248,12 +248,12 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
-		if vm.stands(t, singleton) {
-			t.Errorf("%s stands after the last class on this host was destroyed", singleton)
+		if vm.exists(t, singleton) {
+			t.Errorf("%s still exists after the last class on this host was destroyed", singleton)
 		}
 	}
 	if entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); entry != "" {
-		t.Errorf("%s still stands as %q after the last class went", deployLogin, entry)
+		t.Errorf("%s still exists as %q after the last class went", deployLogin, entry)
 	}
 
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service || true")); active != "active" {

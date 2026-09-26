@@ -19,14 +19,14 @@ import (
 )
 
 const (
-	standingSensitive = "sk-live-2f8c1a"
-	standingPlain     = "eu-west-1"
+	sensitiveValue = "sk-live-2f8c1a"
+	plainValue     = "eu-west-1"
 )
 
 func valuedApp() provider.AppSpec {
 	app := anApp()
 	app.Values = provider.AppValues{
-		ContainerEnv: map[string]string{"API_TOKEN": standingSensitive, "REGION": standingPlain},
+		ContainerEnv: map[string]string{"API_TOKEN": sensitiveValue, "REGION": plainValue},
 		Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Bindings:     []provider.Binding{{Name: "main", Type: provider.BindingPostgres, Version: 3}},
 	}
@@ -34,7 +34,7 @@ func valuedApp() provider.AppSpec {
 }
 
 func everyValue() []string {
-	return []string{standingSensitive, standingPlain}
+	return []string{sensitiveValue, plainValue}
 }
 
 func envFileWritten(t *testing.T, machine *box, class edge.Class, physical string) string {
@@ -55,14 +55,14 @@ func TestTheValuesAnAppIsHandedReachItThroughAFileAndNoOtherWay(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	standing, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, edge.ClassProduction, standing[0].Physical)
+	file := envFileWritten(t, machine, edge.ClassProduction, started[0].Physical)
 	for _, value := range everyValue() {
 		if !strings.Contains(file, value) {
-			t.Errorf("the env file reads %q and does not carry every value the deploy delivered", file)
+			t.Errorf("the env file reads %q and does not include every value the deploy delivered", file)
 		}
 		for _, command := range machine.ran {
 			if strings.Contains(command, value) {
@@ -76,13 +76,13 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	t.Parallel()
 
 	machine := &box{}
-	standing, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, valuedApp()), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, edge.ClassProduction, standing[0].Physical)
+	file := envFileWritten(t, machine, edge.ClassProduction, started[0].Physical)
 	if strings.Contains(file, "DATABASE_URL=") || strings.Contains(file, "SESSION_SECRET=") || strings.Contains(file, "OCEL_RESOURCE_POSTGRES_main=") {
-		t.Errorf("the env file reads %q and carries a secret or a binding record, which the runtime reads live off the box instead", file)
+		t.Errorf("the env file reads %q and contains a secret or a binding record, which the runtime reads live off the box instead", file)
 	}
 	if !strings.Contains(file, originguard.HealthPathVar+"=/healthz\n") {
 		t.Errorf("the env file reads %q and never names the health path the runtime lets the proxy's probe through on", file)
@@ -120,11 +120,11 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	machine := &box{}
 	spec := aStack(t, valuedApp())
 	spec.Ref.Class = edge.ClassPreview
-	standing, err := over(machine).ProvisionContainers(context.Background(), spec, nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, edge.ClassPreview, standing[0].Physical)
+	file := envFileWritten(t, machine, edge.ClassPreview, started[0].Physical)
 	if !strings.Contains(file, `"class":"preview"`) || !strings.Contains(file, `"environment":"`+spec.Ref.Name.Env+`"`) {
 		t.Errorf("the env file reads %q, want a manifest naming the preview class and the stack's environment so its own value shadows the class-wide one", file)
 	}
@@ -154,11 +154,11 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 	t.Parallel()
 
 	machine := &box{}
-	standing, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
+	started, err := over(machine).ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if file := envFileWritten(t, machine, edge.ClassProduction, standing[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
+	if file := envFileWritten(t, machine, edge.ClassProduction, started[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
 		t.Errorf("an app declaring no value is handed %q, want the health path alone", file)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -176,21 +176,21 @@ func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)
 		var rejection refusal.Refusal
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), owned) {
-			t.Errorf("a value delivered as %s was stood up: %v", owned, err)
+			t.Errorf("a value delivered as %s was started: %v", owned, err)
 		}
 	}
 }
 
-func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
+func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	for arch, machine := range map[string]elf.Machine{host.ArchAMD64: elf.EM_X86_64, host.ArchARM64: elf.EM_AARCH64} {
-		held, err := p.Runtime().Binary(context.Background(), arch)
+		raw, err := p.Runtime().Binary(context.Background(), arch)
 		if err != nil {
 			t.Fatalf("ContainerRuntime(%s) = %v", arch, err)
 		}
-		binary, err := elf.NewFile(bytes.NewReader(held))
+		binary, err := elf.NewFile(bytes.NewReader(raw))
 		if err != nil {
 			t.Fatalf("ContainerRuntime(%s) is no ELF binary: %v", arch, err)
 		}

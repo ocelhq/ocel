@@ -24,16 +24,16 @@ const (
 )
 
 type Listener struct {
-	Addr    netip.Addr
-	Port    int
-	Inode   uint64
-	Holders []string
+	Addr   netip.Addr
+	Port   int
+	Inode  uint64
+	Owners []string
 }
 
 func (l Listener) String() string { return netip.AddrPortFrom(l.Addr, uint16(l.Port)).String() }
 
 func Parse(r io.Reader) ([]Listener, error) {
-	var held []Listener
+	var found []Listener
 	sockets := map[uint64][]string{}
 	names := map[string]string{}
 	sections := []string{"", SocketsMark, NamesMark}
@@ -66,17 +66,17 @@ func Parse(r io.Reader) ([]Listener, error) {
 				return nil, err
 			}
 			if listening {
-				held = append(held, listener)
+				found = append(found, listener)
 			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	for at := range held {
-		held[at].Holders = holding(sockets[held[at].Inode], names)
+	for at := range found {
+		found[at].Owners = namesOf(sockets[found[at].Inode], names)
 	}
-	return held, nil
+	return found, nil
 }
 
 func tableRow(line string) (Listener, bool, error) {
@@ -119,24 +119,24 @@ func numbered(said string) bool {
 	return err == nil
 }
 
-func holding(pids []string, names map[string]string) []string {
-	var held []string
+func namesOf(pids []string, names map[string]string) []string {
+	var owners []string
 	for _, pid := range pids {
 		if name := names[pid]; name != "" {
-			held = append(held, name)
+			owners = append(owners, name)
 		}
 	}
-	slices.Sort(held)
-	return slices.Compact(held)
+	slices.Sort(owners)
+	return slices.Compact(owners)
 }
 
-func Holders(held []Listener) []string {
-	var holders []string
-	for _, listener := range held {
-		holders = append(holders, listener.Holders...)
+func Owners(listening []Listener) []string {
+	var owners []string
+	for _, listener := range listening {
+		owners = append(owners, listener.Owners...)
 	}
-	slices.Sort(holders)
-	return slices.Compact(holders)
+	slices.Sort(owners)
+	return slices.Compact(owners)
 }
 
 func local(field string) (Listener, error) {
@@ -170,9 +170,9 @@ func address(written string) (netip.Addr, error) {
 	return addr.Unmap(), nil
 }
 
-func On(held []Listener, port int) []Listener {
+func On(listening []Listener, port int) []Listener {
 	var found []Listener
-	for _, listener := range held {
+	for _, listener := range listening {
 		if listener.Port == port {
 			found = append(found, listener)
 		}
@@ -180,16 +180,16 @@ func On(held []Listener, port int) []Listener {
 	return found
 }
 
-func Lines(held []Listener) []string {
-	written := make([]string, 0, len(held))
-	for _, listener := range held {
+func Lines(listening []Listener) []string {
+	written := make([]string, 0, len(listening))
+	for _, listener := range listening {
 		written = append(written, listener.String())
 	}
 	return written
 }
 
 func Read(said string) ([]Listener, error) {
-	var held []Listener
+	var found []Listener
 	for line := range strings.Lines(said) {
 		spelled := strings.TrimSpace(line)
 		if spelled == "" {
@@ -199,7 +199,7 @@ func Read(said string) ([]Listener, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%q is not a listening socket: %w", spelled, err)
 		}
-		held = append(held, Listener{Addr: at.Addr(), Port: int(at.Port())})
+		found = append(found, Listener{Addr: at.Addr(), Port: int(at.Port())})
 	}
-	return held, nil
+	return found, nil
 }

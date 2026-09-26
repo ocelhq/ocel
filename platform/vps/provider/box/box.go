@@ -22,8 +22,8 @@ const (
 
 type Machine interface {
 	Address(ctx context.Context) (string, error)
-	HoldsImage(ctx context.Context, imageRef string) (bool, error)
-	StandUp(ctx context.Context, spec host.Container) error
+	HasImage(ctx context.Context, imageRef string) (bool, error)
+	RunContainer(ctx context.Context, spec host.Container) error
 	ForgetNetwork(ctx context.Context, class edge.Class, project string) error
 	Promote(ctx context.Context, class edge.Class, project, app, imageRef string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
@@ -112,8 +112,8 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 
 func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	if base, wild := strings.CutPrefix(hostname, "*."); wild {
-		held, err := e.machine.PreviewEntry(ctx)
-		if err != nil || held != base {
+		entry, err := e.machine.PreviewEntry(ctx)
+		if err != nil || entry != base {
 			return "", err
 		}
 		return edge.PreviewEntryOwner, nil
@@ -183,7 +183,7 @@ func (e *Edge) certificateKept(hostname string) edge.PlanChange {
 	}
 	reason := "the proxy renews it"
 	if e.machine.RouteBy(hostname) != "" {
-		reason = "held by your proxy"
+		reason = "your proxy serves it"
 	}
 	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep, Reason: reason}
 }

@@ -60,21 +60,21 @@ func answering(t *testing.T, leaf tls.Certificate, handler http.HandlerFunc) str
 
 func listening(t *testing.T, answer func(net.Conn)) string {
 	t.Helper()
-	held, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { held.Close() })
+	t.Cleanup(func() { listener.Close() })
 	go func() {
 		for {
-			taken, err := held.Accept()
+			taken, err := listener.Accept()
 			if err != nil {
 				return
 			}
 			go answer(taken)
 		}
 	}()
-	return held.Addr().String()
+	return listener.Addr().String()
 }
 
 func declining(t *testing.T) string {
@@ -199,7 +199,7 @@ func TestTheProbeRefusesACertificateThatDoesNotServeTheName(t *testing.T) {
 			t.Errorf("probe over a certificate %s printed %q", what, out)
 		}
 		if strings.Count(strings.TrimSpace(errs), "\n") != 0 || !strings.Contains(errs, "web.localhost") {
-			t.Errorf("probe over a certificate %s said %q, want one line naming the hostname for the settle to report as its cause", what, errs)
+			t.Errorf("probe over a certificate %s said %q, want one line naming the hostname for the serving wait to report as its cause", what, errs)
 		}
 	}
 }
@@ -227,7 +227,7 @@ func TestTheProbeSaysWhatStoppedItWhenTheBoxServesNothingYet(t *testing.T) {
 	} {
 		code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
 		if code != exitNotServingYet {
-			t.Errorf("probe over %s = %d, want %d: the settle keeps waiting on that", what, code, exitNotServingYet)
+			t.Errorf("probe over %s = %d, want %d: the serving wait keeps waiting on that", what, code, exitNotServingYet)
 		}
 		if strings.TrimSpace(out) != "" || strings.TrimSpace(errs) == "" || strings.Count(strings.TrimSpace(errs), "\n") != 0 {
 			t.Errorf("probe over %s printed %q and said %q, want nothing printed and one line saying why", what, out, errs)
@@ -264,10 +264,10 @@ func TestAHandshakeThatFailedForAnyReasonButAMissingCertificateIsNotReportedAsPe
 	}
 }
 
-func TestALeafTheFrontProxyHoldsWhileItOrdersOnDemandIsReportedAsPending(t *testing.T) {
+func TestAHandshakeTheFrontProxyStallsWhileItOrdersOnDemandIsReportedAsPending(t *testing.T) {
 	code, out, errs := ran(t, "leaf", "--at", ordering(t), "shop.example.com")
 	if code != exitNotServingYet {
-		t.Errorf("leaf over a front proxy that holds the handshake while it orders on demand = %d, want %d: %q", code, exitNotServingYet, errs)
+		t.Errorf("leaf over a front proxy that keeps the handshake open while it orders on demand = %d, want %d: %q", code, exitNotServingYet, errs)
 	}
 	if strings.TrimSpace(out) != "" {
 		t.Errorf("leaf printed %q off a handshake that never completed", out)

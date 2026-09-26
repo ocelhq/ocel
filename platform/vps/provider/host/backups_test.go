@@ -41,8 +41,8 @@ func backupsOn(t *testing.T, labelled ...string) backupBench {
 	for name, body := range map[string]string{"docker": docker, "df": df} {
 		executable(t, filepath.Join(bench.bin, name), body)
 	}
-	bench.holds(t, "labelled", strings.Join(labelled, "\n")+"\n")
-	bench.holds(t, "free", "1000000000")
+	bench.stubs(t, "labelled", strings.Join(labelled, "\n")+"\n")
+	bench.stubs(t, "free", "1000000000")
 	mounted := filepath.Join(bench.root, "volume")
 	if err := os.MkdirAll(mounted, 0o700); err != nil {
 		t.Fatal(err)
@@ -50,11 +50,11 @@ func backupsOn(t *testing.T, labelled ...string) backupBench {
 	if err := os.WriteFile(filepath.Join(mounted, "object"), []byte("bytes"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	bench.holds(t, "mounted", mounted)
+	bench.stubs(t, "mounted", mounted)
 	return bench
 }
 
-func (b backupBench) holds(t *testing.T, name, body string) {
+func (b backupBench) stubs(t *testing.T, name, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(b.bin, name), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestADumpLandsWholeUnderTheContainerItCameFromAndSaysWhere(t *testing.T) {
 	}
 	kept := bench.kept(t, "production", "shop-main-pg")
 	if len(kept) != 2 || !strings.HasSuffix(kept[0], ".dump") || !strings.HasSuffix(kept[1], ".roles.sql") {
-		t.Fatalf("the backups hold %v, want the one dump, the roles it was taken with, and nothing half-written beside them", kept)
+		t.Fatalf("the backups contain %v, want the one dump, the roles it was taken with, and nothing half-written beside them", kept)
 	}
 	if roles, _ := os.ReadFile(filepath.Join(bench.root, "production", "backups", "shop-main-pg", kept[1])); string(roles) != "roles of shop-main-pg" {
 		t.Errorf("the roles kept beside the dump are %q, and a database restored without the roles it grants to does not restore", roles)
@@ -119,7 +119,7 @@ func TestADumpLandsWholeUnderTheContainerItCameFromAndSaysWhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(body) != "dump of shop-main-pg" {
-		t.Errorf("the dump holds %q, want what pg_dump wrote", body)
+		t.Errorf("the dump contains %q, want what pg_dump wrote", body)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestADumpThatFailsLeavesNothingBehindAndKeepsWhatWasThere(t *testing.T) {
 		t.Fatalf("the first dump exited %d: %s", code, stderr)
 	}
 	before := bench.kept(t, "production", "shop-main-pg")
-	bench.holds(t, "broken", "")
+	bench.stubs(t, "broken", "")
 	_, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main")
 	if code == 0 {
 		t.Fatal("a pg_dump that failed was reported as a backup taken")
@@ -163,17 +163,17 @@ func TestOnlyTheNewestDumpsAreKept(t *testing.T) {
 	}
 	kept := slices.DeleteFunc(bench.kept(t, "production", "shop-main-pg"), func(name string) bool { return !strings.HasSuffix(name, ".dump") })
 	if len(kept) != 7 {
-		t.Fatalf("the backups hold %d dumps, want the newest 7: %v", len(kept), kept)
+		t.Fatalf("the backups contain %d dumps, want the newest 7: %v", len(kept), kept)
 	}
 	if all := bench.kept(t, "production", "shop-main-pg"); len(all) != 8 {
-		t.Errorf("the backups hold %v, want 7 dumps and the roles of the one just taken: roles whose dump is gone are bytes nothing reads", all)
+		t.Errorf("the backups contain %v, want 7 dumps and the roles of the one just taken: roles whose dump is gone are bytes nothing reads", all)
 	}
 	if slices.Contains(kept, "20260901T000000Z.dump") || !slices.Contains(kept, "20260909T000000Z.dump") {
 		t.Errorf("the backups kept %v, and the ones to go are the oldest", kept)
 	}
 }
 
-func TestADumpIsRefusedWhenTheDiskCannotHoldAnotherOne(t *testing.T) {
+func TestADumpIsRefusedWhenTheDiskHasNoRoomForAnotherOne(t *testing.T) {
 	t.Parallel()
 
 	bench := backupsOn(t)
@@ -184,7 +184,7 @@ func TestADumpIsRefusedWhenTheDiskCannotHoldAnotherOne(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "20260901T000000Z.dump"), make([]byte, 4096), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	bench.holds(t, "free", "4096")
+	bench.stubs(t, "free", "4096")
 	_, stderr, code := bench.runs(t, "production", "dump", "shop-main-pg", "main")
 	if code == 0 {
 		t.Fatal("a dump was taken onto a disk with room for less than two of the last one, and a full disk takes the database down with it")
@@ -241,7 +241,7 @@ func TestAVolumeIsCopiedWhileNothingIsWritingToIt(t *testing.T) {
 	paused := slices.Index(drove, "pause shop-store-s3")
 	unpaused := slices.Index(drove, "unpause shop-store-s3")
 	if paused < 0 || unpaused < 0 {
-		t.Fatalf("the store kept serving while its volume was copied, so the tar holds a half-written object:\n%s",
+		t.Fatalf("the store kept serving while its volume was copied, so the tar contains a half-written object:\n%s",
 			strings.Join(drove, "\n"))
 	}
 	if unpaused < paused {
@@ -253,7 +253,7 @@ func TestAVolumeCopyThatFailsStillStartsTheStoreAgain(t *testing.T) {
 	t.Parallel()
 
 	bench := backupsOn(t, "shop-store-s3\tproduction\tstore\tvol")
-	bench.holds(t, "mounted", filepath.Join(bench.root, "nothing-mounted-here"))
+	bench.stubs(t, "mounted", filepath.Join(bench.root, "nothing-mounted-here"))
 	if _, _, code := bench.runs(t, "sweep"); code == 0 {
 		t.Fatal("a tar of a directory that is not there was reported as a backup")
 	}
@@ -297,16 +297,16 @@ func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 	for _, item := range BackupItems() {
 		missing = append(missing, item.ID())
 	}
-	stood := settledOn(t, class)
-	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
+	older := bootstrappedOn(t, class)
+	older.installed[class] = slices.DeleteFunc(older.installed[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
 	progress := &said{}
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+	if err := NewBootstrap(older.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	for _, id := range missing {
 		if progress.at("wrote "+id) < 0 {
-			t.Errorf("bootstrap says a host carries %s and an apply never wrote it, so every status after it reads drifted and every re-plan moves it:\n%s",
+			t.Errorf("bootstrap says a host has %s and an apply never wrote it, so every status after it reads drifted and every re-plan moves it:\n%s",
 				id, strings.Join(progress.lines, "\n"))
 		}
 	}

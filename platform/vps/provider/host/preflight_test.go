@@ -31,7 +31,7 @@ func TestTheKeepWindowIsTheOneTheHelperOnTheBoxEnforces(t *testing.T) {
 	}
 }
 
-func TestHeadroomIsReadOffTheLargestImageHeldAndTheSlotsLeft(t *testing.T) {
+func TestHeadroomIsReadOffTheLargestImageStoredAndTheSlotsLeft(t *testing.T) {
 	t.Parallel()
 
 	room, err := readHeadroom(headroomSaid)
@@ -41,12 +41,12 @@ func TestHeadroomIsReadOffTheLargestImageHeldAndTheSlotsLeft(t *testing.T) {
 	if room.Root != "/var/lib/docker" || room.Free != 1024*1024 {
 		t.Fatalf("readHeadroom() = %+v, want the data root and its free kibibytes read as bytes", room)
 	}
-	held := room.Repos["ocel-shop-web"]
-	if held.Count != 3 || held.Largest != 300 {
-		t.Fatalf("readHeadroom() held %+v, want three images whose largest is 300", held)
+	repo := room.Repos["ocel-shop-web"]
+	if repo.Count != 3 || repo.Largest != 300 {
+		t.Fatalf("readHeadroom() read %+v, want three images whose largest is 300", repo)
 	}
-	if want := int64(300); held.Measured() != want {
-		t.Errorf("Measured() = %d, want %d: a full window leaves no unfilled slot and the incoming image is the one more", held.Measured(), want)
+	if want := int64(300); repo.Measured() != want {
+		t.Errorf("Measured() = %d, want %d: a full window leaves no unfilled slot and the incoming image is the one more", repo.Measured(), want)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestAnUnfilledWindowAsksForEverySlotItHasNotFilled(t *testing.T) {
 	}
 }
 
-func TestAMeasurementUnderTheFloorIsStillHeldToTheFloor(t *testing.T) {
+func TestAMeasurementUnderTheFloorIsStillRaisedToTheFloor(t *testing.T) {
 	t.Parallel()
 
 	room, err := readHeadroom("root=/var/lib/docker\nfree=1024\nrepo=ocel-shop-web\nsize=300B\n")
@@ -70,7 +70,7 @@ func TestAMeasurementUnderTheFloorIsStillHeldToTheFloor(t *testing.T) {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
 	if room.Needs() != FirstDeployFloor+LogCeiling {
-		t.Errorf("Needs() = %d, want the floor %d and the log ceiling: what a box already holds is no bound on the image this deploy has not built yet, and a 300 byte measurement would authorise a deploy onto a disk with nothing on it",
+		t.Errorf("Needs() = %d, want the floor %d and the log ceiling: what a box already stores is no bound on the image this deploy has not built yet, and a 300 byte measurement would authorise a deploy onto a disk with nothing on it",
 			room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
@@ -82,9 +82,9 @@ func TestAMeasurementUnderTheFloorIsStillHeldToTheFloor(t *testing.T) {
 func TestAMeasurementOverTheFloorIsTheNumberApplied(t *testing.T) {
 	t.Parallel()
 
-	held := Held{Largest: FirstDeployFloor, Count: 1}
-	if want := int64(FirstDeployFloor) * 3; held.Needs() != want {
-		t.Errorf("Needs() = %d, want %d: a box holding images bigger than the floor is measured rather than guessed at", held.Needs(), want)
+	repo := RepoImages{Largest: FirstDeployFloor, Count: 1}
+	if want := int64(FirstDeployFloor) * 3; repo.Needs() != want {
+		t.Errorf("Needs() = %d, want %d: a box storing images bigger than the floor is measured rather than guessed at", repo.Needs(), want)
 	}
 }
 
@@ -96,7 +96,7 @@ func TestAFirstDeployIsProtectedByAConstantThatSaysItIsAGuess(t *testing.T) {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
 	if room.Needs() != FirstDeployFloor+LogCeiling {
-		t.Fatalf("Needs() = %d, want the floor %d and the log ceiling: with nothing held there is no size to extrapolate", room.Needs(), FirstDeployFloor)
+		t.Fatalf("Needs() = %d, want the floor %d and the log ceiling: with nothing stored there is no size to extrapolate", room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
 	if !strings.Contains(said, "guessed") {
@@ -164,12 +164,12 @@ func TestAnImageIsSizedByWhatItOccupiesRatherThanWhatItCompressesTo(t *testing.T
 		"1TB":     1_000_000_000_000,
 		"1.024PB": 1_024_000_000_000_000,
 	} {
-		if read, held := occupied(said); !held || read != want {
-			t.Errorf("occupied(%q) = %d, %t, want %d", said, read, held, want)
+		if read, parsed := occupied(said); !parsed || read != want {
+			t.Errorf("occupied(%q) = %d, %t, want %d", said, read, parsed, want)
 		}
 	}
 	for _, said := range []string{"", "big", "8.37", "MB", "N/A", "8.37EB", "-1MB"} {
-		if read, held := occupied(said); held {
+		if read, parsed := occupied(said); parsed {
 			t.Errorf("occupied(%q) = %d, and a size this host did not answer is not a size", said, read)
 		}
 	}

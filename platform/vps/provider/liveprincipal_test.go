@@ -16,25 +16,25 @@ import (
 
 const deployLogin = "ocel-deploy"
 
-func standsAsDecided(t *testing.T, vm machine) {
+func accountAsDecided(t *testing.T, vm machine) {
 	t.Helper()
 
 	entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin))
 	fields := strings.Split(entry, ":")
 	if len(fields) < 7 {
-		t.Fatalf("getent passwd %s reads %q, and no account stands there", deployLogin, entry)
+		t.Fatalf("getent passwd %s reads %q, and no account exists there", deployLogin, entry)
 	}
 	if fields[5] != "/var/lib/ocel" || fields[6] != "/bin/sh" {
 		t.Errorf("%s has home %q and shell %q, want /var/lib/ocel and /bin/sh", deployLogin, fields[5], fields[6])
 	}
-	if held := strings.TrimSpace(vm.ssh(t, "sudo getent shadow "+deployLogin+" | cut -d: -f2")); held != "*" {
-		t.Errorf("%s carries the password field %q, want `*`: a hash is a password and a `!` is a login sshd refuses before it reads a key", deployLogin, held)
+	if password := strings.TrimSpace(vm.ssh(t, "sudo getent shadow "+deployLogin+" | cut -d: -f2")); password != "*" {
+		t.Errorf("%s has the password field %q, want `*`: a hash is a password and a `!` is a login sshd refuses before it reads a key", deployLogin, password)
 	}
 	if groups := vm.ssh(t, "id -nG "+deployLogin); !strings.Contains(groups, "docker") {
 		t.Errorf("%s is in %q, and a deploy that cannot reach the docker socket deploys nothing", deployLogin, strings.TrimSpace(groups))
 	}
 	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c %a /var/lib/ocel")); mode != "750" {
-		t.Errorf("/var/lib/ocel stands at %q, want 750", mode)
+		t.Errorf("/var/lib/ocel is %q, want 750", mode)
 	}
 
 	rendered, err := vm.authenticates(deployLogin, "id -un")
@@ -149,18 +149,18 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 
 	ctx := context.Background()
 	class := edge.ClassProduction
-	stood := vps.NewProvider(vps.Options{
+	installing := vps.NewProvider(vps.Options{
 		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
 		DeployKey: named,
 	})
-	bootstrap, err := stood.Bootstrap("")
+	bootstrap, err := installing.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	closing(t, stood)
+	closing(t, installing)
 
 	if err := os.Remove(named); err != nil {
 		t.Fatal(err)
@@ -182,11 +182,11 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, taken := range []edge.Class{edge.ClassPreview, class} {
-		standing, err := reading.Describe(ctx, taken)
+		described, err := reading.Describe(ctx, taken)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", taken, err)
 		}
-		if !standing.Present {
+		if !described.Present {
 			continue
 		}
 		if _, err := forgetting.PlanRemove(ctx, taken); err != nil {
@@ -197,6 +197,6 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 		}
 	}
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
-		t.Errorf("%s still stands as %q after a keyless Remove() of every class", deployLogin, left)
+		t.Errorf("%s still exists as %q after a keyless Remove() of every class", deployLogin, left)
 	}
 }

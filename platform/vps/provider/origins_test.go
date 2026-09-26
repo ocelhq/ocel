@@ -36,13 +36,13 @@ func lastFedTo(t *testing.T, machine *box, needle string) (string, string) {
 	return "", ""
 }
 
-func stoodWithABucket(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack) {
+func provisionedWithABucket(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack) {
 	t.Helper()
-	machine, p, stack, _ := stoodWithABucketDeclared(t, declared...)
+	machine, p, stack, _ := provisionedWithABucketDeclared(t, declared...)
 	return machine, p, stack
 }
 
-func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack, resources.ProvisionRequest) {
+func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack, resources.ProvisionRequest) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -77,18 +77,18 @@ func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Prov
 	return machine, p, stack, bucket
 }
 
-func TestAHostnameBoundAfterTheStoreStoodUpIsAnOriginItsBucketAnswers(t *testing.T) {
+func TestAHostnameBoundAfterTheStoreStartedIsAnOriginItsBucketAnswers(t *testing.T) {
 	t.Parallel()
 
-	machine, _, stack := stoodWithABucket(t, "https://app.example.com")
+	machine, _, stack := provisionedWithABucket(t, "https://app.example.com")
 	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain() = %v", err)
 	}
 
-	_, held := lastFedTo(t, machine, "?cors")
+	_, rules := lastFedTo(t, machine, "?cors")
 	for _, origin := range []string{"https://shop.example.com", "https://app.example.com"} {
-		if !strings.Contains(held, "<AllowedOrigin>"+origin+"</AllowedOrigin>") {
-			t.Errorf("after the bind the bucket answers\n%s\nand not %s: a first deploy stands its store up before it binds its hostnames, so a browser on the project's own hostname is refused until the next deploy", held, origin)
+		if !strings.Contains(rules, "<AllowedOrigin>"+origin+"</AllowedOrigin>") {
+			t.Errorf("after the bind the bucket answers\n%s\nand not %s: a first deploy starts its store before it binds its hostnames, so a browser on the project's own hostname is refused until the next deploy", rules, origin)
 		}
 	}
 }
@@ -96,7 +96,7 @@ func TestAHostnameBoundAfterTheStoreStoodUpIsAnOriginItsBucketAnswers(t *testing
 func TestAnUnboundHostnameIsNoLongerAnOriginItsBucketAnswers(t *testing.T) {
 	t.Parallel()
 
-	machine, _, stack := stoodWithABucket(t, "https://app.example.com")
+	machine, _, stack := provisionedWithABucket(t, "https://app.example.com")
 	ctx := context.Background()
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain() = %v", err)
@@ -105,19 +105,19 @@ func TestAnUnboundHostnameIsNoLongerAnOriginItsBucketAnswers(t *testing.T) {
 		t.Fatalf("UnbindDomain() = %v", err)
 	}
 
-	_, held := lastFedTo(t, machine, "?cors")
-	if strings.Contains(held, "https://shop.example.com") {
-		t.Errorf("after the unbind the bucket still answers shop.example.com:\n%s", held)
+	_, rules := lastFedTo(t, machine, "?cors")
+	if strings.Contains(rules, "https://shop.example.com") {
+		t.Errorf("after the unbind the bucket still answers shop.example.com:\n%s", rules)
 	}
-	if !strings.Contains(held, "<AllowedOrigin>https://app.example.com</AllowedOrigin>") {
-		t.Errorf("the unbind took the origin the bucket declared with it:\n%s", held)
+	if !strings.Contains(rules, "<AllowedOrigin>https://app.example.com</AllowedOrigin>") {
+		t.Errorf("the unbind took the origin the bucket declared with it:\n%s", rules)
 	}
 }
 
 func TestABucketLeftWithNoOriginAnswersNoBrowserAtAll(t *testing.T) {
 	t.Parallel()
 
-	machine, _, stack := stoodWithABucket(t)
+	machine, _, stack := provisionedWithABucket(t)
 	ctx := context.Background()
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain() = %v", err)
@@ -128,14 +128,14 @@ func TestABucketLeftWithNoOriginAnswersNoBrowserAtAll(t *testing.T) {
 
 	command, _ := lastFedTo(t, machine, "?cors")
 	if !strings.Contains(command, "'DELETE'") {
-		t.Errorf("the last call to the bucket's cors was\n%s\nwant it deleted: the one origin it answered was released, and a rule left standing keeps answering it", command)
+		t.Errorf("the last call to the bucket's cors was\n%s\nwant it deleted: the one origin it answered was released, and a rule left in place keeps answering it", command)
 	}
 }
 
-func TestTheNextDeployHoldsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCouldNot(t *testing.T) {
+func TestTheNextDeployLimitsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCouldNot(t *testing.T) {
 	t.Parallel()
 
-	machine, p, stack, bucket := stoodWithABucketDeclared(t, "https://app.example.com")
+	machine, p, stack, bucket := provisionedWithABucketDeclared(t, "https://app.example.com")
 	ctx := context.Background()
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain() = %v", err)
@@ -160,11 +160,11 @@ func TestTheNextDeployHoldsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCoul
 	if _, err := p.ProvisionBucket(ctx, bucket, nil); err != nil {
 		t.Fatalf("Bucket() on the next deploy = %v", err)
 	}
-	_, held := lastFedTo(t, machine, "?cors")
-	if strings.Contains(held, "https://shop.example.com") {
-		t.Errorf("the next deploy left the bucket answering the released shop.example.com:\n%s", held)
+	_, rules := lastFedTo(t, machine, "?cors")
+	if strings.Contains(rules, "https://shop.example.com") {
+		t.Errorf("the next deploy left the bucket answering the released shop.example.com:\n%s", rules)
 	}
-	if !strings.Contains(held, "<AllowedOrigin>https://app.example.com</AllowedOrigin>") {
-		t.Errorf("the next deploy dropped the declared origin:\n%s", held)
+	if !strings.Contains(rules, "<AllowedOrigin>https://app.example.com</AllowedOrigin>") {
+		t.Errorf("the next deploy dropped the declared origin:\n%s", rules)
 	}
 }

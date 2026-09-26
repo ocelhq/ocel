@@ -24,7 +24,7 @@ func TestATableTheSwitchboardCannotReadIsRefusedAndTheOneItServesKeepsServing(t 
 	t.Parallel()
 
 	web := backend(t, "web")
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": web}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": web}))
 
 	for what, path := range map[string]string{
 		"a table that is not json":         tableAt(t, []byte(`{"grace":`)),
@@ -59,7 +59,7 @@ func TestLoadingTablesUnderLoadNeverDropsARequestOrTheConnectionItCameOn(t *test
 		tableAt(t, routing(t, map[string]string{"shop.example.com": green})),
 		tableAt(t, []byte(`{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"nowhere"}]}`)),
 	}
-	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 
 	var dialled atomic.Int64
 	client := &http.Client{Transport: &http.Transport{MaxConnsPerHost: 1}}
@@ -111,6 +111,6 @@ func TestLoadingTablesUnderLoadNeverDropsARequestOrTheConnectionItCameOn(t *test
 		t.Errorf("%d of %d requests failed across 300 loads, want none: a load swaps the table under the listener and never touches a connection", failed.Load(), failed.Load()+served.Load())
 	}
 	if dialled.Load() != 1 {
-		t.Errorf("the client dialled %d connections across the loads, want the one it opened first to carry every request", dialled.Load())
+		t.Errorf("the client dialled %d connections across the loads, want the one it opened first to serve every request", dialled.Load())
 	}
 }

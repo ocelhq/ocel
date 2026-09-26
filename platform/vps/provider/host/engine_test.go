@@ -30,24 +30,24 @@ func engineOrSkip(t *testing.T) {
 	t.Helper()
 
 	if _, err := exec.LookPath(dockerEngine); err != nil {
-		t.Skip("this machine carries no docker, and what an engine reports cannot be read off one that is not here")
+		t.Skip("this machine has no docker, and what an engine reports cannot be read off one that is not here")
 	}
 	if err := exec.Command(dockerEngine, "info").Run(); err != nil {
 		t.Skip("the docker on this machine answers nothing, so there is no engine to measure against")
 	}
-	for _, held := range []struct{ kind, name, take string }{
+	for _, existing := range []struct{ kind, name, take string }{
 		{"container", caddy.Container, "docker rm --force " + caddy.Container},
 		{"container", SwitchboardContainer, "docker rm --force " + SwitchboardContainer},
 		{"network", ProxyNetwork, "docker network rm " + ProxyNetwork},
 	} {
-		if exec.Command(dockerEngine, held.kind, "inspect", held.name).Run() == nil {
-			t.Fatalf("this machine already carries the %s %q ocel writes, and the test will not take something it did not create. Skipping here is how the redirect ordering, the subject collection and the pinned pair evaporate into a green run under stale local state. Take it with `%s` and re-run",
-				held.kind, held.name, held.take)
+		if exec.Command(dockerEngine, existing.kind, "inspect", existing.name).Run() == nil {
+			t.Fatalf("this machine already has the %s %q ocel writes, and the test will not take something it did not create. Skipping here is how the redirect ordering, the subject collection and the pinned pair evaporate into a green run under stale local state. Take it with `%s` and re-run",
+				existing.kind, existing.name, existing.take)
 		}
 	}
 }
 
-type standingProxy struct {
+type liveProxy struct {
 	name    string
 	board   string
 	network string
@@ -58,7 +58,7 @@ type standingProxy struct {
 	here    func(string) string
 }
 
-func proxyStanding(t *testing.T) standingProxy {
+func aLiveProxy(t *testing.T) liveProxy {
 	t.Helper()
 
 	engineOrSkip(t)
@@ -72,33 +72,33 @@ func proxyStanding(t *testing.T) standingProxy {
 	if err != nil {
 		t.Skipf("no switchboard is built for a machine reporting %q", runtime.GOARCH)
 	}
-	stood := standingProxy{name: name, board: board, network: network, dir: dir}
+	proxy := liveProxy{name: name, board: board, network: network, dir: dir}
 	proxied, routing, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
-	stood.pins, stood.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(live.RoutingTable))
-	stood.binary = filepath.Join(switching, switchboard.Name)
-	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, stood.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
+	proxy.pins, proxy.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(live.RoutingTable))
+	proxy.binary = filepath.Join(switching, switchboard.Name)
+	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, proxy.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for path, seeded := range map[string][]byte{filepath.Join(proxied, caddy.ConfigName): proxyConfigItem().Content, stood.table: routingTableItem().Content} {
+	for path, seeded := range map[string][]byte{filepath.Join(proxied, caddy.ConfigName): proxyConfigItem().Content, proxy.table: routingTableItem().Content} {
 		if err := os.WriteFile(path, seeded, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	runnable(t, stood.binary, switchboardBinary(arch), 0o755)
+	runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
 	unprivileged := quoted("--security-opt") + " " + quoted(noNewPrivileges) + " "
 	if pinnable() {
 		unprivileged = ""
 	} else {
-		t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard stands here without it")
+		t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard runs here without it")
 	}
-	stood.here = strings.NewReplacer(
+	proxy.here = strings.NewReplacer(
 		switchboard.FrontDir, filepath.Join(dir, "front"),
 		switchboard.ControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
-		caddy.PinsDir, stood.pins,
+		caddy.PinsDir, proxy.pins,
 		proxyRoot, proxied,
 		live.RoutingDir, routing,
 		routingLock, dir,
@@ -112,14 +112,14 @@ func proxyStanding(t *testing.T) standingProxy {
 	taken(t, board)
 	taken(t, name)
 	for what, script := range map[string]string{
-		"the switchboard": switchboardStanding(switchboardBinary(arch), Front{}).writing(containerRising),
+		"the switchboard": switchboardBox(switchboardBinary(arch), Front{}).writing(containerRising),
 		"the proxy":       frontProxy().writing(containerRising),
 	} {
-		if out, err := exec.Command("/bin/sh", "-c", stood.here(script)).CombinedOutput(); err != nil {
-			t.Fatalf("the write that stands %s up = %v\n%s", what, err, out)
+		if out, err := exec.Command("/bin/sh", "-c", proxy.here(script)).CombinedOutput(); err != nil {
+			t.Fatalf("the write that starts %s = %v\n%s", what, err, out)
 		}
 	}
-	return stood
+	return proxy
 }
 
 var pinnable = sync.OnceValue(func() bool {
@@ -137,112 +137,112 @@ func taken(t *testing.T, name string) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Errorf("%s is still reported by the engine after a forced removal, and the ports and the name it holds are the next test's to take", name)
+	t.Errorf("%s is still reported by the engine after a forced removal, and the ports and the name it owns are the next test's to take", name)
 }
 
 func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 	arch, _ := Architecture(runtime.GOARCH)
 
-	for _, standing := range []struct {
+	for _, target := range []struct {
 		name  string
 		as    boxContainer
 		binds []string
 	}{
-		{stood.name, frontProxy(), []string{
-			filepath.Join(stood.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
-			stood.pins + ":" + caddy.PinsMount + ":ro",
-			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
-			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
-			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
+		{proxy.name, frontProxy(), []string{
+			filepath.Join(proxy.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
+			proxy.pins + ":" + caddy.PinsMount + ":ro",
+			filepath.Join(proxy.dir, "proxy", "data") + ":" + caddy.DataMount,
+			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch), Front{}), []string{
-			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
-			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
-			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
-			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
-			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
+		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), []string{
+			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
+			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
+			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
+			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
 	} {
-		rendered, err := exec.Command("/bin/sh", "-c", stood.here(standing.as.probe())).Output()
+		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(target.as.probe())).Output()
 		if err != nil {
-			t.Fatalf("probe %s on this machine: %v", standing.name, err)
+			t.Fatalf("probe %s on this machine: %v", target.name, err)
 		}
 		observed, _, err := readSurvey(string(rendered))
 		if err != nil {
 			t.Fatal(err)
 		}
-		stated := standing.as.item("")
-		stated.Name = standing.name
-		stated.Content = []byte(stood.here(string(standing.as.factsOver(standing.binds))))
+		stated := target.as.item("")
+		stated.Name = target.name
+		stated.Content = []byte(proxy.here(string(target.as.factsOver(target.binds))))
 		if observed[stated.ID()] != stated.Digest() {
-			box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ContainerFactTemplate, standing.name).Output()
-			t.Errorf("a real engine reports %s as something other than the item ocel writes it from, so every re-run plans an update over a container that stands:\n%s",
-				standing.name, compared(canonical(stood.here(string(box))), strings.TrimSpace(string(stated.Content))))
+			box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ContainerFactTemplate, target.name).Output()
+			t.Errorf("a real engine reports %s as something other than the item ocel writes it from, so every re-run plans an update over a container that is already running:\n%s",
+				target.name, compared(canonical(proxy.here(string(box))), strings.TrimSpace(string(stated.Content))))
 		}
 	}
 }
 
 func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 	arch, _ := Architecture(runtime.GOARCH)
 
-	for _, standing := range []struct {
+	for _, target := range []struct {
 		name     string
 		as       boxContainer
 		replaced string
 		emptied  bool
 		binds    []string
 	}{
-		{stood.name, frontProxy(), stood.pins, false, []string{
-			filepath.Join(stood.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
-			stood.pins + ":" + caddy.PinsMount + ":ro",
-			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
-			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
-			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
+		{proxy.name, frontProxy(), proxy.pins, false, []string{
+			filepath.Join(proxy.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
+			proxy.pins + ":" + caddy.PinsMount + ":ro",
+			filepath.Join(proxy.dir, "proxy", "data") + ":" + caddy.DataMount,
+			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
+			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch), Front{}), filepath.Join(stood.dir, "connector"), false, []string{
-			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
-			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
-			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
-			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
-			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
+		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), filepath.Join(proxy.dir, "connector"), false, []string{
+			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
+			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
+			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
+			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch), Front{}), filepath.Dir(stood.binary), true, []string{
-			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
-			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
-			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
-			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
-			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
+		{proxy.board, switchboardBox(switchboardBinary(arch), Front{}), filepath.Dir(proxy.binary), true, []string{
+			filepath.Join(proxy.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
+			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
+			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
+			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
 	} {
-		if err := os.Rename(standing.replaced, standing.replaced+".gone"); err != nil {
+		if err := os.Rename(target.replaced, target.replaced+".gone"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Mkdir(standing.replaced, 0o755); err != nil {
+		if err := os.Mkdir(target.replaced, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if standing.emptied {
-			if err := os.RemoveAll(standing.replaced + ".gone"); err != nil {
+		if target.emptied {
+			if err := os.RemoveAll(target.replaced + ".gone"); err != nil {
 				t.Fatal(err)
 			}
-			runnable(t, stood.binary, switchboardBinary(arch), 0o755)
+			runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
 		}
-		rendered, err := exec.Command("/bin/sh", "-c", stood.here(standing.as.probe())).Output()
+		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(target.as.probe())).Output()
 		if err != nil {
-			t.Fatalf("probe %s on this machine: %v", standing.name, err)
+			t.Fatalf("probe %s on this machine: %v", target.name, err)
 		}
 		observed, _, err := readSurvey(string(rendered))
 		if err != nil {
 			t.Fatal(err)
 		}
-		moved := standing.as.item("")
-		moved.Name = standing.name
-		moved.Content = bytes.Replace([]byte(stood.here(string(standing.as.factsOver(standing.binds)))),
-			[]byte(mountsFact+mountsHeld), []byte(mountsFact+mountsMoved), 1)
+		moved := target.as.item("")
+		moved.Name = target.name
+		moved.Content = bytes.Replace([]byte(proxy.here(string(target.as.factsOver(target.binds)))),
+			[]byte(mountsFact+mountsIntact), []byte(mountsFact+mountsMoved), 1)
 		if observed[moved.ID()] != moved.Digest() {
 			t.Errorf("%s reads %s, a directory the host replaced after it started, and a probe with no root reports it as something other than a moved mount: an unelevated describe then calls a container current that serves a directory which is gone",
-				standing.name, standing.replaced)
+				target.name, target.replaced)
 		}
 	}
 }
@@ -273,7 +273,7 @@ func compared(box, stated string) string {
 	return written.String()
 }
 
-func (p standingProxy) drives(t *testing.T, argv ...string) string {
+func (p liveProxy) drives(t *testing.T, argv ...string) string {
 	t.Helper()
 
 	run := exec.Command(dockerEngine, append([]string{"exec", p.board, SwitchboardMounted}, argv...)...)
@@ -289,7 +289,7 @@ func (p standingProxy) drives(t *testing.T, argv ...string) string {
 	return string(said)
 }
 
-func (p standingProxy) reloads(t *testing.T) {
+func (p liveProxy) reloads(t *testing.T) {
 	t.Helper()
 
 	if out, err := exec.Command(dockerEngine, "exec", p.name, "caddy", "reload", "--config", caddy.ConfigMount, "--address", "unix/"+caddy.AdminSocket).CombinedOutput(); err != nil {
@@ -297,34 +297,34 @@ func (p standingProxy) reloads(t *testing.T) {
 	}
 }
 
-func (p standingProxy) standsApp(t *testing.T, upstream, body string) {
+func (p liveProxy) runsApp(t *testing.T, upstream, body string) {
 	t.Helper()
 
 	name, _, _ := strings.Cut(upstream, ":")
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
-	stood, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image,
+	out, err := exec.Command(dockerEngine, append(run, "--network", p.network, caddy.Image,
 		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
-		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
+		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 }
 
 func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 
 	flipped := routed()
-	stood.standsApp(t, flipped.Routes[0].Upstream, "the app answered")
+	proxy.runsApp(t, flipped.Routes[0].Upstream, "the app answered")
 	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	const moved = `"grace_period":"29s"`
-	stood.stages(t, routingTableItem().Content, flipped, bytes.Replace(mustRender(t, flipped), []byte(`"grace_period":"30s"`), []byte(moved), 1))
-	stood.drives(t, "load", stood.table)
-	stood.reloads(t)
+	proxy.stages(t, routingTableItem().Content, flipped, bytes.Replace(mustRender(t, flipped), []byte(`"grace_period":"30s"`), []byte(moved), 1))
+	proxy.drives(t, "load", proxy.table)
+	proxy.reloads(t)
 
-	if held, err := exec.Command(dockerEngine, "exec", stood.name, "cat", caddy.ConfigMount).Output(); err != nil || !strings.Contains(string(held), moved) {
-		t.Fatalf("the running proxy reads %s as\n%s\n(%v) after a deploy moved a config carrying %s into place: the deploy writes it by staging beside it and renaming, and a proxy handed that file through a bind of the file itself keeps reading the inode it was started on",
-			caddy.ConfigMount, held, err, moved)
+	if mounted, err := exec.Command(dockerEngine, "exec", proxy.name, "cat", caddy.ConfigMount).Output(); err != nil || !strings.Contains(string(mounted), moved) {
+		t.Fatalf("the running proxy reads %s as\n%s\n(%v) after a deploy moved a config containing %s into place: the deploy writes it by staging beside it and renaming, and a proxy handed that file through a bind of the file itself keeps reading the inode it was started on",
+			caddy.ConfigMount, mounted, err, moved)
 	}
 
 	ask := func(hostname string) *http.Response {
@@ -343,7 +343,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 	}
 
 	if said := ask("unclaimed.example.com"); said.StatusCode != http.StatusNotFound || said.Header.Get(edge.HeaderEdge) != switchboard.EdgeName {
-		t.Errorf("a hostname nothing on this box claims was answered %d carrying %s: %q, want a 404 naming this edge",
+		t.Errorf("a hostname nothing on this box claims was answered %d with %s: %q, want a 404 naming this edge",
 			said.StatusCode, edge.HeaderEdge, said.Header.Get(edge.HeaderEdge))
 	}
 	said := ask(claimed)
@@ -352,7 +352,7 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 		t.Fatalf("read what the proxy answered for %q: %v", claimed, err)
 	}
 	if said.StatusCode != http.StatusOK || string(read) != "the app answered" {
-		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app standing on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
+		t.Errorf("the hostname %q claims was answered %d %q, want the body of the app running on %s: the switchboard is handed the directory the table is renamed into, and one handed the file keeps routing the seed",
 			surface, said.StatusCode, read, flipped.Routes[0].Upstream)
 	}
 	if said.Header.Get(edge.HeaderEdge) != switchboard.EdgeName {
@@ -361,12 +361,12 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 }
 
 func TestTheSwitchboardTrustsWhatTheFrontProxyForwardsAndNothingAClientSays(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 
 	state := routed()
-	stood.standsApp(t, state.Routes[0].Upstream, "{http.request.header.X-Forwarded-For}|{http.request.header.X-Forwarded-Proto}|{http.request.host}")
+	proxy.runsApp(t, state.Routes[0].Upstream, "{http.request.header.X-Forwarded-For}|{http.request.header.X-Forwarded-Proto}|{http.request.host}")
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood.moves(t, routingTableItem().Content, state)
+	proxy.moves(t, routingTableItem().Content, state)
 
 	request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+caddy.HTTPPort+"/", nil)
 	if err != nil {
@@ -396,12 +396,12 @@ func TestTheSwitchboardTrustsWhatTheFrontProxyForwardsAndNothingAClientSays(t *t
 }
 
 func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 
 	state := routed()
-	stood.standsApp(t, state.Routes[0].Upstream, "the app answered")
+	proxy.runsApp(t, state.Routes[0].Upstream, "the app answered")
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood.moves(t, routingTableItem().Content, state)
+	proxy.moves(t, routingTableItem().Content, state)
 	ask := func() *http.Response {
 		t.Helper()
 		request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+caddy.HTTPPort+"/", nil)
@@ -420,7 +420,7 @@ func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *tes
 	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(edge.HeaderEdge), []string{switchboard.EdgeName}) {
 		t.Errorf("%s was answered %d naming the edge %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(edge.HeaderEdge), switchboard.EdgeName)
 	}
-	if out, err := exec.Command(dockerEngine, "stop", "--time", "1", stood.board).CombinedOutput(); err != nil {
+	if out, err := exec.Command(dockerEngine, "stop", "--time", "1", proxy.board).CombinedOutput(); err != nil {
 		t.Fatalf("stop the switchboard: %v\n%s", err, out)
 	}
 	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(edge.HeaderEdge), []string{switchboard.EdgeName}) {
@@ -429,11 +429,11 @@ func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *tes
 	}
 }
 
-func (p standingProxy) stages(t *testing.T, held []byte, state RoutingTable, config []byte) []byte {
+func (p liveProxy) stages(t *testing.T, current []byte, state RoutingTable, config []byte) []byte {
 	t.Helper()
 
 	written := mustWrite(t, state)
-	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(held)), ProxyConfig)))
+	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(current)), ProxyConfig)))
 	write.Stdin = strings.NewReader(pairFed(routingPair{table: written, config: []byte(p.here(string(config)))}))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
@@ -441,42 +441,42 @@ func (p standingProxy) stages(t *testing.T, held []byte, state RoutingTable, con
 	return written
 }
 
-func (p standingProxy) writes(t *testing.T, held []byte, state RoutingTable) []byte {
+func (p liveProxy) writes(t *testing.T, current []byte, state RoutingTable) []byte {
 	t.Helper()
-	return p.stages(t, held, state, mustRender(t, state))
+	return p.stages(t, current, state, mustRender(t, state))
 }
 
-func (p standingProxy) moves(t *testing.T, held []byte, state RoutingTable) []byte {
+func (p liveProxy) moves(t *testing.T, current []byte, state RoutingTable) []byte {
 	t.Helper()
 
-	written := p.writes(t, held, state)
+	written := p.writes(t, current, state)
 	p.drives(t, "flip", p.table)
 	p.reloads(t)
 	return written
 }
 
-func (p standingProxy) standsSlowApp(t *testing.T, upstream string, slow time.Duration) {
+func (p liveProxy) runsSlowApp(t *testing.T, upstream string, slow time.Duration) {
 	t.Helper()
 
 	name, _, _ := strings.Cut(upstream, ":")
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	answer := fmt.Sprintf(`while read -r line && [ "$line" != "$(printf '\r')" ]; do :; done; sleep %d; printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'`,
 		int(slow.Seconds()))
-	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
+	out, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", p.network, "--entrypoint", "nc", caddy.Image,
 		"-lk", "-p", appbuild.InjectedPortText, "-e", "sh", "-c", answer).CombinedOutput()
 	if err != nil {
-		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
+		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 }
 
-func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t *testing.T) {
-	stood := proxyStanding(t)
+func TestARealProxyDropsNoRequestWhileAFlipMovesAnExistingRouteBetweenUpstreams(t *testing.T) {
+	proxy := aLiveProxy(t)
 
 	one, two := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
-	stood.standsApp(t, one, "one")
-	stood.standsApp(t, two, "two")
+	proxy.runsApp(t, one, "one")
+	proxy.runsApp(t, two, "two")
 	serving := func(upstream string) RoutingTable {
 		return RoutingTable{
 			Grace:  DrainWindow,
@@ -484,19 +484,19 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
-	held := stood.moves(t, routingTableItem().Content, serving(one))
+	table := proxy.moves(t, routingTableItem().Content, serving(one))
 
 	flips := 0
 	dropped, bodies := underLoad(func() {
 		for _, upstream := range []string{two, one, two, one, two, one, two, one, two, one} {
-			held = stood.moves(t, held, serving(upstream))
+			table = proxy.moves(t, table, serving(upstream))
 			flips++
 			time.Sleep(200 * time.Millisecond)
 		}
 	})
 
 	if len(dropped) > 0 {
-		t.Errorf("%d of the requests made while %d flips moved %s between two standing upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
+		t.Errorf("%d of the requests made while %d flips moved %s between two running upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
 			len(dropped), flips, claimed, dropped[:min(len(dropped), 5)])
 	}
 	if bodies["one"] == 0 || bodies["two"] == 0 {
@@ -553,13 +553,13 @@ func underLoad(storm func()) ([]string, map[string]int) {
 }
 
 func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 
 	state := routed()
-	stood.standsApp(t, state.Routes[0].Upstream, "one")
+	proxy.runsApp(t, state.Routes[0].Upstream, "one")
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	held := stood.moves(t, routingTableItem().Content, state)
-	standing := mustRender(t, state)
+	table := proxy.moves(t, routingTableItem().Content, state)
+	initial := mustRender(t, state)
 
 	binds, rendered := 0, 0
 	dropped, bodies := underLoad(func() {
@@ -573,12 +573,12 @@ func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t
 				next.Connector = "box.example.com"
 			}
 			config := mustRender(t, next)
-			if !bytes.Equal(config, standing) {
+			if !bytes.Equal(config, initial) {
 				rendered++
 			}
-			held = stood.stages(t, held, next, config)
-			stood.drives(t, "load", stood.table)
-			stood.reloads(t)
+			table = proxy.stages(t, table, next, config)
+			proxy.drives(t, "load", proxy.table)
+			proxy.reloads(t)
 			binds++
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -597,11 +597,11 @@ func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t
 }
 
 func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 
 	retired, next := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
-	stood.standsSlowApp(t, retired, 2*time.Second)
-	stood.standsApp(t, next, "two")
+	proxy.runsSlowApp(t, retired, 2*time.Second)
+	proxy.runsApp(t, next, "two")
 	serving := func(upstream string) RoutingTable {
 		return RoutingTable{
 			Grace:  DrainWindow,
@@ -609,10 +609,10 @@ func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
-	held := stood.moves(t, routingTableItem().Content, serving(retired))
-	stood.writes(t, held, serving(next))
-	stood.drives(t, "gate", "--deploy-timeout", "10", next+"/up")
-	stood.drives(t, "flip", "--drain-timeout", "30", "--retire", retired, stood.table)
+	table := proxy.moves(t, routingTableItem().Content, serving(retired))
+	proxy.writes(t, table, serving(next))
+	proxy.drives(t, "gate", "--deploy-timeout", "10", next+"/up")
+	proxy.drives(t, "flip", "--drain-timeout", "30", "--retire", retired, proxy.table)
 	name, _, _ := strings.Cut(retired, ":")
 	if out, err := exec.Command(dockerEngine, "rm", "--force", name).CombinedOutput(); err != nil {
 		t.Fatalf("stop the retired release: %v\n%s", err, out)
@@ -659,11 +659,11 @@ func askedFor(hostname string, timeout time.Duration) (string, error) {
 }
 
 func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *testing.T) {
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 
 	retired, next := "shop-web-1111:"+appbuild.InjectedPortText, "shop-web-2222:"+appbuild.InjectedPortText
-	stood.standsSlowApp(t, retired, 4*time.Second)
-	stood.standsApp(t, next, "two")
+	proxy.runsSlowApp(t, retired, 4*time.Second)
+	proxy.runsApp(t, next, "two")
 	serving := func(upstream string) RoutingTable {
 		return RoutingTable{
 			Grace:  DrainWindow,
@@ -671,8 +671,8 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *t
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
-	held := stood.moves(t, routingTableItem().Content, serving(retired))
-	if idle := strings.TrimSpace(stood.drives(t, "idle", retired)); idle != "" {
+	table := proxy.moves(t, routingTableItem().Content, serving(retired))
+	if idle := strings.TrimSpace(proxy.drives(t, "idle", retired)); idle != "" {
 		t.Errorf("idle named %q while the route still dials it", idle)
 	}
 
@@ -682,11 +682,11 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *t
 		inFlight <- err
 	}()
 	time.Sleep(500 * time.Millisecond)
-	stood.writes(t, held, serving(next))
+	proxy.writes(t, table, serving(next))
 	flipped := make(chan string, 1)
 	go func() {
-		said, err := exec.Command(dockerEngine, "exec", stood.board, SwitchboardMounted,
-			"flip", "--drain-timeout", "30", "--retire", retired, stood.table).CombinedOutput()
+		said, err := exec.Command(dockerEngine, "exec", proxy.board, SwitchboardMounted,
+			"flip", "--drain-timeout", "30", "--retire", retired, proxy.table).CombinedOutput()
 		flipped <- fmt.Sprintf("%v %s", err, said)
 	}()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
@@ -698,14 +698,14 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *t
 		}
 	}
 
-	if idle := strings.TrimSpace(stood.drives(t, "idle", retired, next)); idle != "" {
+	if idle := strings.TrimSpace(proxy.drives(t, "idle", retired, next)); idle != "" {
 		t.Errorf("idle named %q while the flip that retired %s was still draining a request from it: a failed release that removes what idle names cuts that request", idle, retired)
 	}
 	if err := <-inFlight; err != nil {
 		t.Errorf("the request in flight when the route moved was answered %v", err)
 	}
 	t.Logf("the flip said %s", <-flipped)
-	if idle := strings.TrimSpace(stood.drives(t, "idle", retired, next)); idle != retired {
+	if idle := strings.TrimSpace(proxy.drives(t, "idle", retired, next)); idle != retired {
 		t.Errorf("idle named %q once the flip retiring %s had drained it and returned, want %s alone", idle, retired, retired)
 	}
 }

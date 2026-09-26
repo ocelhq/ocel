@@ -143,14 +143,14 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 
 	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
 	if err != nil {
-		t.Fatalf("Serving() over a certificate nothing trusts = %v, want it reported unserved: a settle writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
+		t.Fatalf("Serving() over a certificate nothing trusts = %v, want it reported unserved: a cutover writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
 			err)
 	}
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing: no header is readable off a handshake the client refused", kind)
 	}
 	if cause := p.LastProbeFailure("shop.example.com"); !strings.Contains(cause, "x509") {
-		t.Errorf("LastProbeFailure() = %q, want the chain the client refused: the settle gives up after a full minute with nothing for the operator to act on", cause)
+		t.Errorf("LastProbeFailure() = %q, want the chain the client refused: the cutover gives up after a full minute with nothing for the operator to act on", cause)
 	}
 }
 
@@ -182,13 +182,13 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p.LastProbeFailure("shop.example.com") == "" {
-		t.Fatal("a hostname the probe never reached carries no cause, and this test states nothing about clearing one")
+		t.Fatal("a hostname the probe never reached has no cause, and this test states nothing about clearing one")
 	}
 	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if cause := p.LastProbeFailure("shop.example.com"); cause != "" {
-		t.Errorf("LastProbeFailure() = %q for a hostname that answered, and a stale cause is read out on whatever the settle gives up on next", cause)
+		t.Errorf("LastProbeFailure() = %q for a hostname that answered, and a stale cause is read out on whatever the cutover gives up on next", cause)
 	}
 }
 
@@ -206,7 +206,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 	}
 }
 
-func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
+func TestAHostnameNothingAnswersIsNotAnErrorTheCutoverGivesUpOn(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
@@ -214,7 +214,7 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
 
 	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "nothing.invalid")
 	if err != nil {
-		t.Fatalf("Serving() over a hostname that resolves to nothing = %v, want it reported as unserved: the settle retries on an empty answer and gives up on an error", err)
+		t.Fatalf("Serving() over a hostname that resolves to nothing = %v, want it reported as unserved: the cutover retries on an empty answer and gives up on an error", err)
 	}
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing", kind)
@@ -325,6 +325,6 @@ func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
 	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
 
 	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost"); err == nil {
-		t.Error("Serving() = nil over a proxy that could not be asked at all, and the settle burns a minute on a box whose proxy is down")
+		t.Error("Serving() = nil over a proxy that could not be asked at all, and the cutover burns a minute on a box whose proxy is down")
 	}
 }

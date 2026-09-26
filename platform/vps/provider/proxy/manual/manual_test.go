@@ -87,51 +87,51 @@ func TestManualRendersNothingForItsProxyWhateverTheBoxAdmits(t *testing.T) {
 func TestManualTouchesNothingToReload(t *testing.T) {
 	t.Parallel()
 
-	held := &box{}
-	front := manual.Manual{Box: held}
+	machine := &box{}
+	front := manual.Manual{Box: machine}
 	if err := front.Reload(context.Background()); err != nil {
 		t.Errorf("Reload() = %v, want nothing to do", err)
 	}
-	if len(held.asked) != 0 {
-		t.Errorf("Reload asked the box %q, want nothing asked", held.asked)
+	if len(machine.asked) != 0 {
+		t.Errorf("Reload asked the box %q, want nothing asked", machine.asked)
 	}
 }
 
 func TestManualSaysYourProxyRenewsACertificate(t *testing.T) {
 	t.Parallel()
 
-	held, err := (manual.Manual{Box: &box{}}).Certificate(context.Background(), "shop.example.com")
+	certificate, err := (manual.Manual{Box: &box{}}).Certificate(context.Background(), "shop.example.com")
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)
 	}
-	if held.Renewal != certs.AdoptedRenewal || held.Trouble != nil {
-		t.Errorf("Certificate() = %+v, want renewal %q and no rate limit read", held, certs.AdoptedRenewal)
+	if certificate.Renewal != certs.AdoptedRenewal || certificate.Trouble != nil {
+		t.Errorf("Certificate() = %+v, want renewal %q and no rate limit read", certificate, certs.AdoptedRenewal)
 	}
 }
 
-func verdicts(standing proxy.Standing) map[string]provider.HostCheck {
-	held := map[string]provider.HostCheck{}
-	for _, check := range standing {
-		held[check.Subject] = check
+func verdicts(inspected proxy.Checks) map[string]provider.HostCheck {
+	bySubject := map[string]provider.HostCheck{}
+	for _, check := range inspected {
+		bySubject[check.Subject] = check
 	}
-	return held
+	return bySubject
 }
 
-func TestManualStandsWhenYourProxyHolds443AndRoutesEveryClaimToTheSwitchboard(t *testing.T) {
+func TestManualPassesWhenYourProxyListensOn443AndRoutesEveryClaimToTheSwitchboard(t *testing.T) {
 	t.Parallel()
 
-	held := &box{
+	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "ocel-edge-probe.preview.example.com"},
 		answers:   map[string]string{"shop.example.com": "box", "ocel-edge-probe.preview.example.com": "box"},
 	}
-	standing, err := (manual.Manual{Box: held, Port: 8480}).Inspect(context.Background())
+	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	checks := verdicts(standing)
+	checks := verdicts(inspected)
 	if len(checks) != 3 {
-		t.Fatalf("Inspect() = %+v, want :443 and each claim checked", standing)
+		t.Fatalf("Inspect() = %+v, want :443 and each claim checked", inspected)
 	}
 	for subject, check := range checks {
 		if check.Verdict != provider.HostPass {
@@ -140,64 +140,64 @@ func TestManualStandsWhenYourProxyHolds443AndRoutesEveryClaimToTheSwitchboard(t 
 	}
 }
 
-func TestManualFailsWhenNothingHolds443(t *testing.T) {
+func TestManualFailsWhenNothingListensOn443(t *testing.T) {
 	t.Parallel()
 
-	standing, err := (manual.Manual{Box: &box{}, Port: 8480}).Inspect(context.Background())
+	inspected, err := (manual.Manual{Box: &box{}, Port: 8480}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	check := verdicts(standing)["tcp 443"]
+	check := verdicts(inspected)["tcp 443"]
 	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "nothing listens on 443") {
 		t.Errorf("tcp 443 = %+v, want it failed for nothing listening", check)
 	}
 }
 
-func TestManualStandsWhenAContainerOfYoursPublishes443WithNothingListeningOnTheHost(t *testing.T) {
+func TestManualPassesWhenAContainerOfYoursPublishes443WithNothingListeningOnTheHost(t *testing.T) {
 	t.Parallel()
 
-	held := &box{publishing: []string{"traefik"}}
-	standing, err := (manual.Manual{Box: held, Port: 8480}).Inspect(context.Background())
+	machine := &box{publishing: []string{"traefik"}}
+	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	check := verdicts(standing)["tcp 443"]
+	check := verdicts(inspected)["tcp 443"]
 	if check.Verdict != provider.HostPass || !strings.Contains(check.Finding, "traefik") {
 		t.Errorf("tcp 443 = %+v, want it passed naming traefik: an engine without its userland proxy publishes through the firewall and nothing listens", check)
 	}
 }
 
-func TestManualFailsWhenOcelsOwnProxyHolds443(t *testing.T) {
+func TestManualFailsWhenOcelsOwnProxyPublishes443(t *testing.T) {
 	t.Parallel()
 
-	held := &box{listening: on443(), publishing: []string{caddy.Container}}
-	standing, err := (manual.Manual{Box: held, Port: 8480}).Inspect(context.Background())
+	machine := &box{listening: on443(), publishing: []string{caddy.Container}}
+	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	check := verdicts(standing)["tcp 443"]
+	check := verdicts(inspected)["tcp 443"]
 	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, caddy.Container) {
 		t.Errorf("tcp 443 = %+v, want it failed naming %s", check, caddy.Container)
 	}
-	if !slices.Contains(held.asked, "publishing 443") {
-		t.Errorf("the box was asked %q, want it asked who publishes 443", held.asked)
+	if !slices.Contains(machine.asked, "publishing 443") {
+		t.Errorf("the box was asked %q, want it asked who publishes 443", machine.asked)
 	}
 }
 
 func TestManualFailsAClaimYourProxyDoesNotRouteAndSaysWhereToRouteIt(t *testing.T) {
 	t.Parallel()
 
-	held := &box{
+	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "api.example.com"},
 		answers:   map[string]string{"shop.example.com": "box", "api.example.com": ""},
 		unreached: map[string]string{"api.example.com": "api.example.com answered nothing over tls at 127.0.0.1:443"},
 	}
-	standing, err := (manual.Manual{Box: held, Port: 9000}).Inspect(context.Background())
+	inspected, err := (manual.Manual{Box: machine, Port: 9000}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	check := verdicts(standing)["api.example.com"]
+	check := verdicts(inspected)["api.example.com"]
 	if check.Verdict != provider.HostFail {
 		t.Fatalf("api.example.com = %+v, want it failed", check)
 	}
@@ -212,16 +212,16 @@ func TestManualFailsAClaimYourProxyDoesNotRouteAndSaysWhereToRouteIt(t *testing.
 func TestManualFailsAClaimAnsweredByAnotherEdge(t *testing.T) {
 	t.Parallel()
 
-	held := &box{
+	machine := &box{
 		listening: on443(),
 		claimed:   []string{"shop.example.com"},
 		answers:   map[string]string{"shop.example.com": "cloudflare"},
 	}
-	standing, err := (manual.Manual{Box: held, Port: 8480}).Inspect(context.Background())
+	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	check := verdicts(standing)["shop.example.com"]
+	check := verdicts(inspected)["shop.example.com"]
 	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "cloudflare") {
 		t.Errorf("shop.example.com = %+v, want it failed naming the edge that answered", check)
 	}
@@ -230,12 +230,12 @@ func TestManualFailsAClaimAnsweredByAnotherEdge(t *testing.T) {
 func TestManualFailsTheListenCheckItCouldNotRead(t *testing.T) {
 	t.Parallel()
 
-	held := &box{unread: errors.New("cat: /proc/net/tcp: permission denied")}
-	standing, err := (manual.Manual{Box: held, Port: 8480}).Inspect(context.Background())
+	machine := &box{unread: errors.New("cat: /proc/net/tcp: permission denied")}
+	inspected, err := (manual.Manual{Box: machine, Port: 8480}).Inspect(context.Background())
 	if err != nil {
 		t.Fatalf("Inspect() = %v", err)
 	}
-	check := verdicts(standing)["tcp 443"]
+	check := verdicts(inspected)["tcp 443"]
 	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "permission denied") {
 		t.Errorf("tcp 443 = %+v, want it failed with what the read met", check)
 	}

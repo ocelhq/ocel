@@ -97,8 +97,8 @@ func main() {
 	mux.HandleFunc("/hold", func(w http.ResponseWriter, r *http.Request) {
 		inflight.Add(1)
 		defer inflight.Add(-1)
-		held, _ := strconv.Atoi(r.URL.Query().Get("s"))
-		time.Sleep(time.Duration(held) * time.Second)
+		seconds, _ := strconv.Atoi(r.URL.Query().Get("s"))
+		time.Sleep(time.Duration(seconds) * time.Second)
 		_, _ = io.WriteString(w, release)
 	})
 	mux.HandleFunc("/sse", func(w http.ResponseWriter, r *http.Request) {
@@ -120,8 +120,8 @@ func main() {
 		}
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, _ *http.Request) {
-		hijacker, held := w.(http.Hijacker)
-		if !held {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
 			http.Error(w, "no hijack", http.StatusInternalServerError)
 			return
 		}
@@ -220,11 +220,11 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 
 func fixtures(t *testing.T, vm machine) {
 	t.Helper()
-	held := map[string]bool{}
+	present := map[string]bool{}
 	for _, tagged := range lines(vm.ssh(t, "sudo docker image ls --format '{{.Repository}}:{{.Tag}}' "+fixtureRepo)) {
-		held[strings.TrimSpace(tagged)] = true
+		present[strings.TrimSpace(tagged)] = true
 	}
-	if !held[fixtureBase] {
+	if !present[fixtureBase] {
 		vm.feeds(t, "sudo docker import --change 'ENTRYPOINT [\""+appbuild.ContainerRuntimePath+"\", \"/app\"]' - "+fixtureBase+" >/dev/null",
 			fixtureBinary(t, vm.arch(t)))
 	}
@@ -235,7 +235,7 @@ func fixtures(t *testing.T, vm machine) {
 		"hung":    {"MODE=hang"},
 		"crasher": {"MODE=crash"},
 	} {
-		if held[fixtureAt(tag)] {
+		if present[fixtureAt(tag)] {
 			continue
 		}
 		file := "FROM " + fixtureBase + "\n"

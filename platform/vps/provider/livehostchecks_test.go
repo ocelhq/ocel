@@ -42,12 +42,12 @@ func about(t *testing.T, checks []provider.HostCheck, subject string) provider.H
 func TestLiveTheHostCheckVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	owed := "ocel-live-host-checks.invalid"
-	checks := hostChecksOn(t, p, []string{owed, "*.preview." + owed})
+	unresolved := "ocel-live-host-checks.invalid"
+	checks := hostChecksOn(t, p, []string{unresolved, "*.preview." + unresolved})
 
-	dns := about(t, checks, owed)
+	dns := about(t, checks, unresolved)
 	if dns.Verdict != provider.HostNeedsAction {
-		t.Errorf("the verdict for %s is %v (%q), want it owed: a name nothing resolves is a record a human has not written yet", owed, dns.Verdict, dns.Finding)
+		t.Errorf("the verdict for %s is %v (%q), want it to need action: a name nothing resolves is a manual record a human has not written yet", unresolved, dns.Verdict, dns.Finding)
 	}
 
 	reach := about(t, checks, ":"+caddy.HTTPPort)
@@ -63,11 +63,11 @@ func TestLiveTheHostCheckVerdictsReadOffABootstrappedBoxAndGateNothing(t *testin
 
 	for _, check := range checks {
 		if check.Verdict == provider.HostFail {
-			t.Errorf("a bootstrapped box whose only owed thing is a dns record failed %q: %s", check.Subject, check.Finding)
+			t.Errorf("a bootstrapped box whose only outstanding item is a manual dns record failed %q: %s", check.Subject, check.Finding)
 		}
 	}
 	if !vm.running(t, caddy.Container) {
-		t.Fatalf("%s is not running, so the verdicts above were read off a box that was never standing", caddy.Container)
+		t.Fatalf("%s is not running, so the verdicts above were read off a box that was never running", caddy.Container)
 	}
 }
 

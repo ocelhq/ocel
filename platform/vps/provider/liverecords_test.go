@@ -20,13 +20,13 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 	name := stackrecords.ProjectRecord(edge.ClassProduction, "records-induction")
 	ctx := context.Background()
 
-	held, err := records.ReadOrEmpty(ctx, store, name)
+	record, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		t.Fatalf("read %s as %s = %v, want the tier a bootstrap wrote as root readable by the login every deploy runs as: the whole deploy path reads before it writes, so a tier this login cannot open is a box nothing can deploy to",
 			name, deployLogin, err)
 	}
-	held.Bytes = []byte(`{}`)
-	if _, err := store.Write(ctx, held); err != nil {
+	record.Bytes = []byte(`{}`)
+	if _, err := store.Write(ctx, record); err != nil {
 		t.Fatalf("write %s as %s = %v, want the record tier a bootstrap wrote as root writable by the login every deploy runs as", name, deployLogin, err)
 	}
 	read, err := store.Read(ctx, name)
@@ -46,22 +46,22 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 	const victim = "/tmp/records-victim"
 	vm.ssh(t, "sudo install -m 0644 -o root -g root /etc/hostname "+victim)
 	t.Cleanup(func() { vm.ssh(t, "sudo rm -f "+victim) })
-	if held := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%U:%G' "+victim)); held != "root:root" {
-		t.Fatalf("%s reads %q before the helper is driven at all, so nothing it reads afterwards is a claim about what the helper did", victim, held)
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%U:%G' "+victim)); owner != "root:root" {
+		t.Fatalf("%s reads %q before the helper is driven at all, so nothing it reads afterwards is a claim about what the helper did", victim, owner)
 	}
 
 	tier := host.RecordsDir(edge.ClassProduction)
 	lock := tier + "/.lock"
 	vm.sshAs(t, deployLogin, "rm -f "+quote(lock)+" && ln -sf "+victim+" "+quote(lock))
-	if held := strings.TrimSpace(vm.ssh(t, "sudo readlink "+quote(lock))); held != victim {
-		t.Fatalf("%s points at %q, so the login that deploys cannot plant a name inside the tier and nothing below proves anything", lock, held)
+	if target := strings.TrimSpace(vm.ssh(t, "sudo readlink "+quote(lock))); target != victim {
+		t.Fatalf("%s points at %q, so the login that deploys cannot plant a name inside the tier and nothing below proves anything", lock, target)
 	}
 	if wrote, err := vm.attempt(vm.user, "printf aGk= | sudo "+recordsHelper+" production write app/one ''"); err == nil {
 		t.Errorf("the records helper took the lock through a symlink %s planted and answered %q", deployLogin, strings.TrimSpace(wrote))
 	}
-	if held := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%U:%G' "+victim)); held != "root:root" {
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%U:%G' "+victim)); owner != "root:root" {
 		t.Errorf("%s belongs to %q after root drove the records helper over a symlink %s planted at %s, and the one login on this box that cannot elevate must not be handed a file root owns",
-			victim, held, deployLogin, lock)
+			victim, owner, deployLogin, lock)
 	}
 	vm.sshAs(t, deployLogin, "rm -f "+quote(lock))
 
@@ -98,6 +98,6 @@ func TestLiveARecordAHelperCouldNotHandOverIsARecordItNeverFlipped(t *testing.T)
 	}
 
 	if _, err := vm.attempt(vm.user, "printf aGk3 | sudo "+recordsHelper+" production write app/one "+minted); err != nil {
-		t.Errorf("the write that follows a failed one = %v, want it taken against the revision the caller still holds: a helper that flips the record and then reports failure wedges it at a revision nothing knows, and every write after it is refused as stale", err)
+		t.Errorf("the write that follows a failed one = %v, want it taken against the revision the caller still has: a helper that flips the record and then reports failure wedges it at a revision nothing knows, and every write after it is refused as stale", err)
 	}
 }

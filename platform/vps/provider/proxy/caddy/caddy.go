@@ -45,7 +45,7 @@ func Command() []string { return []string{"caddy", "run", "--config", ConfigMoun
 
 const loadedApp = "/config/apps/http"
 
-func Ready(reader string) []string { return []string{reader, "holds", AdminSocket, loadedApp} }
+func Ready(reader string) []string { return []string{reader, "answers", AdminSocket, loadedApp} }
 
 type Box interface {
 	Ran(ctx context.Context, what string, argv []string) (string, error)

@@ -56,7 +56,7 @@ func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	name := "conformance/production/held"
+	name := "conformance/production/compared"
 
 	first := helperWrite(t, dir, name, "", "one")
 	if first == "" {
@@ -78,7 +78,7 @@ func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 		t.Errorf("a removal at a revision that moved exited %d, want %d", code, ExitStale)
 	}
 	if _, code := helper(t, dir, "", "remove", name, second); code != 0 {
-		t.Errorf("a removal at the revision held exited %d, want it gone", code)
+		t.Errorf("a removal at the current revision exited %d, want it gone", code)
 	}
 	if _, code := helper(t, dir, "", "read", name); code != ExitNoRecord {
 		t.Errorf("a read after a removal exited %d, want %d", code, ExitNoRecord)
@@ -95,9 +95,9 @@ func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 	if _, code := helper(t, dir, fed, "pair", one, "", two, ""); code != 0 {
 		t.Fatalf("a pair of new records exited %d, want both stored", code)
 	}
-	held, _ := helperRead(t, dir, one)
+	current, _ := helperRead(t, dir, one)
 	moved := "a revision nobody wrote"
-	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, held, two, moved); code != ExitStale {
+	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, current, two, moved); code != ExitStale {
 		t.Fatalf("a pair where one half moved exited %d, want %d", code, ExitStale)
 	}
 	for _, name := range []string{one, two} {
@@ -231,7 +231,7 @@ func TestAPairGivenOneBodyWritesNeitherHalf(t *testing.T) {
 	}
 	for _, name := range []string{one, two} {
 		if _, body := helperRead(t, dir, name); body != "one" {
-			t.Errorf("%s reads %q after a pair fed one body, want the bytes that stood before it", name, body)
+			t.Errorf("%s reads %q after a pair fed one body, want the bytes that were there before it", name, body)
 		}
 	}
 }
@@ -248,7 +248,7 @@ func TestARecordThatNamesNoRevisionIsNotOverwritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, code := helper(t, dir, encoded("two")+"\n", "write", name, ""); code == 0 {
-		t.Fatal("a write over a record holding no revision exited 0, and a compare-and-set that compares nothing is a lost update")
+		t.Fatal("a write over a record with no revision exited 0, and a compare-and-set that compares nothing is a lost update")
 	}
 }
 
@@ -260,19 +260,19 @@ func TestARecordIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
 	helperWrite(t, dir, name, "", "postgres://example")
 
 	f := filepath.Join(recordsDir(t, dir), name+".rec")
-	held, err := os.Stat(f)
+	info, err := os.Stat(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.Mode().Perm()&0o077 != 0 {
-		t.Errorf("%s stands at %04o, and a record carries the values of a deploy", f, held.Mode().Perm())
+	if info.Mode().Perm()&0o077 != 0 {
+		t.Errorf("%s has mode %04o, and a record contains the values of a deploy", f, info.Mode().Perm())
 	}
 	within, err := os.Stat(filepath.Dir(f))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if within.Mode().Perm()&0o077 != 0 {
-		t.Errorf("%s stands at %04o, and the names beneath it are a deploy's alone", filepath.Dir(f), within.Mode().Perm())
+		t.Errorf("%s has mode %04o, and the names beneath it are a deploy's alone", filepath.Dir(f), within.Mode().Perm())
 	}
 }
 
@@ -306,20 +306,20 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		"%s can neither act as root nor run sudo without a password", deployUser)
 	b.answer = func(command string) (session.Result, bool) {
 		switch {
-		case strings.Contains(command, "echo held"):
-			return session.Result{Stdout: "held\n"}, true
+		case strings.Contains(command, "echo present"):
+			return session.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, recordsHelper):
 			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t" + base64.StdEncoding.EncodeToString([]byte("{}")) + "\n"}, true
 		}
 		return session.Result{}, false
 	}
 
-	held, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(edge.ClassProduction, "shop"))
+	record, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(edge.ClassProduction, "shop"))
 	if err != nil {
 		t.Fatalf("Read() as the login every deploy runs as = %v", err)
 	}
-	if string(held.Bytes) != "{}" {
-		t.Errorf("the read answered %q, want the row the helper rendered", held.Bytes)
+	if string(record.Bytes) != "{}" {
+		t.Errorf("the read answered %q, want the row the helper rendered", record.Bytes)
 	}
 	reached := 0
 	for _, command := range b.commands() {
@@ -328,7 +328,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		}
 		reached++
 		if strings.Contains(command, "sudo") {
-			t.Errorf("the read ran as %q: %s holds no sudoers line beside the seal helper, so a record tier reached through sudo is a record tier no deploy ever reads", command, deployUser)
+			t.Errorf("the read ran as %q: %s has no sudoers line beside the seal helper, so a record tier reached through sudo is a record tier no deploy ever reads", command, deployUser)
 		}
 	}
 	if reached == 0 {
@@ -345,8 +345,8 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		"%s can neither act as root nor run sudo without a password", deployUser)
 	b.answer = func(command string) (session.Result, bool) {
 		switch {
-		case strings.Contains(command, "echo held"):
-			return session.Result{Stdout: "held\n"}, true
+		case strings.Contains(command, "echo present"):
+			return session.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, recordsHelper):
 			return session.Result{Code: 1, Stderr: "Permission denied"}, true
 		}

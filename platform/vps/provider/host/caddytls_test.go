@@ -25,7 +25,7 @@ import (
 func pinnedBlocks(t *testing.T, names []string, until time.Duration) (cert, key []byte) {
 	t.Helper()
 
-	held, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	signer, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,11 +36,11 @@ func pinnedBlocks(t *testing.T, names []string, until time.Duration) (cert, key 
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(until),
 	}
-	raw, err := x509.CreateCertificate(rand.Reader, &template, &template, &held.PublicKey, held)
+	raw, err := x509.CreateCertificate(rand.Reader, &template, &template, &signer.PublicKey, signer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := x509.MarshalECPrivateKey(held)
+	sealed, err := x509.MarshalECPrivateKey(signer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +63,10 @@ func pinnedPair(t *testing.T, dir, name string, names []string) string {
 }
 
 func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testing.T) {
-	stood := proxyStanding(t)
+	proxyBox := aLiveProxy(t)
 
 	at := caddy.PinsDir + "/wildcard"
-	pinnedPair(t, stood.pins, "wildcard", []string{"*.preview.example.com"})
+	pinnedPair(t, proxyBox.pins, "wildcard", []string{"*.preview.example.com"})
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "pr-7.preview.example.com", Owner: surface, Pointer: pointed}}
@@ -79,17 +79,17 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
 		t.Fatalf("the config names a pinned pair by a path other than the one the proxy is handed it at:\n%s", rendered)
 	}
-	stood.stages(t, routingTableItem().Content, state, issuedByNobody(t, rendered))
-	stood.drives(t, "load", stood.table)
-	reload := exec.Command(dockerEngine, "exec", stood.name, "caddy", "reload", "--config", caddy.ConfigMount, "--address", "unix/"+caddy.AdminSocket)
+	proxyBox.stages(t, routingTableItem().Content, state, issuedByNobody(t, rendered))
+	proxyBox.drives(t, "load", proxyBox.table)
+	reload := exec.Command(dockerEngine, "exec", proxyBox.name, "caddy", "reload", "--config", caddy.ConfigMount, "--address", "unix/"+caddy.AdminSocket)
 	if out, err := reload.CombinedOutput(); err != nil {
-		t.Fatalf("the proxy stood up as the box stands it would not take a config carrying an operator's pin, so every reshape on a box with one pinned — claim, release and retire alike — fails: %v\n%s\n%s",
-			err, out, logsOf(stood.name))
+		t.Fatalf("the proxy run as the box runs it would not take a config containing an operator's pin, so every reshape on a box with one pinned — claim, release and retire alike — fails: %v\n%s\n%s",
+			err, out, logsOf(proxyBox.name))
 	}
 
 	var read []byte
 	for range 100 {
-		asked := exec.Command(stood.binary, "leaf", "pr-7.preview.example.com")
+		asked := exec.Command(proxyBox.binary, "leaf", "pr-7.preview.example.com")
 		if out, err := asked.Output(); err == nil {
 			read = out
 			break
@@ -97,7 +97,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		time.Sleep(100 * time.Millisecond)
 	}
 	if len(read) == 0 {
-		t.Fatalf("the switchboard read no leaf off the box's own :443 for a hostname a pinned pair covers:\n%s", logsOf(stood.name))
+		t.Fatalf("the switchboard read no leaf off the box's own :443 for a hostname a pinned pair covers:\n%s", logsOf(proxyBox.name))
 	}
 	block, _ := pem.Decode(read)
 	if block == nil {
@@ -111,18 +111,18 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		t.Errorf("the proxy served %q for pr-7.preview.example.com, want the pinned pair: a loaded certificate suppresses automatic management for its subject, so nothing here asks a CA",
 			leaf.Subject.CommonName)
 	}
-	if strings.Contains(logsOf(stood.name), "obtain") {
-		t.Errorf("the proxy tried to obtain a certificate for a name a pinned pair already covers:\n%s", logsOf(stood.name))
+	if strings.Contains(logsOf(proxyBox.name), "obtain") {
+		t.Errorf("the proxy tried to obtain a certificate for a name a pinned pair already covers:\n%s", logsOf(proxyBox.name))
 	}
-	if strings.Contains(logsOf(stood.name), acmeDirectory) {
-		t.Errorf("the proxy reached a public CA from a package-level `go test`: this renders a claim for an example.com name, and what keeps the order off the wire is the load_files suppression this very test exists to check:\n%s", logsOf(stood.name))
+	if strings.Contains(logsOf(proxyBox.name), acmeDirectory) {
+		t.Errorf("the proxy reached a public CA from a package-level `go test`: this renders a claim for an example.com name, and what keeps the order off the wire is the load_files suppression this very test exists to check:\n%s", logsOf(proxyBox.name))
 	}
 }
 
 func TestARealProxyOrdersOnTheFirstHandshakeForAClaimedHostnameAndNeverForAnUnclaimedOne(t *testing.T) {
 	state := twoProjects()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood, ask := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
+	proxyBox, ask := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	if said := ask(claimed); said.status/100 == 3 {
 		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy appends its catch-all http->https redirect behind the one terminal forward this config renders, so a forward that stops being terminal turns the redirect on and takes the http-01 challenge and the journey's plain-http leg with it",
@@ -132,9 +132,9 @@ func TestARealProxyOrdersOnTheFirstHandshakeForAClaimedHostnameAndNeverForAnUncl
 		t.Errorf("a hostname nothing claims answers %d as %q over plain http, want the box's own refusal on both ports", said.status, said.edge)
 	}
 
-	stood.handshake("unclaimed.example.com")
-	stood.handshake(claimed)
-	logs := stood.ordered(t, claimed)
+	proxyBox.handshake("unclaimed.example.com")
+	proxyBox.handshake(claimed)
+	logs := proxyBox.ordered(t, claimed)
 	if managed(logs, onDemandOrder, "unclaimed.example.com") {
 		t.Errorf("the proxy ordered a certificate for a hostname nothing on this box claims, so anyone who points a name at the box spends its CA allowance:\n%s", logs)
 	}
@@ -159,8 +159,8 @@ func issuedByNobody(t *testing.T, rendered []byte) []byte {
 	automation, _ := tls["automation"].(map[string]any)
 	policies, _ := automation["policies"].([]any)
 	caught := false
-	for _, held := range policies {
-		policy := held.(map[string]any)
+	for _, entry := range policies {
+		policy := entry.(map[string]any)
 		if _, scoped := policy["subjects"]; !scoped {
 			policy["issuers"] = []any{map[string]any{"module": "acme", "ca": unreachableCA}}
 			caught = true
@@ -187,21 +187,21 @@ func managed(logs, managing, hostname string) bool {
 
 func TestAHostnameClaimedBeforeAnythingServesItIsOrderedForAllTheSame(t *testing.T) {
 	state := RoutingTable{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
-	stood, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
+	proxyBox, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
-	stood.handshake(claimed)
-	if logs := stood.ordered(t, claimed); strings.Contains(logs, acmeDirectory) {
+	proxyBox.handshake(claimed)
+	if logs := proxyBox.ordered(t, claimed); strings.Contains(logs, acmeDirectory) {
 		t.Errorf("the proxy reached a public CA from a package-level `go test`:\n%s", logs)
 	}
 }
 
 const onDemandOrder = "obtaining new certificate"
 
-func (p standingProxy) handshake(hostname string) {
+func (p liveProxy) handshake(hostname string) {
 	_ = exec.Command(p.binary, "leaf", hostname).Run()
 }
 
-func (p standingProxy) ordered(t *testing.T, hostname string) string {
+func (p liveProxy) ordered(t *testing.T, hostname string) string {
 	t.Helper()
 
 	var logs string
@@ -215,7 +215,7 @@ func (p standingProxy) ordered(t *testing.T, hostname string) string {
 	return logs
 }
 
-func (p standingProxy) servedLeaf(t *testing.T, hostname string) *x509.Certificate {
+func (p liveProxy) servedLeaf(t *testing.T, hostname string) *x509.Certificate {
 	t.Helper()
 
 	var read []byte
@@ -244,20 +244,20 @@ func TestARealProxyServesAPinAddedOverAHostnameItAlreadyOrderedFor(t *testing.T)
 	)
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: hostname, Owner: surface, Pointer: pointed}}
-	stood, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
-	if ordered := stood.servedLeaf(t, hostname); ordered.Subject.CommonName == wildcard || !slices.Contains(ordered.DNSNames, hostname) {
+	proxyBox, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
+	if ordered := proxyBox.servedLeaf(t, hostname); ordered.Subject.CommonName == wildcard || !slices.Contains(ordered.DNSNames, hostname) {
 		t.Fatalf("the proxy served %q %v for %s before any pin, want the one it ordered for that name: nothing below is a pin taking over from it",
 			ordered.Subject.CommonName, ordered.DNSNames, hostname)
 	}
 
-	held := mustWrite(t, state)
-	pinnedPair(t, stood.pins, "wildcard", []string{wildcard})
+	written := mustWrite(t, state)
+	pinnedPair(t, proxyBox.pins, "wildcard", []string{wildcard})
 	state.Pins = []Pin{{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}}
-	stood.stages(t, held, state, issuedByNobody(t, mustRender(t, state)))
-	stood.drives(t, "load", stood.table)
-	stood.reloads(t)
+	proxyBox.stages(t, written, state, issuedByNobody(t, mustRender(t, state)))
+	proxyBox.drives(t, "load", proxyBox.table)
+	proxyBox.reloads(t)
 
-	if served := stood.servedLeaf(t, hostname); served.Subject.CommonName != wildcard {
+	if served := proxyBox.servedLeaf(t, hostname); served.Subject.CommonName != wildcard {
 		t.Errorf("the proxy serves %q for %s after %s was pinned over it, want the pin: the certificate it ordered is the exact match caddy serves ahead of any wildcard, and it goes on serving and renewing it until caddy restarts",
 			served.Subject.CommonName, hostname, wildcard)
 	}

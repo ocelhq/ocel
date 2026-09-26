@@ -31,11 +31,11 @@ type Host struct {
 	proxyOption Front
 	front       proxy.Proxy
 
-	elevating sync.Mutex
-	settled   bool
-	floored   bool
-	refusal   error
-	elevation string
+	elevating      sync.Mutex
+	elevationKnown bool
+	floored        bool
+	refusal        error
+	elevation      string
 
 	knowing  sync.Mutex
 	reported string
@@ -48,8 +48,8 @@ type Host struct {
 	engined  bool
 	engine   string
 
-	holding sync.Mutex
-	held    []byte
+	keying sync.Mutex
+	keyed  []byte
 
 	pinning  sync.Mutex
 	vouched  bool
@@ -68,8 +68,8 @@ func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
 	return h
 }
 
-func waited(ctx context.Context, held time.Duration) error {
-	timer := time.NewTimer(held)
+func waited(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -83,16 +83,16 @@ func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
 
 func (h *Host) PinFor(hostname string) string { return Covering(h.pins, hostname) }
 
-func (h *Host) holds(ctx context.Context, class edge.Class) (bool, error) {
+func (h *Host) hasStore(ctx context.Context, class edge.Class) (bool, error) {
 	h.mu.Lock()
-	stood := h.tiers[class]
+	known := h.tiers[class]
 	h.mu.Unlock()
-	if stood {
+	if known {
 		return true, nil
 	}
 	rendered, err := h.reach(ctx, "ask where "+string(class)+" keeps its records",
-		"if [ -x "+quoted(recordsHelper)+" ] && [ -d "+quoted(RecordsDir(class))+" ]; then echo held; fi", nil)
-	if err != nil || strings.TrimSpace(rendered) != "held" {
+		"if [ -x "+quoted(recordsHelper)+" ] && [ -d "+quoted(RecordsDir(class))+" ]; then echo present; fi", nil)
+	if err != nil || strings.TrimSpace(rendered) != "present" {
 		return false, err
 	}
 	h.mu.Lock()
@@ -156,7 +156,7 @@ func (h *Host) forgetting(ctx context.Context) (string, error) {
 func (h *Host) elevate(ctx context.Context) (string, error) {
 	h.elevating.Lock()
 	defer h.elevating.Unlock()
-	if h.settled {
+	if h.elevationKnown {
 		return h.elevation, nil
 	}
 	if h.floored {
@@ -174,7 +174,7 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	if !facts.Root {
 		h.elevation = "sudo -n "
 	}
-	h.settled = true
+	h.elevationKnown = true
 	return h.elevation, nil
 }
 
@@ -350,7 +350,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		return err == nil, err
 	case KindNetwork:
 		rendered, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
-		return strings.TrimSpace(rendered) != networkHeld, err
+		return strings.TrimSpace(rendered) != networkInUse, err
 	case KindContainer, KindApps, KindResourceVolumes, KindAppNetworks:
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
@@ -368,7 +368,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		}
 		rendered, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
 		if taken.kind == KindDir && taken.shared {
-			return strings.TrimSpace(rendered) != dirHeld, err
+			return strings.TrimSpace(rendered) != dirNonEmpty, err
 		}
 		return err == nil, err
 	default:
@@ -395,9 +395,9 @@ type Reading struct {
 
 func (r Reading) current(item Item) bool { return r.Observed[item.ID()] == item.Digest() }
 
-func (r Reading) standing(kind, path string) bool {
-	_, held := r.Observed[kind+" "+path]
-	return held
+func (r Reading) observed(kind, path string) bool {
+	_, seen := r.Observed[kind+" "+path]
+	return seen
 }
 
 func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
@@ -406,7 +406,7 @@ func (r Reading) Items() []Item {
 	return append(Items(r.Class, r.Keys, r.Arch, r.Front), r.recorded...)
 }
 
-func (r Reading) settled() bool {
+func (r Reading) upToDate() bool {
 	items := r.Items()
 	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {
 		return false
@@ -480,15 +480,15 @@ func (h *Host) surveyed(ctx context.Context, class edge.Class, keys []byte, arch
 	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
 	}
-	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(surveying, StampPath(class), FrontRecordPath), nil)
+	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" has installed", drawn.survey(surveying, StampPath(class), FrontRecordPath), nil)
 	if err != nil {
 		return Reading{}, err
 	}
-	observed, held, err := readSurvey(rendered)
+	observed, seal, err := readSurvey(rendered)
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
+	return Reading{Class: class, Keys: keys, Arch: arch, Seal: seal, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
 }
 
 func (h *Host) read(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
@@ -549,11 +549,11 @@ func surveying(file string, items []Item, also ...string) string {
 	for _, path := range also {
 		script.WriteString(" " + quoted(path))
 	}
-	stated, held := `"$(stat -c %a "$p")"`, `"$(stat -c %U "$p")"`
+	stated, owner := `"$(stat -c %a "$p")"`, `"$(stat -c %U "$p")"`
 	script.WriteString(`; do
 if [ -h "$p" ]; then ` + reports(quoted(kindLink), `"$p"`, `0`, `''`, `"$(readlink "$p")"`) + `
-elif [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, held, `''`) + `
-elif ` + file + `; then ` + reports(quoted(KindFile), `"$p"`, stated, held, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
+elif [ -d "$p" ]; then ` + reports(quoted(KindDir), `"$p"`, stated, owner, `''`) + `
+elif ` + file + `; then ` + reports(quoted(KindFile), `"$p"`, stated, owner, `"$(sha256sum "$p" | cut -d' ' -f1)"`) + `
 fi
 done`)
 	return probes.String() + script.String()
@@ -606,7 +606,7 @@ func reports(kind, name, mode, owner, sum string) string {
 
 func readSurvey(rendered string) (map[string]string, Seal, error) {
 	observed := make(map[string]string)
-	var held Seal
+	var seal Seal
 	for _, line := range strings.Split(strings.Trim(rendered, "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -633,10 +633,10 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 		}
 		content := columns[4]
 		if sealed {
-			held = Seal{Fingerprint: columns[4], Algorithm: SealAlgorithm, CreatedAt: columns[5]}
+			seal = Seal{Fingerprint: columns[4], Algorithm: SealAlgorithm, CreatedAt: columns[5]}
 			content = ""
 		}
 		observed[columns[0]+" "+columns[1]] = digest(columns[0], columns[1], parsed, columns[3], content)
 	}
-	return observed, held, nil
+	return observed, seal, nil
 }

@@ -145,7 +145,7 @@ const (
 	bulkImage = 900 * 1024 * 1024
 )
 
-func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxHolds(t *testing.T) {
+func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxStores(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	root := vm.dockerRoot(t)
@@ -158,22 +158,22 @@ func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxHolds(t *testing.
 	if err != nil {
 		t.Fatalf("Headroom(%s) = %v", bulkRepo, err)
 	}
-	held := room.Repos[bulkRepo]
-	if held.Count != 1 {
-		t.Fatalf("%s holds %d image(s), want the one this test put there: an unfilled keep window is what the measurement extrapolates over", bulkRepo, held.Count)
+	bulk := room.Repos[bulkRepo]
+	if bulk.Count != 1 {
+		t.Fatalf("%s has %d image(s), want the one this test put there: an unfilled keep window is what the measurement extrapolates over", bulkRepo, bulk.Count)
 	}
-	if held.Measured() <= host.FirstDeployFloor {
-		t.Fatalf("the one image held under %s is %d bytes, so its keep window measures %d, which the floor %d already covers and this box proves nothing the floor does not",
-			bulkRepo, held.Largest, held.Measured(), int64(host.FirstDeployFloor))
+	if bulk.Measured() <= host.FirstDeployFloor {
+		t.Fatalf("the one image stored under %s is %d bytes, so its keep window measures %d, which the floor %d already covers and this box proves nothing the floor does not",
+			bulkRepo, bulk.Largest, bulk.Measured(), int64(host.FirstDeployFloor))
 	}
 
-	keep := (int64(host.FirstDeployFloor) + held.Measured()) / 2
+	keep := (int64(host.FirstDeployFloor) + bulk.Measured()) / 2
 	vm.fillsDownTo(t, root, keep)
 
 	err = preflightedFor(t, p, bulkRepo+":next")
 	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy onto %s with %d bytes left against a box holding a %d byte image, and the keep window has %d unfilled slot(s) to fill with images that size",
-			root, keep, held.Largest, host.KeepWindow-1)
+		t.Fatalf("PreflightDeploy() let a deploy onto %s with %d bytes left against a box storing a %d byte image, and the keep window has %d unfilled slot(s) to fill with images that size",
+			root, keep, bulk.Largest, host.KeepWindow-1)
 	}
 	if free := vm.freeOn(t, root); free <= host.FirstDeployFloor {
 		t.Fatalf("%s was left with %d bytes free, under the %d floor, so this refusal is the floor's and the measurement was never the number applied",
@@ -191,10 +191,10 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 	vm, p := onABoxServingContainers(t)
 
 	if err := preflightedOn(t, p); err != nil {
-		t.Fatalf("PreflightDeploy() over a standing proxy = %v, and the answered state is the control the others are read against", err)
+		t.Fatalf("PreflightDeploy() over a running proxy = %v, and the answered state is the control the others are read against", err)
 	}
 
-	held := map[string]string{}
+	seen := map[string]string{}
 	for _, induced := range []struct {
 		what    string
 		induce  func()
@@ -249,16 +249,16 @@ func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testin
 					t.Errorf("where %s the refusal is %q, want %q in it: a refusal an operator cannot act on is a wall", induced.what, said, want)
 				}
 			}
-			for what, other := range held {
+			for what, other := range seen {
 				if other == said {
 					t.Errorf("%q and %q are refused with the same words, and their fixes differ:\n%s", induced.what, what, said)
 				}
 			}
-			held[induced.what] = said
+			seen[induced.what] = said
 		}()
 	}
-	if len(held) != 5 {
-		t.Fatalf("%d proxy states were induced, want the five this check tells apart", len(held))
+	if len(seen) != 5 {
+		t.Fatalf("%d proxy states were induced, want the five this check tells apart", len(seen))
 	}
 	if err := preflightedOn(t, vm.deploying(t)); err != nil {
 		t.Fatalf("PreflightDeploy() after every induced state was undone = %v, so the five messages above were read off a box left broken", err)
@@ -280,8 +280,8 @@ func (vm machine) insideFrontProxy(t *testing.T, path string) string {
 
 func (vm machine) deafens(t *testing.T, socket string) {
 	t.Helper()
-	if strings.TrimSpace(vm.ssh(t, "command -v python3 >/dev/null && echo held || echo gone")) != "held" {
-		t.Skip("this box carries no python3, and a socket that is bound and not listening is what an endpoint that refuses looks like")
+	if strings.TrimSpace(vm.ssh(t, "command -v python3 >/dev/null && echo present || echo gone")) != "present" {
+		t.Skip("this box has no python3, and a socket that is bound and not listening is what an endpoint that refuses looks like")
 	}
 	vm.ssh(t, "sudo mv "+quote(socket)+" "+quote(socket+".listening"))
 	vm.ssh(t, "sudo sh -c "+quote(
@@ -302,7 +302,7 @@ func (vm machine) hears(t *testing.T, socket string) {
 	vm.ssh(t, "sudo sh -c "+quote("kill $(cat "+deafPid+") || true; rm -f "+deafPid+" "+socket+"; mv "+socket+".listening "+socket))
 }
 
-func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {
+func TestLiveAForeignContainerPublishingPortEightyIsRefusedByName(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	vm.ssh(t, "sudo docker stop "+caddy.Container)
@@ -314,12 +314,12 @@ func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {
 		vm.waitsFor(t, caddy.Container)
 	}()
 	if !vm.running(t, foreignContainer) {
-		t.Fatalf("%s never came up, so nothing on this box is holding port %s and there is no condition to refuse", foreignContainer, caddy.HTTPPort)
+		t.Fatalf("%s never came up, so nothing on this box publishes port %s and there is no condition to refuse", foreignContainer, caddy.HTTPPort)
 	}
 
 	err := preflightedOn(t, p)
 	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy onto a box where %s holds port %s", foreignContainer, caddy.HTTPPort)
+		t.Fatalf("PreflightDeploy() let a deploy onto a box where %s publishes port %s", foreignContainer, caddy.HTTPPort)
 	}
 	if !strings.Contains(err.Error(), foreignContainer) {
 		t.Errorf("PreflightDeploy() = %q, want %q named: a foreign listener is refused by name", err, foreignContainer)

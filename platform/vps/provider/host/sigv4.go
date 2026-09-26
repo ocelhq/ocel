@@ -27,7 +27,7 @@ const (
 	scopeDateLayou = "20060102"
 )
 
-func signRequest(req *http.Request, held credential, payloadHash string, now time.Time) {
+func signRequest(req *http.Request, cred credential, payloadHash string, now time.Time) {
 	now = now.UTC()
 	req.Header.Set("Host", req.URL.Host)
 	req.Header.Set("X-Amz-Date", now.Format(amzDateLayout))
@@ -45,7 +45,7 @@ func signRequest(req *http.Request, held credential, payloadHash string, now tim
 	}, "\n")
 
 	scope := strings.Join([]string{
-		now.Format(scopeDateLayou), held.Region, signingService, signingTerminal,
+		now.Format(scopeDateLayou), cred.Region, signingService, signingTerminal,
 	}, "/")
 	hashed := sha256.Sum256([]byte(canonical))
 	toSign := strings.Join([]string{
@@ -56,27 +56,27 @@ func signRequest(req *http.Request, held credential, payloadHash string, now tim
 	}, "\n")
 
 	key := hmacOf(hmacOf(hmacOf(hmacOf(
-		[]byte("AWS4"+held.SecretKey), now.Format(scopeDateLayou)),
-		held.Region), signingService), signingTerminal)
+		[]byte("AWS4"+cred.SecretKey), now.Format(scopeDateLayou)),
+		cred.Region), signingService), signingTerminal)
 
 	req.Header.Set("Authorization", signingAlgorithm+
-		" Credential="+held.AccessKeyID+"/"+scope+
+		" Credential="+cred.AccessKeyID+"/"+scope+
 		", SignedHeaders="+signed+
 		", Signature="+hex.EncodeToString(hmacOf(key, toSign)))
 }
 
 const unsignedPayload = "UNSIGNED-PAYLOAD"
 
-func presignURL(method string, at *url.URL, held credential, expiry time.Duration, now time.Time) string {
+func presignURL(method string, at *url.URL, cred credential, expiry time.Duration, now time.Time) string {
 	now = now.UTC()
 	scope := strings.Join([]string{
-		now.Format(scopeDateLayou), held.Region, signingService, signingTerminal,
+		now.Format(scopeDateLayou), cred.Region, signingService, signingTerminal,
 	}, "/")
 
 	signed := *at
 	values := at.Query()
 	values.Set("X-Amz-Algorithm", signingAlgorithm)
-	values.Set("X-Amz-Credential", held.AccessKeyID+"/"+scope)
+	values.Set("X-Amz-Credential", cred.AccessKeyID+"/"+scope)
 	values.Set("X-Amz-Date", now.Format(amzDateLayout))
 	values.Set("X-Amz-Expires", strconv.Itoa(int(expiry/time.Second)))
 	values.Set("X-Amz-SignedHeaders", "host")
@@ -96,14 +96,14 @@ func presignURL(method string, at *url.URL, held credential, expiry time.Duratio
 		signingAlgorithm, now.Format(amzDateLayout), scope, hex.EncodeToString(hashed[:]),
 	}, "\n")
 
-	signed.RawQuery += "&X-Amz-Signature=" + hex.EncodeToString(hmacOf(signingKey(held, now), toSign))
+	signed.RawQuery += "&X-Amz-Signature=" + hex.EncodeToString(hmacOf(signingKey(cred, now), toSign))
 	return signed.String()
 }
 
-func signingKey(held credential, now time.Time) []byte {
+func signingKey(cred credential, now time.Time) []byte {
 	return hmacOf(hmacOf(hmacOf(hmacOf(
-		[]byte("AWS4"+held.SecretKey), now.UTC().Format(scopeDateLayou)),
-		held.Region), signingService), signingTerminal)
+		[]byte("AWS4"+cred.SecretKey), now.UTC().Format(scopeDateLayou)),
+		cred.Region), signingService), signingTerminal)
 }
 
 func hmacOf(key []byte, data string) []byte {
@@ -113,16 +113,16 @@ func hmacOf(key []byte, data string) []byte {
 }
 
 func canonicalHeaders(req *http.Request) ([]string, string) {
-	held := map[string]string{"host": req.URL.Host}
+	headers := map[string]string{"host": req.URL.Host}
 	for name, values := range req.Header {
 		lower := strings.ToLower(name)
 		if lower == "authorization" || lower == "content-length" || lower == "user-agent" {
 			continue
 		}
-		held[lower] = strings.Join(trimmed(values), ",")
+		headers[lower] = strings.Join(trimmed(values), ",")
 	}
-	names := make([]string, 0, len(held))
-	for name := range held {
+	names := make([]string, 0, len(headers))
+	for name := range headers {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -131,7 +131,7 @@ func canonicalHeaders(req *http.Request) ([]string, string) {
 	for _, name := range names {
 		canonical.WriteString(name)
 		canonical.WriteString(":")
-		canonical.WriteString(held[name])
+		canonical.WriteString(headers[name])
 		canonical.WriteString("\n")
 	}
 	return names, canonical.String()
@@ -166,9 +166,9 @@ func canonicalQuery(at *url.URL) string {
 
 	pairs := make([]string, 0, len(keys))
 	for _, key := range keys {
-		held := values[key]
-		sort.Strings(held)
-		for _, value := range held {
+		keyValues := values[key]
+		sort.Strings(keyValues)
+		for _, value := range keyValues {
 			pairs = append(pairs, uriEscape(key)+"="+uriEscape(value))
 		}
 	}

@@ -32,11 +32,11 @@ func dialable(hostname string) error {
 }
 
 func hostKeyDigest(offered provider.HostKey) (string, error) {
-	held, err := offered.Fingerprinted()
+	fingerprinted, err := offered.Fingerprinted()
 	if err != nil {
 		return "", err
 	}
-	blob, err := base64.StdEncoding.Strict().DecodeString(held.Key)
+	blob, err := base64.StdEncoding.Strict().DecodeString(fingerprinted.Key)
 	if err != nil {
 		return "", errors.New("the offered host key is not a base64 key blob")
 	}
@@ -77,14 +77,14 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 		Hostname:    hostname,
 		Arch:        arch,
 	}
-	standing, err := host.NewConnector(p.host).Describe(ctx)
+	current, err := host.NewConnector(p.host).Describe(ctx)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	if standing.Installed {
+	if current.Installed {
 		described.Installed = &provider.ConnectorRelease{
-			Version:   standing.Version,
-			PublicKey: standing.PublicKey,
+			Version:   current.Version,
+			PublicKey: current.PublicKey,
 			Compute:   connectorCompute,
 		}
 	}
@@ -107,13 +107,13 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if progress != nil {
 		progress.Say("connector " + install.Version + " onto " + hostname)
 	}
-	standing, err := host.NewConnector(p.host).Install(ctx, hostname, install.Binary, install.Config, progress)
+	installed, err := host.NewConnector(p.host).Install(ctx, hostname, install.Binary, install.Config, progress)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
 	return provider.ConnectorAddress{
 		URL:       "https://" + hostname + switchboard.ConnectorPath,
-		PublicKey: standing.PublicKey,
+		PublicKey: installed.PublicKey,
 		Compute:   compute,
 	}, nil
 }

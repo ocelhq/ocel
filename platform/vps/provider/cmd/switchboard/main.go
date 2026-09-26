@@ -87,8 +87,8 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 		return probe(rest, out, errs)
 	case "inodes":
 		return inodes(rest, out, errs)
-	case "holds":
-		return holds(rest, errs)
+	case "answers":
+		return answers(rest, errs)
 	case "place":
 		return place(rest, in, errs)
 	case "unplace":
@@ -110,7 +110,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       inodes <path>... |")
-	fmt.Fprintln(errs, "       holds <socket> <path> |")
+	fmt.Fprintln(errs, "       answers <socket> <path> |")
 	fmt.Fprintln(errs, "       place <path> < <file> |")
 	fmt.Fprintln(errs, "       unplace <path> |")
 	fmt.Fprintln(errs, "       placed <path>")
@@ -255,7 +255,7 @@ func controlListener(path string) (net.Listener, io.Closer, error) {
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = lock.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, nil, fmt.Errorf("another switchboard holds %s", path)
+			return nil, nil, fmt.Errorf("another switchboard already has %s locked", path)
 		}
 		return nil, nil, err
 	}

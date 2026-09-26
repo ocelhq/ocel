@@ -12,18 +12,18 @@ import (
 
 type stalling struct {
 	fetches atomic.Int32
-	held    chan struct{}
+	stall   chan struct{}
 }
 
 func (s *stalling) Fetch(ctx context.Context) (map[string]string, error) {
 	s.fetches.Add(1)
-	if s.held == nil {
+	if s.stall == nil {
 		return map[string]string{"SOMETHING": "live"}, nil
 	}
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-s.held:
+	case <-s.stall:
 		return map[string]string{"SOMETHING": "live"}, nil
 	}
 }
@@ -37,26 +37,26 @@ func TestAStoreWithNoClaimedAddressAnswersOnTheCallersOwnDeadline(t *testing.T) 
 	if err := <-values.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch() = %v", err)
 	}
-	source.held = make(chan struct{})
-	defer close(source.held)
+	source.stall = make(chan struct{})
+	defer close(source.stall)
 	clock = clock.Add(time.Minute)
 
 	external := publishing(s3store.Store{}, values)
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	settled := make(chan time.Duration, 1)
+	finished := make(chan time.Duration, 1)
 	go func() {
 		began := time.Now()
 		_, base := external(gone)
 		if base != "" {
 			t.Errorf("a box claiming nothing for its store answered %q as its public address", base)
 		}
-		settled <- time.Since(began)
+		finished <- time.Since(began)
 	}()
 
 	select {
-	case took := <-settled:
+	case took := <-finished:
 		if took > time.Second {
 			t.Errorf("a signing call took %v on a box claiming nothing, so every external sign waits on a reread the caller already gave up on", took)
 		}
@@ -82,7 +82,7 @@ func TestAStoreWithNoClaimedAddressIsNotRereadOnEveryCall(t *testing.T) {
 			t.Fatalf("base = %q, want nothing", base)
 		}
 	}
-	if held := source.fetches.Load(); held > 2 {
-		t.Errorf("a box claiming nothing was reread %d times over five signing calls, so every call pays for the same empty answer", held-1)
+	if fetches := source.fetches.Load(); fetches > 2 {
+		t.Errorf("a box claiming nothing was reread %d times over five signing calls, so every call pays for the same empty answer", fetches-1)
 	}
 }

@@ -25,7 +25,7 @@ import {
   type Front,
   frontNamed,
   frontStep,
-  holderOf,
+  ownerOf,
   refusalMissed,
   stepCommand,
 } from "./front";
@@ -82,7 +82,7 @@ export function recordFile(slug: string): string {
 export function slugsOf(listing: string): string[] {
   if (listing.trim() === NO_RECORDS_TIER) {
     throw new Error(
-      `${PROJECT_RECORDS} does not exist on the box, so nothing here can tell a box that holds ` +
+      `${PROJECT_RECORDS} does not exist on the box, so nothing here can tell a box that has ` +
         "no harness project from one this listing failed to read",
     );
   }
@@ -255,7 +255,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     );
     const said = redact(`${result.stdout}${result.stderr}`);
     await writeFile(path.join(dir, "bootstrap.log"), said, "utf8");
-    const missed = refusalMissed(result.code, said, holderOf(front));
+    const missed = refusalMissed(result.code, said, ownerOf(front));
     if (missed !== undefined) {
       throw new Error(missed);
     }
@@ -409,7 +409,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     const container = named.trim().split("\n")[0] ?? "";
     if (container === "") {
       throw new Error(
-        `no container on the box carries ocel.project=${cell.slug} and ocel.app=${app}, and a ` +
+        `no container on the box is labelled ocel.project=${cell.slug} and ocel.app=${app}, and a ` +
           "deployed database is migrated from the release that binds it",
       );
     }
@@ -503,9 +503,9 @@ export class VpsTarget implements Target, ReleaseCycle {
     const said = await ssh(
       this.box(),
       DEPLOY_LOGIN,
-      `test -e '${PROJECT_RECORDS}/${recordFile(slug)}' && echo held || echo gone`,
+      `test -e '${PROJECT_RECORDS}/${recordFile(slug)}' && echo present || echo gone`,
     );
-    return said.trim() === "held";
+    return said.trim() === "present";
   }
 
   private async recordedSlugs(): Promise<string[]> {

@@ -86,7 +86,7 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(`option "proxy": %w`, err)
 	}
 	if len(keyed) != 1 {
-		return fmt.Errorf(`option "proxy" holds exactly one of the keys %s`, strings.Join(configdoc.KeysOf(Proxy{}), ", "))
+		return fmt.Errorf(`option "proxy" must set exactly one of the keys %s`, strings.Join(configdoc.KeysOf(Proxy{}), ", "))
 	}
 	type wire Proxy
 	var decoded wire
@@ -94,13 +94,13 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(`option "proxy": %w`, err)
 	}
 	*p = Proxy(decoded)
-	if _, held := keyed[proxyTraefik]; held && p.Traefik == nil {
+	if _, set := keyed[proxyTraefik]; set && p.Traefik == nil {
 		p.Traefik = &Traefik{}
 	}
-	if _, held := keyed[proxyCaddy]; held && p.Caddy == nil {
+	if _, set := keyed[proxyCaddy]; set && p.Caddy == nil {
 		p.Caddy = &Caddy{}
 	}
-	if _, held := keyed[proxyManual]; held && p.Manual == nil {
+	if _, set := keyed[proxyManual]; set && p.Manual == nil {
 		p.Manual = &Manual{}
 	}
 	return nil
@@ -249,7 +249,7 @@ type Target struct {
 	Alias        string `json:"-"`
 	Config       string `json:"-"`
 	Host         string `json:"host" doc:"The hostname or address to reach the machine at."`
-	Port         int    `json:"port,omitempty" doc:"The port sshd listens on. Omit it and ssh's own default stands."`
+	Port         int    `json:"port,omitempty" doc:"The port sshd listens on. Omit it and ssh's own default applies."`
 	User         string `json:"user,omitempty" doc:"The account to log in as. Omit it and ssh resolves the user itself."`
 	IdentityFile string `json:"identityFile,omitempty" doc:"The private key to authenticate with, as a path."`
 }
@@ -295,10 +295,10 @@ func (t *Target) UnmarshalJSON(data []byte) error {
 func (p *Provider) Target() Target { return p.options.SSH }
 
 func pins(configured map[string]string) []host.Pin {
-	held := make([]host.Pin, 0, len(configured))
+	sorted := make([]host.Pin, 0, len(configured))
 	for hostname, path := range configured {
-		held = append(held, host.Pin{Hostname: hostname, Path: strings.TrimSuffix(path, "/")})
+		sorted = append(sorted, host.Pin{Hostname: hostname, Path: strings.TrimSuffix(path, "/")})
 	}
-	slices.SortFunc(held, func(a, b host.Pin) int { return strings.Compare(a.Hostname, b.Hostname) })
-	return held
+	slices.SortFunc(sorted, func(a, b host.Pin) int { return strings.Compare(a.Hostname, b.Hostname) })
+	return sorted
 }

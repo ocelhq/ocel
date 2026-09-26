@@ -58,7 +58,7 @@ func TestAHostnameOnABoxYourProxyFrontsIsProbedFromTheBoxItself(t *testing.T) {
 	}
 }
 
-func TestTheStandingOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
+func TestTheCheckOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
 	t.Parallel()
 
 	machine := routedByHand(nil)
@@ -77,6 +77,6 @@ func TestTheStandingOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
 		t.Errorf("CheckHost() dialled %v, want nothing: port 80 matters to ocel's own proxy renewing over http-01, and yours renews as it chooses", reached)
 	}
 	if !slices.ContainsFunc(checks, func(check provider.HostCheck) bool { return check.Subject == "tcp 443" }) {
-		t.Errorf("CheckHost() = %+v, want your proxy's hold on 443 checked", checks)
+		t.Errorf("CheckHost() = %+v, want your proxy's port 443 checked", checks)
 	}
 }

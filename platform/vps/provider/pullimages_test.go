@@ -39,16 +39,16 @@ const (
 )
 
 type registryLog struct {
-	mu     sync.Mutex
-	asked  []string
-	basics []string
-	holds  bool
+	mu       sync.Mutex
+	asked    []string
+	basics   []string
+	hasImage bool
 }
 
-func (r *registryLog) held(holds bool) {
+func (r *registryLog) storing(has bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.holds = holds
+	r.hasImage = has
 }
 
 func (r *registryLog) reads() []string {
@@ -63,7 +63,7 @@ func (r *registryLog) presented() []string {
 	return append([]string(nil), r.basics...)
 }
 
-func standingRegistry(t *testing.T) (string, *registryLog) {
+func aRegistry(t *testing.T) (string, *registryLog) {
 	t.Helper()
 	log := &registryLog{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,9 +76,9 @@ func standingRegistry(t *testing.T) (string, *registryLog) {
 		log.mu.Lock()
 		log.asked = append(log.asked, r.URL.Path)
 		log.basics = append(log.basics, authorization)
-		holds := log.holds
+		has := log.hasImage
 		log.mu.Unlock()
-		if !holds {
+		if !has {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -101,7 +101,7 @@ func (d *daemonLog) pushes() []string {
 	return append([]string(nil), d.pushed...)
 }
 
-func standingDaemon(t *testing.T) *daemonLog {
+func aDaemon(t *testing.T) *daemonLog {
 	t.Helper()
 	log := &daemonLog{}
 	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -168,8 +168,8 @@ func aPull(target images.Registry) images.Push {
 }
 
 func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
-	standingDaemon(t)
-	server, _ := standingRegistry(t)
+	aDaemon(t)
+	server, _ := aRegistry(t)
 	machine := &box{}
 	target := aTarget(server)
 	push := aPull(target)
@@ -189,17 +189,17 @@ func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
 	if strings.Contains(commands, "docker load") {
 		t.Errorf("the machine ran %q: a registry is named, so nothing is streamed onto the box", commands)
 	}
-	for _, carried := range machine.carried() {
-		if strings.Contains(carried, "tar") {
-			t.Errorf("the machine was fed %q where it was told to pull", carried)
+	for _, fed := range machine.feeds() {
+		if strings.Contains(fed, "tar") {
+			t.Errorf("the machine was fed %q where it was told to pull", fed)
 		}
 	}
 }
 
-func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsHolding(t *testing.T) {
-	standingDaemon(t)
-	server, registry := standingRegistry(t)
-	registry.held(true)
+func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsUpWith(t *testing.T) {
+	aDaemon(t)
+	server, registry := aRegistry(t)
+	registry.storing(true)
 	target := aTarget(server)
 	push := aPull(target)
 	machine := &box{serves: map[string]string{
@@ -210,15 +210,15 @@ func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsHolding(t *testing.T) {
 	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
-	if held := machine.under(push.ImageRef); held != "the image this deploy built" {
-		t.Errorf("the machine holds %q under %s, and the release loop, rollback and retention all pin that coordinate: "+
-			"a tag is rewritten by whoever can write the registry, and only the digest names the image this deploy built", held, push.ImageRef)
+	if tagged := machine.under(push.ImageRef); tagged != "the image this deploy built" {
+		t.Errorf("the machine has %q under %s, and the release loop, rollback and retention all pin that coordinate: "+
+			"a tag is rewritten by whoever can write the registry, and only the digest names the image this deploy built", tagged, push.ImageRef)
 	}
 }
 
 func TestTheLoginTakesThePasswordOnStdinAndLogsOutInTheSameSession(t *testing.T) {
-	standingDaemon(t)
-	server, _ := standingRegistry(t)
+	aDaemon(t)
+	server, _ := aRegistry(t)
 	machine := &box{}
 	target := aTarget(server)
 
@@ -236,14 +236,14 @@ func TestTheLoginTakesThePasswordOnStdinAndLogsOutInTheSameSession(t *testing.T)
 	if !strings.Contains(pulled, "docker logout "+quotedIn(server)) {
 		t.Errorf("the pull ran %q, want the login given back before the session ends", pulled)
 	}
-	if fed := strings.Join(machine.carried(), ""); fed != pullPassword {
+	if fed := strings.Join(machine.feeds(), ""); fed != pullPassword {
 		t.Errorf("the machine was fed %q, want the registry password and nothing else", fed)
 	}
 }
 
 func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
-	standingDaemon(t)
-	server, _ := standingRegistry(t)
+	aDaemon(t)
+	server, _ := aRegistry(t)
 	machine := &box{}
 	target := aTarget(server)
 
@@ -261,9 +261,9 @@ func TestNoCredentialFileIsLeftBehindOnTheMachine(t *testing.T) {
 }
 
 func TestTheCredentialDirectoryGoesEvenWhereTheSessionRefuses(t *testing.T) {
-	standingDaemon(t)
-	server, registry := standingRegistry(t)
-	registry.held(true)
+	aDaemon(t)
+	server, registry := aRegistry(t)
+	registry.storing(true)
 	machine, asked := refusingPulls("Error response from daemon: manifest unknown", 100)
 	target := aTarget(server)
 
@@ -271,7 +271,7 @@ func TestTheCredentialDirectoryGoesEvenWhereTheSessionRefuses(t *testing.T) {
 		t.Fatal("Push() = nil over a machine whose pull refused, so a release would promote an image the box was never given")
 	}
 	if got := asked.Load(); got != 1 {
-		t.Errorf("the machine was told to pull %d times over a manifest the registry does not hold, want the refusal taken at its word", got)
+		t.Errorf("the machine was told to pull %d times over a manifest the registry does not have, want the refusal taken at its word", got)
 	}
 	underShell(t, sessionThatPulls(t, machine))
 }
@@ -308,13 +308,13 @@ func underShell(t *testing.T, script string) {
 	}
 	if len(left) != 0 {
 		t.Errorf("the session left %d entries under its temporary directory, and the docker config among them "+
-			"carries the registry username and password in the clear for as long as the machine stands", len(left))
+			"contains the registry username and password in the clear for as long as the machine exists", len(left))
 	}
 }
 
 func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
-	standingDaemon(t)
-	server, _ := standingRegistry(t)
+	aDaemon(t)
+	server, _ := aRegistry(t)
 	machine := &box{}
 	target := aTarget(server)
 	push := aPull(target)
@@ -323,11 +323,11 @@ func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held {
+	if !present {
 		t.Fatal("the machine answers to no coordinate after a pull, so release, rollback and retention have nothing to pin")
 	}
 	if !strings.Contains(strings.Join(machine.commands(), "\n"), quotedIn(push.ImageRef)) {
@@ -335,10 +335,10 @@ func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
 	}
 }
 
-func TestADigestTheMachineAlreadyHoldsIsNeitherPushedNorPulledAgain(t *testing.T) {
-	daemon := standingDaemon(t)
-	server, registry := standingRegistry(t)
-	machine := &box{holds: true}
+func TestADigestTheMachineAlreadyHasIsNeitherPushedNorPulledAgain(t *testing.T) {
+	daemon := aDaemon(t)
+	server, registry := aRegistry(t)
+	machine := &box{hasImage: true}
 	target := aTarget(server)
 	plan := provider.ImagePushes{
 		Store:  pulling(t, machine, target),
@@ -349,20 +349,20 @@ func TestADigestTheMachineAlreadyHoldsIsNeitherPushedNorPulledAgain(t *testing.T
 		t.Fatalf("Ship() = %v", err)
 	}
 	if pushed := daemon.pushes(); len(pushed) != 0 {
-		t.Errorf("the deploy pushed %v for an image the machine already holds", pushed)
+		t.Errorf("the deploy pushed %v for an image the machine already has", pushed)
 	}
 	if commands := strings.Join(machine.commands(), "\n"); strings.Contains(commands, "docker pull") {
-		t.Errorf("the machine ran %q over a digest it already holds", commands)
+		t.Errorf("the machine ran %q over a digest it already has", commands)
 	}
 	if len(registry.reads()) != 0 {
 		t.Errorf("the registry was read %v answering a question the machine answers", registry.reads())
 	}
 }
 
-func TestAMachineMissingADigestTheRegistryHoldsPullsWithoutASecondPush(t *testing.T) {
-	daemon := standingDaemon(t)
-	server, registry := standingRegistry(t)
-	registry.held(true)
+func TestAMachineMissingADigestTheRegistryHasPullsWithoutASecondPush(t *testing.T) {
+	daemon := aDaemon(t)
+	server, registry := aRegistry(t)
+	registry.storing(true)
 	machine := &box{}
 	target := aTarget(server)
 	push := aPull(target)
@@ -371,10 +371,10 @@ func TestAMachineMissingADigestTheRegistryHoldsPullsWithoutASecondPush(t *testin
 		t.Fatalf("Push() = %v", err)
 	}
 	if pushed := daemon.pushes(); len(pushed) != 0 {
-		t.Errorf("the deploy pushed %v that the registry already holds", pushed)
+		t.Errorf("the deploy pushed %v that the registry already has", pushed)
 	}
 	if !strings.Contains(strings.Join(machine.commands(), "\n"), "docker pull") {
-		t.Error("the registry held the digest and the machine was never told to pull it, so the box serves an image it does not have")
+		t.Error("the registry had the digest and the machine was never told to pull it, so the box serves an image it does not have")
 	}
 	if presented := registry.presented(); len(presented) == 0 || presented[0] != basicFor(pullUsername, pullPassword) {
 		t.Errorf("the registry was read as %v, want the deploy's own credentials", presented)
@@ -382,8 +382,8 @@ func TestAMachineMissingADigestTheRegistryHoldsPullsWithoutASecondPush(t *testin
 }
 
 func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T) {
-	daemon := standingDaemon(t)
-	server, registry := standingRegistry(t)
+	daemon := aDaemon(t)
+	server, registry := aRegistry(t)
 	machine := &box{}
 	target := aTarget(server)
 	target.Username = ""
@@ -400,7 +400,7 @@ func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T
 		t.Errorf("the refusal reads %v, want the missing login name named", err)
 	}
 	if pushed := daemon.pushes(); len(pushed) != 0 {
-		t.Errorf("the deploy published %v and refused afterwards, so the image stands in a registry over a credential ocel would not use", pushed)
+		t.Errorf("the deploy published %v and refused afterwards, so the image is left in a registry over a credential ocel would not use", pushed)
 	}
 	if reads := registry.reads(); len(reads) != 0 {
 		t.Errorf("the registry was reached as %v under a password with no login name to present it under", reads)
@@ -420,9 +420,9 @@ func refusingPulls(said string, times int64) (*box, *atomic.Int64) {
 }
 
 func TestAThrottledPullIsAskedAgainRatherThanFailingTheDeploy(t *testing.T) {
-	standingDaemon(t)
-	server, registry := standingRegistry(t)
-	registry.held(true)
+	aDaemon(t)
+	server, registry := aRegistry(t)
+	registry.storing(true)
 	machine, asked := refusingPulls("toomanyrequests: You have reached your pull rate limit", 2)
 	target := aTarget(server)
 
@@ -436,9 +436,9 @@ func TestAThrottledPullIsAskedAgainRatherThanFailingTheDeploy(t *testing.T) {
 }
 
 func TestAPullTheRegistryDeniesIsNotAskedAgain(t *testing.T) {
-	standingDaemon(t)
-	server, registry := standingRegistry(t)
-	registry.held(true)
+	aDaemon(t)
+	server, registry := aRegistry(t)
+	registry.storing(true)
 	machine, asked := refusingPulls("unauthorized: authentication required", 100)
 	target := aTarget(server)
 
@@ -451,8 +451,8 @@ func TestAPullTheRegistryDeniesIsNotAskedAgain(t *testing.T) {
 }
 
 func TestThePullNamesTheMachineRatherThanTheRegistry(t *testing.T) {
-	standingDaemon(t)
-	server, _ := standingRegistry(t)
+	aDaemon(t)
+	server, _ := aRegistry(t)
 	store := pulling(t, &box{}, aTarget(server))
 
 	if got := store.Destination(); got != "box.invalid" {

@@ -115,7 +115,7 @@ func (vm machine) forgetsTheDeployLogin(t *testing.T) {
 	vm.hangsUpAs(deployLogin)
 	vm.ssh(t, "sudo userdel "+deployLogin+" 2>/dev/null || true")
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
-		t.Fatalf("%s stands as %q after the userdel that was meant to take it, and what a bootstrap creates cannot be read off a box that already carries it",
+		t.Fatalf("%s still exists as %q after the userdel that was meant to take it, and what a bootstrap creates cannot be read off a box that already has it",
 			deployLogin, left)
 	}
 }

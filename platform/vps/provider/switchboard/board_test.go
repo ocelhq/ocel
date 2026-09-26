@@ -50,7 +50,7 @@ func routing(t *testing.T, upstreams map[string]string) []byte {
 	return written
 }
 
-func standing(t *testing.T, document []byte) (*switchboard.Board, string) {
+func served(t *testing.T, document []byte) (*switchboard.Board, string) {
 	t.Helper()
 	board, at, _ := fronted(t, document)
 	return board, at
@@ -160,7 +160,7 @@ func TestAClaimedHostnameIsServedByItsUpstreamUnderItsOwnHostAndNamesTheBox(t *t
 	t.Parallel()
 
 	web := backend(t, "web")
-	_, at := standing(t, routing(t, map[string]string{"shop.example.com": web}))
+	_, at := served(t, routing(t, map[string]string{"shop.example.com": web}))
 
 	said := ask(t, http.DefaultClient, at, "shop.example.com", "/cart")
 	if said.status != http.StatusOK || said.body != "web" {
@@ -186,7 +186,7 @@ func TestEveryAnswerTheBoxRefusesOrCannotReachNamesTheBox(t *testing.T) {
 	}
 	unreachable := gone.Addr().String()
 	_ = gone.Close()
-	_, at := standing(t, routing(t, map[string]string{"down.example.com": unreachable}))
+	_, at := served(t, routing(t, map[string]string{"down.example.com": unreachable}))
 
 	for host, status := range map[string]int{
 		"unclaimed.example.com": http.StatusNotFound,

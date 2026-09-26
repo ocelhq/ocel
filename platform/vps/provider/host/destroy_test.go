@@ -27,14 +27,14 @@ func (s *said) at(fragment string) int {
 	return slices.IndexFunc(s.lines, func(line string) bool { return strings.Contains(line, fragment) })
 }
 
-func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
+func TestRemoveTakesWhatIsInstalledAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 	progress := &said{}
 
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
@@ -53,7 +53,7 @@ func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 	if progress.at("ssh-keygen -R") < 0 {
 		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(progress.lines, "\n"))
 	}
-	for _, command := range stood.taking() {
+	for _, command := range box.taking() {
 		if strings.Contains(command, quoted(dockerEngine)) || strings.Contains(command, quoted(dockerUnit)) {
 			t.Errorf("Remove() ran %q, and removing ocel is not removing the workloads this host serves", command)
 		}
@@ -64,17 +64,17 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	stamp := stood.took(quoted(ClassDir(class)))
+	stamp := box.took(quoted(ClassDir(class)))
 	if stamp < 0 {
-		t.Fatalf("Remove() never took %s:\n%s", ClassDir(class), strings.Join(stood.taking(), "\n"))
+		t.Fatalf("Remove() never took %s:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
 	}
 	for _, beneath := range []string{StateDir(class), SealKeyPath(class), SealHelper, deployUser} {
-		if at := stood.took(quoted(beneath)); at < 0 || at > stamp {
+		if at := box.took(quoted(beneath)); at < 0 || at > stamp {
 			t.Errorf("Remove() took %s at command %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				beneath, at, stamp)
 		}
@@ -85,8 +85,8 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
-	stood.after = func(b *bench, command string) {
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box.after = func(b *bench, command string) {
 		if !strings.HasSuffix(command, quoted(classRoot)) {
 			return
 		}
@@ -96,7 +96,7 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 	}
 
 	progress := &said{}
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v after every removal landed, and a host that is gone must not be reported as one that stayed", err)
 	}
 	if progress.at("ssh-keygen -R") < 0 {
@@ -111,61 +111,61 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 	truncated := func(class edge.Class) Item {
 		return Item{Kind: KindFile, Name: StampPath(class), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
 	}
-	stood := machine(map[edge.Class][]Item{
+	box := machine(map[edge.Class][]Item{
 		class:  append(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), truncated(class)),
 		beside: {truncated(beside)},
 	})
 
-	bootstrap := NewBootstrap(stood.host(), testVendor, "shop")
+	bootstrap := NewBootstrap(box.host(), testVendor, "shop")
 	if _, err := bootstrap.PlanRemove(context.Background(), class); err != nil {
 		t.Fatalf("PlanRemove() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
 	}
 	if err := bootstrap.Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v over a host an apply left half-written", err)
 	}
-	if stood.took(quoted(ClassDir(class))) < 0 {
-		t.Errorf("Remove() left %s standing:\n%s", ClassDir(class), strings.Join(stood.taking(), "\n"))
+	if box.took(quoted(ClassDir(class))) < 0 {
+		t.Errorf("Remove() left %s in place:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
 	}
 }
 
 func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 	t.Parallel()
 
-	stood := machine(nil)
-	held := stood.host()
+	box := machine(nil)
+	h := box.host()
 	for name, taken := range map[string]removal{
 		"the engine every container on the host needs": keptEngine(),
 		"the unit that starts it":                      taking(KindUnit, dockerUnit, ""),
 		"a name rooted at nothing":                     taking(KindDir, dockerEngine, ""),
 	} {
-		_, err := held.remove(context.Background(), taken)
+		_, err := h.remove(context.Background(), taken)
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 			t.Errorf("Remove(%s) = %v, want a refusal: rm -rf is not the fallback for anything ocel was not asked about", name, err)
 		}
 	}
-	if ran := stood.commands(); len(ran) != 0 {
+	if ran := box.commands(); len(ran) != 0 {
 		t.Errorf("Remove() ran %q over a host, and what ocel never wrote it never takes", ran)
 	}
 }
 
-func TestADeployLoginSomethingStillHoldsDoesNotStrandTheDestroy(t *testing.T) {
+func TestADeployLoginSomethingStillUsesDoesNotStrandTheDestroy(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
-	stood.answer = func(command string) (session.Result, bool) {
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box.answer = func(command string) (session.Result, bool) {
 		if !strings.HasPrefix(command, "userdel ") || strings.Contains(command, " -f ") {
 			return session.Result{}, false
 		}
 		return session.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
 	}
 
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
-		t.Fatalf("Remove() = %v over a login a lingering session still holds, and every re-run would fail there again", err)
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+		t.Fatalf("Remove() = %v over a login a lingering session still uses, and every re-run would fail there again", err)
 	}
-	if stood.took(quoted(ClassDir(class))) < 0 {
-		t.Errorf("Remove() stopped at the login and left %s standing:\n%s", ClassDir(class), strings.Join(stood.taking(), "\n"))
+	if box.took(quoted(ClassDir(class))) < 0 {
+		t.Errorf("Remove() stopped at the login and left %s in place:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
 	}
 }
 
@@ -173,18 +173,18 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	taken := stood.taking()
+	taken := box.taking()
 	for _, shared := range []string{stateRoot, helperRoot, classRoot} {
 		at := slices.IndexFunc(taken, func(command string) bool {
 			return strings.Contains(command, quoted(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
 		})
 		if at < 0 {
-			t.Fatalf("Remove() left %s standing on a host that carries nothing else:\n%s", shared, strings.Join(taken, "\n"))
+			t.Fatalf("Remove() left %s in place on a host that has nothing else:\n%s", shared, strings.Join(taken, "\n"))
 		}
 		if !strings.HasPrefix(taken[at], "rmdir ") {
 			t.Errorf("Remove() takes %s with %q: a class bootstrapped during the destroy loses its seal key to a survey drawn before it existed",
@@ -197,17 +197,17 @@ func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	taken := stood.taking()
+	taken := box.taking()
 	for _, item := range bootstrapped(t, class) {
 		if item.Kind == KindEngine || item.Kind == KindUnit || gone(taken, item.Name) {
 			continue
 		}
-		t.Errorf("%s stands after the last class on the host was destroyed:\n%s", item.ID(), strings.Join(taken, "\n"))
+		t.Errorf("%s remains after the last class on the host was destroyed:\n%s", item.ID(), strings.Join(taken, "\n"))
 	}
 }
 
@@ -230,17 +230,17 @@ func gone(taken []string, name string) bool {
 	return false
 }
 
-func TestForgettingARecordOnAHostThatCarriesNoStoreIsAlreadyForgotten(t *testing.T) {
+func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) {
 	t.Parallel()
 
-	stood := machine(nil)
+	box := machine(nil)
 	name := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
-	if err := records.Forget(context.Background(), NewRecords(stood.host()), name); err != nil {
+	if err := records.Forget(context.Background(), NewRecords(box.host()), name); err != nil {
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
-	for _, command := range stood.commands() {
+	for _, command := range box.commands() {
 		if strings.HasPrefix(command, quoted(recordsHelper)+" ") {
-			t.Errorf("Forget() ran %q against a host that carries no helper at all", command)
+			t.Errorf("Forget() ran %q against a host that has no helper at all", command)
 		}
 	}
 }
@@ -249,14 +249,14 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
 
-	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
+	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
 	if len(plan.Groups) != 1 {
-		t.Fatalf("PlanRemove() carries %d groups, want the one machine being destroyed", len(plan.Groups))
+		t.Fatalf("PlanRemove() has %d groups, want the one machine being destroyed", len(plan.Groups))
 	}
 	group := plan.Groups[0]
 	if want := "vps/ada@ocelbox"; group.Name != want {
@@ -281,18 +281,18 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *test
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	singletons := []string{
 		stateRoot, helperRoot, recordsHelper, SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, classRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {
-		if kept := removalOf(removing(standing, beside, appsStanding{}), singleton); kept.action == provider.ActionDelete {
-			t.Errorf("destroying one class takes %s, and the sibling class still standing on this host deploys through it", singleton)
+		if kept := removalOf(removing(current, beside, appsPresent{}), singleton); kept.action == provider.ActionDelete {
+			t.Errorf("destroying one class takes %s, and the sibling class still installed on this host deploys through it", singleton)
 		}
 	}
-	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
+	last := removing(current, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, singleton := range singletons {
 		if gone := removalOf(last, singleton); gone.action != provider.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)
@@ -300,11 +300,11 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *test
 	}
 }
 
-func TestPlanRemovalOfAHostCarryingNothingPlansNothing(t *testing.T) {
+func TestPlanRemovalOfAHostWithNothingPlansNothing(t *testing.T) {
 	t.Parallel()
 
-	stood := machine(nil)
-	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), edge.ClassProduction)
+	box := machine(nil)
+	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}

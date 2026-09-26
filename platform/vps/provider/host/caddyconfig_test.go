@@ -16,7 +16,7 @@ func releasing() RoutingTable {
 	}
 }
 
-func TestTheFrontProxysConfigHoldsStillThroughEveryReleaseAndDrainWindow(t *testing.T) {
+func TestTheFrontProxysConfigStaysUnchangedThroughEveryReleaseAndDrainWindow(t *testing.T) {
 	t.Parallel()
 
 	before := releasing()
@@ -78,7 +78,7 @@ func TestWhatBootstrapSeedsIsABoxServingNothingAndItsRendering(t *testing.T) {
 		t.Fatalf("ReadRoutingTable() over the table bootstrap seeds = %v", err)
 	}
 	if len(read.Routes) != 0 || len(read.Claims) != 0 || len(read.Pins) != 0 || read.PreviewBase != "" || read.Connector != "" {
-		t.Errorf("the seeded table reads back carrying %+v", read)
+		t.Errorf("the seeded table reads back as %+v", read)
 	}
 	if read.Grace != DrainWindow {
 		t.Errorf("the seeded table reads back with a grace period of %s, want the %s drain window", read.Grace, DrainWindow)

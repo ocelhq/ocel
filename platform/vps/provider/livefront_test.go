@@ -34,7 +34,7 @@ const (
 const (
 	loadDir    = "/tmp/ocel-front-load"
 	loadLoops  = 4
-	loadSettle = 10
+	loadWarmup = 10
 	loadWait   = 60 * time.Second
 )
 
@@ -121,9 +121,9 @@ func (vm machine) answers(t *testing.T) []answered {
 func (vm machine) awaitAnswers(t *testing.T, what string, count func([]answered) int) {
 	t.Helper()
 	deadline := time.Now().Add(loadWait)
-	for count(vm.answers(t)) < loadSettle {
+	for count(vm.answers(t)) < loadWarmup {
 		if time.Now().After(deadline) {
-			t.Fatalf("the load never read %d answers %s within %s: %v", loadSettle, what, loadWait, vm.answers(t))
+			t.Fatalf("the load never read %d answers %s within %s: %v", loadWarmup, what, loadWait, vm.answers(t))
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -144,25 +144,25 @@ func (vm machine) stopsLoad(t *testing.T) []answered {
 
 func counting(body string, from float64) func([]answered) int {
 	return func(read []answered) int {
-		held := 0
+		count := 0
 		for _, answer := range read {
 			if answer.body == body && answer.at > from {
-				held++
+				count++
 			}
 		}
-		return held
+		return count
 	}
 }
 
 func frontProxy(t *testing.T, front string) *vps.Proxy {
 	t.Helper()
-	var carried struct {
+	var declared struct {
 		Proxy *vps.Proxy `json:"proxy"`
 	}
-	if err := json.Unmarshal(frontScript(t, front, "front.json"), &carried); err != nil || carried.Proxy == nil {
-		t.Fatalf("the %s front's front.json names no proxy its projects carry: %v", front, err)
+	if err := json.Unmarshal(frontScript(t, front, "front.json"), &declared); err != nil || declared.Proxy == nil {
+		t.Fatalf("the %s front's front.json names no proxy its projects use: %v", front, err)
 	}
-	return carried.Proxy
+	return declared.Proxy
 }
 
 func (vm machine) deployingBehind(t *testing.T, proxy *vps.Proxy) *vps.Provider {
@@ -239,7 +239,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		}
 	}
 	if state := vm.state(t, caddy.Container); state != "gone" {
-		t.Errorf("%s is %s on a box %s fronts, want it never stood", caddy.Container, state, front)
+		t.Errorf("%s is %s on a box %s fronts, want it never started", caddy.Container, state, front)
 	}
 	if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); !strings.Contains(published, `"HostIp":"127.0.0.1","HostPort":"8480"`) {
 		t.Errorf("the switchboard publishes %s, want 127.0.0.1:8480 for a proxy on the box to reach", published)
@@ -264,7 +264,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	promotes(t, stack, "p-one", "one", standsUp(t, d, "one"), 1)
+	promotes(t, stack, "p-one", "one", provisioned(t, d, "one"), 1)
 	recorded(t, d, frontedSlug, stack.State())
 
 	bindsBehind(t, d, front)
@@ -275,7 +275,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		t.Errorf("Serving(%s) = %q, %v, want the box proven through %s", frontedHostname, kind, err, front)
 	}
 
-	two := standsUp(t, d, "two")
+	two := provisioned(t, d, "two")
 	vm.loads(t, frontedHostname)
 	vm.awaitAnswers(t, "of one before the flip", counting("one", 0))
 	flipping := vm.clock(t)
@@ -326,7 +326,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
 		t.Errorf("%s is %s after the box was destroyed", host.SwitchboardContainer, state)
 	}
-	if held := vm.ssh(t, "sudo test -e "+quote(host.FrontRecordPath)+" && echo held || echo gone"); strings.TrimSpace(held) != "gone" {
+	if left := vm.ssh(t, "sudo test -e "+quote(host.FrontRecordPath)+" && echo present || echo gone"); strings.TrimSpace(left) != "gone" {
 		t.Errorf("%s outlived the destroy", host.FrontRecordPath)
 	}
 	vm.frontUntouched(t, front)

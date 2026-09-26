@@ -33,8 +33,8 @@ func probedAs(t *testing.T, k kernel, container boxContainer, engine engineRepor
 	}
 	if engine.inside != nil {
 		inside = "shift 2\nfor path; do\ncase \"$path\" in\n"
-		for path, held := range engine.inside {
-			inside += quoted(path) + ") echo " + quoted(path+" "+held) + " ;;\n"
+		for path, device := range engine.inside {
+			inside += quoted(path) + ") echo " + quoted(path+" "+device) + " ;;\n"
 		}
 		inside += "esac\ndone\nexit 0"
 	}
@@ -45,8 +45,8 @@ func probedAs(t *testing.T, k kernel, container boxContainer, engine engineRepor
 		"*) exit 1 ;;\n"+
 		"esac\n")
 	stat := "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in\n"
-	for path, held := range engine.stats {
-		stat += quoted(path) + ") echo " + quoted(held) + " ;;\n"
+	for path, device := range engine.stats {
+		stat += quoted(path) + ") echo " + quoted(device) + " ;;\n"
 	}
 	executable(t, filepath.Join(dir, "stat"), stat+"*) echo \"stat: cannot statx '$last': Permission denied\" >&2; exit 1 ;;\nesac\n")
 	for _, tool := range []string{"sha256sum", "cut", "cat", "sort", "grep"} {
@@ -89,9 +89,9 @@ func mountedAs(container boxContainer, moved int) (inside, stats map[string]stri
 	for at, bind := range container.binds {
 		source, dest, _ := strings.Cut(bind, ":")
 		dest, _, _ = strings.Cut(dest, ":")
-		held := fmt.Sprintf("2049:%d", 100+at)
-		inside[dest] = held
-		stats[source] = held
+		device := fmt.Sprintf("2049:%d", 100+at)
+		inside[dest] = device
+		stats[source] = device
 		if at == moved {
 			stats[source] = fmt.Sprintf("2049:%d", 900+at)
 		}
@@ -99,20 +99,20 @@ func mountedAs(container boxContainer, moved int) (inside, stats map[string]stri
 	return inside, stats
 }
 
-func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
+func TestAContainerWithAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 	t.Parallel()
 
-	for _, container := range []boxContainer{frontProxy(), switchboardStanding(nil, Front{})} {
+	for _, container := range []boxContainer{frontProxy(), switchboardBox(nil, Front{})} {
 		stated := container.item("").Digest()
-		facts := engineSays(container, migrateHeld)
+		facts := engineSays(container, migrateSet)
 		current, _ := mountedAs(container, -1)
 		inside, moved := mountedAs(container, len(container.binds)-1)
-		_, held := mountedAs(container, -1)
+		_, unmoved := mountedAs(container, -1)
 		for what, probed := range map[string]struct {
 			engine  engineReport
 			current bool
 		}{
-			"every mount still the host's own":                      {engineReport{facts: facts, inside: current, stats: held}, true},
+			"every mount still the host's own":                      {engineReport{facts: facts, inside: current, stats: unmoved}, true},
 			"a mount whose source was replaced, read with no /proc": {engineReport{facts: facts, inside: inside, stats: moved}, false},
 			"a container the engine will not exec into":             {engineReport{facts: facts, stats: moved}, true},
 			"a container that cannot find the program it is asked":  {engineReport{facts: facts, stats: moved, started: 127}, false},
@@ -128,20 +128,20 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 	}
 }
 
-func TestAContainerHoldingAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
+func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
-	for _, stood := range []Item{frontItem(), boardItem()} {
-		moved := bytes.Replace(stood.Content, []byte(mountsFact+mountsHeld), []byte(mountsFact+mountsMoved), 1)
-		if bytes.Equal(moved, stood.Content) {
-			t.Fatalf("%s is surveyed without its mounts, so what a moved one proves here is nothing", stood.Name)
+	for _, item := range []Item{frontItem(), boardItem()} {
+		moved := bytes.Replace(item.Content, []byte(mountsFact+mountsIntact), []byte(mountsFact+mountsMoved), 1)
+		if bytes.Equal(moved, item.Content) {
+			t.Fatalf("%s is surveyed without its mounts, so what a moved one proves here is nothing", item.Name)
 		}
 		observed := digests(items)
-		observed[stood.ID()] = digest(KindContainer, stood.Name, 0, rootOwner, contentSum(moved))
+		observed[item.ID()] = digest(KindContainer, item.Name, 0, rootOwner, contentSum(moved))
 		read := Reading{
 			Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
@@ -150,11 +150,11 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 				Seal: Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
 			},
 		}
-		if back := planFor(planned(read), stood.ID()); back.Action != provider.ActionUpdate {
-			t.Errorf("%s reading a mount the host replaced plans %q, want it recreated: the box would call itself current while it serves a directory that is gone", stood.Name, back.Action)
+		if back := planFor(planned(read), item.ID()); back.Action != provider.ActionUpdate {
+			t.Errorf("%s reading a mount the host replaced plans %q, want it recreated: the box would call itself current while it serves a directory that is gone", item.Name, back.Action)
 		}
-		if read.settled() {
-			t.Errorf("a box whose %s reads a mount the host replaced reports itself settled", stood.Name)
+		if read.upToDate() {
+			t.Errorf("a box whose %s reads a mount the host replaced reports itself up to date", item.Name)
 		}
 	}
 }
