@@ -69,9 +69,6 @@ func beatFor(spec Spec) (*beat, error) {
 	}, nil
 }
 
-// Heartbeat sends the console one heartbeat and answers its status, for a
-// connector that is woken on a schedule rather than left running between
-// requests. Serve beats on its own; this is for the hosts that cannot.
 func Heartbeat(ctx context.Context, spec Spec) (int, error) {
 	if !spec.Identity.HasKey() {
 		return 0, errors.New("connectorserver: this connector has no identity, so it has nothing to sign a heartbeat with")
