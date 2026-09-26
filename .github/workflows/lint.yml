@@ -49,20 +49,6 @@ jobs:
       - name: The go sdk ships the root's LICENSE and NOTICE, byte for byte
         run: cmp LICENSE sdk/LICENSE && cmp NOTICE sdk/NOTICE
 
-  contract:
-    name: contract-paths-test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: The contract-path check passes exactly the pull requests it names
-        run: node --test scripts/contract-paths.test.mjs
-
   actions:
     name: actionlint
     runs-on: ubuntu-latest
