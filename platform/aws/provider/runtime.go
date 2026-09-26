@@ -14,9 +14,9 @@ func (p containerRuntime) Arch(_ context.Context, app, declared string) (string,
 }
 
 func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
-	held, err := payloads.ContainerRuntime(arch)
+	payload, err := payloads.ContainerRuntime(arch)
 	if err != nil {
 		return nil, err
 	}
-	return held.Bytes, nil
+	return payload.Bytes, nil
 }

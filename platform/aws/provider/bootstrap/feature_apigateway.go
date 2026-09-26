@@ -46,8 +46,8 @@ func apiGatewayEdgeTemplate(in featureInputs) featureStack {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the role API Gateway assumes reads a release's static assets out of it and nothing else.", in.refs.assetBucketARN},
 	})
-	held := edge.Class(in.class)
-	responder := notFoundAPIResource(in.ns, held) +
+	edgeClass := edge.Class(in.class)
+	responder := notFoundAPIResource(in.ns, edgeClass) +
 		notFoundProxyResource() +
 		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", edgeRootPath) +
 		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", edgeRootPath+edgeProxyPathPart)
@@ -60,7 +60,7 @@ Description: "Ocel bootstrap feature (%s, %s) - what an API Gateway front needs 
 %s%s%s%sOutputs:
 %s`,
 			FeatureAPIGatewayEdge, in.class, params,
-			invokeRoleResource(in.ns, held),
+			invokeRoleResource(in.ns, edgeClass),
 			responder,
 			notFoundDeploymentResource(published),
 			notFoundStageResource(published),
@@ -141,7 +141,7 @@ func notFoundMethodResource(logical, resourceID, path string) string {
 	return fmt.Sprintf(`  %s:
     Type: AWS::ApiGateway::Method
     Metadata:
-      Description: "Answers every method on %s with a mocked 404 carrying the %s header, so a host no deployment claims is told so by Ocel rather than by API Gateway."
+      Description: "Answers every method on %s with a mocked 404 that has the %s header, so a host no deployment claims is told so by Ocel rather than by API Gateway."
     Properties:
       RestApiId: !Ref EdgeNotFoundApi
       ResourceId: %s
@@ -171,7 +171,7 @@ func notFoundDeploymentResource(logical string) string {
       - EdgeNotFoundRootMethod
       - EdgeNotFoundProxyMethod
     Metadata:
-      Description: "Publishes the 404 responder's two methods; without it the API stands but serves nothing. Named for what it publishes, so a changed responder is published rather than left behind."
+      Description: "Publishes the 404 responder's two methods; without it the API exists but serves nothing. Named for what it publishes, so a changed responder is published rather than left behind."
     Properties:
       RestApiId: !Ref EdgeNotFoundApi
 `, logical)

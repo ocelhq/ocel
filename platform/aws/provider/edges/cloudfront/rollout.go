@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	settleAttempts = 60
-	settleEvery    = 15 * time.Second
-	settleJitter   = 0.05
+	rolloutAttempts = 60
+	rolloutEvery    = 15 * time.Second
+	rolloutJitter   = 0.05
 
 	deployedStatus = "Deployed"
 
@@ -27,14 +27,14 @@ type Rollout struct {
 }
 
 func NewRollout() Rollout {
-	return Rollout{Wait: waitFor, Attempts: settleAttempts, Every: settleEvery, Jitter: rand.Float64}
+	return Rollout{Wait: waitFor, Attempts: rolloutAttempts, Every: rolloutEvery, Jitter: rand.Float64}
 }
 
 func (s Rollout) attempts() int { return max(s.Attempts, 1) }
 
 func (s Rollout) every() time.Duration {
 	if s.Every <= 0 {
-		return settleEvery
+		return rolloutEvery
 	}
 	return s.Every
 }
@@ -48,7 +48,7 @@ func (s Rollout) jitter() float64 {
 
 func (s Rollout) interval() time.Duration {
 	every := s.every()
-	spread := settleJitter * (2*s.jitter() - 1)
+	spread := rolloutJitter * (2*s.jitter() - 1)
 	return every + time.Duration(float64(every)*spread)
 }
 
@@ -56,17 +56,17 @@ func (s Rollout) window() time.Duration {
 	return time.Duration(s.attempts()-1) * s.every()
 }
 
-func (s Rollout) hold(ctx context.Context) error {
+func (s Rollout) waitInterval(ctx context.Context) error {
 	if s.Wait != nil {
 		return s.Wait(ctx, s.interval())
 	}
 	return waitFor(ctx, s.interval())
 }
 
-func (s Rollout) settled(ctx context.Context, kind, id, because string, status func(context.Context) (string, error)) error {
+func (s Rollout) awaitDeployed(ctx context.Context, kind, id, because string, status func(context.Context) (string, error)) error {
 	for attempt := 0; attempt < s.attempts(); attempt++ {
 		if attempt > 0 {
-			if err := s.hold(ctx); err != nil {
+			if err := s.waitInterval(ctx); err != nil {
 				return err
 			}
 		}

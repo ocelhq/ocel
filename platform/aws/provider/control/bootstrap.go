@@ -87,9 +87,9 @@ func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.Boo
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	held := described(class, read.Deployed)
-	held.VendorState = read
-	return held, nil
+	description := described(class, read.Deployed)
+	description.VendorState = read
+	return description, nil
 }
 
 func described(class edge.Class, deployed bootstrap.Deployed) provider.BootstrapDescription {
@@ -135,8 +135,8 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {
-	if held, carried := req.VendorState.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
-		return held, nil
+	if prior, passed := req.VendorState.(bootstrap.Reading); passed && prior.Class() == string(req.Class) {
+		return prior, nil
 	}
 	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Class))
 }
@@ -161,7 +161,7 @@ func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest)
 		}
 		adoption, err := adopt(ctx, req.Class)
 		if err != nil {
-			return nil, fmt.Errorf("read what the %s edge hands this account to hold: %w", kind, err)
+			return nil, fmt.Errorf("read what the %s edge hands this account to store: %w", kind, err)
 		}
 		out = append(out, bootstrap.EdgeAdoption{Kind: kind, Adoption: adoption})
 	}
@@ -171,7 +171,7 @@ func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest)
 func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
-		group, err := b.standingEdgeGroup(ctx, req.Class, kind)
+		group, err := b.installedEdgeGroup(ctx, req.Class, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +191,7 @@ func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest
 	return groups, nil
 }
 
-func (b Bootstrap) standingEdgeGroup(ctx context.Context, class edge.Class, kind edge.Kind) (*provider.ChangeGroup, error) {
+func (b Bootstrap) installedEdgeGroup(ctx context.Context, class edge.Class, kind edge.Kind) (*provider.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.
 		if err != nil {
 			return nil, err
 		}
-		group = standingEdgeChanges(kind, feature, planned)
+		group = installedEdgeChanges(kind, feature, planned)
 	}
 	if group == nil {
 		return nil, nil
@@ -243,7 +243,7 @@ func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.
 	return group, nil
 }
 
-func standingEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *provider.ChangeGroup {
+func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *provider.ChangeGroup {
 	group := provider.ChangeGroup{
 		Kind:    provider.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(kind),
@@ -294,7 +294,7 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 	if err != nil {
 		return err
 	}
-	fronts, err := b.standingEdges(ctx, class, read.Deployed)
+	fronts, err := b.installedEdges(ctx, class, read.Deployed)
 	if err != nil {
 		return err
 	}

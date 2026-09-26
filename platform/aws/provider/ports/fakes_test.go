@@ -61,8 +61,8 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 		return nil, err
 	}
 	pk, sk := stringAttr(in.Item, "pk"), stringAttr(in.Item, "sk")
-	held, exists := f.items[pk][sk]
-	if !f.holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
+	existing, exists := f.items[pk][sk]
+	if !f.satisfies(aws.ToString(in.ConditionExpression), existing, exists, in.ExpressionAttributeValues) {
 		return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("fakeDynamo: the condition did not hold")}
 	}
 	if f.items[pk] == nil {
@@ -83,11 +83,11 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 		return nil, err
 	}
 	pk, sk := stringAttr(in.Key, "pk"), stringAttr(in.Key, "sk")
-	held, exists := f.items[pk][sk]
-	if !f.holds(aws.ToString(in.ConditionExpression), held, exists, in.ExpressionAttributeValues) {
+	existing, exists := f.items[pk][sk]
+	if !f.satisfies(aws.ToString(in.ConditionExpression), existing, exists, in.ExpressionAttributeValues) {
 		failed := &ddbtypes.ConditionalCheckFailedException{Message: aws.String("fakeDynamo: the condition did not hold")}
 		if exists && in.ReturnValuesOnConditionCheckFailure == ddbtypes.ReturnValuesOnConditionCheckFailureAllOld {
-			failed.Item = maps.Clone(held)
+			failed.Item = maps.Clone(existing)
 		}
 		return nil, failed
 	}
@@ -103,14 +103,14 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 			f.sawTable(write.Put.TableName)
 		}
 		if write.Put == nil {
-			return nil, fmt.Errorf("fakeDynamo: this transaction carries an operation that is not a put")
+			return nil, fmt.Errorf("fakeDynamo: this transaction includes an operation that is not a put")
 		}
 		if err := namesAndValuesUsed(write.Put.ExpressionAttributeNames, write.Put.ExpressionAttributeValues, aws.ToString(write.Put.ConditionExpression)); err != nil {
 			return nil, err
 		}
 		pk, sk := stringAttr(write.Put.Item, "pk"), stringAttr(write.Put.Item, "sk")
-		held, exists := f.items[pk][sk]
-		if f.holds(aws.ToString(write.Put.ConditionExpression), held, exists, write.Put.ExpressionAttributeValues) {
+		existing, exists := f.items[pk][sk]
+		if f.satisfies(aws.ToString(write.Put.ConditionExpression), existing, exists, write.Put.ExpressionAttributeValues) {
 			continue
 		}
 		return nil, &ddbtypes.TransactionCanceledException{
@@ -128,14 +128,14 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 	return &dynamodb.TransactWriteItemsOutput{}, nil
 }
 
-func (f *fakeDynamo) holds(expression string, held map[string]ddbtypes.AttributeValue, exists bool, values map[string]ddbtypes.AttributeValue) bool {
+func (f *fakeDynamo) satisfies(expression string, existing map[string]ddbtypes.AttributeValue, exists bool, values map[string]ddbtypes.AttributeValue) bool {
 	switch expression {
 	case "":
 		return true
 	case "attribute_not_exists(#pk)":
 		return !exists
 	case "#rev = :rev":
-		return exists && stringAttr(held, "rev") == stringAttr(values, ":rev")
+		return exists && stringAttr(existing, "rev") == stringAttr(values, ":rev")
 	}
 	panic("fakeDynamo: unrecognized condition " + expression)
 }

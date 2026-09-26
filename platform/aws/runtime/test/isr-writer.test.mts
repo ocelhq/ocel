@@ -68,7 +68,7 @@ test("a server-side rejection surfaces as an ordinary retryable failure", async 
   await expect(write).rejects.not.toBeInstanceOf(IsrWriteRejected);
 });
 
-test("a write carries a timeout", async () => {
+test("a write sets a timeout", async () => {
   const { impl, calls } = fakeFetch(new Response(null, { status: 204 }));
 
   await entryStoreAt(WRITER_URL, "write-secret", impl).write("blog/post", entry);

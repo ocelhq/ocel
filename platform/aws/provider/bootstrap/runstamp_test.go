@@ -9,7 +9,7 @@ import (
 )
 
 func TestRunStamps(t *testing.T) {
-	t.Run("every stack it writes carries the schema, its own digest and the writer", func(t *testing.T) {
+	t.Run("every stack it writes is stamped with the schema, its own digest and the writer", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
@@ -21,10 +21,10 @@ func TestRunStamps(t *testing.T) {
 		for _, name := range stacks.stacks() {
 			stamp := stacks.stampOf(name)
 			if stamp.Schema != RequiredSchema {
-				t.Errorf("%s carries schema %d, want %d", name, stamp.Schema, RequiredSchema)
+				t.Errorf("%s is stamped with schema %d, want %d", name, stamp.Schema, RequiredSchema)
 			}
 			if want := cfn.TemplateDigest(stacks.template(name)); stamp.Digest != want {
-				t.Errorf("%s carries digest %q, want the sha256 of its own body %q", name, stamp.Digest, want)
+				t.Errorf("%s is stamped with digest %q, want the sha256 of its own body %q", name, stamp.Digest, want)
 			}
 			if stamp.WrittenBy != "1.9.0" {
 				t.Errorf("%s was written by %q, want 1.9.0", name, stamp.WrittenBy)

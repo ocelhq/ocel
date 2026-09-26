@@ -33,7 +33,7 @@ func TestEveryEdgeKindHasAFeatureOfItsOwn(t *testing.T) {
 		KindAPIGateway: FeatureAPIGatewayEdge,
 	} {
 		if got := bootstrapplan.FeatureNeedingEdge(Catalogue(), kind); got != want {
-			t.Errorf("FeatureNeedingEdge(%q) = %q, want %q: nothing else tells a run which stack the edge it fronts with stands in", kind, got, want)
+			t.Errorf("FeatureNeedingEdge(%q) = %q, want %q: nothing else tells a run which stack the edge it fronts with is installed in", kind, got, want)
 		}
 	}
 }
@@ -55,7 +55,7 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 			want:       []string{FeatureISR, FeatureImageOptimization},
 		},
 		{
-			name: "a Cloudflare front needs its feature and what it stands on",
+			name: "a Cloudflare front needs its feature and what it depends on",
 			edge: "cloudflare",
 			want: []string{FeatureISR, FeatureCloudflareEdge},
 		},

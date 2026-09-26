@@ -35,12 +35,12 @@ const (
 )
 
 const (
-	NameHeldAttempts = 4
-	nameHeldBase     = 20 * time.Second
-	nameHeldCeiling  = 90 * time.Second
-	nameHeldJitter   = 0.2
+	NameBlockedAttempts = 4
+	nameBlockedBase     = 20 * time.Second
+	nameBlockedCeiling  = 90 * time.Second
+	nameBlockedJitter   = 0.2
 
-	HeldQueueName = "QueueDeletedRecently"
+	QueueDeletedRecently = "QueueDeletedRecently"
 )
 
 const (
@@ -63,7 +63,7 @@ type ChangeSetName func(stackName string) string
 
 type ChangeReview func(stackName string, changes []cfntypes.ResourceChange) error
 
-var HoldBefore = func(ctx context.Context, d time.Duration) error {
+var WaitBefore = func(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
@@ -238,12 +238,12 @@ func SameTags(have, want []cfntypes.Tag) bool {
 	if len(have) != len(want) {
 		return false
 	}
-	standing := make(map[string]string, len(have))
+	current := make(map[string]string, len(have))
 	for _, tag := range have {
-		standing[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		current[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
 	for _, tag := range want {
-		value, ok := standing[aws.ToString(tag.Key)]
+		value, ok := current[aws.ToString(tag.Key)]
 		if !ok || value != aws.ToString(tag.Value) {
 			return false
 		}
@@ -317,7 +317,7 @@ func AwaitChangeSet(ctx context.Context, cfn API, id string) ([]cfntypes.Resourc
 		if attempt+1 >= ChangeSetAttempts {
 			return nil, "", fmt.Errorf("change set %s was still being built after %d looks", id, ChangeSetAttempts)
 		}
-		if err := HoldBefore(ctx, ChangeSetDelay(attempt)); err != nil {
+		if err := WaitBefore(ctx, ChangeSetDelay(attempt)); err != nil {
 			return nil, "", err
 		}
 	}
@@ -352,13 +352,13 @@ func Create(ctx context.Context, cfn API, stackName, template string, params []c
 		if err == nil {
 			return nil
 		}
-		if attempt+1 >= NameHeldAttempts || !nameStillHeld(ctx, cfn, stackName) {
+		if attempt+1 >= NameBlockedAttempts || !nameStillBlocked(ctx, cfn, stackName) {
 			return err
 		}
 		if err := Delete(ctx, cfn, stackName); err != nil {
 			return err
 		}
-		if err := HoldBefore(ctx, NameHeldDelay(attempt)); err != nil {
+		if err := WaitBefore(ctx, NameBlockedDelay(attempt)); err != nil {
 			return err
 		}
 	}
@@ -389,16 +389,16 @@ func waitFailure(ctx context.Context, cfn API, stackName, action string, err err
 }
 
 func firstFailure(ctx context.Context, cfn API, stackName string) string {
-	held, found := failureOfThisOperation(ctx, cfn, stackName)
+	failure, found := failureOfThisOperation(ctx, cfn, stackName)
 	if !found {
 		return ""
 	}
-	if embedded := embeddedStackOf(held); embedded != "" {
+	if embedded := embeddedStackOf(failure); embedded != "" {
 		if deeper, ok := failureOfThisOperation(ctx, cfn, embedded); ok {
 			return describeFailure(deeper)
 		}
 	}
-	return describeFailure(held)
+	return describeFailure(failure)
 }
 
 func failureOfThisOperation(ctx context.Context, cfn API, stackName string) (cfntypes.StackEvent, bool) {
@@ -415,12 +415,12 @@ func failureOfThisOperation(ctx context.Context, cfn API, stackName string) (cfn
 		if err != nil {
 			return failed, found
 		}
-		for _, held := range out.StackEvents {
-			if beganTheOperation(held) {
+		for _, event := range out.StackEvents {
+			if beganTheOperation(event) {
 				return failed, found
 			}
-			if failedEvent(held) {
-				failed, found = held, true
+			if failedEvent(event) {
+				failed, found = event, true
 			}
 		}
 		if token = out.NextToken; aws.ToString(token) == "" {
@@ -436,19 +436,19 @@ var operationStarts = []cfntypes.ResourceStatus{
 	cfntypes.ResourceStatusImportInProgress,
 }
 
-func beganTheOperation(held cfntypes.StackEvent) bool {
-	id := aws.ToString(held.StackId)
-	return id != "" && aws.ToString(held.PhysicalResourceId) == id &&
-		slices.Contains(operationStarts, held.ResourceStatus)
+func beganTheOperation(event cfntypes.StackEvent) bool {
+	id := aws.ToString(event.StackId)
+	return id != "" && aws.ToString(event.PhysicalResourceId) == id &&
+		slices.Contains(operationStarts, event.ResourceStatus)
 }
 
 const stackResourceType = "AWS::CloudFormation::Stack"
 
-func embeddedStackOf(held cfntypes.StackEvent) string {
-	if aws.ToString(held.ResourceType) != stackResourceType {
+func embeddedStackOf(event cfntypes.StackEvent) string {
+	if aws.ToString(event.ResourceType) != stackResourceType {
 		return ""
 	}
-	if id := aws.ToString(held.PhysicalResourceId); id != aws.ToString(held.StackId) {
+	if id := aws.ToString(event.PhysicalResourceId); id != aws.ToString(event.StackId) {
 		return id
 	}
 	return ""
@@ -460,30 +460,30 @@ var cancellations = []string{
 	"Resource deletion cancelled",
 }
 
-func failedEvent(held cfntypes.StackEvent) bool {
-	reason := strings.TrimSuffix(strings.TrimSpace(aws.ToString(held.ResourceStatusReason)), ".")
-	return strings.HasSuffix(string(held.ResourceStatus), "_FAILED") &&
+func failedEvent(event cfntypes.StackEvent) bool {
+	reason := strings.TrimSuffix(strings.TrimSpace(aws.ToString(event.ResourceStatusReason)), ".")
+	return strings.HasSuffix(string(event.ResourceStatus), "_FAILED") &&
 		reason != "" && !slices.Contains(cancellations, reason)
 }
 
-func describeFailure(held cfntypes.StackEvent) string {
+func describeFailure(event cfntypes.StackEvent) string {
 	return fmt.Sprintf("%s %s %s: %s",
-		aws.ToString(held.LogicalResourceId), aws.ToString(held.ResourceType),
-		held.ResourceStatus, aws.ToString(held.ResourceStatusReason))
+		aws.ToString(event.LogicalResourceId), aws.ToString(event.ResourceType),
+		event.ResourceStatus, aws.ToString(event.ResourceStatusReason))
 }
 
-func NameHeldDelay(attempt int) time.Duration {
-	step := min(nameHeldBase<<attempt, nameHeldCeiling)
-	return step + time.Duration(mathrand.Float64()*nameHeldJitter*float64(step))
+func NameBlockedDelay(attempt int) time.Duration {
+	step := min(nameBlockedBase<<attempt, nameBlockedCeiling)
+	return step + time.Duration(mathrand.Float64()*nameBlockedJitter*float64(step))
 }
 
-func nameStillHeld(ctx context.Context, cfn API, stackName string) bool {
+func nameStillBlocked(ctx context.Context, cfn API, stackName string) bool {
 	out, err := cfn.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: aws.String(stackName)})
 	if err != nil {
 		return false
 	}
 	for _, event := range out.StackEvents {
-		if strings.Contains(aws.ToString(event.ResourceStatusReason), HeldQueueName) {
+		if strings.Contains(aws.ToString(event.ResourceStatusReason), QueueDeletedRecently) {
 			return true
 		}
 	}

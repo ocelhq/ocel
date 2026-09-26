@@ -49,12 +49,12 @@ const (
 
 	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
 
-	substrateClusterARN    = "arn:aws:ecs:*:*:cluster/ocel-*"
-	substrateServiceARN    = "arn:aws:ecs:*:*:service/ocel-*/*"
-	substrateBalancerARN   = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
-	substrateListenerARN   = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
-	substrateRuleARN       = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
-	substrateVPCOriginARN  = "arn:aws:cloudfront::*:vpcorigin/*"
+	containerClusterARN    = "arn:aws:ecs:*:*:cluster/ocel-*"
+	containerServiceARN    = "arn:aws:ecs:*:*:service/ocel-*/*"
+	containerBalancerARN   = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
+	containerListenerARN   = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
+	containerRuleARN       = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
+	containerVPCOriginARN  = "arn:aws:cloudfront::*:vpcorigin/*"
 	vpcOriginLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
 	ecsLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
 	elbLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
@@ -152,13 +152,13 @@ func mergeConditions(conditions ...map[string]any) map[string]any {
 	merged := map[string]any{}
 	for _, condition := range conditions {
 		for operator, operands := range condition {
-			standing, ok := merged[operator].(map[string]any)
+			existing, ok := merged[operator].(map[string]any)
 			if !ok {
 				merged[operator] = operands
 				continue
 			}
 			for key, value := range operands.(map[string]any) {
-				standing[key] = value
+				existing[key] = value
 			}
 		}
 	}
@@ -372,7 +372,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"cloudfront:CreateVpcOrigin"},
-			Resources: []string{substrateVPCOriginARN},
+			Resources: []string{containerVPCOriginARN},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -384,7 +384,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"cloudfront:UntagResource",
 				"cloudfront:UpdateVpcOrigin",
 			},
-			Resources: []string{substrateVPCOriginARN},
+			Resources: []string{containerVPCOriginARN},
 			Condition: taggedByOcel(),
 		},
 		{
@@ -411,7 +411,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ecs:CreateCluster"},
-			Resources: []string{substrateClusterARN},
+			Resources: []string{containerClusterARN},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -422,7 +422,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"ecs:TagResource",
 				"ecs:UntagResource",
 			},
-			Resources: []string{substrateClusterARN},
+			Resources: []string{containerClusterARN},
 			Condition: taggedByOcel(),
 		},
 		{
@@ -436,7 +436,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ecs:CreateService"},
-			Resources: []string{substrateServiceARN},
+			Resources: []string{containerServiceARN},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -448,7 +448,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"ecs:UntagResource",
 				"ecs:UpdateService",
 			},
-			Resources: []string{substrateServiceARN},
+			Resources: []string{containerServiceARN},
 			Condition: taggedByOcel(),
 		},
 		{
@@ -467,7 +467,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup"},
-			Resources: []string{substrateBalancerARN, appTargetGroupARN},
+			Resources: []string{containerBalancerARN, appTargetGroupARN},
 			Condition: taggedOnCreate(),
 		},
 		{
@@ -489,12 +489,12 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"elasticloadbalancing:SetSecurityGroups",
 				"elasticloadbalancing:SetSubnets",
 			},
-			Resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
+			Resources: []string{containerBalancerARN, containerListenerARN, containerRuleARN, appTargetGroupARN},
 			Condition: taggedByOcel(),
 		},
 		{
 			Actions:   []string{"elasticloadbalancing:AddTags"},
-			Resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
+			Resources: []string{containerBalancerARN, containerListenerARN, containerRuleARN, appTargetGroupARN},
 			Condition: taggedOnCreate(),
 		},
 		{

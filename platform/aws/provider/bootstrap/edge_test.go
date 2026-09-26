@@ -277,7 +277,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		}
 	})
 
-	t.Run("a key at the maximum age is rotated: a fresh key is minted and recorded, the old one stays for the workers still holding it", func(t *testing.T) {
+	t.Run("a key at the maximum age is rotated: a fresh key is minted and recorded, the old one stays for the workers still signing with it", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		recorded(ssmc, "AKOLD", mintedAt)
 		iamc := &fakeIAM{keys: []string{"AKOLD"}}
@@ -300,7 +300,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		}
 	})
 
-	t.Run("the age falls back to what IAM recorded when the parameter carries none", func(t *testing.T) {
+	t.Run("the age falls back to what IAM recorded when the parameter records none", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"s"}`
 		iamc := &fakeIAM{keys: []string{"AKOLD"}, minted: map[string]time.Time{"AKOLD": mintedAt}}
@@ -334,7 +334,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		}
 	})
 
-	t.Run("a superseded key a worker signed with today is left standing", func(t *testing.T) {
+	t.Run("a superseded key a worker signed with today is left in place", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		recorded(ssmc, "AKNEW", stale)
 		now := stale.Add(48 * time.Hour)
@@ -377,7 +377,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 
 		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, now)
 		if err == nil {
-			t.Fatal("ensureEdgeCredentials err = nil, want a refusal: two keys stand and both are in use")
+			t.Fatal("ensureEdgeCredentials err = nil, want a refusal: two keys exist and both are in use")
 		}
 		if !strings.Contains(err.Error(), "AKNEW") {
 			t.Errorf("err = %v, want it to name the key every project must move onto", err)
@@ -415,7 +415,7 @@ func TestStaleEdgeKeyNotice(t *testing.T) {
 	notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge+24*time.Hour), ClassProduction)
 	for _, want := range []string{"AKOLD", "91 days", "ocel bootstrap"} {
 		if !strings.Contains(notice, want) {
-			t.Errorf("notice = %q, want it to carry %q", notice, want)
+			t.Errorf("notice = %q, want it to contain %q", notice, want)
 		}
 	}
 	if notice := StaleEdgeKeyNotice(EdgeCredentials{AccessKeyID: "AKOLD"}, mintedAt.Add(10*EdgeKeyMaxAge), ClassProduction); notice != "" {
@@ -647,7 +647,7 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 }
 
 func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
-	t.Run("a standing credential survives a re-offer without one", func(t *testing.T) {
+	t.Run("a stored credential survives a re-offer without one", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, ClassProduction, "fake", offeredDeploymentsStore()); err != nil {
 			t.Fatalf("first adopt: %v", err)
@@ -682,7 +682,7 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 			t.Fatal("adoptDeploymentsStore stored a credential-less store rather than refusing")
 		}
 		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), namesFor(ClassProduction, "fake").deploymentsStoreParam) {
-			t.Errorf("error = %v, want it to name the worker and the parameter that holds nothing", err)
+			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
 		}
 		if _, stored := ssmc.params[namesFor(ClassProduction, "fake").deploymentsStoreParam]; stored {
 			t.Error("a credential-less store was written despite the refusal")
@@ -691,7 +691,7 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 }
 
 func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
-	t.Run("a standing credential survives a re-offer without one", func(t *testing.T) {
+	t.Run("a stored credential survives a re-offer without one", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, ClassProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
 			t.Fatalf("first adopt: %v", err)
@@ -717,7 +717,7 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 			t.Fatal("adoptISRWriter stored a credential-less writer rather than refusing")
 		}
 		if !strings.Contains(err.Error(), "ocel-isr-writer") || !strings.Contains(err.Error(), namesFor(ClassProduction, "fake").isrWriterParam) {
-			t.Errorf("error = %v, want it to name the worker and the parameter that holds nothing", err)
+			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
 		}
 		if _, stored := ssmc.params[namesFor(ClassProduction, "fake").isrWriterParam]; stored {
 			t.Error("a credential-less writer was written despite the refusal")
@@ -917,7 +917,7 @@ func without(offer map[string]string, key string) map[string]string {
 	return offer
 }
 
-func TestAdoptionWritesNothingWhenWhatStandsIsWhatItWouldWrite(t *testing.T) {
+func TestAdoptionWritesNothingWhenWhatIsStoredIsWhatItWouldWrite(t *testing.T) {
 	for _, tc := range adoptions() {
 		t.Run(tc.what, func(t *testing.T) {
 			ssmc := newFakeSSM()
@@ -931,13 +931,13 @@ func TestAdoptionWritesNothingWhenWhatStandsIsWhatItWouldWrite(t *testing.T) {
 				t.Fatalf("second adopt: %v", err)
 			}
 			if ssmc.puts != 1 {
-				t.Errorf("puts = %d, want the second adopt to write nothing: what stands is what it would write", ssmc.puts)
+				t.Errorf("puts = %d, want the second adopt to write nothing: what is stored is what it would write", ssmc.puts)
 			}
 		})
 	}
 }
 
-func TestAdoptionWritesNothingWhenAReofferOmitsTheStandingCredential(t *testing.T) {
+func TestAdoptionWritesNothingWhenAReofferOmitsTheStoredCredential(t *testing.T) {
 	for _, tc := range adoptions() {
 		t.Run(tc.what, func(t *testing.T) {
 			ssmc := newFakeSSM()

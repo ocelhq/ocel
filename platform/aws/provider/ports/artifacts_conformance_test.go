@@ -43,8 +43,8 @@ func (f *fakeS3) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*
 func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	blob, held := f.objects[f.at(aws.ToString(in.Bucket), aws.ToString(in.Key))]
-	if !held {
+	blob, stored := f.objects[f.at(aws.ToString(in.Bucket), aws.ToString(in.Key))]
+	if !stored {
 		return nil, &s3types.NoSuchKey{}
 	}
 	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(slices.Clone(blob)))}, nil
@@ -53,7 +53,7 @@ func (f *fakeS3) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*
 func (f *fakeS3) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if _, held := f.objects[f.at(aws.ToString(in.Bucket), aws.ToString(in.Key))]; !held {
+	if _, stored := f.objects[f.at(aws.ToString(in.Bucket), aws.ToString(in.Key))]; !stored {
 		return nil, &s3types.NotFound{}
 	}
 	return &s3.HeadObjectOutput{}, nil
@@ -92,14 +92,14 @@ type classBuckets struct {
 }
 
 func (b classBuckets) Buckets(_ context.Context, class edge.Class) (ports.Buckets, error) {
-	held := ports.Buckets{
+	buckets := ports.Buckets{
 		Functions: "ocel-artifacts-" + string(class),
 		Assets:    "ocel-assets-" + string(class),
 	}
 	if !b.cacheless {
-		held.Caches = []ports.CacheBucket{{Name: "ocel-cache-" + string(class), S3: b.cache}}
+		buckets.Caches = []ports.CacheBucket{{Name: "ocel-cache-" + string(class), S3: b.cache}}
 	}
-	return held, nil
+	return buckets, nil
 }
 
 func providerkitCacheRef() provider.ArtifactRef {
@@ -160,14 +160,14 @@ func TestACacheStoreOffTheAccountsEndpointIsSweptThroughItsOwnClient(t *testing.
 	if err := store.Put(ctx, ref, bytes.NewReader([]byte("x"))); err != nil {
 		t.Fatal(err)
 	}
-	if _, held := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Class), ref.Key)]; !held {
+	if _, stored := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Class), ref.Key)]; !stored {
 		t.Fatal("Put() wrote the cache artifact through the account's own client, not the store's")
 	}
 	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 	if len(elsewhere.objects) != 0 {
-		t.Fatalf("the cache store still holds %d object(s) after the sweep", len(elsewhere.objects))
+		t.Fatalf("the cache store still has %d object(s) after the sweep", len(elsewhere.objects))
 	}
 }
 
@@ -182,6 +182,6 @@ func TestASweepOfACacheStoreAlreadyTornDownIsNoWork(t *testing.T) {
 
 	store := ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{cache: goneS3{newFakeS3()}}}
 	if err := store.RemovePrefix(context.Background(), edge.ClassProduction, "shop/prod/", nil); err != nil {
-		t.Fatalf("RemovePrefix() over a cache bucket already gone = %v, want the destroy to carry on", err)
+		t.Fatalf("RemovePrefix() over a cache bucket already gone = %v, want the destroy to continue", err)
 	}
 }

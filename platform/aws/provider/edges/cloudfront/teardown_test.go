@@ -25,17 +25,17 @@ func TestADistributionNameFitsTheCommentWithoutLosingTheFieldsTheGateReads(t *te
 
 	name := distributionName(ns, slug, edge.ClassProduction)
 	if len(name) > maxDistributionNameLen {
-		t.Fatalf("distributionName is %d characters and CloudFront holds %d, so the comment is cut where it lands: %q", len(name), maxDistributionNameLen, name)
+		t.Fatalf("distributionName is %d characters and CloudFront allows %d, so the comment is cut where it lands: %q", len(name), maxDistributionNameLen, name)
 	}
-	if standing := surface.ProjectsNamed(ns, []string{name}, edge.ClassProduction); len(standing) != 1 {
-		t.Fatalf("the gate reads %v out of %q, so this namespace does not see its own project", standing, name)
+	if projects := surface.ProjectsNamed(ns, []string{name}, edge.ClassProduction); len(projects) != 1 {
+		t.Fatalf("the gate reads %v out of %q, so this namespace does not see its own project", projects, name)
 	}
 	if other := distributionName(ns, slug[:len(slug)-1]+"t", edge.ClassProduction); other == name {
 		t.Errorf("two projects both mint %q, so each would adopt the other's distribution", name)
 	}
 }
 
-func TestTheCommentADistributionCarriesIsTheOwnerAProjectClaims(t *testing.T) {
+func TestTheCommentOnADistributionIsTheOwnerAProjectClaims(t *testing.T) {
 	t.Parallel()
 
 	ns := bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
@@ -69,7 +69,7 @@ func TestTeardownRefusesWhileAProjectStillHasADistribution(t *testing.T) {
 		t.Errorf("refusal = %q, want it to name the project and the command that clears it", err)
 	}
 	if err := e.Teardown(ctx, edge.ClassPreview); err != nil {
-		t.Errorf("Teardown(preview) = %v, want nil: the standing distribution belongs to the production class", err)
+		t.Errorf("Teardown(preview) = %v, want nil: the existing distribution belongs to the production class", err)
 	}
 
 	if err := stack.Destroy(ctx); err != nil {

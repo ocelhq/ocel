@@ -137,7 +137,7 @@ func functionEnvOf(t *testing.T, rec *inputRecorder, name string) map[string]str
 	t.Helper()
 	variables := rec.object(t, "aws:lambda/function:Function", name, "environment")["variables"]
 	if !variables.IsObject() {
-		t.Fatalf("function %s carries no environment variables", name)
+		t.Fatalf("function %s has no environment variables", name)
 	}
 	env := map[string]string{}
 	for key, value := range variables.ObjectValue() {
@@ -148,7 +148,7 @@ func functionEnvOf(t *testing.T, rec *inputRecorder, name string) map[string]str
 	return env
 }
 
-func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
+func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
@@ -229,12 +229,12 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	}
 	for _, key := range []string{routingManifestEnv, functionURLsEnv} {
 		if _, wired := sibling[key]; wired {
-			t.Errorf("sibling carries %s, want the router wired into the entry function alone", key)
+			t.Errorf("sibling has %s, want the router wired into the entry function alone", key)
 		}
 	}
 }
 
-func TestAppEnvCarriesTheDeploymentURLToTheFunction(t *testing.T) {
+func TestAppEnvPassesTheDeploymentURLToTheFunction(t *testing.T) {
 	t.Parallel()
 
 	app := routedApp()
@@ -297,7 +297,7 @@ func routerInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
 	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "router", "invoke")
 	raw, ok := rec.inputs(rolePolicyToken, name)["policy"]
 	if !ok || !raw.IsString() {
-		t.Fatalf("the entry role carries no %s policy", name)
+		t.Fatalf("the entry role has no %s policy", name)
 	}
 	var doc struct{ Statement []invokeStatement }
 	if err := json.Unmarshal([]byte(raw.StringValue()), &doc); err != nil {
@@ -388,6 +388,6 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 
 	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "router", "invoke")
 	if _, granted := rec.inputs(rolePolicyToken, name)["policy"]; granted {
-		t.Error("an app whose edge routes carries an invoke grant, want the grant only where the origin routes")
+		t.Error("an app whose edge routes has an invoke grant, want the grant only where the origin routes")
 	}
 }

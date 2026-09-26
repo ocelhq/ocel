@@ -49,7 +49,7 @@ func runtimeLayerBody(t *testing.T, class string) string {
 }
 
 func TestRuntimeLayerTemplate(t *testing.T) {
-	t.Run("one layer version per architecture, named after the payload it carries", func(t *testing.T) {
+	t.Run("one layer version per architecture, named after the payload it contains", func(t *testing.T) {
 		for _, class := range []string{ClassProduction, ClassPreview} {
 			t.Run(class, func(t *testing.T) {
 				tmpl := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, class))
@@ -58,7 +58,7 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 						len(tmpl.Resources), len(runtimeArches()))
 				}
 				for _, arch := range runtimeArches() {
-					carried, err := payloads.RuntimeLayer(arch)
+					shipped, err := payloads.RuntimeLayer(arch)
 					if err != nil {
 						t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
 					}
@@ -69,15 +69,15 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 					if layer.Type != "AWS::Lambda::LayerVersion" {
 						t.Errorf("%s Type = %q, want AWS::Lambda::LayerVersion", arch, layer.Type)
 					}
-					if !strings.Contains(layer.Properties.LayerName, shortRuntimeDigest(carried.SHA256)) {
+					if !strings.Contains(layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256)) {
 						t.Errorf("%s LayerName = %q, want the payload digest %s in it",
-							arch, layer.Properties.LayerName, shortRuntimeDigest(carried.SHA256))
+							arch, layer.Properties.LayerName, shortRuntimeDigest(shipped.SHA256))
 					}
 					if !strings.Contains(layer.Properties.LayerName, runtimeArchTokens[arch]) {
 						t.Errorf("%s LayerName = %q, names no architecture, so the two arches would collide",
 							arch, layer.Properties.LayerName)
 					}
-					if want := payloads.Key(runtimeLayerKeyPrefix, carried.SHA256); layer.Properties.Content.S3Key != want {
+					if want := payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256); layer.Properties.Content.S3Key != want {
 						t.Errorf("%s S3Key = %q, want %q", arch, layer.Properties.Content.S3Key, want)
 					}
 					if layer.Properties.Content.S3Bucket != fixtureBucket {
@@ -90,9 +90,9 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 						t.Errorf("%s CompatibleRuntimes = %v, want none listed: Lambda refuses the layer to any function whose runtime is left off the list, and one runtime serves them all",
 							arch, layer.Properties.CompatibleRuntimes)
 					}
-					out, ok := tmpl.Outputs[runtimeLayerOutputKey(arch, carried.SHA256)]
+					out, ok := tmpl.Outputs[runtimeLayerOutputKey(arch, shipped.SHA256)]
 					if !ok {
-						t.Fatalf("the runtime stack publishes no %s output, so no release can reach the layer", runtimeLayerOutputKey(arch, carried.SHA256))
+						t.Fatalf("the runtime stack publishes no %s output, so no release can reach the layer", runtimeLayerOutputKey(arch, shipped.SHA256))
 					}
 					if !strings.Contains(out.Value, runtimeLayerResourceID(arch)) {
 						t.Errorf("%s output = %q, want the version ARN of %s", arch, out.Value, runtimeLayerResourceID(arch))
@@ -116,7 +116,7 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 }
 
 func TestRunRuntimeLayers(t *testing.T) {
-	t.Run("a first bootstrap places both payloads and stands the layers up", func(t *testing.T) {
+	t.Run("a first bootstrap places both payloads and publishes the layers", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := newFakeObjectStore()
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
@@ -126,15 +126,15 @@ func TestRunRuntimeLayers(t *testing.T) {
 		}
 		body := stacks.template(runtimeStack(ClassProduction))
 		if body == "" {
-			t.Fatal("a first bootstrap stood up no runtime stack, so its releases have nothing to boot through")
+			t.Fatal("a first bootstrap created no runtime stack, so its releases have nothing to boot through")
 		}
 		for _, arch := range runtimeArches() {
-			carried, err := payloads.RuntimeLayer(arch)
+			shipped, err := payloads.RuntimeLayer(arch)
 			if err != nil {
 				t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
 			}
-			key := payloads.Key(runtimeLayerKeyPrefix, carried.SHA256)
-			if !store.holds(key) {
+			key := payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256)
+			if !store.has(key) {
 				t.Errorf("the %s runtime payload was never placed at %s", arch, key)
 			}
 			if !strings.Contains(body, key) {
@@ -152,7 +152,7 @@ func TestRunRuntimeLayers(t *testing.T) {
 			t.Fatalf("first run: %v", err)
 		}
 		if store.puts != 0 {
-			t.Errorf("placed %d payloads into an account that already holds them", store.puts)
+			t.Errorf("placed %d payloads into an account that already stores them", store.puts)
 		}
 		creates := stacks.creates
 		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
@@ -175,11 +175,11 @@ func TestReadRuntimeLayers(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		for _, arch := range runtimeArches() {
-			carried, err := payloads.RuntimeLayer(arch)
+			shipped, err := payloads.RuntimeLayer(arch)
 			if err != nil {
 				t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
 			}
-			want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(arch, carried.SHA256))
+			want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(arch, shipped.SHA256))
 			if want == "" {
 				t.Fatalf("the seeded runtime stack published no %s ARN", arch)
 			}
@@ -199,8 +199,8 @@ func TestReadRuntimeLayers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if arn, held := deployed.RuntimeLayers[arch.X8664]; held {
-			t.Errorf("read %q as this build's runtime, and it carries another build's", arn)
+		if arn, found := deployed.RuntimeLayers[arch.X8664]; found {
+			t.Errorf("read %q as this build's runtime, and it is another build's", arn)
 		}
 	})
 
@@ -247,14 +247,14 @@ func ensureRuntimeRequest() RuntimeLayerRequest {
 	return RuntimeLayerRequest{ArtifactBucket: fixtureBucket, Writer: "1.4.0"}
 }
 
-func assertCarriesThisBuild(t *testing.T, stacks *fakeCFN, layers map[string]string) {
+func assertShipsThisBuild(t *testing.T, stacks *fakeCFN, layers map[string]string) {
 	t.Helper()
 	for _, arch := range runtimeArches() {
-		carried, err := payloads.RuntimeLayer(arch)
+		shipped, err := payloads.RuntimeLayer(arch)
 		if err != nil {
 			t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
 		}
-		want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(arch, carried.SHA256))
+		want := stacks.output(runtimeStack(ClassProduction), runtimeLayerOutputKey(arch, shipped.SHA256))
 		if want == "" {
 			t.Fatalf("the runtime stack publishes no %s ARN", arch)
 		}
@@ -266,7 +266,7 @@ func assertCarriesThisBuild(t *testing.T, stacks *fakeCFN, layers map[string]str
 
 func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("an account bootstrapped by an older build has this build's runtime published for it", func(t *testing.T) {
-		holdNothing(t)
+		recordWaits(t)
 		stacks, store := newFakeCFN(), newFakeObjectStore()
 		stacks.seed(runtimeStack(ClassProduction), staleRuntimeBody())
 		var log healLog
@@ -275,13 +275,13 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
-		assertCarriesThisBuild(t, stacks, layers)
+		assertShipsThisBuild(t, stacks, layers)
 		for _, arch := range runtimeArches() {
-			carried, err := payloads.RuntimeLayer(arch)
+			shipped, err := payloads.RuntimeLayer(arch)
 			if err != nil {
 				t.Fatalf("payloads.RuntimeLayer(%s): %v", arch, err)
 			}
-			if !store.holds(payloads.Key(runtimeLayerKeyPrefix, carried.SHA256)) {
+			if !store.has(payloads.Key(runtimeLayerKeyPrefix, shipped.SHA256)) {
 				t.Errorf("the %s runtime payload the stack points at was never placed", arch)
 			}
 		}
@@ -290,8 +290,8 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		}
 	})
 
-	t.Run("an account already carrying this build's runtime is written to again by nothing", func(t *testing.T) {
-		holdNothing(t)
+	t.Run("an account that already has this build's runtime is written to again by nothing", func(t *testing.T) {
+		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.seed(runtimeStack(ClassProduction), runtimeLayerBody(t, ClassProduction))
 		creates, updates := stacks.creates, stacks.updates
@@ -301,18 +301,18 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
-		assertCarriesThisBuild(t, stacks, layers)
+		assertShipsThisBuild(t, stacks, layers)
 		if stacks.creates != creates || stacks.updates != updates {
 			t.Errorf("wrote the runtime stack %d creates and %d updates over a runtime this build already published",
 				stacks.creates-creates, stacks.updates-updates)
 		}
 		if store.puts != 0 {
-			t.Errorf("placed %d payloads the account already holds", store.puts)
+			t.Errorf("placed %d payloads the account already stores", store.puts)
 		}
 	})
 
 	t.Run("a runtime another deploy is publishing is waited out rather than raced", func(t *testing.T) {
-		holdNothing(t)
+		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.seed(runtimeStack(ClassProduction), staleRuntimeBody())
 		stacks.busyWriting(runtimeStack(ClassProduction), 4, runtimeLayerBody(t, ClassProduction))
@@ -320,19 +320,19 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
 		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers over a stack another deploy holds: %v", err)
+			t.Fatalf("EnsureRuntimeLayers over a stack another deploy is writing: %v", err)
 		}
-		assertCarriesThisBuild(t, stacks, layers)
+		assertShipsThisBuild(t, stacks, layers)
 		if stacks.updates != 0 {
 			t.Errorf("executed %d change sets against a stack another deploy was writing", stacks.updates)
 		}
 		if !log.says("under another run") {
-			t.Errorf("the deploy said %v, want it to say it stood by while another run wrote the runtime", log.lines)
+			t.Errorf("the deploy said %v, want it to say it waited while another run wrote the runtime", log.lines)
 		}
 	})
 
-	t.Run("a runtime another deploy stood up first is booted through rather than created twice", func(t *testing.T) {
-		holdNothing(t)
+	t.Run("a runtime another deploy created first is booted through rather than created twice", func(t *testing.T) {
+		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.claimedMidCreate(runtimeStack(ClassProduction), runtimeLayerBody(t, ClassProduction))
 		var log healLog
@@ -341,19 +341,19 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers against a runtime another deploy created: %v", err)
 		}
-		assertCarriesThisBuild(t, stacks, layers)
+		assertShipsThisBuild(t, stacks, layers)
 	})
 
-	t.Run("a runtime that settles still behind is left for the deploy to refuse", func(t *testing.T) {
-		holdNothing(t)
+	t.Run("a runtime whose stack stays busy and behind is left for the deploy to refuse", func(t *testing.T) {
+		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
 		stacks.seed(runtimeStack(ClassProduction), staleRuntimeBody())
-		stacks.busyWriting(runtimeStack(ClassProduction), settleAttempts*4, staleRuntimeBody())
+		stacks.busyWriting(runtimeStack(ClassProduction), idleAttempts*4, staleRuntimeBody())
 		var log healLog
 
 		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
 		if err != nil {
-			t.Fatalf("EnsureRuntimeLayers over a stack that never settles: %v", err)
+			t.Fatalf("EnsureRuntimeLayers over a stack that never goes idle: %v", err)
 		}
 		if len(layers) != 0 {
 			t.Errorf("read %v as this build's runtime, and no run published it", layers)

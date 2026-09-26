@@ -37,7 +37,7 @@ async function waitFor(pred: () => boolean, label: string): Promise<void> {
   throw new Error(`timed out waiting for ${label}`);
 }
 
-async function settle(): Promise<void> {
+async function yieldToPendingWork(): Promise<void> {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
 }
 
@@ -78,12 +78,12 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
-test("holds the application's import until the first push, then runs it with the values in hand", async () => {
+test("defers the application's import until the first push, then runs it with the values in hand", async () => {
   vi.stubEnv("OCEL_LIVE_KEYS", "API_TOKEN");
 
   void import("@framework/node-runtime/entrypoint");
   await waitForConnection();
-  await settle();
+  await yieldToPendingWork();
 
   expect((globalThis as any).__appImportedAt).toBeUndefined();
   expect(messages.some((m) => m.type === "server-ready")).toBe(false);
@@ -95,7 +95,7 @@ test("holds the application's import until the first push, then runs it with the
   expect((globalThis as any).__appSawLive).toBe("sk_live_boot");
 });
 
-test("holds the Next launcher's import until the first push", async () => {
+test("defers the Next launcher's import until the first push", async () => {
   vi.stubEnv("OCEL_LIVE_KEYS", "API_TOKEN");
   const projectDir = join(dir, "project");
   await writeNextProjectFixture(projectDir);
@@ -111,7 +111,7 @@ module.exports = { handler(req, res) { res.end("ok"); } };
 
   void import("../src/next/entrypoint.mjs");
   await waitForConnection();
-  await settle();
+  await yieldToPendingWork();
   expect((globalThis as any).__appImportedAt).toBeUndefined();
 
   push({ type: "liveValues", generation: 1, values: { API_TOKEN: "sk_live_next" } });

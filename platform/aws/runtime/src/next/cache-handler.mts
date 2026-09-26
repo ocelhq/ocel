@@ -127,8 +127,8 @@ export default class OcelCacheHandler {
   }
 
   private get refreshing(): number | undefined {
-    const held = Number(this.requestHeaders[refreshHeader]);
-    return Number.isFinite(held) ? held : undefined;
+    const generation = Number(this.requestHeaders[refreshHeader]);
+    return Number.isFinite(generation) ? generation : undefined;
   }
 
   private get store(): CacheStore {

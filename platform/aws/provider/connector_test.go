@@ -10,12 +10,12 @@ import (
 func TestAnUnsetComputeTakesTheProvidersOwnDefault(t *testing.T) {
 	t.Parallel()
 
-	held, err := provider.ConnectorCompute("", connectorCompute)
+	compute, err := provider.ConnectorCompute("", connectorCompute)
 	if err != nil {
 		t.Fatalf("provider.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
 	}
-	if held != provider.ComputeServerless {
-		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, provider.ComputeServerless)
+	if compute != provider.ComputeServerless {
+		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", compute, provider.ComputeServerless)
 	}
 }
 

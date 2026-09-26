@@ -66,7 +66,7 @@ type UnscopedGrantError struct {
 
 func (e *UnscopedGrantError) Error() string {
 	return fmt.Sprintf(
-		"binding %s carries a grant (%s) with an unscoped %s. "+
+		"binding %s has a grant (%s) with an unscoped %s. "+
 			"Ocel renders one inline policy per binding and refuses blanket access: name the actions and the resource ARNs the app needs",
 		e.Binding, e.Label, e.Field,
 	)
@@ -177,7 +177,7 @@ type PolicyBudgetError struct {
 func (e *PolicyBudgetError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b,
-		"AWS caps a role's inline policies at %d characters, of which Ocel's own runtime policies hold %d, leaving %d for the bindings an app uses:\n",
+		"AWS caps a role's inline policies at %d characters, of which Ocel's own runtime policies use %d, leaving %d for the bindings an app uses:\n",
 		rolePolicyCeilingChars, platformPolicyReserveChars, policyBudgetChars,
 	)
 	for _, app := range e.Apps {

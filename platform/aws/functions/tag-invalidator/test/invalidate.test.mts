@@ -19,8 +19,8 @@ class FakeDynamo {
   async send(command: any): Promise<any> {
     this.reads.push(command.input);
     if (this.fail !== null) throw this.fail;
-    const held = this.items.get(command.input.Key.pk.S);
-    return held === undefined ? {} : { Item: { distributions: { SS: held } } };
+    const distributions = this.items.get(command.input.Key.pk.S);
+    return distributions === undefined ? {} : { Item: { distributions: { SS: distributions } } };
   }
 }
 
@@ -150,7 +150,7 @@ it("sends soft tags first, in batches of at most one request's worth", async () 
   expect(new Set(references).size).toBe(references.length);
 });
 
-it("names a batch by what it carries, so a redrive re-sends nothing new", async () => {
+it("names a batch by what it contains, so a redrive re-sends nothing new", async () => {
   const first = new FakeCloudFront();
   const second = new FakeCloudFront();
 
@@ -173,7 +173,7 @@ it("names a later raise of the same tag differently, so it is not swallowed", as
   expect(after).not.toBe(before);
 });
 
-it("treats a batch CloudFront already holds as sent", async () => {
+it("treats a batch CloudFront already has as sent", async () => {
   cloudfront.fail = named("InvalidationBatchAlreadyExists");
 
   const failed = await invalidateAll(invalidator(dynamo, cloudfront), raises(["products"]));

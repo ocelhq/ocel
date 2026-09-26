@@ -99,12 +99,12 @@ func (t *transformPatches) install(pctx *sdk.Context) error {
 
 func (t *transformPatches) claim(ref resourceRef, props sdk.Map) (sdk.Map, bool) {
 	t.mu.Lock()
-	patch, held := t.patches[ref]
-	if held {
+	patch, patched := t.patches[ref]
+	if patched {
 		t.claimed[ref] = true
 	}
 	t.mu.Unlock()
-	if !held {
+	if !patched {
 		return nil, false
 	}
 	return mergeProps(props, patch), true
@@ -127,7 +127,7 @@ func (t *transformPatches) refuseUnclaimed() error {
 	}
 	slices.Sort(missed)
 	return refusal.Refuse(refusal.CodeInvalid,
-		"a transform patches %s, and this deploy stood up nothing to carry it; a patch that reaches no resource is a patch this deploy never honoured",
+		"a transform patches %s, and this deploy provisioned nothing to apply it to; a patch that reaches no resource is a patch this deploy never honoured",
 		strings.Join(missed, ", "))
 }
 
@@ -140,12 +140,12 @@ func mergeProps(props sdk.Map, patch map[string]any) sdk.Map {
 	return merged
 }
 
-func mergeInput(held sdk.Input, over any) sdk.Input {
+func mergeInput(current sdk.Input, over any) sdk.Input {
 	nested, isMap := over.(map[string]any)
 	if !isMap {
 		return sdk.Any(over)
 	}
-	under, layered := held.(sdk.Map)
+	under, layered := current.(sdk.Map)
 	if !layered {
 		return sdk.Any(over)
 	}
@@ -153,7 +153,7 @@ func mergeInput(held sdk.Input, over any) sdk.Input {
 }
 
 func indexPatches(candidates []transformCandidate, results []transformkit.Result) (*transformPatches, error) {
-	held := &transformPatches{
+	indexed := &transformPatches{
 		patches:  map[resourceRef]map[string]any{},
 		sites:    map[resourceRef]string{},
 		tags:     map[resourceKey]map[string]string{},
@@ -163,7 +163,7 @@ func indexPatches(candidates []transformCandidate, results []transformkit.Result
 	for i, candidate := range candidates {
 		result := results[i]
 		if len(result.Tags) > 0 {
-			held.tags[candidate.key] = result.Tags
+			indexed.tags[candidate.key] = result.Tags
 		}
 		for _, key := range slices.Sorted(maps.Keys(result.Patches)) {
 			patch := result.Patches[key]
@@ -177,15 +177,15 @@ func indexPatches(candidates []transformCandidate, results []transformkit.Result
 				continue
 			}
 			site := candidate.key.Type + " " + candidate.key.Name + "'s " + key
-			if standing, taken := held.patches[ref]; taken {
-				merged, err := mergeClaims(standing, patch, held.sites[ref], site)
+			if earlier, taken := indexed.patches[ref]; taken {
+				merged, err := mergeClaims(earlier, patch, indexed.sites[ref], site)
 				if err != nil {
 					return nil, err
 				}
 				patch = merged
 			}
-			held.patches[ref] = patch
-			held.sites[ref] = site
+			indexed.patches[ref] = patch
+			indexed.sites[ref] = site
 		}
 		switch candidate.key.Type {
 		case transformTypeFunction:
@@ -193,20 +193,20 @@ func indexPatches(candidates []transformCandidate, results []transformkit.Result
 				return nil, err
 			}
 			if _, bound := result.Patches["lambda"][lambdaVPCConfigField]; bound {
-				held.vpcBound[candidate.key.Name] = true
+				indexed.vpcBound[candidate.key.Name] = true
 			}
 		case transformTypeBucket:
 			if len(result.Patches["cors"]) > 0 {
-				held.corsBind[candidate.key.Name] = true
+				indexed.corsBind[candidate.key.Name] = true
 			}
 		}
 	}
-	return held, nil
+	return indexed, nil
 }
 
-func mergeClaims(standing, over map[string]any, at, also string) (map[string]any, error) {
+func mergeClaims(earlier, over map[string]any, at, also string) (map[string]any, error) {
 	merged := map[string]any{}
-	maps.Copy(merged, standing)
+	maps.Copy(merged, earlier)
 	for _, field := range slices.Sorted(maps.Keys(over)) {
 		value := over[field]
 		if seen, taken := merged[field]; taken && !sameValue(seen, value) {
@@ -251,11 +251,11 @@ func checkVPCConfig(logicalName string, patch map[string]any) error {
 }
 
 func namedCount(value any) int {
-	switch held := value.(type) {
+	switch typed := value.(type) {
 	case []any:
-		return len(held)
+		return len(typed)
 	case string:
-		if strings.TrimSpace(held) == "" {
+		if strings.TrimSpace(typed) == "" {
 			return 0
 		}
 		return 1

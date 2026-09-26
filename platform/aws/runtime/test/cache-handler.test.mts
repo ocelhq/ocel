@@ -283,7 +283,7 @@ test("expires an entry whose tag was revalidated after it was written", async ()
   expect(entry).toBeNull();
 });
 
-test("misses on a refresh that already holds this generation, so Next regenerates", async () => {
+test("misses on a refresh that already has this generation, so Next regenerates", async () => {
   const store = fakeStore();
   seedPage(store, "index", { lastModified: 1_000 });
   const handler = new OcelCacheHandler({ _requestHeaders: { [refreshHeader]: "1000" } });
@@ -291,7 +291,7 @@ test("misses on a refresh that already holds this generation, so Next regenerate
   expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
 });
 
-test("serves a refresh the generation newer than the one it holds", async () => {
+test("serves a refresh the generation newer than the one it has", async () => {
   const store = fakeStore();
   seedPage(store, "index", { lastModified: 2_000 });
   const handler = new OcelCacheHandler({ _requestHeaders: { [refreshHeader]: "1000" } });
@@ -323,7 +323,7 @@ test("ticks the revalidation signal so the request can announce it", async () =>
   expect(revalidationTicks()).toBe(before + 1);
 });
 
-test("ticks before the tag write settles, so a response sent meanwhile announces it", async () => {
+test("ticks before the tag write finishes, so a response sent meanwhile announces it", async () => {
   const store = fakeStore();
   const release = store.holdWrites();
   const before = revalidationTicks();
@@ -565,7 +565,7 @@ const bundles: [name: string, contents: string | null][] = [
 ];
 
 for (const [name, contents] of bundles) {
-  test(`writes the entry when the bundle holds ${name}`, async () => {
+  test(`writes the entry when the bundle contains ${name}`, async () => {
     const store = fakeStore();
     bundleProjection(contents);
 

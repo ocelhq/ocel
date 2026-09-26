@@ -28,25 +28,25 @@ func ContainerFrontRecord(class edge.Class) records.Name {
 }
 
 func ReadContainerFront(ctx context.Context, store records.Store, class edge.Class) (ContainerFront, bool, error) {
-	held, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(class))
+	record, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(class))
 	if err != nil {
 		return ContainerFront{}, false, err
 	}
-	if len(held.Bytes) == 0 {
+	if len(record.Bytes) == 0 {
 		return ContainerFront{}, false, nil
 	}
 	var front ContainerFront
-	if err := json.Unmarshal(held.Bytes, &front); err != nil {
-		return ContainerFront{}, false, fmt.Errorf("read the container front %s records: %w", held.Name, err)
+	if err := json.Unmarshal(record.Bytes, &front); err != nil {
+		return ContainerFront{}, false, fmt.Errorf("read the container front %s records: %w", record.Name, err)
 	}
 	if front.VPCOrigin == "" || front.Host == "" {
-		return ContainerFront{}, false, fmt.Errorf("the container front %s records names no VPC origin or host", held.Name)
+		return ContainerFront{}, false, fmt.Errorf("the container front %s records names no VPC origin or host", record.Name)
 	}
 	return front, true, nil
 }
 
 func WriteContainerFront(ctx context.Context, store records.Store, class edge.Class, front ContainerFront) error {
-	held, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(class))
+	current, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(class))
 	if err != nil {
 		return err
 	}
@@ -54,11 +54,11 @@ func WriteContainerFront(ctx context.Context, store records.Store, class edge.Cl
 	if err != nil {
 		return fmt.Errorf("encode the container front: %w", err)
 	}
-	if string(held.Bytes) == string(encoded) {
+	if string(current.Bytes) == string(encoded) {
 		return nil
 	}
-	held.Bytes = encoded
-	if _, err := store.Write(ctx, held); err != nil {
+	current.Bytes = encoded
+	if _, err := store.Write(ctx, current); err != nil {
 		return fmt.Errorf("record the container front the %s class answers behind: %w", class, err)
 	}
 	return nil

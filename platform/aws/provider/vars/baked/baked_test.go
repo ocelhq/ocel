@@ -31,7 +31,7 @@ func TestSealOpen(t *testing.T) {
 		}
 		for _, secret := range []string{"sk-live-abc", "whsec-xyz", "STRIPE_API_KEY"} {
 			if bytes.Contains(sealed, []byte(secret)) {
-				t.Errorf("sealed bytes carry %q in the clear", secret)
+				t.Errorf("sealed bytes contain %q in the clear", secret)
 			}
 		}
 
@@ -104,7 +104,7 @@ func TestOpen(t *testing.T) {
 		}
 
 		if _, err := Open(k, sealed[:NonceBytes-1]); err == nil {
-			t.Error("Open accepted a bundle too short to hold a nonce")
+			t.Error("Open accepted a bundle too short to contain a nonce")
 		}
 	})
 }

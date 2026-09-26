@@ -6,7 +6,7 @@ import (
 )
 
 func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
-	stacks, apis := standingBootstrap(t)
+	stacks, apis := installedBootstrap(t)
 	edge, dropped := edgeStack(ClassProduction), optStack(ClassProduction)
 
 	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil, nil); err != nil {
@@ -15,13 +15,13 @@ func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 
 	removal, write := stacks.lastEvent("removed "+dropped), stacks.lastEvent("wrote "+edge)
 	if removal < 0 {
-		t.Fatalf("%s was left standing though the set no longer names it", dropped)
+		t.Fatalf("%s was left provisioned though the set no longer names it", dropped)
 	}
 	if write < 0 {
-		t.Fatalf("%s was never rewritten for the set it now stands alongside", edge)
+		t.Fatalf("%s was never rewritten for the set it is now deployed alongside", edge)
 	}
 	if removal > write {
-		t.Errorf("%s was rewritten before %s went, so an interrupted run leaves it reading against a set that no longer stands", edge, dropped)
+		t.Errorf("%s was rewritten before %s went, so an interrupted run leaves it reading against a set that no longer exists", edge, dropped)
 	}
 
 	deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)

@@ -17,7 +17,7 @@ function response(headers = {}, body) {
 }
 
 describe("the empty-body dropper", () => {
-  it("empties the body a marked response carries, and drops the mark", () => {
+  it("empties the body of a marked response, and drops the mark", () => {
     const answered = load()(response({ [EMPTY_BODY_HEADER]: "1", "content-type": "text/html" }));
 
     expect(answered.body).toEqual({ encoding: "text", data: "" });

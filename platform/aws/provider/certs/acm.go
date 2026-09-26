@@ -118,7 +118,7 @@ func (i ACM) window() time.Duration {
 	return time.Duration(i.attempts()-1) * i.every()
 }
 
-func (i ACM) hold(ctx context.Context) error {
+func (i ACM) waitInterval(ctx context.Context) error {
 	return i.pause(ctx, i.every())
 }
 
@@ -176,7 +176,7 @@ func (i ACM) AwaitValidation(ctx context.Context, cert Certificate, say func(str
 			if attempt == 1 {
 				say(fmt.Sprintf("Waiting up to %s for ACM to name the record that proves you own this domain", i.window()))
 			}
-			if err := i.hold(ctx); err != nil {
+			if err := i.waitInterval(ctx); err != nil {
 				return cert, err
 			}
 		}
@@ -201,7 +201,7 @@ func (i ACM) AwaitIssued(ctx context.Context, cert Certificate, say func(string)
 			if attempt == 1 {
 				say(fmt.Sprintf("Waiting up to %s for ACM to issue the certificate, which it does once the record resolves", i.window()))
 			}
-			if err := i.hold(ctx); err != nil {
+			if err := i.waitInterval(ctx); err != nil {
 				return cert, err
 			}
 		}
@@ -296,7 +296,7 @@ func (i ACM) Discard(ctx context.Context, cert Certificate, say func(string)) er
 		return nil
 	}
 	if cert.Adopted {
-		say(fmt.Sprintf("Leaving certificate %s standing: ocel did not request it, so it is not ocel's to delete", cert.ARN))
+		say(fmt.Sprintf("Leaving certificate %s in place: ocel did not request it, so it is not ocel's to delete", cert.ARN))
 		return nil
 	}
 	err := i.delete(ctx, cert)
@@ -307,7 +307,7 @@ func (i ACM) Discard(ctx context.Context, cert Certificate, say func(string)) er
 	if err == nil || Gone(err) {
 		return nil
 	}
-	say(fmt.Sprintf("Leaving certificate %s standing: %v — delete it in ACM once nothing uses it", cert.ARN, err))
+	say(fmt.Sprintf("Leaving certificate %s in place: %v — delete it in ACM once nothing uses it", cert.ARN, err))
 	if InUse(err) {
 		return nil
 	}
@@ -318,11 +318,11 @@ func (i ACM) awaitRelease(ctx context.Context, cert Certificate) error {
 	var err error
 	backoff := releaseFirst
 	for waited := time.Duration(0); waited < releaseBudget; {
-		hold := min(backoff, releaseBudget-waited)
-		if err = i.pause(ctx, hold); err != nil {
+		wait := min(backoff, releaseBudget-waited)
+		if err = i.pause(ctx, wait); err != nil {
 			return err
 		}
-		waited += hold
+		waited += wait
 		if err = i.delete(ctx, cert); !InUse(err) {
 			return err
 		}
@@ -341,8 +341,8 @@ func (i ACM) delete(ctx context.Context, cert Certificate) error {
 type pending struct{ error }
 
 func Pending(err error) bool {
-	var held pending
-	return errors.As(err, &held)
+	var p pending
+	return errors.As(err, &p)
 }
 
 func Gone(err error) bool {

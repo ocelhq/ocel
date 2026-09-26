@@ -36,7 +36,7 @@ const embedPassDeadline = 3 * time.Minute
 
 const embedUpdatePoll = 500 * time.Millisecond
 
-const embedUpdateSettle = 45 * time.Second
+const embedUpdateWait = 45 * time.Second
 
 type ObjectsAPI interface {
 	GetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
@@ -77,14 +77,14 @@ func missingEmbedClients(cfg Config) string {
 }
 
 type embedPass struct {
-	objects ObjectsAPI
-	store   payloads.ObjectStore
-	code    FunctionCodeAPI
-	invoke  InvokeAPI
-	targets []embedTarget
-	budget  time.Duration
-	settle  time.Duration
-	log     func(string)
+	objects    ObjectsAPI
+	store      payloads.ObjectStore
+	code       FunctionCodeAPI
+	invoke     InvokeAPI
+	targets    []embedTarget
+	budget     time.Duration
+	updateWait time.Duration
+	log        func(string)
 }
 
 func (p embedPass) run(ctx context.Context) {
@@ -168,7 +168,7 @@ func (p embedPass) embedOne(ctx context.Context, target embedTarget) (string, bo
 		return fmt.Sprintf("could not upload the repackaged bundle: %v; not embedded", err), false
 	}
 	if err := p.updateCode(ctx, target, key); err != nil {
-		if errors.Is(err, errUpdateUnsettled) {
+		if errors.Is(err, errUpdateUnfinished) {
 			return fmt.Sprintf("embedded %s, but %v; the function is moving onto %s unverified", entry, err, key), false
 		}
 		return fmt.Sprintf("%v; left on its original package", err), false
@@ -233,7 +233,7 @@ func mergeEmbeddedTar(dst, srcZip, tarPath, name string) error {
 	zw := zip.NewWriter(out)
 	for _, f := range src.File {
 		if f.Name == name {
-			return fmt.Errorf("package %s already holds %s", srcZip, name)
+			return fmt.Errorf("package %s already contains %s", srcZip, name)
 		}
 		if err := zw.Copy(f); err != nil {
 			return fmt.Errorf("copy %s: %w", f.Name, err)
@@ -330,11 +330,11 @@ func (p embedPass) putFile(ctx context.Context, bucket, key, src string) error {
 	return nil
 }
 
-var errUpdateUnsettled = errors.New("the code update did not settle in time")
+var errUpdateUnfinished = errors.New("the code update did not finish in time")
 
 func (p embedPass) updateCode(ctx context.Context, target embedTarget, key string) error {
-	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < p.settle {
-		return fmt.Errorf("the embed pass has under %s left, too little to settle a code update", p.settle)
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < p.updateWait {
+		return fmt.Errorf("the embed pass has under %s left, too little to finish a code update", p.updateWait)
 	}
 	if _, err := p.code.UpdateFunctionCode(ctx, &lambda.UpdateFunctionCodeInput{
 		FunctionName: aws.String(target.FunctionName),
@@ -344,14 +344,14 @@ func (p embedPass) updateCode(ctx context.Context, target embedTarget, key strin
 		return fmt.Errorf("could not update the function's code: %w", err)
 	}
 
-	settle, cancel := context.WithTimeout(ctx, p.settle)
+	polling, cancel := context.WithTimeout(ctx, p.updateWait)
 	defer cancel()
 	for {
-		out, err := p.code.GetFunctionConfiguration(settle, &lambda.GetFunctionConfigurationInput{
+		out, err := p.code.GetFunctionConfiguration(polling, &lambda.GetFunctionConfigurationInput{
 			FunctionName: aws.String(target.FunctionName),
 		})
 		if err != nil {
-			return fmt.Errorf("%w: could not read it back: %w", errUpdateUnsettled, err)
+			return fmt.Errorf("%w: could not read it back: %w", errUpdateUnfinished, err)
 		}
 		switch out.LastUpdateStatus {
 		case lambdatypes.LastUpdateStatusSuccessful:
@@ -360,8 +360,8 @@ func (p embedPass) updateCode(ctx context.Context, target embedTarget, key strin
 			return fmt.Errorf("the code update failed: %s", aws.ToString(out.LastUpdateStatusReason))
 		}
 		select {
-		case <-settle.Done():
-			return errUpdateUnsettled
+		case <-polling.Done():
+			return errUpdateUnfinished
 		case <-time.After(embedUpdatePoll):
 		}
 	}

@@ -93,13 +93,13 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 	if err != nil {
 		return nil, err
 	}
-	standing := read.Deployed.Features.Names()
-	order, err := FeatureDeleteOrder(standing)
+	installed := read.Deployed.Features.Names()
+	order, err := FeatureDeleteOrder(installed)
 	if err != nil {
 		return nil, err
 	}
 	alongside := FeatureSet{}
-	for _, name := range standing {
+	for _, name := range installed {
 		alongside[name] = true
 	}
 
@@ -144,7 +144,7 @@ var stranded = map[string]provider.Change{
 		Reason: "every build's static assets, prerender fallbacks and edge fetch cache",
 		Slow:   true,
 	},
-	"VarsTable": {Reason: "every variable value this class holds, and their history"},
+	"VarsTable": {Reason: "every variable value this class stores, and their history"},
 	"VarsKey":   {Reason: "the key those values are encrypted under"},
 }
 
@@ -190,14 +190,14 @@ func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group provide
 }
 
 func planDelete(ctx context.Context, stacks cfn.API, group provider.ChangeGroup, body string) provider.ChangeGroup {
-	standing, err := stackResources(ctx, stacks, group.Name)
+	provisioned, err := stackResources(ctx, stacks, group.Name)
 	if err != nil {
 		group.Changes = templateChanges(body, provider.ActionDelete)
 		group.Reason = provider.WithDetailUnavailable(group.Reason)
 		return group
 	}
-	group.Changes = make([]provider.Change, 0, len(standing))
-	for _, resource := range standing {
+	group.Changes = make([]provider.Change, 0, len(provisioned))
+	for _, resource := range provisioned {
 		group.Changes = append(group.Changes, provider.Change{
 			Kind:   resource.kind,
 			Name:   resource.id,

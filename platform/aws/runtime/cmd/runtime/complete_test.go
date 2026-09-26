@@ -23,7 +23,7 @@ func okNode(t *testing.T) *httptest.Server {
 }
 
 func TestHandleInvocationComplete(t *testing.T) {
-	t.Run("holds until complete", func(t *testing.T) {
+	t.Run("waits until complete", func(t *testing.T) {
 		node := okNode(t)
 		rt, _ := fakeRuntime(t, []byte(getEvent))
 

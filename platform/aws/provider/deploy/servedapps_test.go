@@ -22,21 +22,21 @@ func TestServedAppsHandsOutASnapshotRatherThanTheEntryItself(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			held, known := served.byPhysicalName("shop-prod-web-entry")
+			fn, known := served.byPhysicalName("shop-prod-web-entry")
 			if !known {
 				t.Error("byPhysicalName() lost the entry function it was told about")
 				return
 			}
-			held.Warmed.Key = "a reader's own scribble"
+			fn.Warmed.Key = "a reader's own scribble"
 		}()
 	}
 	wg.Wait()
 
-	held, known := served.byPhysicalName("shop-prod-web-entry")
+	fn, known := served.byPhysicalName("shop-prod-web-entry")
 	if !known {
 		t.Fatal("byPhysicalName() lost the entry function it was told about")
 	}
-	if held.Warmed.Key != "a-cache-key" {
-		t.Errorf("the index holds %q, want the warm reply it recorded: a caller may not write through what it was handed", held.Warmed.Key)
+	if fn.Warmed.Key != "a-cache-key" {
+		t.Errorf("the index stores %q, want the warm reply it recorded: a caller may not write through what it was handed", fn.Warmed.Key)
 	}
 }

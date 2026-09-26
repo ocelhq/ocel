@@ -61,12 +61,12 @@ func previewing(t *testing.T, w *world) (*apiGateway, edge.EdgeStack) {
 
 func rulesOn(t *testing.T, w *world, domain string) map[string]*fakeRule {
 	t.Helper()
-	held := w.gateway.domains[domain]
-	if held == nil {
-		t.Fatalf("no domain name %q; the gateway holds %v", domain, slices.Sorted(maps.Keys(w.gateway.domains)))
+	entry := w.gateway.domains[domain]
+	if entry == nil {
+		t.Fatalf("no domain name %q; the gateway has %v", domain, slices.Sorted(maps.Keys(w.gateway.domains)))
 	}
 	byHost := map[string]*fakeRule{}
-	for _, rule := range held.rules {
+	for _, rule := range entry.rules {
 		byHost[rule.host] = rule
 	}
 	return byHost
@@ -113,14 +113,14 @@ func TestReconcilePreviewWildcardRoutesEverythingUnclaimedTo404(t *testing.T) {
 		t.Fatal("no wildcard domain name")
 	}
 	if domain.routing != agtypes.RoutingModeRoutingRuleOnly {
-		t.Errorf("routing mode = %q, want %q; the wildcard carries no base path mapping, only per-preview host rules", domain.routing, agtypes.RoutingModeRoutingRuleOnly)
+		t.Errorf("routing mode = %q, want %q; the wildcard has no base path mapping, only per-preview host rules", domain.routing, agtypes.RoutingModeRoutingRuleOnly)
 	}
 	if domain.certificate != previewCert {
 		t.Errorf("certificate = %q, want the wildcard certificate %q", domain.certificate, previewCert)
 	}
 	catchAll := rulesOn(t, w, previewWild)[anyHost]
 	if catchAll == nil {
-		t.Fatalf("no catch-all rule; the wildcard holds %v", w.gateway.mutations())
+		t.Fatalf("no catch-all rule; the wildcard has %v", w.gateway.mutations())
 	}
 	if catchAll.api != fakeNotFoundAPI || catchAll.stage != bootstrap.EdgeStageName {
 		t.Errorf("catch-all rule serves %s/%s, want the %s the core stack outputs, on %s", catchAll.api, catchAll.stage, bootstrap.OutputEdgeNotFoundAPIID, stageName)
@@ -163,7 +163,7 @@ func TestReconcilePreviewWildcardConvergesADomainThatDrifted(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("onto the certificate the bootstrap now holds", func(t *testing.T) {
+	t.Run("onto the certificate the bootstrap now has", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -287,7 +287,7 @@ func TestPromoteRoutesThePreviewHostAtItsOwnAPI(t *testing.T) {
 	}
 	rule := rulesOn(t, w, previewWild)[previewHostname()]
 	if rule == nil {
-		t.Fatalf("no rule for %s; the wildcard holds %v", previewHostname(), slices.Sorted(maps.Keys(rulesOn(t, w, previewWild))))
+		t.Fatalf("no rule for %s; the wildcard has %v", previewHostname(), slices.Sorted(maps.Keys(rulesOn(t, w, previewWild))))
 	}
 	if rule.api != api.id || rule.stage != stageName {
 		t.Errorf("rule for %s serves %s/%s, want the pointer's own API %s/%s", previewHostname(), rule.api, rule.stage, api.id, stageName)
@@ -436,8 +436,8 @@ func TestPreviewHostRulesDoNotCollideOnPriority(t *testing.T) {
 
 	seen := map[int32]string{}
 	for host, rule := range rulesOn(t, w, previewWild) {
-		if held, taken := seen[rule.priority]; taken {
-			t.Errorf("%s and %s both sit at priority %d; API Gateway refuses two rules at one priority", host, held, rule.priority)
+		if other, taken := seen[rule.priority]; taken {
+			t.Errorf("%s and %s both sit at priority %d; API Gateway refuses two rules at one priority", host, other, rule.priority)
 		}
 		seen[rule.priority] = host
 	}

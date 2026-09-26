@@ -35,7 +35,7 @@ func boundaryStatements(t *testing.T, class, broughtKey string) []boundaryStatem
 	}
 	boundary, ok := tmpl.Resources["AppBoundary"]
 	if !ok {
-		t.Fatal("the core stack carries no AppBoundary, so nothing caps the roles a deploy mints")
+		t.Fatal("the core stack has no AppBoundary, so nothing caps the roles a deploy mints")
 	}
 	if boundary.Type != "AWS::IAM::ManagedPolicy" {
 		t.Errorf("AppBoundary Type = %q, want AWS::IAM::ManagedPolicy", boundary.Type)
@@ -64,7 +64,7 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t
 							t.Errorf("%s is admitted under %v, want it pinned to %s alone: a %s role must not open what the other class sealed", action, st.Condition, want, class)
 						}
 						if st.Resource != "*" {
-							t.Errorf("%s is admitted on %q; the alias Ocel put on the key it made is the fence, and no key ARN is known before that stack stands", action, st.Resource)
+							t.Errorf("%s is admitted on %q; the alias Ocel put on the key it made is the fence, and no key ARN is known before that stack is provisioned", action, st.Resource)
 						}
 					case "secretsmanager":
 						if st.Resource != appSecretARN {

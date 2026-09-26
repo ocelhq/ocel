@@ -33,7 +33,7 @@ describe("the deployable bundle", () => {
     expect(execFileSync(process.execPath, [probe], { encoding: "utf8" }).trim()).toBe("loaded");
   }, 120_000);
 
-  it("carries no path of the checkout it was built in", () => {
+  it("contains no path of the checkout it was built in", () => {
     const checkout = join(root, "..", "..", "..", "..");
 
     expect(readFileSync(bundled(), "utf8")).not.toContain(checkout);

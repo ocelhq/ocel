@@ -13,11 +13,11 @@ import (
 )
 
 type blockingArtifactStore struct {
-	mu     sync.Mutex
-	live   int
-	peak   int
-	arrive chan struct{}
-	hold   chan struct{}
+	mu      sync.Mutex
+	live    int
+	peak    int
+	arrive  chan struct{}
+	release chan struct{}
 }
 
 func (b *blockingArtifactStore) HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
@@ -33,7 +33,7 @@ func (b *blockingArtifactStore) PutObject(context.Context, *s3.PutObjectInput, .
 	b.mu.Unlock()
 
 	b.arrive <- struct{}{}
-	<-b.hold
+	<-b.release
 
 	b.mu.Lock()
 	b.live--
@@ -55,8 +55,8 @@ func staticAssetApps(t *testing.T, apps []string, assets int) string {
 func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.T) {
 	apps := []string{"web", "admin"}
 	uploader := &blockingArtifactStore{
-		arrive: make(chan struct{}, len(apps)*uploadConcurrency*4),
-		hold:   make(chan struct{}),
+		arrive:  make(chan struct{}, len(apps)*uploadConcurrency*4),
+		release: make(chan struct{}),
 	}
 	cfg := Config{
 		ArtifactRoot:      staticAssetApps(t, apps, uploadConcurrency),
@@ -87,7 +87,7 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		t.Error("an upload started while the budget was already full: each app took a budget of its own")
 	case <-time.After(200 * time.Millisecond):
 	}
-	close(uploader.hold)
+	close(uploader.release)
 	group.Wait()
 
 	for slot, err := range failures {
@@ -96,6 +96,6 @@ func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.
 		}
 	}
 	if uploader.peak > uploadConcurrency {
-		t.Errorf("%d uploads were in flight at once, want at most %d: the apps standing up side by side share one budget", uploader.peak, uploadConcurrency)
+		t.Errorf("%d uploads were in flight at once, want at most %d: the apps deploying side by side share one budget", uploader.peak, uploadConcurrency)
 	}
 }

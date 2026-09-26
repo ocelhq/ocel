@@ -101,7 +101,7 @@ func (i ecrImages) Push(ctx context.Context, push images.Push, progress edge.Pro
 func repositoryOf(target images.Registry, imageRef string) (string, error) {
 	rest, found := strings.CutPrefix(imageRef, target.Server+"/")
 	if !found {
-		return "", fmt.Errorf("%s is not an image ref under %s, so there is no repository of this account's to hold it", imageRef, target.Server)
+		return "", fmt.Errorf("%s is not an image ref under %s, so there is no repository of this account's to store it", imageRef, target.Server)
 	}
 	repository, _, _ := strings.Cut(rest, "@")
 	if at := strings.LastIndex(repository, ":"); at > strings.LastIndex(repository, "/") {

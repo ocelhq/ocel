@@ -294,7 +294,7 @@ test("an asset bucket the function cannot read refuses to boot", async () => {
   expect(routerHostFromEnv({ ...env, ...credentials }, localOrigin).assetBucket).toBeDefined();
 });
 
-test("a sibling call signs with the credentials the sandbox holds now", async () => {
+test("a sibling call signs with the credentials the sandbox has now", async () => {
   const rotating = { ...credentials };
   const seen: Request[] = [];
   const doFetch = (async (input: Request) => {

@@ -77,7 +77,7 @@ func storeError(op string, err error) error {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"%s: the store refused the signature because its clock and this box's disagree — every signed url this deployment hands out fails until one of them is put right", op))
 	case preconditionFailed(err):
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s: the object did not meet the condition the write carried", op))
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s: the object did not meet the condition the write sent", op))
 	default:
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", op, err))
 	}

@@ -16,7 +16,7 @@ function captured(): string[] {
   return lines;
 }
 
-it("emits one JSON line carrying the dedup ingredients and the outcome", () => {
+it("emits one JSON line containing the dedup ingredients and the outcome", () => {
   const lines = captured();
 
   report(context("msg-1", message!), { event: "RevalidateOk" });

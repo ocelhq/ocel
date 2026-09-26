@@ -33,5 +33,5 @@ func edgeSetOf(deployed bootstrap.Deployed, class edge.Class) (edgeSet, error) {
 }
 
 func unbootstrapped(class edge.Class) error {
-	return fmt.Errorf("the %s bootstrap in this account carries nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies stand in the %s feature stack, and this account has none. Run `%s` with this edge selected, then deploy again", class, Kind, bootstrap.FeatureCloudFrontEdge, provider.BootstrapCommand(class))
+	return fmt.Errorf("the %s bootstrap in this account has nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies are provisioned in the %s feature stack, and this account has none. Run `%s` with this edge selected, then deploy again", class, Kind, bootstrap.FeatureCloudFrontEdge, provider.BootstrapCommand(class))
 }

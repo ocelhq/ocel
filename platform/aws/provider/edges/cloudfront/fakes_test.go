@@ -107,7 +107,7 @@ func (w *world) edge() *cloudFront {
 	return &cloudFront{
 		ns:   defaultNamespace,
 		open: func(context.Context) (Clients, error) { return w.clients(), nil },
-		settle: Rollout{
+		pacing: Rollout{
 			Wait:     func(context.Context, time.Duration) error { return nil },
 			Attempts: 5,
 			Every:    time.Second,
@@ -130,10 +130,10 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if trimmed, preview := strings.CutSuffix(name, "-"+string(edge.ClassPreview)); preview {
 		class, name = edge.ClassPreview, trimmed
 	}
-	var held map[string]string
+	var outputs map[string]string
 	switch name {
 	case coreStackName:
-		held = map[string]string{
+		outputs = map[string]string{
 			"StateTableName":  fakeStateTable,
 			"AssetBucketName": fakeAssetBucket,
 		}
@@ -141,13 +141,13 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 		if f.otherEdge {
 			return &cloudformation.DescribeStacksOutput{}, nil
 		}
-		held = fakeEdgeOutputs(class)
+		outputs = fakeEdgeOutputs(class)
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	out := make([]cfntypes.Output, 0, len(held))
-	for _, key := range slices.Sorted(maps.Keys(held)) {
-		out = append(out, cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(held[key])})
+	out := make([]cfntypes.Output, 0, len(outputs))
+	for _, key := range slices.Sorted(maps.Keys(outputs)) {
+		out = append(out, cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(outputs[key])})
 	}
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{StackName: in.StackName, Outputs: out}}}, nil
 }
@@ -297,13 +297,13 @@ func (f *fakeCloudFront) DescribeKeyValueStore(_ context.Context, in *cloudfront
 	defer f.mu.Unlock()
 	name := aws.ToString(in.Name)
 	f.record("DescribeKeyValueStore " + name)
-	held, ok := f.stores[name]
+	store, ok := f.stores[name]
 	if !ok {
 		return nil, &cftypes.EntityNotFound{Message: aws.String("no key value store " + name)}
 	}
 	return &cloudfront.DescribeKeyValueStoreOutput{
-		ETag:          aws.String(held.etag),
-		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(held.arn), Name: in.Name, Status: aws.String("READY")},
+		ETag:          aws.String(store.etag),
+		KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(store.arn), Name: in.Name, Status: aws.String("READY")},
 	}, nil
 }
 
@@ -313,13 +313,13 @@ func (f *fakeCloudFront) ListDistributions(_ context.Context, _ *cloudfront.List
 	f.record("ListDistributions")
 	items := make([]cftypes.DistributionSummary, 0, len(f.distributions))
 	for _, id := range slices.Sorted(maps.Keys(f.distributions)) {
-		held := f.distributions[id]
+		existing := f.distributions[id]
 		items = append(items, cftypes.DistributionSummary{
-			Id:         aws.String(held.id),
-			DomainName: aws.String(held.domain),
-			Comment:    held.config.Comment,
-			Aliases:    held.config.Aliases,
-			Enabled:    held.config.Enabled,
+			Id:         aws.String(existing.id),
+			DomainName: aws.String(existing.domain),
+			Comment:    existing.config.Comment,
+			Aliases:    existing.config.Aliases,
+			Enabled:    existing.config.Enabled,
 		})
 	}
 	return &cloudfront.ListDistributionsOutput{DistributionList: &cftypes.DistributionList{Items: items}}, nil
@@ -334,20 +334,20 @@ func (f *fakeCloudFront) CreateDistribution(_ context.Context, in *cloudfront.Cr
 		return nil, f.createDistributionErr
 	}
 	id := f.id("E")
-	held := &fakeDistribution{
+	created := &fakeDistribution{
 		id:      id,
 		domain:  strings.ToLower(id) + ".cloudfront.net",
 		etag:    f.id("dist-"),
 		config:  in.DistributionConfig,
 		rollout: f.rollout,
 	}
-	f.distributions[id] = held
+	f.distributions[id] = created
 	return &cloudfront.CreateDistributionOutput{
-		ETag: aws.String(held.etag),
+		ETag: aws.String(created.etag),
 		Distribution: &cftypes.Distribution{
-			Id:                 aws.String(held.id),
-			DomainName:         aws.String(held.domain),
-			Status:             aws.String(held.status()),
+			Id:                 aws.String(created.id),
+			DomainName:         aws.String(created.domain),
+			Status:             aws.String(created.status()),
 			DistributionConfig: in.DistributionConfig,
 		},
 	}, nil
@@ -362,19 +362,19 @@ func (f *fakeCloudFront) GetDistribution(_ context.Context, in *cloudfront.GetDi
 		f.statusThrottles--
 		return nil, throttlingError()
 	}
-	held, ok := f.distributions[id]
+	existing, ok := f.distributions[id]
 	if !ok {
 		return nil, &cftypes.NoSuchDistribution{Message: aws.String("no distribution " + id)}
 	}
-	status := held.status()
-	held.polls++
+	status := existing.status()
+	existing.polls++
 	return &cloudfront.GetDistributionOutput{
-		ETag: aws.String(held.etag),
+		ETag: aws.String(existing.etag),
 		Distribution: &cftypes.Distribution{
-			Id:                 aws.String(held.id),
-			DomainName:         aws.String(held.domain),
+			Id:                 aws.String(existing.id),
+			DomainName:         aws.String(existing.domain),
 			Status:             aws.String(status),
-			DistributionConfig: held.config,
+			DistributionConfig: existing.config,
 		},
 	}, nil
 }
@@ -384,13 +384,13 @@ func (f *fakeCloudFront) GetDistributionConfig(_ context.Context, in *cloudfront
 	defer f.mu.Unlock()
 	id := aws.ToString(in.Id)
 	f.record("GetDistributionConfig " + id)
-	held, ok := f.distributions[id]
+	existing, ok := f.distributions[id]
 	if !ok {
 		return nil, &cftypes.NoSuchDistribution{Message: aws.String("no distribution " + id)}
 	}
 	return &cloudfront.GetDistributionConfigOutput{
-		ETag:               aws.String(held.etag),
-		DistributionConfig: clonedConfig(held.config),
+		ETag:               aws.String(existing.etag),
+		DistributionConfig: clonedConfig(existing.config),
 	}, nil
 }
 
@@ -414,24 +414,24 @@ func (f *fakeCloudFront) UpdateDistribution(_ context.Context, in *cloudfront.Up
 	defer f.mu.Unlock()
 	id := aws.ToString(in.Id)
 	f.record("UpdateDistribution " + id)
-	held, ok := f.distributions[id]
+	existing, ok := f.distributions[id]
 	if !ok {
 		return nil, &cftypes.NoSuchDistribution{Message: aws.String("no distribution " + id)}
 	}
-	if aws.ToString(in.IfMatch) != held.etag {
+	if aws.ToString(in.IfMatch) != existing.etag {
 		return nil, &cftypes.PreconditionFailed{Message: aws.String("stale etag for " + id)}
 	}
 	if f.aliasErr != nil {
 		return nil, f.aliasErr
 	}
 	f.updates = append(f.updates, in.DistributionConfig)
-	held.config = in.DistributionConfig
-	held.etag = f.id("dist-")
-	held.polls = 0
-	held.rollout = f.rollout
+	existing.config = in.DistributionConfig
+	existing.etag = f.id("dist-")
+	existing.polls = 0
+	existing.rollout = f.rollout
 	return &cloudfront.UpdateDistributionOutput{
-		ETag:         aws.String(held.etag),
-		Distribution: &cftypes.Distribution{Id: in.Id, DomainName: aws.String(held.domain)},
+		ETag:         aws.String(existing.etag),
+		Distribution: &cftypes.Distribution{Id: in.Id, DomainName: aws.String(existing.domain)},
 	}, nil
 }
 
@@ -440,14 +440,14 @@ func (f *fakeCloudFront) DeleteDistribution(_ context.Context, in *cloudfront.De
 	defer f.mu.Unlock()
 	id := aws.ToString(in.Id)
 	f.record("DeleteDistribution " + id)
-	held, ok := f.distributions[id]
+	existing, ok := f.distributions[id]
 	if !ok {
 		return nil, &cftypes.NoSuchDistribution{Message: aws.String("no distribution " + id)}
 	}
-	if aws.ToString(in.IfMatch) != held.etag {
+	if aws.ToString(in.IfMatch) != existing.etag {
 		return nil, &cftypes.PreconditionFailed{Message: aws.String("stale etag for " + id)}
 	}
-	if aws.ToBool(held.config.Enabled) {
+	if aws.ToBool(existing.config.Enabled) {
 		return nil, &cftypes.DistributionNotDisabled{Message: aws.String("distribution " + id + " still serves")}
 	}
 	delete(f.distributions, id)
@@ -482,7 +482,7 @@ func (f *fakeKeyValueStore) etagFor(arn string) string {
 	return arn + "#" + strconv.Itoa(f.next)
 }
 
-func (f *fakeKeyValueStore) held(arn string) map[string]string {
+func (f *fakeKeyValueStore) itemsOf(arn string) map[string]string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return maps.Clone(f.items[arn])
@@ -532,16 +532,16 @@ func (f *fakeKeyValueStore) UpdateKeys(_ context.Context, in *cloudfrontkeyvalue
 		f.next++
 		return nil, &kvstypes.ConflictException{Message: aws.String("another writer moved " + arn)}
 	}
-	held, ok := f.items[arn]
+	entries, ok := f.items[arn]
 	if !ok {
-		held = map[string]string{}
-		f.items[arn] = held
+		entries = map[string]string{}
+		f.items[arn] = entries
 	}
 	for _, put := range in.Puts {
-		held[aws.ToString(put.Key)] = aws.ToString(put.Value)
+		entries[aws.ToString(put.Key)] = aws.ToString(put.Value)
 	}
 	for _, drop := range in.Deletes {
-		delete(held, aws.ToString(drop.Key))
+		delete(entries, aws.ToString(drop.Key))
 	}
 	f.next++
 	return &cloudfrontkeyvaluestore.UpdateKeysOutput{ETag: aws.String(f.etagFor(arn))}, nil
@@ -648,11 +648,11 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 	if f.beforePut != nil {
 		f.beforePut(key, f.items)
 	}
-	held, err := conditionHolds(in, f.items[key])
+	satisfied, err := conditionHolds(in, f.items[key])
 	if err != nil {
 		return nil, err
 	}
-	if !held {
+	if !satisfied {
 		return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key)}
 	}
 	f.record("PutItem " + key)
@@ -687,18 +687,18 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := dynamoKey(in.Key)
-	held, present := f.items[key]
+	item, present := f.items[key]
 	if aws.ToString(in.ConditionExpression) != "" {
 		want, ok := in.ExpressionAttributeValues[":rev"].(*ddbtypes.AttributeValueMemberS)
 		if !ok {
 			return nil, fmt.Errorf("fake dynamo needs the revision the condition %q compares against", aws.ToString(in.ConditionExpression))
 		}
-		got, matched := held["rev"].(*ddbtypes.AttributeValueMemberS)
+		got, matched := item["rev"].(*ddbtypes.AttributeValueMemberS)
 		if !present {
 			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("no " + key)}
 		}
 		if !matched || got.Value != want.Value {
-			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key), Item: held}
+			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key), Item: item}
 		}
 	}
 	f.record("DeleteItem " + key)

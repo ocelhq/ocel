@@ -25,23 +25,23 @@ import (
 )
 
 const (
-	SubstrateSlug = awsports.ContainersSlug
+	ContainersSlug = awsports.ContainersSlug
 
-	substrateConsumers = "consumers"
-	substrateLease     = "lease"
-	leaseAttempts      = 5
+	consumersKey  = "consumers"
+	leaseKey      = "lease"
+	leaseAttempts = 5
 
-	ecsTasksPrincipal          = "ecs-tasks.amazonaws.com"
-	ecsTaskExecutionPolicyARN  = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-	substrateLogRetentionDays  = 14
-	substrateListenerPort      = 80
-	substrateTLSPort           = 443
-	vpcOriginProtocolPolicy    = "http-only"
-	vpcOriginTLSFloor          = "TLSv1.2"
-	vpcOriginSettleTimeout     = "20m"
-	substrateDeniedStatus      = "404"
-	substrateDeniedContentType = "text/plain"
-	substrateDeniedBody        = "no release answers on this origin"
+	ecsTasksPrincipal         = "ecs-tasks.amazonaws.com"
+	ecsTaskExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+	containerLogRetentionDays = 14
+	originListenerPort        = 80
+	originTLSPort             = 443
+	vpcOriginProtocolPolicy   = "http-only"
+	vpcOriginTLSFloor         = "TLSv1.2"
+	vpcOriginDeployTimeout    = "20m"
+	listenerDeniedStatus      = "404"
+	listenerDeniedContentType = "text/plain"
+	listenerDeniedBody        = "no release answers on this origin"
 
 	outputKeyVPC           = "vpcId"
 	outputKeySubnets       = "subnets"
@@ -54,7 +54,7 @@ const (
 	outputKeyLogGroup      = "logGroup"
 )
 
-type substrate struct {
+type containerInfra struct {
 	VPC           string
 	Subnets       []string
 	Listener      string
@@ -66,7 +66,7 @@ type substrate struct {
 	LogGroup      string
 }
 
-type substrateWork struct {
+type containerInfraWork struct {
 	class    edge.Class
 	boundary string
 	tags     map[string]string
@@ -75,25 +75,25 @@ type substrateWork struct {
 
 const cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 
-func substrateRef(class edge.Class) provider.StackRef {
-	return provider.StackRef{Project: SubstrateSlug, Class: class, Name: naming.InfraStack(string(class))}
+func containerInfraRef(class edge.Class) provider.StackRef {
+	return provider.StackRef{Project: ContainersSlug, Class: class, Name: naming.InfraStack(string(class))}
 }
 
-func substrateName(class edge.Class, parts ...string) string {
-	return naming.Join(naming.WordSeparator, append([]string{SubstrateSlug, string(class)}, parts...)...)
+func containerInfraName(class edge.Class, parts ...string) string {
+	return naming.Join(naming.WordSeparator, append([]string{ContainersSlug, string(class)}, parts...)...)
 }
 
-func substrateTags(class edge.Class) map[string]string {
+func containerInfraTags(class edge.Class) map[string]string {
 	return map[string]string{
 		"ocel:managed-by": "ocel",
-		"ocel:project":    SubstrateSlug,
+		"ocel:project":    ContainersSlug,
 		"ocel:env-class":  string(class),
-		"ocel:stack":      substrateRef(class).Name.String(),
+		"ocel:stack":      containerInfraRef(class).Name.String(),
 	}
 }
 
 func consumersRecord(class edge.Class) records.Name {
-	return append(stackrecords.StacksRecord(class, SubstrateSlug), substrateConsumers)
+	return append(stackrecords.StacksRecord(class, ContainersSlug), consumersKey)
 }
 
 func consumerRecord(ref provider.StackRef) records.Name {
@@ -101,7 +101,7 @@ func consumerRecord(ref provider.StackRef) records.Name {
 }
 
 func leaseRecord(class edge.Class) records.Name {
-	return append(stackrecords.StacksRecord(class, SubstrateSlug), substrateLease)
+	return append(stackrecords.StacksRecord(class, ContainersSlug), leaseKey)
 }
 
 type lease struct {
@@ -109,124 +109,124 @@ type lease struct {
 }
 
 func leaseOf(record records.Record) (lease, error) {
-	var held lease
+	var state lease
 	if len(record.Bytes) == 0 {
-		return held, nil
+		return state, nil
 	}
-	if err := json.Unmarshal(record.Bytes, &held); err != nil {
-		return lease{}, fmt.Errorf("read the container substrate lease %s: %w", record.Name, err)
+	if err := json.Unmarshal(record.Bytes, &state); err != nil {
+		return lease{}, fmt.Errorf("read the container infrastructure lease %s: %w", record.Name, err)
 	}
-	return held, nil
+	return state, nil
 }
 
-func writeLease(ctx context.Context, records records.Store, record records.Record, held lease) error {
-	encoded, err := json.Marshal(held)
+func writeLease(ctx context.Context, records records.Store, record records.Record, state lease) error {
+	encoded, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("encode the container substrate lease: %w", err)
+		return fmt.Errorf("encode the container infrastructure lease: %w", err)
 	}
 	record.Bytes = encoded
 	_, err = records.Write(ctx, record)
 	return err
 }
 
-func (r *Stacks) substrateFor(ctx context.Context, class edge.Class) (*release, error) {
-	return r.at(ctx, substrateRef(class), "")
+func (r *Stacks) containerInfraFor(ctx context.Context, class edge.Class) (*release, error) {
+	return r.at(ctx, containerInfraRef(class), "")
 }
 
-func (r *Stacks) readSubstrate(ctx context.Context, class edge.Class) (substrate, bool, error) {
-	held, err := r.substrateFor(ctx, class)
+func (r *Stacks) readContainerInfra(ctx context.Context, class edge.Class) (containerInfra, bool, error) {
+	owner, err := r.containerInfraFor(ctx, class)
 	if err != nil {
-		return substrate{}, false, err
+		return containerInfra{}, false, err
 	}
-	_, present, err := stackrecords.Read(ctx, held.cfg.Records, class, SubstrateSlug, substrateRef(class).Name)
+	_, present, err := stackrecords.Read(ctx, owner.cfg.Records, class, ContainersSlug, containerInfraRef(class).Name)
 	if err != nil || !present {
-		return substrate{}, false, err
+		return containerInfra{}, false, err
 	}
-	outputs, err := held.automation.Outputs(ctx, substrateRef(class), nil)
+	outputs, err := owner.automation.Outputs(ctx, containerInfraRef(class), nil)
 	if err != nil {
-		return substrate{}, false, err
+		return containerInfra{}, false, err
 	}
 	if len(outputs) == 0 {
-		return substrate{}, false, nil
+		return containerInfra{}, false, nil
 	}
-	decoded, err := decodeSubstrate(outputs)
+	decoded, err := decodeContainerInfra(outputs)
 	return decoded, err == nil, err
 }
 
-func (r *Stacks) ensureSubstrate(ctx context.Context, ref provider.StackRef, progress edge.Progress) (substrate, error) {
-	r.substrates.Lock()
-	defer r.substrates.Unlock()
+func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress edge.Progress) (containerInfra, error) {
+	r.containerInfraLock.Lock()
+	defer r.containerInfraLock.Unlock()
 	class := ref.Class
-	held, present, err := r.readSubstrate(ctx, class)
+	infra, present, err := r.readContainerInfra(ctx, class)
 	if err != nil {
-		return substrate{}, err
+		return containerInfra{}, err
 	}
-	owner, err := r.substrateFor(ctx, class)
+	owner, err := r.containerInfraFor(ctx, class)
 	if err != nil {
-		return substrate{}, err
+		return containerInfra{}, err
 	}
 	if present {
-		if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, held.front()); err != nil {
-			return substrate{}, err
+		if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, infra.front()); err != nil {
+			return containerInfra{}, err
 		}
-		return held, r.claimSubstrate(ctx, ref)
+		return infra, r.claimContainerInfra(ctx, ref)
 	}
 	if progress != nil {
-		progress.Say("Standing up the shared container substrate for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
+		progress.Say("Provisioning the shared container infrastructure for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
 	}
-	work := &substrateWork{
+	work := &containerInfraWork{
 		class:    class,
 		boundary: owner.cfg.AppBoundaryARN,
-		tags:     substrateTags(class),
+		tags:     containerInfraTags(class),
 	}
 	spec := provider.StackSpec{
-		Ref:         substrateRef(class),
+		Ref:         containerInfraRef(class),
 		Kind:        provider.StackInfra,
-		Tags:        substrateTags(class),
+		Tags:        containerInfraTags(class),
 		VendorState: work,
 	}
-	if err := stackrecords.Write(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, owner.cfg.Records, class, ContainersSlug, containerInfraRef(class).Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: provider.WrittenByVersion(""),
 	}); err != nil {
-		return substrate{}, err
+		return containerInfra{}, err
 	}
 	if _, err := owner.automation.Run(ctx, spec, progress); err != nil {
-		return substrate{}, fmt.Errorf("stand up the container substrate for the %s class: %w", class, err)
+		return containerInfra{}, fmt.Errorf("provision the shared container infrastructure for the %s class: %w", class, err)
 	}
-	decoded, err := decodeSubstrate(work.outputs)
+	decoded, err := decodeContainerInfra(work.outputs)
 	if err != nil {
-		return substrate{}, err
+		return containerInfra{}, err
 	}
 	if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, decoded.front()); err != nil {
-		return substrate{}, err
+		return containerInfra{}, err
 	}
-	return decoded, r.claimSubstrate(ctx, ref)
+	return decoded, r.claimContainerInfra(ctx, ref)
 }
 
-func (s substrate) front() awsports.ContainerFront {
+func (s containerInfra) front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
 }
 
-func (r *Stacks) claimSubstrate(ctx context.Context, ref provider.StackRef) error {
-	owner, err := r.substrateFor(ctx, ref.Class)
+func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef) error {
+	owner, err := r.containerInfraFor(ctx, ref.Class)
 	if err != nil {
 		return err
 	}
 	store := owner.cfg.Records
 	for range leaseAttempts {
-		held, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
+		leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
 		if err != nil {
 			return err
 		}
-		state, err := leaseOf(held)
+		state, err := leaseOf(leased)
 		if err != nil {
 			return err
 		}
 		if state.Destroying {
 			return errors.Join(
 				refusal.Refuse(refusal.CodeBusy,
-					"the container substrate for the %s class is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will stand a fresh one up", ref.Class),
+					"the shared container infrastructure for the %s class is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will provision a fresh one", ref.Class),
 				records.Forget(ctx, store, consumerRecord(ref)))
 		}
 		record, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
@@ -235,31 +235,31 @@ func (r *Stacks) claimSubstrate(ctx context.Context, ref provider.StackRef) erro
 		}
 		record.Bytes = []byte("{}")
 		if _, err := store.Write(ctx, record); err != nil && !errors.Is(err, records.ErrStale) {
-			return fmt.Errorf("record %s as a consumer of the container substrate: %w", ref.Name, err)
+			return fmt.Errorf("record %s as a consumer of the shared container infrastructure: %w", ref.Name, err)
 		}
-		err = writeLease(ctx, store, held, state)
+		err = writeLease(ctx, store, leased, state)
 		if err == nil {
 			return nil
 		}
 		if !errors.Is(err, records.ErrStale) {
-			return fmt.Errorf("hold the container substrate for %s: %w", ref.Name, err)
+			return fmt.Errorf("claim the shared container infrastructure for %s: %w", ref.Name, err)
 		}
 	}
 	return refusal.Refuse(refusal.CodeBusy,
-		"the container substrate for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
+		"the shared container infrastructure for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
 }
 
-func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref provider.StackRef, progress edge.Progress) error {
+func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store, ref provider.StackRef, progress edge.Progress) error {
 	if store == nil {
 		return nil
 	}
-	r.substrates.Lock()
-	defer r.substrates.Unlock()
-	held, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
+	r.containerInfraLock.Lock()
+	defer r.containerInfraLock.Unlock()
+	consumer, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
 	if err != nil {
 		return err
 	}
-	if len(held.Bytes) == 0 {
+	if len(consumer.Bytes) == 0 {
 		return nil
 	}
 	leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
@@ -273,7 +273,7 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref 
 	if err := records.Forget(ctx, store, consumerRecord(ref)); err != nil {
 		return err
 	}
-	owner, err := r.substrateFor(ctx, ref.Class)
+	owner, err := r.containerInfraFor(ctx, ref.Class)
 	if err != nil {
 		return err
 	}
@@ -289,16 +289,16 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref 
 		if errors.Is(err, records.ErrStale) {
 			return nil
 		}
-		return fmt.Errorf("mark the container substrate for the %s class as going down: %w", ref.Class, err)
+		return fmt.Errorf("mark the shared container infrastructure for the %s class as going down: %w", ref.Class, err)
 	}
 	if progress != nil {
-		progress.Say("Taking down the shared container substrate for the " + string(ref.Class) + " class: the last container app in it is gone")
+		progress.Say("Taking down the shared container infrastructure for the " + string(ref.Class) + " class: the last container app in it is gone")
 	}
-	substrate := substrateRef(ref.Class)
-	if err := owner.automation.Destroy(ctx, substrate, progress); err != nil {
-		return fmt.Errorf("take down the container substrate for the %s class: %w", ref.Class, err)
+	stack := containerInfraRef(ref.Class)
+	if err := owner.automation.Destroy(ctx, stack, progress); err != nil {
+		return fmt.Errorf("take down the shared container infrastructure for the %s class: %w", ref.Class, err)
 	}
-	if err := stackrecords.Forget(ctx, store, ref.Class, SubstrateSlug, substrate.Name); err != nil {
+	if err := stackrecords.Forget(ctx, store, ref.Class, ContainersSlug, stack.Name); err != nil {
 		return err
 	}
 	if err := records.Forget(ctx, store, awsports.ContainerFrontRecord(ref.Class)); err != nil {
@@ -307,7 +307,7 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref 
 	return records.Forget(ctx, store, leaseRecord(ref.Class))
 }
 
-func (w *substrateWork) run(ctx *pulumi.Context) error {
+func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	vpc, err := ec2.LookupVpc(ctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
@@ -325,7 +325,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	class := w.class
 
 	cluster, err := ecs.NewCluster(ctx, naming.ResourceID(naming.KindService, "cluster"), &ecs.ClusterArgs{
-		Name: pulumi.String(substrateName(class)),
+		Name: pulumi.String(containerInfraName(class)),
 		Tags: tags,
 	})
 	if err != nil {
@@ -337,13 +337,13 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 		return fmt.Errorf("look up the addresses CloudFront reaches an origin from: %w", err)
 	}
 	front, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "front", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(substrateName(class, "front")),
+		Name:        pulumi.String(containerInfraName(class, "front")),
 		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(class) + " class answers behind"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
 			Protocol:      pulumi.String("tcp"),
-			FromPort:      pulumi.Int(substrateListenerPort),
-			ToPort:        pulumi.Int(substrateListenerPort),
+			FromPort:      pulumi.Int(originListenerPort),
+			ToPort:        pulumi.Int(originListenerPort),
 			PrefixListIds: pulumi.StringArray{pulumi.String(edgeRanges.Id)},
 			Description:   pulumi.String("Ocel: only CloudFront reaches the front, through the VPC origin, and every rule behind it demands the origin secret"),
 		}},
@@ -357,7 +357,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	tasks, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "tasks", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(substrateName(class, "tasks")),
+		Name:        pulumi.String(containerInfraName(class, "tasks")),
 		Description: pulumi.String("Ocel: the tasks every container app in the " + string(class) + " class runs as"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
@@ -378,7 +378,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	}
 
 	balancer, err := lb.NewLoadBalancer(ctx, naming.ResourceID(naming.KindService, "front"), &lb.LoadBalancerArgs{
-		Name:             pulumi.String(substrateName(class)),
+		Name:             pulumi.String(containerInfraName(class)),
 		LoadBalancerType: pulumi.String("application"),
 		Internal:         pulumi.Bool(true),
 		SecurityGroups:   pulumi.StringArray{front.ID()},
@@ -390,14 +390,14 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	}
 	listener, err := lb.NewListener(ctx, naming.ResourceID(naming.KindService, "front", "listener"), &lb.ListenerArgs{
 		LoadBalancerArn: balancer.Arn,
-		Port:            pulumi.Int(substrateListenerPort),
+		Port:            pulumi.Int(originListenerPort),
 		Protocol:        pulumi.String("HTTP"),
 		DefaultActions: lb.ListenerDefaultActionArray{&lb.ListenerDefaultActionArgs{
 			Type: pulumi.String("fixed-response"),
 			FixedResponse: &lb.ListenerDefaultActionFixedResponseArgs{
-				ContentType: pulumi.String(substrateDeniedContentType),
-				StatusCode:  pulumi.String(substrateDeniedStatus),
-				MessageBody: pulumi.String(substrateDeniedBody),
+				ContentType: pulumi.String(listenerDeniedContentType),
+				StatusCode:  pulumi.String(listenerDeniedStatus),
+				MessageBody: pulumi.String(listenerDeniedBody),
 			},
 		}},
 		Tags: tags,
@@ -408,10 +408,10 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 
 	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, naming.ResourceID(naming.KindService, "front", "vpc-origin"), &cloudfront.VpcOriginArgs{
 		VpcOriginEndpointConfig: &cloudfront.VpcOriginVpcOriginEndpointConfigArgs{
-			Name:                 pulumi.String(substrateName(class)),
+			Name:                 pulumi.String(containerInfraName(class)),
 			Arn:                  balancer.Arn,
-			HttpPort:             pulumi.Int(substrateListenerPort),
-			HttpsPort:            pulumi.Int(substrateTLSPort),
+			HttpPort:             pulumi.Int(originListenerPort),
+			HttpsPort:            pulumi.Int(originTLSPort),
 			OriginProtocolPolicy: pulumi.String(vpcOriginProtocolPolicy),
 			OriginSslProtocols: &cloudfront.VpcOriginVpcOriginEndpointConfigOriginSslProtocolsArgs{
 				Items:    pulumi.StringArray{pulumi.String(vpcOriginTLSFloor)},
@@ -419,9 +419,9 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 			},
 		},
 		Timeouts: &cloudfront.VpcOriginTimeoutsArgs{
-			Create: pulumi.String(vpcOriginSettleTimeout),
-			Update: pulumi.String(vpcOriginSettleTimeout),
-			Delete: pulumi.String(vpcOriginSettleTimeout),
+			Create: pulumi.String(vpcOriginDeployTimeout),
+			Update: pulumi.String(vpcOriginDeployTimeout),
+			Delete: pulumi.String(vpcOriginDeployTimeout),
 		},
 		Tags: tags,
 	}, pulumi.DependsOn([]pulumi.Resource{listener}))
@@ -430,7 +430,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	}
 
 	execution, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, "execution"), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(substrateName(class, "exec") + naming.WordSeparator),
+		NamePrefix:          pulumi.String(containerInfraName(class, "exec") + naming.WordSeparator),
 		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(class) + " class"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
@@ -448,7 +448,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 
 	logs, err := cloudwatch.NewLogGroup(ctx, naming.ResourceID(naming.KindService, "logs"), &cloudwatch.LogGroupArgs{
 		Name:            pulumi.String("/ocel/containers/" + string(class)),
-		RetentionInDays: pulumi.Int(substrateLogRetentionDays),
+		RetentionInDays: pulumi.Int(containerLogRetentionDays),
 		Tags:            tags,
 	})
 	if err != nil {
@@ -471,35 +471,35 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	return nil
 }
 
-func decodeSubstrate(outputs auto.OutputMap) (substrate, error) {
+func decodeContainerInfra(outputs auto.OutputMap) (containerInfra, error) {
 	fields := make(map[string]any, len(outputs))
 	for key, value := range outputs {
 		fields[key] = value.Value
 	}
 	var (
-		held substrate
-		err  error
+		infra containerInfra
+		err   error
 	)
 	for key, into := range map[string]*string{
-		outputKeyVPC:           &held.VPC,
-		outputKeyListener:      &held.Listener,
-		outputKeyOriginHost:    &held.OriginHost,
-		outputKeyVPCOrigin:     &held.VPCOrigin,
-		outputKeyTaskSecurity:  &held.TaskSecurity,
-		outputKeyCluster:       &held.Cluster,
-		outputKeyExecutionRole: &held.ExecutionRole,
-		outputKeyLogGroup:      &held.LogGroup,
+		outputKeyVPC:           &infra.VPC,
+		outputKeyListener:      &infra.Listener,
+		outputKeyOriginHost:    &infra.OriginHost,
+		outputKeyVPCOrigin:     &infra.VPCOrigin,
+		outputKeyTaskSecurity:  &infra.TaskSecurity,
+		outputKeyCluster:       &infra.Cluster,
+		outputKeyExecutionRole: &infra.ExecutionRole,
+		outputKeyLogGroup:      &infra.LogGroup,
 	} {
-		if *into, err = requireStringField(fields, SubstrateSlug, key); err != nil {
-			return substrate{}, err
+		if *into, err = requireStringField(fields, ContainersSlug, key); err != nil {
+			return containerInfra{}, err
 		}
 	}
-	encoded, err := requireStringField(fields, SubstrateSlug, outputKeySubnets)
+	encoded, err := requireStringField(fields, ContainersSlug, outputKeySubnets)
 	if err != nil {
-		return substrate{}, err
+		return containerInfra{}, err
 	}
-	if err := json.Unmarshal([]byte(encoded), &held.Subnets); err != nil || len(held.Subnets) == 0 {
-		return substrate{}, fmt.Errorf("output %q for %s names no subnets to place a task in", outputKeySubnets, SubstrateSlug)
+	if err := json.Unmarshal([]byte(encoded), &infra.Subnets); err != nil || len(infra.Subnets) == 0 {
+		return containerInfra{}, fmt.Errorf("output %q for %s names no subnets to place a task in", outputKeySubnets, ContainersSlug)
 	}
-	return held, nil
+	return infra, nil
 }

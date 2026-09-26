@@ -75,14 +75,14 @@ type Clients struct {
 type cloudFront struct {
 	ns     bootstrap.Namespace
 	open   func(context.Context) (Clients, error)
-	settle Rollout
+	pacing Rollout
 
 	mu      sync.Mutex
 	clients *Clients
 }
 
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
-	return &cloudFront{ns: ns, open: open, settle: NewRollout()}
+	return &cloudFront{ns: ns, open: open, pacing: NewRollout()}
 }
 
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
@@ -202,10 +202,10 @@ func (p *cloudFront) clientsFor(ctx context.Context) (Clients, error) {
 }
 
 func (p *cloudFront) rollout() Rollout {
-	if p.settle.Attempts == 0 {
+	if p.pacing.Attempts == 0 {
 		return NewRollout()
 	}
-	return p.settle
+	return p.pacing
 }
 
 func knownClass(class edge.Class) error {
@@ -249,13 +249,13 @@ func (p *cloudFront) Teardown(ctx context.Context, class edge.Class) error {
 		names = append(names, summary.comment)
 	}
 	slices.Sort(names)
-	standing := surface.ProjectsNamed(p.ns, names, class)
-	if len(standing) == 0 {
+	fronted := surface.ProjectsNamed(p.ns, names, class)
+	if len(fronted) == 0 {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge still fronts %d project(s) of class %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
-		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
+		Kind, len(fronted), class, strings.Join(fronted, ", "), "ocel destroy "+string(class))
 }
 
 func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -264,14 +264,14 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	if spec.Slug == "" {
-		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack carries none", Kind)
+		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack names none", Kind)
 	}
 	deployed, err := p.bootstrap(ctx, c, spec.Class)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in. Run `%s` against this account, then deploy again", spec.Class, Kind, spec.Slug, provider.BootstrapCommand(spec.Class))
+		return nil, fmt.Errorf("the %s bootstrap is not installed, so the %q edge has no state table to keep %s's deployments in. Run `%s` against this account, then deploy again", spec.Class, Kind, spec.Slug, provider.BootstrapCommand(spec.Class))
 	}
 	var own private
 	if err := prior.Private.Into(&own); err != nil {

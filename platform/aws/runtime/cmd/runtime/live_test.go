@@ -60,7 +60,7 @@ func TestLiveValuesReachNode(t *testing.T) {
 	}
 	decl := regexp.MustCompile(`const LIVE_VALUES_MESSAGE = "([^"]+)"`).FindSubmatch(src)
 	if decl == nil {
-		t.Fatal("frameworks/node/runtime/src/live-values.mts no longer declares LIVE_VALUES_MESSAGE, so this test cannot hold the runtime to it")
+		t.Fatal("frameworks/node/runtime/src/live-values.mts no longer declares LIVE_VALUES_MESSAGE, so this test cannot check the runtime against it")
 	}
 
 	out := &sink{}
@@ -233,7 +233,7 @@ func TestBringUpNode(t *testing.T) {
 }
 
 func TestChildEnv(t *testing.T) {
-	t.Run("carries the live declaration beside the delivered class", func(t *testing.T) {
+	t.Run("passes the live declaration beside the delivered class", func(t *testing.T) {
 		bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 		l := &stubValues{env: []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}}
 

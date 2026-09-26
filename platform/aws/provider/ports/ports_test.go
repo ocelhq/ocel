@@ -54,9 +54,9 @@ func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
-	for _, held := range ddb.partitions() {
-		if held != partition {
-			t.Errorf("a value write landed in partition %q, and a function's role is scoped to %q alone", held, partition)
+	for _, written := range ddb.partitions() {
+		if written != partition {
+			t.Errorf("a value write landed in partition %q, and a function's role is scoped to %q alone", written, partition)
 		}
 	}
 	if !strings.Contains(partition, scope.Project) || !strings.Contains(partition, string(scope.Class)) {
@@ -82,13 +82,13 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	held, err := records.List(context.Background(), envvars.ScopedRecordName(scope))
+	stored, err := records.List(context.Background(), envvars.ScopedRecordName(scope))
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
-	for _, record := range held {
+	for _, record := range stored {
 		if bytes.Contains(record.Bytes, []byte("sk_live_secret")) {
-			t.Fatalf("%s holds the plaintext at rest", record.Name)
+			t.Fatalf("%s stores the plaintext at rest", record.Name)
 		}
 	}
 }
@@ -164,34 +164,34 @@ func mustSealer() records.Cipher {
 	return sealer
 }
 
-func TestAnAccountWithNoBootstrapHoldsNoRecords(t *testing.T) {
+func TestAnAccountWithNoBootstrapHasNoRecords(t *testing.T) {
 	t.Parallel()
 
 	store := awsports.Records{Dynamo: newFakeDynamo()}
 	name := records.Name{"bootstrap", "production"}
 
 	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
-		t.Errorf("Read() with no bootstrap standing = %v, want ErrNotFound", err)
+		t.Errorf("Read() with no bootstrap installed = %v, want ErrNotFound", err)
 	}
-	held, err := store.List(context.Background(), records.Name{"projects", "production"})
-	if err != nil || len(held) != 0 {
-		t.Errorf("List() with no bootstrap standing = %v, %v, want nothing", held, err)
+	listed, err := store.List(context.Background(), records.Name{"projects", "production"})
+	if err != nil || len(listed) != 0 {
+		t.Errorf("List() with no bootstrap installed = %v, %v, want nothing", listed, err)
 	}
 	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
-		t.Errorf("Remove() with no bootstrap standing = %v, want ErrNotFound", err)
+		t.Errorf("Remove() with no bootstrap installed = %v, want ErrNotFound", err)
 	}
 
 	_, err = store.Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Write() with no bootstrap standing = %v, want a %s refusal rather than a silent no-op", err, refusal.CodeNotReady)
+		t.Fatalf("Write() with no bootstrap installed = %v, want a %s refusal rather than a silent no-op", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "ocel bootstrap") {
 		t.Errorf("Write() refusal = %q, want it to name what creates the bootstrap", refused.Message)
 	}
 }
 
-func TestATableDeletedMidTeardownHoldsNoRecords(t *testing.T) {
+func TestATableDeletedMidTeardownHasNoRecords(t *testing.T) {
 	t.Parallel()
 
 	dynamo := newFakeDynamo()
@@ -202,9 +202,9 @@ func TestATableDeletedMidTeardownHoldsNoRecords(t *testing.T) {
 	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Read() against a deleted table = %v, want ErrNotFound", err)
 	}
-	held, err := store.List(context.Background(), records.Name{"projects", "production"})
-	if err != nil || len(held) != 0 {
-		t.Errorf("List() against a deleted table = %v, %v, want nothing", held, err)
+	listed, err := store.List(context.Background(), records.Name{"projects", "production"})
+	if err != nil || len(listed) != 0 {
+		t.Errorf("List() against a deleted table = %v, %v, want nothing", listed, err)
 	}
 	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("Remove() against a deleted table = %v, want ErrNotFound", err)
@@ -259,7 +259,7 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 		t.Errorf("both projects' stacks land in %q, and one project's deploys then throttle the other's", shop)
 	}
 	if !strings.Contains(shop, "shop") {
-		t.Errorf("stack partition = %q, want it to name the project whose deploys it holds", shop)
+		t.Errorf("stack partition = %q, want it to name the project whose deploys it contains", shop)
 	}
 }
 
@@ -277,9 +277,9 @@ func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
-	for _, held := range ddb.partitions() {
-		if held != partition {
-			t.Errorf("a binding write landed in partition %q, and a function's role is scoped to %q alone", held, partition)
+	for _, written := range ddb.partitions() {
+		if written != partition {
+			t.Errorf("a binding write landed in partition %q, and a function's role is scoped to %q alone", written, partition)
 		}
 	}
 
@@ -290,7 +290,7 @@ func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 			continue
 		}
 		if !strings.HasPrefix(sk, prefix) {
-			t.Errorf("a binding record sorts at %q, want the whole pair under %q so one query holds it", sk, prefix)
+			t.Errorf("a binding record sorts at %q, want the whole pair under %q so one query returns it", sk, prefix)
 			continue
 		}
 		under++

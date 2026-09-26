@@ -180,7 +180,7 @@ func TestHead(t *testing.T) {
 			t.Fatalf("etag = %q, want the store's etag passed through untouched", got.GetEtag())
 		}
 		if got.GetMetadata()["owner"] != "u1" {
-			t.Fatalf("metadata = %v, want the user metadata the object carries", got.GetMetadata())
+			t.Fatalf("metadata = %v, want the user metadata the object has", got.GetMetadata())
 		}
 		if got.GetUploadedAt().AsTime().Unix() != 1_700_000_000 {
 			t.Fatalf("uploaded_at = %v, want the object's last-modified time", got.GetUploadedAt().AsTime())
@@ -311,7 +311,7 @@ func TestDelete(t *testing.T) {
 func TestCopy(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the destination carries the source's bytes", func(t *testing.T) {
+	t.Run("the destination contains the source's bytes", func(t *testing.T) {
 		t.Parallel()
 		objects := newFakeS3()
 		objects.seed("storage", "a.png", "0123456789", "image/png")

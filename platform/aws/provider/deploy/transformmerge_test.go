@@ -15,7 +15,7 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 	t.Parallel()
 
 	if !emptyOutput(nil) {
-		t.Fatal("emptyOutput(nil) = false, and a record carrying an explicit null would land in the patch as one")
+		t.Fatal("emptyOutput(nil) = false, and a record containing an explicit null would land in the patch as one")
 	}
 
 	stack := specUnderTransform().Ref.Name
@@ -37,9 +37,9 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 	}
 }
 
-func mergedValue(t *testing.T, held sdk.Input) any {
+func mergedValue(t *testing.T, input sdk.Input) any {
 	t.Helper()
-	switch value := held.(type) {
+	switch value := input.(type) {
 	case sdk.String:
 		return string(value)
 	case sdk.Float64:
@@ -63,7 +63,7 @@ func mergedValue(t *testing.T, held sdk.Input) any {
 		}
 		return out
 	}
-	return held
+	return input
 }
 
 func awaited(t *testing.T, out sdk.AnyOutput) any {
@@ -110,7 +110,7 @@ func TestTheMergeLayersAPatchOntoWhatOcelPlanned(t *testing.T) {
 			want:  map[string]any{"subnetIds": []any{"c"}},
 		},
 		{
-			name:  "a field ocel never set is carried through",
+			name:  "a field ocel never set passes through",
 			props: sdk.Map{"memorySize": sdk.Int(512)},
 			patch: map[string]any{"timeout": float64(60)},
 			want:  map[string]any{"memorySize": 512, "timeout": float64(60)},
@@ -125,16 +125,16 @@ func TestTheMergeLayersAPatchOntoWhatOcelPlanned(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := mergedValue(t, mergeProps(tc.props, tc.patch))
-			held, mapped := got.(map[string]any)
+			merged, mapped := got.(map[string]any)
 			if !mapped {
 				t.Fatalf("mergeProps() = %#v, want a map", got)
 			}
-			if len(held) != len(tc.want) {
-				t.Fatalf("mergeProps() = %#v, want %#v", held, tc.want)
+			if len(merged) != len(tc.want) {
+				t.Fatalf("mergeProps() = %#v, want %#v", merged, tc.want)
 			}
 			for key, want := range tc.want {
-				if !sameValue(held[key], want) {
-					t.Errorf("mergeProps()[%q] = %#v, want %#v", key, held[key], want)
+				if !sameValue(merged[key], want) {
+					t.Errorf("mergeProps()[%q] = %#v, want %#v", key, merged[key], want)
 				}
 			}
 		})
@@ -152,11 +152,11 @@ func TestInstallRegistersATransformThatMergesTheClaimedResource(t *testing.T) {
 	t.Parallel()
 
 	ref := resourceRef{Token: tokenLambdaFunction, Name: "shop-prod-api"}
-	held := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
+	patches := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
 
 	registered := false
 	err := sdk.RunErr(func(pctx *sdk.Context) error {
-		if err := held.install(pctx); err != nil {
+		if err := patches.install(pctx); err != nil {
 			return err
 		}
 		registered = true
@@ -169,14 +169,14 @@ func TestInstallRegistersATransformThatMergesTheClaimedResource(t *testing.T) {
 		t.Fatal("install() registered nothing, and a transform that registers nothing patches nothing")
 	}
 
-	merged, claimed := held.claim(ref, sdk.Map{"memorySize": sdk.Int(512)})
+	merged, claimed := patches.claim(ref, sdk.Map{"memorySize": sdk.Int(512)})
 	if !claimed {
 		t.Fatal("the registered transform passed over the resource its patch names")
 	}
 	if got := mergedValue(t, merged["memorySize"]); !sameValue(got, float64(2048)) {
 		t.Errorf("memorySize = %#v, want the patched 2048", got)
 	}
-	if err := held.refuseUnclaimed(); err != nil {
+	if err := patches.refuseUnclaimed(); err != nil {
 		t.Errorf("refuseUnclaimed() = %v after the patch was claimed", err)
 	}
 }
@@ -185,17 +185,17 @@ func TestAPatchNothingInTheProgramMatchesIsRefusedRatherThanDroppped(t *testing.
 	t.Parallel()
 
 	ref := resourceRef{Token: tokenLambdaFunction, Name: "shop-prod-api"}
-	held := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
+	patches := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
 
 	if err := sdk.RunErr(func(pctx *sdk.Context) error {
-		return held.install(pctx)
+		return patches.install(pctx)
 	}, sdk.WithMocks("shop", "prod--api", &inputRecorder{})); err != nil {
 		t.Fatalf("install() = %v", err)
 	}
 
-	err := held.refuseUnclaimed()
+	err := patches.refuseUnclaimed()
 	if err == nil {
-		t.Fatal("a patch that reached no resource passed silently, and a transform nothing carries out is a deploy the user did not get")
+		t.Fatal("a patch that reached no resource passed silently, and a transform nothing applies is a deploy the user did not get")
 	}
 	if !strings.Contains(err.Error(), "function api's lambda") {
 		t.Errorf("refuseUnclaimed() = %v, want the patch named by where it was written", err)
@@ -205,10 +205,10 @@ func TestAPatchNothingInTheProgramMatchesIsRefusedRatherThanDroppped(t *testing.
 func TestAResourceSharingANameWithAPatchedOneIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	held := patchedFor(resourceRef{Token: tokenLambdaFunction, Name: "shared"}, map[string]any{"memorySize": float64(2048)})
-	held.claimed = map[resourceRef]bool{}
+	patches := patchedFor(resourceRef{Token: tokenLambdaFunction, Name: "shared"}, map[string]any{"memorySize": float64(2048)})
+	patches.claimed = map[resourceRef]bool{}
 
-	if _, claimed := held.claim(resourceRef{Token: tokenLogGroup, Name: "shared"}, sdk.Map{}); claimed {
+	if _, claimed := patches.claim(resourceRef{Token: tokenLogGroup, Name: "shared"}, sdk.Map{}); claimed {
 		t.Fatal("a log group claimed the lambda's patch because they share a name")
 	}
 }
@@ -272,11 +272,11 @@ func TestAFunctionPlacedInAVPCWithHalfOfWhatALambdaNeedsIsRefused(t *testing.T) 
 			"subnetIds": []any{"subnet-1"}, "securityGroupIds": []any{"sg-1"},
 		}},
 	}}}
-	held, err := indexPatches(candidates, results)
+	indexed, err := indexPatches(candidates, results)
 	if err != nil {
 		t.Fatalf("indexPatches() = %v, want a fully named VPC placement accepted", err)
 	}
-	if !held.placesInVPC("fn--api--users") {
+	if !indexed.placesInVPC("fn--api--users") {
 		t.Error("the function was not marked as placed in a VPC, so its role would go without VPC access")
 	}
 }

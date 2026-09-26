@@ -125,12 +125,12 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	run("app", func(pctx *pulumi.Context) error { return appWork.run(pctx, nil) })
 
 	containerCfg, containerSpec := containerStackSpec(t)
-	containerWork, err := releasing(t, containerCfg).containerWork(containerSpec, fixtureSubstrate())
+	containerWork, err := releasing(t, containerCfg).containerWork(containerSpec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatal(err)
 	}
 	run("container", containerWork.run)
-	run("substrate", (&substrateWork{class: edge.ClassProduction, boundary: containerCfg.AppBoundaryARN}).run)
+	run("container-infra", (&containerInfraWork{class: edge.ClassProduction, boundary: containerCfg.AppBoundaryARN}).run)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err
@@ -178,7 +178,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	}
 }
 
-func TestShapeScopesAppsUnderTheEnvironmentAndTheSubstrateAsShared(t *testing.T) {
+func TestShapeScopesAppsUnderTheEnvironmentAndTheContainerInfraAsShared(t *testing.T) {
 	t.Parallel()
 
 	set := shaped(t, nil, shapeRequest(t))

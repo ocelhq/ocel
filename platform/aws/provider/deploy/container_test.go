@@ -36,8 +36,8 @@ const (
 	fixtureListener = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/ocel-containers-production/abc/def"
 )
 
-func fixtureSubstrate() substrate {
-	return substrate{
+func fixtureContainerInfra() containerInfra {
+	return containerInfra{
 		VPC:           "vpc-123",
 		Subnets:       []string{"subnet-a", "subnet-b"},
 		Listener:      fixtureListener,
@@ -120,7 +120,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
-	work, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -134,7 +134,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 		t.Errorf("%s = %q, want the class's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
 	}
 	if _, pinned := work.env[vars.EnvVar]; pinned {
-		t.Errorf("env carries %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", vars.EnvVar)
+		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", vars.EnvVar)
 	}
 	if work.readsLive() {
 		t.Error("an app with nothing live is granted a read on the variable table")
@@ -149,12 +149,12 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	}
 
 	spec.App.HealthCheckPath = "not a path"
-	if _, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate()); err == nil {
+	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {
 		t.Error("containerWork accepted a health check path a load balancer cannot probe")
 	}
 	cfg.OriginSecret = ""
 	spec.App.HealthCheckPath = "/healthz"
-	if _, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate()); err == nil {
+	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {
 		t.Error("containerWork accepted a class with no origin secret, so the listener rule would admit every stranger")
 	}
 }
@@ -165,12 +165,12 @@ func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEith
 	cfg, spec := containerStackSpec(t)
 	cfg.PreviousOriginSecret = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
 	if work.env[edge.OriginSecretVar] != fixtureSecret || work.env[edge.OriginSecretPreviousVar] != cfg.PreviousOriginSecret {
-		t.Errorf("env carries %q and %q, want the current secret and the one it replaced: a route written before the rotation still presents the old one", work.env[edge.OriginSecretVar], work.env[edge.OriginSecretPreviousVar])
+		t.Errorf("env has %q and %q, want the current secret and the one it replaced: a route written before the rotation still presents the old one", work.env[edge.OriginSecretVar], work.env[edge.OriginSecretPreviousVar])
 	}
 	if err := release.placeRule(context.Background(), work); err != nil {
 		t.Fatalf("placeRule() = %v", err)
@@ -195,16 +195,16 @@ func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEith
 	}
 
 	cfg.PreviousOriginSecret = ""
-	settled, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
+	unrotated, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if _, held := settled.env[edge.OriginSecretPreviousVar]; held || len(settled.secrets) != 1 {
-		t.Errorf("a class with no rotation underway hands the container %v and env %v, want the current secret alone", settled.secrets, settled.env)
+	if _, set := unrotated.env[edge.OriginSecretPreviousVar]; set || len(unrotated.secrets) != 1 {
+		t.Errorf("a class with no rotation underway hands the container %v and env %v, want the current secret alone", unrotated.secrets, unrotated.env)
 	}
 }
 
-func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T) {
+func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
@@ -218,7 +218,7 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 		}},
 	}}
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -235,8 +235,8 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	if task["family"].StringValue() != "shop-prod-web-container-r3f8a1c90" {
 		t.Errorf("family = %v, want project, env, app and release", task["family"])
 	}
-	if task["executionRoleArn"].StringValue() != fixtureSubstrate().ExecutionRole {
-		t.Errorf("executionRoleArn = %v, want the substrate's shared execution role", task["executionRoleArn"])
+	if task["executionRoleArn"].StringValue() != fixtureContainerInfra().ExecutionRole {
+		t.Errorf("executionRoleArn = %v, want the shared container infrastructure's execution role", task["executionRoleArn"])
 	}
 	if task["taskRoleArn"].StringValue() == "" {
 		t.Error("an app granted a binding runs without a task role, so the grant reaches nothing")
@@ -245,30 +245,30 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	if err := json.Unmarshal([]byte(task["containerDefinitions"].SecretValue().Element.StringValue()), &definitions); err != nil || len(definitions) != 1 {
 		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
 	}
-	held := definitions[0]
-	if held.Image != containerImage || held.Name != containerName || held.PortMappings[0].ContainerPort != containerPortNumber {
-		t.Errorf("container = %+v, want the pushed image listening on %d", held, containerPortNumber)
+	definition := definitions[0]
+	if definition.Image != containerImage || definition.Name != containerName || definition.PortMappings[0].ContainerPort != containerPortNumber {
+		t.Errorf("container = %+v, want the pushed image listening on %d", definition, containerPortNumber)
 	}
 	env := definitionEnvOf(t, rec)
 	if env["GREETING"] != "hello" || env[containerPortEnv] != containerPort {
 		t.Errorf("environment = %v, want the delivered values and the port", env)
 	}
-	if held.LogConfig.Options["awslogs-group"] != "/ocel/containers/production" || held.LogConfig.Options["awslogs-region"] != "us-east-1" {
-		t.Errorf("logs = %v, want the class log group in the deploy's region", held.LogConfig)
+	if definition.LogConfig.Options["awslogs-group"] != "/ocel/containers/production" || definition.LogConfig.Options["awslogs-region"] != "us-east-1" {
+		t.Errorf("logs = %v, want the class log group in the deploy's region", definition.LogConfig)
 	}
 
 	group := recordedOf(t, rec, "aws:lb/targetGroup:TargetGroup")
 	health := group["healthCheck"].ObjectValue()
 	if health["path"].StringValue() != "/healthz" || group["targetType"].StringValue() != "ip" || group["vpcId"].StringValue() != "vpc-123" {
-		t.Errorf("target group = %v, want an ip target group in the substrate's VPC probed on the manifest's path", group)
+		t.Errorf("target group = %v, want an ip target group in the shared container infrastructure's VPC probed on the manifest's path", group)
 	}
 
 	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
 	if rule["listenerArn"].StringValue() != fixtureListener {
-		t.Errorf("listenerArn = %v, want the substrate's listener", rule["listenerArn"])
+		t.Errorf("listenerArn = %v, want the shared container infrastructure's listener", rule["listenerArn"])
 	}
 	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("shop-prod-web-container-r3f8a1c90", nil)) {
-		t.Errorf("priority = %v, want one derived from the service name: two releases stood up at once must not both take the next free slot", priority)
+		t.Errorf("priority = %v, want one derived from the service name: two releases deployed at once must not both take the next free slot", priority)
 	}
 	demanded := map[string]string{}
 	for _, condition := range rule["conditions"].ArrayValue() {
@@ -283,15 +283,15 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	}
 
 	service := recordedOf(t, rec, "aws:ecs/service:Service")
-	if service["launchType"].StringValue() != "FARGATE" || service["cluster"].StringValue() != fixtureSubstrate().Cluster {
-		t.Errorf("service = %v, want a Fargate service in the substrate's cluster", service)
+	if service["launchType"].StringValue() != "FARGATE" || service["cluster"].StringValue() != fixtureContainerInfra().Cluster {
+		t.Errorf("service = %v, want a Fargate service in the shared container infrastructure's cluster", service)
 	}
 	network := service["networkConfiguration"].ObjectValue()
 	if network["securityGroups"].ArrayValue()[0].StringValue() != "sg-tasks" || len(network["subnets"].ArrayValue()) != 2 {
-		t.Errorf("network = %v, want the substrate's task security group and subnets", network)
+		t.Errorf("network = %v, want the shared container infrastructure's task security group and subnets", network)
 	}
 	if !service["waitForSteadyState"].BoolValue() {
-		t.Error("the deploy does not wait for the service to settle, so it would record a container nothing answers on yet")
+		t.Error("the deploy does not wait for the service to reach a steady state, so it would record a container nothing answers on yet")
 	}
 
 	for key, inputs := range rec.recorded {
@@ -305,7 +305,7 @@ func TestAContainerWithNoGrantsRunsWithoutATaskRole(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
-	work, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
+	work, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -320,12 +320,12 @@ func TestAContainerWithNoGrantsRunsWithoutATaskRole(t *testing.T) {
 	}
 }
 
-func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
+func TestAContainerStackDecodesIntoTheContainerItDeployed(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -339,14 +339,14 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 		t.Fatalf("Decode() = %v", err)
 	}
 	if len(result.Functions) != 0 {
-		t.Errorf("Functions = %v, want none: a container stack stands up no function", result.Functions)
+		t.Errorf("Functions = %v, want none: a container stack provisions no function", result.Functions)
 	}
 	if len(result.Containers) != 1 {
-		t.Fatalf("Containers = %v, want the one service the stack stood up", result.Containers)
+		t.Fatalf("Containers = %v, want the one service the stack provisioned", result.Containers)
 	}
-	held := result.Containers[0]
-	if held.Name != "web" || held.URL != "http://"+fixtureOrigin || held.Image != containerImage || held.Physical != "shop-prod-web-container-r3f8a1c90" {
-		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", held)
+	deployed := result.Containers[0]
+	if deployed.Name != "web" || deployed.URL != "http://"+fixtureOrigin || deployed.Image != containerImage || deployed.Physical != "shop-prod-web-container-r3f8a1c90" {
+		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", deployed)
 	}
 
 	if _, err := release.Decode(context.Background(), spec, auto.OutputMap{}); err == nil {
@@ -355,9 +355,9 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 }
 
 type fakeRules struct {
-	mu    sync.Mutex
-	taken []string
-	held  []elbv2types.Rule
+	mu       sync.Mutex
+	taken    []string
+	existing []elbv2types.Rule
 }
 
 func (f *fakeRules) DescribeRules(_ context.Context, in *elbv2.DescribeRulesInput, _ ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error) {
@@ -366,7 +366,7 @@ func (f *fakeRules) DescribeRules(_ context.Context, in *elbv2.DescribeRulesInpu
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := &elbv2.DescribeRulesOutput{Rules: slices.Clone(f.held)}
+	out := &elbv2.DescribeRulesOutput{Rules: slices.Clone(f.existing)}
 	for _, priority := range f.taken {
 		out.Rules = append(out.Rules, elbv2types.Rule{Priority: aws.String(priority)})
 	}
@@ -393,14 +393,14 @@ func ruleRouting(priority int, physical string) elbv2types.Rule {
 	}
 }
 
-func TestARuleStepsPastThePrioritiesTheFrontAlreadyHolds(t *testing.T) {
+func TestARuleStepsPastThePrioritiesTheFrontAlreadyUses(t *testing.T) {
 	t.Parallel()
 
 	hashed := rulePriority("shop-prod-web-container-r3f8a1c90", nil)
 	cfg, spec := containerStackSpec(t)
 	cfg.Rules = &fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -429,7 +429,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	cfg, spec := containerStackSpec(t)
 	spec = declaringASecret(spec)
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -442,7 +442,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	}
 	for name, value := range work.definitionEnv() {
 		if strings.Contains(value, "postgres://") || name == "DATABASE_URL" {
-			t.Errorf("the task definition carries %s=%q: a secret's plaintext is readable by anyone who can describe the task definition, so the runtime reads it live instead", name, value)
+			t.Errorf("the task definition contains %s=%q: a secret's plaintext is readable by anyone who can describe the task definition, so the runtime reads it live instead", name, value)
 		}
 	}
 	if !work.readsLive() {
@@ -463,24 +463,24 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 		}
 	}
 	if len(policies) != 1 {
-		t.Fatalf("the task role carries %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
+		t.Fatalf("the task role has %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
 	}
 	own, _ := valuePartition("shop", string(edge.ClassProduction))
 	for _, want := range []string{"kms:Decrypt", cfg.VarsKeyARN, "dynamodb:Query", cfg.VarsTableARN, own} {
 		if !strings.Contains(policies[0], want) {
-			t.Errorf("policy = %s, want it to carry %q: the read is fenced to this project's partition and the class key", policies[0], want)
+			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the class key", policies[0], want)
 		}
 	}
 }
 
-func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *testing.T) {
+func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
 	pass := &fakePass{tags: map[string]string{"team": "shop"}}
 	cfg.Transform = pass
 	release := releasing(t, cfg)
-	work, err := release.containerWork(spec, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureContainerInfra())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -499,7 +499,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 	}
 	for _, token := range []string{"aws:ecs/service:Service", "aws:ecs/taskDefinition:TaskDefinition", "aws:lb/targetGroup:TargetGroup"} {
 		if got := recordedOf(t, rec, token)["tags"].ObjectValue()["team"]; got.StringValue() != "shop" {
-			t.Errorf("%s tags carry team=%v, want the transform's tag: a transform reaching a container app was silently dropped before", token, got)
+			t.Errorf("%s is tagged team=%v, want the transform's tag: a transform reaching a container app was silently dropped before", token, got)
 		}
 	}
 
@@ -518,20 +518,20 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 func TestAContainerWhoseClassResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t *testing.T) {
 	cfg, spec := containerStackSpec(t)
 	cfg.AppBoundaryARN = ""
-	_, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
+	_, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())
 	if err == nil || !strings.Contains(err.Error(), "boundary") {
 		t.Fatalf("containerWork() with no boundary = %v, want a refusal naming the boundary", err)
 	}
 }
 
-func TestAContainersTaskIsStoodUpOnTheArchitectureItsAppDeclares(t *testing.T) {
+func TestAContainersTaskRunsOnTheArchitectureItsAppDeclares(t *testing.T) {
 	t.Parallel()
 
 	for declared, want := range map[string]string{"": "X86_64", arch.X8664: "X86_64", arch.ARM64: "ARM64"} {
 		cfg, spec := containerStackSpec(t)
 		spec.App.Arch = declared
 		release := releasing(t, cfg)
-		work, err := release.containerWork(spec, fixtureSubstrate())
+		work, err := release.containerWork(spec, fixtureContainerInfra())
 		if err != nil {
 			t.Fatalf("containerWork() = %v", err)
 		}

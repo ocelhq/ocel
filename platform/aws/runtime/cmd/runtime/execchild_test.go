@@ -126,7 +126,7 @@ func TestStartExecutable(t *testing.T) {
 		}
 	})
 
-	t.Run("carries none of the hooks the runtime holds a control channel for", func(t *testing.T) {
+	t.Run("answers none of the hooks the runtime keeps a control channel for", func(t *testing.T) {
 		var c child = &execChild{}
 		if _, controlled := c.(controlledChild); controlled {
 			t.Error("an exec'd child answers hooks that exist only for a child the runtime drives over a control socket")
@@ -140,7 +140,7 @@ func TestStartExecutable(t *testing.T) {
 			t.Fatal("startExecutable() error = nil, want the child's exit reported")
 		}
 		if !strings.Contains(err.Error(), "exit status 3") {
-			t.Errorf("error = %q, want it to carry the exit status the app died with", err)
+			t.Errorf("error = %q, want it to include the exit status the app died with", err)
 		}
 	})
 
@@ -180,7 +180,7 @@ func TestStartExecutable(t *testing.T) {
 
 		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(600*time.Millisecond))
 		if err := handleInvocation(t.Context(), rt, child); err != nil {
-			t.Fatalf("handleInvocation = %v, want the loop to carry on to the next invocation", err)
+			t.Fatalf("handleInvocation = %v, want the loop to move on to the next invocation", err)
 		}
 		if p, _ := splitPrelude(t, captured.body); p.StatusCode != http.StatusServiceUnavailable {
 			t.Errorf("status = %d, want %d", p.StatusCode, http.StatusServiceUnavailable)
@@ -227,7 +227,7 @@ func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
 	}
 }
 
-func TestReadArtifactCarriesTheCommandItIsServedBy(t *testing.T) {
+func TestReadArtifactNamesTheCommandItIsServedBy(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
 	if err := os.WriteFile(filepath.Join(root, "config.json"),

@@ -7,9 +7,9 @@ import (
 )
 
 func (p *Provider) Key(ctx context.Context, class edge.Class) (string, error) {
-	held, err := p.bootstrapped(ctx, class)
+	deployed, err := p.bootstrapped(ctx, class)
 	if err != nil {
 		return "", err
 	}
-	return held.VarsKeyARN, nil
+	return deployed.VarsKeyARN, nil
 }

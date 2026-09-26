@@ -19,15 +19,15 @@ func Fitted(max int, ns bootstrap.Namespace, slug string, class edge.Class, tail
 }
 
 func ProjectsNamed(ns bootstrap.Namespace, names []string, class edge.Class) []string {
-	var standing []string
+	var slugs []string
 	for _, name := range names {
 		fields := strings.Split(name, naming.FieldSeparator)
 		if len(fields) < 3 || fields[0] != string(ns) || fields[2] != string(class) {
 			continue
 		}
-		if !slices.Contains(standing, fields[1]) {
-			standing = append(standing, fields[1])
+		if !slices.Contains(slugs, fields[1]) {
+			slugs = append(slugs, fields[1])
 		}
 	}
-	return standing
+	return slugs
 }

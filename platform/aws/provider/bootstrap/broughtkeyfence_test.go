@@ -23,7 +23,7 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsFeatureIsRequested(t 
 		t.Fatalf("Run with the feature: %v", err)
 	}
 	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, ClassProduction, broughtKeyARN); got != want {
-		t.Error("adding the vars-key feature over a brought key left the core boundary fenced to an alias the key never carries")
+		t.Error("adding the vars-key feature over a brought key left the core boundary fenced to an alias the key never has")
 	}
 	if !strings.Contains(stacks.template(coreStackName), broughtKeyARN) {
 		t.Error("the core boundary does not name the brought key")

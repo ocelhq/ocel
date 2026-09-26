@@ -63,7 +63,7 @@ func createError(what, name string, err error) error {
 	case errors.As(err, &tooManyDistributions):
 		return fmt.Errorf("create the %s %q: this account is at its CloudFront limit, so there is no room for another distribution. Every project the %q edge fronts gets one distribution, and the account-wide ceiling is the \"Distributions per account\" quota for Amazon CloudFront. Open the Service Quotas console, find Amazon CloudFront, request an increase on that quota, and deploy again once AWS grants it. If you would rather not raise it, run `ocel destroy production` on a project you no longer serve and the next deploy will fit: %w", what, name, Kind, err)
 	case errors.As(err, &tooManyAliases):
-		return fmt.Errorf("create the %s %q: this distribution already carries as many alternate domain names as CloudFront allows. Unbind a hostname this project no longer serves, or request an increase on the \"Alternate domain names (CNAMEs) per distribution\" quota for Amazon CloudFront: %w", what, name, err)
+		return fmt.Errorf("create the %s %q: this distribution already has as many alternate domain names as CloudFront allows. Unbind a hostname this project no longer serves, or request an increase on the \"Alternate domain names (CNAMEs) per distribution\" quota for Amazon CloudFront: %w", what, name, err)
 	case throttled(err):
 		return fmt.Errorf("create the %s %q: CloudFront is rate-limiting this account's control-plane calls, and the SDK gave up after its own retries. This is a throttle, not a quota, so nothing needs to be raised or deleted: wait a few seconds and deploy again. If you are deploying several projects at once, deploy them one at a time: %w", what, name, err)
 	}
@@ -71,7 +71,7 @@ func createError(what, name string, err error) error {
 }
 
 func pagedForever(what string) error {
-	return fmt.Errorf("read the %s this account already holds: CloudFront handed back a %d-th page and kept asking for more, which it does not do for an account of any size. Wait a minute and run the same command again; if it keeps happening, this is an AWS-side fault and nothing in your account needs changing", what, listPageCeiling)
+	return fmt.Errorf("read the %s this account already has: CloudFront handed back a %d-th page and kept asking for more, which it does not do for an account of any size. Wait a minute and run the same command again; if it keeps happening, this is an AWS-side fault and nothing in your account needs changing", what, listPageCeiling)
 }
 
 func aliasError(hostname, id string, err error) error {

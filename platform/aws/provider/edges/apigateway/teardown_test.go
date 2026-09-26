@@ -33,7 +33,7 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 		t.Errorf("refusal = %q, want it to name the project and the command that clears it", err)
 	}
 	if err := e.Teardown(ctx, edge.ClassPreview); err != nil {
-		t.Errorf("Teardown(preview) = %v, want nil: the standing API belongs to the production class", err)
+		t.Errorf("Teardown(preview) = %v, want nil: the project's API belongs to the production class", err)
 	}
 
 	if err := stack.Destroy(ctx); err != nil {
@@ -54,17 +54,17 @@ func TestDestroyReclaimsTheRestAPIThisStackRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	held := w.gateway.named(productionAPIName())
-	if held == nil {
-		t.Fatalf("Reconcile stood up no API named %s", productionAPIName())
+	api := w.gateway.named(productionAPIName())
+	if api == nil {
+		t.Fatalf("Reconcile created no API named %s", productionAPIName())
 	}
-	held.name = "legacy--" + conformanceSlug + "--production"
+	api.name = "legacy--" + conformanceSlug + "--production"
 
 	if err := stack.Destroy(ctx); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
-	if w.gateway.apis[held.id] != nil {
-		t.Errorf("Destroy left %s standing: a stack reaches the API it recorded by id, not only by the name this run mints", held.id)
+	if w.gateway.apis[api.id] != nil {
+		t.Errorf("Destroy left %s in place: a stack reaches the API it recorded by id, not only by the name this run mints", api.id)
 	}
 }
 

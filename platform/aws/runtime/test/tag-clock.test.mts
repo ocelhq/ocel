@@ -251,7 +251,7 @@ test("a cold instance learns the whole invalidation history from one object", as
   expect(await handler.get("k", [])).toBeUndefined();
 });
 
-test("conditions the next read on the version it holds and keeps its records on a 304", async () => {
+test("conditions the next read on the version it has and keeps its records on a 304", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
   store.seed("products", { expired: Date.now(), writtenAt: Date.now() });

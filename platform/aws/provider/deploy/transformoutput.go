@@ -78,7 +78,7 @@ type UnpublishedOutputError struct {
 	Published   string
 	Class       string
 	Environment string
-	Carries     []string
+	Properties  []string
 }
 
 func (e *UnpublishedOutputError) Error() string {
@@ -87,25 +87,25 @@ func (e *UnpublishedOutputError) Error() string {
 		"a transform fills %s from %s, and nothing has published a record under %q to %s. "+
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
 		e.At, e.Ref, e.Published, describeCoordinate(e.Class, e.Environment))
-	if len(e.Carries) == 0 {
+	if len(e.Properties) == 0 {
 		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Class, e.Environment))
 		return b.String()
 	}
-	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Class, e.Environment), strings.Join(e.Carries, ", "))
+	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Class, e.Environment), strings.Join(e.Properties, ", "))
 	return b.String()
 }
 
 type OutputPropertyError struct {
-	Ref     outputRef
-	At      outputSite
-	Carries []string
+	Ref        outputRef
+	At         outputSite
+	Properties []string
 }
 
 func (e *OutputPropertyError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from %s, and the published record carries no such property. "+
-			"The record carries %s — republish it with %s",
-		e.At, e.Ref, carried(e.Carries), e.Ref.Property)
+		"a transform fills %s from %s, and the published record has no such property. "+
+			"The record has %s — republish it with %s",
+		e.At, e.Ref, listProperties(e.Properties), e.Ref.Property)
 }
 
 type ProvisionedOutputError struct {
@@ -128,7 +128,7 @@ type EmptyOutputError struct {
 
 func (e *EmptyOutputError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from %s, and the published record carries nothing under it. "+
+		"a transform fills %s from %s, and the published record has nothing under it. "+
 			"A field an operator filled is never rendered as one they left alone, so this deploy stops here: republish it with a value under %s",
 		e.At, e.Ref, e.Ref.Property)
 }
@@ -189,7 +189,7 @@ func readOutputRef(m map[string]any, at outputSite) (outputRef, bool, error) {
 		return outputRef{}, false, nil
 	}
 	if len(m) != 1 {
-		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "carries keys beside the one it names"}
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "has keys beside the one it names"}
 	}
 	fields, ok := raw.(map[string]any)
 	if !ok {
@@ -210,7 +210,7 @@ func readOutputRef(m map[string]any, at outputSite) (outputRef, bool, error) {
 	return outputRef{Type: kind, Name: name, Property: property}, true, nil
 }
 
-func carried(properties []string) string {
+func listProperties(properties []string) string {
 	if len(properties) == 0 {
 		return "no properties at all"
 	}

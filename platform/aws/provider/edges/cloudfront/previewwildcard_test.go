@@ -23,7 +23,7 @@ func TestTheSharedPreviewNameFitsTheCommentCloudFrontAccepts(t *testing.T) {
 
 	name := previewWildcardName(strings.Repeat("preview-", 30) + ".example.com")
 	if len(name) > maxDistributionNameLen {
-		t.Fatalf("previewWildcardName is %d characters and CloudFront holds %d: %q", len(name), maxDistributionNameLen, name)
+		t.Fatalf("previewWildcardName is %d characters and CloudFront allows %d: %q", len(name), maxDistributionNameLen, name)
 	}
 	if other := previewWildcardName(strings.Repeat("preview-", 30) + ".example.net"); other == name {
 		t.Errorf("two base domains both mint %q, so each would adopt the other's shared distribution", name)
@@ -81,15 +81,15 @@ func previewing(t *testing.T, w *world) (*cloudFront, edge.EdgeStack) {
 func previewRoutes(t *testing.T, w *world) map[string]route {
 	t.Helper()
 	arn := fakeRoutesARN(edge.ClassPreview)
-	held := map[string]route{}
-	for key, value := range w.store.held(arn) {
+	routes := map[string]route{}
+	for key, value := range w.store.itemsOf(arn) {
 		var published route
 		if err := json.Unmarshal([]byte(value), &published); err != nil {
 			t.Fatalf("decode the route under %q: %v", key, err)
 		}
-		held[key] = published
+		routes[key] = published
 	}
-	return held
+	return routes
 }
 
 func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
@@ -106,27 +106,27 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 }
 
 func TestReconcilePreviewWildcard(t *testing.T) {
-	t.Run("one distribution carries the wildcard, its certificate and the preview resolver", func(t *testing.T) {
+	t.Run("one distribution has the wildcard, its certificate and the preview resolver", func(t *testing.T) {
 		w := newWorld()
 		front, err := previewBootstrapped(t, w).ReconcilePreviewWildcard(context.Background(), previewWildcardSpec())
 		if err != nil {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 
-		held := w.front.named(previewWildcardName(previewBase))
-		if held == nil {
-			t.Fatalf("no distribution named %q; the account holds %v", previewWildcardName(previewBase), w.front.mutations())
+		wildcard := w.front.named(previewWildcardName(previewBase))
+		if wildcard == nil {
+			t.Fatalf("no distribution named %q; the account has %v", previewWildcardName(previewBase), w.front.mutations())
 		}
-		if front != held.domain {
-			t.Errorf("front = %q, want the distribution's domain name %q", front, held.domain)
+		if front != wildcard.domain {
+			t.Errorf("front = %q, want the distribution's domain name %q", front, wildcard.domain)
 		}
-		if aliases := held.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
+		if aliases := wildcard.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
 			t.Errorf("aliases = %v, want exactly %q", aliases, previewWild)
 		}
-		if arn := aws.ToString(held.config.ViewerCertificate.ACMCertificateArn); arn != previewCert {
+		if arn := aws.ToString(wildcard.config.ViewerCertificate.ACMCertificateArn); arn != previewCert {
 			t.Errorf("viewer certificate = %q, want the wildcard certificate %q", arn, previewCert)
 		}
-		associated := held.config.DefaultCacheBehavior.FunctionAssociations
+		associated := wildcard.config.DefaultCacheBehavior.FunctionAssociations
 		if associated == nil || len(associated.Items) != 2 {
 			t.Fatalf("function associations = %+v, want the resolver and the empty-body dropper attached at creation", associated)
 		}
@@ -142,7 +142,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if arn := aws.ToString(associated.Items[1].FunctionARN); arn != fakeEmptyBodyARN(edge.ClassPreview) {
 			t.Errorf("function association = %q, want the preview empty-body dropper", arn)
 		}
-		if origin := aws.ToString(held.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
+		if origin := aws.ToString(wildcard.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
 			t.Errorf("origin = %q, want the preview bootstrap's asset bucket", origin)
 		}
 	})
@@ -187,11 +187,11 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if n := len(w.front.distributions); n != 1 {
 			t.Errorf("distributions = %d, want the one wildcard converged rather than a second raised", n)
 		}
-		held := w.front.named(previewWildcardName(previewBase))
-		if arn := aws.ToString(held.config.ViewerCertificate.ACMCertificateArn); arn != spec.Certificate {
+		wildcard := w.front.named(previewWildcardName(previewBase))
+		if arn := aws.ToString(wildcard.config.ViewerCertificate.ACMCertificateArn); arn != spec.Certificate {
 			t.Errorf("viewer certificate = %q, want the re-issued certificate %q", arn, spec.Certificate)
 		}
-		if aliases := held.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
+		if aliases := wildcard.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
 			t.Errorf("aliases = %v, want exactly %q", aliases, previewWild)
 		}
 	})
@@ -209,8 +209,8 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
 			t.Fatalf("ReconcilePreviewWildcard again: %v", err)
 		}
-		held := w.front.named(previewWildcardName(previewBase))
-		if aliases := held.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
+		wildcard := w.front.named(previewWildcardName(previewBase))
+		if aliases := wildcard.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
 			t.Errorf("aliases = %v, want %q served again", aliases, previewWild)
 		}
 	})
@@ -247,11 +247,11 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if front != "e9.cloudfront.net" {
 			t.Errorf("front = %q, want the distribution the other run raised", front)
 		}
-		held := w.front.distributions["E9"]
-		if aliases := held.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
+		adopted := w.front.distributions["E9"]
+		if aliases := adopted.config.Aliases.Items; !slices.Equal(aliases, []string{previewWild}) {
 			t.Errorf("aliases = %v, want the adopted distribution moved onto %q", aliases, previewWild)
 		}
-		if arn := aws.ToString(held.config.ViewerCertificate.ACMCertificateArn); arn != previewCert {
+		if arn := aws.ToString(adopted.config.ViewerCertificate.ACMCertificateArn); arn != previewCert {
 			t.Errorf("viewer certificate = %q, want the wildcard certificate %q", arn, previewCert)
 		}
 	})
@@ -294,9 +294,9 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		}
 
 		raised := w.front.named(previewWildcardName(previewBase))
-		held := w.invalidationTargets(ledger.Scope(edge.ClassPreview, ""))
-		if !slices.Equal(held, []string{raised.id}) {
-			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", held, raised.id)
+		targets := w.invalidationTargets(ledger.Scope(edge.ClassPreview, ""))
+		if !slices.Equal(targets, []string{raised.id}) {
+			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", targets, raised.id)
 		}
 		if perProject := w.invalidationTargets(ledger.Scope(edge.ClassPreview, conformanceSlug)); perProject != nil {
 			t.Errorf("project invalidation targets = %v, want a shared front named once rather than per project", perProject)
@@ -313,8 +313,8 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		if err := e.DestroyPreviewWildcard(ctx, previewBase); err != nil {
 			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
-		if held := w.invalidationTargets(ledger.Scope(edge.ClassPreview, "")); len(held) != 0 {
-			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", held)
+		if targets := w.invalidationTargets(ledger.Scope(edge.ClassPreview, "")); len(targets) != 0 {
+			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", targets)
 		}
 	})
 }
@@ -349,7 +349,7 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 		t.Fatalf("DestroyPreviewWildcard = %v, want a refusal: %s still routes every preview on %s through this one distribution", err, other, previewBase)
 	}
 	if !strings.Contains(refusal.Message, string(other)) {
-		t.Errorf("refusal = %q, want it to name the namespace still holding the shared entry", refusal.Message)
+		t.Errorf("refusal = %q, want it to name the namespace still serving previews through the shared entry", refusal.Message)
 	}
 	if w.front.named(previewWildcardName(previewBase)) == nil {
 		t.Error("the shared preview entry was deleted anyway, so every preview another namespace serves on it now answers nothing")
@@ -404,9 +404,9 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		if err := e.DestroyPreviewWildcard(context.Background(), previewBase); err != nil {
 			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
-		held := slices.Sorted(maps.Keys(w.store.held(arn)))
-		if !slices.Equal(held, []string{"www.unrelated.example"}) {
-			t.Errorf("keys = %v, want every hostname on %q swept and nothing else", held, previewBase)
+		remaining := slices.Sorted(maps.Keys(w.store.itemsOf(arn)))
+		if !slices.Equal(remaining, []string{"www.unrelated.example"}) {
+			t.Errorf("keys = %v, want every hostname on %q swept and nothing else", remaining, previewBase)
 		}
 	})
 
@@ -425,10 +425,10 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 
 		promotePreview(t, stack, previewPointer)
 
-		held := previewRoutes(t, w)
-		published, ok := held[previewHostname()]
+		routes := previewRoutes(t, w)
+		published, ok := routes[previewHostname()]
 		if !ok {
-			t.Fatalf("routes = %v, want one under %q", slices.Sorted(maps.Keys(held)), previewHostname())
+			t.Fatalf("routes = %v, want one under %q", slices.Sorted(maps.Keys(routes)), previewHostname())
 		}
 		if published.Origin != fakeEntryHost || published.Release != "d1.f1" {
 			t.Errorf("route = %+v, want the release's entry function URL", published)
@@ -461,14 +461,14 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 
 		published, ok := previewRoutes(t, w)[previewHostname()]
 		if !ok {
-			t.Fatalf("routes hold no entry under %q", previewHostname())
+			t.Fatalf("routes have no entry under %q", previewHostname())
 		}
 		if published.Origin != fakeFront.Host || published.Container != "shop-prod-web-container-r3f8a1c90" {
 			t.Errorf("route = %+v, want the class front and the container the rule names", published)
 		}
 		wildcard := w.front.named(previewWildcardName(previewBase))
 		if wildcard == nil {
-			t.Fatal("no wildcard distribution stands")
+			t.Fatal("no wildcard distribution exists")
 		}
 		if got := containerFrontOf(wildcard.config); got != fakeFront {
 			t.Errorf("the wildcard distribution declares %+v, want the preview class front as a VPC origin", got)
@@ -493,7 +493,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		promotePreview(t, stack, previewPointer)
 
 		if _, ok := previewRoutes(t, w)[previewHostname()]; !ok {
-			t.Error("the preview hostname carries no route after a conflicting writer moved the store")
+			t.Error("the preview hostname has no route after a conflicting writer moved the store")
 		}
 		if n := w.store.count("kvs.UpdateKeys"); n != 2 {
 			t.Errorf("UpdateKeys = %d, want the conflicted write retried once", n)
@@ -530,8 +530,8 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if _, err := stack.RemovePointer(context.Background(), previewPointer, edge.DiscardProgress()); err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
-		if held := previewRoutes(t, w); len(held) != 0 {
-			t.Errorf("routes = %v, want none once the preview is gone", slices.Sorted(maps.Keys(held)))
+		if routes := previewRoutes(t, w); len(routes) != 0 {
+			t.Errorf("routes = %v, want none once the preview is gone", slices.Sorted(maps.Keys(routes)))
 		}
 	})
 
@@ -545,8 +545,8 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if err := stack.Destroy(context.Background()); err != nil {
 			t.Fatalf("Destroy: %v", err)
 		}
-		if held := previewRoutes(t, w); len(held) != 0 {
-			t.Errorf("routes = %v, want none after the stack was destroyed", slices.Sorted(maps.Keys(held)))
+		if routes := previewRoutes(t, w); len(routes) != 0 {
+			t.Errorf("routes = %v, want none after the stack was destroyed", slices.Sorted(maps.Keys(routes)))
 		}
 		if slices.Contains(w.front.calls, "ListDistributions") {
 			t.Error("destroying a stack that serves on the wildcard listed the account's distributions")
@@ -568,8 +568,8 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if err := moved.Destroy(context.Background()); err != nil {
 			t.Fatalf("Destroy: %v", err)
 		}
-		if held := previewRoutes(t, w); len(held) != 0 {
-			t.Errorf("routes = %v, want the wildcard hostnames withdrawn even once the stack stopped declaring the base", slices.Sorted(maps.Keys(held)))
+		if routes := previewRoutes(t, w); len(routes) != 0 {
+			t.Errorf("routes = %v, want the wildcard hostnames withdrawn even once the stack stopped declaring the base", slices.Sorted(maps.Keys(routes)))
 		}
 	})
 
@@ -586,8 +586,8 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		if err := stack.Destroy(context.Background()); err != nil {
 			t.Fatalf("Destroy again: %v", err)
 		}
-		if held := previewRoutes(t, w); len(held) != 0 {
-			t.Errorf("routes = %v, want the re-run to find the pointers it needed and withdraw them", slices.Sorted(maps.Keys(held)))
+		if routes := previewRoutes(t, w); len(routes) != 0 {
+			t.Errorf("routes = %v, want the re-run to find the pointers it needed and withdraw them", slices.Sorted(maps.Keys(routes)))
 		}
 	})
 
@@ -604,8 +604,8 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		}, previewPointer, edge.DiscardProgress()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the deployments ledger")
 		}
-		if held := previewRoutes(t, w); len(held) != 0 {
-			t.Errorf("routes = %v, want no hostname left pointing at a release the ledger never recorded", slices.Sorted(maps.Keys(held)))
+		if routes := previewRoutes(t, w); len(routes) != 0 {
+			t.Errorf("routes = %v, want no hostname left pointing at a release the ledger never recorded", slices.Sorted(maps.Keys(routes)))
 		}
 	})
 }

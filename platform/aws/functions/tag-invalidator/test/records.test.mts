@@ -68,13 +68,13 @@ describe("raisesOf", () => {
     }
   });
 
-  it("drops a record carrying no watermark at all", () => {
+  it("drops a record with no watermark at all", () => {
     expect(raisesOf([tagRecord("cart", {})]).size).toBe(0);
     expect(raisesOf([tagRecord("cart", { expired: { N: "nope" } })]).size).toBe(0);
     expect(raisesOf([tagRecord("cart", { expired: { N: "-1" } })]).size).toBe(0);
   });
 
-  it("ignores a record with no new image, which a REMOVE carries", () => {
+  it("ignores a record with no new image, which a REMOVE produces", () => {
     expect(raisesOf([{ dynamodb: {} }, {}]).size).toBe(0);
   });
 });

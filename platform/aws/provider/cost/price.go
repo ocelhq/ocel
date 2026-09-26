@@ -98,11 +98,11 @@ var table = costkit.Table{
 }
 
 func Price(req *costv1.PriceRequest, edges ...costkit.EdgeRates) (*costv1.Estimate, error) {
-	held, err := card()
+	priceCard, err := card()
 	if err != nil {
 		return nil, err
 	}
-	merged, pricing, err := costkit.Priced(held, table, edges...)
+	merged, pricing, err := costkit.Priced(priceCard, table, edges...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func Price(req *costv1.PriceRequest, edges ...costkit.EdgeRates) (*costv1.Estima
 	estimate.Notes = append(estimate.Notes,
 		"list prices for us-east-1; a resource in another region is left unpriced",
 		"an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
-		"CloudFront is priced at its United States rates whichever price class the distribution carries",
+		"CloudFront is priced at its United States rates whichever price class the distribution uses",
 	)
 	return estimate, nil
 }

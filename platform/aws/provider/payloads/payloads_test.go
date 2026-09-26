@@ -28,7 +28,7 @@ func TestPayloads(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := tc.payload()
 			if len(p.Bytes) == 0 {
-				t.Fatal("carries no bytes")
+				t.Fatal("has no bytes")
 			}
 			sum := sha256.Sum256(p.Bytes)
 			if want := hex.EncodeToString(sum[:]); p.SHA256 != want {
@@ -48,7 +48,7 @@ func TestPayloads(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Errorf("holds no %s", tc.entry)
+				t.Errorf("contains no %s", tc.entry)
 			}
 		})
 	}
@@ -64,7 +64,7 @@ func runtimeLayerFor(arch string) func() Payload {
 	}
 }
 
-func TestTheRuntimeIsCarriedForEveryArchitectureAFunctionRunsOn(t *testing.T) {
+func TestTheRuntimeShipsForEveryArchitectureAFunctionRunsOn(t *testing.T) {
 	for _, architecture := range []string{arch.X8664, arch.ARM64} {
 		if _, err := RuntimeLayer(architecture); err != nil {
 			t.Errorf("RuntimeLayer(%q) = %v, want the runtime built for it", architecture, err)
@@ -87,7 +87,7 @@ func TestPayloadsDiffer(t *testing.T) {
 		"tag invalidator":      TagInvalidator(),
 	} {
 		if other, ok := seen[p.SHA256]; ok {
-			t.Errorf("%s and %s carry the same bytes", name, other)
+			t.Errorf("%s and %s have the same bytes", name, other)
 		}
 		seen[p.SHA256] = name
 	}

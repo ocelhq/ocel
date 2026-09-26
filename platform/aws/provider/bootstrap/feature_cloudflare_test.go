@@ -107,7 +107,7 @@ func TestEdgeUser(t *testing.T) {
 				t.Error("missing dynamodb:Query on the table's index bounded to the TAG# LeadingKeys")
 			}
 			if !sqsSend {
-				t.Error("missing sqs:SendMessage on the revalidation queue the isr feature stood up")
+				t.Error("missing sqs:SendMessage on the revalidation queue the isr feature provisioned")
 			}
 			if !invoke {
 				t.Error("missing the lambda:Invoke* grant")
@@ -124,16 +124,16 @@ func TestEdgeUser(t *testing.T) {
 
 type mintingEdge struct {
 	*fakeEdge
-	holds bool
-	torn  int
+	hasCred bool
+	torn    int
 }
 
 func (e *mintingEdge) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	e.bootstraps++
 	e.class = class
 	cred := ""
-	if !e.holds {
-		cred, e.holds = "bootstrap-secret", true
+	if !e.hasCred {
+		cred, e.hasCred = "bootstrap-secret", true
 	}
 	return edge.BootstrapOutput{Offers: []edge.Offer{{
 		Kind: edge.OfferDeploymentsStore,
@@ -146,7 +146,7 @@ func (e *mintingEdge) Bootstrap(_ context.Context, class edge.Class) (edge.Boots
 }
 
 func (e *mintingEdge) Teardown(context.Context, edge.Class) error {
-	e.holds = false
+	e.hasCred = false
 	e.torn++
 	return nil
 }
@@ -159,7 +159,7 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
 
 	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil, nil); err != nil {
-		t.Fatalf("the bootstrap that stands the edge up: %v", err)
+		t.Fatalf("the bootstrap that installs the edge: %v", err)
 	}
 
 	drop := Request{Features: []string{FeatureISR}, Remove: []string{FeatureCloudflareEdge}}
@@ -172,8 +172,8 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if front.bootstraps != 1 {
 		t.Errorf("the edge was bootstrapped %d times, want once: a drop re-adopting what it is about to sever leaves the two disagreeing", front.bootstraps)
 	}
-	if _, held := ssmc.params[cloudflareNames(ClassProduction).deploymentsStoreParam]; held {
-		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store nothing stands behind")
+	if _, present := ssmc.params[cloudflareNames(ClassProduction).deploymentsStoreParam]; present {
+		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store for an edge that is no longer installed")
 	}
 
 	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil, nil); err != nil {

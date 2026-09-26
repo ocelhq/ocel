@@ -84,8 +84,8 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 	if worker.Secrets[edge.EdgeSecretKeyVar] != "secret" {
 		t.Errorf("Secrets[%s] missing, want the edge credential delivered as a secret", edge.EdgeSecretKeyVar)
 	}
-	if _, carried := worker.Vars[envPreviewApps]; carried {
-		t.Errorf("Vars carries %s, which is per-project", envPreviewApps)
+	if _, set := worker.Vars[envPreviewApps]; set {
+		t.Errorf("Vars has %s, which is per-project", envPreviewApps)
 	}
 	if built.Spec.Name != "" {
 		t.Errorf("Name = %q, want empty: the edge names the shared entry itself", built.Spec.Name)
@@ -162,8 +162,8 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if _, carried := built.Spec.Worker.Vars[envPreviewBaseDomain]; carried {
-		t.Errorf("Vars carries %s = %q, want none: the shared preview entry holds the base domain, not the project's worker",
+	if _, set := built.Spec.Worker.Vars[envPreviewBaseDomain]; set {
+		t.Errorf("Vars has %s = %q, want none: the shared preview entry has the base domain, not the project's worker",
 			envPreviewBaseDomain, built.Spec.Worker.Vars[envPreviewBaseDomain])
 	}
 	for name, want := range map[string]string{envPreview: "1", envPreviewApps: "web,admin"} {
@@ -191,8 +191,8 @@ func TestEdgeProgramForAProductionProject(t *testing.T) {
 		t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", built.Spec.PruneWorkerStem)
 	}
 	for _, unwanted := range []string{envPreview, envPreviewGlobal, envPreviewApps, envPreviewBaseDomain} {
-		if _, carried := built.Spec.Worker.Vars[unwanted]; carried {
-			t.Errorf("Vars carries %s, which belongs to a preview", unwanted)
+		if _, set := built.Spec.Worker.Vars[unwanted]; set {
+			t.Errorf("Vars has %s, which belongs to a preview", unwanted)
 		}
 	}
 }

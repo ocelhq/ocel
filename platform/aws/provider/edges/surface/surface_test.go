@@ -15,7 +15,7 @@ const commentLimit = 128
 
 var longest = bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 
-func TestNameCarriesTheNamespaceTheSlugAndTheClass(t *testing.T) {
+func TestNameContainsTheNamespaceTheSlugAndTheClass(t *testing.T) {
 	if got, want := surface.Name("ocel", "shop", edge.ClassProduction), "ocel--shop--production"; got != want {
 		t.Errorf("Name = %q, want %q", got, want)
 	}

@@ -93,7 +93,7 @@ func TestParseEvent(t *testing.T) {
 			t.Errorf("Accept = %v, want both values the REST API sent", got)
 		}
 		if got := ev.header().Get("Content-Type"); got != "application/json" {
-			t.Errorf("Content-Type = %q, want the single-valued header carried through", got)
+			t.Errorf("Content-Type = %q, want the single-valued header passed through", got)
 		}
 		body, err := ev.decodedBody()
 		if err != nil {
@@ -114,7 +114,7 @@ func TestParseEvent(t *testing.T) {
 		}
 	})
 
-	t.Run("payload V1 carries cookies in a header", func(t *testing.T) {
+	t.Run("payload V1 sends cookies in a header", func(t *testing.T) {
 		ev, err := parseEvent([]byte(`{"version":"1.0","path":"/","httpMethod":"GET","headers":{"Cookie":"s=1; t=2"}}`))
 		if err != nil {
 			t.Fatalf("parseEvent: %v", err)
@@ -330,7 +330,7 @@ func TestEncodePrelude(t *testing.T) {
 			t.Fatalf("prelude JSON invalid: %v", err)
 		}
 		if p.Headers["X-Ocel-Edge"] != "cloudfront" {
-			t.Errorf("headers = %v, want the edge header the router set carried through; it is the only thing that marks a streamed response", p.Headers)
+			t.Errorf("headers = %v, want the edge header the router set passed through; it is the only thing that marks a streamed response", p.Headers)
 		}
 	})
 

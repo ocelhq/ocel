@@ -47,30 +47,30 @@ func (p *Provider) accountID(ctx context.Context) (string, error) {
 }
 
 type memo[K comparable, V any] struct {
-	mu   sync.Mutex
-	held map[K]V
+	mu     sync.Mutex
+	values map[K]V
 }
 
 func (m *memo[K, V]) resolve(key K, fill func() (V, error)) (V, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if held, filled := m.held[key]; filled {
-		return held, nil
+	if cached, filled := m.values[key]; filled {
+		return cached, nil
 	}
 	value, err := fill()
 	if err != nil {
 		var zero V
 		return zero, err
 	}
-	if m.held == nil {
-		m.held = map[K]V{}
+	if m.values == nil {
+		m.values = map[K]V{}
 	}
-	m.held[key] = value
+	m.values[key] = value
 	return value, nil
 }
 
 func (m *memo[K, V]) forget() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.held = nil
+	m.values = nil
 }

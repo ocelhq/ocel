@@ -110,7 +110,7 @@ export function routerHostFromEnv(env: NodeJS.ProcessEnv, localOrigin: string): 
   const bucket = env[assetBucketVar];
   if (bucket && !(region && credentialsOf(env))) {
     throw new Error(
-      `ocel: ${assetBucketVar} names ${bucket} but this function holds no credentials to read it with`,
+      `ocel: ${assetBucketVar} names ${bucket} but this function has no credentials to read it with`,
     );
   }
 

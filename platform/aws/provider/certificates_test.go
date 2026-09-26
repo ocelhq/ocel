@@ -72,11 +72,11 @@ func issuerOver(api certs.ACMAPI) certs.ACM {
 	}
 }
 
-func requestFor(hostname string, held provider.Certificate, proved *[]edge.Record) provider.CertificateRequest {
+func requestFor(hostname string, current provider.Certificate, proved *[]edge.Record) provider.CertificateRequest {
 	return provider.CertificateRequest{
 		Kind:     "cloudfront",
 		Hostname: hostname,
-		Current:  held,
+		Current:  current,
 		Progress: silentProgress{},
 		Prove: func(_ context.Context, cert provider.Certificate, records []edge.Record) (provider.Certificate, error) {
 			*proved = records
@@ -102,10 +102,10 @@ func TestIssueRequestsACertificateForAnUnpinnedHostname(t *testing.T) {
 		t.Errorf("issue() = %+v, want the handle ocel requested, marked as ocel's", cert)
 	}
 	if len(proved) != 1 || proved[0].Name != "_ocel.app.acme.com" {
-		t.Errorf("the validation records settled were %v, want the one ACM named", proved)
+		t.Errorf("the validation records written were %v, want the one ACM named", proved)
 	}
 	if len(cert.Written) != 1 {
-		t.Errorf("issue() = %+v, want it to carry the validation records the kit wrote", cert)
+		t.Errorf("issue() = %+v, want it to include the validation records the kit wrote", cert)
 	}
 }
 
@@ -123,10 +123,10 @@ func TestIssueRefusesAsNotReadyWhileACMIsStillValidating(t *testing.T) {
 		t.Errorf("issue() error = %v, want it marked pending: ACM issues on its own time, and a deploy leaves the hostname to `ocel domain add` rather than failing", err)
 	}
 	if cert.ID != issuedARN {
-		t.Errorf("issue() = %+v, want the requested handle carried out so the re-run picks it up", cert)
+		t.Errorf("issue() = %+v, want the requested handle returned so the re-run picks it up", cert)
 	}
 	if len(proved) != 1 {
-		t.Errorf("the validation records settled were %v, want them written before the wait", proved)
+		t.Errorf("the validation records written were %v, want them written before the wait", proved)
 	}
 }
 
@@ -134,16 +134,16 @@ func TestIssueKeepsACertificateThatStillCoversTheHostname(t *testing.T) {
 	t.Parallel()
 	api := &stubACM{statuses: []string{certs.StatusIssued}}
 	var proved []edge.Record
-	held := provider.Certificate{ID: issuedARN, Requested: true}
+	existing := provider.Certificate{ID: issuedARN, Requested: true}
 
-	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", held, &proved))
+	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", existing, &proved))
 	if err != nil {
 		t.Fatalf("issue() error = %v", err)
 	}
-	if cert.ID != held.ID || !cert.Requested {
-		t.Errorf("issue() = %+v, want the certificate already held", cert)
+	if cert.ID != existing.ID || !cert.Requested {
+		t.Errorf("issue() = %+v, want the existing certificate kept", cert)
 	}
 	if api.requested != 0 {
-		t.Errorf("ACM was asked for %d certificates, want none while the held one still covers", api.requested)
+		t.Errorf("ACM was asked for %d certificates, want none while the existing one still covers", api.requested)
 	}
 }

@@ -51,37 +51,37 @@ func deploymentNamed(tmpl apiGatewayEdgeShape) string {
 	return ""
 }
 
-func TestAPIGatewayEdgeStandsUpWhatEveryRESTAPIInTheAccountShares(t *testing.T) {
+func TestAPIGatewayEdgeProvisionsWhatEveryRESTAPIInTheAccountShares(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			held := edge.Class(class)
+			edgeClass := edge.Class(class)
 			_, tmpl := apiGatewayEdgeStack(t, class)
 
 			role, ok := tmpl.Resources["EdgeInvokeRole"]
 			if !ok {
-				t.Fatal("template stands up no invoke role; no REST API can reach an entry function or a release's assets")
+				t.Fatal("template provisions no invoke role; no REST API can reach an entry function or a release's assets")
 			}
 			if role.Type != "AWS::IAM::Role" {
 				t.Errorf("EdgeInvokeRole Type = %q, want AWS::IAM::Role", role.Type)
 			}
-			if got, want := role.Properties.RoleName, defaultNamespace.EdgeInvokeRoleName(held); got != want {
+			if got, want := role.Properties.RoleName, defaultNamespace.EdgeInvokeRoleName(edgeClass); got != want {
 				t.Errorf("invoke role name = %q, want %q", got, want)
 			}
 
 			api, ok := tmpl.Resources["EdgeNotFoundApi"]
 			if !ok {
-				t.Fatal("template stands up no 404 responder; a host no deployment claims is answered by API Gateway rather than by Ocel")
+				t.Fatal("template provisions no 404 responder; a host no deployment claims is answered by API Gateway rather than by Ocel")
 			}
 			if api.Type != "AWS::ApiGateway::RestApi" {
 				t.Errorf("EdgeNotFoundApi Type = %q, want AWS::ApiGateway::RestApi", api.Type)
 			}
-			if got, want := api.Properties.Name, defaultNamespace.EdgeNotFoundAPIName(held); got != want {
+			if got, want := api.Properties.Name, defaultNamespace.EdgeNotFoundAPIName(edgeClass); got != want {
 				t.Errorf("404 responder name = %q, want %q", got, want)
 			}
 
 			proxy, ok := tmpl.Resources["EdgeNotFoundProxy"]
 			if !ok {
-				t.Fatal("the 404 responder holds no catch-all path, so a request for anything but the root is refused rather than answered")
+				t.Fatal("the 404 responder has no catch-all path, so a request for anything but the root is refused rather than answered")
 			}
 			if got := proxy.Properties.PathPart; got != edgeProxyPathPart {
 				t.Errorf("catch-all PathPart = %q, want %q", got, edgeProxyPathPart)
@@ -109,11 +109,11 @@ func TestAPIGatewayEdgeStandsUpWhatEveryRESTAPIInTheAccountShares(t *testing.T) 
 
 			deployment := deploymentNamed(tmpl)
 			if deployment == "" {
-				t.Fatal("nothing publishes the 404 responder's methods, so the API stands and serves nothing")
+				t.Fatal("nothing publishes the 404 responder's methods, so the API exists and serves nothing")
 			}
 			for _, method := range []string{"EdgeNotFoundRootMethod", "EdgeNotFoundProxyMethod"} {
 				if !containsString(tmpl.Resources[deployment].DependsOn, method) {
-					t.Errorf("the deployment does not wait on %s, so it can publish an API that holds no method", method)
+					t.Errorf("the deployment does not wait on %s, so it can publish an API that has no method", method)
 				}
 			}
 
@@ -166,7 +166,7 @@ func TestAPIGatewayEdgeRepublishesA404ResponderThatMoved(t *testing.T) {
 		t.Error("two renders of the same responder are published under different names, so every bootstrap leaves a deployment behind")
 	}
 	if deploymentNamed(production) == deploymentNamed(preview) {
-		t.Error("a moved responder is published under the name the old one holds, so the change is never served")
+		t.Error("a moved responder is published under the name the old one has, so the change is never served")
 	}
 }
 
@@ -189,7 +189,7 @@ func TestTheAPIGatewayInvokeRoleReachesOnlyItsOwnClassOfAppFunctions(t *testing.
 			}
 			role, ok := tmpl.Resources["EdgeInvokeRole"]
 			if !ok {
-				t.Fatal("template stands up no invoke role")
+				t.Fatal("template provisions no invoke role")
 			}
 			if len(role.Properties.Policies) != 1 {
 				t.Fatalf("want exactly one inline policy, got %d", len(role.Properties.Policies))

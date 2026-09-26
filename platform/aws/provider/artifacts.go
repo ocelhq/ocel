@@ -13,12 +13,12 @@ import (
 )
 
 func (p *Provider) Buckets(ctx context.Context, class edge.Class) (awsports.Buckets, error) {
-	held, err := p.bootstrapped(ctx, class)
+	deployed, err := p.bootstrapped(ctx, class)
 	if err != nil {
 		return awsports.Buckets{}, err
 	}
-	buckets := awsports.Buckets{Functions: held.ArtifactBucket, Assets: held.AssetBucket}
-	for _, kind := range bootstrap.EdgeKindsFor(held.Features.Names()) {
+	buckets := awsports.Buckets{Functions: deployed.ArtifactBucket, Assets: deployed.AssetBucket}
+	for _, kind := range bootstrap.EdgeKindsFor(deployed.Features.Names()) {
 		params, err := p.classParams(ctx, class, kind)
 		if err != nil {
 			return buckets, err

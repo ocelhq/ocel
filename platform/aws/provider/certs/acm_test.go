@@ -322,7 +322,7 @@ func TestIssuerDiscard(t *testing.T) {
 		}
 	})
 
-	t.Run("a certificate ocel adopted is left standing", func(t *testing.T) {
+	t.Run("a certificate ocel adopted is left in place", func(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
@@ -334,7 +334,7 @@ func TestIssuerDiscard(t *testing.T) {
 			t.Errorf("deleted = %v, want a certificate ocel adopted left alone", api.deleted)
 		}
 		if len(said) != 1 || !strings.Contains(said[0], testARN) {
-			t.Errorf("said = %v, want the certificate left standing named", said)
+			t.Errorf("said = %v, want the certificate left in place named", said)
 		}
 	})
 
@@ -353,7 +353,7 @@ func TestIssuerDiscard(t *testing.T) {
 		}
 	})
 
-	t.Run("a certificate still in use once the wait runs out is left standing, not fatal", func(t *testing.T) {
+	t.Run("a certificate still in use once the wait runs out is left in place, not fatal", func(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: &acmtypes.ResourceInUseException{}}
@@ -364,12 +364,12 @@ func TestIssuerDiscard(t *testing.T) {
 		if api.deletes < 2 {
 			t.Errorf("deletes = %d, want the refusal retried", api.deletes)
 		}
-		if len(said) == 0 || !strings.Contains(said[len(said)-1], "standing") || !strings.Contains(said[len(said)-1], testARN) {
-			t.Errorf("said = %v, want the certificate left standing named", said)
+		if len(said) == 0 || !strings.Contains(said[len(said)-1], "in place") || !strings.Contains(said[len(said)-1], testARN) {
+			t.Errorf("said = %v, want the certificate left in place named", said)
 		}
 	})
 
-	t.Run("a refusal that is not the edge holding on is fatal", func(t *testing.T) {
+	t.Run("a refusal that is not the edge still using it is fatal", func(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: errors.New("AccessDeniedException")}
@@ -379,7 +379,7 @@ func TestIssuerDiscard(t *testing.T) {
 			t.Fatal("Discard err = nil, want the refusal reported so nothing forgets the certificate")
 		}
 		if len(said) != 1 || !strings.Contains(said[0], testARN) {
-			t.Errorf("said = %v, want the certificate left standing named", said)
+			t.Errorf("said = %v, want the certificate left in place named", said)
 		}
 	})
 

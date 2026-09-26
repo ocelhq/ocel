@@ -90,11 +90,11 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		args[spec.Name] = declared
 		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name)
 		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route})
-		held, err := r.artifactAt(spec.Artifact)
+		artifact, err := r.artifactAt(spec.Artifact)
 		if err != nil {
 			return nil, fmt.Errorf("place %s's code: %w", spec.Name, err)
 		}
-		artifacts[spec.Name] = held
+		artifacts[spec.Name] = artifact
 		logical = append(logical, spec.Name)
 	}
 
@@ -191,10 +191,10 @@ func (r *release) store(name string) (string, error) {
 }
 
 func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string, error) {
-	held := map[string]string{}
+	layers := map[string]string{}
 	for _, declared := range args {
 		arch := declared.Arch
-		if _, carried := held[arch]; carried {
+		if _, seen := layers[arch]; seen {
 			continue
 		}
 		arn := r.cfg.RuntimeLayers[arch]
@@ -203,9 +203,9 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 				"this account's bootstrap publishes no %s runtime for this build's functions to boot through; re-run `%s`",
 				arch, provider.BootstrapCommand(r.cfg.Class))
 		}
-		held[arch] = arn
+		layers[arch] = arn
 	}
-	return held, nil
+	return layers, nil
 }
 
 func (r *release) routerHost(spec provider.StackSpec) (*routerHost, error) {
@@ -243,29 +243,29 @@ func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
-			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `%s`",
+			"the edge reaches %s over a Function URL no signature guards, and this bootstrap has no secret for the entry function to demand of it; re-run `%s`",
 			spec.App.App, provider.BootstrapCommand(r.cfg.Class))
 	}
 	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
 func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
-	held := spec.App.ISR
-	if held == nil {
+	isr := spec.App.ISR
+	if isr == nil {
 		return nil
 	}
 	cache := &isrConfig{
 		Coord:     appCoordinate(spec),
-		Namespace: held.TagNamespace,
+		Namespace: isr.TagNamespace,
 		Bucket:    r.cfg.AssetBucket,
-		Prefix:    held.Prefix,
+		Prefix:    isr.Prefix,
 		Table:     r.cfg.StateTable,
 		TableARN:  r.cfg.StateTableARN,
 	}
 	if isrEntriesAdopted(r.cfg.objectStores()) {
 		cache.CacheStoreBucket = r.cfg.CacheStoreBucket
-		cache.WriterURL = r.cfg.ISRWriterEndpoint + "/" + held.Prefix + "/entry"
-		cache.WriterSecret = isrWriteSecret(r.cfg.ISRWriterSeed, held.Prefix)
+		cache.WriterURL = r.cfg.ISRWriterEndpoint + "/" + isr.Prefix + "/entry"
+		cache.WriterSecret = isrWriteSecret(r.cfg.ISRWriterSeed, isr.Prefix)
 	}
 	return cache
 }
@@ -281,23 +281,23 @@ func appCoordinate(spec provider.StackSpec) naming.Coordinate {
 }
 
 func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
-	held := spec.App.Bytecode
-	if held == nil {
+	bytecode := spec.App.Bytecode
+	if bytecode == nil {
 		return nil
 	}
-	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: held.Prefix}
+	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: bytecode.Prefix}
 }
 
 func (r *release) appBundle(spec provider.StackSpec) (appBundle, error) {
-	if sealed, carried := spec.App.VendorState.(appBundle); carried {
+	if sealed, ok := spec.App.VendorState.(appBundle); ok {
 		return sealed, nil
 	}
 	return r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
 }
 
-func (r *release) sealApp(project, app string, held provider.AppValues) (appBundle, error) {
-	bindings := make([]live.Binding, 0, len(held.Bindings))
-	for _, binding := range held.Bindings {
+func (r *release) sealApp(project, app string, values provider.AppValues) (appBundle, error) {
+	bindings := make([]live.Binding, 0, len(values.Bindings))
+	for _, binding := range values.Bindings {
 		kind := provider.WireBindingType(binding.Type)
 		bindings = append(bindings, live.Binding{
 			Name:    binding.Name,
@@ -306,11 +306,11 @@ func (r *release) sealApp(project, app string, held provider.AppValues) (appBund
 			Granted: binding.Version,
 		})
 	}
-	keys := make([]live.Key, 0, len(held.Secrets))
-	for _, secret := range held.Secrets {
+	keys := make([]live.Key, 0, len(values.Secrets))
+	for _, secret := range values.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
-	return sealAppBundle(r.cfg, project, app, held.Sensitive, keys, bindings)
+	return sealAppBundle(r.cfg, project, app, values.Sensitive, keys, bindings)
 }
 
 func bindingResource(binding provider.Binding) string {
@@ -386,8 +386,8 @@ func grantMessages(grants []provider.Grant) []*bindingsv1.Grant {
 }
 
 func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	work, held := spec.VendorState.(*appWork)
-	if !held {
+	work, planned := spec.VendorState.(*appWork)
+	if !planned {
 		return provider.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
 	}
 	result := provider.StackResult{

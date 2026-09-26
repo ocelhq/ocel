@@ -25,7 +25,7 @@ func proxyEnvValue(t *testing.T, env []string, key string) string {
 			return value
 		}
 	}
-	t.Fatalf("env %q carries no %s", env, key)
+	t.Fatalf("env %q has no %s", env, key)
 	return ""
 }
 
@@ -79,7 +79,7 @@ func TestServeProxy(t *testing.T) {
 			t.Fatalf("serveProxy: %v", err)
 		}
 		if served == nil {
-			t.Fatal("serveProxy returned no channel to carry the proxy's terminal error")
+			t.Fatal("serveProxy returned no channel to deliver the proxy's terminal error")
 		}
 
 		addr := proxyEnvValue(t, env, constants.RuntimeAddressEnvName)

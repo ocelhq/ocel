@@ -307,7 +307,7 @@ func TestWarmBytecodeCache(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the skipped entries", func(t *testing.T) {
+	t.Run("reports the skipped entries", func(t *testing.T) {
 		m := warmFixture(t, publishes(), stoppedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
@@ -332,7 +332,7 @@ func TestWarmBytecodeCache(t *testing.T) {
 			t.Errorf("uploaded = %v, want false", got.Uploaded)
 		}
 		if !strings.Contains(got.Error, "access denied") {
-			t.Errorf("error = %q, want it to carry what the store said", got.Error)
+			t.Errorf("error = %q, want it to include what the store said", got.Error)
 		}
 	})
 
@@ -432,7 +432,7 @@ func TestWarmLoadDeadline(t *testing.T) {
 }
 
 func TestWarmCompileCache(t *testing.T) {
-	t.Run("request carries the deadline and the ceiling", func(t *testing.T) {
+	t.Run("request includes the deadline and the ceiling", func(t *testing.T) {
 		m, nodeReader, nodeConn := controlConnPair(t)
 		deadline := time.Now().Add(5 * time.Second)
 

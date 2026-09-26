@@ -37,11 +37,11 @@ func (d *recordingDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ..
 	}
 	var matched []map[string]ddbtypes.AttributeValue
 	for _, row := range d.rows {
-		held, err := conditionHolds(row, in)
+		met, err := conditionHolds(row, in)
 		if err != nil {
 			return nil, err
 		}
-		if held {
+		if met {
 			matched = append(matched, row)
 		}
 	}
@@ -60,7 +60,7 @@ func conditionHolds(row map[string]ddbtypes.AttributeValue, in *dynamodb.QueryIn
 		}
 		operand, ok := in.ExpressionAttributeValues[fields[1]].(*ddbtypes.AttributeValueMemberS)
 		if !ok {
-			return false, fmt.Errorf("recordingDynamo: %q carries no string value", fields[1])
+			return false, fmt.Errorf("recordingDynamo: %q names no string value", fields[1])
 		}
 		stored, ok := row[attribute].(*ddbtypes.AttributeValueMemberS)
 		if !ok || stored.Value != operand.Value {

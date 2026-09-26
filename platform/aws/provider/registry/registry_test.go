@@ -94,7 +94,7 @@ func TestAPushCreatesTheRepositoryTheCoordinateNamesOnce(t *testing.T) {
 		}
 	}
 	if _, err := repositoryOf(target, "ghcr.io/acme/web:tag"); err == nil {
-		t.Error("repositoryOf accepted a coordinate under another registry, which no repository of this account's holds")
+		t.Error("repositoryOf accepted a coordinate under another registry, which no repository of this account's stores")
 	}
 
 	api := &fakeECR{existing: []string{"ocel/api"}}

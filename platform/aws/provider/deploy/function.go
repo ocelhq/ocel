@@ -227,7 +227,7 @@ func accountOfARN(arn string) string {
 func isrPolicy(c isrConfig) (string, error) {
 	namespace := c.tagNamespace()
 	if namespace == "" {
-		return "", fmt.Errorf("isr cache under %q carries no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
+		return "", fmt.Errorf("isr cache under %q has no coordinate, so its tag items cannot be scoped to this app", c.Prefix)
 	}
 	statements := []any{
 		map[string]any{

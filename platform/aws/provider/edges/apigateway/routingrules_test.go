@@ -35,15 +35,15 @@ func TestPutHostRuleRetargetsAHostWithoutEverDroppingItsRule(t *testing.T) {
 	assertSet(t, "the calls retargeting a host makes", w.gateway.mutations(), []string{
 		"PutRoutingRule " + previewWild + " " + host,
 	})
-	held := rulesOn(t, w, previewWild)[host]
-	if held == nil {
-		t.Fatalf("%s lost its rule while being retargeted; the wildcard holds %v", host, slices.Sorted(maps.Keys(rulesOn(t, w, previewWild))))
+	rule := rulesOn(t, w, previewWild)[host]
+	if rule == nil {
+		t.Fatalf("%s lost its rule while being retargeted; the wildcard has %v", host, slices.Sorted(maps.Keys(rulesOn(t, w, previewWild))))
 	}
-	if held.id != first.id || held.priority != first.priority {
-		t.Errorf("rule = %+v, want the one %s already had updated in place: a delete-then-create 404s the host in between", held, host)
+	if rule.id != first.id || rule.priority != first.priority {
+		t.Errorf("rule = %+v, want the one %s already had updated in place: a delete-then-create 404s the host in between", rule, host)
 	}
-	if held.api != "api-two" {
-		t.Errorf("rule serves %s, want api-two", held.api)
+	if rule.api != "api-two" {
+		t.Errorf("rule serves %s, want api-two", rule.api)
 	}
 }
 
@@ -78,12 +78,12 @@ func TestPutHostRuleReprobesWhenAnotherDeployTakesThePriority(t *testing.T) {
 		t.Fatalf("putHostRule: %v", err)
 	}
 
-	held := rulesOn(t, w, previewWild)[host]
-	if held == nil {
+	rule := rulesOn(t, w, previewWild)[host]
+	if rule == nil {
 		t.Fatal("the deploy that lost the priority race left the host unrouted")
 	}
-	if held.priority == stolen {
-		t.Errorf("priority = %d, want another one: a rival deploy took %d between the list and the create", held.priority, stolen)
+	if rule.priority == stolen {
+		t.Errorf("priority = %d, want another one: a rival deploy took %d between the list and the create", rule.priority, stolen)
 	}
 	if got := w.gateway.count("CreateRoutingRule"); got != 2 {
 		t.Errorf("CreateRoutingRule calls = %d, want the conflict re-probed once", got)
@@ -193,7 +193,7 @@ func TestDomainOwnerNamesWhoAnswersARoutingRuleDomain(t *testing.T) {
 			t.Fatalf("DomainOwner: %v", err)
 		}
 		if owner != edge.PreviewEntryOwner {
-			t.Errorf("DomainOwner(%q) = %q, want %q: a routing-rule domain carries no base path mapping, and a deploy refuses to publish a preview onto a wildcard nothing owns", previewWild, owner, edge.PreviewEntryOwner)
+			t.Errorf("DomainOwner(%q) = %q, want %q: a routing-rule domain has no base path mapping, and a deploy refuses to publish a preview onto a wildcard nothing owns", previewWild, owner, edge.PreviewEntryOwner)
 		}
 	})
 

@@ -282,7 +282,7 @@ func TestResolveLiveValues(t *testing.T) {
 			t.Errorf("FromManifest names %q to the child, want %q", fromBytes.Env(), fromFile.Env())
 		}
 		if !slices.Equal(fromBytes.Bindings(), fromFile.Bindings()) {
-			t.Errorf("FromManifest carries %+v, want %+v", fromBytes.Bindings(), fromFile.Bindings())
+			t.Errorf("FromManifest binds %+v, want %+v", fromBytes.Bindings(), fromFile.Bindings())
 		}
 	})
 }
@@ -298,11 +298,11 @@ func TestMerged(t *testing.T) {
 	t.Run("a binding is never shadowed by a secret that shares its name", func(t *testing.T) {
 		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, bindings, records)
 		if handed := decodeBinding(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
-			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the binding; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
+			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the binding; a secret the user named the same way must not substitute for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
 		}
 	})
 
-	t.Run("carries both when they name different keys", func(t *testing.T) {
+	t.Run("keeps both when they name different keys", func(t *testing.T) {
 		got := merged(map[string]string{"STRIPE_API_KEY": "sk_live"}, bindings, records)
 		if got["STRIPE_API_KEY"] != "sk_live" || len(got) != 2 {
 			t.Errorf("merged = %v, want the secret beside the binding and nothing else", got)
@@ -334,7 +334,7 @@ func TestEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("never carries a live plaintext", func(t *testing.T) {
+	t.Run("never exports a live plaintext", func(t *testing.T) {
 		const dbPassword = "pg-plaintext-must-not-be-exported"
 		const sessionSecret = "session-plaintext-must-not-be-exported"
 		secrets := []string{dbPassword, sessionSecret}
@@ -391,7 +391,7 @@ func TestGrantLag(t *testing.T) {
 		}
 		for _, want := range []string{"main", "2 more time", "version 3", "version 5"} {
 			if !strings.Contains(got[0].Message, want) {
-				t.Errorf("report = %q, want it to carry %q", got[0].Message, want)
+				t.Errorf("report = %q, want it to contain %q", got[0].Message, want)
 			}
 		}
 	})
@@ -415,7 +415,7 @@ func TestGrantLag(t *testing.T) {
 			t.Fatalf("first refresh reported %v, want the lag once", got)
 		}
 		if got := source.unreportedGrantLag(published(5)); len(got) != 0 {
-			t.Errorf("second refresh reported %v, want a standing lag reported once, not on every refresh", got)
+			t.Errorf("second refresh reported %v, want a persistent lag reported once, not on every refresh", got)
 		}
 		if got := source.unreportedGrantLag(published(6)); len(got) != 1 {
 			t.Errorf("a further publish reported %v, want the widened lag named again", got)

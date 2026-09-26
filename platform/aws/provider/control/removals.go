@@ -20,7 +20,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	shared, err := bootstrap.PassphraseHeldBySibling(ctx, b.CFN, b.Namespace, string(class))
+	shared, err := bootstrap.SiblingSharesPassphrase(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -34,7 +34,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	}
 
 	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, stacks)}
-	fronts, err := b.standingEdges(ctx, class, read.Deployed)
+	fronts, err := b.installedEdges(ctx, class, read.Deployed)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -50,21 +50,21 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	return plan, nil
 }
 
-func (b Bootstrap) standingEdges(ctx context.Context, class edge.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
-	held := bootstrap.EdgeKindsFor(deployed.Features.Names())
+func (b Bootstrap) installedEdges(ctx context.Context, class edge.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
+	featureKinds := bootstrap.EdgeKindsFor(deployed.Features.Names())
 	fronts := []edge.Edge{b.Edge}
 	for _, kind := range b.Kinds {
 		if kind == b.Edge.Kind() {
 			continue
 		}
-		standing := slices.Contains(held, kind)
-		if !standing {
+		installed := slices.Contains(featureKinds, kind)
+		if !installed {
 			var err error
-			if standing, err = bootstrap.EdgeStanding(ctx, b.SSM, b.Namespace, string(class), kind); err != nil {
+			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, string(class), kind); err != nil {
 				return nil, err
 			}
 		}
-		if !standing {
+		if !installed {
 			continue
 		}
 		front, err := b.Edges.Open(kind)

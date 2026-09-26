@@ -86,7 +86,7 @@ func TestBindingFixtureExistsPerBindingType(t *testing.T) {
 	for _, typ := range naming.BindingTypes() {
 		want = append(want, fixtureFile(typ))
 		if got := naming.BindingTypeOf(bindingFixture(t, typ)); got != typ {
-			t.Errorf("fixture %s carries a %s, want %s", fixtureFile(typ), got, typ)
+			t.Errorf("fixture %s declares a %s, want %s", fixtureFile(typ), got, typ)
 		}
 	}
 

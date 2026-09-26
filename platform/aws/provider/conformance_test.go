@@ -27,7 +27,7 @@ func TestAWSProvider(t *testing.T) {
 	})
 }
 
-func TestTheProviderCarriesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
+func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	t.Parallel()
 
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
@@ -37,7 +37,7 @@ func TestTheProviderCarriesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	}
 	for _, want := range []provider.BindingType{provider.BindingPostgres, provider.BindingBucket} {
 		if !slices.Contains(p.Facts().Bindings, want) {
-			t.Errorf("Facts().Bindings = %v, want it to carry %s", p.Facts().Bindings, want)
+			t.Errorf("Facts().Bindings = %v, want it to include %s", p.Facts().Bindings, want)
 		}
 	}
 

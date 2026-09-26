@@ -263,7 +263,7 @@ test("reads the whole tag clock from one object under the build's prefix", async
   });
 });
 
-test("conditions a later read on the version it already holds", async () => {
+test("conditions a later read on the version it already has", async () => {
   const { store, sends } = await storeWithObjects([notModified()]);
 
   const read = await store.readTagSnapshot('"v1"');

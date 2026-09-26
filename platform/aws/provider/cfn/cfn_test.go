@@ -58,43 +58,43 @@ func (f *failedStack) DescribeStacks(_ context.Context, in *cloudformation.Descr
 
 func (f *failedStack) DescribeStackEvents(_ context.Context, in *cloudformation.DescribeStackEventsInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStackEventsOutput, error) {
 	f.pages++
-	if held, nested := f.nested[aws.ToString(in.StackName)]; nested {
-		return &cloudformation.DescribeStackEventsOutput{StackEvents: held}, nil
+	if events, nested := f.nested[aws.ToString(in.StackName)]; nested {
+		return &cloudformation.DescribeStackEventsOutput{StackEvents: events}, nil
 	}
 	return &cloudformation.DescribeStackEventsOutput{StackEvents: f.events}, nil
 }
 
 func event(logical, kind string, status cfntypes.ResourceStatus, reason string) cfntypes.StackEvent {
-	held := cfntypes.StackEvent{
+	built := cfntypes.StackEvent{
 		LogicalResourceId: aws.String(logical),
 		ResourceType:      aws.String(kind),
 		ResourceStatus:    status,
 	}
 	if reason != "" {
-		held.ResourceStatusReason = aws.String(reason)
+		built.ResourceStatusReason = aws.String(reason)
 	}
-	return held
+	return built
 }
 
 const stackType = "AWS::CloudFormation::Stack"
 
 func stackEvent(stackID, logical string, status cfntypes.ResourceStatus, reason string) cfntypes.StackEvent {
-	held := event(logical, stackType, status, reason)
-	held.StackId = aws.String(stackID)
-	held.PhysicalResourceId = aws.String(stackID)
-	return held
+	built := event(logical, stackType, status, reason)
+	built.StackId = aws.String(stackID)
+	built.PhysicalResourceId = aws.String(stackID)
+	return built
 }
 
 func embeddedEvent(parentID, childID, logical string, status cfntypes.ResourceStatus, reason string) cfntypes.StackEvent {
-	held := event(logical, stackType, status, reason)
-	held.StackId = aws.String(parentID)
-	held.PhysicalResourceId = aws.String(childID)
-	return held
+	built := event(logical, stackType, status, reason)
+	built.StackId = aws.String(parentID)
+	built.PhysicalResourceId = aws.String(childID)
+	return built
 }
 
 const thisStack = "arn:aws:cloudformation:eu-west-1:111122223333:stack/ocel-bootstrap/now"
 
-func TestCreateCarriesTheReasonCloudFormationGaveThroughTheRollbackThatFollowedIt(t *testing.T) {
+func TestCreateReportsTheReasonCloudFormationGaveThroughTheRollbackThatFollowedIt(t *testing.T) {
 	const reason = "Resource handler returned message: \"Limit exceeded for resource of type 'AWS::CloudFront::CachePolicy'. Reason: Account's Cache Policies limit reached.\""
 	api := &failedStack{
 		status: cfntypes.StackStatusRollbackComplete,
@@ -127,7 +127,7 @@ func TestCreateCarriesTheReasonCloudFormationGaveThroughTheRollbackThatFollowedI
 	}
 }
 
-func TestUpdateCarriesTheReasonThisRunFailedOnRatherThanAnOlderOne(t *testing.T) {
+func TestUpdateReportsTheReasonThisRunFailedOnRatherThanAnOlderOne(t *testing.T) {
 	const ancient = "Resource handler returned message: Account's Cache Policies limit reached."
 	const now = "Resource handler returned message: the VPC origin is not available."
 	api := &failedStack{
@@ -156,11 +156,11 @@ func TestUpdateCarriesTheReasonThisRunFailedOnRatherThanAnOlderOne(t *testing.T)
 		t.Errorf("Update = %v, want the reason this run failed on", err)
 	}
 	if strings.Contains(err.Error(), ancient) {
-		t.Errorf("Update = %v, want this run's failure rather than one the stack carried from an earlier operation", err)
+		t.Errorf("Update = %v, want this run's failure rather than one the stack recorded from an earlier operation", err)
 	}
 }
 
-func TestRestampCarriesTheReasonCloudFormationGave(t *testing.T) {
+func TestRestampReportsTheReasonCloudFormationGave(t *testing.T) {
 	const reason = "Resource handler returned message: the distribution is being deployed."
 	api := &failedStack{
 		status: cfntypes.StackStatusUpdateRollbackComplete,
@@ -194,7 +194,7 @@ func TestCreateKeepsAReasonThatMerelySaysCancelled(t *testing.T) {
 
 	err := Create(context.Background(), api, "ocel-bootstrap", "{}", nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), reason) {
-		t.Errorf("Create = %v, want the reason CloudFormation gave rather than nothing because it holds the word cancelled", err)
+		t.Errorf("Create = %v, want the reason CloudFormation gave rather than nothing because it contains the word cancelled", err)
 	}
 }
 

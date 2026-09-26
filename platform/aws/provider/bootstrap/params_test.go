@@ -20,7 +20,7 @@ func cloudflareAdoption() edge.Adoption {
 
 func fronting() Request { return Request{Features: []string{FeatureCloudflareEdge}} }
 
-func standingParams(t *testing.T) (*fakeSSM, *fakeIAM) {
+func installedParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -75,14 +75,14 @@ func actions(group provider.ChangeGroup) map[string]provider.ChangeAction {
 	return by
 }
 
-func TestPlanParametersOnAFreshAccountCreatesEveryStandingParameter(t *testing.T) {
+func TestPlanParametersOnAFreshAccountCreatesEveryParameter(t *testing.T) {
 	group := plannedParams(t, newFakeSSM(), &fakeIAM{}, fronting())
 
 	if group.Kind != provider.ParameterGroupKind || group.Name != ParamGroupName || group.Feature != "" {
 		t.Errorf("group = %+v, want the unfeatured parameters group", group)
 	}
 	if group.Action != provider.ActionCreate {
-		t.Errorf("group action = %q, want create where nothing stands", group.Action)
+		t.Errorf("group action = %q, want create where nothing is provisioned", group.Action)
 	}
 	names := cloudflareNames(ClassProduction)
 	want := []string{
@@ -98,7 +98,7 @@ func TestPlanParametersOnAFreshAccountCreatesEveryStandingParameter(t *testing.T
 	}
 	got := actions(group)
 	if len(got) != len(want) {
-		t.Fatalf("plan rows = %+v, want one per standing resource: %v", group.Changes, want)
+		t.Fatalf("plan rows = %+v, want one per resource the bootstrap provisions: %v", group.Changes, want)
 	}
 	for _, name := range want {
 		if got[name] != provider.ActionCreate {
@@ -117,7 +117,7 @@ func TestPlanParametersOnAFreshAccountCreatesEveryStandingParameter(t *testing.T
 }
 
 func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
-	ssmc, iamc := standingParams(t)
+	ssmc, iamc := installedParams(t)
 	writes := ssmc.puts
 
 	group := plannedParams(t, ssmc, iamc, fronting())
@@ -136,7 +136,7 @@ func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
 }
 
 func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
-	ssmc, iamc := standingParams(t)
+	ssmc, iamc := installedParams(t)
 	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare, map[string]string{"cacheBucket": "stale"}); err != nil {
 		t.Fatalf("writeEdgeValues: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testin
 }
 
 func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
-	ssmc, iamc := standingParams(t)
+	ssmc, iamc := installedParams(t)
 
 	group := plannedParams(t, ssmc, iamc, Request{Remove: []string{FeatureCloudflareEdge}})
 
@@ -201,7 +201,7 @@ func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
 }
 
 func TestPlanParametersRotatesAKeyPastItsAge(t *testing.T) {
-	ssmc, iamc := standingParams(t)
+	ssmc, iamc := installedParams(t)
 	payload, _ := json.Marshal(EdgeCredentials{AccessKeyID: "AKIAEDGE", SecretAccessKey: "s", CreatedAt: time.Now().Add(-EdgeKeyMaxAge - time.Hour)})
 	ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = string(payload)
 
@@ -218,8 +218,8 @@ func TestPlanParametersRotatesAKeyPastItsAge(t *testing.T) {
 	}
 }
 
-func TestPlanParametersRemintsTheKeyTheAccountNoLongerHolds(t *testing.T) {
-	ssmc, iamc := standingParams(t)
+func TestPlanParametersRemintsTheKeyTheAccountNoLongerHas(t *testing.T) {
+	ssmc, iamc := installedParams(t)
 	iamc.keys = nil
 
 	group := plannedParams(t, ssmc, iamc, fronting())
@@ -240,9 +240,9 @@ func TestPlanParametersRemintsTheKeyTheAccountNoLongerHolds(t *testing.T) {
 }
 
 func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
-	standing := featureRegistry
-	t.Cleanup(func() { featureRegistry = standing })
-	featureRegistry = append(slices.Clone(standing), feature{
+	registered := featureRegistry
+	t.Cleanup(func() { featureRegistry = registered })
+	featureRegistry = append(slices.Clone(registered), feature{
 		name: "test-edge",
 		afterPlan: func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error) {
 			return []provider.Change{{Kind: kindParameter, Name: "/ocel/test/written", Action: provider.ActionCreate}}, nil
@@ -252,7 +252,7 @@ func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
 		},
 	})
 
-	ssmc, iamc := standingParams(t)
+	ssmc, iamc := installedParams(t)
 
 	planned := actions(plannedParams(t, ssmc, iamc, Request{Features: []string{"test-edge"}}))
 	if planned["/ocel/test/written"] != provider.ActionCreate {
@@ -272,7 +272,7 @@ func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
 }
 
 func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
-	ssmc, iamc := standingParams(t)
+	ssmc, iamc := installedParams(t)
 	ssmc.batches = 0
 
 	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, ClassProduction, false)
@@ -280,7 +280,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 		t.Fatalf("PlanParameterRemoval: %v", err)
 	}
 	if len(group.Changes) == 0 {
-		t.Fatal("the removal plan names nothing, and this account holds parameters")
+		t.Fatal("the removal plan names nothing, and this account stores parameters")
 	}
 
 	names, err := ClassParamNames(defaultNamespace, ClassProduction)

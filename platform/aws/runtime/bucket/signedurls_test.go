@@ -121,7 +121,7 @@ func TestSign(t *testing.T) {
 			t.Fatalf("method = %q, want POST", target.GetMethod())
 		}
 		if target.GetFields()["policy"] == "" || target.GetFields()["key"] != "avatars/a.png" {
-			t.Fatalf("fields = %v, want the policy and key a form post carries", target.GetFields())
+			t.Fatalf("fields = %v, want the policy and key a form post includes", target.GetFields())
 		}
 	})
 }

@@ -34,9 +34,9 @@ type stack struct {
 var _ edge.EdgeStack = (*stack)(nil)
 
 func (s *stack) State() edge.StackState {
-	held := s.state
-	held.Private = edge.Own(s.own)
-	return held
+	state := s.state
+	state.Private = edge.Own(s.own)
+	return state
 }
 
 func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
@@ -141,7 +141,7 @@ func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiPlan,
 		return plan, id, nil
 	}
 	if plan.role == "" || plan.region == "" {
-		return apiPlan{}, "", fmt.Errorf("the stack serving %s carries no invoke role or region; reconcile it before promoting into it", s.slug())
+		return apiPlan{}, "", fmt.Errorf("the stack serving %s records no invoke role or region; reconcile it before promoting into it", s.slug())
 	}
 	id, err = createAPI(ctx, c, plan)
 	if err != nil {
@@ -261,7 +261,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 		return nil, err
 	}
 	if !found {
-		return nil, fmt.Errorf("promote %s: the deployments ledger holds no record for %s/%s, so nothing names the function the %s stage would serve; re-run the deploy that built it", promotion.PromotionID, app, identity, stageName)
+		return nil, fmt.Errorf("promote %s: the deployments ledger has no record for %s/%s, so nothing names the function the %s stage would serve; re-run the deploy that built it", promotion.PromotionID, app, identity, stageName)
 	}
 	if record.Origin != "" {
 		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": \"cloudfront\"`", promotion.PromotionID, app, identity, record.Origin, Kind)
@@ -375,11 +375,11 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 }
 
 func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding) (string, error) {
-	held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
+	current, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
 		DomainName: aws.String(binding.Hostname),
 	})
 	if err == nil {
-		return regionalFrontOf(binding.Hostname, aws.ToString(held.RegionalDomainName))
+		return regionalFrontOf(binding.Hostname, aws.ToString(current.RegionalDomainName))
 	}
 	if !isNotFound(err) {
 		return "", fmt.Errorf("read the API Gateway domain name for %s: %w", binding.Hostname, err)
@@ -405,12 +405,12 @@ func regionalFrontOf(hostname, regional string) (string, error) {
 	return regional, nil
 }
 
-func (s *stack) settleDomainFronts(ctx context.Context, c Clients, warn func(string)) error {
+func (s *stack) publishDomainFronts(ctx context.Context, c Clients, warn func(string)) error {
 	for _, hostname := range s.state.Bound {
 		if s.state.Fronts[hostname] != "" {
 			continue
 		}
-		held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
+		current, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
 			DomainName: aws.String(hostname),
 		})
 		if err != nil {
@@ -424,7 +424,7 @@ func (s *stack) settleDomainFronts(ctx context.Context, c Clients, warn func(str
 			}
 			return fmt.Errorf("read the API Gateway domain name for %s: %w", hostname, err)
 		}
-		front, err := regionalFrontOf(hostname, aws.ToString(held.RegionalDomainName))
+		front, err := regionalFrontOf(hostname, aws.ToString(current.RegionalDomainName))
 		if err != nil {
 			return err
 		}

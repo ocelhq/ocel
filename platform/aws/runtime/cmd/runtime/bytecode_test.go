@@ -125,7 +125,7 @@ func TestHandleInvocationBytecode(t *testing.T) {
 
 		time.Sleep(75 * time.Millisecond)
 		if early := cache.count(); early != 0 {
-			t.Fatalf("uploads before invocation-complete = %d, want the upload held until the invocation is done", early)
+			t.Fatalf("uploads before invocation-complete = %d, want the upload deferred until the invocation is done", early)
 		}
 
 		if _, err := jsSide.Write([]byte(`{"type":"invocation-complete","payload":{"requestId":"req-1"}}` + "\n")); err != nil {
@@ -193,7 +193,7 @@ func TestFlushCompileCache(t *testing.T) {
 		}
 	})
 
-	t.Run("carries a null dir as not OK", func(t *testing.T) {
+	t.Run("reads a null dir as not OK", func(t *testing.T) {
 		m, nodeReader, nodeConn := controlConnPair(t)
 		done := startFlush(m, context.Background())
 
@@ -294,7 +294,7 @@ func TestDrainControl(t *testing.T) {
 }
 
 func TestNodeChildEnv(t *testing.T) {
-	t.Run("carries the compile cache only when gated", func(t *testing.T) {
+	t.Run("passes the compile cache only when gated", func(t *testing.T) {
 		t.Run("gate open", func(t *testing.T) {
 			t.Setenv("OCEL_BYTECODE_PREFIX", "ocel")
 			want := bytecode.Env()
@@ -378,7 +378,7 @@ func TestBringUpNodeWithBytecode(t *testing.T) {
 		}
 	})
 
-	t.Run("an unconfigured deployment carries no cache", func(t *testing.T) {
+	t.Run("an unconfigured deployment gets no cache", func(t *testing.T) {
 		l := &stubValues{}
 
 		var gotBudget time.Duration

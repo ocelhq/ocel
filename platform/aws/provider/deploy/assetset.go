@@ -59,17 +59,17 @@ type pendingSet struct {
 }
 
 type pendingSets struct {
-	mu   sync.Mutex
-	held map[string]pendingSet
+	mu      sync.Mutex
+	pending map[string]pendingSet
 }
 
-func newPendingSets() *pendingSets { return &pendingSets{held: map[string]pendingSet{}} }
+func newPendingSets() *pendingSets { return &pendingSets{pending: map[string]pendingSet{}} }
 
-func (p *pendingSets) hold(stack string, sets []assetSet, progress edge.Progress) {
+func (p *pendingSets) add(stack string, sets []assetSet, progress edge.Progress) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, set := range sets {
-		p.held[pendingKey(stack, set.name)] = pendingSet{set: set, progress: progress}
+		p.pending[pendingKey(stack, set.name)] = pendingSet{set: set, progress: progress}
 	}
 }
 
@@ -77,18 +77,18 @@ func (p *pendingSets) drop(stack string, sets []assetSet) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, set := range sets {
-		delete(p.held, pendingKey(stack, set.name))
+		delete(p.pending, pendingKey(stack, set.name))
 	}
 }
 
 func (p *pendingSets) take(key string) (pendingSet, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	held, waiting := p.held[key]
+	pending, waiting := p.pending[key]
 	if waiting {
-		delete(p.held, key)
+		delete(p.pending, key)
 	}
-	return held, waiting
+	return pending, waiting
 }
 
 func pendingKey(stack, set string) string { return stack + "/" + set }
@@ -117,17 +117,17 @@ func (r *assetSetResource) Create(ctx context.Context, req infer.CreateRequest[a
 	if req.DryRun {
 		return infer.CreateResponse[assetSetOutputs]{ID: id, Output: assetSetOutputs{assetSetArgs: req.Inputs}}, nil
 	}
-	held, waiting := r.pending.take(id)
+	pending, waiting := r.pending.take(id)
 	if !waiting {
 		return infer.CreateResponse[assetSetOutputs]{}, fmt.Errorf(
-			"%s carries no %s to push, and this run would leave the plan's row unwritten", req.Inputs.Stack, req.Inputs.Set)
+			"%s has no %s waiting to push, and this run would leave the plan's row unwritten", req.Inputs.Stack, req.Inputs.Set)
 	}
-	if err := held.set.push(ctx, held.progress); err != nil {
+	if err := pending.set.push(ctx, pending.progress); err != nil {
 		return infer.CreateResponse[assetSetOutputs]{}, err
 	}
 	return infer.CreateResponse[assetSetOutputs]{
 		ID:     id,
-		Output: assetSetOutputs{assetSetArgs: req.Inputs, Pushed: held.set.files},
+		Output: assetSetOutputs{assetSetArgs: req.Inputs, Pushed: pending.set.files},
 	}, nil
 }
 

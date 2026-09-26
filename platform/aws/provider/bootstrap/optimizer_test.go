@@ -44,11 +44,11 @@ func (f *fakeObjectStore) putVerified(key string, body []byte) {
 	f.checksums[key] = base64.StdEncoding.EncodeToString(sum[:])
 }
 
-func (f *fakeObjectStore) holds(key string) bool {
+func (f *fakeObjectStore) has(key string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	_, held := f.objects[key]
-	return held
+	_, ok := f.objects[key]
+	return ok
 }
 
 func (f *fakeObjectStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
@@ -94,24 +94,24 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 }
 
 func bootstrapPayloads() map[string]payloads.Payload {
-	held := map[string]payloads.Payload{
+	byPrefix := map[string]payloads.Payload{
 		optimizerKeyPrefix:      payloads.ImageOptimizer(),
 		tagPublisherKeyPrefix:   payloads.TagPublisher(),
 		tagInvalidatorKeyPrefix: payloads.TagInvalidator(),
 		revalidatorKeyPrefix:    payloads.Revalidator(),
 	}
-	carried := map[string]payloads.Payload{}
-	for prefix, p := range held {
-		carried[payloads.Key(prefix, p.SHA256)] = p
+	byKey := map[string]payloads.Payload{}
+	for prefix, p := range byPrefix {
+		byKey[payloads.Key(prefix, p.SHA256)] = p
 	}
 	for _, arch := range runtimeArches() {
 		p, err := payloads.RuntimeLayer(arch)
 		if err != nil {
 			panic(err)
 		}
-		carried[payloads.Key(runtimeLayerKeyPrefix, p.SHA256)] = p
+		byKey[payloads.Key(runtimeLayerKeyPrefix, p.SHA256)] = p
 	}
-	return carried
+	return byKey
 }
 
 func preloadedStore() *fakeObjectStore {
@@ -249,7 +249,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 			t.Errorf("ImageOptimizerRole is a %s", role.Type)
 		}
 		if len(role.Properties.Policies) != 1 {
-			t.Fatalf("role carries %d inline policies, want exactly 1", len(role.Properties.Policies))
+			t.Fatalf("role has %d inline policies, want exactly 1", len(role.Properties.Policies))
 		}
 		statements := role.Properties.Policies[0].PolicyDocument.Statement
 		if len(statements) != 1 {
@@ -327,7 +327,7 @@ func TestEdgeUserOptimizer(t *testing.T) {
 	t.Run("no optimizer alongside is no invoke grant", func(t *testing.T) {
 		template := featureTemplateWith(FeatureCloudflareEdge, ClassProduction, FeatureSet{FeatureISR: true, FeatureCloudflareEdge: true})
 		if strings.Contains(template, paramImageOptimizerARN) {
-			t.Errorf("the edge reader is granted an optimizer this bootstrap does not carry:\n%s", template)
+			t.Errorf("the edge reader is granted an optimizer this bootstrap does not include:\n%s", template)
 		}
 	})
 }
@@ -342,18 +342,18 @@ func TestRunOptimizer(t *testing.T) {
 			t.Fatalf("run: %v", err)
 		}
 		if want := 2 + len(featureNames()); stacks.creates != want || stacks.updates != 0 {
-			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", stacks.creates, stacks.updates, len(featureNames()))
+			t.Errorf("installed the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", stacks.creates, stacks.updates, len(featureNames()))
 		}
 		final := stacks.template(optStack(ClassProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {
-			t.Errorf("the settled template carries no optimizer:\n%s", final)
+			t.Errorf("the final template has no optimizer:\n%s", final)
 		}
 		if !strings.Contains(final, payloads.Key(optimizerKeyPrefix, payloads.ImageOptimizer().SHA256)) {
-			t.Error("the settled template does not point at the uploaded payload")
+			t.Error("the final template does not point at the uploaded payload")
 		}
 	})
 
-	t.Run("an account already holding the payloads uploads nothing", func(t *testing.T) {
+	t.Run("an account that already stores the payloads uploads nothing", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := preloadedStore()
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
@@ -362,7 +362,7 @@ func TestRunOptimizer(t *testing.T) {
 			t.Fatalf("run: %v", err)
 		}
 		if store.puts != 0 {
-			t.Errorf("uploaded %d payloads into an account that already holds them", store.puts)
+			t.Errorf("uploaded %d payloads into an account that already stores them", store.puts)
 		}
 	})
 }

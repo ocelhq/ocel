@@ -40,7 +40,7 @@ func Render(m Manifest) ([]byte, error) {
 		}
 	}
 	if m.KeyARN == "" {
-		return nil, fmt.Errorf("the live-value manifest names %d keys but the %s bootstrap holds no key to read them through.\nRun `%s` to add one, then deploy again",
+		return nil, fmt.Errorf("the live-value manifest names %d keys but the %s bootstrap has no key to read them through.\nRun `%s` to add one, then deploy again",
 			len(m.Keys)+len(m.Bindings), m.Class, provider.BootstrapVarsKeyCommand(edge.Class(m.Class)))
 	}
 	return json.Marshal(m)

@@ -55,11 +55,11 @@ func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBu
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {
 		return nil, edgeDelivery{}, nil
 	}
-	bundle, held, err := readEdgeBundle(cfg, app)
+	bundle, present, err := readEdgeBundle(cfg, app)
 	if err != nil {
 		return nil, edgeDelivery{}, err
 	}
-	if !held {
+	if !present {
 		return nil, edgeDelivery{}, nil
 	}
 	delivery := edgeDelivery{BundleKey: appEdgeBundleKey(coord)}

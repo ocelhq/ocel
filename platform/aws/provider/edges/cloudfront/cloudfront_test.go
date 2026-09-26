@@ -135,10 +135,10 @@ func promotion() edge.Promotion {
 
 func routeOn(t *testing.T, w *world, stack edge.EdgeStack, hostname string) route {
 	t.Helper()
-	held := w.store.held(ownState(t, stack).KeyValueStore)
-	raw, ok := held[hostname]
+	entries := w.store.itemsOf(ownState(t, stack).KeyValueStore)
+	raw, ok := entries[hostname]
 	if !ok {
-		t.Fatalf("the key value store holds %v, want an entry for %q", slices.Sorted(keysOf(held)), hostname)
+		t.Fatalf("the key value store contains %v, want an entry for %q", slices.Sorted(keysOf(entries)), hostname)
 	}
 	var published route
 	if err := json.Unmarshal([]byte(raw), &published); err != nil {
@@ -147,9 +147,9 @@ func routeOn(t *testing.T, w *world, stack edge.EdgeStack, hostname string) rout
 	return published
 }
 
-func keysOf(held map[string]string) func(func(string) bool) {
+func keysOf(entries map[string]string) func(func(string) bool) {
 	return func(yield func(string) bool) {
-		for key := range held {
+		for key := range entries {
 			if !yield(key) {
 				return
 			}
@@ -188,7 +188,7 @@ func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
 	t.Parallel()
 
 	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureCloudFrontEdge {
-		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else stands the resolver, routes store and policies this edge reads", Kind, got, bootstrap.FeatureCloudFrontEdge)
+		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else provisions the resolver, routes store and policies this edge reads", Kind, got, bootstrap.FeatureCloudFrontEdge)
 	}
 }
 
@@ -256,18 +256,18 @@ func TestReconcile(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 
-		held := w.front.named(productionDistributionName())
-		if held == nil {
-			t.Fatalf("no distribution for the stack; CloudFront holds %v", w.front.mutations())
+		distribution := w.front.named(productionDistributionName())
+		if distribution == nil {
+			t.Fatalf("no distribution for the stack; CloudFront received %v", w.front.mutations())
 		}
-		if got := ownState(t, stack).Distribution; got != held.id {
-			t.Errorf("state records distribution %q, want the one reconcile created (%q)", got, held.id)
+		if got := ownState(t, stack).Distribution; got != distribution.id {
+			t.Errorf("state records distribution %q, want the one reconcile created (%q)", got, distribution.id)
 		}
-		if got := stack.State().Front; got != held.domain {
-			t.Errorf("state records front %q, want the distribution's domain name (%q), which is what a CNAME points at", got, held.domain)
+		if got := stack.State().Front; got != distribution.domain {
+			t.Errorf("state records front %q, want the distribution's domain name (%q), which is what a CNAME points at", got, distribution.domain)
 		}
 
-		behavior := held.config.DefaultCacheBehavior
+		behavior := distribution.config.DefaultCacheBehavior
 		if aws.ToString(behavior.OriginRequestPolicyId) != allViewerExceptHostPolicyID {
 			t.Errorf("origin request policy = %q, want the managed AllViewerExceptHostHeader policy", aws.ToString(behavior.OriginRequestPolicyId))
 		}
@@ -284,10 +284,10 @@ func TestReconcile(t *testing.T) {
 		if aws.ToString(behavior.CachePolicyId) != ownState(t, stack).CachePolicy {
 			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), ownState(t, stack).CachePolicy)
 		}
-		if got := aws.ToString(held.config.CacheTagConfig.HeaderName); got != bootstrap.EdgeCacheTagHeader {
+		if got := aws.ToString(distribution.config.CacheTagConfig.HeaderName); got != bootstrap.EdgeCacheTagHeader {
 			t.Errorf("cache tag header = %q, want %q", got, bootstrap.EdgeCacheTagHeader)
 		}
-		origin := held.config.Origins.Items[0]
+		origin := distribution.config.Origins.Items[0]
 		if aws.ToString(origin.DomainName) != assetOriginDomain(fakeAssetBucket, fakeRegion) {
 			t.Errorf("origin = %q, want the account's asset bucket", aws.ToString(origin.DomainName))
 		}
@@ -385,7 +385,7 @@ func TestPromote(t *testing.T) {
 			t.Errorf("stack = %q, want the stack that owns the hostname (%q)", published.Stack, productionDistributionName())
 		}
 		if published.Secret != fakeSecret {
-			t.Errorf("the route carries a secret the entry function will not accept")
+			t.Errorf("the route includes a secret the entry function will not accept")
 		}
 	})
 
@@ -414,17 +414,17 @@ func TestPromote(t *testing.T) {
 			t.Errorf("assets = %q under %q, want none: a container serves its own static files, and a bucket in front would answer 403 for them", published.Assets, published.AssetPrefix)
 		}
 		if published.Secret != fakeSecret {
-			t.Errorf("the route carries no secret, so the origin cannot tell the edge from a stranger")
+			t.Errorf("the route includes no secret, so the origin cannot tell the edge from a stranger")
 		}
-		held := w.front.named(productionDistributionName())
-		if got := containerFrontOf(held.config); got != fakeFront {
+		distribution := w.front.named(productionDistributionName())
+		if got := containerFrontOf(distribution.config); got != fakeFront {
 			t.Errorf("the distribution declares %+v, want the class front as a VPC origin: the resolver can select it but never rewrite a request to it", got)
 		}
 		if w.front.count("UpdateDistribution") != 1 || w.front.count("GetDistribution") == 0 {
 			t.Errorf("CloudFront saw %v, want one update that declares the origin and a wait for it to roll out before the route goes live", w.front.calls)
 		}
 		steps := w.trail.taken()
-		if indexOf(t, steps, "UpdateDistribution "+held.id) > indexOf(t, steps, "kvs.UpdateKeys") {
+		if indexOf(t, steps, "UpdateDistribution "+distribution.id) > indexOf(t, steps, "kvs.UpdateKeys") {
 			t.Errorf("the route was written before the distribution declared the origin it selects (%v)", steps)
 		}
 
@@ -463,7 +463,7 @@ func TestPromote(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "container front") {
 			t.Fatalf("Promote error = %v, want a refusal naming the missing front", err)
 		}
-		if _, ok := w.store.held(ownState(t, stack).KeyValueStore)[boundHost]; ok {
+		if _, ok := w.store.itemsOf(ownState(t, stack).KeyValueStore)[boundHost]; ok {
 			t.Error("a route was written to a front the distribution cannot reach")
 		}
 	})
@@ -621,8 +621,8 @@ func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 		t.Fatalf("UnbindDomain: %v", err)
 	}
 
-	if held := w.store.held(ownState(t, stack).KeyValueStore); len(held) != 0 {
-		t.Errorf("the key value store holds %v, want nothing once the host is unbound", held)
+	if entries := w.store.itemsOf(ownState(t, stack).KeyValueStore); len(entries) != 0 {
+		t.Errorf("the key value store contains %v, want nothing once the host is unbound", entries)
 	}
 	distribution := w.front.named(productionDistributionName())
 	if len(distribution.config.Aliases.Items) != 0 {
@@ -682,7 +682,7 @@ func TestDestroyGivesUpOnADistributionStillRollingOut(t *testing.T) {
 	}
 	var stale *cftypes.PreconditionFailed
 	if !errors.As(destroyErr, &stale) {
-		t.Errorf("err = %v, want it to carry what CloudFront said", destroyErr)
+		t.Errorf("err = %v, want it to include what CloudFront said", destroyErr)
 	}
 	if !strings.Contains(destroyErr.Error(), "Re-run") {
 		t.Errorf("err = %q, want it to say that re-running picks up where this stopped", destroyErr)
@@ -703,13 +703,13 @@ func TestDestroyKeepsTheLedgerUntilTheDistributionIsActuallyGone(t *testing.T) {
 	}
 	var outstanding *edge.OutstandingError
 	if !errors.As(err, &outstanding) {
-		t.Fatalf("Destroy error = %v, want the distribution named as still standing", err)
+		t.Fatalf("Destroy error = %v, want the distribution named as still present", err)
 	}
 	if len(w.front.distributions) != 1 {
 		t.Fatalf("%d distributions left, want the one the rollout would not release", len(w.front.distributions))
 	}
 	if len(w.dynamo.items) == 0 {
-		t.Error("the deployments ledger was erased while the distribution it names is still standing; a re-run would never find it")
+		t.Error("the deployments ledger was erased while the distribution it names still exists; a re-run would never find it")
 	}
 
 	w.front.distributions[id].rollout = 0
@@ -730,12 +730,12 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	held := w.invalidationTargets(ledger.Scope(edge.ClassProduction, conformanceSlug))
-	if held == nil {
-		t.Fatalf("the ledger names no front for the tag invalidator to reach; it holds %v", slices.Sorted(maps.Keys(w.dynamo.items)))
+	targets := w.invalidationTargets(ledger.Scope(edge.ClassProduction, conformanceSlug))
+	if targets == nil {
+		t.Fatalf("the ledger names no front for the tag invalidator to reach; it contains %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}
-	if want := ownState(t, stack).Distribution; !slices.Equal(held, []string{want}) {
-		t.Errorf("invalidation targets = %v, want the distribution this reconcile fronts the project with (%q)", held, want)
+	if want := ownState(t, stack).Distribution; !slices.Equal(targets, []string{want}) {
+		t.Errorf("invalidation targets = %v, want the distribution this reconcile fronts the project with (%q)", targets, want)
 	}
 }
 

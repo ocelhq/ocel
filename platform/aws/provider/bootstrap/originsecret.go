@@ -28,12 +28,12 @@ type OriginSecret struct {
 	RotatedAt time.Time `json:"rotatedAt,omitzero"`
 }
 
-func (s OriginSecret) Held() bool { return s.Current != "" }
+func (s OriginSecret) Present() bool { return s.Current != "" }
 
 func (s OriginSecret) Rotating() bool { return s.Previous != "" }
 
 func (s OriginSecret) Stale(now time.Time) bool {
-	return s.Held() && !s.CreatedAt.IsZero() && now.Sub(s.CreatedAt) >= OriginSecretMaxAge
+	return s.Present() && !s.CreatedAt.IsZero() && now.Sub(s.CreatedAt) >= OriginSecretMaxAge
 }
 
 func (s OriginSecret) GraceOver(now time.Time) bool {
@@ -48,20 +48,20 @@ func (s OriginSecret) Presented(deployedAt int64) string {
 }
 
 func OriginSecretOf(raw string) (OriginSecret, error) {
-	var held OriginSecret
-	if err := json.Unmarshal([]byte(raw), &held); err != nil {
+	var secret OriginSecret
+	if err := json.Unmarshal([]byte(raw), &secret); err != nil {
 		return OriginSecret{}, fmt.Errorf("parse origin secret: %w", err)
 	}
-	if !held.Held() {
+	if !secret.Present() {
 		return OriginSecret{}, errors.New("parse origin secret: it names no current secret")
 	}
-	return held, nil
+	return secret, nil
 }
 
 func StaleOriginSecretNotice(s OriginSecret, now time.Time, class string) string {
 	switch {
 	case s.Rotating():
-		return fmt.Sprintf("the %s origin secret was rotated %d days ago; this deploy answers to the new one, and every other project in the class must be re-deployed by %s, when `ocel bootstrap` retires the old one and a release still holding it stops answering",
+		return fmt.Sprintf("the %s origin secret was rotated %d days ago; this deploy answers to the new one, and every other project in the class must be re-deployed by %s, when `ocel bootstrap` retires the old one and a release still expecting it stops answering",
 			class, int(now.Sub(s.RotatedAt).Hours()/24), s.RotatedAt.Add(OriginSecretGrace).UTC().Format(time.DateOnly))
 	case s.Stale(now):
 		return fmt.Sprintf("the %s origin secret every front presents to reach a release is %d days old; run `ocel bootstrap` to rotate it (secrets older than %d days are rotated there), then re-deploy each project so its releases accept the new one",
@@ -80,16 +80,16 @@ func planOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, class
 	if err != nil {
 		return provider.Change{}, err
 	}
-	held, found, err := readOriginSecret(ctx, ssmClient, name)
+	secret, found, err := readOriginSecret(ctx, ssmClient, name)
 	if err != nil {
 		return provider.Change{}, err
 	}
 	change := provider.Change{Kind: kindParameter, Name: name, Action: provider.ActionCreate}
 	switch {
 	case !found:
-	case held.GraceOver(now):
-		change.Action, change.Reason = provider.ActionUpdate, fmt.Sprintf(originSecretRetired, int(now.Sub(held.RotatedAt).Hours()/24))
-	case held.Stale(now) && !held.Rotating():
+	case secret.GraceOver(now):
+		change.Action, change.Reason = provider.ActionUpdate, fmt.Sprintf(originSecretRetired, int(now.Sub(secret.RotatedAt).Hours()/24))
+	case secret.Stale(now) && !secret.Rotating():
 		change.Action, change.Reason = provider.ActionUpdate, fmt.Sprintf(originSecretStale, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24))
 	default:
 		change.Action, change.Reason = provider.ActionKeep, paramCurrent
@@ -112,14 +112,14 @@ func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, cla
 		"Ocel: the shared secret every %s release demands of the front that reaches it, because those Function URLs answer without SigV4, and when it was minted. A rotation keeps the one it replaced here until every release has been re-deployed.",
 		class,
 	)
-	held, found, err := readOriginSecret(ctx, ssmClient, paramName)
+	secret, found, err := readOriginSecret(ctx, ssmClient, paramName)
 	if err != nil {
 		return originSecretOutcome{}, err
 	}
 	if !found {
 		minted, err := mintSecret()
 		if err != nil {
-			return originSecretOutcome{}, fmt.Errorf("generate the secret %s holds: %w", paramName, err)
+			return originSecretOutcome{}, fmt.Errorf("generate the secret for %s: %w", paramName, err)
 		}
 		created, err := createOriginSecret(ctx, ssmClient, paramName, description, OriginSecret{Current: minted, CreatedAt: stamp(now)})
 		if err != nil {
@@ -129,28 +129,28 @@ func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, cla
 	}
 
 	var outcome originSecretOutcome
-	if held.GraceOver(now) {
-		held.Previous, held.RotatedAt = "", time.Time{}
+	if secret.GraceOver(now) {
+		secret.Previous, secret.RotatedAt = "", time.Time{}
 		outcome.retired = true
 	}
-	if held.Stale(now) {
-		if held.Rotating() {
+	if secret.Stale(now) {
+		if secret.Rotating() {
 			return originSecretOutcome{}, fmt.Errorf(
 				"the %s origin secret is %d days old and due for rotation, but the one it replaced on %s is still within its %d-day grace, so a second rotation would strand every release that has not been re-deployed since: "+
 					"re-deploy every project in the class, wait for %s, and re-run bootstrap",
-				class, int(now.Sub(held.CreatedAt).Hours()/24), held.RotatedAt.UTC().Format(time.DateOnly), int(OriginSecretGrace.Hours()/24), held.RotatedAt.Add(OriginSecretGrace).UTC().Format(time.DateOnly))
+				class, int(now.Sub(secret.CreatedAt).Hours()/24), secret.RotatedAt.UTC().Format(time.DateOnly), int(OriginSecretGrace.Hours()/24), secret.RotatedAt.Add(OriginSecretGrace).UTC().Format(time.DateOnly))
 		}
 		minted, err := mintSecret()
 		if err != nil {
-			return originSecretOutcome{}, fmt.Errorf("generate the secret %s holds: %w", paramName, err)
+			return originSecretOutcome{}, fmt.Errorf("generate the secret for %s: %w", paramName, err)
 		}
-		held = OriginSecret{Current: minted, CreatedAt: stamp(now), Previous: held.Current, RotatedAt: stamp(now)}
+		secret = OriginSecret{Current: minted, CreatedAt: stamp(now), Previous: secret.Current, RotatedAt: stamp(now)}
 		outcome.minted, outcome.rotated = true, true
 	}
 	if !outcome.retired && !outcome.rotated {
 		return outcome, nil
 	}
-	if err := writeOriginSecret(ctx, ssmClient, paramName, description, held, true); err != nil {
+	if err := writeOriginSecret(ctx, ssmClient, paramName, description, secret, true); err != nil {
 		return originSecretOutcome{}, err
 	}
 	return outcome, nil
@@ -178,15 +178,15 @@ func readOriginSecret(ctx context.Context, ssmClient SSMAPI, paramName string) (
 		}
 		return OriginSecret{}, false, fmt.Errorf("read %s: %w", paramName, err)
 	}
-	held, err := OriginSecretOf(aws.ToString(out.Parameter.Value))
+	secret, err := OriginSecretOf(aws.ToString(out.Parameter.Value))
 	if err != nil {
-		return OriginSecret{}, true, fmt.Errorf("%s holds something other than the origin secret bootstrap writes: %w. Delete the parameter and re-run bootstrap to mint a fresh one, then re-deploy every project in the class", paramName, err)
+		return OriginSecret{}, true, fmt.Errorf("%s contains something other than the origin secret bootstrap writes: %w. Delete the parameter and re-run bootstrap to mint a fresh one, then re-deploy every project in the class", paramName, err)
 	}
-	return held, true, nil
+	return secret, true, nil
 }
 
-func createOriginSecret(ctx context.Context, ssmClient SSMAPI, paramName, description string, held OriginSecret) (bool, error) {
-	err := writeOriginSecret(ctx, ssmClient, paramName, description, held, false)
+func createOriginSecret(ctx context.Context, ssmClient SSMAPI, paramName, description string, secret OriginSecret) (bool, error) {
+	err := writeOriginSecret(ctx, ssmClient, paramName, description, secret, false)
 	if err == nil {
 		return true, nil
 	}
@@ -200,8 +200,8 @@ func createOriginSecret(ctx context.Context, ssmClient SSMAPI, paramName, descri
 	return false, nil
 }
 
-func writeOriginSecret(ctx context.Context, ssmClient SSMAPI, paramName, description string, held OriginSecret, overwrite bool) error {
-	payload, err := json.Marshal(held)
+func writeOriginSecret(ctx context.Context, ssmClient SSMAPI, paramName, description string, secret OriginSecret, overwrite bool) error {
+	payload, err := json.Marshal(secret)
 	if err != nil {
 		return fmt.Errorf("marshal origin secret: %w", err)
 	}
@@ -244,7 +244,7 @@ func ensureSecret(ctx context.Context, ssmClient SSMAPI, paramName, description 
 
 	minted, err := mintSecret()
 	if err != nil {
-		return "", fmt.Errorf("generate the secret %s holds: %w", paramName, err)
+		return "", fmt.Errorf("generate the secret for %s: %w", paramName, err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:        aws.String(paramName),

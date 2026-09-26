@@ -62,7 +62,7 @@ func crowdedWildcardError(domain, host, api string) error {
 }
 
 func routingRuleQuotaAdvice(domain string) string {
-	return fmt.Sprintf("Each live preview holds one routing rule on %s, plus the one catch-all that answers hostnames no preview claims, and API Gateway allows %d rules per domain name by default - the \"RoutingRules Per Domain Name\" quota. Remove previews you no longer serve with `ocel preview rm`, or open the Service Quotas console in this region, find Amazon API Gateway, and request an increase on that quota", domain, routingRuleQuota)
+	return fmt.Sprintf("Each live preview has one routing rule on %s, plus the one catch-all that answers hostnames no preview claims, and API Gateway allows %d rules per domain name by default - the \"RoutingRules Per Domain Name\" quota. Remove previews you no longer serve with `ocel preview rm`, or open the Service Quotas console in this region, find Amazon API Gateway, and request an increase on that quota", domain, routingRuleQuota)
 }
 
 func missingWildcardError(domain, host, api string) error {

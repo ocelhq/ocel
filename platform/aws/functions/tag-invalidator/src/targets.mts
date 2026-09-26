@@ -36,8 +36,8 @@ async function notedAt(
       },
     }),
   );
-  const held = out?.Item?.[targetsAttribute]?.SS;
-  return Array.isArray(held) ? held : [];
+  const distributions = out?.Item?.[targetsAttribute]?.SS;
+  return Array.isArray(distributions) ? distributions : [];
 }
 
 export async function targetsOf(

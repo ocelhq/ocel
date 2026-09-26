@@ -25,14 +25,14 @@ const (
 	kindAccessKey = "AWS::IAM::AccessKey"
 
 	paramCurrent    = "already current"
-	valuesDrifted   = "what the edge hands back differs from what stands"
+	valuesDrifted   = "what the edge hands back differs from what is stored"
 	keyGone         = "the access key it records is no longer on the user"
 	keyUnrecorded   = "it records no access key"
 	keyStale        = "the access key it records is older than 90 days and is rotated"
 	severedByRemove = "removing %s takes what the %s edge was reached through with it"
 
 	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account was encrypted under; no bootstrap is left to need it"
-	passphraseShared   = "the %s bootstrap still stands and its Pulumi state is encrypted under it"
+	passphraseShared   = "the %s bootstrap is still installed and its Pulumi state is encrypted under it"
 )
 
 type ParamAPIs struct {
@@ -107,12 +107,12 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, cla
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	held, err := paramsHeld(ctx, apis.SSM, append(slices.Clone(names), ns.PassphraseParamName()))
+	present, err := paramsPresent(ctx, apis.SSM, append(slices.Clone(names), ns.PassphraseParamName()))
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
 	for _, name := range names {
-		if held[name] {
+		if present[name] {
 			group.Changes = append(group.Changes, provider.Change{
 				Kind:   kindParameter,
 				Name:   name,
@@ -137,7 +137,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, cla
 		})
 	}
 
-	passphrase, err := plannedPassphraseRemoval(held[ns.PassphraseParamName()], ns, class, sharedPassphrase)
+	passphrase, err := plannedPassphraseRemoval(present[ns.PassphraseParamName()], ns, class, sharedPassphrase)
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
@@ -155,8 +155,8 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, cla
 	return group, nil
 }
 
-func plannedPassphraseRemoval(held bool, ns Namespace, class string, shared bool) (provider.Change, error) {
-	if !held {
+func plannedPassphraseRemoval(present bool, ns Namespace, class string, shared bool) (provider.Change, error) {
+	if !present {
 		return provider.Change{}, nil
 	}
 	if !shared {
@@ -229,30 +229,30 @@ func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, class 
 }
 
 func paramPresence(ctx context.Context, ssmClient SSMAPI, name string) (provider.Change, error) {
-	held, err := paramHeld(ctx, ssmClient, name)
+	present, err := paramPresent(ctx, ssmClient, name)
 	if err != nil {
 		return provider.Change{}, err
 	}
 	change := provider.Change{Kind: kindParameter, Name: name, Action: provider.ActionCreate}
-	if held {
+	if present {
 		change.Action, change.Reason = provider.ActionKeep, paramCurrent
 	}
 	return change, nil
 }
 
-func paramsHeld(ctx context.Context, api SSMBatchAPI, names []string) (map[string]bool, error) {
+func paramsPresent(ctx context.Context, api SSMBatchAPI, names []string) (map[string]bool, error) {
 	found, err := getParameters(ctx, api, names)
 	if err != nil {
 		return nil, err
 	}
-	held := make(map[string]bool, len(found))
+	present := make(map[string]bool, len(found))
 	for name := range found {
-		held[name] = true
+		present[name] = true
 	}
-	return held, nil
+	return present, nil
 }
 
-func paramHeld(ctx context.Context, ssmClient SSMAPI, name string) (bool, error) {
+func paramPresent(ctx context.Context, ssmClient SSMAPI, name string) (bool, error) {
 	if _, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(name),
 		WithDecryption: aws.Bool(true),
@@ -266,7 +266,7 @@ func paramHeld(ctx context.Context, ssmClient SSMAPI, name string) (bool, error)
 	return true, nil
 }
 
-func edgeKeyStanding(ctx context.Context, iamClient IAMKeyAPI, userName, recorded string) (bool, error) {
+func edgeKeyLive(ctx context.Context, iamClient IAMKeyAPI, userName, recorded string) (bool, error) {
 	if recorded == "" {
 		return false, nil
 	}

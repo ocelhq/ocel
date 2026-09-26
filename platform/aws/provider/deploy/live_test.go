@@ -169,7 +169,7 @@ func TestRenderAppBundle(t *testing.T) {
 			t.Errorf("Live = %q, want nothing", bundle.Live)
 		}
 		if _, ok := bundle.overlay()[vars.FilePath]; ok {
-			t.Error("an app with no live values still carries a live manifest file")
+			t.Error("an app with no live values still includes a live manifest file")
 		}
 	})
 

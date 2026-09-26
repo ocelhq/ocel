@@ -68,7 +68,7 @@ func (t Table) Table(context.Context, edge.Class) (string, error) { return strin
 
 func (t Table) ValuesTable(context.Context, edge.Class) (string, error) { return string(t), nil }
 
-func holdsValues(name records.Name) bool {
+func isValueRecord(name records.Name) bool {
 	return len(name) > 0 && (name[0] == records.RootValues || name[0] == records.RootValueRefs)
 }
 
@@ -81,7 +81,7 @@ func (r Records) table(ctx context.Context, name records.Name) (string, error) {
 	if r.Tables == nil {
 		return "", nil
 	}
-	if holdsValues(name) {
+	if isValueRecord(name) {
 		return r.Tables.ValuesTable(ctx, class)
 	}
 	return r.Tables.Table(ctx, class)

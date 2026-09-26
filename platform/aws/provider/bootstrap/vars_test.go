@@ -269,7 +269,7 @@ func TestVarsDescriptions(t *testing.T) {
 			}
 			for name, description := range described {
 				if description == "" {
-					t.Errorf("%s carries no description; an operator meets it in the console with no context", name)
+					t.Errorf("%s has no description; an operator meets it in the console with no context", name)
 					continue
 				}
 				if len(description) > maxDescriptionLen {
@@ -296,7 +296,7 @@ func TestVarsDescriptions(t *testing.T) {
 }
 
 func TestRunVars(t *testing.T) {
-	t.Run("the core stack holds the table and no key", func(t *testing.T) {
+	t.Run("the core stack contains the table and no key", func(t *testing.T) {
 		for _, tc := range varsBootstraps() {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseVarsTemplate(t, tc.template)
@@ -342,7 +342,7 @@ func TestRunVars(t *testing.T) {
 
 		stack := defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)
 		if slices.Contains(stacks.stacks(), stack) {
-			t.Errorf("%s stands after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
+			t.Errorf("%s exists after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}
 	})
 }

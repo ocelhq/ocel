@@ -35,14 +35,14 @@ func isrTemplate(in featureInputs) featureStack {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketName, "The core bootstrap's asset bucket, where the revalidator reads each build's origin descriptor and the fronts read their static assets.", in.refs.assetBucket},
 		{paramAssetBucketARN, "ARN of that bucket, so the revalidator's role can be scoped to the origin descriptors inside it and nothing else.", in.refs.assetBucketARN},
-		{paramStateTableName, "The core bootstrap's state table, holding the tag clock the invalidator turns into cache invalidations.", in.refs.stateTable},
+		{paramStateTableName, "The core bootstrap's state table, which stores the tag clock the invalidator turns into cache invalidations.", in.refs.stateTable},
 		{paramStateTableARN, "ARN of that table, so the invalidator's role can read the ledger items naming which distributions to reach.", in.refs.stateTableARN},
 		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the invalidator has.", in.refs.stateTableStreamARN},
 	})
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this bootstrap: the queue a front sends an admitted refresh to, the revalidator that renders it at the app's own origin, and the invalidator that clears the fronts holding the stale copy."
+Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration for every app in this bootstrap: the queue a front sends an admitted refresh to, the revalidator that renders it at the app's own origin, and the invalidator that clears the stale copy from the fronts that cached it."
 %sResources:
 %s%s%sOutputs:
 %s`,

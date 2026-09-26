@@ -61,7 +61,7 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 	cfg.CacheStoreObjects = store
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
-	stacks := standingUp(cfg, engine)
+	stacks := stacksWith(cfg, engine)
 	spec := siblingAppSpec(t, "web")
 
 	planned, err := stacks.Plan(ctx, spec, nil)
@@ -81,7 +81,7 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 		t.Fatalf("Provision() of the app whose plan showed the asset sets = %v", err)
 	}
 	if !slices.ContainsFunc(store.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
-		t.Errorf("the cache store holds %v, want the static asset the plan's row promised", store.puts)
+		t.Errorf("the cache store has %v, want the static asset the plan's row promised", store.puts)
 	}
 }
 
@@ -107,7 +107,7 @@ func (r *registrationOrder) at(token string) int {
 	return slices.Index(r.kinds, token)
 }
 
-func TestNoFunctionStandsUpBeforeTheAssetsItServes(t *testing.T) {
+func TestNoFunctionIsProvisionedBeforeTheAssetsItServes(t *testing.T) {
 	t.Parallel()
 
 	cfg := assetShippingConfig(t, "web")
@@ -116,7 +116,7 @@ func TestNoFunctionStandsUpBeforeTheAssetsItServes(t *testing.T) {
 
 	order := &registrationOrder{}
 	engine := &mockedEngine{outputs: siblingAppOutputs("web"), mocks: order}
-	if _, err := standingUp(cfg, engine).Provision(context.Background(), siblingAppSpec(t, "web"), nil); err != nil {
+	if _, err := stacksWith(cfg, engine).Provision(context.Background(), siblingAppSpec(t, "web"), nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 
@@ -125,7 +125,7 @@ func TestNoFunctionStandsUpBeforeTheAssetsItServes(t *testing.T) {
 		t.Fatalf("the run registered %v, want both an asset set and a function", order.kinds)
 	}
 	if sets > function {
-		t.Errorf("the function stood up before its asset set (%v), want the assets in place before anything serves them", order.kinds)
+		t.Errorf("the function was provisioned before its asset set (%v), want the assets in place before anything serves them", order.kinds)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestAnAssetSetIsOneRowWhateverTheFileCount(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
-	planned, err := standingUp(cfg, engine).Plan(context.Background(), siblingAppSpec(t, "web"), nil)
+	planned, err := stacksWith(cfg, engine).Plan(context.Background(), siblingAppSpec(t, "web"), nil)
 	if err != nil {
 		t.Fatalf("Plan() of an app shipping many files = %v", err)
 	}
@@ -174,11 +174,11 @@ func TestAStaticAssetSetIsPlannedOnceAndPushedOnce(t *testing.T) {
 		t.Errorf("the same build digests to %q then %q, want one digest so an unchanged set is not re-pushed", first.digest, second.digest)
 	}
 	if first.files == 0 {
-		t.Error("the set counts no files, and the plan's row would say nothing about what it carries")
+		t.Error("the set counts no files, and the plan's row would say nothing about what it contains")
 	}
 }
 
-func TestAnAssetSetTheRunNeverHeldIsRefused(t *testing.T) {
+func TestAnAssetSetTheRunNeverQueuedIsRefused(t *testing.T) {
 	t.Parallel()
 
 	pending := newPendingSets()
@@ -186,7 +186,7 @@ func TestAnAssetSetTheRunNeverHeldIsRefused(t *testing.T) {
 	if _, err := resource.Create(context.Background(), createRequest(assetSetArgs{
 		Stack: "prod.web.rel-1", Set: staticAssetSetName,
 	}, false)); err == nil {
-		t.Error("Create() of a set the run holds nothing for = nil, want a refusal: the plan's row would go unwritten")
+		t.Error("Create() of a set the run has nothing pending for = nil, want a refusal: the plan's row would go unwritten")
 	}
 }
 
@@ -195,7 +195,7 @@ func TestAPlannedAssetSetPushesNothing(t *testing.T) {
 
 	pending := newPendingSets()
 	pushed := 0
-	pending.hold("prod.web.rel-1", []assetSet{{
+	pending.add("prod.web.rel-1", []assetSet{{
 		name: staticAssetSetName,
 		push: func(context.Context, edge.Progress) error { pushed++; return nil },
 	}}, nil)

@@ -17,35 +17,35 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func substrateOutputs() auto.OutputMap {
-	held := fixtureSubstrate()
-	subnets, _ := json.Marshal(held.Subnets)
+func containerInfraOutputs() auto.OutputMap {
+	infra := fixtureContainerInfra()
+	subnets, _ := json.Marshal(infra.Subnets)
 	return auto.OutputMap{
-		outputKeyVPC:           auto.OutputValue{Value: held.VPC},
+		outputKeyVPC:           auto.OutputValue{Value: infra.VPC},
 		outputKeySubnets:       auto.OutputValue{Value: string(subnets)},
-		outputKeyListener:      auto.OutputValue{Value: held.Listener},
-		outputKeyOriginHost:    auto.OutputValue{Value: held.OriginHost},
-		outputKeyVPCOrigin:     auto.OutputValue{Value: held.VPCOrigin},
-		outputKeyTaskSecurity:  auto.OutputValue{Value: held.TaskSecurity},
-		outputKeyCluster:       auto.OutputValue{Value: held.Cluster},
-		outputKeyExecutionRole: auto.OutputValue{Value: held.ExecutionRole},
-		outputKeyLogGroup:      auto.OutputValue{Value: held.LogGroup},
+		outputKeyListener:      auto.OutputValue{Value: infra.Listener},
+		outputKeyOriginHost:    auto.OutputValue{Value: infra.OriginHost},
+		outputKeyVPCOrigin:     auto.OutputValue{Value: infra.VPCOrigin},
+		outputKeyTaskSecurity:  auto.OutputValue{Value: infra.TaskSecurity},
+		outputKeyCluster:       auto.OutputValue{Value: infra.Cluster},
+		outputKeyExecutionRole: auto.OutputValue{Value: infra.ExecutionRole},
+		outputKeyLogGroup:      auto.OutputValue{Value: infra.LogGroup},
 	}
 }
 
-func TestTheSubstrateProgramStandsUpOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
+func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	work := &substrateWork{class: edge.ClassProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: substrateTags(edge.ClassProduction)}
+	work := &containerInfraWork{class: edge.ClassProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: containerInfraTags(edge.ClassProduction)}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
-		t.Fatalf("run the substrate program: %v", err)
+		t.Fatalf("run the container infrastructure program: %v", err)
 	}
 
 	listener := recordedOf(t, rec, "aws:lb/listener:Listener")
 	action := listener["defaultActions"].ArrayValue()[0].ObjectValue()
-	if action["type"].StringValue() != "fixed-response" || action["fixedResponse"].ObjectValue()["statusCode"].StringValue() != substrateDeniedStatus {
-		t.Errorf("default action = %v, want a fixed %s: a request that names no release reaches nothing", action, substrateDeniedStatus)
+	if action["type"].StringValue() != "fixed-response" || action["fixedResponse"].ObjectValue()["statusCode"].StringValue() != listenerDeniedStatus {
+		t.Errorf("default action = %v, want a fixed %s: a request that names no release reaches nothing", action, listenerDeniedStatus)
 	}
 	balancer := recordedOf(t, rec, "aws:lb/loadBalancer:LoadBalancer")
 	if balancer["name"].StringValue() != "ocel-containers-production" || !balancer["internal"].BoolValue() {
@@ -56,8 +56,8 @@ func TestTheSubstrateProgramStandsUpOneFrontOneClusterAndOneExecutionRole(t *tes
 	if endpoint["arn"].StringValue() == "" || endpoint["name"].StringValue() != "ocel-containers-production" {
 		t.Errorf("vpc origin = %v, want it to name the class front by its ARN: the edge reaches the front through it and nothing else", endpoint)
 	}
-	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != substrateListenerPort {
-		t.Errorf("vpc origin = %v, want CloudFront to reach the listener on %d over its private path", endpoint, substrateListenerPort)
+	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != originListenerPort {
+		t.Errorf("vpc origin = %v, want CloudFront to reach the listener on %d over its private path", endpoint, originListenerPort)
 	}
 	role := recordedOf(t, rec, "aws:iam/role:Role")
 	if !strings.Contains(role["assumeRolePolicy"].StringValue(), ecsTasksPrincipal) {
@@ -87,24 +87,24 @@ func TestTheSubstrateProgramStandsUpOneFrontOneClusterAndOneExecutionRole(t *tes
 	}
 }
 
-func TestDecodeSubstrateReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) {
+func TestDecodeContainerInfraReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) {
 	t.Parallel()
 
-	decoded, err := decodeSubstrate(substrateOutputs())
+	decoded, err := decodeContainerInfra(containerInfraOutputs())
 	if err != nil {
-		t.Fatalf("decodeSubstrate() = %v", err)
+		t.Fatalf("decodeContainerInfra() = %v", err)
 	}
 	if decoded.OriginHost != fixtureOrigin || decoded.VPCOrigin != fixtureFront || len(decoded.Subnets) != 2 || decoded.Listener != fixtureListener {
 		t.Errorf("decoded = %+v, want every output the program exported", decoded)
 	}
-	partial := substrateOutputs()
+	partial := containerInfraOutputs()
 	delete(partial, outputKeyListener)
-	if _, err := decodeSubstrate(partial); err == nil {
-		t.Error("decodeSubstrate accepted outputs with no listener, so a container would have no rule to hang off")
+	if _, err := decodeContainerInfra(partial); err == nil {
+		t.Error("decodeContainerInfra accepted outputs with no listener, so a container would have no rule to hang off")
 	}
 }
 
-func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *testing.T) {
+func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
@@ -112,13 +112,13 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
-	outputs := substrateOutputs()
+	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
 		outputKeyContainerURL:      "http://" + fixtureOrigin,
 		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}
 	engine := &mockedEngine{outputs: outputs}
-	stacks := standingUp(cfg, engine)
+	stacks := stacksWith(cfg, engine)
 	ctx := context.Background()
 
 	shop := spec
@@ -126,15 +126,15 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	ran := engine.stacks()
-	if len(ran) != 2 || ran[0] != substrateRef(edge.ClassProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
-		t.Fatalf("the first container deploy ran %v, want the substrate stack before the app stack", ran)
+	if len(ran) != 2 || ran[0] != containerInfraRef(edge.ClassProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
+		t.Fatalf("the first container deploy ran %v, want the container infrastructure stack before the app stack", ran)
 	}
 	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction)
 	if err != nil || !recorded {
 		t.Fatalf("the front is recorded %v (%v), want the edge able to read which VPC origin reaches the class's containers", recorded, err)
 	}
 	if front != (awsports.ContainerFront{VPCOrigin: fixtureFront, Host: fixtureOrigin}) {
-		t.Errorf("front = %+v, want the substrate's VPC origin and host", front)
+		t.Errorf("front = %+v, want the shared container infrastructure's VPC origin and host", front)
 	}
 
 	blog := spec
@@ -143,7 +143,7 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 		t.Fatalf("Provision(blog) = %v", err)
 	}
 	if ran := engine.stacks(); len(ran) != 3 {
-		t.Fatalf("the second container deploy ran %v, want the substrate reused rather than stood up again", ran)
+		t.Fatalf("the second container deploy ran %v, want the shared container infrastructure reused rather than provisioned again", ran)
 	}
 
 	if err := stacks.Destroy(ctx, shop.Ref, edge.DiscardProgress()); err != nil {
@@ -156,14 +156,14 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 		t.Fatalf("Destroy(blog) = %v", err)
 	}
 	destroyed := engine.torn()
-	if len(destroyed) != 3 || destroyed[2] != substrateRef(edge.ClassProduction).Name.String() {
-		t.Fatalf("destroying the last container stack tore down %v, want the substrate to go with it: nothing idle-billing survives the last container", destroyed)
+	if len(destroyed) != 3 || destroyed[2] != containerInfraRef(edge.ClassProduction).Name.String() {
+		t.Fatalf("destroying the last container stack tore down %v, want the shared container infrastructure to go with it: nothing idle-billing survives the last container", destroyed)
 	}
-	if _, present, err := stackrecords.Read(ctx, cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || present {
-		t.Errorf("the substrate is still recorded (present %v, err %v) after its last consumer left", present, err)
+	if _, present, err := stackrecords.Read(ctx, cfg.Records, edge.ClassProduction, ContainersSlug, containerInfraRef(edge.ClassProduction).Name); err != nil || present {
+		t.Errorf("the shared container infrastructure is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
 	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction); err != nil || recorded {
-		t.Errorf("the front is still recorded (%v, err %v) after the substrate went; a later promote would declare an origin that no longer exists", recorded, err)
+		t.Errorf("the front is still recorded (%v, err %v) after the shared container infrastructure went; a later promote would declare an origin that no longer exists", recorded, err)
 	}
 }
 
@@ -175,8 +175,8 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
-	engine := &mockedEngine{outputs: substrateOutputs()}
-	stacks := standingUp(cfg, engine)
+	engine := &mockedEngine{outputs: containerInfraOutputs()}
+	stacks := stacksWith(cfg, engine)
 	ctx := context.Background()
 
 	if _, err := stacks.Provision(ctx, spec, edge.DiscardProgress()); err == nil {
@@ -187,10 +187,10 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(remaining) != 0 {
-		t.Errorf("a failed deploy left %d consumer records, so the substrate could never be taken down", len(remaining))
+		t.Errorf("a failed deploy left %d consumer records, so the shared container infrastructure could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != substrateRef(edge.ClassProduction).Name.String() {
-		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the substrate it had just stood up: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
+	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != containerInfraRef(edge.ClassProduction).Name.String() {
+		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the container infrastructure stack it had just provisioned: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
 	}
 
 	spec.App.HealthCheckPath = "not a path"
@@ -198,6 +198,6 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 		t.Fatal("Provision accepted a health check path a load balancer cannot probe")
 	}
 	if ran := engine.stacks(); len(ran) != 2 {
-		t.Errorf("a refused deploy ran %v, want no second substrate stand-up: the app is checked before anything is stood up", ran)
+		t.Errorf("a refused deploy ran %v, want no second container infrastructure stack: the app is checked before anything is provisioned", ran)
 	}
 }

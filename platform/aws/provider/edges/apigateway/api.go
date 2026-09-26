@@ -196,22 +196,22 @@ func ensureMethod(ctx context.Context, c Clients, in *apigateway.PutMethodInput)
 	if !isNotFound(err) {
 		return err
 	}
-	var held *agtypes.ConflictException
-	if _, err := c.APIGateway.PutMethod(ctx, in); err != nil && !errors.As(err, &held) {
+	var conflict *agtypes.ConflictException
+	if _, err := c.APIGateway.PutMethod(ctx, in); err != nil && !errors.As(err, &conflict) {
 		return err
 	}
 	return nil
 }
 
 func ensureMethodResponse(ctx context.Context, c Clients, in *apigateway.PutMethodResponseInput) error {
-	held, err := c.APIGateway.GetMethodResponse(ctx, &apigateway.GetMethodResponseInput{
+	current, err := c.APIGateway.GetMethodResponse(ctx, &apigateway.GetMethodResponseInput{
 		RestApiId:  in.RestApiId,
 		ResourceId: in.ResourceId,
 		HttpMethod: in.HttpMethod,
 		StatusCode: in.StatusCode,
 	})
 	switch {
-	case err == nil && maps.Equal(held.ResponseParameters, in.ResponseParameters):
+	case err == nil && maps.Equal(current.ResponseParameters, in.ResponseParameters):
 		return nil
 	case err == nil:
 		if _, err := c.APIGateway.DeleteMethodResponse(ctx, &apigateway.DeleteMethodResponseInput{
@@ -233,14 +233,14 @@ func ensureMethodResponse(ctx context.Context, c Clients, in *apigateway.PutMeth
 }
 
 func ensureIntegrationResponse(ctx context.Context, c Clients, in *apigateway.PutIntegrationResponseInput) error {
-	held, err := c.APIGateway.GetIntegrationResponse(ctx, &apigateway.GetIntegrationResponseInput{
+	current, err := c.APIGateway.GetIntegrationResponse(ctx, &apigateway.GetIntegrationResponseInput{
 		RestApiId:  in.RestApiId,
 		ResourceId: in.ResourceId,
 		HttpMethod: in.HttpMethod,
 		StatusCode: in.StatusCode,
 	})
 	switch {
-	case err == nil && maps.Equal(held.ResponseParameters, in.ResponseParameters):
+	case err == nil && maps.Equal(current.ResponseParameters, in.ResponseParameters):
 		return nil
 	case err == nil:
 		if _, err := c.APIGateway.DeleteIntegrationResponse(ctx, &apigateway.DeleteIntegrationResponseInput{

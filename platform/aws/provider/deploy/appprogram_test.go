@@ -51,7 +51,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	return cfg, spec
 }
 
-func TestAnAppStackStandsUpFromTheSpecAlone(t *testing.T) {
+func TestAnAppStackIsProvisionedFromTheSpecAlone(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := appStackSpec(t)
@@ -73,16 +73,16 @@ func TestAnAppStackStandsUpFromTheSpecAlone(t *testing.T) {
 		t.Errorf("%s = %q, want the edge kind the deploy chose", edgeKindEnv, entry[edgeKindEnv])
 	}
 	if entry[routingManifestEnv] != routingManifestInTask {
-		t.Errorf("%s = %q, want the routing manifest the spec carried", routingManifestEnv, entry[routingManifestEnv])
+		t.Errorf("%s = %q, want the routing manifest the spec passed", routingManifestEnv, entry[routingManifestEnv])
 	}
 	if entry[deploymentIDEnv] != "d1" {
 		t.Errorf("%s = %q, want the deployment the spec named", deploymentIDEnv, entry[deploymentIDEnv])
 	}
 	if entry["OCEL_ISR_PREFIX"] != spec.App.ISR.Prefix {
-		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the spec carried", entry["OCEL_ISR_PREFIX"])
+		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the spec passed", entry["OCEL_ISR_PREFIX"])
 	}
 	if entry["OCEL_ISR_TAG_NAMESPACE"] != spec.App.ISR.TagNamespace {
-		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the spec carried", entry["OCEL_ISR_TAG_NAMESPACE"])
+		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the spec passed", entry["OCEL_ISR_TAG_NAMESPACE"])
 	}
 	var siblings map[string]string
 	if err := json.Unmarshal([]byte(entry[functionURLsEnv]), &siblings); err != nil {
@@ -110,7 +110,7 @@ func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) 
 	}
 }
 
-func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHold(t *testing.T) {
+func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHave(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := appStackSpec(t)
@@ -149,7 +149,7 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	release := releasing(t, cfg)
 
 	if _, err := release.appWork(spec, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Fatalf("appWork() = %v, want it to say the bootstrap holds no origin secret", err)
+		t.Fatalf("appWork() = %v, want it to say the bootstrap has no origin secret", err)
 	}
 
 	cfg.OriginSecret = "s3cret"
@@ -183,11 +183,11 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 		t.Fatalf("binding policies = %+v, want one for the binding the app was granted", work.role.BindingPolicies)
 	}
 	if !strings.Contains(work.role.BindingPolicies[0].Policy, "s3:GetObject") {
-		t.Errorf("policy = %q, want the actions the grant carried", work.role.BindingPolicies[0].Policy)
+		t.Errorf("policy = %q, want the actions the grant named", work.role.BindingPolicies[0].Policy)
 	}
 }
 
-func TestAnAppStackWhoseSpecCarriesNoAppIsRefusedRatherThanStoodUpEmpty(t *testing.T) {
+func TestAnAppStackWhoseSpecHasNoAppIsRefusedRatherThanProvisionedEmpty(t *testing.T) {
 	t.Parallel()
 
 	release := releasing(t, Config{})
@@ -197,12 +197,12 @@ func TestAnAppStackWhoseSpecCarriesNoAppIsRefusedRatherThanStoodUpEmpty(t *testi
 	}
 	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.Run(pctx, spec) },
 		pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{}))
-	if err == nil || !strings.Contains(err.Error(), "carries none") {
-		t.Fatalf("Run() = %v, want it refused: an app stack with no app stands nothing up", err)
+	if err == nil || !strings.Contains(err.Error(), "names none") {
+		t.Fatalf("Run() = %v, want it refused: an app stack with no app provisions nothing", err)
 	}
 }
 
-func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackStoodUp(t *testing.T) {
+func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := appStackSpec(t)
@@ -212,15 +212,15 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackStoodUp(t *testing.T) {
 	}
 	release.served.realized("fn--web--entry", "shop-prod-web-entry")
 
-	held, known := release.served.byPhysicalName("shop-prod-web-entry")
+	fn, known := release.served.byPhysicalName("shop-prod-web-entry")
 	if !known {
-		t.Fatal("the warmer cannot reach a function the spec stood up")
+		t.Fatal("the warmer cannot reach a function the spec declared")
 	}
-	if held.App != "web" || held.Logical != "fn--web--entry" {
-		t.Errorf("realized %+v, want the app and logical name the spec named", held)
+	if fn.App != "web" || fn.Logical != "fn--web--entry" {
+		t.Errorf("realized %+v, want the app and logical name the spec named", fn)
 	}
-	if held.Bytecode == nil || held.Bytecode.Prefix != spec.App.Bytecode.Prefix {
-		t.Errorf("bytecode = %+v, want the cache prefix the spec carried", held.Bytecode)
+	if fn.Bytecode == nil || fn.Bytecode.Prefix != spec.App.Bytecode.Prefix {
+		t.Errorf("bytecode = %+v, want the cache prefix the spec passed", fn.Bytecode)
 	}
 	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, nil); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
@@ -248,7 +248,7 @@ func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 
 	env := releasing(t, Config{}).appEnv(spec, appBundle{}, sessionScope{})
 
-	if got, held := env[constants.PhaseEnvName]; held {
+	if got, set := env[constants.PhaseEnvName]; set {
 		t.Errorf("%s = %q, want a release that provisions to name no phase at all", constants.PhaseEnvName, got)
 	}
 }

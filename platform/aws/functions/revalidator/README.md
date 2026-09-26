@@ -12,7 +12,7 @@ and evaluates only that declared expectation.
 
 ## The message names no host
 
-A record is a signed instruction to render, and it can carry whatever headers
+A record is a signed instruction to render, and it can include whatever headers
 the edge chose to have replayed, so where the trigger is sent is a security
 decision. The message does not make it. It names a route — `isrPrefix` (which deploy) and `routeId` (which of that
 deploy's functions serves it) — and the consumer looks the origin up in the
@@ -39,7 +39,7 @@ real boundary is this, and it is two things, not one:
   key, nothing empty, and no `fetch-cache` segment. Without that check a `#` or
   a `?` truncates the `/origin.json` the consumer appends, and the message names
   an arbitrary object — including one under the fetch-cache segment the edge
-  holds `s3:PutObject` on and writes fully-controlled JSON bodies to. And a
+  is granted `s3:PutObject` on and writes fully-controlled JSON bodies to. And a
   prefix ending `.../fetch-cache` needs no truncation at all: the appended
   `/origin.json` lands it in that same region, which is why the segment is
   rejected outright rather than merely well-formed. A fragment
@@ -67,7 +67,7 @@ redeploy must not keep triggering the origin the previous build recorded.
 `x-forwarded-host` stays in the message. The consumer resolves the *origin*,
 which is the Function URL; the app's *public* hostname is route knowledge only
 the edge has, and the rendered entry's absolute URLs depend on it. It names no
-destination, so it carries no part of the decision above.
+destination, so it plays no part in the decision above.
 
 ## Environment
 
@@ -75,9 +75,9 @@ destination, so it carries no part of the decision above.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `OCEL_ASSET_BUCKET` | yes | The bootstrap's asset bucket, holding each deploy's `<isrPrefix>/origin.json`. Same variable and same bucket the tag publisher reads. Unset ⇒ the consumer resolves nothing and triggers nothing. |
+| `OCEL_ASSET_BUCKET` | yes | The bootstrap's asset bucket, storing each deploy's `<isrPrefix>/origin.json`. Same variable and same bucket the tag publisher reads. Unset ⇒ the consumer resolves nothing and triggers nothing. |
 | `AWS_REGION` | Lambda | The bucket's region, used to address and sign the record read. |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | Lambda | The function role's credentials. The message carries none. |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` | Lambda | The function role's credentials. The message contains none. |
 
 The environment is read per invocation, so rotated role credentials are the ones
 the next batch signs with.
@@ -177,7 +177,7 @@ Per record, in the batch's order:
   are item failures, and none of them fetches the origin.
 - `HEAD` the resolved URL with the message's headers. The headers are signed
   along with `host`: nothing sits inside the TLS session to rewrite them, so
-  signing them is free and narrows what a captured signature could carry.
+  signing them is free and narrows what a captured signature could authorize.
 - `ok` with no declared expectation, or with the declared header matching, is a
   success. `ok` with the expectation missing or mismatched is **also a success**,
   logged as `RevalidateExpectMiss`: the route went dynamic since it was enqueued
@@ -190,7 +190,7 @@ Per record, in the batch's order:
   own group, keyed by its message id. Other groups run on. Nothing throws out of
   the handler — a thrown handler fails the whole batch.
 
-Logs carry the dedup ingredients (`isrPrefix`, `routePath`, `lastModified`,
-`enqueuedAt`) plus the message id and an outcome code. They never carry the
+Logs contain the dedup ingredients (`isrPrefix`, `routePath`, `lastModified`,
+`enqueuedAt`) plus the message id and an outcome code. They never contain the
 record, its headers, or an error's own text — the emitter has no field that
-could hold them.
+could take them.

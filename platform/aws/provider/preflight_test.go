@@ -54,18 +54,18 @@ func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
 	}
 }
 
-func TestTheArchitectureContainersAreBuiltForIsOneTheProviderCarriesARuntimeFor(t *testing.T) {
+func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t *testing.T) {
 	t.Parallel()
 
 	p := &Provider{}
 	for declared, want := range map[string]string{"": "amd64", arch.X8664: "amd64", arch.ARM64: "arm64"} {
 		runs, err := p.Runtime().Arch(context.Background(), "web", declared)
 		if err != nil || runs != want {
-			t.Fatalf("ContainerArch(%q) = %q, %v, want %s: the image is built for the architecture the app's task is stood up on", declared, runs, err, want)
+			t.Fatalf("ContainerArch(%q) = %q, %v, want %s: the image is built for the architecture the app's task runs on", declared, runs, err, want)
 		}
-		held, err := p.Runtime().Binary(context.Background(), runs)
-		if err != nil || len(held) == 0 {
-			t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through", runs, len(held), err)
+		binary, err := p.Runtime().Binary(context.Background(), runs)
+		if err != nil || len(binary) == 0 {
+			t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through", runs, len(binary), err)
 		}
 	}
 	if _, err := p.Runtime().Arch(context.Background(), "web", "riscv64"); err == nil {

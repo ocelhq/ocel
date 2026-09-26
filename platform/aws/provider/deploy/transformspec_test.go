@@ -25,8 +25,8 @@ type publishedReader struct {
 
 func (r *publishedReader) Names(context.Context) ([]string, error) {
 	names := make([]string, 0, len(r.bindings))
-	for _, held := range r.bindings {
-		names = append(names, held.Name)
+	for _, record := range r.bindings {
+		names = append(names, record.Name)
 	}
 	return names, nil
 }
@@ -42,9 +42,9 @@ func (r *publishedReader) Named(_ context.Context, binding string) (provider.Bin
 	if r.failure != nil {
 		return provider.Binding{}, r.failure
 	}
-	for _, held := range r.bindings {
-		if held.Name == binding {
-			return held, nil
+	for _, record := range r.bindings {
+		if record.Name == binding {
+			return record, nil
 		}
 	}
 	return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid, "nothing published %s", binding)
@@ -83,8 +83,8 @@ func (e patchingPass) Evaluate(_ context.Context, req transformkit.Request) ([]t
 		e.patch(patches)
 	}
 	results := make([]transformkit.Result, len(patches))
-	for i, held := range overTheWire(patches) {
-		results[i] = transformkit.Result{Patches: held}
+	for i, patch := range overTheWire(patches) {
+		results[i] = transformkit.Result{Patches: patch}
 	}
 	return results, nil
 }
@@ -114,7 +114,7 @@ func offered(t *testing.T, spec provider.StackSpec) (*fakePass, []string) {
 	return pass, seen
 }
 
-func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
+func TestAnAppStackOffersOnlyTheFunctionsItProvisions(t *testing.T) {
 	pass, seen := offered(t, specUnderTransform())
 
 	want := []string{"function:fn--api--users"}
@@ -158,7 +158,7 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 	}
 }
 
-func TestAnInfraStackOffersTheResourcesItStandsUpAndNotTheOnesItIsHandled(t *testing.T) {
+func TestAnInfraStackOffersTheResourcesItProvisionsAndNotTheOnesItIsHandled(t *testing.T) {
 	spec := specUnderTransform()
 	spec.App = nil
 	spec.Kind = provider.StackInfra
@@ -220,7 +220,7 @@ func TestATransformReadsABindingOutputThroughTheSpecsOwnBindings(t *testing.T) {
 	}
 	names := functionResourceNames("shop", spec.Ref.Name, "fn--api--users")
 	if got := transformed.patches[names["lambda"]]["runtime"]; got != "nodejs22.x" {
-		t.Errorf("the function runs %q, want the value the published binding carries", got)
+		t.Errorf("the function runs %q, want the value the published binding records", got)
 	}
 	if len(bindings.asked) != 1 || bindings.asked[0] != "legacy" {
 		t.Fatalf("the pass asked the spec's bindings for %v, want the one output the transform named", bindings.asked)
@@ -234,7 +234,7 @@ func TestATransformReadingABindingThisSpecProvisionsIsRefused(t *testing.T) {
 	_, err := transformStackSpec(context.Background(), filledFromBinding("postgres", "db", "runtime"), spec)
 	var provisioned *ProvisionedOutputError
 	if !errors.As(err, &provisioned) {
-		t.Fatalf("transformStackSpec() = %v, want it refused: this spec stands \"db\" up itself, so its outputs are not there to read", err)
+		t.Fatalf("transformStackSpec() = %v, want it refused: this spec provisions \"db\" itself, so its outputs are not there to read", err)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestATransformReadingABindingThisProjectNeverBoundIsRefused(t *testing.T) {
 func TestATransformReadingAnUnpublishedRecordNamesWhatIsPublished(t *testing.T) {
 	spec := specUnderTransform()
 	spec.Bindings = &publishedReader{bindings: []provider.Binding{
-		{Type: provider.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "held"}},
+		{Type: provider.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "archive-bucket"}},
 	}}
 
 	_, err := transformStackSpec(context.Background(), filledFromBinding(customBindingType, "absent", "runtime"), spec)
@@ -264,8 +264,8 @@ func TestATransformReadingAnUnpublishedRecordNamesWhatIsPublished(t *testing.T) 
 	if !errors.As(err, &unpublished) {
 		t.Fatalf("transformStackSpec() = %v, want an unpublished-output refusal", err)
 	}
-	if !slices.Equal(unpublished.Carries, []string{"archive"}) {
-		t.Errorf("the refusal lists %v as published, want what the spec's bindings actually carry", unpublished.Carries)
+	if !slices.Equal(unpublished.Properties, []string{"archive"}) {
+		t.Errorf("the refusal lists %v as published, want what the spec's bindings actually publish", unpublished.Properties)
 	}
 }
 
@@ -282,7 +282,7 @@ func TestATransformReadsABoundResourceUnderTheNameItIsPublishedAs(t *testing.T) 
 	}
 	names := functionResourceNames("shop", spec.Ref.Name, "fn--api--users")
 	if got := transformed.patches[names["lambda"]]["runtime"]; got != "nodejs22.x" {
-		t.Errorf("the function runs %q, want the value the bound record carries", got)
+		t.Errorf("the function runs %q, want the value the bound record has", got)
 	}
 }
 
@@ -296,7 +296,7 @@ func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.
 
 	_, err := transformStackSpec(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), spec)
 	if !errors.Is(err, torn) {
-		t.Fatalf("transformStackSpec() = %v, want the store's own failure carried out", err)
+		t.Fatalf("transformStackSpec() = %v, want the store's own failure returned", err)
 	}
 	var property *OutputPropertyError
 	if errors.As(err, &property) {
@@ -304,7 +304,7 @@ func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.
 	}
 }
 
-func TestABindingCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
+func TestABindingWithNoSuchPropertyNamesWhatItDoesHave(t *testing.T) {
 	spec := specUnderTransform()
 	spec.Bindings = &publishedReader{bindings: []provider.Binding{{
 		Type:       provider.BindingPostgres,
@@ -317,8 +317,8 @@ func TestABindingCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
 	if !errors.As(err, &property) {
 		t.Fatalf("transformStackSpec() = %v, want an OutputPropertyError", err)
 	}
-	if want := []string{"host", "port"}; !slices.Equal(property.Carries, want) {
-		t.Errorf("carries = %v, want the published record's own keys %v", property.Carries, want)
+	if want := []string{"host", "port"}; !slices.Equal(property.Properties, want) {
+		t.Errorf("Properties = %v, want the published record's own keys %v", property.Properties, want)
 	}
 }
 

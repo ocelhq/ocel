@@ -397,7 +397,7 @@ func TestBytecodeUpload(t *testing.T) {
 			t.Errorf("put to %s/%s, want assets-xyz/ocel/bytecode/my-app/node24.3.1-arm64.tar.gz", put.bucket, put.key)
 		}
 		if got := readArchive(t, put.body); got["cached.blob"] != "compiled bytes" {
-			t.Errorf("uploaded archive = %v, want it to carry the cache directory's contents", got)
+			t.Errorf("uploaded archive = %v, want it to contain the cache directory's contents", got)
 		}
 	})
 
@@ -812,7 +812,7 @@ func TestResolveBytecodeResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the environment and version into the key", func(t *testing.T) {
+	t.Run("includes the environment and version in the key", func(t *testing.T) {
 		t.Setenv(prefixEnvVar, "stg/proj/web/r1a2b3c4d/bytecode")
 		t.Setenv(bucketEnvVar, "assets-xyz")
 		t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")

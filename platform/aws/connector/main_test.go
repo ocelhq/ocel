@@ -30,8 +30,8 @@ func (p *proxied) ProxyWithContext(_ context.Context, req events.APIGatewayV2HTT
 type parameters map[string]string
 
 func (p parameters) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
-	value, held := p[aws.ToString(in.Name)]
-	if !held {
+	value, present := p[aws.ToString(in.Name)]
+	if !present {
 		return nil, &ssmtypes.ParameterNotFound{}
 	}
 	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{Value: aws.String(value)}}, nil
@@ -44,13 +44,13 @@ func TestTheKeyReadOutOfTheParameterSignsAsTheSeedTheInstallWrote(t *testing.T) 
 	for i := range seed {
 		seed[i] = byte(i)
 	}
-	held, err := keyed(context.Background(), parameters{"/ocel/connector/key": base64.StdEncoding.EncodeToString(seed) + "\n"}, "/ocel/connector/key")
+	identity, err := keyed(context.Background(), parameters{"/ocel/connector/key": base64.StdEncoding.EncodeToString(seed) + "\n"}, "/ocel/connector/key")
 	if err != nil {
 		t.Fatalf("keyed: %v", err)
 	}
 	want := base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
-	if held.PublicKey() != want {
-		t.Errorf("the connector signs as %s, the install registered %s", held.PublicKey(), want)
+	if identity.PublicKey() != want {
+		t.Errorf("the connector signs as %s, the install registered %s", identity.PublicKey(), want)
 	}
 	if _, err := keyed(context.Background(), parameters{}, "/ocel/connector/key"); err == nil {
 		t.Error("a parameter that is not there yielded an identity")

@@ -72,7 +72,7 @@ func TestBakedVarsEnv(t *testing.T) {
 			wantAny []string
 		}{
 			{
-				name:    "the package carries no sealed file",
+				name:    "the package contains no sealed file",
 				env:     envelope(dataKey()),
 				root:    t.TempDir(),
 				wantAny: []string{baked.FilePath},

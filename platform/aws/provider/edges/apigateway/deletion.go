@@ -55,7 +55,7 @@ func (d *Deletion) interval() time.Duration {
 	return every + time.Duration(float64(every)*deleteJitter*d.jitter())
 }
 
-func (d *Deletion) hold(ctx context.Context) error {
+func (d *Deletion) waitInterval(ctx context.Context) error {
 	if d.Wait != nil {
 		return d.Wait(ctx, d.interval())
 	}
@@ -66,37 +66,37 @@ func (d *Deletion) drain(ctx context.Context, c Clients, ids []string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	standing := slices.Clone(ids)
+	remaining := slices.Clone(ids)
 	var errs []error
-	for at := 0; at < len(standing) && d.spent < d.attempts(); {
+	for at := 0; at < len(remaining) && d.spent < d.attempts(); {
 		if d.begun {
-			if err := d.hold(ctx); err != nil {
-				return errors.Join(append(errs, err, d.outstanding(standing))...)
+			if err := d.waitInterval(ctx); err != nil {
+				return errors.Join(append(errs, err, d.outstanding(remaining))...)
 			}
 		}
 		d.begun = true
 		d.spent++
-		err := deleteAPI(ctx, c, standing[at])
+		err := deleteAPI(ctx, c, remaining[at])
 		switch {
 		case err == nil:
-			standing = slices.Delete(standing, at, at+1)
+			remaining = slices.Delete(remaining, at, at+1)
 		case throttled(err):
 		default:
 			errs = append(errs, err)
 			at++
 		}
 	}
-	if len(standing) > 0 {
-		errs = append(errs, d.outstanding(standing))
+	if len(remaining) > 0 {
+		errs = append(errs, d.outstanding(remaining))
 	}
 	return errors.Join(errs...)
 }
 
-func (d *Deletion) outstanding(standing []string) error {
+func (d *Deletion) outstanding(remaining []string) error {
 	return &edge.OutstandingError{
 		Because: "API Gateway deletes at most one REST API every " + d.every().String() + " per account, and this run stopped with the queue unfinished",
 		Waited:  time.Duration(max(d.spent-1, 0)) * d.every(),
-		Items:   outstandingAPIs(standing),
+		Items:   outstandingAPIs(remaining),
 	}
 }
 
