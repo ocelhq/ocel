@@ -10,7 +10,7 @@ before any change bigger than a small fix, and agree on the approach there.
 
 A maintainer closes a pull request without review when it:
 
-- changes a [contract path](#contract-paths) and its author is not a maintainer;
+- changes a [contract path](#contract-paths) from a fork whose author is not a maintainer;
 - argues with a review gate instead of fixing the finding.
 
 ## Contract paths
@@ -18,7 +18,9 @@ A maintainer closes a pull request without review when it:
 The contract is the set of paths [`scripts/contract-paths.mjs`](scripts/contract-paths.mjs)
 lists: the provider and edge contracts, the wire format, every published package, and the
 rules in this file, `AGENTS.md` and `.greptile/rules.md`. For now only maintainers change
-them, and CI fails a pull request from anyone else that touches one.
+them: CI fails a pull request that touches one from a fork whose author is not an owner,
+member or collaborator. A branch of this repository passes, since only people with push
+access open one.
 
 A contract change updates every implementer in the same pull request
 ([Clean break](.greptile/rules.md#clean-break)), and the conformance suites in
