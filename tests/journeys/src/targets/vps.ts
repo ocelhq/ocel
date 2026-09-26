@@ -20,7 +20,7 @@ import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
 import { engineSeries, unadopted } from "./engine";
-import { coveredNames, type Front, frontNamed, frontStep, stepCommand } from "./front";
+import { coveredNames, type Front, frontNamed, frontStep, stepCommand, unrefused } from "./front";
 import { type Gateway, openGateway } from "./gateway";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
@@ -209,6 +209,7 @@ export class VpsTarget implements Target, ReleaseCycle {
       const log = path.join(outputRoot, "vps", "box", `${front.name}-up.log`);
       await mkdir(path.dirname(log), { recursive: true });
       await writeFile(log, redact(said), "utf8");
+      await this.refusedUnfronted(front);
     }
     const dir = await this.boxConfig(
       path.join(outputRoot, "vps", "box"),
@@ -228,6 +229,27 @@ export class VpsTarget implements Target, ReleaseCycle {
       throw new Error(missed);
     }
     return {};
+  }
+
+  private async refusedUnfronted(front: Front): Promise<void> {
+    const target = this.box();
+    const dir = await this.boxConfig(
+      path.join(outputRoot, "vps", "box", "unfronted"),
+      `${HARNESS_PREFIX}journey-bootstrap`,
+      target.user,
+      false,
+    );
+    const result = await spawnOcel(
+      dir,
+      ["bootstrap", "production", "--yes"],
+      this.boxEnv(target.user),
+    );
+    const said = redact(`${result.stdout}${result.stderr}`);
+    await writeFile(path.join(dir, "bootstrap.log"), said, "utf8");
+    const missed = unrefused(result.code, said, front.holder);
+    if (missed !== undefined) {
+      throw new Error(missed);
+    }
   }
 
   async prepareProcess(): Promise<void> {
@@ -334,9 +356,14 @@ export class VpsTarget implements Target, ReleaseCycle {
     return env;
   }
 
-  private async boxConfig(dir: string, slug: string, login: string): Promise<string> {
+  private async boxConfig(
+    dir: string,
+    slug: string,
+    login: string,
+    fronted = true,
+  ): Promise<string> {
     const target = this.box();
-    const front = this.front();
+    const front = fronted ? this.front() : undefined;
     await mkdir(dir, { recursive: true });
     await writeFile(
       path.join(dir, "ocel.json"),
