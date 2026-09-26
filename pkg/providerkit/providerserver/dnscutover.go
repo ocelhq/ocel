@@ -204,20 +204,20 @@ func (s dnsCutover) attempt(ctx context.Context, hostname string) (edge.Kind, er
 func (s dnsCutover) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
-		cause := s.unreached(hostname)
+		failure := s.lastProbeFailure(hostname)
 		if outlasted != "" {
-			cause += ", and " + outlasted
+			failure += ", and " + outlasted
 		}
 		return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
-			hostname, s.kind, cause, waited))
+			hostname, s.kind, failure, waited))
 	}
 	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
 		hostname, serving, s.kind, waited))
 }
 
-func (s dnsCutover) unreached(hostname string) string {
+func (s dnsCutover) lastProbeFailure(hostname string) string {
 	cause := s.liveness.LastProbeFailure(hostname)
 	if cause == "" {
 		return ""

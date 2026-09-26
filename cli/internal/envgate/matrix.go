@@ -162,11 +162,11 @@ func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv
 		if resolves(definition, binding, present) {
 			continue
 		}
-		unset := Cell{Key: definition.GetKey()}
+		missing := Cell{Key: definition.GetKey()}
 		if len(scope) > 0 {
-			unset.Folder = binding
+			missing.Folder = binding
 		}
-		out = append(out, unset)
+		out = append(out, missing)
 	}
 	return out
 }

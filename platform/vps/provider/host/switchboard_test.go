@@ -350,7 +350,7 @@ func TestTheDeployLoginIsToldItRunsTheSwitchboardAndCannotWriteIt(t *testing.T) 
 	}
 }
 
-func TestAProbeTheBoxCannotAnswerYetIsUnreachedAndItsReasonIsOneLine(t *testing.T) {
+func TestAProbeTheBoxCannotAnswerYetFailsWithAOneLineReason(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
@@ -361,8 +361,8 @@ func TestAProbeTheBoxCannotAnswerYetIsUnreachedAndItsReasonIsOneLine(t *testing.
 		return session.Result{}, false
 	}
 	said, err := box.host().ServedEdge(context.Background(), "web.localhost")
-	if err != nil || said.Unreached == "" || strings.Contains(said.Unreached, "\n") {
-		t.Errorf("ServedEdge() over a box not serving yet = %+v, %v, want one unreached line", said, err)
+	if err != nil || said.Failure == "" || strings.Contains(said.Failure, "\n") {
+		t.Errorf("ServedEdge() over a box not serving yet = %+v, %v, want its failure on one line", said, err)
 	}
 	box.answer = func(string) (session.Result, bool) { return session.Result{Code: 2, Stderr: "usage"}, true }
 	if _, err := box.host().ServedEdge(context.Background(), "web.localhost"); err == nil {

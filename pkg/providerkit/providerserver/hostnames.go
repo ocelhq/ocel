@@ -346,7 +346,7 @@ func (d *hostnames) hostnameBlocker(host string, cert provider.Certificate, heal
 	case !bound:
 		return fmt.Sprintf("%s is not bound to the %s edge yet; run `ocel domain add`", host, d.cutover.kind)
 	case !probe.OK:
-		return fmt.Sprintf("%s does not answer as the %s edge yet%s", host, d.cutover.kind, d.cutover.unreached(host))
+		return fmt.Sprintf("%s does not answer as the %s edge yet%s", host, d.cutover.kind, d.cutover.lastProbeFailure(host))
 	}
 	return ""
 }

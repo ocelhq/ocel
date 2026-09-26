@@ -150,17 +150,17 @@ func TestRefusalMissingIsTheStreamFormOfError(t *testing.T) {
 		Problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), invalid("PORT", "/web", "not a number")},
 		Scope:    envgate.Scope{Browser: true},
 	}
-	unset := refusal.Missing()
-	if len(unset.GetCells()) != 2 {
-		t.Fatalf("Missing().Cells = %+v, want one per problem", unset.GetCells())
+	missing := refusal.Missing()
+	if len(missing.GetCells()) != 2 {
+		t.Fatalf("Missing().Cells = %+v, want one per problem", missing.GetCells())
 	}
-	if got := unset.GetCells()[1]; got.GetKey() != "PORT" || got.GetFolder() != "/web" || got.GetReason() != "set, but not a number" {
+	if got := missing.GetCells()[1]; got.GetKey() != "PORT" || got.GetFolder() != "/web" || got.GetReason() != "set, but not a number" {
 		t.Errorf("Missing().Cells[1] = %+v, want the key, folder and reason of the invalid cell", got)
 	}
-	if unset.GetRemedy() != "ocel env ui" {
-		t.Errorf("Missing().Remedy = %q, want the editor", unset.GetRemedy())
+	if missing.GetRemedy() != "ocel env ui" {
+		t.Errorf("Missing().Remedy = %q, want the editor", missing.GetRemedy())
 	}
-	plain := strings.Join(append(envgate.Lines(unset, envgate.Plain), "", envgate.RemedyLine(unset.GetRemedy())), "\n")
+	plain := strings.Join(append(envgate.Lines(missing, envgate.Plain), "", envgate.RemedyLine(missing.GetRemedy())), "\n")
 	if plain != refusal.Error() {
 		t.Errorf("Lines(Missing()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-func NameStacks(ns Namespace, described provider.BootstrapDescription) provider.BootstrapDescription {
+func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription) provider.BootstrapDescription {
 	coreStack, err := ns.StackNameFor(string(described.Class))
 	if err != nil {
 		return described

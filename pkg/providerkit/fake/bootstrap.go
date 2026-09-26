@@ -148,7 +148,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := bootstrapplan.ChangeGroups(b.named(described), b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(b.withDefaultStackNames(described), b.Catalogue(), req)
 	for i, group := range groups {
 		if group.Action == provider.ActionKeep {
 			continue
@@ -162,7 +162,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 	return provider.Plan{Groups: groups}, nil
 }
 
-func (b *Bootstrap) named(described provider.BootstrapDescription) provider.BootstrapDescription {
+func (b *Bootstrap) withDefaultStackNames(described provider.BootstrapDescription) provider.BootstrapDescription {
 	return bootstrapplan.WithDefaultStackNames(described, b.Catalogue(), func(feature string) string {
 		return stackNameOf(described.Class, feature)
 	})

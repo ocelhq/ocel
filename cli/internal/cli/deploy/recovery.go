@@ -94,11 +94,11 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 }
 
 func (r gateRecovery) recovery(refusal *envgate.Refusal) *varsui.Recovery {
-	unset := make([]envgate.Cell, 0, len(refusal.Problems))
+	missing := make([]envgate.Cell, 0, len(refusal.Problems))
 	for _, problem := range refusal.Problems {
-		unset = append(unset, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+		missing = append(missing, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 	}
-	return &varsui.Recovery{Deploy: r.command, Missing: unset}
+	return &varsui.Recovery{Deploy: r.command, Missing: missing}
 }
 
 func endAttemptSpan(span trace.Span, err error) {

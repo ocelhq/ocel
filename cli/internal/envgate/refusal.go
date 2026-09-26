@@ -23,8 +23,8 @@ type Refusal struct {
 }
 
 func (r *Refusal) Error() string {
-	unset := r.Missing()
-	lines := append(Lines(unset, Plain), "", RemedyLine(unset.GetRemedy()))
+	missing := r.Missing()
+	lines := append(Lines(missing, Plain), "", RemedyLine(missing.GetRemedy()))
 	return strings.Join(lines, "\n")
 }
 
@@ -120,8 +120,8 @@ func Headline(n int) string {
 	return fmt.Sprintf("%d variables are not ready — nothing has been built.", n)
 }
 
-func Lines(unset *streamv1.MissingVariables, paint Paint) []string {
-	cells := unset.GetCells()
+func Lines(missing *streamv1.MissingVariables, paint Paint) []string {
+	cells := missing.GetCells()
 	out := []string{paint.Fail(Mark) + " " + Headline(len(cells)), ""}
 	keyWidth, folderWidth := 0, 0
 	for _, cell := range cells {
@@ -144,7 +144,7 @@ func Lines(unset *streamv1.MissingVariables, paint Paint) []string {
 			continue
 		}
 		written[group] = true
-		out = append(out, indent+paint.Faint(GroupHeadline(group, groupDescription(unset.GetGroups(), group))))
+		out = append(out, indent+paint.Faint(GroupHeadline(group, groupDescription(missing.GetGroups(), group))))
 		for _, member := range cells {
 			if member.GetGroup() == group {
 				out = append(out, missingLines(member, indent+indent, keyWidth-len(indent), folderWidth, paint)...)

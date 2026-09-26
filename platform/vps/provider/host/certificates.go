@@ -114,8 +114,8 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 }
 
 type Answer struct {
-	Edge      string
-	Unreached string
+	Edge    string
+	Failure string
 }
 
 func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) {
@@ -127,7 +127,7 @@ func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) 
 	case 0:
 		return Answer{Edge: strings.TrimSpace(result.Stdout)}, nil
 	case proxyNotServingYet:
-		return Answer{Unreached: spoken(result)}, nil
+		return Answer{Failure: spoken(result)}, nil
 	default:
 		return Answer{}, h.refuse("probe "+hostname+" on this box's own https port", result, "")
 	}
@@ -161,7 +161,7 @@ func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
 
 func (b frontBox) Probe(ctx context.Context, hostname string) (string, string, error) {
 	said, err := b.h.ServedEdge(ctx, hostname)
-	return said.Edge, said.Unreached, err
+	return said.Edge, said.Failure, err
 }
 
 func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {

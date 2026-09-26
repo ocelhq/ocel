@@ -22,7 +22,7 @@ type box struct {
 	publishing []string
 	claimed    []string
 	answers    map[string]string
-	unreached  map[string]string
+	failures   map[string]string
 	unread     error
 }
 
@@ -43,7 +43,7 @@ func (b *box) Claimed(context.Context) ([]string, error) {
 
 func (b *box) Probe(_ context.Context, hostname string) (string, string, error) {
 	b.asked = append(b.asked, "probe "+hostname)
-	return b.answers[hostname], b.unreached[hostname], nil
+	return b.answers[hostname], b.failures[hostname], nil
 }
 
 func on443() []listeners.Listener {
@@ -191,7 +191,7 @@ func TestManualFailsAClaimYourProxyDoesNotRouteAndSaysWhereToRouteIt(t *testing.
 		listening: on443(),
 		claimed:   []string{"shop.example.com", "api.example.com"},
 		answers:   map[string]string{"shop.example.com": "box", "api.example.com": ""},
-		unreached: map[string]string{"api.example.com": "api.example.com answered nothing over tls at 127.0.0.1:443"},
+		failures:  map[string]string{"api.example.com": "api.example.com answered nothing over tls at 127.0.0.1:443"},
 	}
 	inspected, err := (manual.Manual{Box: machine, Port: 9000}).Inspect(context.Background())
 	if err != nil {
