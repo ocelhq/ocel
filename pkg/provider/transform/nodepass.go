@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-//go:generate pnpm --dir ../.. exec turbo run build --filter=@pkg/transform-runner
+//go:generate pnpm --dir ../../.. exec turbo run build --filter=@pkg/transform-runner
 
 //go:embed dist/runner.mjs
 var runner []byte

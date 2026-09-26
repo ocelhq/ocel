@@ -22,7 +22,6 @@ on:
       - "pkg/runtime/**"
       - "pkg/stackrecords/**"
       - "pkg/target/**"
-      - "pkg/transform/**"
       - "pkg/go.mod"
       - "pkg/go.sum"
       - "platform/edge/cloudflare/deploy/**"

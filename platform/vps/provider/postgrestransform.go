@@ -11,12 +11,12 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transform"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-//go:generate go generate -C ../../../pkg/transform ./...
+//go:generate go generate -C ../../../pkg/provider/transform ./...
 
 const (
 	transformProvider     = "vps"

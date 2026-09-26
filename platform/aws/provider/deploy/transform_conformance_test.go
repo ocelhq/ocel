@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/transform"
-	"github.com/ocelhq/ocel/pkg/transform/transformtest"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
 )
 
 const conformanceModule = `

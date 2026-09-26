@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/ocelhq/ocel/pkg/transform"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 )
 
 type fakePass struct {
