@@ -46,17 +46,13 @@ func Parse(r io.Reader) ([]Listener, error) {
 		}
 		switch section {
 		case SocketsMark:
-			pid, inode, err := socket(line)
-			if err != nil {
-				return nil, err
+			if pid, inode, read := socket(line); read {
+				sockets[inode] = append(sockets[inode], pid)
 			}
-			sockets[inode] = append(sockets[inode], pid)
 		case NamesMark:
-			pid, name, err := named(line)
-			if err != nil {
-				return nil, err
+			if pid, name, read := named(line); read {
+				names[pid] = name
 			}
-			names[pid] = name
 		default:
 			listener, listening, err := tabled(line)
 			if err != nil {
@@ -93,27 +89,22 @@ func tabled(line string) (Listener, bool, error) {
 	return listener, true, nil
 }
 
-func socket(line string) (string, uint64, error) {
+func socket(line string) (string, uint64, bool) {
 	dir, link, split := strings.Cut(strings.TrimSpace(line), " ")
 	pid, fd, pidded := strings.Cut(strings.TrimPrefix(dir, "/proc/"), "/")
-	spelled, closed := strings.CutSuffix(strings.TrimPrefix(link, "socket:["), "]")
-	if !split || !pidded || fd != "fd" || !numbered(pid) || !closed || !strings.HasPrefix(link, "socket:[") {
-		return "", 0, fmt.Errorf("%q is not a process's socket", line)
+	spelled, linked := strings.CutPrefix(link, "socket:[")
+	spelled, closed := strings.CutSuffix(spelled, "]")
+	if !split || !pidded || fd != "fd" || !numbered(pid) || !linked || !closed {
+		return "", 0, false
 	}
 	inode, err := strconv.ParseUint(spelled, 10, 64)
-	if err != nil {
-		return "", 0, fmt.Errorf("%q names no socket inode: %w", line, err)
-	}
-	return pid, inode, nil
+	return pid, inode, err == nil
 }
 
-func named(line string) (string, string, error) {
+func named(line string) (string, string, bool) {
 	path, name, split := strings.Cut(line, ":")
 	pid, comm, pidded := strings.Cut(strings.TrimPrefix(path, "/proc/"), "/")
-	if !split || !pidded || comm != "comm" || !numbered(pid) {
-		return "", "", fmt.Errorf("%q is not a process's name", line)
-	}
-	return pid, name, nil
+	return pid, name, split && pidded && comm == "comm" && numbered(pid)
 }
 
 func numbered(said string) bool {

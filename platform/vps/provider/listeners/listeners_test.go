@@ -140,18 +140,24 @@ func TestAHolderIsNamedAsTheKernelNamesIt(t *testing.T) {
 	}
 }
 
-func TestASocketLineNoReadingEverWroteIsRefusedRatherThanRead(t *testing.T) {
+func TestALineNoReadingEverWroteNamesNoHolderAndStopsNothing(t *testing.T) {
 	t.Parallel()
 
 	for what, said := range map[string]string{
-		"a socket with no process":   listeners.SocketsMark + "\nsocket:[12345]\n",
-		"a socket that is no inode":  listeners.SocketsMark + "\n/proc/812/fd socket:[x]\n",
-		"a process that is no pid":   listeners.SocketsMark + "\n/proc/self/fd socket:[12345]\n",
-		"a name with no process":     listeners.NamesMark + "\nnginx\n",
-		"a name under no pid at all": listeners.NamesMark + "\n/proc/x/comm:nginx\n",
+		"a socket with no process":            listeners.SocketsMark + "\nsocket:[12345]\n" + listeners.NamesMark + "\n/proc/812/comm:nginx\n",
+		"a socket that is no inode":           listeners.SocketsMark + "\n/proc/812/fd socket:[x]\n" + listeners.NamesMark + "\n/proc/812/comm:nginx\n",
+		"a process that is no pid":            listeners.SocketsMark + "\n/proc/self/fd socket:[12345]\n" + listeners.NamesMark + "\n/proc/self/comm:nginx\n",
+		"a name with no process":              listeners.SocketsMark + "\n/proc/812/fd socket:[12345]\n" + listeners.NamesMark + "\nnginx\n",
+		"a name under no pid at all":          listeners.SocketsMark + "\n/proc/812/fd socket:[12345]\n" + listeners.NamesMark + "\n/proc/x/comm:nginx\n",
+		"a name a process wrote a newline in": listeners.SocketsMark + "\n/proc/9/fd socket:[1]\n" + listeners.NamesMark + "\n/proc/9/comm:evil\nnginx\n",
 	} {
-		if _, err := listeners.Parse(strings.NewReader(tcpTable + said)); err == nil {
-			t.Errorf("Parse(%s) read it, want a refusal rather than a holder read off a line nothing wrote", what)
+		held, err := listeners.Parse(strings.NewReader(tcpTable + said))
+		if err != nil {
+			t.Errorf("Parse(%s) = %v, want the line passed over: a process any local user can name is no reason to stop a bootstrap", what, err)
+			continue
+		}
+		if got := listeners.Holders(listeners.On(held, 80)); len(got) != 0 {
+			t.Errorf("Parse(%s) named %v as holding :80, off a line nothing that names a holder wrote", what, got)
 		}
 	}
 }
