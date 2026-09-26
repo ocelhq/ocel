@@ -33,8 +33,8 @@ When they conflict:
 
 ## Codebase Map
 
-Boundaries, not contents — every top-level directory is here, and a new one needs an
-entry before it needs files. Dotfile directories are tooling and are exempt.
+Boundaries, not contents. Every top-level directory is here except dotfile directories,
+which are tooling.
 
 - **`packages/`** — everything published to npm, and nothing else. `@ocel/*` is public
   API; nothing internal may claim it.

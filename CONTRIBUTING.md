@@ -46,8 +46,7 @@ rules 1–9 to `pkg/` and the vendors that implement the provider contract.
 - A package sits under `pkg/provider/` only if nothing but providers uses it.
 - A vendor keeps each port, hook or hook group in its own file
   ([Naming](.greptile/rules.md#naming) rule 6).
-- Nothing is released yet, so a change replaces old behaviour outright
-  ([Clean break](.greptile/rules.md#clean-break)).
+- [Clean break](.greptile/rules.md#clean-break) applies to every change.
 
 ## Comments
 
