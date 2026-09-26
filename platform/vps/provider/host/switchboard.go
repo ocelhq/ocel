@@ -118,6 +118,7 @@ func (s boxContainer) restoring(attempts int) string {
 	return "set -e\n" +
 		routingLocked("-x") +
 		"if ! docker inspect --type container --format " + quoted("{{.Id}}") + " " + quoted(s.name) + " >/dev/null 2>&1; then\n" +
+		s.networksStanding() +
 		networkCommand() + "\n" +
 		bindsStanding(s.files) +
 		imageHeld(s.image, containerPulls) +
