@@ -95,19 +95,23 @@ func keptEngine() removal {
 }
 
 const (
-	engineAttemptSeconds = 300
-	aptWaitSeconds       = 30
-	engineTailLines      = 3
+	aptWaitSeconds    = 30
+	dpkgLockSeconds   = 300
+	fetchWaitSeconds  = 30
+	fetchTotalSeconds = 120
+	engineTailLines   = 3
 )
 
 func engineCommand() string {
-	attempt := strconv.Itoa(engineAttemptSeconds)
 	apt := strconv.Itoa(aptWaitSeconds)
 	return `set -e
 script=$(mktemp)
 log=$(mktemp)
 apt=$(mktemp)
-trap 'rm -f "$script" "$log" "$apt"' EXIT
+CURL_HOME=$(mktemp -d)
+export CURL_HOME
+trap 'rm -rf "$script" "$log" "$apt" "$CURL_HOME"' EXIT
+printf '%s\n' 'connect-timeout = ` + strconv.Itoa(fetchWaitSeconds) + `' 'max-time = ` + strconv.Itoa(fetchTotalSeconds) + `' >"$CURL_HOME/.curlrc"
 if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 5 --retry-delay 2 ` + dockerSource + ` -o "$script"
 elif command -v wget >/dev/null 2>&1; then wget -qO "$script" ` + dockerSource + `
 else echo 'this host has neither curl nor wget' >&2; exit 1
@@ -116,15 +120,13 @@ if ! printf '%s  %s\n' ` + dockerScriptSum + ` "$script" | sha256sum -c - >/dev/
 echo '` + dockerSource + ` does not match the pinned sha256 ` + dockerScriptSum + `' >&2
 exit 1
 fi
-printf '%s\n' 'Acquire::http::Timeout "` + apt + `";' 'Acquire::https::Timeout "` + apt + `";' >"$apt"
+printf '%s\n' 'Acquire::http::Timeout "` + apt + `";' 'Acquire::https::Timeout "` + apt + `";' 'DPkg::Lock::Timeout "` + strconv.Itoa(dpkgLockSeconds) + `";' >"$apt"
 tries=0
 ` + engineInstallHold.start() + `while :; do
-if APT_CONFIG="$apt" timeout ` + attempt + ` env VERSION=` + dockerVersion + ` sh "$script" >"$log" 2>&1; then break; else code=$?; fi
+if APT_CONFIG="$apt" VERSION=` + dockerVersion + ` sh "$script" >"$log" 2>&1; then break; fi
 tries=$((tries + 1))
 if [ "$tries" -ge ` + strconv.Itoa(engineInstallTries) + ` ]; then
-ended=''
-if [ "$code" -eq 124 ]; then ended=', the last timing out after ` + attempt + `s'; fi
-echo "` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times$ended; its last lines:" >&2
+echo "` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times; its last lines:" >&2
 tail -n ` + strconv.Itoa(engineTailLines) + ` "$log" >&2
 exit 1
 fi
@@ -170,8 +172,8 @@ if [ -n "$engine" ]; then
 if [ -n "$held" ]; then :
 elif [ "$engine" = present ]; then held=` + engineStandard + `
 elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then held=` + engineSnap + `
-elif pgrep -x rootlesskit >/dev/null 2>&1 || command -v dockerd-rootless.sh >/dev/null 2>&1; then held=` + engineRootless + `
-else held=` + engineUnserved + `
+elif pgrep -x rootlesskit >/dev/null 2>&1; then held=` + engineRootless + `
+elif pgrep -x dockerd >/dev/null 2>&1; then held=` + engineUnserved + `
 fi
 version=$(timeout 10 docker version --format '{{.Server.Version}}' 2>/dev/null) || version=''
 [ -n "$version" ] || version=$(dockerd --version 2>/dev/null) || version=''
@@ -212,7 +214,7 @@ func (r Reading) runnableEngine(named string) error {
 			named, dockerUnit, engineFloor, command)
 	case engineUnserved:
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"docker on %s is not run by %s, the system daemon ocel needs\n"+
+			"a docker daemon on %s runs outside %s, the system daemon ocel needs\n"+
 				"Install docker %s or later as the system daemon and run `%s`",
 			named, dockerUnit, engineFloor, command)
 	}
