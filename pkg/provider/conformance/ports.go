@@ -236,7 +236,7 @@ func RunStore(t *testing.T, store records.Store) {
 		}
 	})
 
-	t.Run("every prefix the kit reads a whole subtree at is one this store can answer", func(t *testing.T) {
+	t.Run("every prefix providerserver reads a whole subtree at is one this store can answer", func(t *testing.T) {
 		scope := envvars.Scope{Project: "conformance", Class: edge.ClassProduction}
 		for _, name := range []records.Name{
 			stackrecords.ProjectsRecord(edge.ClassProduction),
@@ -247,7 +247,7 @@ func RunStore(t *testing.T, store records.Store) {
 			envvars.ReferencesRecordName(scope),
 		} {
 			if _, err := store.List(ctx, name); err != nil {
-				t.Errorf("List(%s) = %v, want a store that partitions no deeper than the kit reads", name, err)
+				t.Errorf("List(%s) = %v, want a store that partitions no deeper than providerserver reads", name, err)
 			}
 		}
 	})
@@ -960,14 +960,14 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		}
 		for _, binding := range result.Bindings {
 			if err := provider.VerifyProperties(binding); err != nil {
-				t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
+				t.Errorf("Provision() returned a binding providerserver refuses to record: %v", err)
 			}
 		}
 
 		if store != nil {
 			recorded := stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}
 			if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, recorded); err != nil {
-				t.Fatalf("recording what the release returned, as the kit does after every Provision() = %v", err)
+				t.Fatalf("recording what the release returned, as providerserver does after every Provision() = %v", err)
 			}
 			defer func() {
 				if err := stackrecords.Forget(ctx, store, ref.Class, ref.Project, ref.Name); err != nil {
@@ -1020,7 +1020,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			[]refusal.Code{refusal.CodeInvalid, refusal.CodeNotReady, refusal.CodeDenied, refusal.CodeBusy},
 			refused.Code,
 		) {
-			t.Errorf("Provision() refused with code %q, which is none the kit maps", refused.Code)
+			t.Errorf("Provision() refused with code %q, which is none providerserver maps", refused.Code)
 		}
 		if planned, err := stacks.Plan(ctx, unserved, nil); err == nil {
 			t.Errorf("Plan() showed %+v for a release its own provision refuses, and the plan is the diff the apply runs", planned.Groups)

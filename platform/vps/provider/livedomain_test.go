@@ -61,7 +61,7 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 	}
 	record.Bytes = body
 	if _, err := p.Records().Write(ctx, record); err != nil {
-		t.Fatalf("record the edge stack the kit opens: %v", err)
+		t.Fatalf("record the edge stack providerserver opens: %v", err)
 	}
 }
 

@@ -137,7 +137,7 @@ func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	}
 }
 
-func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
+func TestNoPortIsNilForProviderserverToCallThrough(t *testing.T) {
 	t.Parallel()
 
 	p := testProvider(t)
@@ -151,7 +151,7 @@ func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 		"DNS":         p.DNS(),
 	} {
 		if port == nil {
-			t.Errorf("%s() is nil, and the kit calls methods on it", name)
+			t.Errorf("%s() is nil, and providerserver calls methods on it", name)
 		}
 	}
 }

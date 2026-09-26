@@ -114,7 +114,7 @@ func everyStoreRef() []provider.ArtifactRef {
 	}
 }
 
-func TestArtifactsRunTheKitsPortTier(t *testing.T) {
+func TestArtifactsRunTheConformancePortTier(t *testing.T) {
 	conformance.RunArtifactStore(t, provider.Facts{StoresArtifacts: true}, artifacts())
 }
 

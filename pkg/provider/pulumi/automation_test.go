@@ -121,7 +121,7 @@ func TestWorkspaceUsesTheBackendTheProviderNamed(t *testing.T) {
 		t.Fatalf("the workspace points at %+v, want the backend the provider named", setup.Project.Backend)
 	}
 	if setup.Project.Runtime.Name() != "go" {
-		t.Errorf("the workspace runs %q, want the go runtime a kit provider's program is written in", setup.Project.Runtime.Name())
+		t.Errorf("the workspace runs %q, want the go runtime a provider's program is written in", setup.Project.Runtime.Name())
 	}
 	if string(setup.Project.Name) != naming.PulumiProject("shop") {
 		t.Errorf("the workspace's project is %q, want %q", setup.Project.Name, naming.PulumiProject("shop"))

@@ -105,7 +105,7 @@ func TestIssueRequestsACertificateForAnUnpinnedHostname(t *testing.T) {
 		t.Errorf("the validation records written were %v, want the one ACM named", proved)
 	}
 	if len(cert.Written) != 1 {
-		t.Errorf("issue() = %+v, want it to include the validation records the kit wrote", cert)
+		t.Errorf("issue() = %+v, want it to include the validation records it wrote", cert)
 	}
 }
 

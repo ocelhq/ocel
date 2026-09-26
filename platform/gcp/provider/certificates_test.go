@@ -185,7 +185,7 @@ func TestAnInspectedCertificateSaysWhatItCoversAndWhenItLapses(t *testing.T) {
 		t.Errorf("InspectCertificate(%s).Issued = false on an ACTIVE certificate", cert.ID)
 	}
 	if !health.Covers {
-		t.Errorf("InspectCertificate(%s).Covers = false for the hostname it was minted for, and the kit would request a second one", cert.ID)
+		t.Errorf("InspectCertificate(%s).Covers = false for the hostname it was minted for, and providerserver would request a second one", cert.ID)
 	}
 	if health.ExpiresAt == 0 {
 		t.Errorf("InspectCertificate(%s) names no expiry, and nothing can then warn that a renewal has not happened", cert.ID)

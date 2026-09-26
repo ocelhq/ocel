@@ -295,7 +295,7 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ edge.Class, prefix 
 	return nil
 }
 
-func TestReleaserRunsTheKitsPortTier(t *testing.T) {
+func TestStacksRunTheConformancePortTier(t *testing.T) {
 	store := newShippedArtifacts()
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
 	conformance.RunStacks(t, provider.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
@@ -321,7 +321,7 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 	}
 	for _, binding := range result.Bindings {
 		if err := provider.VerifyProperties(binding); err != nil {
-			t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
+			t.Errorf("Provision() returned a binding providerserver refuses to record: %v", err)
 		}
 	}
 	if got := result.Bindings[0].Properties[provider.PropertyPassword]; got != "a-master-password" {

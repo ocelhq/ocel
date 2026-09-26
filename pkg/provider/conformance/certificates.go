@@ -59,7 +59,7 @@ func RunCertificates(t *testing.T, certificates provider.Certificates, checks Ce
 			cert := issued(t, ctx, certificates, checks, hostname)
 			health, err := certificates.Inspect(ctx, checks.Kind, hostname, cert)
 			if !health.Terminates {
-				t.Errorf("Inspect(%s, %s).Terminates = false (err = %v), and a zero health makes the kit skip every certificate case it reports on",
+				t.Errorf("Inspect(%s, %s).Terminates = false (err = %v), and a zero health makes providerserver skip every certificate case it reports on",
 					hostname, cert.ID, err)
 			}
 			if health.Renewal == "" {
@@ -77,7 +77,7 @@ func RunCertificates(t *testing.T, certificates provider.Certificates, checks Ce
 					hostname)
 			}
 			if err := certificates.Discard(ctx, cert, edge.DiscardProgress()); err != nil {
-				t.Errorf("Discard(%s) = %v, want nil: the kit short-circuits on Requested, so this is unreachable and must not refuse if it is ever reached",
+				t.Errorf("Discard(%s) = %v, want nil: providerserver short-circuits on Requested, so this is unreachable and must not refuse if it is ever reached",
 					cert.ID, err)
 			}
 		}
@@ -90,7 +90,7 @@ func RunCertificates(t *testing.T, certificates provider.Certificates, checks Ce
 		for _, hostname := range certified(t, checks) {
 			cert := issued(t, ctx, certificates, checks, hostname)
 			if want := checks.Handle(hostname); cert.ID != want {
-				t.Errorf("Issue(%s).ID = %q, want %q: nothing in the kit parses a handle, so it is the provider's own and must be the one it states",
+				t.Errorf("Issue(%s).ID = %q, want %q: nothing in providerserver parses a handle, so it is the provider's own and must be the one it states",
 					hostname, cert.ID, want)
 			}
 			if again := issued(t, ctx, certificates, checks, hostname); again.ID != cert.ID {

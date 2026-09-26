@@ -54,11 +54,11 @@ func TestAProbedPathIsOnePathOffTheRootAndNothingElse(t *testing.T) {
 	}
 }
 
-func TestTheWirePinAndTheKitPinTheSameImageIdentity(t *testing.T) {
+func TestTheWireAndAppbuildPinTheSameImageIdentity(t *testing.T) {
 	assertFieldPattern(t, "image", appbuild.PinnedImagePattern)
 }
 
-func TestTheWirePinAndTheKitPinTheSameProbedPath(t *testing.T) {
+func TestTheWireAndAppbuildPinTheSameProbedPath(t *testing.T) {
 	assertFieldPattern(t, "health_check_path", appbuild.HealthCheckPathPattern)
 }
 
@@ -76,6 +76,6 @@ func assertFieldPattern(t *testing.T, name, want string) {
 	}
 
 	if got := rules.GetString().GetPattern(); got != want {
-		t.Errorf("ManifestContainer.%s pins %q, the kit pins %q — a value one admits and the other refuses is either a plan-time refusal of something the wire would have taken, or a protovalidate error naming a field the user never wrote", name, got, want)
+		t.Errorf("ManifestContainer.%s pins %q, appbuild pins %q — a value one admits and the other refuses is either a plan-time refusal of something the wire would have taken, or a protovalidate error naming a field the user never wrote", name, got, want)
 	}
 }

@@ -78,15 +78,15 @@ func newMux(config Config) *http.ServeMux {
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	kit := &handlers{session: s, Service: &envvarsserver.Service{Source: sessionBackend{session: s}}}
+	services := &handlers{session: s, Service: &envvarsserver.Service{Source: sessionBackend{session: s}}}
 
-	path, handler := contractv1connect.NewProviderServiceHandler(kit, interceptors)
+	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
-	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(kit, interceptors)
+	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
-	path, handler = costv1connect.NewCostServiceHandler(kit, interceptors)
+	path, handler = costv1connect.NewCostServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
 	return mux

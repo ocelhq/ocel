@@ -442,7 +442,7 @@ func TestAnApplyRefusesAConsentedPlanItCannotRead(t *testing.T) {
 		}},
 	})
 	if err == nil {
-		t.Fatal("Bootstrap() = nil, want an apply naming an action this kit cannot read refused")
+		t.Fatal("Bootstrap() = nil, want an apply naming an action providerserver cannot read refused")
 	}
 	if !strings.Contains(err.Error(), unreadable.String()) {
 		t.Errorf("the refusal reads %q, want it to name the action it could not read", err)
