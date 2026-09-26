@@ -224,13 +224,20 @@ func IdentityProto(vendor Vendor, id Identity) *contractv1.Identity {
 	return out
 }
 
+var credentialTrouble = map[Code]string{
+	CodeDenied:   "could not authenticate",
+	CodeNotReady: "could not reach",
+	CodeInvalid:  "misconfigured",
+}
+
 func CredentialProblemProto(vendor Vendor, err error) *contractv1.CredentialProblem {
 	problem := &contractv1.CredentialProblem{Provider: string(vendor)}
 	var refusal Refusal
-	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
-		problem.Message = "could not authenticate"
-		problem.Hint = refusal.Message
-		return problem
+	if errors.As(err, &refusal) {
+		if trouble, named := credentialTrouble[refusal.Code]; named {
+			problem.Message, problem.Hint = trouble, refusal.Message
+			return problem
+		}
 	}
 	problem.Message = fmt.Sprintf("could not authenticate: %v", err)
 	return problem

@@ -97,6 +97,25 @@ func TestPreflightNamesNoContainerArchitectureForAProviderThatWrapsNone(t *testi
 	}
 }
 
+func TestACredentialProblemSaysWhatWentWrongByTheRefusalsCode(t *testing.T) {
+	t.Parallel()
+
+	for code, want := range map[providerkit.Code]string{
+		providerkit.CodeDenied:   "could not authenticate",
+		providerkit.CodeNotReady: "could not reach",
+		providerkit.CodeInvalid:  "misconfigured",
+	} {
+		refused := providerkit.Refuse(code, "ada@box port 22 said so\nFix it")
+		problem := providerkit.CredentialProblemProto(fake.Vendor, refused)
+		if problem.GetMessage() != want {
+			t.Errorf("a %q refusal reads %q, want %q: a host that never answered refused no credential", code, problem.GetMessage(), want)
+		}
+		if problem.GetHint() != "ada@box port 22 said so\nFix it" {
+			t.Errorf("a %q refusal hints %q, want the refusal's own wording", code, problem.GetHint())
+		}
+	}
+}
+
 func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	t.Parallel()
 

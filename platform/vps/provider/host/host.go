@@ -230,7 +230,7 @@ func (h *Host) granted(ctx context.Context, what string, argv []string, stdin io
 		return "", err
 	}
 	if result.Code != 0 {
-		return "", h.refuse(what, result)
+		return "", h.refuse(what, result, elevation)
 	}
 	return result.Stdout, nil
 }
@@ -280,7 +280,7 @@ func (h *Host) spoke(ctx context.Context, what, command string, stdin io.Reader,
 		return "", "", err
 	}
 	if result.Code != 0 {
-		return "", spoken(result), h.refuse(what, result)
+		return "", spoken(result), h.refuse(what, result, elevation)
 	}
 	return result.Stdout, "", nil
 }
@@ -289,8 +289,19 @@ const saidLines = 4
 
 func unstarted(code int) bool { return code == 126 || code == 127 }
 
-func (h *Host) refuse(what string, result session.Result) error {
-	return providerkit.Refuse(session.Refusing(result.Stderr), "%s on %s: %s", what, h.named(), spoken(result))
+func (h *Host) refuse(what string, result session.Result, elevation string) error {
+	failed := providerkit.CodeNotReady
+	if elevation != "" && sudoRefused(result) {
+		failed = providerkit.CodeDenied
+	}
+	return providerkit.Refuse(failed, "%s on %s: %s", what, h.named(), spoken(result))
+}
+
+var sudoRefusals = []string{"sudo: a password is required", "is not in the sudoers file", "is not allowed to execute"}
+
+func sudoRefused(result session.Result) bool {
+	first, _, _ := strings.Cut(strings.TrimSpace(result.Stderr), "\n")
+	return result.Code == 1 && slices.ContainsFunc(sudoRefusals, func(refusal string) bool { return strings.Contains(first, refusal) })
 }
 
 func spoken(result session.Result) string {

@@ -429,7 +429,7 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 			"%s or %s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's class",
 			live.RoutingTable, ProxyConfig, h.named())
 	default:
-		return "", unelevated(refused, h.refuse("write "+live.RoutingTable+" and "+ProxyConfig, result))
+		return "", unelevated(refused, h.refuse("write "+live.RoutingTable+" and "+ProxyConfig, result, elevation))
 	}
 }
 

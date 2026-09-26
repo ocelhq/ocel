@@ -206,7 +206,7 @@ func (s sshRecords) Records(ctx context.Context, class providerkit.Class, stdin 
 	case ExitStale:
 		return "", providerkit.ErrStale
 	default:
-		return "", unelevated(refused, s.host.refuse("records "+argv[0], result))
+		return "", unelevated(refused, s.host.refuse("records "+argv[0], result, elevation))
 	}
 }
 

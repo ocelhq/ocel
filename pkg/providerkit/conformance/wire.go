@@ -137,8 +137,8 @@ func holdsTheSessionRules(t *testing.T, provider contractv1connect.ProviderServi
 	}
 
 	_, err = provider.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: "conformance"})
-	if got := connect.CodeOf(err); got == connect.CodeFailedPrecondition {
-		t.Errorf("an RPC after Configure: code = %v, want the session to be past its precondition", got)
+	if _, refused := providerkit.RefusedCode(err); connect.CodeOf(err) == connect.CodeFailedPrecondition && !refused {
+		t.Errorf("an RPC after Configure: %v, want the session to be past its precondition", err)
 	}
 }
 

@@ -536,19 +536,34 @@ func TestAMaskedDockerServiceStopsThePlanRatherThanWedgingItOnAnEnableThatNeverT
 	}
 }
 
-func TestAnEngineInstallThatFailsIsRefusedForWhatWentWrongAndNotAsAPermissionProblem(t *testing.T) {
+func TestAWriteThatFailsIsDeniedOnlyWhenSudoRefusedTheLogin(t *testing.T) {
 	t.Parallel()
 
-	for said, want := range map[string]providerkit.Code{
-		dockerSource + " failed 3 times, the last timing out after 300s; its last lines:\n+ sh -c apt-get -qq update >/dev/null": providerkit.CodeNotReady,
-		"sudo: a password is required": providerkit.CodeDenied,
+	for name, tc := range map[string]struct {
+		root bool
+		said string
+		want providerkit.Code
+	}{
+		"sudo asking a password":             {said: "sudo: a password is required", want: providerkit.CodeDenied},
+		"a login sudoers never names":        {said: "ada is not in the sudoers file.  This incident will be reported.", want: providerkit.CodeDenied},
+		"a command sudoers does not grant":   {said: "Sorry, user ada is not allowed to execute '/bin/sh -c install' as root on ocelbox.", want: providerkit.CodeDenied},
+		"a path the elevated write can't be": {said: "install: cannot create directory '/srv/ocel': Permission denied", want: providerkit.CodeNotReady},
+		"a runtime the kernel refuses":       {said: "docker: Error response from daemon: failed to create task for container: operation not permitted", want: providerkit.CodeNotReady},
+		"an install whose mirror stalled":    {said: "E: Failed to fetch https://download.docker.com/linux/ubuntu/dists/noble/InRelease  Connection timed out\nE: Some index files failed to download.", want: providerkit.CodeNotReady},
+		"root, which sudo never elevated":    {root: true, said: "sudo: a password is required", want: providerkit.CodeNotReady},
 	} {
-		stood := machine(nil)
-		stood.answer = func(command string) (session.Result, bool) {
-			return session.Result{Code: 1, Stderr: said}, strings.Contains(command, dockerSource)
-		}
-		if refused := refusal(t, stood.host().Install(context.Background(), engineItem()), want); !strings.Contains(refused.Message, strings.Split(said, "\n")[0]) {
-			t.Errorf("the refusal reads %q, want what the install said in it", refused.Message)
-		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			stood := machine(nil)
+			stood.facts.Root, stood.facts.Sudo = tc.root, !tc.root
+			stood.answer = func(command string) (session.Result, bool) {
+				return session.Result{Code: 1, Stderr: tc.said}, strings.Contains(command, "install -d")
+			}
+			item := Item{Kind: KindDir, Name: "/srv/ocel", Mode: 0o755, Owner: rootOwner}
+			if refused := refusal(t, stood.host().Install(context.Background(), item), tc.want); !strings.Contains(refused.Message, strings.Split(tc.said, "\n")[0]) {
+				t.Errorf("the refusal reads %q, want what the host said in it", refused.Message)
+			}
+		})
 	}
 }
