@@ -63,7 +63,7 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
                         "type": "integer"
                       },
                       "preset": {
@@ -116,7 +116,7 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
                         "type": "integer"
                       },
                       "preset": false,
@@ -170,7 +170,7 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
                         "type": "integer"
                       },
                       "preset": {
@@ -206,7 +206,7 @@
                         "type": "string"
                       },
                       "port": {
-                        "description": "The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network.",
+                        "description": "The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network.",
                         "type": "integer"
                       },
                       "preset": false

@@ -166,8 +166,9 @@ preset overrides it, for a proxy whose configuration you have edited.
 | `network` | all | A docker network the switchboard joins, so the proxy reaches it by name. | |
 | `port` | all | The loopback port the switchboard is published on. | `8480` |
 
-A Traefik or Caddy reaches the switchboard over `network` or over `port`, so they can't be set
-together. On `manual`, `port` is always published and `network` is joined as well.
+A Traefik or Caddy reaches the switchboard over `network` or over `port`, so they can't both be
+written. A `port` written beside a preset replaces the `network` it fills. On `manual`, `port` is
+always published and `network` is joined as well.
 
 | | `traefik` + `coolify` | `traefik` + `dokploy` | `caddy` + `coolify` |
 | --- | --- | --- | --- |

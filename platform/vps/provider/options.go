@@ -38,7 +38,7 @@ type Traefik struct {
 	PreviewResolver string       `json:"previewResolver,omitempty" doc:"A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver."`
 	Entrypoints     *Entrypoints `json:"entrypoints,omitempty" doc:"The entry points ocel's routers attach to."`
 	Network         string       `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port."`
-	Port            int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network."`
+	Port            int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
 }
 
 type Entrypoints struct {
@@ -52,7 +52,7 @@ type Caddy struct {
 	Container string `json:"container,omitempty" doc:"The container Caddy runs in; left out, Caddy runs as the systemd caddy.service."`
 	Config    string `json:"config,omitempty" doc:"The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out."`
 	Network   string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port."`
-	Port      int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network."`
+	Port      int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network."`
 }
 
 type Manual struct {
@@ -185,7 +185,7 @@ func (t *Traefik) usable() error {
 	if err := needs(at, "resolver", filled.Resolver); err != nil {
 		return err
 	}
-	return reachedOnce(at, t.Preset, t.Network, filled.Network, t.Port)
+	return reachedOnce(at, t.Network, t.Port)
 }
 
 func (c *Caddy) usable() error {
@@ -197,7 +197,7 @@ func (c *Caddy) usable() error {
 	if err := needs(at, "directory", filled.Directory); err != nil {
 		return err
 	}
-	return reachedOnce(at, c.Preset, c.Network, filled.Network, c.Port)
+	return reachedOnce(at, c.Network, c.Port)
 }
 
 func presetKnown(at, preset string, known []string) error {
@@ -220,18 +220,12 @@ func needs(at, field, filled string) error {
 		"option %q names no %q: write one, or a %q that fills it", at, field, "preset")
 }
 
-func reachedOnce(at, preset, written, network string, port int) error {
-	switch {
-	case network == "" || port == 0:
-		return reaching(at, network, port)
-	case written == "":
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q sets %q beside the %q %s that preset %q fills: the proxy reaches the switchboard by one of them",
-			at, "port", "network", network, preset)
-	default:
+func reachedOnce(at, writtenNetwork string, writtenPort int) error {
+	if writtenNetwork != "" && writtenPort != 0 {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"option %q sets both %q and %q: the proxy reaches the switchboard by one of them", at, "network", "port")
 	}
+	return reaching(at, writtenNetwork, writtenPort)
 }
 
 var dockerNetworkName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)

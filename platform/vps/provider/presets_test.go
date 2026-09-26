@@ -81,6 +81,20 @@ func TestAFieldWrittenBesideAPresetOverridesItAndTheRestStand(t *testing.T) {
 				Entrypoints: host.Entrypoints{HTTP: "web", HTTPS: "secure"}, Network: "dokploy-network",
 			}},
 		},
+		"Coolify's Traefik reaching the switchboard on a port in place of its network": {
+			proxy: map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}},
+			want: host.Front{Traefik: &host.TraefikFront{
+				Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+				Entrypoints: host.Entrypoints{HTTP: "http", HTTPS: "https"}, Port: 9000,
+			}},
+		},
+		"Coolify's Caddy reaching the switchboard on a port in place of its network": {
+			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify", "port": 9000}},
+			want: host.Front{Caddy: &host.CaddyFront{
+				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", Container: "coolify-proxy",
+				Config: "/config/caddy/Caddyfile.autosave", Port: 9000,
+			}},
+		},
 		"Coolify's Caddy in a container of another name": {
 			proxy: map[string]any{"caddy": map[string]any{"preset": "coolify", "container": "edge"}},
 			want: host.Front{Caddy: &host.CaddyFront{
@@ -186,9 +200,13 @@ func TestAProxyMissingWhatItNeedsIsRefusedNamingTheField(t *testing.T) {
 			proxy:   map[string]any{"caddy": map[string]any{"directory": "/d", "network": "web", "port": 9000}},
 			mention: []string{`"proxy.caddy"`, `"network"`, `"port"`},
 		},
-		"a port beside a preset that puts the proxy on a network": {
-			proxy:   map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}},
-			mention: []string{`"proxy.traefik"`, `"network"`, `"port"`, `preset "coolify"`},
+		"a Traefik preset with a network and a port both written beside it": {
+			proxy:   map[string]any{"traefik": map[string]any{"preset": "coolify", "network": "coolify", "port": 9000}},
+			mention: []string{`"proxy.traefik"`, `"network"`, `"port"`},
+		},
+		"a Caddy preset with a network and a port both written beside it": {
+			proxy:   map[string]any{"caddy": map[string]any{"preset": "coolify", "network": "web", "port": 9000}},
+			mention: []string{`"proxy.caddy"`, `"network"`, `"port"`},
 		},
 		"a Traefik port outside the range": {
 			proxy:   map[string]any{"traefik": map[string]any{"directory": "/d", "resolver": "le", "port": 70000}},
