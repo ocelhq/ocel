@@ -82,18 +82,18 @@ func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 
 func (b Bootstrap) Catalogue() []provider.Feature { return bootstrap.Catalogue() }
 
-func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
+func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
-		return provider.BootstrapReading{}, err
+		return provider.BootstrapDescription{}, err
 	}
 	held := described(class, read.Deployed)
-	held.Reading = read
+	held.VendorState = read
 	return held, nil
 }
 
-func described(class edge.Class, deployed bootstrap.Deployed) provider.BootstrapReading {
-	described := provider.BootstrapReading{Class: class, Present: deployed.Present}
+func described(class edge.Class, deployed bootstrap.Deployed) provider.BootstrapDescription {
+	described := provider.BootstrapDescription{Class: class, Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
@@ -135,7 +135,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {
-	if held, carried := req.Reading.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
+	if held, carried := req.VendorState.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
 		return held, nil
 	}
 	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Class))

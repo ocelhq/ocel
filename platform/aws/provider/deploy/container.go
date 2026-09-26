@@ -544,7 +544,7 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 		if err = r.placeRule(ctx, work); err != nil {
 			return provider.StackResult{}, err
 		}
-		spec.Work = work
+		spec.VendorState = work
 		var result provider.StackResult
 		if result, err = r.automation.Run(ctx, spec, progress); err == nil {
 			return result, nil
@@ -599,7 +599,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	if err := r.placeRule(ctx, work); err != nil {
 		return provider.Plan{}, err
 	}
-	spec.Work = work
+	spec.VendorState = work
 	previewed, err := r.automation.Preview(ctx, spec, progress)
 	if err != nil {
 		return provider.Plan{}, err

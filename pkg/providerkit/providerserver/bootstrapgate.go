@@ -23,25 +23,25 @@ type Gate struct {
 	Edge      edge.Kind
 }
 
-type BootstrapState struct {
-	Class      edge.Class
-	Present    bool
-	Stacks     []provider.BootstrapStack
-	Features   []string
-	Schema     int
-	WrittenBy  provider.WrittenBy
-	AutoHeal   bool
-	Unfinished bool
-	Reading    any
+type BootstrapStatus struct {
+	Class       edge.Class
+	Present     bool
+	Stacks      []provider.BootstrapStack
+	Features    []string
+	Schema      int
+	WrittenBy   provider.WrittenBy
+	AutoHeal    bool
+	Unfinished  bool
+	VendorState any
 }
 
-func (g Gate) State(ctx context.Context, class edge.Class) (BootstrapState, error) {
+func (g Gate) Status(ctx context.Context, class edge.Class) (BootstrapStatus, error) {
 	described, err := g.Bootstrap.Describe(ctx, class)
 	if err != nil {
-		return BootstrapState{}, err
+		return BootstrapStatus{}, err
 	}
-	standing := BootstrapState{Class: class, Present: described.Present, Stacks: described.Stacks,
-		Unfinished: described.Unfinished, Reading: described.Reading}
+	standing := BootstrapStatus{Class: class, Present: described.Present, Stacks: described.Stacks,
+		Unfinished: described.Unfinished, VendorState: described.VendorState}
 	var carried []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
@@ -55,12 +55,12 @@ func (g Gate) State(ctx context.Context, class edge.Class) (BootstrapState, erro
 	}
 	standing.Features = bootstrapplan.InCatalogueOrder(g.Bootstrap.Catalogue(), carried)
 	if standing.AutoHeal, err = g.autoHeal(ctx, class); err != nil {
-		return BootstrapState{}, err
+		return BootstrapStatus{}, err
 	}
 	return standing, nil
 }
 
-func (s BootstrapState) Stale(required []string) []string {
+func (s BootstrapStatus) Stale(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if !stack.Present || stack.DigestCurrent {
@@ -74,11 +74,11 @@ func (s BootstrapState) Stale(required []string) []string {
 	return out
 }
 
-func (s BootstrapState) Downgrade(writing provider.WrittenBy) bool {
+func (s BootstrapStatus) Downgrade(writing provider.WrittenBy) bool {
 	return s.WrittenBy.Newer(writing)
 }
 
-func (s BootstrapState) healable(required []string) []string {
+func (s BootstrapStatus) healable(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if stack.Feature == "" || stack.DigestCurrent || !stack.Present {
@@ -104,13 +104,13 @@ type ApplyRequest struct {
 }
 
 type intent struct {
-	standing  BootstrapState
+	standing  BootstrapStatus
 	requested []string
 	removing  []string
 	ordered   []string
 }
 
-func (g Gate) intended(standing BootstrapState, req ApplyRequest) (intent, error) {
+func (g Gate) intended(standing BootstrapStatus, req ApplyRequest) (intent, error) {
 	catalogue := g.Bootstrap.Catalogue()
 	class := standing.Class
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
@@ -166,24 +166,24 @@ func (g Gate) refuseUnfronting(catalogue []provider.Feature, named, removing []s
 
 func (i intent) request(class edge.Class, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
 	return provider.BootstrapRequest{
-		Class:      class,
-		Features:   i.requested,
-		Remove:     i.ordered,
-		Unattended: !req.AcceptReplacements,
-		WrittenBy:  writer,
-		Reading:    i.standing.Reading,
+		Class:       class,
+		Features:    i.requested,
+		Remove:      i.ordered,
+		Unattended:  !req.AcceptReplacements,
+		WrittenBy:   writer,
+		VendorState: i.standing.VendorState,
 	}
 }
 
 func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (provider.Plan, error) {
-	standing, err := g.State(ctx, class)
+	standing, err := g.Status(ctx, class)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	return g.PlanFrom(ctx, standing, req)
 }
 
-func (g Gate) PlanFrom(ctx context.Context, standing BootstrapState, req ApplyRequest) (provider.Plan, error) {
+func (g Gate) PlanFrom(ctx context.Context, standing BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
 	intended, err := g.intended(standing, req)
 	if err != nil {
 		return provider.Plan{}, err
@@ -224,7 +224,7 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []pro
 }
 
 func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, req ApplyRequest, progress edge.Progress) error {
-	standing, err := g.State(ctx, class)
+	standing, err := g.Status(ctx, class)
 	if err != nil {
 		return err
 	}
@@ -334,10 +334,10 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapState, error) {
-	standing, err := g.State(ctx, class)
+func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapStatus, error) {
+	standing, err := g.Status(ctx, class)
 	if err != nil {
-		return BootstrapState{}, err
+		return BootstrapStatus{}, err
 	}
 	command := provider.BootstrapCommand(class)
 	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
@@ -347,8 +347,8 @@ func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, he
 		return standing, err
 	}
 	if heal && g.heal(ctx, standing, required, progress) {
-		if standing, err = g.State(ctx, class); err != nil {
-			return BootstrapState{}, err
+		if standing, err = g.Status(ctx, class); err != nil {
+			return BootstrapStatus{}, err
 		}
 	}
 	if stale := standing.Stale(required); len(stale) > 0 {
@@ -359,7 +359,7 @@ func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, he
 	return standing, nil
 }
 
-func (s BootstrapState) lacking(required []string, command string) error {
+func (s BootstrapStatus) lacking(required []string, command string) error {
 	missing := bootstrapplan.MissingFeatures(s.Features, required)
 	if len(missing) == 0 {
 		return nil
@@ -369,7 +369,7 @@ func (s BootstrapState) lacking(required []string, command string) error {
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, standing BootstrapState, required []string, progress edge.Progress) bool {
+func (g Gate) heal(ctx context.Context, standing BootstrapStatus, required []string, progress edge.Progress) bool {
 	if !standing.AutoHeal || len(standing.healable(required)) == 0 {
 		return false
 	}

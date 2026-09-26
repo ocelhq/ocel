@@ -564,7 +564,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	cfn := b.CFN.(*teardownCFN)
 	gate := providerserver.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
 
-	standing, err := gate.State(context.Background(), edge.ClassProduction)
+	standing, err := gate.Status(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Standing: %v", err)
 	}

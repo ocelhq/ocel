@@ -109,11 +109,11 @@ func (b *Bootstrap) Applied() []provider.BootstrapRequest {
 	return slices.Clone(b.requests)
 }
 
-func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (provider.BootstrapReading, error) {
+func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (provider.BootstrapDescription, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
-	described := provider.BootstrapReading{Class: class, Present: present, Unfinished: present && b.halfway}
+	described := provider.BootstrapDescription{Class: class, Present: present, Unfinished: present && b.halfway}
 	if !present {
 		return described, nil
 	}
@@ -162,7 +162,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 	return provider.Plan{Groups: groups}, nil
 }
 
-func (b *Bootstrap) named(described provider.BootstrapReading) provider.BootstrapReading {
+func (b *Bootstrap) named(described provider.BootstrapDescription) provider.BootstrapDescription {
 	return bootstrapplan.WithDefaultStackNames(described, b.Catalogue(), func(feature string) string {
 		return stackNameOf(described.Class, feature)
 	})

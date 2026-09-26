@@ -203,8 +203,8 @@ const sealedFile = constants.ProjectStateDirName + "/vars.sealed"
 type packingProvider struct {
 	*fake.Provider
 
-	mu     sync.Mutex
-	packed []provider.AppPacking
+	mu       sync.Mutex
+	requests []provider.PackAppRequest
 }
 
 func (p *packingProvider) Hooks() provider.Hooks {
@@ -213,20 +213,20 @@ func (p *packingProvider) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (p *packingProvider) PackApp(_ context.Context, packing provider.AppPacking, _ edge.Progress) (provider.AppPack, error) {
+func (p *packingProvider) PackApp(_ context.Context, req provider.PackAppRequest, _ edge.Progress) (provider.PackAppResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.packed = append(p.packed, packing)
-	return provider.AppPack{
-		Overlay: map[string][]byte{sealedFile: []byte("sealed for " + packing.App)},
-		Packed:  "bundle for " + packing.App,
+	p.requests = append(p.requests, req)
+	return provider.PackAppResult{
+		Overlay:     map[string][]byte{sealedFile: []byte("sealed for " + req.App)},
+		VendorState: "bundle for " + req.App,
 	}, nil
 }
 
-func (p *packingProvider) packings() []provider.AppPacking {
+func (p *packingProvider) packings() []provider.PackAppRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return append([]provider.AppPacking(nil), p.packed...)
+	return append([]provider.PackAppRequest(nil), p.requests...)
 }
 
 func packagedFiles(t *testing.T, p provider.Provider, ref provider.ArtifactRef) map[string]string {
@@ -278,13 +278,13 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 	if got := files[sealedFile]; got != "sealed for web" {
 		t.Errorf("the package holds %s = %q, want the sealed values the vendor packed; without them the function boots with no variables", sealedFile, got)
 	}
-	if spec.App.Packed != "bundle for web" {
-		t.Errorf("the app spec carries %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.Packed)
+	if spec.App.VendorState != "bundle for web" {
+		t.Errorf("the app spec carries %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.VendorState)
 	}
 
-	packings := provider.packings()
-	if len(packings) != 1 || packings[0].App != "web" || packings[0].Values.Folder != spec.App.Values.Folder {
-		t.Errorf("the vendor was asked to pack %+v, want the app's own values, once", packings)
+	requests := provider.packings()
+	if len(requests) != 1 || requests[0].App != "web" || requests[0].Values.Folder != spec.App.Values.Folder {
+		t.Errorf("the vendor was asked to pack %+v, want the app's own values, once", requests)
 	}
 }
 

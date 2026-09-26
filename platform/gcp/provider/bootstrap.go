@@ -76,10 +76,10 @@ func (g bootstrapGate) stood(ctx context.Context) (bootstrap, error) {
 	return bootstrap{clients: held, fronts: g.p.Edges()}, nil
 }
 
-func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
+func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
-		return provider.BootstrapReading{}, err
+		return provider.BootstrapDescription{}, err
 	}
 	return b.Describe(ctx, class)
 }
@@ -121,15 +121,15 @@ type bootstrap struct {
 	fronts  provider.Edges
 }
 
-func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
+func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
-		return provider.BootstrapReading{}, err
+		return provider.BootstrapDescription{}, err
 	}
 	return b.described(ctx, read)
 }
 
-func (b bootstrap) described(ctx context.Context, read survey) (provider.BootstrapReading, error) {
+func (b bootstrap) described(ctx context.Context, read survey) (provider.BootstrapDescription, error) {
 	items := bootstrapItems(read.Names, read.Class, read.Emulated)
 	stacks := []provider.BootstrapStack{{
 		Name:          read.Project + "/" + string(read.Class),
@@ -141,7 +141,7 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 	for _, feature := range read.Stamp.Features {
 		standing, err := b.frontStands(ctx, read.Class, feature)
 		if err != nil {
-			return provider.BootstrapReading{}, err
+			return provider.BootstrapDescription{}, err
 		}
 		stacks = append(stacks, provider.BootstrapStack{
 			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
@@ -152,17 +152,17 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 			WrittenBy:     read.Stamp.Writer,
 		})
 	}
-	return provider.BootstrapReading{
-		Class:      read.Class,
-		Present:    read.Present,
-		Unfinished: read.Present && read.Stamp.State != stateComplete,
-		Reading:    read,
-		Stacks:     stacks,
+	return provider.BootstrapDescription{
+		Class:       read.Class,
+		Present:     read.Present,
+		Unfinished:  read.Present && read.Stamp.State != stateComplete,
+		VendorState: read,
+		Stacks:      stacks,
 	}, nil
 }
 
 func (b bootstrap) held(ctx context.Context, req provider.BootstrapRequest) (survey, error) {
-	if carried, held := req.Reading.(survey); held && carried.Class == req.Class {
+	if carried, held := req.VendorState.(survey); held && carried.Class == req.Class {
 		return carried, nil
 	}
 	return b.survey(ctx, req.Class)

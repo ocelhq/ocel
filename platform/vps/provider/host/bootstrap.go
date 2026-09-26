@@ -29,32 +29,32 @@ func NewBootstrap(h *Host, vendor provider.Vendor, project string) Bootstrap {
 
 func (b Bootstrap) Catalogue() []provider.Feature { return nil }
 
-func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
+func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
 	read, err := b.host.Observe(ctx, class)
 	if err != nil {
-		return provider.BootstrapReading{}, err
+		return provider.BootstrapDescription{}, err
 	}
 	return b.described(ctx, read)
 }
 
-func (b Bootstrap) described(ctx context.Context, read Reading) (provider.BootstrapReading, error) {
+func (b Bootstrap) described(ctx context.Context, read Reading) (provider.BootstrapDescription, error) {
 	principal, err := b.host.Principal(ctx)
 	if err != nil {
-		return provider.BootstrapReading{}, err
+		return provider.BootstrapDescription{}, err
 	}
 	if read, err = b.recorded(ctx, read); err != nil {
-		return provider.BootstrapReading{}, err
+		return provider.BootstrapDescription{}, err
 	}
 	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
-			return provider.BootstrapReading{}, err
+			return provider.BootstrapDescription{}, err
 		}
 	}
-	return provider.BootstrapReading{
-		Class:      read.Class,
-		Present:    read.Present,
-		Unfinished: read.unfinished(),
-		Reading:    read,
+	return provider.BootstrapDescription{
+		Class:       read.Class,
+		Present:     read.Present,
+		Unfinished:  read.unfinished(),
+		VendorState: read,
 		Stacks: []provider.BootstrapStack{{
 			Name:          principal,
 			Present:       read.Present,
@@ -74,7 +74,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	read = described.Reading.(Reading)
+	read = described.VendorState.(Reading)
 	if err := read.runnableEngine(b.host.named()); err != nil {
 		return provider.Plan{}, err
 	}
@@ -144,7 +144,7 @@ func slowLast(changes []provider.Change) []provider.Change {
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (Reading, error) {
-	if held, carried := req.Reading.(Reading); carried && held.Class == req.Class {
+	if held, carried := req.VendorState.(Reading); carried && held.Class == req.Class {
 		return held, nil
 	}
 	return b.read(ctx, req.Class)

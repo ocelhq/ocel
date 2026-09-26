@@ -18,8 +18,8 @@ type reached struct {
 
 func (r *reached) Catalogue() []provider.Feature { return nil }
 
-func (r *reached) Describe(context.Context, edge.Class) (provider.BootstrapReading, error) {
-	return provider.BootstrapReading{}, nil
+func (r *reached) Describe(context.Context, edge.Class) (provider.BootstrapDescription, error) {
+	return provider.BootstrapDescription{}, nil
 }
 
 func (r *reached) Plan(context.Context, provider.BootstrapRequest) (provider.Plan, error) {

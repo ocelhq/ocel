@@ -54,7 +54,7 @@ type StackSpec struct {
 
 	App *AppSpec
 
-	Work any
+	VendorState any
 }
 
 type Bindings interface {
@@ -90,7 +90,7 @@ type AppSpec struct {
 
 	PreviewLabel string
 
-	Packed any
+	VendorState any
 
 	Proxied bool
 }

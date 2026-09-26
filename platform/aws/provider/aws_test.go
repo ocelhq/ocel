@@ -49,8 +49,8 @@ type stubBootstrap struct{ err error }
 
 func (stubBootstrap) Catalogue() []provider.Feature { return nil }
 
-func (stubBootstrap) Describe(context.Context, edge.Class) (provider.BootstrapReading, error) {
-	return provider.BootstrapReading{}, nil
+func (stubBootstrap) Describe(context.Context, edge.Class) (provider.BootstrapDescription, error) {
+	return provider.BootstrapDescription{}, nil
 }
 
 func (s stubBootstrap) Plan(context.Context, provider.BootstrapRequest) (provider.Plan, error) {

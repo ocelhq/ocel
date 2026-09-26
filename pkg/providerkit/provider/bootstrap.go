@@ -9,7 +9,7 @@ import (
 type Bootstrap interface {
 	Catalogue() []Feature
 
-	Describe(ctx context.Context, class edge.Class) (BootstrapReading, error)
+	Describe(ctx context.Context, class edge.Class) (BootstrapDescription, error)
 
 	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
@@ -20,14 +20,14 @@ type Bootstrap interface {
 	Remove(ctx context.Context, class edge.Class, progress edge.Progress) error
 }
 
-type BootstrapReading struct {
+type BootstrapDescription struct {
 	Class   edge.Class
 	Present bool
 	Stacks  []BootstrapStack
 
 	Unfinished bool
 
-	Reading any
+	VendorState any
 }
 
 type BootstrapStack struct {
@@ -67,7 +67,7 @@ type BootstrapRequest struct {
 
 	WrittenBy WrittenBy
 
-	Reading any
+	VendorState any
 }
 
 const BootstrapSchema = 1

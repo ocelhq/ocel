@@ -26,14 +26,14 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err := os.WriteFile(bundlePath, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	spec.App.Packed = appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
+	spec.App.VendorState = appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
 
 	release := releasing(t, cfg)
 	work, err := release.appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	spec.Work = work
+	spec.VendorState = work
 
 	outputs := auto.OutputMap{"fn--web--entry": auto.OutputValue{Value: map[string]any{
 		outputKeyFunctionURL:  "https://web.lambda-url.us-east-1.on.aws/",
@@ -68,7 +68,7 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	spec.Work = work
+	spec.VendorState = work
 
 	result, err := release.decodeApp(spec, auto.OutputMap{
 		"fn--web--entry": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://web.example/"}},

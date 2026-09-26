@@ -72,7 +72,7 @@ func surveyed(features ...string) survey {
 	}
 }
 
-func featureStack(described provider.BootstrapReading, name string) (provider.BootstrapStack, bool) {
+func featureStack(described provider.BootstrapDescription, name string) (provider.BootstrapStack, bool) {
 	for _, stack := range described.Stacks {
 		if stack.Feature == name {
 			return stack, true
