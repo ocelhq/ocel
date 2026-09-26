@@ -54,8 +54,8 @@ func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) e
 }
 
 func (r *deployRun) writtenByTheDeploy(name string, published map[string]provider.Binding) bool {
-	_, held := published[name]
-	return r.dry && !held && naming.IsInlineRecord(name)
+	_, taken := published[name]
+	return r.dry && !taken && naming.IsInlineRecord(name)
 }
 
 func proxied(kind provider.BindingType) bool {
@@ -79,7 +79,7 @@ func RefuseMismatchedBinding(binding provider.Binding, declaredName string, decl
 	case binding.Source != "" && proxied(declared) && !binding.Endpointed():
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s to the %s record %q published by %s, and the record names no store for ocel's %s client to reach it in. "+
-				"Bind it inline instead, with the store's endpoint and a key pair, or publish a record that carries them",
+				"Bind it inline instead, with the store's endpoint and a key pair, or publish a record that contains them",
 			declaredName, declared, binding.Name, binding.Source, declared)
 	}
 	return nil
@@ -133,8 +133,8 @@ func (r *deployRun) warnShadowed(progress edge.Progress, resources []provider.Re
 		if resource.Binding != "" {
 			continue
 		}
-		namesake, held := published[resource.Declared]
-		if !held || RefuseMismatchedBinding(namesake, resource.Declared, resource.Type, proxied) != nil {
+		namesake, taken := published[resource.Declared]
+		if !taken || RefuseMismatchedBinding(namesake, resource.Declared, resource.Type, proxied) != nil {
 			continue
 		}
 		progress.Say(fmt.Sprintf(

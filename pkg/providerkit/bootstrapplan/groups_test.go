@@ -9,7 +9,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestPrefixWithVendorNamesEveryGroupUnderTheVendorThatHoldsIt(t *testing.T) {
+func TestPrefixWithVendorNamesEveryGroupUnderTheVendorThatOwnsIt(t *testing.T) {
 	t.Parallel()
 
 	groups := []provider.ChangeGroup{{Kind: provider.StackGroupKind, Name: "ocel-bootstrap"}}

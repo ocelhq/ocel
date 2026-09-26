@@ -67,11 +67,11 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return nil, err
 		}
 		if req.GetConsented() == nil {
-			standing, err := gate.Status(ctx, class)
+			status, err := gate.Status(ctx, class)
 			if err != nil {
 				return nil, provider.RefusalError(err)
 			}
-			if plan, err = gate.PlanFrom(ctx, standing, intent); err != nil {
+			if plan, err = gate.PlanFrom(ctx, status, intent); err != nil {
 				return nil, provider.RefusalError(err)
 			}
 			sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(p, req.GetEdge().GetKind())))))
@@ -109,7 +109,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	standing, err := gate.Status(ctx, class)
+	status, err := gate.Status(ctx, class)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -121,7 +121,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	}
 
 	resp := &contractv1.DescribeBootstrapResponse{
-		Bootstrap: BootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
+		Bootstrap: BootstrapStatusProto(status, h.session.writer, req.GetTier(), status.Features),
 	}
 	for _, f := range gate.Bootstrap.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
@@ -129,7 +129,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 			Summary:    f.Summary,
 			DependsOn:  f.DependsOn,
 			Needs:      f.Needs,
-			Enabled:    slices.Contains(standing.Features, f.Name),
+			Enabled:    slices.Contains(status.Features, f.Name),
 			Dependents: ProjectsDependingOn(recorded, []string{f.Name}),
 		})
 	}
@@ -172,7 +172,7 @@ func PlanFromProto(shown *planv1.ChangePlan) (provider.Plan, error) {
 		if err != nil {
 			return provider.Plan{}, err
 		}
-		held := provider.ChangeGroup{
+		converted := provider.ChangeGroup{
 			Kind:    group.GetKind(),
 			Name:    group.GetName(),
 			Feature: group.GetFeature(),
@@ -184,7 +184,7 @@ func PlanFromProto(shown *planv1.ChangePlan) (provider.Plan, error) {
 			if action, err = changeAction(change.GetAction()); err != nil {
 				return provider.Plan{}, err
 			}
-			held.Changes = append(held.Changes, provider.Change{
+			converted.Changes = append(converted.Changes, provider.Change{
 				Kind:   change.GetKind(),
 				Name:   change.GetName(),
 				Action: action,
@@ -192,7 +192,7 @@ func PlanFromProto(shown *planv1.ChangePlan) (provider.Plan, error) {
 				Slow:   change.GetSlow(),
 			})
 		}
-		plan.Groups = append(plan.Groups, held)
+		plan.Groups = append(plan.Groups, converted)
 	}
 	return plan, nil
 }
@@ -201,24 +201,24 @@ func changeAction(drawn planv1.Change_Action) (provider.ChangeAction, error) {
 	action, known := provider.ActionFromProto(drawn)
 	if !known {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"this plan names %s, an action this provider cannot carry out; draw the plan again and consent to what it shows now",
+			"this plan names %s, an action this provider cannot perform; draw the plan again and consent to what it shows now",
 			drawn)
 	}
 	return action, nil
 }
 
-func BootstrapStatusProto(standing BootstrapStatus, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
-		Present:        standing.Present,
-		Schema:         uint32(standing.Schema),
+		Present:        current.Present,
+		Schema:         uint32(current.Schema),
 		RequiredSchema: provider.BootstrapSchema,
-		AutoHeal:       standing.AutoHeal,
+		AutoHeal:       current.AutoHeal,
 		Writer:         writing.String(),
-		Downgrade:      standing.Downgrade(writing),
-		Unfinished:     standing.Unfinished,
+		Downgrade:      current.Downgrade(writing),
+		Unfinished:     current.Unfinished,
 	}
-	for _, stack := range standing.Stacks {
+	for _, stack := range current.Stacks {
 		status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{
 			Name:          stack.Name,
 			Feature:       stack.Feature,
@@ -248,10 +248,10 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	return ChangePlanProto(plan, string(class), soleStandingEdge(plan)), nil
+	return ChangePlanProto(plan, string(class), soleRaisedEdge(plan)), nil
 }
 
-func soleStandingEdge(plan provider.Plan) string {
+func soleRaisedEdge(plan provider.Plan) string {
 	var kinds []edge.Kind
 	for _, group := range plan.Groups {
 		if group.Kind != provider.EdgeGroupKind {

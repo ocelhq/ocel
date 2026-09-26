@@ -118,7 +118,7 @@ func requireInvalid(t *testing.T, err error, call string) {
 	t.Helper()
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("%s() refused with %v, want a Refusal carrying %s so the CLI can name the choices", call, err, refusal.CodeInvalid)
+		t.Fatalf("%s() refused with %v, want a Refusal with code %s so the CLI can name the choices", call, err, refusal.CodeInvalid)
 	}
 	if refused.Message == "" {
 		t.Errorf("%s() refused with no message, so the CLI has nothing to tell the user", call)

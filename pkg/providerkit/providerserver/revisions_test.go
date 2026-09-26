@@ -32,7 +32,7 @@ func TestRevisionsAreKeyedToTheAppTheRecordIsFor(t *testing.T) {
 	}
 }
 
-func TestAnAppThatStoodUpNoRevisionRecordsNone(t *testing.T) {
+func TestAnAppThatProvisionedNoRevisionRecordsNone(t *testing.T) {
 	t.Parallel()
 
 	result := provider.StackResult{

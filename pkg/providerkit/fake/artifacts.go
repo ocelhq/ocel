@@ -45,8 +45,8 @@ func (a *Artifacts) Keys() []provider.ArtifactRef {
 func (a *Artifacts) Has(_ context.Context, ref provider.ArtifactRef) (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	_, held := a.objects[ref]
-	return held, nil
+	_, present := a.objects[ref]
+	return present, nil
 }
 
 func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {

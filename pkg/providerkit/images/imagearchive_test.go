@@ -73,12 +73,12 @@ func TestAWholeArchivePassesThroughUntouchedAndReportsNoGap(t *testing.T) {
 	archive := archiveOf(t, []fixtureBlob{config, layer, manifest}, index)
 
 	checked := NewVerifiedExport(bytes.NewReader(archive), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
-	carried, err := io.ReadAll(checked)
+	read, err := io.ReadAll(checked)
 	if err != nil {
 		t.Fatalf("reading through the check = %v", err)
 	}
-	if !bytes.Equal(carried, archive) {
-		t.Fatal("the check altered the bytes it carried, and the box would load something other than what the daemon exported")
+	if !bytes.Equal(read, archive) {
+		t.Fatal("the check altered the bytes it passed through, and the box would load something other than what the daemon exported")
 	}
 	if gap := checked.VerifyErr(); gap != nil {
 		t.Errorf("VerifyErr() over a whole archive = %v", gap)
@@ -91,7 +91,7 @@ func TestAnArchiveMissingALayerItsManifestNamesIsRefusedNamingTheDigestAndTheDae
 
 	checked := NewVerifiedExport(bytes.NewReader(archive), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
 	if _, err := io.ReadAll(checked); err != nil {
-		t.Fatalf("reading through the check = %v: the stream itself is carried whole either way", err)
+		t.Fatalf("reading through the check = %v: the stream itself is passed through whole either way", err)
 	}
 	gap := checked.VerifyErr()
 	if gap == nil {
@@ -104,12 +104,12 @@ func TestAnArchiveMissingALayerItsManifestNamesIsRefusedNamingTheDigestAndTheDae
 	}
 }
 
-func TestAStreamThatIsNoArchiveAtAllIsCarriedAndReportsNothing(t *testing.T) {
+func TestAStreamThatIsNoArchiveAtAllIsPassedThroughAndReportsNothing(t *testing.T) {
 	checked := NewVerifiedExport(strings.NewReader("not a tar"), "unix:///var/run/docker.sock", "ocel/web:sha256-abc")
 	if _, err := io.ReadAll(checked); err != nil {
 		t.Fatalf("reading through the check = %v", err)
 	}
 	if gap := checked.VerifyErr(); gap != nil {
-		t.Errorf("VerifyErr() over bytes that are no archive = %v, want the daemon's own answer to stand", gap)
+		t.Errorf("VerifyErr() over bytes that are no archive = %v, want the daemon's own answer left as it is", gap)
 	}
 }

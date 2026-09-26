@@ -293,8 +293,8 @@ func (e *Edge) open(state edge.StackState) (*Stack, error) {
 	build := e.ledgers
 	if build == nil {
 		records := e.records
-		build = func(held edge.StackState) Ledger {
-			return ledger.New(records, held.Class, held.Slug)
+		build = func(stack edge.StackState) Ledger {
+			return ledger.New(records, stack.Class, stack.Slug)
 		}
 	}
 	return &Stack{front: e, state: state, ledger: build(state)}, nil

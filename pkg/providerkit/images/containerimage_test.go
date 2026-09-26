@@ -35,7 +35,7 @@ func lastLayer(t *testing.T, image v1.Image) v1.Layer {
 		t.Fatal(err)
 	}
 	if len(layers) == 0 {
-		t.Fatal("the wrapped image carries no layer at all")
+		t.Fatal("the wrapped image has no layer at all")
 	}
 	return layers[len(layers)-1]
 }
@@ -51,7 +51,7 @@ func tarEntry(t *testing.T, layer v1.Layer, name string) (*tar.Header, []byte) {
 	for {
 		header, err := reader.Next()
 		if errors.Is(err, io.EOF) {
-			t.Fatalf("the layer holds nothing at %s", name)
+			t.Fatalf("the layer contains nothing at %s", name)
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -59,11 +59,11 @@ func tarEntry(t *testing.T, layer v1.Layer, name string) (*tar.Header, []byte) {
 		if header.Name != name {
 			continue
 		}
-		held, err := io.ReadAll(reader)
+		body, err := io.ReadAll(reader)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return header, held
+		return header, body
 	}
 }
 
@@ -91,11 +91,11 @@ func TestWrapContainerBootsTheImagesOwnCommandThroughTheRuntime(t *testing.T) {
 		t.Errorf("the wrapped image runs %v, want %v: the base's own entrypoint and command are what the runtime executes", config.Cmd, want)
 	}
 	if !slices.Equal(config.Env, []string{"PATH=/usr/bin"}) || config.WorkingDir != "/srv" || config.User != "app" {
-		t.Errorf("the wrapped image carries env %v, working dir %q and user %q, want the base's own untouched", config.Env, config.WorkingDir, config.User)
+		t.Errorf("the wrapped image has env %v, working dir %q and user %q, want the base's own untouched", config.Env, config.WorkingDir, config.User)
 	}
 }
 
-func TestWrapContainerCarriesTheRuntimeExecutableAtThePathItBootsFrom(t *testing.T) {
+func TestWrapContainerIncludesTheRuntimeExecutableAtThePathItBootsFrom(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"node", "server.js"}})
@@ -107,16 +107,16 @@ func TestWrapContainerCarriesTheRuntimeExecutableAtThePathItBootsFrom(t *testing
 	}
 
 	name := strings.TrimPrefix(appbuild.ContainerRuntimePath, "/")
-	header, held := tarEntry(t, lastLayer(t, wrapped), name)
-	if !bytes.Equal(held, runtime) {
-		t.Errorf("the layer holds %q at %s, want the runtime it was handed", held, appbuild.ContainerRuntimePath)
+	header, body := tarEntry(t, lastLayer(t, wrapped), name)
+	if !bytes.Equal(body, runtime) {
+		t.Errorf("the layer contains %q at %s, want the runtime it was handed", body, appbuild.ContainerRuntimePath)
 	}
 	if header.Mode&0o111 == 0 || header.Mode != 0o755 {
-		t.Errorf("the layer holds %s at mode %o, want 0755: the entrypoint the container boots through must be executable", appbuild.ContainerRuntimePath, header.Mode)
+		t.Errorf("the layer has %s at mode %o, want 0755: the entrypoint the container boots through must be executable", appbuild.ContainerRuntimePath, header.Mode)
 	}
 }
 
-func TestWrapContainerCarriesALiveDirectoryAnyImageUserCanProjectInto(t *testing.T) {
+func TestWrapContainerIncludesALiveDirectoryAnyImageUserCanProjectInto(t *testing.T) {
 	t.Parallel()
 
 	base := baseContainer(t, v1.Config{Cmd: []string{"node", "server.js"}, User: "1000"})
@@ -128,10 +128,10 @@ func TestWrapContainerCarriesALiveDirectoryAnyImageUserCanProjectInto(t *testing
 	name := strings.TrimPrefix(appbuild.ContainerLivePath, "/") + "/"
 	header, _ := tarEntry(t, lastLayer(t, wrapped), name)
 	if header.Typeflag != tar.TypeDir {
-		t.Fatalf("the layer holds %s as type %q, want a directory the runtime projects live values into", appbuild.ContainerLivePath, header.Typeflag)
+		t.Fatalf("the layer has %s as type %q, want a directory the runtime projects live values into", appbuild.ContainerLivePath, header.Typeflag)
 	}
 	if header.Mode != 0o1777 {
-		t.Errorf("the layer holds %s at mode %o, want 1777: an image that runs as its own user, or from scratch with no /tmp, still needs somewhere the runtime can write", appbuild.ContainerLivePath, header.Mode)
+		t.Errorf("the layer has %s at mode %o, want 1777: an image that runs as its own user, or from scratch with no /tmp, still needs somewhere the runtime can write", appbuild.ContainerLivePath, header.Mode)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestWrapContainerRefusesAnImageThereIsNothingToRunInFrontOf(t *testing.T) {
 	}
 	for _, want := range []string{"ENTRYPOINT", "CMD"} {
 		if !strings.Contains(err.Error(), want) {
-			t.Errorf("WrapContainer() = %v, want it to name %s as what the image carries none of", err, want)
+			t.Errorf("WrapContainer() = %v, want it to name %s as what the image lacks", err, want)
 		}
 	}
 }
@@ -163,7 +163,7 @@ func wrappedDigestOf(t *testing.T, runtime []byte) string {
 	return digest.String()
 }
 
-func TestWrappingOneImageInOneRuntimeTwiceCarriesTheSameDigest(t *testing.T) {
+func TestWrappingOneImageInOneRuntimeTwiceGivesTheSameDigest(t *testing.T) {
 	t.Parallel()
 
 	runtime := []byte("a runtime binary")
@@ -184,8 +184,8 @@ func TestTheRuntimeTagNamesTheImagesDigestAndTheRuntimeItIsWrappedIn(t *testing.
 	if !strings.HasPrefix(tag, prefix) {
 		t.Fatalf("RuntimeTag() = %q, want it to open with %q: the tag is read back as the image the deploy built", tag, prefix)
 	}
-	if held := strings.TrimPrefix(tag, prefix); len(held) != 12 {
-		t.Errorf("RuntimeTag() names the runtime as %q, want twelve hex characters", held)
+	if digest := strings.TrimPrefix(tag, prefix); len(digest) != 12 {
+		t.Errorf("RuntimeTag() names the runtime as %q, want twelve hex characters", digest)
 	}
 	if other := images.RuntimeTag(wrappedDigest, []byte("a newer runtime binary")); other == tag {
 		t.Error("two runtimes share one tag, so a rebuilt runtime would be read as already pushed and never reach the registry")

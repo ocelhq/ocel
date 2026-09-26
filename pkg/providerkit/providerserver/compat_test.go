@@ -128,7 +128,7 @@ func TestCompatibilityExplain(t *testing.T) {
 		}
 	})
 
-	t.Run("every explanation is a refusal the wire can carry", func(t *testing.T) {
+	t.Run("every explanation is a refusal the wire can send", func(t *testing.T) {
 		t.Parallel()
 
 		for _, c := range []compatibility{needsBootstrapInit, needsBootstrapUpgrade, needsCLIUpgrade} {

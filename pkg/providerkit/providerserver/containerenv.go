@@ -25,14 +25,14 @@ func runsFromImage(p provider.Provider, compute provider.Compute) bool {
 	return false
 }
 
-func (r *deployRun) containerEnv(entry provider.AppEntry, held provider.AppValues) map[string]string {
+func (r *deployRun) containerEnv(entry provider.AppEntry, values provider.AppValues) map[string]string {
 	if !runsFromImage(r.provider, entry.Compute()) {
 		return nil
 	}
-	env := make(map[string]string, len(held.Plain)+len(held.Sensitive)+1)
-	maps.Copy(env, held.Plain)
-	maps.Copy(env, held.Sensitive)
-	maps.Copy(env, held.PhaseEnv())
+	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+1)
+	maps.Copy(env, values.Plain)
+	maps.Copy(env, values.Sensitive)
+	maps.Copy(env, values.PhaseEnv())
 	return env
 }
 
@@ -48,14 +48,14 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 		if !runsFromImage(r.provider, entry.Compute()) {
 			continue
 		}
-		held, err := r.manifestValues(entry, nil)
+		values, err := r.manifestValues(entry, nil)
 		if err != nil {
 			return err
 		}
-		if err := refuseOwnedNames(entry.App, entry.Manifest.GetClientBundle(), held); err != nil {
+		if err := refuseOwnedNames(entry.App, entry.Manifest.GetClientBundle(), values); err != nil {
 			return err
 		}
-		if len(held.Secrets) == 0 {
+		if len(values.Secrets) == 0 {
 			continue
 		}
 		if stored == nil {
@@ -63,7 +63,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 				return err
 			}
 		}
-		for _, secret := range held.Secrets {
+		for _, secret := range values.Secrets {
 			if !stored[envvars.Cell{Folder: secret.Folder, Key: secret.Key}] {
 				return r.refuseUnsetSecret(entry.App, secret.Key)
 			}
@@ -73,13 +73,13 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 }
 
 func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, error) {
-	held, err := r.values.List(ctx, r.scope)
+	listed, err := r.values.List(ctx, r.scope)
 	if err != nil {
 		return nil, err
 	}
 	shadowed := map[string]bool{"": true, bindingEnvironment(r.spec): true}
-	stored := make(map[envvars.Cell]bool, len(held))
-	for _, metadata := range held {
+	stored := make(map[envvars.Cell]bool, len(listed))
+	for _, metadata := range listed {
 		if shadowed[metadata.Coordinate.Environment] {
 			stored[metadata.Coordinate.Cell] = true
 		}
@@ -87,9 +87,9 @@ func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, err
 	return stored, nil
 }
 
-func refuseOwnedNames(app string, clientBundle bool, held provider.AppValues) error {
+func refuseOwnedNames(app string, clientBundle bool, values provider.AppValues) error {
 	var injected, served, owned []string
-	for _, key := range declaredNames(clientBundle, held) {
+	for _, key := range declaredNames(clientBundle, values) {
 		switch {
 		case key == appbuild.InjectedPortName:
 			injected = append(injected, key)
@@ -117,9 +117,9 @@ func refuseOwnedNames(app string, clientBundle bool, held provider.AppValues) er
 	return nil
 }
 
-func declaredNames(clientBundle bool, held provider.AppValues) []string {
-	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
-	for _, named := range []map[string]string{held.Plain, held.Sensitive} {
+func declaredNames(clientBundle bool, values provider.AppValues) []string {
+	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
+	for _, named := range []map[string]string{values.Plain, values.Sensitive} {
 		for key := range named {
 			if appbuild.IsOcelInjectedEnv(clientBundle, key) {
 				continue
@@ -127,7 +127,7 @@ func declaredNames(clientBundle bool, held provider.AppValues) []string {
 			names = append(names, key)
 		}
 	}
-	for _, secret := range held.Secrets {
+	for _, secret := range values.Secrets {
 		names = append(names, secret.Key)
 	}
 	slices.Sort(names)

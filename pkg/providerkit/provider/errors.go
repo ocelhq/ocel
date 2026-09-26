@@ -70,12 +70,12 @@ func RefusedCode(err error) (refusal.Code, bool) {
 		if err != nil {
 			continue
 		}
-		carried, ok := value.(*contractv1.Refusal)
+		refused, ok := value.(*contractv1.Refusal)
 		if !ok {
 			continue
 		}
 		for code, encoded := range wireRefusalCodes {
-			if encoded == carried.GetCode() {
+			if encoded == refused.GetCode() {
 				return code, true
 			}
 		}

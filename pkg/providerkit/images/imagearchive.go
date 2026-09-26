@@ -110,8 +110,8 @@ func verifyExportComplete(from *io.PipeReader, daemon, ref string) error {
 		}
 		for _, named := range manifest.Manifests {
 			digest := strings.TrimPrefix(named.Digest, "sha256:")
-			nested, held := kept[archiveBlobs+digest]
-			if !held {
+			nested, ok := kept[archiveBlobs+digest]
+			if !ok {
 				if !present[digest] {
 					missing[named.Digest] = true
 				}
@@ -138,7 +138,7 @@ func verifyExportComplete(from *io.PipeReader, daemon, ref string) error {
 	}
 	sort.Strings(lost)
 	return refusal.Refuse(refusal.CodeInvalid,
-		"the daemon at %s exported %s without %d of the blobs its manifest names (%s): the daemon no longer holds them, so the archive would load as an image with layers missing — rebuild the image and deploy again",
+		"the daemon at %s exported %s without %d of the blobs its manifest names (%s): the daemon no longer has them, so the archive would load as an image with layers missing — rebuild the image and deploy again",
 		daemon, ref, len(lost), strings.Join(lost, ", "))
 }
 

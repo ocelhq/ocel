@@ -110,7 +110,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.App,
 			Action:  planv1.Change_ACTION_DELETE,
-			Reason:  "everything this release of " + stack.App + " stood up",
+			Reason:  "everything this release of " + stack.App + " provisioned",
 		})
 	}
 	for _, stack := range r.infra {
@@ -210,7 +210,7 @@ func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
 	if len(consented.GetGroups()) == 0 {
 		return nil
 	}
-	standing, err := r.plan()
+	current, err := r.plan()
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
 	if err != nil {
 		return err
 	}
-	drawn, err := PlanFromProto(standing)
+	drawn, err := PlanFromProto(current)
 	if err != nil {
 		return err
 	}
@@ -236,14 +236,14 @@ func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error 
 			errs = append(errs, err)
 		}
 	}
-	written, held := r.state.PointerRecords(), r.state.Certificates()
+	written, certificates := r.state.PointerRecords(), r.state.Certificates()
 	if err := r.tearDownEdge(ctx, progress); err != nil {
 		errs = append(errs, err)
 	} else {
 		if err := r.releaseRecords(ctx, written, progress); err != nil {
 			errs = append(errs, err)
 		}
-		if err := r.discardCertificates(ctx, held, progress); err != nil {
+		if err := r.discardCertificates(ctx, certificates, progress); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -315,10 +315,10 @@ func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Reco
 	return nil
 }
 
-func (r *projectRemoval) discardCertificates(ctx context.Context, held []provider.Certificate, progress edge.Progress) error {
+func (r *projectRemoval) discardCertificates(ctx context.Context, certificates []provider.Certificate, progress edge.Progress) error {
 	var errs []error
-	for _, cert := range held {
-		if err := retireCertificate(ctx, r.provider, r.cutover, cert, provider.Certificate{}, progress); err != nil {
+	for _, cert := range certificates {
+		if err := discardCertificateAndRecords(ctx, r.provider, r.cutover, cert, provider.Certificate{}, progress); err != nil {
 			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
 		}
 	}

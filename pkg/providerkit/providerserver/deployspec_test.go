@@ -82,7 +82,7 @@ func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 		t.Errorf("spec infra stack = %s, want %s", spec.Infra, naming.InfraStack(stackrecords.ProductionEnv))
 	}
 	if len(spec.Apps) != 2 {
-		t.Fatalf("spec carries %d app stacks, want one per app", len(spec.Apps))
+		t.Fatalf("spec has %d app stacks, want one per app", len(spec.Apps))
 	}
 	if spec.Pointer != edge.DefaultPointer {
 		t.Errorf("a production spec points at %q, want %q", spec.Pointer, edge.DefaultPointer)
@@ -165,15 +165,15 @@ func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 
 	infra, apps, pointers := classifyStacks(entries, edge.ClassProduction)
 	if len(infra) != 1 || len(apps) != 1 || len(pointers) != 1 {
-		t.Fatalf("production carries %v / %v / %v, want only the production stacks", infra, apps, pointers)
+		t.Fatalf("production has %v / %v / %v, want only the production stacks", infra, apps, pointers)
 	}
 
 	infra, apps, pointers = classifyStacks(entries, edge.ClassPreview)
 	if len(infra) != 1 || len(apps) != 1 {
-		t.Fatalf("preview carries %v / %v, want the staging infra and the pr-7 app", infra, apps)
+		t.Fatalf("preview has %v / %v, want the staging infra and the pr-7 app", infra, apps)
 	}
 	if len(pointers) != 2 {
-		t.Errorf("preview carries pointers %v, want one per preview environment", pointers)
+		t.Errorf("preview has pointers %v, want one per preview environment", pointers)
 	}
 }
 
@@ -183,7 +183,7 @@ func functionRequest(fn *contractv1.ManifestFunction, apps ...*contractv1.Manife
 	return req
 }
 
-func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanCarry(t *testing.T) {
+func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanContain(t *testing.T) {
 	t.Parallel()
 
 	_, err := buildDeploySpec(productionRequest(
@@ -196,7 +196,7 @@ func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanCarry(t *testing.T) {
 		t.Fatalf("buildDeploySpec() = %v, want a %s refusal", err, refusal.CodeInvalid)
 	}
 	if !strings.Contains(refused.Message, "Web") {
-		t.Errorf("buildDeploySpec() = %q, want the refusal to name the app it will not carry", refused.Message)
+		t.Errorf("buildDeploySpec() = %q, want the refusal to name the app it will not deploy", refused.Message)
 	}
 }
 
@@ -209,7 +209,7 @@ func TestBuildDeploySpecRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
 		_, err := buildDeploySpec(functionRequest(
 			&contractv1.ManifestFunction{LogicalName: "admin-server", App: "admin"}, web), "p1")
 		if err == nil {
-			t.Fatal("buildDeploySpec() accepted a function naming an app no stack stands up, so the deploy would succeed with the route 404ing")
+			t.Fatal("buildDeploySpec() accepted a function naming an app no stack provisions, so the deploy would succeed with the route 404ing")
 		}
 		if !strings.Contains(err.Error(), "admin") {
 			t.Errorf("buildDeploySpec() = %v, want the refusal to name the app it cannot find", err)
@@ -286,7 +286,7 @@ func TestAContainerNamingAnAppTheManifestDoesNotDeclareRefusesTheDeploy(t *testi
 
 	_, err := buildDeploySpec(req, "p1")
 	if err == nil {
-		t.Fatal("buildDeploySpec() admitted a container for an app this manifest never declares, and nothing would ever stand it up")
+		t.Fatal("buildDeploySpec() admitted a container for an app this manifest never declares, and nothing would ever run it")
 	}
 	if !strings.Contains(err.Error(), "ghost") {
 		t.Errorf("buildDeploySpec() error = %q, want it to name the app", err)

@@ -15,8 +15,8 @@ import (
 func lastPlan(events []*progressv1.OperationEvent) *planv1.ChangePlan {
 	var plan *planv1.ChangePlan
 	for _, event := range events {
-		if held := event.GetPlan(); held != nil {
-			plan = held
+		if got := event.GetPlan(); got != nil {
+			plan = got
 		}
 	}
 	return plan
@@ -131,7 +131,7 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	}
 
 	if provisioned := p.FakeStacks().Provisioned(); len(provisioned) != 0 {
-		t.Errorf("a dry deploy provisioned %d stacks, want a run that stands nothing up", len(provisioned))
+		t.Errorf("a dry deploy provisioned %d stacks, want a run that provisions nothing", len(provisioned))
 	}
 	if reconciled := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks(); len(reconciled) != 0 {
 		t.Errorf("a dry deploy reconciled the edge %d times, want it left alone", len(reconciled))

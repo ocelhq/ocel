@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
-func TestAPinnedImageCarriesARegistryHostButNeverATag(t *testing.T) {
+func TestAPinnedImageNamesARegistryHostButNeverATag(t *testing.T) {
 	const digest = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 	for _, ref := range []string{
@@ -49,7 +49,7 @@ func TestAProbedPathIsOnePathOffTheRootAndNothingElse(t *testing.T) {
 
 	for _, path := range []string{"", "healthz", "/up?ready=1", "/up#ready", "/up ready", "/up\tready", "/up\nready"} {
 		if appbuild.HealthCheckPath(path) {
-			t.Errorf("HealthCheckPath(%q) = true, want it refused: a probe asks one path of the process and carries no query, fragment or whitespace to ask it with", path)
+			t.Errorf("HealthCheckPath(%q) = true, want it refused: a probe asks one path of the process and has no query, fragment or whitespace to ask it with", path)
 		}
 	}
 }
@@ -72,7 +72,7 @@ func assertFieldPattern(t *testing.T, name, want string) {
 
 	rules, ok := proto.GetExtension(field.Options(), validate.E_Field).(*validate.FieldRules)
 	if !ok || rules.GetString() == nil {
-		t.Fatalf("ManifestContainer.%s carries no buf.validate string rule, so the wire admits anything at all there", name)
+		t.Fatalf("ManifestContainer.%s has no buf.validate string rule, so the wire admits anything at all there", name)
 	}
 
 	if got := rules.GetString().GetPattern(); got != want {

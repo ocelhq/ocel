@@ -9,7 +9,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
+func TestEdgeGroupKeepsTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -19,7 +19,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 		reason  string
 	}{
 		{
-			name: "nothing stands",
+			name: "nothing exists yet",
 			planned: []edge.PlanChange{
 				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
 				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanCreate},
@@ -27,7 +27,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 			action: provider.ActionCreate,
 		},
 		{
-			name: "everything stands",
+			name: "everything is current",
 			planned: []edge.PlanChange{
 				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep, Reason: "already current"},
 				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: "already current"},
@@ -69,7 +69,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				t.Errorf("group action = %q (%q), want %q (%q)", group.Action, group.Reason, tc.action, tc.reason)
 			}
 			if len(group.Changes) != len(tc.planned) {
-				t.Fatalf("group carries %d changes, want one per planned change", len(group.Changes))
+				t.Fatalf("group has %d changes, want one per planned change", len(group.Changes))
 			}
 			for i, change := range group.Changes {
 				if change.Kind != tc.planned[i].Kind || change.Name != tc.planned[i].Name {
@@ -117,7 +117,7 @@ func TestEdgeGroupThatAccountsForNothingIsNotCalledCurrent(t *testing.T) {
 func TestEdgeGroupFromPlanGroup(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a group carrying nothing is a group all the same", func(t *testing.T) {
+	t.Run("a group with no changes is a group all the same", func(t *testing.T) {
 		t.Parallel()
 
 		converted, err := bootstrapplan.EdgeGroupFromPlanGroup(edge.PlanGroup{
@@ -133,7 +133,7 @@ func TestEdgeGroupFromPlanGroup(t *testing.T) {
 			t.Errorf("group = %+v, want the kept group and the reason it is kept for", converted)
 		}
 		if len(converted.Changes) != 0 {
-			t.Errorf("group carries %+v, want the rows it was given: none", converted.Changes)
+			t.Errorf("group has %+v, want the rows it was given: none", converted.Changes)
 		}
 	})
 

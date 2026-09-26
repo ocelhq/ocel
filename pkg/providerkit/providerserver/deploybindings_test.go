@@ -89,7 +89,7 @@ func refusedDeploy(t *testing.T, req *contractv1.DeployRequest, publish func(*fa
 	for stream.Receive() {
 		result := stream.Msg().GetResult()
 		if result.GetSuccess() {
-			t.Fatal("Deploy() succeeded, want the binding refused before anything was stood up")
+			t.Fatal("Deploy() succeeded, want the binding refused before anything was provisioned")
 		}
 		if result.GetError() != "" {
 			refusal = result.GetError()
@@ -109,7 +109,7 @@ func TestDeployRefusesABindingNothingPublished(t *testing.T) {
 		message := refusedDeploy(t, bindingRequest("orders", bindingsv1.BindingType_BINDING_TYPE_POSTGRES), nil)
 		for _, want := range []string{"orders", "prod", "Nothing at all is published"} {
 			if !strings.Contains(message, want) {
-				t.Errorf("refusal = %q, want it to carry %q", message, want)
+				t.Errorf("refusal = %q, want it to contain %q", message, want)
 			}
 		}
 	})
@@ -268,7 +268,7 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 		want := `"bindings": { "postgres": { "orders": "@orders" } }`
 		messages := said(t, postgresRecord("orders", "terraform"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 		if !slices.ContainsFunc(messages, func(message string) bool { return strings.Contains(message, want) }) {
-			t.Errorf("no progress message carries %s: the warning must show the binding written as config accepts it", want)
+			t.Errorf("no progress message contains %s: the warning must show the binding written as config accepts it", want)
 		}
 	})
 

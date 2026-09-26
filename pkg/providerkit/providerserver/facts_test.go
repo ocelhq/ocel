@@ -36,7 +36,7 @@ func servedListingTransforms(t *testing.T, p provider.Provider) contractv1connec
 	}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	standsBootstrapped(t, client)
+	bootstrappedOverRPC(t, client)
 	return client
 }
 
@@ -46,7 +46,7 @@ func TestADeployListingTransformsIsRefusedByAProviderWhoseFactsSayItRendersNone(
 
 	result, _, err := deployStream(t, client, deployRequest())
 	if err == nil || result.GetSuccess() {
-		t.Fatal("Deploy() listing a transform succeeded through a provider whose facts say it renders none, want it refused before anything is stood up")
+		t.Fatal("Deploy() listing a transform succeeded through a provider whose facts say it renders none, want it refused before anything is provisioned")
 	}
 	if !strings.Contains(err.Error(), "tags.transform.ts") {
 		t.Errorf("Deploy() error = %q, want it to name the transform nothing here would run", err)

@@ -99,8 +99,8 @@ func WithDetailUnavailable(reason string) string {
 	return reason + "; " + DetailUnavailable
 }
 
-func KeepOrCreate(stands bool) ChangeAction {
-	if stands {
+func KeepOrCreate(exists bool) ChangeAction {
+	if exists {
 		return ActionKeep
 	}
 	return ActionCreate

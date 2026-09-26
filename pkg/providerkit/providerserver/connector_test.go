@@ -81,8 +81,8 @@ func finalResult(t *testing.T, stream *connect.ServerStreamForClient[progressv1.
 	defer stream.Close()
 	var result *progressv1.ResultEvent
 	for stream.Receive() {
-		if held := stream.Msg().GetResult(); held != nil {
-			result = held
+		if got := stream.Msg().GetResult(); got != nil {
+			result = got
 		}
 	}
 	if err := stream.Err(); err != nil {
@@ -111,9 +111,9 @@ func TestAProviderThatPutsNoConnectorOnItsTargetsSaysSo(t *testing.T) {
 	}
 }
 
-func TestDescribingAConnectorTargetCarriesWhatTheConsoleKeysItBy(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+func TestDescribingAConnectorTargetIncludesWhatTheConsoleKeysItBy(t *testing.T) {
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	described, err := client.DescribeConnectorTarget(context.Background(), &contractv1.DescribeConnectorTargetRequest{})
 	if err != nil {
@@ -126,13 +126,13 @@ func TestDescribingAConnectorTargetCarriesWhatTheConsoleKeysItBy(t *testing.T) {
 		t.Errorf("hostname/arch = %q/%q", described.GetHostname(), described.GetArch())
 	}
 	if described.GetInstalled().GetVersion() != "0.4.1" || described.GetInstalled().GetPublicKey() != "ZmFrZQ==" {
-		t.Errorf("installed = %v, want the version and key the target holds", described.GetInstalled())
+		t.Errorf("installed = %v, want the version and key installed on the target", described.GetInstalled())
 	}
 }
 
 func TestInstallingAConnectorEndsWithTheAddressAndTheKey(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
 		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
@@ -147,11 +147,11 @@ func TestInstallingAConnectorEndsWithTheAddressAndTheKey(t *testing.T) {
 	if result.GetConnector().GetPublicKey() != "ZmFrZQ==" {
 		t.Errorf("public key = %q", result.GetConnector().GetPublicKey())
 	}
-	if string(held.install.Binary) != "#!/bin/sh\n" || held.install.Version != "0.4.1" {
-		t.Errorf("the provider was handed %+v", held.install)
+	if string(host.install.Binary) != "#!/bin/sh\n" || host.install.Version != "0.4.1" {
+		t.Errorf("the provider was handed %+v", host.install)
 	}
-	if string(held.install.Config) != `{"console":"https://ocel.app"}` {
-		t.Errorf("the provider was handed the config %q", held.install.Config)
+	if string(host.install.Config) != `{"console":"https://ocel.app"}` {
+		t.Errorf("the provider was handed the config %q", host.install.Config)
 	}
 }
 
@@ -166,67 +166,67 @@ func closed(stream *connect.ServerStreamForClient[progressv1.OperationEvent], er
 }
 
 func TestAnEmptyInstallIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("InstallConnector() with nothing to install = %v, want invalid argument", err)
 	}
-	if held.install.Version != "" {
-		t.Error("the provider was handed an install carrying no binary")
+	if host.install.Version != "" {
+		t.Error("the provider was handed an install with no binary")
 	}
 }
 
 func TestRemovingAConnectorReachesTheProvider(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	stream, err := client.RemoveConnector(context.Background(), &contractv1.RemoveConnectorRequest{})
 	if result := finalResult(t, stream, err); !result.GetSuccess() {
 		t.Fatalf("result error = %q, want a success", result.GetError())
 	}
-	if !held.removed {
+	if !host.removed {
 		t.Error("the provider was never asked to take the connector off")
 	}
 }
 
 func TestTheComputeTheCallerAsksForReachesTheProviderAndItsChoiceComesBack(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
 		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
 		Compute: string(provider.ComputeServerless),
 	})
 	result := finalResult(t, stream, err)
-	if held.install.Compute != provider.ComputeServerless {
-		t.Errorf("the provider was asked for %q, want the compute the caller named", held.install.Compute)
+	if host.install.Compute != provider.ComputeServerless {
+		t.Errorf("the provider was asked for %q, want the compute the caller named", host.install.Compute)
 	}
 	if result.GetConnector().GetCompute() != string(provider.ComputeServerless) {
-		t.Errorf("compute = %q, want what the provider settled on so the console records it", result.GetConnector().GetCompute())
+		t.Errorf("compute = %q, want what the provider chose so the console records it", result.GetConnector().GetCompute())
 	}
 }
 
 func TestAnUnsetComputeLeavesTheChoiceToTheProvider(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
 		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
 	})
 	result := finalResult(t, stream, err)
-	if held.install.Compute != "" {
-		t.Errorf("the provider was asked for %q, want nothing named so it picks its own default", held.install.Compute)
+	if host.install.Compute != "" {
+		t.Errorf("the provider was asked for %q, want nothing named so it picks its own default", host.install.Compute)
 	}
 	if result.GetConnector().GetCompute() != string(provider.ComputeContainer) {
-		t.Errorf("compute = %q, want the provider's own default carried back", result.GetConnector().GetCompute())
+		t.Errorf("compute = %q, want the provider's own default passed back", result.GetConnector().GetCompute())
 	}
 }
 
 func TestAComputeOutsideTheVocabularyIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
-	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
-	client := connectorServing(t, held)
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
 
 	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
 		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
@@ -235,7 +235,7 @@ func TestAComputeOutsideTheVocabularyIsRefusedBeforeTheProviderSeesIt(t *testing
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("InstallConnector() naming a compute outside the wire pin = %v, want invalid argument", err)
 	}
-	if held.install.Version != "" {
+	if host.install.Version != "" {
 		t.Error("the provider was handed an install naming a compute the wire does not admit")
 	}
 }

@@ -248,6 +248,6 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of an app moving back to serverless = %v", err)
 	}
 	if taken := p.FakeStacks().Destroyed(); !slices.Contains(taken, "web") {
-		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work standing otherwise", taken)
+		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work running otherwise", taken)
 	}
 }

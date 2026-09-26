@@ -14,11 +14,11 @@ import (
 func UploadRows(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload) ([]provider.Change, error) {
 	rows := make([]provider.Change, 0, len(uploads))
 	for _, upload := range uploads {
-		held, err := store.Has(ctx, upload.Ref)
+		present, err := store.Has(ctx, upload.Ref)
 		if err != nil {
 			return nil, fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
 		}
-		rows = append(rows, provider.Change{Kind: provider.UploadKind, Name: upload.Name, Action: provider.KeepOrCreate(held)})
+		rows = append(rows, provider.Change{Kind: provider.UploadKind, Name: upload.Name, Action: provider.KeepOrCreate(present)})
 	}
 	return rows, nil
 }
@@ -45,11 +45,11 @@ func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []pr
 }
 
 func ship(ctx context.Context, store provider.ArtifactStore, upload provider.Upload, progress edge.Progress) error {
-	held, err := store.Has(ctx, upload.Ref)
+	present, err := store.Has(ctx, upload.Ref)
 	if err != nil {
 		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
 	}
-	if held {
+	if present {
 		return nil
 	}
 	body, err := os.Open(upload.Path)

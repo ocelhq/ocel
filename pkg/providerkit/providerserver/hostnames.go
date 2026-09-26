@@ -91,20 +91,20 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 	if d.host == "" {
 		return d.configured
 	}
-	return slices.DeleteFunc(slices.Clone(d.configured), func(held ConfiguredHost) bool { return held.Hostname != d.host })
+	return slices.DeleteFunc(slices.Clone(d.configured), func(configured ConfiguredHost) bool { return configured.Hostname != d.host })
 }
 
 func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress edge.Progress) (bool, error) {
 	host := target.Hostname
 	hostState := d.state.Host(host)
 	serving := hostState.Serving()
-	held := hostState.Certificate.ID
+	priorCertID := hostState.Certificate.ID
 	certifying := d.hostCertificates(host, &hostState)
 
 	if err := certifying.certify(ctx, host, progress); err != nil {
 		return false, err
 	}
-	if d.state.Ready(host, d.cutover.kind) && hostState.Certificate.ID == held {
+	if d.state.Ready(host, d.cutover.kind) && hostState.Certificate.ID == priorCertID {
 		return false, certifying.discardSuperseded(ctx, progress)
 	}
 
@@ -172,7 +172,7 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving
 	if err := edge.Heeded(stack.UnbindDomain(ctx, host), progress); err != nil {
 		return err
 	}
-	progress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s",
+	progress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they cached: %s",
 		host, flipWindow(d.cutover.dns)))
 	return nil
 }
@@ -217,7 +217,7 @@ func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
 			if d.state.Uses(cert.ID) {
 				continue
 			}
-			if err := retireCertificate(ctx, d.provider, d.cutover, cert, provider.Certificate{}, progress); err != nil {
+			if err := discardCertificateAndRecords(ctx, d.provider, d.cutover, cert, provider.Certificate{}, progress); err != nil {
 				return err
 			}
 		}
@@ -293,12 +293,12 @@ func (d *hostnames) statusHosts() []string {
 
 func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.ProductionHostname, error) {
 	hostState := d.state.Host(host)
-	held := d.stack.State()
-	bound := edge.Pointable(edge.TargetOf(d.cutover.kind, d.cutover.unbound, held), held.Bound, host)
+	stackState := d.stack.State()
+	bound := edge.Pointable(edge.TargetOf(d.cutover.kind, d.cutover.unbound, stackState), stackState.Bound, host)
 
 	var manual []edge.Record
 	if bound {
-		wanted, err := d.cutover.recordsFor(held, host)
+		wanted, err := d.cutover.recordsFor(stackState, host)
 		if err != nil {
 			return nil, err
 		}

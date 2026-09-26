@@ -39,7 +39,7 @@ func namingARegistry(req *contractv1.DeployRequest) *contractv1.DeployRequest {
 }
 
 func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -78,8 +78,8 @@ func TestTheWireRefusesAnAppNamingAComputeOutsideTheVocabulary(t *testing.T) {
 	}
 }
 
-func TestTheAppSpecCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+func TestTheAppSpecNamesTheImageAndProbeAContainerAppIsProvisionedFrom(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
 	client := servedBy(t, p)
@@ -92,7 +92,7 @@ func TestTheAppSpecCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 	specs := p.FakeStacks().Provisioned()
 	app := specs[len(specs)-1].App
 	if app == nil {
-		t.Fatal("the last plan the stacks port saw stands up no app")
+		t.Fatal("the last plan the stacks port saw provisions no app")
 	}
 	if app.Compute != provider.ComputeContainer {
 		t.Errorf("Compute = %q, want %q: the primitive is chosen by what the plan names", app.Compute, provider.ComputeContainer)
@@ -105,7 +105,7 @@ func TestTheAppSpecCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 	}
 }
 
-func TestAServerlessAppSpecNamesItsComputeAndCarriesNoImage(t *testing.T) {
+func TestAServerlessAppSpecNamesItsComputeAndNoImage(t *testing.T) {
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
 	client := servedBy(t, p)
@@ -121,12 +121,12 @@ func TestAServerlessAppSpecNamesItsComputeAndCarriesNoImage(t *testing.T) {
 		t.Errorf("Compute = %q, want %q", app.Compute, provider.ComputeServerless)
 	}
 	if app.Image != "" || app.HealthCheckPath != "" {
-		t.Errorf("Image = %q and HealthCheckPath = %q, want a serverless app to carry neither", app.Image, app.HealthCheckPath)
+		t.Errorf("Image = %q and HealthCheckPath = %q, want a serverless app to have neither", app.Image, app.HealthCheckPath)
 	}
 }
 
-func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+func TestTheContainerAProvisionedAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
 	client := servedBy(t, p)
@@ -147,19 +147,19 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 		}
 		stacks++
 		if len(entry.Containers) != 1 || entry.Containers[0].Name != "web" {
-			t.Fatalf("%s recorded %v, want the container it stood the app up as: nothing can take down what was never written", entry.Name, entry.Containers)
+			t.Fatalf("%s recorded %v, want the container it ran the app as: nothing can take down what was never written", entry.Name, entry.Containers)
 		}
 		if entry.Containers[0].Image != pushedCoordinate {
-			t.Errorf("%s recorded the container running %q, want %q: a teardown that cannot say what a container ran cannot sweep the image it held", entry.Name, entry.Containers[0].Image, pushedCoordinate)
+			t.Errorf("%s recorded the container running %q, want %q: a teardown that cannot say what a container ran cannot sweep the image it ran", entry.Name, entry.Containers[0].Image, pushedCoordinate)
 		}
 	}
 	if stacks == 0 {
-		t.Fatalf("the deploy wrote no app stack at all among %d entries, so the container it stood up was recorded nowhere", len(entries))
+		t.Fatalf("the deploy wrote no app stack at all among %d entries, so the container it started was recorded nowhere", len(entries))
 	}
 }
 
 func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -167,18 +167,18 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 		t.Fatalf("Deploy() of a container app = %q", result.GetError())
 	}
 
-	held := ledger.New(provider.Records(), edge.ClassProduction, "shop")
-	record, found, err := held.Record(context.Background(), "web", containerTestImage)
+	releases := ledger.New(provider.Records(), edge.ClassProduction, "shop")
+	record, found, err := releases.Record(context.Background(), "web", containerTestImage)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !found {
-		t.Fatalf("the deployments ledger holds no record under %q, which is what a promotion carries for a container app: a promotion reads promotion.Builds and finds nothing, so every rollback and every re-point refuses by name", containerTestImage)
+		t.Fatalf("the deployments ledger has no record under %q, which is what a promotion names for a container app: a promotion reads promotion.Builds and finds nothing, so every rollback and every re-point refuses by name", containerTestImage)
 	}
 	if record.Image == "" {
 		t.Errorf("the record under %q names no image, so a promotion reading it has nothing to put in front of the app", containerTestImage)
 	}
 	if record.Origin == "" || record.Origin != "https://"+record.Physical+".ctr.fake.invalid" {
-		t.Errorf("the record under %q names origin %q for container %q, want the URL the provider stood the container up on: an edge that fronts a container by URL has nothing else to reach", containerTestImage, record.Origin, record.Physical)
+		t.Errorf("the record under %q names origin %q for container %q, want the URL the provider serves the container on: an edge that fronts a container by URL has nothing else to reach", containerTestImage, record.Origin, record.Physical)
 	}
 }

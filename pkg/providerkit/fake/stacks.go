@@ -145,19 +145,19 @@ func ProvisionedFunctions(spec provider.StackSpec) []provider.Function {
 	if spec.App == nil {
 		return nil
 	}
-	standing := make([]provider.Function, 0, len(spec.App.Functions))
+	functions := make([]provider.Function, 0, len(spec.App.Functions))
 	for _, function := range spec.App.Functions {
 		physical := spec.Ref.Name.String() + "-" + function.Name
-		standing = append(standing, provider.Function{
+		functions = append(functions, provider.Function{
 			Name:     function.Name,
 			Physical: physical,
 			URL:      "https://" + physical + ".fn.fake.invalid",
 		})
 	}
-	if len(standing) == 0 {
+	if len(functions) == 0 {
 		return nil
 	}
-	return standing
+	return functions
 }
 
 func ProvisionedContainers(spec provider.StackSpec) []provider.AppContainer {

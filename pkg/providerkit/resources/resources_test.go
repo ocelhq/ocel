@@ -98,7 +98,7 @@ func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	}
 	removing := resources.Hooks{RemoveResource: (&buckets{}).RemoveResource}
 	if served := resources.ServedBindingTypes(removing); len(served) != 0 {
-		t.Fatalf("ServedBindingTypes() = %v for hooks that only remove, want nothing: a resource nothing can stand up is not served", served)
+		t.Fatalf("ServedBindingTypes() = %v for hooks that only remove, want nothing: a resource nothing can provision is not served", served)
 	}
 }
 
@@ -171,7 +171,7 @@ func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
 		Resources: []provider.Resource{{Name: "orders", Type: provider.BindingPostgres}},
 	}, nil)
 	if err == nil {
-		t.Fatal("Provision() recorded a Postgres binding carrying only a host, want it refused before anything binds to it")
+		t.Fatal("Provision() recorded a Postgres binding with only a host, want it refused before anything binds to it")
 	}
 	if !strings.Contains(err.Error(), provider.PropertyDatabase) {
 		t.Errorf("the refusal reads %q, want it to name the property that is missing", err)
@@ -279,12 +279,12 @@ func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.
 	rows := rowsOf(plan)
 	for _, name := range []string{"orders", "uploads"} {
 		if rows[name] != provider.ActionCreate {
-			t.Errorf("%s reads %q, want it created: nothing recorded stands", name, rows[name])
+			t.Errorf("%s reads %q, want it created: nothing is recorded yet", name, rows[name])
 		}
 	}
 }
 
-func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
+func TestPlanKeepsWhatExistsAndDeletesWhatThePlanDropped(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -374,11 +374,11 @@ func (w *withFunctions) hooks() resources.Hooks {
 }
 
 func (w *withFunctions) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.Function, error) {
-	var standing []provider.Function
+	var functions []provider.Function
 	for _, fn := range spec.App.Functions {
-		standing = append(standing, function(spec.Ref, fn.Name))
+		functions = append(functions, function(spec.Ref, fn.Name))
 	}
-	return standing, nil
+	return functions, nil
 }
 
 func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ edge.Progress) error {
@@ -476,8 +476,8 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 
 type withContainers struct {
 	*buckets
-	stood   []provider.StackSpec
-	removed []provider.AppContainer
+	provisioned []provider.StackSpec
+	removed     []provider.AppContainer
 }
 
 func (w *withContainers) hooks() resources.Hooks {
@@ -487,7 +487,7 @@ func (w *withContainers) hooks() resources.Hooks {
 }
 
 func (w *withContainers) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
-	w.stood = append(w.stood, spec)
+	w.provisioned = append(w.provisioned, spec)
 	return []provider.AppContainer{container(spec.Ref, spec.App.App)}, nil
 }
 
@@ -523,7 +523,7 @@ func recordContainers(t *testing.T, records records.Store, ref provider.StackRef
 	}
 }
 
-func TestAContainerAppReachesTheContainerPrimitiveCarryingItsImageAndProbe(t *testing.T) {
+func TestAContainerAppReachesTheContainerPrimitiveWithItsImageAndProbe(t *testing.T) {
 	t.Parallel()
 
 	ref := appRef()
@@ -538,18 +538,18 @@ func TestAContainerAppReachesTheContainerPrimitiveCarryingItsImageAndProbe(t *te
 	if err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if len(own.stood) != 1 {
-		t.Fatalf("the container primitive was called %d times, want the one app the spec carries", len(own.stood))
+	if len(own.provisioned) != 1 {
+		t.Fatalf("the container primitive was called %d times, want the one app the spec names", len(own.provisioned))
 	}
-	app := own.stood[0].App
+	app := own.provisioned[0].App
 	if app.Compute != provider.ComputeContainer || app.Image != testImage || app.HealthCheckPath != "/healthz" {
-		t.Errorf("the primitive read compute %q, image %q and probe %q, want the flat fields the spec carries", app.Compute, app.Image, app.HealthCheckPath)
+		t.Errorf("the primitive read compute %q, image %q and probe %q, want the flat fields the spec has", app.Compute, app.Image, app.HealthCheckPath)
 	}
 	if len(result.Containers) != 1 || result.Containers[0].Name != "web" {
-		t.Fatalf("Provision() returned %v, want the container the primitive stood up", result.Containers)
+		t.Fatalf("Provision() returned %v, want the container the primitive provisioned", result.Containers)
 	}
 	if len(result.Functions) != 0 {
-		t.Errorf("Provision() returned %v, want a container app to stand up no function", result.Functions)
+		t.Errorf("Provision() returned %v, want a container app to provision no function", result.Functions)
 	}
 }
 
@@ -575,11 +575,11 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 		t.Fatalf("Provision() returned %v, want the function the serverless app declares", result.Functions)
 	}
 	if len(result.Containers) != 0 {
-		t.Errorf("Provision() returned %v, want a serverless app to stand up no container", result.Containers)
+		t.Errorf("Provision() returned %v, want a serverless app to provision no container", result.Containers)
 	}
 }
 
-func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T) {
+func TestAProviderProvisioningNoContainersRefusesAContainerAppByName(t *testing.T) {
 	t.Parallel()
 
 	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
@@ -591,14 +591,14 @@ func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T)
 	}, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want an invalid refusal", err)
+		t.Fatalf("Provision() of a container app on a provider that provisions none = %v, want an invalid refusal", err)
 	}
 	if !strings.Contains(refused.Message, "Containers hooks") {
 		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refused.Message, "Containers hooks")
 	}
 }
 
-func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T) {
+func TestAProviderProvisioningNoFunctionsRefusesAServerlessAppByName(t *testing.T) {
 	t.Parallel()
 
 	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
@@ -610,7 +610,7 @@ func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T)
 	}, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("Provision() of a serverless app on a provider that stands up none = %v, want an invalid refusal", err)
+		t.Fatalf("Provision() of a serverless app on a provider that provisions none = %v, want an invalid refusal", err)
 	}
 	if !strings.Contains(refused.Message, "Functions hooks") {
 		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refused.Message, "Functions hooks")
@@ -665,7 +665,7 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 	}
 }
 
-func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *testing.T) {
+func TestAProviderProvisioningNoContainersRefusesToOrphanTheOnesItRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -727,7 +727,7 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 	err := resources.NewHookStacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil)
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
-		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, "Containers hooks")
+		t.Fatalf("Destroy() of a recorded container nothing provisions = %v, want a refusal naming %s", err, "Containers hooks")
 	}
 	if strings.Contains(refusal.Message, "nothing here declares") {
 		t.Errorf("the refusal reads %q, and a destroy declares nothing at all: the sentence an orphan sweep gives is false here", refusal.Message)
@@ -754,10 +754,10 @@ func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTak
 	}, nil)
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
-		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, "Containers hooks")
+		t.Fatalf("Provision() of a container app on a provider that provisions none = %v, want a refusal naming %s", err, "Containers hooks")
 	}
 	if len(own.removed) != 0 {
-		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
+		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing running in its place", own.removed)
 	}
 }
 
@@ -781,7 +781,7 @@ func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T
 		t.Fatalf("Provision() of an app naming no compute = %v, want an invalid refusal", err)
 	}
 	if len(own.removed) != 0 {
-		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
+		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing running in its place", own.removed)
 	}
 }
 
@@ -794,11 +794,11 @@ func (m misnaming) hooks() resources.Hooks {
 }
 
 func (m misnaming) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
-	m.stood = append(m.stood, spec)
+	m.provisioned = append(m.provisioned, spec)
 	return []provider.AppContainer{container(spec.Ref, spec.App.App+"-svc")}, nil
 }
 
-func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *testing.T) {
+func TestAContainerRunningUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -808,20 +808,20 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), misnaming{own}.hooks())
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}
 
-	stood, err := stacks.Provision(ctx, spec, nil)
+	result, err := stacks.Provision(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if len(stood.Containers) != 1 || stood.Containers[0].Name != "web-svc" {
-		t.Fatalf("Provision() returned %v, want the container this provider names for itself", stood.Containers)
+	if len(result.Containers) != 1 || result.Containers[0].Name != "web-svc" {
+		t.Fatalf("Provision() returned %v, want the container this provider names for itself", result.Containers)
 	}
-	recordContainers(t, records, ref, stood.Containers[0].Name)
+	recordContainers(t, records, ref, result.Containers[0].Name)
 
 	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "web-svc" {
-		t.Fatalf("the fan-out took down %v; a release declares the app's own name and nothing else, so a container standing under any other name is swept the next time round", own.removed)
+		t.Fatalf("the fan-out took down %v; a release declares the app's own name and nothing else, so a container running under any other name is swept the next time round", own.removed)
 	}
 }
 
@@ -834,7 +834,7 @@ func imagePushes(store images.Store) provider.ImagePushes {
 	}}}
 }
 
-func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
+func TestTheImageIsPushedBeforeTheContainerItIsProvisionedFrom(t *testing.T) {
 	t.Parallel()
 
 	own := &withContainers{buckets: &buckets{}}
@@ -853,12 +853,12 @@ func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
 	if pushed := registry.Pushed(); len(pushed) != 1 || pushed[0].Source != testImage {
 		t.Fatalf("the fan-out pushed %v, want the app's own image", pushed)
 	}
-	if len(own.stood) != 1 {
-		t.Fatalf("the fan-out stood up %d containers, want the one the pushed image runs", len(own.stood))
+	if len(own.provisioned) != 1 {
+		t.Fatalf("the fan-out provisioned %d containers, want the one the pushed image runs", len(own.provisioned))
 	}
 }
 
-func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
+func TestAReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T) {
 	t.Parallel()
 
 	own := &withContainers{buckets: &buckets{}}
@@ -875,32 +875,32 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 	if _, err := stacks.Provision(context.Background(), spec, nil); err == nil {
 		t.Fatal("Provision() succeeded with an image that never reached the registry, so the box would be pointed at an image it cannot pull")
 	}
-	if len(own.stood) != 0 {
-		t.Fatalf("the fan-out stood up %v after the push failed", own.stood)
+	if len(own.provisioned) != 0 {
+		t.Fatalf("the fan-out provisioned %v after the push failed", own.provisioned)
 	}
 }
 
 type retaining struct {
 	*buckets
-	swept      []string
-	taken      []string
-	window     map[string][]string
-	holding    map[string]bool
-	stood      func() error
-	served     func(resources.ProvisionRequest) error
-	sweeping   func() error
-	forgetting func() error
+	swept        []string
+	taken        []string
+	window       map[string][]string
+	retained     map[string]bool
+	provisioning func() error
+	served       func(resources.ProvisionRequest) error
+	sweeping     func() error
+	forgetting   func() error
 }
 
 func (r *retaining) promote(app, imageRef string) {
 	if r.window == nil {
 		r.window = map[string][]string{}
 	}
-	if r.holding == nil {
-		r.holding = map[string]bool{}
+	if r.retained == nil {
+		r.retained = map[string]bool{}
 	}
 	r.window[app] = append([]string{imageRef}, r.window[app]...)
-	r.holding[imageRef] = true
+	r.retained[imageRef] = true
 }
 
 func (r *retaining) hooks() resources.Hooks {
@@ -911,11 +911,11 @@ func (r *retaining) hooks() resources.Hooks {
 	return hooks
 }
 
-func (r *retaining) holds(imageRef string) bool { return r.holding[imageRef] }
+func (r *retaining) retains(imageRef string) bool { return r.retained[imageRef] }
 
 func (r *retaining) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
-	if r.stood != nil {
-		if err := r.stood(); err != nil {
+	if r.provisioning != nil {
+		if err := r.provisioning(); err != nil {
 			return nil, err
 		}
 	}
@@ -946,9 +946,9 @@ func (r *retaining) ReconcileImages(_ context.Context, _ provider.StackRef, app,
 			return err
 		}
 	}
-	for held := range r.holding {
-		if !slices.Contains(r.window[app], held) {
-			delete(r.holding, held)
+	for ref := range r.retained {
+		if !slices.Contains(r.window[app], ref) {
+			delete(r.retained, ref)
 		}
 	}
 	return nil
@@ -997,8 +997,8 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 			spec.Resources = []provider.Resource{{Name: "store", Type: provider.BindingBucket}}
 			return spec
 		},
-		"the container never stands": func(own *retaining) provider.StackSpec {
-			own.stood = func() error { return refused }
+		"the container is never provisioned": func(own *retaining) provider.StackSpec {
+			own.provisioning = func() error { return refused }
 			return containerSpec()
 		},
 		"the release succeeds": func(own *retaining) provider.StackSpec {
@@ -1039,7 +1039,7 @@ func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) 
 			spec.Resources = []provider.Resource{{Name: "ledger", Type: provider.BindingPostgres}}
 			return fake.NewRecords(), spec
 		},
-		"the app names a compute nothing stands up": func() (records.Store, provider.StackSpec) {
+		"the app names a compute nothing provisions": func() (records.Store, provider.StackSpec) {
 			spec := containerSpec()
 			spec.App.Compute = provider.Compute("steam")
 			return fake.NewRecords(), spec
@@ -1078,7 +1078,7 @@ func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
 	}
 }
 
-func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
+func TestATeardownSweepsTheImageTheContainerItTookDownWasRetaining(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1098,9 +1098,9 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
-		t.Fatalf("the teardown swept %v, want the image the container it took down was the last thing holding", own.swept)
+		t.Fatalf("the teardown swept %v, want the image the container it took down was the last thing referencing", own.swept)
 	}
-	if own.holds(testImage) {
+	if own.retains(testImage) {
 		t.Error("the teardown left " + testImage + " on the box, and a stack that names itself in the window it never rewrites is swept by nothing that comes after it")
 	}
 }

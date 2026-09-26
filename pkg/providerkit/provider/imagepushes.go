@@ -33,22 +33,22 @@ func (p ImagePushes) GoString() string { return p.String() }
 func (p ImagePushes) Rows(ctx context.Context) ([]Change, error) {
 	rows := make([]Change, 0, len(p.Pushes))
 	for _, push := range p.Pushes {
-		held, err := p.held(ctx, push)
+		present, err := p.inStore(ctx, push)
 		if err != nil {
 			return nil, err
 		}
-		rows = append(rows, Change{Kind: ImageKind, Name: push.App, Action: KeepOrCreate(held)})
+		rows = append(rows, Change{Kind: ImageKind, Name: push.App, Action: KeepOrCreate(present)})
 	}
 	return rows, nil
 }
 
 func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) error {
 	for _, push := range p.Pushes {
-		held, err := p.held(ctx, push)
+		present, err := p.inStore(ctx, push)
 		if err != nil {
 			return err
 		}
-		if held {
+		if present {
 			continue
 		}
 		where := p.Store.Destination()
@@ -86,14 +86,14 @@ func (p ImagePushes) ImageRef(app string) string {
 	return ""
 }
 
-func (p ImagePushes) held(ctx context.Context, push images.Push) (bool, error) {
+func (p ImagePushes) inStore(ctx context.Context, push images.Push) (bool, error) {
 	if p.Store == nil {
 		return false, refusal.Refuse(refusal.CodeInvalid,
-			"%s's image is pushed to %s and this release carries nothing to push it with", push.App, push.ImageRef)
+			"%s's image is pushed to %s and this release has nothing to push it with", push.App, push.ImageRef)
 	}
-	held, err := p.Store.Has(ctx, push)
+	present, err := p.Store.Has(ctx, push)
 	if err != nil {
 		return false, fmt.Errorf("look for %s's image in %s: %w", push.App, p.Store.Destination(), err)
 	}
-	return held, nil
+	return present, nil
 }

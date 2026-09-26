@@ -18,7 +18,7 @@ func TestTheCoordinateIsTheTargetPlusTheAppRepositoryAndTheDigestTag(t *testing.
 }
 
 func TestATargetNamesARegistryOnlyWhenItNamesAServer(t *testing.T) {
-	for _, held := range []struct {
+	for _, tc := range []struct {
 		target images.Registry
 		named  bool
 	}{
@@ -26,9 +26,9 @@ func TestATargetNamesARegistryOnlyWhenItNamesAServer(t *testing.T) {
 		{images.Registry{Namespace: "acme/ocel"}, false},
 		{images.Registry{Server: "ghcr.io"}, true},
 	} {
-		if got := held.target.Named(); got != held.named {
+		if got := tc.target.Named(); got != tc.named {
 			t.Errorf("%v Named() = %v, want %v: a target names a registry when it says where to push, "+
-				"and the resolve and the push must read that the same way", held.target, got, held.named)
+				"and the resolve and the push must read that the same way", tc.target, got, tc.named)
 		}
 	}
 }

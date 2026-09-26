@@ -43,7 +43,7 @@ func (r *Records) Read(_ context.Context, name records.Name) (records.Record, er
 func (r *Records) Write(_ context.Context, record records.Record) (records.Revision, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.held(record); err != nil {
+	if err := r.checkRevision(record); err != nil {
 		return "", err
 	}
 	return r.store(record), nil
@@ -53,7 +53,7 @@ func (r *Records) WritePair(_ context.Context, first, second records.Record) err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, record := range []records.Record{first, second} {
-		if err := r.held(record); err != nil {
+		if err := r.checkRevision(record); err != nil {
 			return err
 		}
 	}
@@ -62,7 +62,7 @@ func (r *Records) WritePair(_ context.Context, first, second records.Record) err
 	return nil
 }
 
-func (r *Records) held(record records.Record) error {
+func (r *Records) checkRevision(record records.Record) error {
 	prior, exists := r.rows[record.Name.String()]
 	if exists != (record.Revision != "") || (exists && prior.Revision != record.Revision) {
 		return records.ErrStale
@@ -116,11 +116,11 @@ func (r *Records) List(_ context.Context, under records.Name) ([]records.Record,
 func (r *Records) Snapshot() map[string]records.Revision {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	held := make(map[string]records.Revision, len(r.rows))
+	revisions := make(map[string]records.Revision, len(r.rows))
 	for key, row := range r.rows {
-		held[key] = row.Revision
+		revisions[key] = row.Revision
 	}
-	return held
+	return revisions
 }
 
 func copyRecord(row records.Record) records.Record {

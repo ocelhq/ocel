@@ -109,7 +109,7 @@ func (t HostTrust) Message() string {
 	if t.Reason == HostKeyMismatch {
 		fmt.Fprintf(&b, "the host key for %s changed", t.Where())
 		fmt.Fprintf(&b, "\n  got  %s %s", t.Got.Type, t.Got.Fingerprint)
-		fmt.Fprintf(&b, "\n  want %s %s, held in %s", t.Want.Type, t.Want.Fingerprint, strings.Join(t.KnownHosts, ", "))
+		fmt.Fprintf(&b, "\n  want %s %s, recorded in %s", t.Want.Type, t.Want.Fingerprint, strings.Join(t.KnownHosts, ", "))
 		fmt.Fprintf(&b, "\nEither that machine was rebuilt or something sits between you and it.\nIf it was rebuilt, drop the old key and try again:\n  %s", t.Remedy)
 		return b.String()
 	}
@@ -153,8 +153,8 @@ func HostTrustOf(err error) (HostTrust, bool) {
 		if err != nil {
 			continue
 		}
-		if carried, ok := value.(*contractv1.HostTrustRefusal); ok {
-			return hostTrustFrom(carried), true
+		if refused, ok := value.(*contractv1.HostTrustRefusal); ok {
+			return hostTrustFrom(refused), true
 		}
 	}
 	return HostTrust{}, false
@@ -186,19 +186,19 @@ func hostKeyProto(key HostKey) *contractv1.HostKey {
 	return &contractv1.HostKey{Type: key.Type, Key: key.Key, Fingerprint: key.Fingerprint}
 }
 
-func hostTrustFrom(carried *contractv1.HostTrustRefusal) HostTrust {
+func hostTrustFrom(refused *contractv1.HostTrustRefusal) HostTrust {
 	trust := HostTrust{
-		Host:       carried.GetHost(),
-		Address:    carried.GetAddress(),
-		Port:       int(carried.GetPort()),
-		Got:        hostKeyFrom(carried.GetGot()),
-		Want:       hostKeyFrom(carried.GetWant()),
-		KnownHosts: carried.GetKnownHosts(),
-		Remedy:     carried.GetRemedy(),
-		KeyAlias:   carried.GetKeyAlias(),
+		Host:       refused.GetHost(),
+		Address:    refused.GetAddress(),
+		Port:       int(refused.GetPort()),
+		Got:        hostKeyFrom(refused.GetGot()),
+		Want:       hostKeyFrom(refused.GetWant()),
+		KnownHosts: refused.GetKnownHosts(),
+		Remedy:     refused.GetRemedy(),
+		KeyAlias:   refused.GetKeyAlias(),
 	}
 	for reason, encoded := range hostTrustReasons {
-		if encoded == carried.GetReason() {
+		if encoded == refused.GetReason() {
 			trust.Reason = reason
 		}
 	}
@@ -213,9 +213,9 @@ func hostTrustError(refusal HostTrustRefusal) error {
 	return wire
 }
 
-func hostKeyFrom(carried *contractv1.HostKey) HostKey {
-	if carried == nil {
+func hostKeyFrom(key *contractv1.HostKey) HostKey {
+	if key == nil {
 		return HostKey{}
 	}
-	return HostKey{Type: carried.GetType(), Key: carried.GetKey(), Fingerprint: carried.GetFingerprint()}
+	return HostKey{Type: key.GetType(), Key: key.GetKey(), Fingerprint: key.GetFingerprint()}
 }

@@ -20,13 +20,13 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 	if target.Project == "" {
 		return Metadata{}, fmt.Errorf("a reference names no project to resolve against")
 	}
-	holds := Coordinate{Cell: target.Cell}
+	sourceAt := Coordinate{Cell: target.Cell}
 	to := Scope{Project: target.Project, Class: scope.Class}
-	if scope == to && at.canonical() == holds.canonical() {
+	if scope == to && at.canonical() == sourceAt.canonical() {
 		return Metadata{}, fmt.Errorf("%s would reference itself: %w", at, ErrWouldDeepen)
 	}
 
-	_, pointedAt, err := s.cellAt(ctx, to, holds)
+	_, pointedAt, err := s.cellAt(ctx, to, sourceAt)
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -42,7 +42,7 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 		return Metadata{}, fmt.Errorf("%s is referenced by %s, which would then be reading a reference: %w", at, describe(consumers), ErrWouldDeepen)
 	}
 
-	held, current, err := s.cellAt(ctx, scope, at)
+	recorded, current, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -51,7 +51,7 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 			return Metadata{}, err
 		}
 	}
-	metadata, err := s.commit(ctx, scope, at, held, current, nil, storedValue{Target: &target})
+	metadata, err := s.commit(ctx, scope, at, recorded, current, nil, storedValue{Target: &target})
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -65,29 +65,29 @@ func (s Store) References(ctx context.Context, scope Scope, at Coordinate) ([]Re
 	if at.Environment != "" && at.Environment != ClassWideEnvironment {
 		return nil, nil
 	}
-	held, err := s.Records.List(ctx, refsName(scope, at))
+	recorded, err := s.Records.List(ctx, refsName(scope, at))
 	if err != nil {
 		return nil, fmt.Errorf("read what references %s: %w", at, err)
 	}
-	out := make([]Reference, 0, len(held))
-	for _, record := range held {
-		holds, ok := cellOf(record.Name)
+	out := make([]Reference, 0, len(recorded))
+	for _, record := range recorded {
+		sourceAt, ok := cellOf(record.Name)
 		if !ok || len(record.Name) < 4 {
 			continue
 		}
-		out = append(out, Reference{Project: record.Name[len(record.Name)-4], Coordinate: holds})
+		out = append(out, Reference{Project: record.Name[len(record.Name)-4], Coordinate: sourceAt})
 	}
 	slices.SortFunc(out, func(a, b Reference) int { return strings.Compare(a.String(), b.String()) })
 	return out, nil
 }
 
 func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate]string, error) {
-	held, err := s.List(ctx, scope)
+	listed, err := s.List(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
 	owners := map[Coordinate]string{}
-	for _, m := range held {
+	for _, m := range listed {
 		if m.Target != nil && m.Target.Project != scope.Project {
 			owners[m.Coordinate] = m.Target.Project
 		}
@@ -98,12 +98,12 @@ func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate
 func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, target Target) error {
 	to := Scope{Project: target.Project, Class: scope.Class}
 	name := refName(to, Coordinate{Cell: target.Cell}, scope, at)
-	held, err := records.ReadOrEmpty(ctx, s.Records, name)
+	recorded, err := records.ReadOrEmpty(ctx, s.Records, name)
 	if err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}
-	held.Bytes = []byte("{}")
-	if _, err := s.Records.Write(ctx, held); err != nil {
+	recorded.Bytes = []byte("{}")
+	if _, err := s.Records.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}
 	return nil

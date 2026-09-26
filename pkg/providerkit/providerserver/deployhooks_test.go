@@ -44,11 +44,11 @@ func TestDeployRefusesToAdoptAStackItHasNoRecordOf(t *testing.T) {
 	stream.Close()
 
 	if failure == "" && streamErr == nil {
-		t.Fatal("Deploy() stood a project up over a stack it never recorded, want it refused")
+		t.Fatal("Deploy() provisioned a project over a stack it never recorded, want it refused")
 	}
 	said := failure + connectMessage(streamErr)
-	if !strings.Contains(said, "already standing") {
-		t.Errorf("Deploy() failed with %q, want it to say the stack was already standing", said)
+	if !strings.Contains(said, "already exists") {
+		t.Errorf("Deploy() failed with %q, want it to say the stack already exists", said)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestDeployWarmsEveryFunctionAProviderKnowsHowToWarm(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	if len(provider.warmed) != 1 {
-		t.Fatalf("the deploy warmed %v, want the function it stood up", provider.warmed)
+		t.Fatalf("the deploy warmed %v, want the function it provisioned", provider.warmed)
 	}
 }
 
@@ -217,7 +217,7 @@ func TestPreflightSeesWhichResourcesEachAppUses(t *testing.T) {
 func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 	builtProject(t)
 	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
-	provider.RefusePreflight(refusal.Refuse(refusal.CodeInvalid, "this account holds no room for what the manifest asks for"))
+	provider.RefusePreflight(refusal.Refuse(refusal.CodeInvalid, "this account has no room for what the manifest asks for"))
 	client := servedBy(t, provider)
 
 	stream, err := client.Deploy(context.Background(), deployRequest())

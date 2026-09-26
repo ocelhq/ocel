@@ -33,7 +33,7 @@ func FeatureLevels(catalogue []provider.Feature, names []string) ([][]string, er
 			}
 		}
 		if len(level) == 0 {
-			return nil, fmt.Errorf("no order stands %s up: each waits on another in the set",
+			return nil, fmt.Errorf("no order installs %s: each waits on another in the set",
 				strings.Join(InCatalogueOrder(catalogue, keys(pending)), ", "))
 		}
 		for _, name := range level {
@@ -106,20 +106,20 @@ func DeleteOrder(catalogue []provider.Feature, names []string) ([]string, error)
 	return out, nil
 }
 
-func FeaturesToRemove(catalogue []provider.Feature, standing, named []string) ([]string, error) {
+func FeaturesToRemove(catalogue []provider.Feature, installed, named []string) ([]string, error) {
 	doomed := map[string]bool{}
 	for _, name := range named {
 		if _, ok := featureNamed(catalogue, name); !ok {
 			return nil, unknownFeature(catalogue, name, "")
 		}
-		if slices.Contains(standing, name) {
+		if slices.Contains(installed, name) {
 			doomed[name] = true
 		}
 	}
 	for grew := true; grew; {
 		grew = false
 		for _, f := range catalogue {
-			if doomed[f.Name] || !slices.Contains(standing, f.Name) {
+			if doomed[f.Name] || !slices.Contains(installed, f.Name) {
 				continue
 			}
 			for _, dep := range f.DependsOn {
@@ -143,14 +143,14 @@ func RefuseEnsuringAndRemoving(ensure, removing []string) error {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"this run asks to stand %s up and to take it down at once; a feature is either ensured or removed, never both",
+		"this run asks to install %s and to remove it at once; a feature is either ensured or removed, never both",
 		strings.Join(both, ", "))
 }
 
-func MissingFeatures(standing, required []string) []string {
+func MissingFeatures(installed, required []string) []string {
 	var out []string
 	for _, name := range required {
-		if !slices.Contains(standing, name) && !slices.Contains(out, name) {
+		if !slices.Contains(installed, name) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
 	}

@@ -132,8 +132,8 @@ func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
 func (r *deployRun) artifact(logical string) (provider.ArtifactRef, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	ref, held := r.artifacts[logical]
-	return ref, held
+	ref, ok := r.artifacts[logical]
+	return ref, ok
 }
 
 func (r *deployRun) recordFunctions(app string, functions []provider.Function) {
@@ -306,14 +306,14 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
 	name := stackrecords.ProjectRecord(r.spec.Class, r.spec.Slug)
-	held, err := records.ReadOrEmpty(ctx, r.provider.Records(), name)
+	recorded, err := records.ReadOrEmpty(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if held.Bytes, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
+	if recorded.Bytes, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := r.provider.Records().Write(ctx, held); err != nil {
+	if _, err := r.provider.Records().Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
@@ -411,7 +411,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 					continue
 				}
 				_, err := attaching.attachHostname(ctx, host, progress)
-				if waits, held := provider.ResumableMessage(err); held {
+				if waits, ok := provider.ResumableMessage(err); ok {
 					r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
 					continue
 				}
@@ -852,7 +852,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"%s is already standing and this project has no record of it: ocel deploys over what it stood up itself, never over what it finds. "+
+		"%s already exists and this project has no record of it: ocel deploys over what it provisioned itself, never over what it finds. "+
 			"Remove it, or deploy this project under another name",
 		stack)
 }
@@ -915,7 +915,7 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 		if !used[binding.Name] {
 			continue
 		}
-		at := slices.IndexFunc(grants, func(held provider.Binding) bool { return held.Name == binding.Name })
+		at := slices.IndexFunc(grants, func(grant provider.Binding) bool { return grant.Name == binding.Name })
 		if at < 0 {
 			grants = append(grants, binding)
 			continue
@@ -944,16 +944,16 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 }
 
 func (r *deployRun) appValues(ctx context.Context, entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
-	held, err := r.manifestValues(entry, grants)
+	values, err := r.manifestValues(entry, grants)
 	if err != nil {
 		return provider.AppValues{}, err
 	}
-	held.ContainerEnv = r.containerEnv(entry, held)
-	return held, nil
+	values.ContainerEnv = r.containerEnv(entry, values)
+	return values, nil
 }
 
 func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
-	held := provider.AppValues{
+	values := provider.AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
 		Owners:    map[string]string{},
@@ -964,19 +964,19 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 	for _, variable := range entry.Manifest.GetVariables() {
 		switch variable.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-			held.Secrets = append(held.Secrets, provider.SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
+			values.Secrets = append(values.Secrets, provider.SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
-			held.Sensitive[variable.GetKey()] = variable.GetValue()
+			values.Sensitive[variable.GetKey()] = variable.GetValue()
 		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
-			held.Plain[variable.GetKey()] = variable.GetValue()
+			values.Plain[variable.GetKey()] = variable.GetValue()
 		default:
 			return provider.AppValues{}, refusal.Refuse(refusal.CodeInvalid,
 				"%s declares %s with class %s, which this deploy cannot deliver to a function; declare it as `plain`, `sensitive` or `secret`",
 				entry.App, variable.GetKey(), variable.GetClass())
 		}
-		held.Owners[variable.GetKey()] = entry.App
+		values.Owners[variable.GetKey()] = entry.App
 	}
-	return held, nil
+	return values, nil
 }
 
 func (r *deployRun) functionSpecs(entry provider.AppEntry) []provider.FunctionSpec {
@@ -1027,8 +1027,8 @@ func (r *deployRun) embedBytecodeCaches(ctx context.Context, entry provider.AppE
 		return nil
 	}
 	for _, fn := range functions {
-		ref, held := r.artifact(fn.Name)
-		if !held {
+		ref, ok := r.artifact(fn.Name)
+		if !ok {
 			continue
 		}
 		if err := embedCode(ctx, fn.Physical, ref, progress); err != nil {
@@ -1052,16 +1052,16 @@ func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Func
 	return warmFunctions(ctx, targets, progress)
 }
 
-func declaredVariables(clientBundle bool, held provider.AppValues) []edge.VariableRecord {
-	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
-	for _, key := range slices.Sorted(maps.Keys(held.Plain)) {
+func declaredVariables(clientBundle bool, values provider.AppValues) []edge.VariableRecord {
+	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
+	for _, key := range slices.Sorted(maps.Keys(values.Plain)) {
 		if !appbuild.IsOcelInjectedEnv(clientBundle, key) {
 			names = append(names, key)
 		}
 	}
-	names = append(names, slices.Sorted(maps.Keys(held.Sensitive))...)
-	folders := make(map[string]string, len(held.Secrets))
-	for _, secret := range held.Secrets {
+	names = append(names, slices.Sorted(maps.Keys(values.Sensitive))...)
+	folders := make(map[string]string, len(values.Secrets))
+	for _, secret := range values.Secrets {
 		names = append(names, secret.Key)
 		folders[secret.Key] = secret.Folder
 	}
@@ -1273,12 +1273,12 @@ func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) er
 
 func (r *deployRun) prune(ctx context.Context, bindings []provider.Binding) error {
 	environment := bindingEnvironment(r.spec)
-	held, err := r.values.ListBindings(ctx, r.scope, environment)
+	published, err := r.values.ListBindings(ctx, r.scope, environment)
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", r.scope.Project, err)
 	}
 	var stale []string
-	for _, record := range held {
+	for _, record := range published {
 		if record.Owner != envvars.OwnerOcel || record.Environment != environment {
 			continue
 		}
@@ -1303,19 +1303,19 @@ type publishedBindings struct {
 
 	mu       sync.Mutex
 	resolved []provider.Binding
-	held     bool
+	loaded   bool
 }
 
 func (p *publishedBindings) forget() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.resolved, p.held = nil, false
+	p.resolved, p.loaded = nil, false
 }
 
 func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.held {
+	if p.loaded {
 		return p.resolved, nil
 	}
 	names, err := p.store.PublishedNames(ctx, p.scope, p.environment)
@@ -1334,7 +1334,7 @@ func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, 
 		}
 		bindings = append(bindings, binding)
 	}
-	p.resolved, p.held = bindings, true
+	p.resolved, p.loaded = bindings, true
 	return bindings, nil
 }
 

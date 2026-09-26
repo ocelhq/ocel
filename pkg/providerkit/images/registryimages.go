@@ -59,22 +59,22 @@ func (r registryStore) Has(ctx context.Context, push Push) (bool, error) {
 	endpoint := registryScheme(server) + "://" + server + "/v2/" + repository + "/manifests/" + url.PathEscape(tag)
 
 	var wait time.Duration
-	var held, again bool
+	var present, again bool
 	for attempt := range registryAttempts {
 		if attempt > 0 {
 			if err := pause(ctx, backoff(attempt, wait)); err != nil {
 				return false, err
 			}
 		}
-		held, again, wait, err = r.manifestExists(ctx, client, endpoint, server, repository, push)
+		present, again, wait, err = r.manifestExists(ctx, client, endpoint, server, repository, push)
 		if !again {
-			return held, err
+			return present, err
 		}
 	}
 	return false, err
 }
 
-func (r registryStore) manifestExists(ctx context.Context, client *http.Client, endpoint, server, repository string, push Push) (held, again bool, after time.Duration, err error) {
+func (r registryStore) manifestExists(ctx context.Context, client *http.Client, endpoint, server, repository string, push Push) (present, again bool, after time.Duration, err error) {
 	resp, err := r.head(ctx, client, endpoint, "")
 	if err != nil {
 		return false, resolvable(err), 0, err
@@ -96,9 +96,9 @@ func (r registryStore) manifestExists(ctx context.Context, client *http.Client, 
 	case resp.StatusCode == http.StatusNotFound:
 		return false, false, 0, nil
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
-		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.ImageRef)
+		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already has %s", server, resp.Status, push.ImageRef)
 	default:
-		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.ImageRef)
+		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already has %s", server, resp.Status, push.ImageRef)
 	}
 }
 
@@ -156,7 +156,7 @@ func (r registryStore) head(ctx context.Context, client *http.Client, endpoint, 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("ask %s whether it already holds this image: %w", endpoint, err)
+		return nil, fmt.Errorf("ask %s whether it already has this image: %w", endpoint, err)
 	}
 	return resp, nil
 }
@@ -208,7 +208,7 @@ func (r registryStore) bearer(ctx context.Context, client *http.Client, params m
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s answered %q handing out a token for %s: the registry credentials this deploy carries are not accepted", realm, resp.Status, repository)
+		return "", fmt.Errorf("%s answered %q handing out a token for %s: the registry credentials this deploy passed are not accepted", realm, resp.Status, repository)
 	}
 	var handed struct {
 		Token       string `json:"token"`
@@ -279,7 +279,7 @@ func splitImageRef(imageRef string) (server, repository, tag string, err error) 
 	}
 	colon := strings.LastIndex(path, ":")
 	if colon < 0 {
-		return "", "", "", fmt.Errorf("%q carries no tag, and an image is pushed under one", imageRef)
+		return "", "", "", fmt.Errorf("%q has no tag, and an image is pushed under one", imageRef)
 	}
 	return host, path[:colon], path[colon+1:], nil
 }

@@ -40,7 +40,7 @@ func TestParseNamespaceRefusesASpellingNamingWouldNotMint(t *testing.T) {
 	for _, given := range []string{"a--b", "abc-", "a---b", "ocel--two"} {
 		ns, err := provider.ParseNamespace(given)
 		if err == nil {
-			t.Errorf("ParseNamespace(%q) = %q, want a refusal: it is not the spelling a name minted from it would carry", given, ns)
+			t.Errorf("ParseNamespace(%q) = %q, want a refusal: it is not the spelling a name minted from it would contain", given, ns)
 		}
 	}
 }
@@ -52,7 +52,7 @@ func TestEveryAcceptedNamespaceIsTheFieldANameMintsFromIt(t *testing.T) {
 			t.Fatalf("ParseNamespace(%q): %v", given, err)
 		}
 		if minted := naming.Join(naming.FieldSeparator, ns.String()); minted != ns.String() {
-			t.Errorf("a name minted from namespace %q carries the field %q, so what is minted and what is matched differ", ns, minted)
+			t.Errorf("a name minted from namespace %q contains the field %q, so what is minted and what is matched differ", ns, minted)
 		}
 	}
 }

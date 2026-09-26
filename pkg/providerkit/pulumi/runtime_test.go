@@ -17,31 +17,31 @@ func stagedRuntime(t *testing.T, dir, marker string) string {
 	return dir
 }
 
-func TestSettleMovesTheStagedRuntimeIntoPlace(t *testing.T) {
+func TestRenameIntoPlaceMovesTheStagedRuntimeIntoPlace(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "3.146.0")
 	staging := stagedRuntime(t, root+"-1", "mine")
 
 	if err := renameIntoPlace(staging, root); err != nil {
-		t.Fatalf("settle() = %v", err)
+		t.Fatalf("renameIntoPlace() = %v", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, "bin", "pulumi")); string(got) != "mine" {
-		t.Errorf("the root holds %q, want the staged runtime", got)
+		t.Errorf("the root contains %q, want the staged runtime", got)
 	}
 	if _, err := os.Stat(staging); !os.IsNotExist(err) {
-		t.Errorf("the staging dir stands after settle: %v", err)
+		t.Errorf("the staging dir still exists after renameIntoPlace: %v", err)
 	}
 }
 
-func TestSettleYieldsToARuntimeAnotherProcessSettledFirst(t *testing.T) {
+func TestRenameIntoPlaceYieldsToARuntimeAnotherProcessInstalledFirst(t *testing.T) {
 	base := t.TempDir()
 	root := stagedRuntime(t, filepath.Join(base, "3.146.0"), "theirs")
 	staging := stagedRuntime(t, root+"-2", "mine")
 
 	if err := renameIntoPlace(staging, root); err != nil {
-		t.Fatalf("settle() against a settled root = %v, want it to yield", err)
+		t.Fatalf("renameIntoPlace() onto an installed root = %v, want it to yield", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, "bin", "pulumi")); string(got) != "theirs" {
-		t.Errorf("the root holds %q; the loser overwrote a runtime another process may be running", got)
+		t.Errorf("the root contains %q; the loser overwrote a runtime another process may be running", got)
 	}
 }

@@ -172,14 +172,14 @@ func (f *hookStacks) computeProvisioner(spec provider.StackSpec) (computeProvisi
 		}, nil
 	default:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s names the compute %q, and a stack is stood up by the primitive its compute names; the computes are %v",
+			"app %s names the compute %q, and a stack is provisioned by the primitive its compute names; the computes are %v",
 			spec.App.App, spec.App.Compute, provider.ComputeNames(provider.Computes()))
 	}
 }
 
 func refuseMissingComputeHooks(app *provider.AppSpec, hook string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"app %s runs on %s compute and this provider sets no %s hooks, so nothing here can stand it up",
+		"app %s runs on %s compute and this provider sets no %s hooks, so nothing here can provision it",
 		app.App, app.Compute, hook)
 }
 
@@ -233,13 +233,13 @@ func (f *hookStacks) Destroy(ctx context.Context, ref provider.StackRef, progres
 		return err
 	}
 	var stopped error
-	for _, held := range recorded.Containers {
-		if err := f.forget(ctx, ref, held.Name, progress); err != nil && stopped == nil {
+	for _, container := range recorded.Containers {
+		if err := f.forget(ctx, ref, container.Name, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
-	for _, held := range recorded.Containers {
-		if err := f.reconcile(ctx, ref, held.Name, held.Image, progress); err != nil && stopped == nil {
+	for _, container := range recorded.Containers {
+		if err := f.reconcile(ctx, ref, container.Name, container.Image, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
@@ -252,7 +252,7 @@ func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app stri
 	}
 	err := f.hooks.Retention.Forget(ctx, ref, app, progress)
 	if err != nil && progress != nil {
-		progress.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
+		progress.Detail(fmt.Sprintf("Left %s's release window in place: %v", app, err))
 	}
 	return err
 }
@@ -263,7 +263,7 @@ func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, 
 	}
 	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, progress)
 	if err != nil && progress != nil {
-		progress.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
+		progress.Detail(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
 	}
 	return err
 }
@@ -295,7 +295,7 @@ func (f *hookStacks) removeContainers(ctx context.Context, ref provider.StackRef
 
 func refuseOrphans(ref provider.StackRef, going int, noun, because, hook string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s holds %d %s(s) %s, and this provider sets no %s hooks, so they would be left standing and unowned",
+		"%s has %d %s(s) %s, and this provider sets no %s hooks, so they would be left running and unowned",
 		ref.Name, going, noun, because, hook)
 }
 
@@ -322,12 +322,12 @@ func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec,
 func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress edge.Progress) error {
 	declared := DeclaredFunctions(spec)
 	var orphans []provider.Function
-	for _, held := range recorded.Functions {
-		if slices.Contains(declared, held.Name) {
+	for _, function := range recorded.Functions {
+		if slices.Contains(declared, function.Name) {
 			continue
 		}
-		reportUndeclared(progress, held.Name)
-		orphans = append(orphans, held)
+		reportUndeclared(progress, function.Name)
+		orphans = append(orphans, function)
 	}
 	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, progress)
 }
@@ -335,12 +335,12 @@ func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.St
 func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress edge.Progress) error {
 	declared := DeclaredContainers(spec)
 	var orphans []provider.AppContainer
-	for _, held := range recorded.Containers {
-		if slices.Contains(declared, held.Name) {
+	for _, container := range recorded.Containers {
+		if slices.Contains(declared, container.Name) {
 			continue
 		}
-		reportUndeclared(progress, held.Name)
-		orphans = append(orphans, held)
+		reportUndeclared(progress, container.Name)
+		orphans = append(orphans, container)
 	}
 	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, progress)
 }
@@ -355,7 +355,7 @@ func reportUndeclared(progress edge.Progress, name string) {
 func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
 	if f.hooks.RemoveResource == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"binding %s is no longer declared and this provider removes no resource, so it would be left standing and unowned",
+			"binding %s is no longer declared and this provider removes no resource, so it would be left in place and unowned",
 			binding.Name)
 	}
 	return f.hooks.RemoveResource(ctx, ref, binding, progress)

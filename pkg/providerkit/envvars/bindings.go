@@ -106,7 +106,7 @@ func refuseControl(what, value string) error {
 	for _, r := range value {
 		if unicode.IsControl(r) {
 			return fmt.Errorf(
-				"%s %q carries the control character %q: a coordinate is written into store keys, log lines and generated files, and a character that breaks a line breaks all three",
+				"%s %q contains the control character %q: a coordinate is written into store keys, log lines and generated files, and a character that breaks a line breaks all three",
 				what, value, r)
 		}
 	}
@@ -176,14 +176,14 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 		return 0, err
 	}
 
-	heldRecord, record, err := s.bindingRecordAt(ctx, scope, environment, name)
+	recordedBinding, record, err := s.bindingRecordAt(ctx, scope, environment, name)
 	if err != nil {
 		return 0, err
 	}
 	if owner != OwnerOcel && record.Version > 0 && record.owner() != owner {
 		return 0, s.claimRefusal(scope, name, record.owner(), owner)
 	}
-	heldValue, err := records.ReadOrEmpty(ctx, s.Records, bindingValueName(scope, name, environment))
+	recordedValue, err := records.ReadOrEmpty(ctx, s.Records, bindingValueName(scope, name, environment))
 	if err != nil {
 		return 0, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
@@ -204,9 +204,9 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 		return 0, fmt.Errorf("encode binding %s's value: %w", name, err)
 	}
 
-	heldValue.Bytes = beside
-	heldRecord.Bytes = written
-	if err := s.Records.WritePair(ctx, heldValue, heldRecord); err != nil {
+	recordedValue.Bytes = beside
+	recordedBinding.Bytes = written
+	if err := s.Records.WritePair(ctx, recordedValue, recordedBinding); err != nil {
 		return 0, s.racedPair(err, name)
 	}
 	return next, nil
@@ -262,21 +262,21 @@ func (s Store) RemoveBindings(ctx context.Context, scope Scope, environment stri
 	}
 	at := canonicalEnvironment(environment)
 	removed := make([]bool, len(names))
-	held := map[string][]string{}
+	remaining := map[string][]string{}
 	for i, name := range names {
 		for _, c := range claimed[name] {
 			if c.environment != at {
 				continue
 			}
 			removed[i] = true
-			if !slices.Contains(held[c.owner], name) {
-				held[c.owner] = append(held[c.owner], name)
+			if !slices.Contains(remaining[c.owner], name) {
+				remaining[c.owner] = append(remaining[c.owner], name)
 			}
 		}
 	}
 
-	for _, owner := range slices.Sorted(maps.Keys(held)) {
-		if err := s.unclaim(ctx, scope, owner, environment, held[owner]...); err != nil {
+	for _, owner := range slices.Sorted(maps.Keys(remaining)) {
+		if err := s.unclaim(ctx, scope, owner, environment, remaining[owner]...); err != nil {
 			return nil, err
 		}
 	}
@@ -324,13 +324,13 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 	out := make([]StoredBinding, len(names))
 	sealed := make([][]byte, len(names))
 	for range bindingAttempts {
-		held := s.newRecordCache(scope)
-		if err := held.named(ctx, names); err != nil {
+		cache := s.newRecordCache(scope)
+		if err := cache.named(ctx, names); err != nil {
 			return nil, err
 		}
 		torn := ""
 		for i, name := range names {
-			resolved, value, err := s.readPair(held, scope, environment, name)
+			resolved, value, err := s.readPair(cache, scope, environment, name)
 			if errors.Is(err, ErrTornPair) {
 				torn = name
 				break
@@ -361,13 +361,13 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 		bindingAttempts, describeEnvironment(environment), ErrTornPair)
 }
 
-func (s Store) readPair(held *recordCache, scope Scope, environment, name string) (StoredBinding, []byte, error) {
+func (s Store) readPair(cache *recordCache, scope Scope, environment, name string) (StoredBinding, []byte, error) {
 	for _, at := range shadowing(environment) {
-		record, err := decodeBindingRecord(name, held.at(bindingRecordName(scope, name, at)))
+		record, err := decodeBindingRecord(name, cache.at(bindingRecordName(scope, name, at)))
 		if err != nil {
 			return StoredBinding{}, nil, err
 		}
-		value, err := decodeBindingValue(name, held.at(bindingValueName(scope, name, at)))
+		value, err := decodeBindingValue(name, cache.at(bindingValueName(scope, name, at)))
 		if err != nil {
 			return StoredBinding{}, nil, err
 		}
@@ -399,14 +399,14 @@ func (s Store) ListBindings(ctx context.Context, scope Scope, environment string
 		return nil, err
 	}
 
-	held := s.newRecordCache(scope)
-	if err := held.all(ctx); err != nil {
+	cache := s.newRecordCache(scope)
+	if err := cache.all(ctx); err != nil {
 		return nil, err
 	}
 	out := make([]StoredBinding, 0, len(names))
 	for _, name := range names {
 		for _, at := range shadowing(environment) {
-			record, err := decodeBindingRecord(name, held.at(bindingRecordName(scope, name, at)))
+			record, err := decodeBindingRecord(name, cache.at(bindingRecordName(scope, name, at)))
 			if err != nil {
 				return nil, err
 			}
@@ -430,13 +430,13 @@ func (s Store) ListBindings(ctx context.Context, scope Scope, environment string
 }
 
 type recordCache struct {
-	store Store
-	scope Scope
-	held  map[string]records.Record
+	store  Store
+	scope  Scope
+	byName map[string]records.Record
 }
 
 func (s Store) newRecordCache(scope Scope) *recordCache {
-	return &recordCache{store: s, scope: scope, held: map[string]records.Record{}}
+	return &recordCache{store: s, scope: scope, byName: map[string]records.Record{}}
 }
 
 func (p *recordCache) named(ctx context.Context, names []string) error {
@@ -456,20 +456,20 @@ func (p *recordCache) load(ctx context.Context, under records.Name) error {
 		return fmt.Errorf("read %s's published bindings: %w", p.scope.Project, err)
 	}
 	for _, record := range stored {
-		p.held[record.Name.String()] = record
+		p.byName[record.Name.String()] = record
 	}
 	return nil
 }
 
-func (p *recordCache) at(name records.Name) records.Record { return p.held[name.String()] }
+func (p *recordCache) at(name records.Name) records.Record { return p.byName[name.String()] }
 
 func (s Store) PublishedNames(ctx context.Context, scope Scope, environment string) ([]string, error) {
-	held, err := s.Records.List(ctx, bindingOwnersName(scope))
+	recorded, err := s.Records.List(ctx, bindingOwnersName(scope))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
 	}
 	names := map[string]bool{}
-	for _, record := range held {
+	for _, record := range recorded {
 		at := records.Unescape(record.Name[len(record.Name)-1])
 		if !bindsTo(at, environment) {
 			continue
@@ -509,12 +509,12 @@ type claim struct {
 }
 
 func (s Store) claims(ctx context.Context, scope Scope) (map[string][]claim, error) {
-	held, err := s.Records.List(ctx, bindingOwnersName(scope))
+	recorded, err := s.Records.List(ctx, bindingOwnersName(scope))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
 	}
 	out := map[string][]claim{}
-	for _, record := range held {
+	for _, record := range recorded {
 		if len(record.Name) < 2 {
 			continue
 		}
@@ -562,20 +562,20 @@ func (s Store) claim(ctx context.Context, scope Scope, owner, environment string
 
 func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment string, dropping ...string) error {
 	return s.reindex(ctx, scope, owner, environment, func(names []string) []string {
-		return slices.DeleteFunc(slices.Clone(names), func(held string) bool { return slices.Contains(dropping, held) })
+		return slices.DeleteFunc(slices.Clone(names), func(name string) bool { return slices.Contains(dropping, name) })
 	})
 }
 
 func (s Store) reindex(ctx context.Context, scope Scope, owner, environment string, apply func([]string) []string) error {
 	at := bindingOwnerName(scope, owner, environment)
 	for range bindingAttempts {
-		held, err := records.ReadOrEmpty(ctx, s.Records, at)
+		recorded, err := records.ReadOrEmpty(ctx, s.Records, at)
 		if err != nil {
 			return fmt.Errorf("read %s's published bindings: %w", owner, err)
 		}
 		var index ownerIndex
-		if len(held.Bytes) > 0 {
-			if err := json.Unmarshal(held.Bytes, &index); err != nil {
+		if len(recorded.Bytes) > 0 {
+			if err := json.Unmarshal(recorded.Bytes, &index); err != nil {
 				return fmt.Errorf("read %s's published bindings: %w", owner, err)
 			}
 		}
@@ -586,7 +586,7 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 		slices.Sort(kept)
 
 		if len(kept) == 0 {
-			if err := s.Records.Remove(ctx, at, held.Revision); err != nil {
+			if err := s.Records.Remove(ctx, at, recorded.Revision); err != nil {
 				if errors.Is(err, records.ErrStale) {
 					continue
 				}
@@ -600,8 +600,8 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 		if err != nil {
 			return fmt.Errorf("encode %s's published bindings: %w", owner, err)
 		}
-		held.Bytes = encoded
-		if _, err := s.Records.Write(ctx, held); err != nil {
+		recorded.Bytes = encoded
+		if _, err := s.Records.Write(ctx, recorded); err != nil {
 			if errors.Is(err, records.ErrStale) {
 				continue
 			}
@@ -616,34 +616,34 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 }
 
 func (s Store) bindingRecordAt(ctx context.Context, scope Scope, environment, name string) (records.Record, bindingRecord, error) {
-	held, err := records.ReadOrEmpty(ctx, s.Records, bindingRecordName(scope, name, environment))
+	recorded, err := records.ReadOrEmpty(ctx, s.Records, bindingRecordName(scope, name, environment))
 	if err != nil {
 		return records.Record{}, bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
 	}
-	record, err := decodeBindingRecord(name, held)
+	record, err := decodeBindingRecord(name, recorded)
 	if err != nil {
 		return records.Record{}, bindingRecord{}, err
 	}
-	return held, record, nil
+	return recorded, record, nil
 }
 
-func decodeBindingRecord(name string, held records.Record) (bindingRecord, error) {
-	if len(held.Bytes) == 0 {
+func decodeBindingRecord(name string, recorded records.Record) (bindingRecord, error) {
+	if len(recorded.Bytes) == 0 {
 		return bindingRecord{}, nil
 	}
 	var record bindingRecord
-	if err := json.Unmarshal(held.Bytes, &record); err != nil {
+	if err := json.Unmarshal(recorded.Bytes, &record); err != nil {
 		return bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
 	}
 	return record, nil
 }
 
-func decodeBindingValue(name string, held records.Record) (bindingValue, error) {
-	if len(held.Bytes) == 0 {
+func decodeBindingValue(name string, recorded records.Record) (bindingValue, error) {
+	if len(recorded.Bytes) == 0 {
 		return bindingValue{}, nil
 	}
 	var value bindingValue
-	if err := json.Unmarshal(held.Bytes, &value); err != nil {
+	if err := json.Unmarshal(recorded.Bytes, &value); err != nil {
 		return bindingValue{}, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
 	return value, nil

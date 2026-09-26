@@ -20,29 +20,29 @@ type edgeStateStore struct {
 }
 
 func (s edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
-	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
+	recorded, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
 	var state stackrecords.EdgeState
-	if len(held.Bytes) == 0 {
+	if len(recorded.Bytes) == 0 {
 		return state, nil
 	}
-	if err := json.Unmarshal(held.Bytes, &state); err != nil {
+	if err := json.Unmarshal(recorded.Bytes, &state); err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
 	return state, nil
 }
 
 func (s edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState) error {
-	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
+	recorded, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
 	}
-	if held.Bytes, err = json.Marshal(state); err != nil {
+	if recorded.Bytes, err = json.Marshal(state); err != nil {
 		return fmt.Errorf("record %s: %w", s.name, err)
 	}
-	if _, err := s.records.Write(ctx, held); err != nil {
+	if _, err := s.records.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record %s: %w", s.name, err)
 	}
 	return nil

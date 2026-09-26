@@ -29,15 +29,15 @@ func TestARunHasEndedOnlyWhenItsProcessOnThisMachineHas(t *testing.T) {
 		of    string
 		ended bool
 	}{
-		"this run":                         {run, false},
-		"a run whose process still stands": {runOf(hostname(), os.Getppid()), false},
-		"a run whose process is gone":      {aRunThatEnded(t), true},
-		"a run on another machine":         {runOf(hostname()+"-elsewhere", 1<<22), false},
-		"a label nothing here wrote":       {"unreadable", false},
-		"a pid that names no process":      {runOf(hostname(), 0), false},
+		"this run":                       {run, false},
+		"a run whose process still runs": {runOf(hostname(), os.Getppid()), false},
+		"a run whose process is gone":    {aRunThatEnded(t), true},
+		"a run on another machine":       {runOf(hostname()+"-elsewhere", 1<<22), false},
+		"a label nothing here wrote":     {"unreadable", false},
+		"a pid that names no process":    {runOf(hostname(), 0), false},
 	} {
 		if got := runProcessGone(want.of); got != want.ended {
-			t.Errorf("%s (%q): ended = %v, want %v: a live run swept loses what it stands on mid-test, and a dead one never swept leaves its containers and networks on the machine for good", what, want.of, got, want.ended)
+			t.Errorf("%s (%q): ended = %v, want %v: a live run swept loses what it depends on mid-test, and a dead one never swept leaves its containers and networks on the machine for good", what, want.of, got, want.ended)
 		}
 	}
 }
@@ -45,19 +45,19 @@ func TestARunHasEndedOnlyWhenItsProcessOnThisMachineHas(t *testing.T) {
 func TestABucketOnTheSharedStoreIsTakenByOneTestAlone(t *testing.T) {
 	t.Parallel()
 
-	held := taken{by: map[string]string{}}
-	if err := held.take("uploads", "TestFirst"); err != nil {
+	keys := taken{by: map[string]string{}}
+	if err := keys.take("uploads", "TestFirst"); err != nil {
 		t.Fatalf("the first take of a bucket = %v", err)
 	}
-	err := held.take("uploads", "TestSecond")
+	err := keys.take("uploads", "TestSecond")
 	if err == nil || !strings.Contains(err.Error(), "TestFirst") {
-		t.Errorf("a second test taking the same bucket was told %v, want a refusal naming the test that holds it", err)
+		t.Errorf("a second test taking the same bucket was told %v, want a refusal naming the test that took it", err)
 	}
-	if err := held.take("uploads", "TestFirst"); err != nil {
-		t.Errorf("the test holding a bucket was refused it again: %v", err)
+	if err := keys.take("uploads", "TestFirst"); err != nil {
+		t.Errorf("the test that took a bucket was refused it again: %v", err)
 	}
-	if err := held.take("downloads", "TestSecond"); err != nil {
-		t.Errorf("a bucket nothing holds was refused: %v", err)
+	if err := keys.take("downloads", "TestSecond"); err != nil {
+		t.Errorf("a bucket nothing took was refused: %v", err)
 	}
 }
 
@@ -68,7 +68,7 @@ type planted struct {
 func plant(t *testing.T, of string) planted {
 	t.Helper()
 	seen := filepath.Dir(filepath.Dir(BindSource(t)))
-	left := planted{network: uniqueName("net"), labelled: uniqueName("held"), attached: uniqueName("attached")}
+	left := planted{network: uniqueName("net"), labelled: uniqueName("labelled"), attached: uniqueName("attached")}
 	does := func(argv ...string) {
 		t.Helper()
 		if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
@@ -95,11 +95,11 @@ func plant(t *testing.T, of string) planted {
 		t.Fatal(err)
 	}
 	does("run", "--rm", "--network", "none", "--user", "0", "--volume", root+":/written",
-		"--entrypoint", "sh", constants.ObjectStoreImage(), "-c", "mkdir -m 700 /written/data && echo held > /written/data/state")
+		"--entrypoint", "sh", constants.ObjectStoreImage(), "-c", "mkdir -m 700 /written/data && echo written > /written/data/state")
 	return left
 }
 
-func (p planted) standing(t *testing.T) []string {
+func (p planted) remaining(t *testing.T) []string {
 	t.Helper()
 	var found []string
 	for _, container := range []string{p.labelled, p.attached} {
@@ -116,7 +116,7 @@ func (p planted) standing(t *testing.T) []string {
 	return found
 }
 
-func TestWhatARunThatDiedLeftIsTakenByTheNextAndWhatALiveOneHoldsIsNot(t *testing.T) {
+func TestWhatARunThatDiedLeftIsTakenByTheNextAndWhatALiveOneOwnsIsNot(t *testing.T) {
 	requireDocker(t)
 
 	died := plant(t, aRunThatEnded(t))
@@ -125,15 +125,15 @@ func TestWhatARunThatDiedLeftIsTakenByTheNextAndWhatALiveOneHoldsIsNot(t *testin
 	if err := sweep(runProcessGone); err != nil {
 		t.Fatalf("sweep = %v", err)
 	}
-	if left := died.standing(t); len(left) > 0 {
-		t.Errorf("a run that died still holds %v after the next run swept: every killed run then leaves its containers, its network and the directories a root container wrote into for good", left)
+	if left := died.remaining(t); len(left) > 0 {
+		t.Errorf("a run that died still has %v after the next run swept: every killed run then leaves its containers, its network and the directories a root container wrote into for good", left)
 	}
-	if left := living.standing(t); len(left) != 4 {
-		t.Errorf("a run whose process still stands holds only %v after another run swept, want its containers, network and directory untouched: two suites running at once would take each other's fixtures mid-test", left)
+	if left := living.remaining(t); len(left) != 4 {
+		t.Errorf("a run whose process still runs has only %v after another run swept, want its containers, network and directory untouched: two suites running at once would take each other's fixtures mid-test", left)
 	}
 }
 
-func TestTheStoreIsStoodOnceForTheWholeRunAndServesFromTheHostAndWithin(t *testing.T) {
+func TestTheStoreIsStartedOnceForTheWholeRunAndServesFromTheHostAndWithin(t *testing.T) {
 	first := SharedObjectStore(t)
 	if again := SharedObjectStore(t); again.Name != first.Name {
 		t.Errorf("a second test was handed store %s, want %s: a store per test is a container, a volume and a veth per test", again.Name, first.Name)
@@ -151,7 +151,7 @@ func TestTheStoreIsStoodOnceForTheWholeRunAndServesFromTheHostAndWithin(t *testi
 	}
 	labelled, err := exec.Command(engine, "inspect", "--format", `{{index .Config.Labels "`+runLabel+`"}}`, first.Name).Output()
 	if err != nil || strings.TrimSpace(string(labelled)) != run {
-		t.Errorf("the store carries %q as its run, want %q: an unlabelled store outlives a killed run", labelled, run)
+		t.Errorf("the store has %q as its run, want %q: an unlabelled store outlives a killed run", labelled, run)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestARootNamesItsRunUntilEverythingElseInItIsGone(t *testing.T) {
 	if err := os.Mkdir(guarded, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(guarded, "state"), []byte("held\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(guarded, "state"), []byte("written\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(guarded, 0o555); err != nil {
@@ -196,16 +196,16 @@ func TestARootNamesItsRunUntilEverythingElseInItIsGone(t *testing.T) {
 	}
 
 	if err := emptyRunRoot(root); err == nil {
-		t.Fatal("a root holding what this user cannot remove was emptied all the same")
+		t.Fatal("a root containing what this user cannot remove was emptied all the same")
 	}
 	if _, err := os.Stat(filepath.Join(root, runFile)); err != nil {
-		t.Fatalf("the root lost the file naming its run while it still held %s: when the engine cannot take the rest either, no later sweep can tell whose it is and it stays on the machine for good", guarded)
+		t.Fatalf("the root lost the file naming its run while it still contained %s: when the engine cannot take the rest either, no later sweep can tell whose it is and it stays on the machine for good", guarded)
 	}
 	if err := removeRunRoot(root); err != nil {
 		t.Fatalf("reclaimed = %v", err)
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
-		t.Errorf("%s still stands after the engine took back what this user could not", root)
+		t.Errorf("%s still exists after the engine took back what this user could not", root)
 	}
 }
 
@@ -214,6 +214,6 @@ func TestARootAnotherRunAlreadySweptIsReclaimedWithoutComplaint(t *testing.T) {
 
 	gone := filepath.Join(t.TempDir(), rootPrefix+"swept")
 	if err := removeRunRoot(gone); err != nil {
-		t.Errorf("reclaimed(%s) = %v, want nil: two runs that sweep at once both list a root the first one then removes, and the second is left failing its whole run over a directory nobody holds any more", gone, err)
+		t.Errorf("reclaimed(%s) = %v, want nil: two runs that sweep at once both list a root the first one then removes, and the second is left failing its whole run over a directory nobody owns any more", gone, err)
 	}
 }

@@ -38,7 +38,7 @@ func (r *deployRun) imageFunctions(
 ) ([]images.Push, error) {
 	if r.images == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"%s's functions are run from images, and nothing this deploy carries names a registry to push them to", entry.App)
+			"%s's functions are run from images, and nothing in this deploy names a registry to push them to", entry.App)
 	}
 	root := appbuild.ArtifactRoot()
 	var pushes []images.Push
@@ -74,11 +74,11 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return images.Push{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
 	}
-	carried, err := runtimeOverlay(ctx, hooks, framework, name, overlay)
+	files, err := runtimeOverlay(ctx, hooks, framework, name, overlay)
 	if err != nil {
 		return images.Push{}, err
 	}
-	image, err := images.FunctionImage(base, framework, dir, carried)
+	image, err := images.FunctionImage(base, framework, dir, files)
 	if err != nil {
 		return images.Push{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
@@ -106,7 +106,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework app
 	goarch, known := arch.GoArch(framework.Arch)
 	if !known {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"%s is built for %s, and this provider carries a container runtime for %s and %s alone",
+			"%s is built for %s, and this provider ships a container runtime for %s and %s alone",
 			name, framework.Arch, arch.X8664, arch.ARM64)
 	}
 	body, err := r.provider.Runtime().Binary(ctx, goarch)
@@ -115,7 +115,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework app
 	}
 	if len(body) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this provider carries no container runtime built for %s, and %s is built for it", goarch, name)
+			"this provider ships no container runtime built for %s, and %s is built for it", goarch, name)
 	}
 	wrapped, err := images.WrapContainer(image, body)
 	if err != nil {
@@ -140,12 +140,12 @@ func runtimeOverlay(
 	}
 	if len(body) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this provider carries no runtime for a %s function to boot through, and %s is one", framework.Name, name)
+			"this provider ships no runtime for a %s function to boot through, and %s is one", framework.Name, name)
 	}
-	carried := make(map[string][]byte, len(overlay)+1)
-	maps.Copy(carried, overlay)
-	carried[images.NodeRuntimePath] = body
-	return carried, nil
+	files := make(map[string][]byte, len(overlay)+1)
+	maps.Copy(files, overlay)
+	files[images.NodeRuntimePath] = body
+	return files, nil
 }
 
 func functionRepository(app, function string) string {

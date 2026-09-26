@@ -28,13 +28,13 @@ type EnvironmentMeta struct {
 
 func RecordEnvironmentMeta(ctx context.Context, store records.Store, class edge.Class, slug, env, label string) error {
 	name := EnvironmentRecord(class, slug, env)
-	held, err := records.ReadOrEmpty(ctx, store, name)
+	recorded, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
 	var meta EnvironmentMeta
-	if len(held.Bytes) > 0 {
-		if err := json.Unmarshal(held.Bytes, &meta); err != nil {
+	if len(recorded.Bytes) > 0 {
+		if err := json.Unmarshal(recorded.Bytes, &meta); err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
 		}
 	}
@@ -44,22 +44,22 @@ func RecordEnvironmentMeta(ctx context.Context, store records.Store, class edge.
 	if label != "" {
 		meta.Label = label
 	}
-	if held.Bytes, err = json.Marshal(meta); err != nil {
+	if recorded.Bytes, err = json.Marshal(meta); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := store.Write(ctx, held); err != nil {
+	if _, err := store.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
 }
 
 func EnvironmentMetas(ctx context.Context, records records.Store, class edge.Class, slug string) (map[string]EnvironmentMeta, error) {
-	held, err := records.List(ctx, EnvironmentsRecord(class, slug))
+	recorded, err := records.List(ctx, EnvironmentsRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
-	meta := make(map[string]EnvironmentMeta, len(held))
-	for _, record := range held {
+	meta := make(map[string]EnvironmentMeta, len(recorded))
+	for _, record := range recorded {
 		var recorded EnvironmentMeta
 		if err := json.Unmarshal(record.Bytes, &recorded); err != nil {
 			continue
@@ -70,12 +70,12 @@ func EnvironmentMetas(ctx context.Context, records records.Store, class edge.Cla
 }
 
 func StackNames(ctx context.Context, records records.Store, class edge.Class, slug string) ([]naming.StackName, error) {
-	held, err := records.List(ctx, StacksRecord(class, slug))
+	recorded, err := records.List(ctx, StacksRecord(class, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
-	names := make([]naming.StackName, 0, len(held))
-	for _, record := range held {
+	names := make([]naming.StackName, 0, len(recorded))
+	for _, record := range recorded {
 		stack, err := naming.ParseStackName(record.Name[len(record.Name)-1])
 		if err != nil {
 			continue

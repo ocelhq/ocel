@@ -89,7 +89,7 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 	if len(plaintext) > MaxValueBytes {
 		return Metadata{}, fmt.Errorf("value for %s is too large: %d bytes, limit %d: %w", at.Key, len(plaintext), MaxValueBytes, ErrTooLarge)
 	}
-	held, current, err := s.cellAt(ctx, scope, at)
+	recorded, current, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -101,10 +101,10 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 	if err != nil {
 		return Metadata{}, err
 	}
-	return s.commit(ctx, scope, at, held, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext))})
+	return s.commit(ctx, scope, at, recorded, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext))})
 }
 
-func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, held records.Record, current storedValue, expected *int64, next storedValue) (Metadata, error) {
+func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded records.Record, current storedValue, expected *int64, next storedValue) (Metadata, error) {
 	if expected != nil && *expected != current.live() {
 		return Metadata{}, ErrStaleVersion
 	}
@@ -116,8 +116,8 @@ func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, held reco
 	if err != nil {
 		return Metadata{}, fmt.Errorf("encode %s: %w", at, err)
 	}
-	held.Bytes = encoded
-	if _, err := s.Records.Write(ctx, held); err != nil {
+	recorded.Bytes = encoded
+	if _, err := s.Records.Write(ctx, recorded); err != nil {
 		if errors.Is(err, records.ErrStale) {
 			return Metadata{}, ErrStaleVersion
 		}
@@ -134,12 +134,12 @@ func (s Store) remember(ctx context.Context, scope Scope, at Coordinate, written
 	if err != nil {
 		return fmt.Errorf("encode version %d of %s: %w", written.Version, at, err)
 	}
-	held, err := records.ReadOrEmpty(ctx, s.Records, versionName(scope, at, written.Version))
+	recorded, err := records.ReadOrEmpty(ctx, s.Records, versionName(scope, at, written.Version))
 	if err != nil {
 		return err
 	}
-	held.Bytes = entry
-	if _, err := s.Records.Write(ctx, held); err != nil && !errors.Is(err, records.ErrStale) {
+	recorded.Bytes = entry
+	if _, err := s.Records.Write(ctx, recorded); err != nil && !errors.Is(err, records.ErrStale) {
 		return fmt.Errorf("record version %d of %s: %w", written.Version, at, err)
 	}
 	if pruned := written.Version - historyWindow; pruned > 0 {
@@ -151,18 +151,18 @@ func (s Store) remember(ctx context.Context, scope Scope, at Coordinate, written
 }
 
 func (s Store) Get(ctx context.Context, scope Scope, at Coordinate, reveal bool) (Value, error) {
-	_, held, err := s.cellAt(ctx, scope, at)
+	_, cell, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return Value{}, err
 	}
-	if held.live() == 0 {
+	if cell.live() == 0 {
 		return Value{}, ErrNotFound
 	}
-	value := Value{Metadata: metadataOf(at, held)}
+	value := Value{Metadata: metadataOf(at, cell)}
 	if !reveal {
 		return value, nil
 	}
-	plaintext, err := s.open(ctx, scope, at, held)
+	plaintext, err := s.open(ctx, scope, at, cell)
 	if err != nil {
 		return Value{}, err
 	}
@@ -170,51 +170,51 @@ func (s Store) Get(ctx context.Context, scope Scope, at Coordinate, reveal bool)
 	return value, nil
 }
 
-func (s Store) open(ctx context.Context, scope Scope, at Coordinate, held storedValue) (string, error) {
-	holder, from, holds, err := s.dereference(ctx, scope, at, held)
+func (s Store) open(ctx context.Context, scope Scope, at Coordinate, cell storedValue) (string, error) {
+	source, from, sourceAt, err := s.dereference(ctx, scope, at, cell)
 	if err != nil {
 		return "", err
 	}
-	plaintext, err := s.Cipher.Open(ctx, coordinateOf(from, holds), holder.Sealed)
+	plaintext, err := s.Cipher.Open(ctx, coordinateOf(from, sourceAt), source.Sealed)
 	if err != nil {
 		return "", err
 	}
 	return string(plaintext), nil
 }
 
-func (s Store) dereference(ctx context.Context, scope Scope, at Coordinate, held storedValue) (storedValue, Scope, Coordinate, error) {
-	if held.Target == nil {
-		return held, scope, at, nil
+func (s Store) dereference(ctx context.Context, scope Scope, at Coordinate, cell storedValue) (storedValue, Scope, Coordinate, error) {
+	if cell.Target == nil {
+		return cell, scope, at, nil
 	}
-	from := Scope{Project: held.Target.Project, Class: scope.Class}
-	holds := Coordinate{Cell: held.Target.Cell}
-	_, holder, err := s.cellAt(ctx, from, holds)
+	from := Scope{Project: cell.Target.Project, Class: scope.Class}
+	sourceAt := Coordinate{Cell: cell.Target.Cell}
+	_, source, err := s.cellAt(ctx, from, sourceAt)
 	if err != nil {
 		return storedValue{}, Scope{}, Coordinate{}, err
 	}
-	if err := validateHolder(at, held.Target, holder); err != nil {
+	if err := validateSource(at, cell.Target, source); err != nil {
 		return storedValue{}, Scope{}, Coordinate{}, err
 	}
-	return holder, from, holds, nil
+	return source, from, sourceAt, nil
 }
 
-func validateHolder(at Coordinate, target *Target, holder storedValue) error {
+func validateSource(at Coordinate, target *Target, source storedValue) error {
 	switch {
-	case holder.live() == 0:
-		return fmt.Errorf("%s references %s, which holds no value: %w", at, target, ErrDangling)
-	case holder.Target != nil:
+	case source.live() == 0:
+		return fmt.Errorf("%s references %s, which has no value: %w", at, target, ErrDangling)
+	case source.Target != nil:
 		return fmt.Errorf("%s references %s, which is itself a reference: %w", at, target, ErrWouldDeepen)
 	}
 	return nil
 }
 
 func (s Store) List(ctx context.Context, scope Scope) ([]Metadata, error) {
-	held, err := s.Records.List(ctx, cellsName(scope))
+	recorded, err := s.Records.List(ctx, cellsName(scope))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
-	out := make([]Metadata, 0, len(held))
-	for _, record := range held {
+	out := make([]Metadata, 0, len(recorded))
+	for _, record := range recorded {
 		at, ok := cellOf(record.Name)
 		if !ok {
 			continue
@@ -244,44 +244,44 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	}
 
 	found := make([]Coordinate, 0, len(cells))
-	holding := make([]storedValue, 0, len(cells))
+	cellValues := make([]storedValue, 0, len(cells))
 	for _, at := range cells {
-		held, ok := stored[cellName(scope, at).String()]
-		if !ok || held.live() == 0 {
+		cell, ok := stored[cellName(scope, at).String()]
+		if !ok || cell.live() == 0 {
 			continue
 		}
 		found = append(found, at)
-		holding = append(holding, held)
+		cellValues = append(cellValues, cell)
 	}
 
-	holders, err := s.gather(ctx, scope, stored, holding)
+	sources, err := s.gather(ctx, scope, stored, cellValues)
 	if err != nil {
 		return nil, err
 	}
 
 	sealed := make([]storedValue, len(found))
 	from := make([]Scope, len(found))
-	holds := make([]Coordinate, len(found))
+	sourceCells := make([]Coordinate, len(found))
 	for i, at := range found {
-		if holding[i].Target == nil {
-			sealed[i], from[i], holds[i] = holding[i], scope, at
+		if cellValues[i].Target == nil {
+			sealed[i], from[i], sourceCells[i] = cellValues[i], scope, at
 			continue
 		}
-		target := *holding[i].Target
+		target := *cellValues[i].Target
 		from[i] = Scope{Project: target.Project, Class: scope.Class}
-		holds[i] = Coordinate{Cell: target.Cell}
-		holder := holders[cellName(from[i], holds[i]).String()]
-		if err := validateHolder(at, &target, holder); err != nil {
+		sourceCells[i] = Coordinate{Cell: target.Cell}
+		source := sources[cellName(from[i], sourceCells[i]).String()]
+		if err := validateSource(at, &target, source); err != nil {
 			return nil, err
 		}
-		sealed[i] = holder
+		sealed[i] = source
 	}
 
 	opening := make([]int, 0, len(found))
 	slotOf := make([]int, len(found))
 	slots := make(map[string]int, len(found))
 	for i := range found {
-		key := cellName(from[i], holds[i]).String()
+		key := cellName(from[i], sourceCells[i]).String()
 		slot, seen := slots[key]
 		if !seen {
 			slot = len(opening)
@@ -294,7 +294,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	plaintexts := make([]string, len(opening))
 	if err := forEachConcurrently(ctx, len(opening), func(ctx context.Context, slot int) error {
 		i := opening[slot]
-		plaintext, err := s.Cipher.Open(ctx, coordinateOf(from[i], holds[i]), sealed[i].Sealed)
+		plaintext, err := s.Cipher.Open(ctx, coordinateOf(from[i], sourceCells[i]), sealed[i].Sealed)
 		if err != nil {
 			return err
 		}
@@ -306,18 +306,18 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 
 	out := make([]Value, 0, len(found))
 	for i, at := range found {
-		out = append(out, Value{Metadata: metadataOf(at, holding[i]), Plaintext: plaintexts[slotOf[i]]})
+		out = append(out, Value{Metadata: metadataOf(at, cellValues[i]), Plaintext: plaintexts[slotOf[i]]})
 	}
 	return out, nil
 }
 
 func (s Store) storedCells(ctx context.Context, scope Scope) (map[string]storedValue, error) {
-	held, err := s.Records.List(ctx, cellsName(scope))
+	recorded, err := s.Records.List(ctx, cellsName(scope))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
-	out := make(map[string]storedValue, len(held))
-	for _, record := range held {
+	out := make(map[string]storedValue, len(recorded))
+	for _, record := range recorded {
 		var stored storedValue
 		if err := json.Unmarshal(record.Bytes, &stored); err != nil {
 			return nil, fmt.Errorf("read %s: %w", record.Name, err)
@@ -327,33 +327,33 @@ func (s Store) storedCells(ctx context.Context, scope Scope) (map[string]storedV
 	return out, nil
 }
 
-func (s Store) gather(ctx context.Context, scope Scope, stored map[string]storedValue, holding []storedValue) (map[string]storedValue, error) {
+func (s Store) gather(ctx context.Context, scope Scope, stored map[string]storedValue, cellValues []storedValue) (map[string]storedValue, error) {
 	var from []Scope
-	var holds []Coordinate
+	var sourceCells []Coordinate
 	wanted := map[string]bool{}
-	for _, held := range holding {
-		if held.Target == nil {
+	for _, cell := range cellValues {
+		if cell.Target == nil {
 			continue
 		}
-		at := Scope{Project: held.Target.Project, Class: scope.Class}
-		holder := Coordinate{Cell: held.Target.Cell}
-		key := cellName(at, holder).String()
+		at := Scope{Project: cell.Target.Project, Class: scope.Class}
+		sourceAt := Coordinate{Cell: cell.Target.Cell}
+		key := cellName(at, sourceAt).String()
 		if wanted[key] {
 			continue
 		}
 		wanted[key] = true
 		from = append(from, at)
-		holds = append(holds, holder)
+		sourceCells = append(sourceCells, sourceAt)
 	}
 
-	holders := make([]storedValue, len(from))
+	sources := make([]storedValue, len(from))
 	if err := forEachConcurrently(ctx, len(from), func(ctx context.Context, i int) error {
 		if from[i].Project == scope.Project {
-			holders[i] = stored[cellName(from[i], holds[i]).String()]
+			sources[i] = stored[cellName(from[i], sourceCells[i]).String()]
 			return nil
 		}
-		_, holder, err := s.cellAt(ctx, from[i], holds[i])
-		holders[i] = holder
+		_, source, err := s.cellAt(ctx, from[i], sourceCells[i])
+		sources[i] = source
 		return err
 	}); err != nil {
 		return nil, err
@@ -361,13 +361,13 @@ func (s Store) gather(ctx context.Context, scope Scope, stored map[string]stored
 
 	out := make(map[string]storedValue, len(from))
 	for i := range from {
-		out[cellName(from[i], holds[i]).String()] = holders[i]
+		out[cellName(from[i], sourceCells[i]).String()] = sources[i]
 	}
 	return out, nil
 }
 
 func (s Store) Delete(ctx context.Context, scope Scope, at Coordinate, expected *int64) (bool, error) {
-	held, current, err := s.cellAt(ctx, scope, at)
+	recorded, current, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return false, err
 	}
@@ -388,8 +388,8 @@ func (s Store) Delete(ctx context.Context, scope Scope, at Coordinate, expected 
 	if err != nil {
 		return false, fmt.Errorf("encode %s: %w", at, err)
 	}
-	held.Bytes = encoded
-	if _, err := s.Records.Write(ctx, held); err != nil {
+	recorded.Bytes = encoded
+	if _, err := s.Records.Write(ctx, recorded); err != nil {
 		if errors.Is(err, records.ErrStale) {
 			return false, ErrStaleVersion
 		}
@@ -399,12 +399,12 @@ func (s Store) Delete(ctx context.Context, scope Scope, at Coordinate, expected 
 }
 
 func (s Store) Versions(ctx context.Context, scope Scope, at Coordinate) ([]Version, error) {
-	held, err := s.Records.List(ctx, historyName(scope, at))
+	recorded, err := s.Records.List(ctx, historyName(scope, at))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's versions: %w", at, err)
 	}
-	out := make([]Version, 0, len(held))
-	for _, record := range held {
+	out := make([]Version, 0, len(recorded))
+	for _, record := range recorded {
 		var entry Version
 		if err := json.Unmarshal(record.Bytes, &entry); err != nil {
 			return nil, fmt.Errorf("read a version of %s: %w", at, err)
@@ -429,11 +429,11 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 		}
 	}
 
-	held, err := s.Records.List(ctx, ScopedRecordName(scope))
+	recorded, err := s.Records.List(ctx, ScopedRecordName(scope))
 	if err != nil {
 		return 0, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
-	for _, record := range held {
+	for _, record := range recorded {
 		if err := records.Forget(ctx, s.Records, record.Name); err != nil {
 			return 0, fmt.Errorf("remove %s's stored values: %w", scope.Project, err)
 		}
@@ -447,31 +447,31 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 			return 0, fmt.Errorf("remove what references %s: %w", scope.Project, err)
 		}
 	}
-	return len(held), nil
+	return len(recorded), nil
 }
 
 func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (records.Record, storedValue, error) {
-	held, err := records.ReadOrEmpty(ctx, s.Records, cellName(scope, at))
+	recorded, err := records.ReadOrEmpty(ctx, s.Records, cellName(scope, at))
 	if err != nil {
 		return records.Record{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
 	}
-	if len(held.Bytes) == 0 {
-		return held, storedValue{}, nil
+	if len(recorded.Bytes) == 0 {
+		return recorded, storedValue{}, nil
 	}
 	var stored storedValue
-	if err := json.Unmarshal(held.Bytes, &stored); err != nil {
+	if err := json.Unmarshal(recorded.Bytes, &stored); err != nil {
 		return records.Record{}, storedValue{}, fmt.Errorf("read %s: %w", at, err)
 	}
-	return held, stored, nil
+	return recorded, stored, nil
 }
 
-func metadataOf(at Coordinate, held storedValue) Metadata {
+func metadataOf(at Coordinate, cell storedValue) Metadata {
 	return Metadata{
 		Coordinate: at,
-		Version:    held.Version,
-		UpdatedAt:  held.UpdatedAt,
-		Size:       held.Size,
-		Target:     held.Target,
+		Version:    cell.Version,
+		UpdatedAt:  cell.UpdatedAt,
+		Size:       cell.Size,
+		Target:     cell.Target,
 	}
 }
 

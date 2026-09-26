@@ -24,7 +24,7 @@ func (daemonStore) Destination() string { return "the local docker daemon" }
 func (daemonStore) Has(ctx context.Context, push Push) (bool, error) {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
-		return false, fmt.Errorf("%q names nowhere the daemon can hold an image: %w", push.ImageRef, err)
+		return false, fmt.Errorf("%q names nowhere the daemon can store an image: %w", push.ImageRef, err)
 	}
 	_, err = daemon.Image(ref, daemon.WithContext(ctx))
 	if errdefs.IsNotFound(err) {
@@ -39,11 +39,11 @@ func (daemonStore) Has(ctx context.Context, push Push) (bool, error) {
 func (daemonStore) Push(ctx context.Context, push Push, _ edge.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s's image is written straight into the local docker daemon, and this release carries no image it was built into", push.App)
+			"%s's image is written straight into the local docker daemon, and this release has no image it was built into", push.App)
 	}
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
-		return fmt.Errorf("%q names nowhere the daemon can hold an image: %w", push.ImageRef, err)
+		return fmt.Errorf("%q names nowhere the daemon can store an image: %w", push.ImageRef, err)
 	}
 	if _, err := daemon.Write(ref, push.Built, daemon.WithContext(ctx)); err != nil {
 		return fmt.Errorf("write %s's image into the local docker daemon: %w", push.App, err)

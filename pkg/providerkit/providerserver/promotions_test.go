@@ -20,17 +20,17 @@ import (
 
 func seedPromotions(t *testing.T, provider *fake.Provider, class edge.Class, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
-	held := ledger.New(provider.Records(), class, slug)
-	if err := held.EnsureSchema(context.Background()); err != nil {
+	releases := ledger.New(provider.Records(), class, slug)
+	if err := releases.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	for i, id := range ids {
 		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
-		if err := held.Promote(context.Background(), promotion, pointer, edge.DiscardProgress()); err != nil {
+		if err := releases.Promote(context.Background(), promotion, pointer, edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return held
+	return releases
 }
 
 func buildIdentity(seq int) string {
@@ -90,7 +90,7 @@ func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if id := listed.GetPromotions()[0].GetPromotion().GetPromotionId(); id != "p1" {
-		t.Errorf("after the rollback the pointer holds %q, want p1", id)
+		t.Errorf("after the rollback the pointer names %q, want p1", id)
 	}
 }
 
@@ -121,22 +121,22 @@ func (c *capturingLedger) flipped() (edge.Progress, bool) {
 
 func capturing(t *testing.T, provider *fake.Provider, class edge.Class, slug, marker string) *capturingLedger {
 	t.Helper()
-	held := &capturingLedger{Ledger: ledger.New(provider.Records(), class, slug), marker: marker}
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return held })
-	return held
+	capturer := &capturingLedger{Ledger: ledger.New(provider.Records(), class, slug), marker: marker}
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return capturer })
+	return capturer
 }
 
 func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	const marker = "the flip said this through the reporter it was handed"
-	held := capturing(t, provider, edge.ClassProduction, "shop", marker)
+	capturer := capturing(t, provider, edge.ClassProduction, "shop", marker)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	progress, heard := held.flipped()
+	progress, heard := capturer.flipped()
 	if !heard {
 		t.Fatal("the deploy never reached Promote, so nothing was reported from the flip")
 	}
@@ -157,7 +157,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 		}
 	}
 	if spoke == "" {
-		t.Fatal("nothing the flip said reached the stream, so the flip reports through a reporter the run does not carry")
+		t.Fatal("nothing the flip said reached the stream, so the flip reports through a reporter the run does not have")
 	}
 	if got, want := titles[spoke], "Finalizing"; got != want {
 		t.Errorf("the flip spoke on stage %q, want %q", got, want)
@@ -172,13 +172,13 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
 	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
-	held := capturing(t, provider, edge.ClassProduction, "shop",
+	capturer := capturing(t, provider, edge.ClassProduction, "shop",
 		"the flip said this into a rollback that streams nothing")
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	progress, heard := held.flipped()
+	progress, heard := capturer.flipped()
 	if !heard {
 		t.Fatal("the rollback never reached Promote")
 	}
@@ -187,7 +187,7 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	}
 }
 
-func TestRollbackRefusesAPromotionTheHistoryDoesNotHold(t *testing.T) {
+func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
@@ -233,18 +233,18 @@ type jostle struct {
 func (j *jostle) Write(ctx context.Context, record records.Record) (records.Revision, error) {
 	if record.Name.String() == j.at.String() {
 		j.once.Do(func() {
-			held, err := records.ReadOrEmpty(ctx, j.Store, j.at)
+			recorded, err := records.ReadOrEmpty(ctx, j.Store, j.at)
 			if err != nil {
 				return
 			}
-			held.Bytes = append(slices.Clone(held.Bytes), ' ')
-			_, _ = j.Store.Write(ctx, held)
+			recorded.Bytes = append(slices.Clone(recorded.Bytes), ' ')
+			_, _ = j.Store.Write(ctx, recorded)
 		})
 	}
 	return j.Store.Write(ctx, record)
 }
 
-func TestAnEdgeCarryingItsOwnLedgerStillWorks(t *testing.T) {
+func TestAnEdgeWithItsOwnLedgerStillWorks(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
@@ -324,6 +324,6 @@ func TestRemoveStalePromotionsKeepsTheNewestN(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(listed.GetPromotions()) != 2 {
-		t.Errorf("after the sweep the history holds %d promotion(s), want the 2 kept", len(listed.GetPromotions()))
+		t.Errorf("after the sweep the history has %d promotion(s), want the 2 kept", len(listed.GetPromotions()))
 	}
 }

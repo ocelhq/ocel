@@ -52,7 +52,7 @@ func servingQuery(root, app, framework string) providerserver.AppServingInput {
 	}
 }
 
-func TestEveryAppCarriesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T) {
+func TestEveryAppIncludesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T) {
 	facts, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", "astro"))
 	if err != nil {
 		t.Fatalf("AppServingFor() = %v", err)
@@ -88,7 +88,7 @@ func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
 	}
 }
 
-func TestAnAppRoutingAtItsOriginCarriesTheManifestItRoutesBy(t *testing.T) {
+func TestAnAppRoutingAtItsOriginIncludesTheManifestItRoutesBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
 
@@ -175,7 +175,7 @@ func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manife
 	}
 }
 
-func TestTheAppSpecCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
+func TestTheAppSpecIncludesEveryFactTheProvisionedAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
@@ -194,10 +194,10 @@ func TestTheAppSpecCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	specs := provider.FakeStacks().Provisioned()
 	app := specs[len(specs)-1].App
 	if app == nil {
-		t.Fatal("the last spec the stacks port saw stands up no app")
+		t.Fatal("the last spec the stacks port saw provisions no app")
 	}
 	if app.AssetPrefix == "" {
-		t.Error("the app spec names no asset prefix, so the stood-up app serves its static files from nowhere")
+		t.Error("the app spec names no asset prefix, so the provisioned app serves its static files from nowhere")
 	}
 	if app.Bytecode == nil || app.Bytecode.Prefix == "" {
 		t.Errorf("Bytecode = %+v, want the prefix the runtime warms its compile cache under", app.Bytecode)
@@ -210,12 +210,12 @@ func TestTheAppSpecCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordCarriesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
+func TestTheStagedRecordIncludesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
 	client, provider := deployServed(t)
-	held := staging(t, provider)
+	stager := staging(t, provider)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -225,7 +225,7 @@ func TestTheStagedRecordCarriesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}

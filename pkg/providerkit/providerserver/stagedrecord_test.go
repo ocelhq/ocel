@@ -31,7 +31,7 @@ func builtEdgeBundle(t *testing.T, app string, bundle []byte) {
 func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	held := staging(t, provider)
+	stager := staging(t, provider)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -42,18 +42,18 @@ func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T)
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
 	urls := staged[0].FunctionURLs
-	stood := result.GetFunctions()
-	if len(stood) != 1 {
-		t.Fatalf("the deploy stood up %d functions, want the one the manifest declares", len(stood))
+	functions := result.GetFunctions()
+	if len(functions) != 1 {
+		t.Fatalf("the deploy provisioned %d functions, want the one the manifest declares", len(functions))
 	}
-	if urls["bundle-0"] != stood[0].GetUrl() {
-		t.Errorf("functionUrls[bundle-0] = %q, want the URL %q the function stands on: the router reaches a target by the route the manifest names, and a record keyed by logical name answers every page 502",
-			urls["bundle-0"], stood[0].GetUrl())
+	if urls["bundle-0"] != functions[0].GetUrl() {
+		t.Errorf("functionUrls[bundle-0] = %q, want the URL %q the function is reachable at: the router reaches a target by the route the manifest names, and a record keyed by logical name answers every page 502",
+			urls["bundle-0"], functions[0].GetUrl())
 	}
 	if _, keyed := urls["server"]; keyed {
 		t.Errorf("functionUrls = %v, want no entry under the logical name", urls)
@@ -64,7 +64,7 @@ func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 	builtProject(t)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{Entry: "/"}, nil)
 	client, provider := deployServed(t)
-	held := staging(t, provider)
+	stager := staging(t, provider)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -75,7 +75,7 @@ func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
@@ -91,12 +91,12 @@ func TestTheStagedRecordNamesTheEntryTheBuildRoutesThrough(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordCarriesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testing.T) {
+func TestTheStagedRecordIncludesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testing.T) {
 	builtProject(t)
 	bundle := []byte(`{"version":1}`)
 	builtEdgeBundle(t, "web", bundle)
 	client, provider := deployServed(t)
-	held := staging(t, provider)
+	stager := staging(t, provider)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -112,13 +112,13 @@ func TestTheStagedRecordCarriesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testin
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
 	record := staged[0]
 	if record.EdgeWorkers == nil {
-		t.Fatal("the staged record carries no edgeWorkers, so an edge that runs the app's code has nothing to load")
+		t.Fatal("the staged record has no edgeWorkers, so an edge that runs the app's code has nothing to load")
 	}
 	if record.EdgeWorkers.BundleKey == "" {
 		t.Error("edgeWorkers names no bundle key, so the edge cannot fetch the bundle the release uploaded")
@@ -142,14 +142,14 @@ func TestTheStagedRecordCarriesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testin
 		t.Errorf("env = %v, want no binding name among the variables the worker runs with", record.Env)
 	}
 	if record.IsrWriteSecret == "" {
-		t.Error("the staged record carries no isrWriteSecret, so the edge cannot write a revalidated page back")
+		t.Error("the staged record has no isrWriteSecret, so the edge cannot write a revalidated page back")
 	}
 }
 
 func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	held := staging(t, provider)
+	stager := staging(t, provider)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -159,14 +159,14 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
 	specs := provider.FakeStacks().Provisioned()
 	app := specs[len(specs)-1].App
 	if app == nil || app.ISR == nil {
-		t.Fatal("the last spec the stacks port saw carries no ISR spec")
+		t.Fatal("the last spec the stacks port saw has no ISR spec")
 	}
 	if staged[0].IsrPrefix != app.ISR.Prefix {
 		t.Errorf("isrPrefix = %q, want %q: the edge reads entries at <isrPrefix>/cache/<route>.cache.json, so a prefix that differs from the one the function writes under misses every prerender",
@@ -177,18 +177,18 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordCarriesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
+func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 	builtProject(t)
 	builtEdgeBundle(t, "web", []byte(`{"version":1}`))
 	client, provider := deployServed(t)
 	direct := provider.Edges().(*fake.Edges).Edge(fake.KindDirect)
-	held := &stagingLedger{}
+	stager := &stagingLedger{}
 	direct.UseLedger(func(state edge.StackState) fake.Ledger {
-		held.Ledger = ledger.New(provider.Records(), state.Class, state.Slug)
-		return held
+		stager.Ledger = ledger.New(provider.Records(), state.Class, state.Slug)
+		return stager
 	})
 	if !direct.Facts().Compatibility.IsZero() {
-		t.Fatal("the reference direct edge names a compatibility, so it cannot stand for an edge that runs no code")
+		t.Fatal("the reference direct edge names a compatibility, so it cannot represent an edge that runs no code")
 	}
 
 	req := deployRequest()
@@ -198,7 +198,7 @@ func TestTheStagedRecordCarriesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}

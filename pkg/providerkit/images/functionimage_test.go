@@ -87,7 +87,7 @@ func tarNames(t *testing.T, layer v1.Layer) []string {
 	return names
 }
 
-func TestFunctionImageCarriesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *testing.T) {
+func TestFunctionImageIncludesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":    "export const handler = () => {}",
 		"lib/deep.mjs": "export const deep = 1",
@@ -104,12 +104,12 @@ func TestFunctionImageCarriesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *test
 		t.Fatal(err)
 	}
 	if len(layers) != 1 {
-		t.Fatalf("FunctionImage() appended %d layers, want the one carrying the function's tree", len(layers))
+		t.Fatalf("FunctionImage() appended %d layers, want the one containing the function's tree", len(layers))
 	}
-	held := tarNames(t, layers[0])
+	names := tarNames(t, layers[0])
 	want := []string{"ocel/app/config.json", "ocel/app/index.mjs", "ocel/app/lib/deep.mjs"}
-	if !slices.Equal(held, want) {
-		t.Errorf("the layer holds %v, want the staged tree under %s: %v", held, images.FunctionImageRoot, want)
+	if !slices.Equal(names, want) {
+		t.Errorf("the layer contains %v, want the staged tree under %s: %v", names, images.FunctionImageRoot, want)
 	}
 }
 
@@ -141,7 +141,7 @@ func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime
 		t.Fatal("FunctionImage() built an image for a go function with no command, want it refused: the image would boot node over a binary that is never run")
 	}
 	if !strings.Contains(err.Error(), "command") {
-		t.Errorf("FunctionImage() = %v, want it to name the command the artifact carries none of", err)
+		t.Errorf("FunctionImage() = %v, want it to name the command the artifact lacks", err)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 		t.Fatal("FunctionImage() built a go image booting the node runtime because the staged config said node, want the runtime the base was chosen for to decide")
 	}
 	if !strings.Contains(err.Error(), "command") {
-		t.Errorf("FunctionImage() = %v, want it to name the command the artifact carries none of", err)
+		t.Errorf("FunctionImage() = %v, want it to name the command the artifact lacks", err)
 	}
 }
 
@@ -178,13 +178,13 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 	config := configOf(t, image)
 	port := appbuild.InjectedPortName + "=" + appbuild.InjectedPortText
 	if !slices.Contains(config.Env, port) {
-		t.Errorf("the image carries env %v, want %s: the function is reached on the port ocel binds it to", config.Env, port)
+		t.Errorf("the image has env %v, want %s: the function is reached on the port ocel binds it to", config.Env, port)
 	}
 	if slices.Contains(config.Env, "PORT=3000") {
-		t.Errorf("the image carries env %v, want the base's own port replaced rather than left to win", config.Env)
+		t.Errorf("the image has env %v, want the base's own port replaced rather than left to win", config.Env)
 	}
 	if !slices.Contains(config.Env, "PATH=/usr/bin") {
-		t.Errorf("the image carries env %v, want the base's own entries kept", config.Env)
+		t.Errorf("the image has env %v, want the base's own entries kept", config.Env)
 	}
 }
 
@@ -201,7 +201,7 @@ func builtDigest(t *testing.T, files map[string]string) string {
 	return digest.String()
 }
 
-func TestFunctionImageOfTheSameFunctionCarriesTheSameDigest(t *testing.T) {
+func TestFunctionImageOfTheSameFunctionGetsTheSameDigest(t *testing.T) {
 	files := map[string]string{
 		"index.mjs":   "export const handler = () => {}",
 		"config.json": functionConfig(t, nil),
@@ -250,7 +250,7 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 	}
 }
 
-func TestFunctionImageCarriesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
+func TestFunctionImageIncludesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
@@ -267,13 +267,13 @@ func TestFunctionImageCarriesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	held := tarNames(t, layers[0])
+	names := tarNames(t, layers[0])
 	want := strings.TrimPrefix(images.NodeRuntimePath, "/")
-	if !slices.Contains(held, want) {
-		t.Fatalf("the layer holds %v and nothing at %s, so the image runs a runtime it does not carry", held, images.NodeRuntimePath)
+	if !slices.Contains(names, want) {
+		t.Fatalf("the layer contains %v and nothing at %s, so the image runs a runtime it does not include", names, images.NodeRuntimePath)
 	}
 	if body := tarBody(t, layers[0], want); !bytes.Equal(body, runtime) {
-		t.Errorf("the image carries %q at %s, want the runtime it was handed", body, images.NodeRuntimePath)
+		t.Errorf("the image has %q at %s, want the runtime it was handed", body, images.NodeRuntimePath)
 	}
 }
 
@@ -291,7 +291,7 @@ func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 	config := configOf(t, image)
 	want := "OCEL_HANDLER=" + images.FunctionImageRoot + "/index.mjs"
 	if !slices.Contains(config.Env, want) {
-		t.Errorf("the image carries env %v and never %s, so the runtime has no handler to serve", config.Env, want)
+		t.Errorf("the image has env %v and never %s, so the runtime has no handler to serve", config.Env, want)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsRuntime(
 		_, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 			map[string][]byte{rel: []byte("root::0:0::/:/bin/sh")})
 		if err == nil {
-			t.Fatalf("FunctionImage() carried an overlay at %s, want it refused: a function's image may not write over the base image it is built on", rel)
+			t.Fatalf("FunctionImage() included an overlay at %s, want it refused: a function's image may not write over the base image it is built on", rel)
 		}
 		if !strings.Contains(err.Error(), rel) {
 			t.Errorf("FunctionImage() = %v, want it to name %s as the path it refuses", err, rel)
@@ -313,7 +313,7 @@ func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsRuntime(
 	}
 }
 
-func TestFunctionImageCarriesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.T) {
+func TestFunctionImageIncludesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
@@ -323,25 +323,25 @@ func TestFunctionImageCarriesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 		map[string][]byte{beside: []byte("export const shim = 1")})
 	if err != nil {
-		t.Fatalf("FunctionImage() error = %v, want the runtime's own directory carried: it is the one place outside the function's tree the image is built to hold", err)
+		t.Fatalf("FunctionImage() error = %v, want the runtime's own directory included: it is the one place outside the function's tree the image is built to contain", err)
 	}
 
 	layers, err := image.Layers()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held := tarNames(t, layers[0]); !slices.Contains(held, strings.TrimPrefix(beside, "/")) {
-		t.Errorf("the layer holds %v and nothing at %s", held, beside)
+	if names := tarNames(t, layers[0]); !slices.Contains(names, strings.TrimPrefix(beside, "/")) {
+		t.Errorf("the layer contains %v and nothing at %s", names, beside)
 	}
 }
 
-func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageHolds(t *testing.T) {
+func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageContains(t *testing.T) {
 	t.Parallel()
 
 	landed := appbuild.ContainerRuntimePath
 	for _, root := range []string{images.FunctionImageRoot, images.NodeRuntimeRoot} {
 		if landed == root || strings.HasPrefix(landed, root+"/") {
-			t.Errorf("the container runtime lands at %s, inside %s: a node function's image holds a directory there, and a file appended over a directory cannot be loaded", appbuild.ContainerRuntimePath, root)
+			t.Errorf("the container runtime lands at %s, inside %s: a node function's image has a directory there, and a file appended over a directory cannot be loaded", appbuild.ContainerRuntimePath, root)
 		}
 	}
 
@@ -351,7 +351,7 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageHolds(t *testing.
 	})
 	if _, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 		map[string][]byte{appbuild.ContainerRuntimePath: []byte("theirs")}); err == nil {
-		t.Errorf("FunctionImage() carried an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", appbuild.ContainerRuntimePath)
+		t.Errorf("FunctionImage() included an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", appbuild.ContainerRuntimePath)
 	}
 
 	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
@@ -380,7 +380,7 @@ func tarBody(t *testing.T, layer v1.Layer, name string) []byte {
 	for {
 		header, err := reader.Next()
 		if errors.Is(err, io.EOF) {
-			t.Fatalf("the layer holds nothing at %s", name)
+			t.Fatalf("the layer contains nothing at %s", name)
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -388,11 +388,11 @@ func tarBody(t *testing.T, layer v1.Layer, name string) []byte {
 		if header.Name != name {
 			continue
 		}
-		held, err := io.ReadAll(reader)
+		body, err := io.ReadAll(reader)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return held
+		return body
 	}
 }
 
@@ -408,6 +408,6 @@ func TestAFunctionsRouteIsWhatIsLeftOfItsLogicalName(t *testing.T) {
 	}
 	if got, want := images.FunctionRoute("web", "fn--web--API/Users_[id]"), "api-users-id"; got != want {
 		t.Errorf("FunctionRoute() = %q, want %q: every caller names a resource with it, and no registry, "+
-			"bucket or service takes what a route may hold", got, want)
+			"bucket or service takes what a route may contain", got, want)
 	}
 }

@@ -51,7 +51,7 @@ func Main(m *testing.M) int {
 		return code
 	}
 	if err := sweep(func(of string) bool { return of == run }); err != nil {
-		fmt.Fprintf(os.Stderr, "this run leaves behind what it stood on the engine, and every run after it inherits the leftovers:\n%v\n", err)
+		fmt.Fprintf(os.Stderr, "this run leaves behind what it started on the engine, and every run after it inherits the leftovers:\n%v\n", err)
 		if code == 0 {
 			return 1
 		}
@@ -71,11 +71,11 @@ func requireDocker(t *testing.T) {
 	t.Helper()
 	begun.Do(func() {
 		if _, err := exec.LookPath(engine); err != nil {
-			silent = "this machine carries no docker, so nothing can be stood on an engine that is not here"
+			silent = "this machine has no docker, so nothing can run on an engine that is not here"
 			return
 		}
 		if err := exec.Command(engine, "info").Run(); err != nil {
-			silent = "the docker on this machine answers nothing, so nothing can be stood on it"
+			silent = "the docker on this machine answers nothing, so nothing can run on it"
 			return
 		}
 		engaged.Store(true)
@@ -130,7 +130,7 @@ func listLabelled(listing ...string) (map[string]string, error) {
 	argv := append(slices.Clone(listing), "--filter", "label="+runLabel, "--format", `{{.ID}} {{.Label "`+runLabel+`"}}`)
 	said, err := exec.Command(engine, argv...).Output()
 	if err != nil {
-		return nil, fmt.Errorf("list what runs stood (%s): %w", strings.Join(listing, " "), err)
+		return nil, fmt.Errorf("list what runs started (%s): %w", strings.Join(listing, " "), err)
 	}
 	found := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(said)), "\n") {
@@ -154,7 +154,7 @@ func ownedBy(found map[string]string, owned func(of string) bool) []string {
 func removeNetwork(network string) error {
 	said, err := exec.Command(engine, "network", "inspect", "--format", `{{range .Containers}}{{.Name}} {{end}}`, network).Output()
 	if err != nil {
-		return fmt.Errorf("read what stands on network %s: %w", network, err)
+		return fmt.Errorf("read what is attached to network %s: %w", network, err)
 	}
 	if attached := strings.Fields(string(said)); len(attached) > 0 {
 		if err := docker(append([]string{"rm", "--force", "--volumes"}, attached...)...); err != nil {
@@ -211,7 +211,7 @@ func removeRunRoot(root string) error {
 		if _, gone := os.Stat(root); errors.Is(gone, fs.ErrNotExist) {
 			return nil
 		}
-		return fmt.Errorf("take back %s, which holds what a container wrote as a user this run is not: %w\n%s", root, err, strings.TrimSpace(string(said)))
+		return fmt.Errorf("take back %s, which contains what a container wrote as a user this run is not: %w\n%s", root, err, strings.TrimSpace(string(said)))
 	}
 	if err := emptyRunRoot(root); err != nil {
 		return err
@@ -250,9 +250,9 @@ type onceOrSkip[T any] struct {
 	refused string
 }
 
-func (l *onceOrSkip[T]) get(t *testing.T, stand func() (T, string)) T {
+func (l *onceOrSkip[T]) get(t *testing.T, provision func() (T, string)) T {
 	t.Helper()
-	l.once.Do(func() { l.value, l.refused = stand() })
+	l.once.Do(func() { l.value, l.refused = provision() })
 	if l.refused != "" {
 		t.Skip(l.refused)
 	}

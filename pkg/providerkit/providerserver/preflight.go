@@ -51,15 +51,15 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, provider.RefusalError(err)
 	}
 
-	standing, err := gate.Status(ctx, class)
+	status, err := gate.Status(ctx, class)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	resp.Bootstrap = BootstrapStatusProto(standing, h.session.writer, req.GetRequiredTier(), required)
+	resp.Bootstrap = BootstrapStatusProto(status, h.session.writer, req.GetRequiredTier(), required)
 
-	if standing.Present {
+	if status.Present {
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(class), true
-		if err := checkCompat(standing.Schema, true, provider.BootstrapSchema).explain(standing.Schema, provider.BootstrapSchema, provider.BootstrapCommand(class)); err != nil {
+		if err := checkCompat(status.Schema, true, provider.BootstrapSchema).explain(status.Schema, provider.BootstrapSchema, provider.BootstrapCommand(class)); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 		resp.KnownSlugs, err = slugsBesides(ctx, gate, class, req.GetSlug())

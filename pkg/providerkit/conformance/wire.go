@@ -36,13 +36,13 @@ func runWire(t *testing.T, suite Suite) {
 
 	t.Run("in process", func(t *testing.T) {
 		if suite.Server.New == nil {
-			t.Skip("the suite carries no Spec, so there is no mux to serve")
+			t.Skip("the suite has no Spec, so there is no mux to serve")
 		}
 		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
 
 		provider := client(server.Client(), server.URL)
-		holdsTheSessionRules(t, provider, suite.Options)
+		enforcesTheSessionRules(t, provider, suite.Options)
 		t.Run("names the computes it runs", func(t *testing.T) {
 			namesTheComputesItRuns(t, suite, provider)
 		})
@@ -50,7 +50,7 @@ func runWire(t *testing.T, suite Suite) {
 
 	t.Run("a run says what it would change and then what it is doing", func(t *testing.T) {
 		if suite.Server.New == nil || suite.New == nil {
-			t.Skip("this provider stands nothing up without an account behind it, so no run reaches its stream here")
+			t.Skip("this provider provisions nothing without an account behind it, so no run reaches its stream here")
 		}
 		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
@@ -70,7 +70,7 @@ func runWire(t *testing.T, suite Suite) {
 
 		provider.refusesAnUnpairedClient(t)
 		paired := client(provider.http, providerURL)
-		holdsTheSessionRules(t, paired, suite.Options)
+		enforcesTheSessionRules(t, paired, suite.Options)
 		t.Run("names the computes it runs", func(t *testing.T) {
 			namesTheComputesItRuns(t, suite, paired)
 		})
@@ -113,7 +113,7 @@ func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 	}
 }
 
-func holdsTheSessionRules(t *testing.T, providerClient contractv1connect.ProviderServiceClient, options provider.Options) {
+func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.ProviderServiceClient, options provider.Options) {
 	t.Helper()
 	ctx := context.Background()
 

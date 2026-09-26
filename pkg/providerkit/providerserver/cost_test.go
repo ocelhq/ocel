@@ -84,7 +84,7 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 	}
 	for _, resource := range set.GetResources() {
 		if resource.GetVendor() != "fake" || resource.GetRegion() != "nowhere" {
-			t.Errorf("resource %s carries vendor %q region %q", resource.GetId(), resource.GetVendor(), resource.GetRegion())
+			t.Errorf("resource %s has vendor %q region %q", resource.GetId(), resource.GetVendor(), resource.GetRegion())
 		}
 	}
 }

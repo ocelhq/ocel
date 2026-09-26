@@ -206,7 +206,7 @@ func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Pl
 		Reason: "the core every feature above was built on",
 		Slow:   true,
 	})
-	for _, kind := range b.standingEdges() {
+	for _, kind := range b.raisedEdges() {
 		plan.Groups = append(plan.Groups, provider.ChangeGroup{
 			Kind:   provider.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(kind),
@@ -221,7 +221,7 @@ func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Pl
 	return plan, nil
 }
 
-func (b *Bootstrap) standingEdges() []edge.Kind {
+func (b *Bootstrap) raisedEdges() []edge.Kind {
 	if b.raised != nil {
 		return b.raised
 	}

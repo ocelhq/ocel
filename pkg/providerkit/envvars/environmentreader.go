@@ -26,14 +26,14 @@ func (r EnvironmentReader) Values(ctx context.Context, cells []Cell) (map[string
 		return nil, err
 	}
 
-	held := make(map[Coordinate]string, len(found))
+	plaintexts := make(map[Coordinate]string, len(found))
 	for _, value := range found {
-		held[value.Coordinate] = value.Plaintext
+		plaintexts[value.Coordinate] = value.Plaintext
 	}
 	out := make(map[string]string, len(cells))
 	for _, at := range cells {
 		for _, environment := range shadowing(r.Environment) {
-			plaintext, ok := held[Coordinate{Cell: at, Environment: environment}]
+			plaintext, ok := plaintexts[Coordinate{Cell: at, Environment: environment}]
 			if !ok {
 				continue
 			}

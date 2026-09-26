@@ -173,7 +173,7 @@ func TestARegistryWithNoServerIsRefusedRatherThanPassedOn(t *testing.T) {
 		Repositories: []string{"web"},
 	})
 	if err == nil {
-		t.Fatal("ResolveImageRegistry() answered a registry with no server, want the provider held to naming one")
+		t.Fatal("ResolveImageRegistry() answered a registry with no server, want the provider required to name one")
 	}
 	if !strings.Contains(err.Error(), "server") {
 		t.Errorf("ResolveImageRegistry() error = %v, and the provider author never learns which half is missing", err)
@@ -188,7 +188,7 @@ func TestARegistryTheProviderRefusesToNameFailsTheResolve(t *testing.T) {
 		Repositories: []string{"web"},
 	})
 	if err == nil {
-		t.Fatal("ResolveImageRegistry() succeeded over a provider that refused, want the refusal carried")
+		t.Fatal("ResolveImageRegistry() succeeded over a provider that refused, want the refusal passed on")
 	}
 	if !strings.Contains(err.Error(), "the repository could not be created") {
 		t.Errorf("ResolveImageRegistry() error = %v, want the provider's own reason", err)

@@ -20,6 +20,6 @@ func TestAGroupThatAdoptsAndKeepsRollsUpAsKept(t *testing.T) {
 		{Kind: "dir", Name: "/etc/ocel", Action: provider.ActionCreate},
 		{Kind: "docker:engine", Name: "docker", Action: provider.ActionAdopt},
 	}); action != provider.ActionUpdate {
-		t.Errorf("RollUp() over a create and an adopt = %q, want %q: what is adopted already stands, as what is kept does", action, provider.ActionUpdate)
+		t.Errorf("RollUp() over a create and an adopt = %q, want %q: what is adopted already exists, as what is kept does", action, provider.ActionUpdate)
 	}
 }

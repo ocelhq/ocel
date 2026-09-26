@@ -108,12 +108,12 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, environment string) error {
 	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
 	scope := envvars.Scope{Project: slug, Class: edge.ClassPreview}
-	held, err := store.ListBindings(ctx, scope, environment)
+	published, err := store.ListBindings(ctx, scope, environment)
 	if err != nil {
 		return fmt.Errorf("read the records kept for preview %s: %w", environment, err)
 	}
 	var kept []string
-	for _, record := range held {
+	for _, record := range published {
 		if record.Environment != environment {
 			continue
 		}

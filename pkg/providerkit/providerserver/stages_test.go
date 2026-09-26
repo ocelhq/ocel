@@ -43,7 +43,7 @@ func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
 	t.Run("every declared stage is closed by a span", func(t *testing.T) {
 		for _, key := range order {
 			if spans[key] == 0 {
-				t.Errorf("stage %q was declared and no span carries its id: a span whose span_id equals the stage id is the only end-of-stage signal, so this stage never ends", declared[key].GetTitle())
+				t.Errorf("stage %q was declared and no span has its id: a span whose span_id equals the stage id is the only end-of-stage signal, so this stage never ends", declared[key].GetTitle())
 			}
 		}
 	})

@@ -10,19 +10,19 @@ import (
 
 type Images struct {
 	mu     sync.Mutex
-	held   map[string]bool
+	stored map[string]bool
 	asked  []images.Push
 	pushed []images.Push
 	failed error
 	opened []images.Registry
 }
 
-func NewImages() *Images { return &Images{held: map[string]bool{}} }
+func NewImages() *Images { return &Images{stored: map[string]bool{}} }
 
 func (i *Images) Preload(imageRef string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.held[imageRef] = true
+	i.stored[imageRef] = true
 }
 
 func (i *Images) FailPushes(err error) {
@@ -58,7 +58,7 @@ func (i *Images) Has(_ context.Context, push images.Push) (bool, error) {
 	if i.failed != nil {
 		return false, i.failed
 	}
-	return i.held[push.ImageRef], nil
+	return i.stored[push.ImageRef], nil
 }
 
 func (i *Images) Push(_ context.Context, push images.Push, _ edge.Progress) error {
@@ -68,7 +68,7 @@ func (i *Images) Push(_ context.Context, push images.Push, _ edge.Progress) erro
 		return i.failed
 	}
 	i.pushed = append(i.pushed, push)
-	i.held[push.ImageRef] = true
+	i.stored[push.ImageRef] = true
 	return nil
 }
 

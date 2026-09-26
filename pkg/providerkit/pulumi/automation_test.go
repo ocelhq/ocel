@@ -110,7 +110,7 @@ func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCarriesTheBackendTheProviderNamed(t *testing.T) {
+func TestWorkspaceUsesTheBackendTheProviderNamed(t *testing.T) {
 	t.Parallel()
 
 	setup, err := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run}).Workspace(spec())
@@ -127,11 +127,11 @@ func TestWorkspaceCarriesTheBackendTheProviderNamed(t *testing.T) {
 		t.Errorf("the workspace's project is %q, want %q", setup.Project.Name, naming.PulumiProject("shop"))
 	}
 	if len(setup.Options) == 0 {
-		t.Error("the workspace carries no options, so nothing configures a local workspace from it")
+		t.Error("the workspace has no options, so nothing configures a local workspace from it")
 	}
 }
 
-func TestWorkspaceCarriesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) {
+func TestWorkspacePassesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) {
 	t.Parallel()
 
 	setup, err := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run}).Workspace(spec())
@@ -139,10 +139,10 @@ func TestWorkspaceCarriesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) 
 		t.Fatalf("Workspace() = %v", err)
 	}
 	if setup.EnvVars["PULUMI_CONFIG_PASSPHRASE"] != "a-passphrase" {
-		t.Error("the workspace does not carry the passphrase, so the state it writes would be unsealed")
+		t.Error("the workspace does not include the passphrase, so the state it writes would be unsealed")
 	}
 	if setup.EnvVars["VENDOR_REGION"] != "nowhere" {
-		t.Errorf("the workspace's environment is %v, want the vendor's own variables carried through", setup.EnvVars)
+		t.Errorf("the workspace's environment is %v, want the vendor's own variables passed through", setup.EnvVars)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestWorkspaceRefusesAnAccessThatWouldWriteStateUnsealed(t *testing.T) {
 	}
 }
 
-func TestWorkspaceRefusesAnAutomationCarryingNoProgram(t *testing.T) {
+func TestWorkspaceRefusesAnAutomationWithNoProgram(t *testing.T) {
 	t.Parallel()
 
 	if _, err := pulumi.New(pulumi.Config{Backend: backend()}).Workspace(spec()); err == nil {
@@ -228,7 +228,7 @@ func TestRunHandsTheEngineTheWorkspaceAndDecodesWhatItAnswers(t *testing.T) {
 		t.Fatalf("Run() = %v", err)
 	}
 	if engine.up.Stack != spec().Ref.Name.String() {
-		t.Errorf("the engine was asked to stand up %q, want %q", engine.up.Stack, spec().Ref.Name)
+		t.Errorf("the engine was asked to provision %q, want %q", engine.up.Stack, spec().Ref.Name)
 	}
 	if engine.up.Parallel != pulumi.DefaultParallel {
 		t.Errorf("the engine ran at parallelism %d, want the automation's %d", engine.up.Parallel, pulumi.DefaultParallel)
@@ -282,7 +282,7 @@ func TestRunRefreshesOnlyTheStacksTheProviderSaysToRefresh(t *testing.T) {
 	}
 }
 
-func TestRunCarriesTheProgramsConfigToTheEngine(t *testing.T) {
+func TestRunPassesTheProgramsConfigToTheEngine(t *testing.T) {
 	t.Parallel()
 
 	engine := &recordingEngine{}

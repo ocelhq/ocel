@@ -17,8 +17,8 @@ func discardCertificate(ctx context.Context, p provider.Provider, cert provider.
 	return p.Certificates().Discard(ctx, cert, progress)
 }
 
-func retireCertificate(ctx context.Context, p provider.Provider, cutover dnsCutover, cert, holding provider.Certificate, progress edge.Progress) error {
-	if !cert.Issued() || cert.ID == holding.ID {
+func discardCertificateAndRecords(ctx context.Context, p provider.Provider, cutover dnsCutover, cert, active provider.Certificate, progress edge.Progress) error {
+	if !cert.Issued() || cert.ID == active.ID {
 		return nil
 	}
 	if cert.Requested {
@@ -27,7 +27,7 @@ func retireCertificate(ctx context.Context, p provider.Provider, cutover dnsCuto
 	if err := discardCertificate(ctx, p, cert, progress); err != nil {
 		return err
 	}
-	return cutover.release(ctx, edge.Unwritten(cert.Written, holding.Written), progress.Say)
+	return cutover.release(ctx, edge.Unwritten(cert.Written, active.Written), progress.Say)
 }
 
 type hostCertificates struct {
@@ -69,14 +69,14 @@ func (c hostCertificates) discardSuperseded(ctx context.Context, progress edge.P
 	if len(c.hostState.Superseded) == 0 {
 		return nil
 	}
-	holding := c.hostState.Certificate
+	active := c.hostState.Certificate
 	var kept []provider.Certificate
 	var errs []error
 	for _, cert := range c.hostState.Superseded {
 		if c.uses != nil && c.uses(cert.ID) {
 			continue
 		}
-		if err := retireCertificate(ctx, c.provider, c.cutover, cert, holding, progress); err != nil {
+		if err := discardCertificateAndRecords(ctx, c.provider, c.cutover, cert, active, progress); err != nil {
 			errs = append(errs, err)
 			kept = append(kept, cert)
 		}

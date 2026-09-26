@@ -109,11 +109,11 @@ func bindingFor(resource provider.Resource) func(provider.Binding) bool {
 }
 
 func functionNamed(function string) func(provider.Function) bool {
-	return func(held provider.Function) bool { return held.Name == function }
+	return func(fn provider.Function) bool { return fn.Name == function }
 }
 
 func containerNamed(container string) func(provider.AppContainer) bool {
-	return func(held provider.AppContainer) bool { return held.Name == container }
+	return func(c provider.AppContainer) bool { return c.Name == container }
 }
 
 func stackPlan(ref provider.StackRef, changes []provider.Change) provider.Plan {

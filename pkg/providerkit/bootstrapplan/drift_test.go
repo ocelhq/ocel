@@ -52,7 +52,7 @@ func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
 	}
 }
 
-func TestAGroupTheShownPlanNeverCarriedIsWorkNobodyConsentedTo(t *testing.T) {
+func TestAGroupTheShownPlanNeverIncludedIsWorkNobodyConsentedTo(t *testing.T) {
 	t.Parallel()
 
 	shown := provider.Plan{Groups: []provider.ChangeGroup{
@@ -82,12 +82,12 @@ func TestAnAdoptionWritesNothingAndSoNeverGrowsThePlan(t *testing.T) {
 			Changes: []provider.Change{{Kind: "docker:engine", Name: "docker", Action: action}},
 		}}}
 	}
-	for shown, standing := range map[provider.ChangeAction]provider.ChangeAction{
+	for shown, current := range map[provider.ChangeAction]provider.ChangeAction{
 		provider.ActionAdopt: provider.ActionAdopt,
 		provider.ActionKeep:  provider.ActionAdopt,
 	} {
-		if err := bootstrapplan.RefuseUnconsentedChanges(plan(shown), plan(standing)); err != nil {
-			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want the apply to run", shown, standing, err)
+		if err := bootstrapplan.RefuseUnconsentedChanges(plan(shown), plan(current)); err != nil {
+			t.Errorf("RefuseUnconsentedChanges() from %s to %s = %v, want the apply to run", shown, current, err)
 		}
 	}
 	if err := bootstrapplan.RefuseUnconsentedChanges(plan(provider.ActionAdopt), plan(provider.ActionCreate)); err == nil {

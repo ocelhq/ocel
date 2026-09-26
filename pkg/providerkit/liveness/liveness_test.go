@@ -63,8 +63,8 @@ func (b *dnsBook) Host(_ context.Context, host string) ([]string, error) {
 	if b.down {
 		return nil, &net.DNSError{Err: "i/o timeout", Name: host, IsTimeout: true}
 	}
-	if held, ok := b.hosts[host]; ok {
-		return held, nil
+	if addresses, ok := b.hosts[host]; ok {
+		return addresses, nil
 	}
 	return nil, missing(host)
 }
@@ -85,12 +85,12 @@ func (b *dnsBook) CNAME(_ context.Context, host string) (string, error) {
 
 func (b *dnsBook) NS(_ context.Context, name string) ([]*net.NS, error) {
 	name = b.note("NS", name)
-	held, ok := b.zones[name]
+	servers, ok := b.zones[name]
 	if !ok {
 		return nil, missing(name)
 	}
-	named := make([]*net.NS, 0, len(held))
-	for _, ns := range held {
+	named := make([]*net.NS, 0, len(servers))
+	for _, ns := range servers {
 		named = append(named, &net.NS{Host: ns + "."})
 	}
 	return named, nil
@@ -197,7 +197,7 @@ func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 	probe.TLS = nil
 	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil {
-		t.Fatalf("Serving() = %v, want it reported unserved so the settle keeps waiting", err)
+		t.Fatalf("Serving() = %v, want it reported unserved so the cutover wait keeps polling", err)
 	}
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing: no header is readable off a handshake the client refused", kind)
@@ -283,7 +283,7 @@ func TestAHostnameAliasedToTheFrontIsLocatedWhereTheFrontIs(t *testing.T) {
 		})
 
 	if kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com"); err != nil || kind != "cloudfront" {
-		t.Fatalf("Serving() = %q, %v (%s), want the edge where the alias the zone holds resolves", kind, err, probe.LastProbeFailure("shop.example.com"))
+		t.Fatalf("Serving() = %q, %v (%s), want the edge where the alias the zone records resolves", kind, err, probe.LastProbeFailure("shop.example.com"))
 	}
 }
 
