@@ -45,8 +45,8 @@ type Version struct {
 }
 
 type Recovery struct {
-	Deploy string         `json:"deploy"`
-	Owed   []envgate.Cell `json:"owed"`
+	Deploy  string         `json:"deploy"`
+	Missing []envgate.Cell `json:"owed"`
 }
 
 type State struct {

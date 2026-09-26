@@ -10,11 +10,11 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
-func TestOwedVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
+func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	t.Parallel()
 	ev := &streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
 		Url: "http://127.0.0.1:5555/#t=abc",
-		Owed: &streamv1.VariablesOwed{Cells: []*streamv1.OwedVariable{
+		Missing: &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{
 			{Key: "DATABASE_URL", Reason: "no value", Description: "The primary database connection string"},
 			{Key: "PORT", Folder: "/web", Reason: "set, but not a number"},
 		}},
@@ -46,13 +46,13 @@ func TestTheDeployTUIHeadsAGroupOnce(t *testing.T) {
 	t.Parallel()
 	ev := &streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
 		Url: "http://127.0.0.1:5555/#t=abc",
-		Owed: &streamv1.VariablesOwed{
-			Cells: []*streamv1.OwedVariable{
+		Missing: &streamv1.MissingVariables{
+			Cells: []*streamv1.MissingVariable{
 				{Key: "GITHUB_CLIENT_ID", Reason: "no value", Group: "github"},
 				{Key: "DATABASE_URL", Reason: "no value"},
 				{Key: "GITHUB_CLIENT_SECRET", Reason: "no value", Group: "github"},
 			},
-			Groups: []*streamv1.OwedGroup{{Key: "github", Description: "Sign in with GitHub"}},
+			Groups: []*streamv1.MissingGroup{{Key: "github", Description: "Sign in with GitHub"}},
 		},
 	}}}
 

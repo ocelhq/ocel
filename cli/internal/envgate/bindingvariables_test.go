@@ -69,7 +69,7 @@ func TestBindingVariables(t *testing.T) {
 
 		err := g.Check()
 		if err == nil || !strings.Contains(err.Error(), "ORDERS_HOST") {
-			t.Fatalf("Check = %v, want ORDERS_HOST owed at the root", err)
+			t.Fatalf("Check = %v, want ORDERS_HOST missing at the root", err)
 		}
 		if strings.Contains(err.Error(), "--folder") {
 			t.Errorf("refusal = %q, want the root-level command", err)
@@ -124,11 +124,11 @@ func TestBindingVariables(t *testing.T) {
 		}
 	})
 
-	t.Run("a key the app declares and a binding reads in another tier is refused, though this tier owes it nothing", func(t *testing.T) {
+	t.Run("a key the app declares and a binding reads in another tier is refused, though this tier does not need it", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Preview: true, OtherTiers: []envgate.BindingVariables{ordersBinding}})
 		if err := g.Check(); err != nil {
-			t.Fatalf("Check = %v, want nothing owed for a binding this tier does not take", err)
+			t.Fatalf("Check = %v, want nothing missing for a binding this tier does not take", err)
 		}
 		declare(t, g, &resourcesv1.VariableDefinition{
 			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: false, Source: "resources/env.ts",

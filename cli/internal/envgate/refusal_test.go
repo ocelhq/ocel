@@ -144,25 +144,25 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 	}
 }
 
-func TestRefusalOwedIsTheStreamFormOfError(t *testing.T) {
+func TestRefusalMissingIsTheStreamFormOfError(t *testing.T) {
 	t.Parallel()
 	refusal := &envgate.Refusal{
 		Problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), invalid("PORT", "/web", "not a number")},
 		Scope:    envgate.Scope{Browser: true},
 	}
-	owed := refusal.Owed()
-	if len(owed.GetCells()) != 2 {
-		t.Fatalf("Owed().Cells = %+v, want one per problem", owed.GetCells())
+	unset := refusal.Missing()
+	if len(unset.GetCells()) != 2 {
+		t.Fatalf("Missing().Cells = %+v, want one per problem", unset.GetCells())
 	}
-	if got := owed.GetCells()[1]; got.GetKey() != "PORT" || got.GetFolder() != "/web" || got.GetReason() != "set, but not a number" {
-		t.Errorf("Owed().Cells[1] = %+v, want the key, folder and reason of the invalid cell", got)
+	if got := unset.GetCells()[1]; got.GetKey() != "PORT" || got.GetFolder() != "/web" || got.GetReason() != "set, but not a number" {
+		t.Errorf("Missing().Cells[1] = %+v, want the key, folder and reason of the invalid cell", got)
 	}
-	if owed.GetRemedy() != "ocel env ui" {
-		t.Errorf("Owed().Remedy = %q, want the editor", owed.GetRemedy())
+	if unset.GetRemedy() != "ocel env ui" {
+		t.Errorf("Missing().Remedy = %q, want the editor", unset.GetRemedy())
 	}
-	plain := strings.Join(append(envgate.Lines(owed, envgate.Plain), "", envgate.RemedyLine(owed.GetRemedy())), "\n")
+	plain := strings.Join(append(envgate.Lines(unset, envgate.Plain), "", envgate.RemedyLine(unset.GetRemedy())), "\n")
 	if plain != refusal.Error() {
-		t.Errorf("Lines(Owed()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
+		t.Errorf("Lines(Missing()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
 	}
 }
 
@@ -178,12 +178,12 @@ func TestRefusalPrintsTheVariableDescription(t *testing.T) {
 	if got := refusal.Error(); !strings.Contains(got, "Used to call Stripe") {
 		t.Errorf("Error() = %q, want the variable description", got)
 	}
-	if got := refusal.Owed().GetCells()[0].GetDescription(); got != "Used to call Stripe" {
-		t.Errorf("Owed().Cells[0].Description = %q, want %q", got, "Used to call Stripe")
+	if got := refusal.Missing().GetCells()[0].GetDescription(); got != "Used to call Stripe" {
+		t.Errorf("Missing().Cells[0].Description = %q, want %q", got, "Used to call Stripe")
 	}
 }
 
-func TestOwedCarriesGroupingOverTheWire(t *testing.T) {
+func TestMissingSendsGroupingOverTheWire(t *testing.T) {
 	t.Parallel()
 	refusal := &envgate.Refusal{
 		Problems: []*resourcesv1.VariableProblem{
@@ -199,11 +199,11 @@ func TestOwedCarriesGroupingOverTheWire(t *testing.T) {
 		Groups: []*resourcesv1.GroupDefinition{{Key: "github", Description: "Sign in with GitHub"}},
 	}
 
-	encoded, err := proto.Marshal(refusal.Owed())
+	encoded, err := proto.Marshal(refusal.Missing())
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	wire := &streamv1.VariablesOwed{}
+	wire := &streamv1.MissingVariables{}
 	if err := proto.Unmarshal(encoded, wire); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 		Fail:  func(s string) string { return "<red>" + s + "</red>" },
 		Faint: func(s string) string { return "<dim>" + s + "</dim>" },
 	}
-	got := envgate.Lines(refusal.Owed(), paint)
+	got := envgate.Lines(refusal.Missing(), paint)
 	want := []string{
 		"<red>✗</red> 2 variables are not ready — nothing has been built.",
 		"",
@@ -237,7 +237,7 @@ func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 		t.Errorf("Lines() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	stripped := strings.NewReplacer("<red>", "", "</red>", "", "<dim>", "", "</dim>", "").Replace(strings.Join(got, "\n"))
-	if plain := strings.Join(envgate.Lines(refusal.Owed(), envgate.Plain), "\n"); stripped != plain {
+	if plain := strings.Join(envgate.Lines(refusal.Missing(), envgate.Plain), "\n"); stripped != plain {
 		t.Errorf("painted minus codes =\n%s\nwant the plain form\n%s", stripped, plain)
 	}
 }

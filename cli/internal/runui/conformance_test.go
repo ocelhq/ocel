@@ -226,7 +226,7 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 				}
 			}
 		case ev.GetWaiting() != nil:
-			r.waits = append(r.waits, fmt.Sprintf("waiting %d owed, remedy %q", len(ev.GetWaiting().GetOwed().GetCells()), ev.GetWaiting().GetOwed().GetRemedy()))
+			r.waits = append(r.waits, fmt.Sprintf("waiting on %d unset, remedy %q", len(ev.GetWaiting().GetMissing().GetCells()), ev.GetWaiting().GetMissing().GetRemedy()))
 		case ev.GetResumed() != nil:
 			r.waits = append(r.waits, "resumed "+ev.GetResumed().GetReason())
 		case ev.GetResult() != nil:

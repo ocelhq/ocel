@@ -3,7 +3,7 @@ stages:
     Building
 plan:
 waits:
-  waiting 1 owed, remedy "ocel env ui"
+  waiting on 1 unset, remedy "ocel env ui"
   resumed the page was answered
 results:
   success=true interrupted=false headline="Deployed" detail="" duration_ms=12000

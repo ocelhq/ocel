@@ -26,7 +26,7 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 		t.Fatalf("Plan() error = %v", err)
 	}
 	if action := groupFor(t, shown, fake.FeatureCache).Action; action != provider.ActionKeep {
-		t.Fatalf("the cache group is %q, want the plan to show nothing owed on it", action)
+		t.Fatalf("the cache group is %q, want the plan to show no change on it", action)
 	}
 
 	p.FakeBootstrap().MarkStale(fake.FeatureCache)

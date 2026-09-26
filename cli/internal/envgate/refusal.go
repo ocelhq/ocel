@@ -23,19 +23,19 @@ type Refusal struct {
 }
 
 func (r *Refusal) Error() string {
-	owed := r.Owed()
-	lines := append(Lines(owed, Plain), "", RemedyLine(owed.GetRemedy()))
+	unset := r.Missing()
+	lines := append(Lines(unset, Plain), "", RemedyLine(unset.GetRemedy()))
 	return strings.Join(lines, "\n")
 }
 
-func (r *Refusal) Owed() *streamv1.VariablesOwed {
-	cells := make([]*streamv1.OwedVariable, 0, len(r.Problems))
-	groups := make([]*streamv1.OwedGroup, 0, len(r.Groups))
+func (r *Refusal) Missing() *streamv1.MissingVariables {
+	cells := make([]*streamv1.MissingVariable, 0, len(r.Problems))
+	groups := make([]*streamv1.MissingGroup, 0, len(r.Groups))
 	listed := map[string]bool{}
 	for _, problem := range r.Problems {
 		definition := r.definition(problem.GetKey())
 		group := definition.GetGroup()
-		cells = append(cells, &streamv1.OwedVariable{
+		cells = append(cells, &streamv1.MissingVariable{
 			Key:         problem.GetKey(),
 			Folder:      problem.GetFolder(),
 			Reason:      reason(problem),
@@ -46,9 +46,9 @@ func (r *Refusal) Owed() *streamv1.VariablesOwed {
 			continue
 		}
 		listed[group] = true
-		groups = append(groups, &streamv1.OwedGroup{Key: group, Description: groupDescription(r.Groups, group)})
+		groups = append(groups, &streamv1.MissingGroup{Key: group, Description: groupDescription(r.Groups, group)})
 	}
-	return &streamv1.VariablesOwed{Cells: cells, Remedy: r.remedy(), Groups: groups}
+	return &streamv1.MissingVariables{Cells: cells, Remedy: r.remedy(), Groups: groups}
 }
 
 func (r *Refusal) definition(key string) *resourcesv1.VariableDefinition {
@@ -120,8 +120,8 @@ func Headline(n int) string {
 	return fmt.Sprintf("%d variables are not ready — nothing has been built.", n)
 }
 
-func Lines(owed *streamv1.VariablesOwed, paint Paint) []string {
-	cells := owed.GetCells()
+func Lines(unset *streamv1.MissingVariables, paint Paint) []string {
+	cells := unset.GetCells()
 	out := []string{paint.Fail(Mark) + " " + Headline(len(cells)), ""}
 	keyWidth, folderWidth := 0, 0
 	for _, cell := range cells {
@@ -137,24 +137,24 @@ func Lines(owed *streamv1.VariablesOwed, paint Paint) []string {
 	for _, cell := range cells {
 		group := cell.GetGroup()
 		if group == "" {
-			out = append(out, owedLines(cell, indent, keyWidth, folderWidth, paint)...)
+			out = append(out, missingLines(cell, indent, keyWidth, folderWidth, paint)...)
 			continue
 		}
 		if written[group] {
 			continue
 		}
 		written[group] = true
-		out = append(out, indent+paint.Faint(GroupHeadline(group, groupDescription(owed.GetGroups(), group))))
-		for _, held := range cells {
-			if held.GetGroup() == group {
-				out = append(out, owedLines(held, indent+indent, keyWidth-len(indent), folderWidth, paint)...)
+		out = append(out, indent+paint.Faint(GroupHeadline(group, groupDescription(unset.GetGroups(), group))))
+		for _, member := range cells {
+			if member.GetGroup() == group {
+				out = append(out, missingLines(member, indent+indent, keyWidth-len(indent), folderWidth, paint)...)
 			}
 		}
 	}
 	return out
 }
 
-func owedLines(cell *streamv1.OwedVariable, lead string, keyWidth, folderWidth int, paint Paint) []string {
+func missingLines(cell *streamv1.MissingVariable, lead string, keyWidth, folderWidth int, paint Paint) []string {
 	key := fmt.Sprintf("%-*s", keyWidth, cell.GetKey())
 	folder := fmt.Sprintf("%-*s", folderWidth, folderName(cell.GetFolder()))
 	out := []string{lead + paint.Fail(Mark) + " " + key + indent + paint.Faint(folder) + indent + cell.GetReason()}

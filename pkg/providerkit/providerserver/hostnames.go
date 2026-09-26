@@ -370,7 +370,7 @@ func certificateState(hostState stackrecords.HostnameState, probe stackrecords.S
 		CertificateId:     hostState.Certificate.ID,
 		CertificateStatus: status,
 		RecordsWritten:    recordLines(hostState.WrittenRecords()),
-		RecordsOwed:       recordLines(append(hostState.ManualRecords(), manual...)),
+		ManualRecords:     recordLines(append(hostState.ManualRecords(), manual...)),
 		LastProbeAt:       probe.At,
 		LastProbeOk:       probe.OK,
 		LastProbeEdge:     string(probe.Edge),

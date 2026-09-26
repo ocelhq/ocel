@@ -288,7 +288,7 @@ func TestMatrix(t *testing.T) {
 			t.Error("the /worker cell reports filled, want it empty — no deploy resolves a named environment's value")
 		}
 		if c.State != envgate.CellOptional {
-			t.Errorf("the /worker cell is %q, want %q — a column drawn for an override owes nobody anything", c.State, envgate.CellOptional)
+			t.Errorf("the /worker cell is %q, want %q — a column drawn for an override is required of nobody", c.State, envgate.CellOptional)
 		}
 		if want := []envgate.Override{{Environment: "pr-42", Version: 1}}; !reflect.DeepEqual(c.Overrides, want) {
 			t.Errorf("overrides = %+v, want %+v — the column exists to carry exactly this", c.Overrides, want)
@@ -296,14 +296,14 @@ func TestMatrix(t *testing.T) {
 
 		var refusal *envgate.Refusal
 		if !errors.As(g.Check(), &refusal) {
-			t.Fatal("Check err is not an *envgate.Refusal — the root cell is still owed")
+			t.Fatal("Check err is not an *envgate.Refusal — the root cell is still missing")
 		}
-		var owed []envgate.Cell
+		var unset []envgate.Cell
 		for _, problem := range refusal.Problems {
-			owed = append(owed, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+			unset = append(unset, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 		}
-		if want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(owed, want) {
-			t.Errorf("the deploy is refused over %+v, want %+v — a column drawn for an override must not reach the verdict", owed, want)
+		if want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(unset, want) {
+			t.Errorf("the deploy is refused over %+v, want %+v — a column drawn for an override must not reach the verdict", unset, want)
 		}
 	})
 
@@ -345,7 +345,7 @@ func TestMatrix(t *testing.T) {
 		}
 		want := []envgate.Cell{{Key: "POSTHOG_ID", Folder: "/admin"}}
 		if got := app(t, m, "admin").Missing; !reflect.DeepEqual(got, want) {
-			t.Errorf("admin is missing %+v, want %+v — the cell it owes, named where it owes it", got, want)
+			t.Errorf("admin is missing %+v, want %+v — the cell it needs, named where it needs it", got, want)
 		}
 	})
 
@@ -372,7 +372,7 @@ func TestMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("an unbound app owes the root cell it could not read", func(t *testing.T) {
+	t.Run("an unbound app needs the root cell it could not read", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 		declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))

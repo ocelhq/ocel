@@ -459,7 +459,7 @@ func lastProbe(cert *contractv1.CertificateState, never string) string {
 
 func renderCertificateRecords(out io.Writer, cert *contractv1.CertificateState) {
 	renderDomainRecords(out, "Records ocel wrote", cert.GetRecordsWritten(), "none — nothing here writes DNS")
-	renderDomainRecords(out, "Records you own", cert.GetRecordsOwed(), "none outstanding")
+	renderDomainRecords(out, "Records you own", cert.GetManualRecords(), "none outstanding")
 }
 
 func renderGlobalDomainProjects(out io.Writer, projects []string) {
@@ -600,7 +600,7 @@ func outstandingHosts(resp *contractv1.GetHostnameStatusResponse) string {
 type domainStatusReport struct {
 	Ready          bool               `json:"ready"`
 	RecordsWritten []string           `json:"recordsWritten,omitempty"`
-	RecordsOwed    []string           `json:"recordsOwed,omitempty"`
+	ManualRecords  []string           `json:"manualRecords,omitempty"`
 	Hosts          []domainHostReport `json:"hosts"`
 }
 
@@ -615,7 +615,7 @@ type domainHostReport struct {
 	ExpiresAt      string   `json:"expiresAt,omitempty"`
 	ExpiringSoon   bool     `json:"expiringSoon,omitempty"`
 	RecordsWritten []string `json:"recordsWritten,omitempty"`
-	RecordsOwed    []string `json:"recordsOwed,omitempty"`
+	ManualRecords  []string `json:"manualRecords,omitempty"`
 	LastProbeAt    string   `json:"lastProbeAt,omitempty"`
 	LastProbeOk    bool     `json:"lastProbeOk"`
 	LastProbeEdge  string   `json:"lastProbeEdge,omitempty"`
@@ -626,7 +626,7 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 	report := domainStatusReport{
 		Ready:          resp.GetReady(),
 		RecordsWritten: resp.GetRecordsWritten(),
-		RecordsOwed:    resp.GetRecordsOwed(),
+		ManualRecords:  resp.GetManualRecords(),
 		Hosts:          make([]domainHostReport, 0, len(resp.GetHostnames())),
 	}
 	for _, host := range resp.GetHostnames() {
@@ -642,7 +642,7 @@ func writeDomainStatusJSON(out io.Writer, resp *contractv1.GetHostnameStatusResp
 			ExpiresAt:      epochRFC3339(host.GetExpiresAt()),
 			ExpiringSoon:   host.GetExpiringSoon(),
 			RecordsWritten: cert.GetRecordsWritten(),
-			RecordsOwed:    cert.GetRecordsOwed(),
+			ManualRecords:  cert.GetManualRecords(),
 			LastProbeAt:    epochRFC3339(cert.GetLastProbeAt()),
 			LastProbeOk:    cert.GetLastProbeOk(),
 			LastProbeEdge:  cert.GetLastProbeEdge(),
@@ -666,10 +666,10 @@ func renderDomainStatus(out io.Writer, resp *contractv1.GetHostnameStatusRespons
 		fmt.Fprintf(out, "This project declares no domains.production in %s, so nothing is served under a hostname of its own.\n", configName)
 		return
 	}
-	if len(resp.GetRecordsWritten()) > 0 || len(resp.GetRecordsOwed()) > 0 {
+	if len(resp.GetRecordsWritten()) > 0 || len(resp.GetManualRecords()) > 0 {
 		fmt.Fprintln(out, "Certificate validation")
 		renderDomainRecords(out, "Records ocel wrote", resp.GetRecordsWritten(), "none — nothing here writes DNS")
-		renderDomainRecords(out, "Records you own", resp.GetRecordsOwed(), "none outstanding")
+		renderDomainRecords(out, "Records you own", resp.GetManualRecords(), "none outstanding")
 		fmt.Fprintln(out)
 	}
 	for i, host := range resp.GetHostnames() {

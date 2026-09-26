@@ -1201,36 +1201,36 @@ func TestOtherSubstrate(t *testing.T) {
 func TestRecovery(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the state carries the deploy that is waiting and the cells it is owed", func(t *testing.T) {
+	t.Run("the state includes the deploy that is waiting and the cells it is missing", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		owed := []envgate.Cell{{Key: "API_URL"}}
+		unset := []envgate.Cell{{Key: "API_URL"}}
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:     discovered(t, store, def("API_URL")),
 			Store:    store,
-			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Owed: owed},
+			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: unset},
 		})
 		got := state(t, s)
-		if got.Recovery == nil || got.Recovery.Deploy != "ocel deploy" || !reflect.DeepEqual(got.Recovery.Owed, owed) {
-			t.Errorf("recovery = %+v, want the deploy named and API_URL owed", got.Recovery)
+		if got.Recovery == nil || got.Recovery.Deploy != "ocel deploy" || !reflect.DeepEqual(got.Recovery.Missing, unset) {
+			t.Errorf("recovery = %+v, want the deploy named and API_URL missing", got.Recovery)
 		}
 		if standalone := state(t, session(t, newFakeStore(), def("API_URL"))); standalone.Recovery != nil {
 			t.Errorf("a standalone visit carries recovery %+v, want none", standalone.Recovery)
 		}
 	})
 
-	t.Run("done is refused while a cell is still owed, and accepted once it is filled", func(t *testing.T) {
+	t.Run("done is refused while a cell is still unset, and accepted once it is filled", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:     discovered(t, store, def("API_URL")),
 			Store:    store,
-			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Owed: []envgate.Cell{{Key: "API_URL"}}},
+			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: []envgate.Cell{{Key: "API_URL"}}},
 		})
 
 		resp := request(t, s, http.MethodPost, "/api/done", nil)
 		if body := bodyOf(t, resp); resp.StatusCode != http.StatusConflict || !strings.Contains(body, "API_URL") {
-			t.Fatalf("POST /api/done = %d %q, want %d naming the owed cell", resp.StatusCode, body, http.StatusConflict)
+			t.Fatalf("POST /api/done = %d %q, want %d naming the unset cell", resp.StatusCode, body, http.StatusConflict)
 		}
 		if err := s.Wait(shortContext(t)); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("Wait = %v after a refused done, want the session still open", err)
@@ -1243,7 +1243,7 @@ func TestRecovery(t *testing.T) {
 			t.Fatalf("POST /api/done = %d: %s", resp.StatusCode, bodyOf(t, resp))
 		}
 		if err := s.Wait(context.Background()); err != nil {
-			t.Errorf("Wait = %v, want nil once every owed cell is filled", err)
+			t.Errorf("Wait = %v, want nil once every unset cell is filled", err)
 		}
 	})
 

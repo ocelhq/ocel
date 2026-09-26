@@ -268,7 +268,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 		t.Setenv(clitest.FakeGlobalDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
 		t.Setenv(clitest.FakeGlobalDomainRecordsEnvVar, "*.preview.acme.com AAAA 100::")
-		t.Setenv(clitest.FakeGlobalDomainOwedEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
+		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.preview.acme.com CNAME _target.acm-validations.aws")
 		t.Setenv(clitest.FakeGlobalDomainProbeEnvVar, "1755500000 cloudflare")
 		t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
 		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
@@ -591,7 +591,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234")
 		t.Setenv(clitest.FakeDomainExpiresEnvVar, "1757000000")
-		t.Setenv(clitest.FakeGlobalDomainOwedEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
+		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {

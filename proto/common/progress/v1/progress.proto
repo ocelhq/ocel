@@ -17,7 +17,7 @@ message OperationEvent {
     StagePlanEvent stage_plan = 4;
     SpanEvent span = 5;
     DegradedEvent degraded = 6;
-    DnsOwedEvent dns_owed = 7;
+    DnsManualRecordsEvent dns_manual_records = 7;
     common.plan.v1.ChangePlan plan = 8;
   }
 }
@@ -123,7 +123,7 @@ message DnsRecord {
   bool proxied = 4;
 }
 
-message DnsOwedEvent {
+message DnsManualRecordsEvent {
   string headline = 1;
 
   repeated DnsRecord records = 2;
@@ -138,7 +138,7 @@ message DegradedEvent {
 }
 
 // What became of one app in a multi-app apply. Promotion is the failure gate: unless
-// every app SUCCEEDED, none is promoted, so a run can carry successes and still fail.
+// every app SUCCEEDED, none is promoted, so a run can include successes and still fail.
 enum AppOutcome {
   APP_OUTCOME_UNSPECIFIED = 0;
 
@@ -179,7 +179,7 @@ message ResultEvent {
   repeated AppResult apps = 9;
 
   // The request was refused: the stream's own error is the verdict, and this envelope
-  // carries only what the run learned before the refusal.
+  // reports only what the run learned before the refusal.
   bool refused = 10;
 
   ConnectorInstalled connector = 11;

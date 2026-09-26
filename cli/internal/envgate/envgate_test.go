@@ -224,7 +224,7 @@ func TestCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("an unreported missing folder cell names the folder that owes it", func(t *testing.T) {
+	t.Run("an unreported missing folder cell names the folder that needs it", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("POSTHOG_ID", "/web", "ph_web")
@@ -244,7 +244,7 @@ func TestCheck(t *testing.T) {
 			t.Fatal("Check err = nil, want the folder holding no value to refuse")
 		}
 		if !strings.Contains(err.Error(), "ocel env set POSTHOG_ID=<VALUE> --folder /admin") {
-			t.Errorf("refusal = %q, want it to address the folder that owes the value", err.Error())
+			t.Errorf("refusal = %q, want it to address the folder that needs the value", err.Error())
 		}
 		if strings.Contains(err.Error(), "--folder /web") {
 			t.Errorf("refusal = %q, want the folder that already holds a value left out", err.Error())

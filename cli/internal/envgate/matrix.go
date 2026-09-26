@@ -152,7 +152,7 @@ func state(definition *resourcesv1.VariableDefinition, folder string) CellState 
 func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, held heldCells) []Cell {
 	var out []Cell
 	for _, definition := range definitions {
-		if !owes(definition, definitions, groups, binding, held) {
+		if !needsValue(definition, definitions, groups, binding, held) {
 			continue
 		}
 		scope := definition.GetFolders()
@@ -162,11 +162,11 @@ func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv
 		if resolves(definition, binding, held) {
 			continue
 		}
-		owed := Cell{Key: definition.GetKey()}
+		unset := Cell{Key: definition.GetKey()}
 		if len(scope) > 0 {
-			owed.Folder = binding
+			unset.Folder = binding
 		}
-		out = append(out, owed)
+		out = append(out, unset)
 	}
 	return out
 }

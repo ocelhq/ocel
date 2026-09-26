@@ -276,7 +276,7 @@ func TestEventConstructors(t *testing.T) {
 		t.Errorf("degradedEvent() Need = %q", degraded.GetNeed())
 	}
 
-	manual := dnsManualRecordsEvent("add these", []edge.Record{{Name: "app.example.com", Type: edge.RecordTypeCNAME, Value: "front"}}, "note").GetDnsOwed()
+	manual := dnsManualRecordsEvent("add these", []edge.Record{{Name: "app.example.com", Type: edge.RecordTypeCNAME, Value: "front"}}, "note").GetDnsManualRecords()
 	if len(manual.GetRecords()) != 1 || manual.GetRecords()[0].GetName() != "app.example.com" {
 		t.Errorf("dnsManualRecordsEvent() records = %+v", manual.GetRecords())
 	}

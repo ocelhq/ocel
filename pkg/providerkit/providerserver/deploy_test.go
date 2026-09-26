@@ -1051,7 +1051,7 @@ func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 func manualRecordsIn(events []*progressv1.OperationEvent) []string {
 	var manual []string
 	for _, event := range events {
-		for _, record := range event.GetDnsOwed().GetRecords() {
+		for _, record := range event.GetDnsManualRecords().GetRecords() {
 			manual = append(manual, record.GetName()+" "+record.GetType())
 		}
 	}

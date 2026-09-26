@@ -722,7 +722,7 @@ type GetHostnameStatusResponse struct {
 	Hostnames      []*ProductionHostname  `protobuf:"bytes,1,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
 	Ready          bool                   `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
 	RecordsWritten []string               `protobuf:"bytes,3,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
-	RecordsOwed    []string               `protobuf:"bytes,4,rep,name=records_owed,json=recordsOwed,proto3" json:"records_owed,omitempty"`
+	ManualRecords  []string               `protobuf:"bytes,4,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -778,9 +778,9 @@ func (x *GetHostnameStatusResponse) GetRecordsWritten() []string {
 	return nil
 }
 
-func (x *GetHostnameStatusResponse) GetRecordsOwed() []string {
+func (x *GetHostnameStatusResponse) GetManualRecords() []string {
 	if x != nil {
-		return x.RecordsOwed
+		return x.ManualRecords
 	}
 	return nil
 }
@@ -790,7 +790,7 @@ type CertificateState struct {
 	CertificateId     string                 `protobuf:"bytes,1,opt,name=certificate_id,json=certificateId,proto3" json:"certificate_id,omitempty"`
 	CertificateStatus string                 `protobuf:"bytes,2,opt,name=certificate_status,json=certificateStatus,proto3" json:"certificate_status,omitempty"`
 	RecordsWritten    []string               `protobuf:"bytes,3,rep,name=records_written,json=recordsWritten,proto3" json:"records_written,omitempty"`
-	RecordsOwed       []string               `protobuf:"bytes,4,rep,name=records_owed,json=recordsOwed,proto3" json:"records_owed,omitempty"`
+	ManualRecords     []string               `protobuf:"bytes,4,rep,name=manual_records,json=manualRecords,proto3" json:"manual_records,omitempty"`
 	LastProbeAt       int64                  `protobuf:"varint,5,opt,name=last_probe_at,json=lastProbeAt,proto3" json:"last_probe_at,omitempty"`
 	LastProbeOk       bool                   `protobuf:"varint,6,opt,name=last_probe_ok,json=lastProbeOk,proto3" json:"last_probe_ok,omitempty"`
 	LastProbeEdge     string                 `protobuf:"bytes,7,opt,name=last_probe_edge,json=lastProbeEdge,proto3" json:"last_probe_edge,omitempty"`
@@ -849,9 +849,9 @@ func (x *CertificateState) GetRecordsWritten() []string {
 	return nil
 }
 
-func (x *CertificateState) GetRecordsOwed() []string {
+func (x *CertificateState) GetManualRecords() []string {
 	if x != nil {
-		return x.RecordsOwed
+		return x.ManualRecords
 	}
 	return nil
 }
@@ -1914,7 +1914,7 @@ type BootstrapRequest struct {
 	Remove             []string               `protobuf:"bytes,7,rep,name=remove,proto3" json:"remove,omitempty"`
 	// Draw the plan, emit it as a plan event and stop: the stream changes nothing.
 	Dry bool `protobuf:"varint,8,opt,name=dry,proto3" json:"dry,omitempty"`
-	// An apply carrying a consented plan emits no plan of its own and refuses
+	// An apply that sends a consented plan emits no plan of its own and refuses
 	// work that plan never showed.
 	Consented     *v12.ChangePlan `protobuf:"bytes,9,opt,name=consented,proto3" json:"consented,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2674,7 +2674,7 @@ type BootstrapScope struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Tier  v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Edge  *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
-	// A removal carrying a consented plan refuses work that plan never showed.
+	// A removal that sends a consented plan refuses work that plan never showed.
 	Consented     *v12.ChangePlan `protobuf:"bytes,3,opt,name=consented,proto3" json:"consented,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2796,7 +2796,7 @@ type ProjectRequest struct {
 	Slug        string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
 	Environment *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
 	Edge        *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
-	// A removal carrying a consented plan refuses work that plan never showed.
+	// A removal that sends a consented plan refuses work that plan never showed.
 	Consented     *v12.ChangePlan `protobuf:"bytes,4,opt,name=consented,proto3" json:"consented,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4771,17 +4771,17 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"configured\x12\x12\n" +
 	"\x04host\x18\x03 \x01(\tR\x04host\x127\n" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x14\n" +
-	"\x05probe\x18\x05 \x01(\bR\x05probe\"\xc5\x01\n" +
+	"\x05probe\x18\x05 \x01(\bR\x05probe\"\xc9\x01\n" +
 	"\x19GetHostnameStatusResponse\x12F\n" +
 	"\thostnames\x18\x01 \x03(\v2(.provider.contract.v1.ProductionHostnameR\thostnames\x12\x14\n" +
 	"\x05ready\x18\x02 \x01(\bR\x05ready\x12'\n" +
-	"\x0frecords_written\x18\x03 \x03(\tR\x0erecordsWritten\x12!\n" +
-	"\frecords_owed\x18\x04 \x03(\tR\vrecordsOwed\"\xa4\x02\n" +
+	"\x0frecords_written\x18\x03 \x03(\tR\x0erecordsWritten\x12%\n" +
+	"\x0emanual_records\x18\x04 \x03(\tR\rmanualRecords\"\xa8\x02\n" +
 	"\x10CertificateState\x12%\n" +
 	"\x0ecertificate_id\x18\x01 \x01(\tR\rcertificateId\x12-\n" +
 	"\x12certificate_status\x18\x02 \x01(\tR\x11certificateStatus\x12'\n" +
-	"\x0frecords_written\x18\x03 \x03(\tR\x0erecordsWritten\x12!\n" +
-	"\frecords_owed\x18\x04 \x03(\tR\vrecordsOwed\x12\"\n" +
+	"\x0frecords_written\x18\x03 \x03(\tR\x0erecordsWritten\x12%\n" +
+	"\x0emanual_records\x18\x04 \x03(\tR\rmanualRecords\x12\"\n" +
 	"\rlast_probe_at\x18\x05 \x01(\x03R\vlastProbeAt\x12\"\n" +
 	"\rlast_probe_ok\x18\x06 \x01(\bR\vlastProbeOk\x12&\n" +
 	"\x0flast_probe_edge\x18\a \x01(\tR\rlastProbeEdge\"\xda\x02\n" +

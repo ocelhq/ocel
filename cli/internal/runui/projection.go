@@ -25,19 +25,19 @@ const (
 type armFunc func(*projector, protoreflect.Message) []string
 
 var overrides = map[protoreflect.FullName]armFunc{
-	"common.progress.v1.StagePlanEvent": (*projector).stagePlan,
-	"common.progress.v1.ProgressEvent":  (*projector).progress,
-	"common.progress.v1.LogEvent":       (*projector).log,
-	"common.progress.v1.SpanEvent":      (*projector).span,
-	"common.progress.v1.DnsOwedEvent":   (*projector).dnsOwed,
-	"common.progress.v1.DegradedEvent":  (*projector).degraded,
-	"common.progress.v1.ResultEvent":    (*projector).outcome,
-	"cli.stream.v1.RunResultEvent":      (*projector).result,
-	"cli.stream.v1.DiagnosticEvent":     (*projector).diagnostic,
-	"cli.stream.v1.IdentityEvent":       (*projector).identity,
-	"cli.stream.v1.WaitingEvent":        (*projector).waiting,
-	"cli.stream.v1.ResumedEvent":        (*projector).resumed,
-	"common.plan.v1.ChangePlan":         (*projector).plan,
+	"common.progress.v1.StagePlanEvent":        (*projector).stagePlan,
+	"common.progress.v1.ProgressEvent":         (*projector).progress,
+	"common.progress.v1.LogEvent":              (*projector).log,
+	"common.progress.v1.SpanEvent":             (*projector).span,
+	"common.progress.v1.DnsManualRecordsEvent": (*projector).dnsManualRecords,
+	"common.progress.v1.DegradedEvent":         (*projector).degraded,
+	"common.progress.v1.ResultEvent":           (*projector).outcome,
+	"cli.stream.v1.RunResultEvent":             (*projector).result,
+	"cli.stream.v1.DiagnosticEvent":            (*projector).diagnostic,
+	"cli.stream.v1.IdentityEvent":              (*projector).identity,
+	"cli.stream.v1.WaitingEvent":               (*projector).waiting,
+	"cli.stream.v1.ResumedEvent":               (*projector).resumed,
+	"common.plan.v1.ChangePlan":                (*projector).plan,
 }
 
 type blockLine struct {
@@ -456,8 +456,8 @@ func (p *projector) strand(mark, note string) []string {
 	return out
 }
 
-func (p *projector) dnsOwed(m protoreflect.Message) []string {
-	ev := m.Interface().(*progressv1.DnsOwedEvent)
+func (p *projector) dnsManualRecords(m protoreflect.Message) []string {
+	ev := m.Interface().(*progressv1.DnsManualRecordsEvent)
 	records := ev.GetRecords()
 	if len(records) == 0 {
 		return nil
@@ -504,7 +504,7 @@ func (p *projector) identity(m protoreflect.Message) []string {
 func (p *projector) waiting(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.WaitingEvent)
 	out := append(p.strand(warnMark, "paused"), "")
-	out = append(out, envgate.Lines(ev.GetOwed(), p.owedPaint())...)
+	out = append(out, envgate.Lines(ev.GetMissing(), p.missingPaint())...)
 	return append(out,
 		"",
 		"  Fill them in at:",
@@ -551,10 +551,10 @@ func (p *projector) result(m protoreflect.Message) []string {
 	}
 
 	out := p.strand(failMark, "failed")
-	if owed := ev.GetOwed(); owed != nil {
+	if unset := ev.GetMissing(); unset != nil {
 		out = append(out, "")
-		out = append(out, envgate.Lines(owed, p.owedPaint())...)
-		out = append(out, "", envgate.RemedyLine(owed.GetRemedy()))
+		out = append(out, envgate.Lines(unset, p.missingPaint())...)
+		out = append(out, "", envgate.RemedyLine(unset.GetRemedy()))
 		if ev.GetDetail() != "" {
 			out = append(out, "")
 		}
@@ -613,7 +613,7 @@ func unservedApp(app *progressv1.AppResult) string {
 	return "no public url"
 }
 
-func (p *projector) owedPaint() envgate.Paint {
+func (p *projector) missingPaint() envgate.Paint {
 	return envgate.Paint{
 		Fail:  func(s string) string { return p.style(color.FgRed).Sprint(s) },
 		Faint: p.faint,

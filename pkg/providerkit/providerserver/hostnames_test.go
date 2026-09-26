@@ -175,7 +175,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	}
 }
 
-func TestAddHostnameOwesTheRecordsWhenNoWriterIsSelected(t *testing.T) {
+func TestAddHostnameNamesTheManualRecordsWhenNoWriterIsSelected(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
@@ -190,7 +190,7 @@ func TestAddHostnameOwesTheRecordsWhenNoWriterIsSelected(t *testing.T) {
 	var manual, notes []string
 	defer stream.Close()
 	for stream.Receive() {
-		if event := stream.Msg().GetDnsOwed(); event != nil {
+		if event := stream.Msg().GetDnsManualRecords(); event != nil {
 			for _, record := range event.GetRecords() {
 				manual = append(manual, record.GetName())
 			}

@@ -91,13 +91,13 @@ func dnsOutput(t *testing.T, present Presentation, headline string, records []*p
 	var out safeBuffer
 	s := newStream(&out, present)
 	t.Cleanup(func() { _ = s.Close() })
-	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_DnsOwed{
-		DnsOwed: &progressv1.DnsOwedEvent{Headline: headline, Records: records, Notes: notes},
+	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_DnsManualRecords{
+		DnsManualRecords: &progressv1.DnsManualRecordsEvent{Headline: headline, Records: records, Notes: notes},
 	}}))
 	return out.String()
 }
 
-func TestDNSOwedProjection(t *testing.T) {
+func TestDNSManualRecordsProjection(t *testing.T) {
 	t.Parallel()
 
 	human := Presentation{Format: FormatHuman, Width: defaultWidth}
@@ -136,23 +136,23 @@ func TestDNSOwedProjection(t *testing.T) {
 		}
 	})
 
-	t.Run("nothing owed prints nothing", func(t *testing.T) {
+	t.Run("no manual record prints nothing", func(t *testing.T) {
 		t.Parallel()
 		if got := dnsOutput(t, human, "Prove you own prev.ocel.site", nil, []string{"Leave it in place."}); got != "" {
 			t.Errorf("output = %q, want nothing printed with no record to add", got)
 		}
 	})
 
-	t.Run("json carries the records as fields, not prose", func(t *testing.T) {
+	t.Run("json sends the records as fields, not prose", func(t *testing.T) {
 		t.Parallel()
 		raw := dnsOutput(t, Presentation{Format: FormatJSON, Width: defaultWidth}, "Prove you own prev.ocel.site", []*progressv1.DnsRecord{validation}, nil)
 		got := parseNDJSON(t, raw)
 		if len(got) != 1 {
 			t.Fatalf("recorded %d envelopes, want 1", len(got))
 		}
-		records := got[0].GetOperation().GetDnsOwed().GetRecords()
+		records := got[0].GetOperation().GetDnsManualRecords().GetRecords()
 		if len(records) != 1 {
-			t.Fatalf("envelope owes %v, want one record", records)
+			t.Fatalf("envelope names %v, want one record", records)
 		}
 		if records[0].GetName() != validation.GetName() || records[0].GetValue() != validation.GetValue() {
 			t.Errorf("record = %+v, want the fields carried through", records[0])

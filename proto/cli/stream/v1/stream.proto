@@ -59,18 +59,18 @@ message Party {
 message WaitingEvent {
   string url = 2;
 
-  VariablesOwed owed = 3;
+  MissingVariables missing = 3;
 }
 
-message VariablesOwed {
-  repeated OwedVariable cells = 1;
+message MissingVariables {
+  repeated MissingVariable cells = 1;
 
   string remedy = 2;
 
-  repeated OwedGroup groups = 3;
+  repeated MissingGroup groups = 3;
 }
 
-message OwedVariable {
+message MissingVariable {
   string key = 1;
 
   string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
@@ -82,7 +82,7 @@ message OwedVariable {
   string group = 5 [(buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$"];
 }
 
-message OwedGroup {
+message MissingGroup {
   string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 
   string description = 2;
@@ -113,7 +113,7 @@ message RunResultEvent {
   // common.progress.v1.ResultEvent.apps as the provider reported it.
   repeated common.progress.v1.AppResult apps = 10;
 
-  VariablesOwed owed = 11;
+  MissingVariables missing = 11;
 }
 
 enum DiagnosticLevel {
