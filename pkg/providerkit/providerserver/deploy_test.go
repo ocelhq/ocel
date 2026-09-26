@@ -989,7 +989,7 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 		t.Fatalf("Deploy() succeeded, want it failed: the dns writer broke, which no one waiting fixes")
 	}
 	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
-		t.Error("the run promoted, want nothing promoted once settling a declared hostname failed")
+		t.Error("the run promoted, want nothing promoted once attaching a declared hostname failed")
 	}
 }
 

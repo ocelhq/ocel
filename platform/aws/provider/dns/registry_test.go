@@ -34,7 +34,7 @@ func TestRecordsForNamesNoWriterWhenNoneIsAsked(t *testing.T) {
 		t.Fatalf("RecordsFor(\"\") error = %v", err)
 	}
 	if writer != nil {
-		t.Errorf("RecordsFor(\"\") = %v, want no writer: a request that names none owes the operator its records", writer)
+		t.Errorf("RecordsFor(\"\") = %v, want no writer: a request that names none leaves its records to the operator to write by hand", writer)
 	}
 }
 
