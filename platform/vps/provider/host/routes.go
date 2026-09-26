@@ -107,7 +107,14 @@ func proxySpec(state RoutingTable) proxy.Spec {
 	for _, pin := range state.Pins {
 		pins = append(pins, proxy.Pin(pin))
 	}
-	return proxy.Spec{Pins: pins, Upstream: SwitchboardUpstream, Edge: switchboard.EdgeName, Permission: SwitchboardPermission}
+	return proxy.Spec{
+		Pins:        pins,
+		Hostnames:   state.hostnames(),
+		PreviewBase: state.PreviewBase,
+		Upstream:    SwitchboardUpstream,
+		Edge:        switchboard.EdgeName,
+		Permission:  SwitchboardPermission,
+	}
 }
 
 func validTable(state RoutingTable) error {
