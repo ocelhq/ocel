@@ -101,7 +101,7 @@ describe("lifting the skips", () => {
   });
 });
 
-describe("a run that leaves its cells standing", () => {
+describe("a run that leaves its cells deployed", () => {
   it("destroys unless it is asked to keep", () => {
     expect(filterFrom({}).keep).toBe(false);
     expect(filterFrom({ OCEL_JOURNEY_KEEP: "  " }).keep).toBe(false);

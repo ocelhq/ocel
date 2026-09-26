@@ -24,7 +24,7 @@ export function servedBy(services: Service[], lead: string): string {
   if (!serving) {
     throw new Error(
       `no Cloud Run service is named ${lead}-*, so nothing says where the app is served ` +
-        `(${services.map((service) => service.name).join(", ") || "the project holds none"})`,
+        `(${services.map((service) => service.name).join(", ") || "the project has none"})`,
     );
   }
   if (serving.uri === "") {
@@ -33,7 +33,7 @@ export function servedBy(services: Service[], lead: string): string {
   return serving.uri;
 }
 
-export function standing(services: Service[], leads: string[]): boolean {
+export function hasServicesUnder(services: Service[], leads: string[]): boolean {
   return leads.some((lead) => under(services, lead).length > 0);
 }
 

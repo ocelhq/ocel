@@ -293,14 +293,14 @@ export class DevTarget implements Target {
   }
 
   private async stateStaysHome(cell: CellUnderTest, dir: string): Promise<void> {
-    const holding: string[] = [];
+    const withState: string[] = [];
     for (const candidate of [dir, ...appHomes(cell.fixture).map((home) => path.join(dir, home))]) {
       try {
         await access(path.join(candidate, ".ocel"));
-        holding.push(candidate);
+        withState.push(candidate);
       } catch {}
     }
-    const complaint = stateComplaint(dir, holding);
+    const complaint = stateComplaint(dir, withState);
     if (complaint) {
       throw new Error(complaint);
     }

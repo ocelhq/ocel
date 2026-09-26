@@ -64,7 +64,7 @@ export function boxLane(said: string): Lane {
   );
 }
 
-export function unsettled(said: string, hostnames: string[]): string[] {
+export function hostnamesWithoutUrl(said: string, hostnames: string[]): string[] {
   return hostnames.filter(
     (hostname) => !new RegExp(`https://${hostname.replaceAll(".", "\\.")}(?![\\w.-])`).test(said),
   );
@@ -285,13 +285,13 @@ export class VpsTarget implements Target, ReleaseCycle {
       await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
     }
     const deployed = await drive("deploy", ["deploy", "--yes"]);
-    const pending = unsettled(`${deployed.stdout}\n${deployed.stderr}`, [
+    const pending = hostnamesWithoutUrl(`${deployed.stdout}\n${deployed.stderr}`, [
       ...this.hostnamesOf(cell).values(),
     ]);
     if (pending.length > 0) {
       throw new Error(
         `the deploy printed no url for ${pending.join(", ")}, so it left a declared hostname ` +
-          "pending instead of settling it",
+          "pending instead of attaching it",
       );
     }
     if (migrates(cell.fixture.checks)) {

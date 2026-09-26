@@ -11,7 +11,7 @@ describe("steady", () => {
     await expect(steady(reading(["a", "a", "a"]), "/cache/isr", 3, 3)).resolves.toBe("a");
   });
 
-  it("starts over when a window turned over mid-attempt and settles on the next one", async () => {
+  it("starts over when a window turned over mid-attempt and agrees on the next one", async () => {
     await expect(steady(reading(["a", "a", "b", "b", "b", "b"]), "/cache/isr", 3, 3)).resolves.toBe(
       "b",
     );

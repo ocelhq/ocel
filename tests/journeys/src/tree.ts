@@ -143,11 +143,11 @@ function packageManagerOf(manifest: Manifest): string | undefined {
   return `${declared.name}@${declared.version}`;
 }
 
-export function rootManifest(name: string, carried: Manifest): string {
-  const packageManager = packageManagerOf(carried);
+export function rootManifest(name: string, repoManifest: Manifest): string {
+  const packageManager = packageManagerOf(repoManifest);
   const declared = Object.fromEntries(
     DEPENDENCY_FIELDS.flatMap((field) => {
-      const ranges = carried[field];
+      const ranges = repoManifest[field];
       return ranges === undefined ? [] : [[field, ranges] as const];
     }),
   );
@@ -165,8 +165,13 @@ export function rootManifest(name: string, carried: Manifest): string {
 }
 
 export async function writeWorkspace(root: string, name: string, members: string[]): Promise<void> {
-  const carried = splitWorkspaceFile(await readFile(path.join(repoRoot, WORKSPACE_FILE), "utf8"));
-  await writeFile(path.join(root, WORKSPACE_FILE), workspaceFileFor(members, carried.settings));
+  const repoWorkspace = splitWorkspaceFile(
+    await readFile(path.join(repoRoot, WORKSPACE_FILE), "utf8"),
+  );
+  await writeFile(
+    path.join(root, WORKSPACE_FILE),
+    workspaceFileFor(members, repoWorkspace.settings),
+  );
   await writeFile(
     path.join(root, MANIFEST),
     rootManifest(name, (await readManifest(path.join(repoRoot, MANIFEST))) ?? {}),
@@ -234,8 +239,12 @@ export async function plantWorkspace(
     await linkVendored(path.join(repoRoot, member), path.join(root, member));
   }
   const packages = await workspaceClosure(repoRoot, [...apps, ...nested, "."]);
-  for (const held of packages) {
-    await copyInto(path.join(repoRoot, held), path.join(root, held), NEVER_COPIED_FROM_A_PACKAGE);
+  for (const packageDir of packages) {
+    await copyInto(
+      path.join(repoRoot, packageDir),
+      path.join(root, packageDir),
+      NEVER_COPIED_FROM_A_PACKAGE,
+    );
   }
   await writeWorkspace(root, name, [...apps, ...nested, ...packages]);
   await writeLockfile(root);

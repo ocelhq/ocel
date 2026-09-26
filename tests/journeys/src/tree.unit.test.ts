@@ -70,7 +70,7 @@ beforeAll(async () => {
   }
 });
 
-describe("the packages a tree has to carry", () => {
+describe("the packages a tree has to include", () => {
   it("reaches every workspace ref the apps declare, through any dependency field", async () => {
     expect(await workspaceClosure(root, ["apps/web"])).toEqual([
       "packages/native/linux",
@@ -81,9 +81,9 @@ describe("the packages a tree has to carry", () => {
   });
 
   it("leaves out packages no app in the tree reaches", async () => {
-    const held = await workspaceClosure(root, ["apps/web", "apps/worker"]);
-    expect(held).not.toContain("packages/orphan");
-    expect(held).not.toContain("packages/native/darwin");
+    const closure = await workspaceClosure(root, ["apps/web", "apps/worker"]);
+    expect(closure).not.toContain("packages/orphan");
+    expect(closure).not.toContain("packages/native/darwin");
   });
 
   it("never names an app as one of the packages beside it", async () => {
@@ -139,7 +139,7 @@ describe("where an app sits in the tree built for it", () => {
 });
 
 describe("the root manifest a tree gets", () => {
-  it("carries every dependency range the repo root declares, so a member resolves as it does at home", () => {
+  it("copies every dependency range the repo root declares, so a member resolves as it does at home", () => {
     const written = JSON.parse(
       rootManifest("journey-probe", {
         name: "ocelhq",
@@ -159,19 +159,14 @@ describe("the root manifest a tree gets", () => {
 });
 
 describe("the workspace file a tree gets", () => {
-  it("carries every install-affecting key the repo root declares", () => {
-    const carried = splitWorkspaceFile(ROOT_WORKSPACE);
-    expect(carried.packages).toEqual([
-      "apps/*",
-      "apps/*/apps/*",
-      "packages/*",
-      "packages/native/*",
-    ]);
-    expect(carried.settings).toContain("better-sqlite3: false");
-    expect(carried.settings).toContain("semver: ^7.7.2");
-    expect(carried.settings).toContain("react: ^19.2.0");
-    expect(carried.settings).toContain("minimumReleaseAge: 1440");
-    expect(carried.settings).toContain("linkWorkspacePackages: true");
+  it("copies every install-affecting key the repo root declares", () => {
+    const split = splitWorkspaceFile(ROOT_WORKSPACE);
+    expect(split.packages).toEqual(["apps/*", "apps/*/apps/*", "packages/*", "packages/native/*"]);
+    expect(split.settings).toContain("better-sqlite3: false");
+    expect(split.settings).toContain("semver: ^7.7.2");
+    expect(split.settings).toContain("react: ^19.2.0");
+    expect(split.settings).toContain("minimumReleaseAge: 1440");
+    expect(split.settings).toContain("linkWorkspacePackages: true");
   });
 
   it("lists the members it was given and nothing the root globbed", () => {

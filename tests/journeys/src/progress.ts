@@ -15,20 +15,20 @@ export function progress(prefix: string, env: NodeJS.ProcessEnv = process.env): 
 }
 
 export function lines(onLine: Log): { push(chunk: string | Buffer): void; end(): void } {
-  let carry = "";
+  let partial = "";
   return {
     push(chunk) {
-      carry += String(chunk);
-      const parts = carry.split(/\r?\n/);
-      carry = parts.pop() ?? "";
+      partial += String(chunk);
+      const parts = partial.split(/\r?\n/);
+      partial = parts.pop() ?? "";
       for (const part of parts) {
         onLine(part);
       }
     },
     end() {
-      if (carry !== "") {
-        onLine(carry);
-        carry = "";
+      if (partial !== "") {
+        onLine(partial);
+        partial = "";
       }
     },
   };

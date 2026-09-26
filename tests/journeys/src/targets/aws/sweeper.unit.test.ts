@@ -5,7 +5,7 @@ import { type Cell, fixture as fixtureNamed } from "../../matrix/types";
 import { defaults } from "../../matrix/variants";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { ExternalStack } from "../../stacks";
-import { bootstrapHeldBy, cellsBySlugPart, despite, sweepPlan, sweepStacks } from "./sweeper";
+import { bootstrapBlockedBy, cellsBySlugPart, despite, sweepPlan, sweepStacks } from "./sweeper";
 
 const fixture = deploy.node;
 
@@ -32,7 +32,7 @@ describe("despite", () => {
     const complaints: string[] = [];
     const ran: string[] = [];
 
-    for (const namespace of ["j-1799-half-deleted", "j-1799-standing"]) {
+    for (const namespace of ["j-1799-half-deleted", "j-1799-intact"]) {
       await despite(complaints, `${namespace} sweep`, async () => {
         if (namespace.endsWith("half-deleted")) {
           throw new Error("the bootstrap stack is stuck in DELETE_FAILED");
@@ -41,24 +41,24 @@ describe("despite", () => {
       });
     }
 
-    expect(ran).toEqual(["j-1799-standing"]);
+    expect(ran).toEqual(["j-1799-intact"]);
     expect(complaints).toEqual([
       "j-1799-half-deleted sweep: Error: the bootstrap stack is stuck in DELETE_FAILED",
     ]);
   });
 });
 
-describe("bootstrapHeldBy", () => {
-  it("holds the bootstrap back when a project in it was not destroyed", () => {
+describe("bootstrapBlockedBy", () => {
+  it("keeps the bootstrap when a project in it was not destroyed", () => {
     expect(
-      bootstrapHeldBy("j-1799-deploy-next-cloudflare", ["j-1799-deploy-next-cloudflare"]),
+      bootstrapBlockedBy("j-1799-deploy-next-cloudflare", ["j-1799-deploy-next-cloudflare"]),
     ).toBe(
-      "the j-1799-deploy-next-cloudflare bootstrap was left standing: j-1799-deploy-next-cloudflare could not be destroyed out of it",
+      "the j-1799-deploy-next-cloudflare bootstrap was left in place: j-1799-deploy-next-cloudflare could not be destroyed out of it",
     );
   });
 
   it("lets the bootstrap go when every project in it was destroyed", () => {
-    expect(bootstrapHeldBy("j-1799-deploy-next-cloudflare", [])).toBeUndefined();
+    expect(bootstrapBlockedBy("j-1799-deploy-next-cloudflare", [])).toBeUndefined();
   });
 });
 
@@ -140,7 +140,7 @@ describe("sweepStacks", () => {
     return fixtureNamed(name, { apps: ["web"], checks: [], stack, on: { aws: [defaults] } });
   }
 
-  it("sweeps the stack of every fixture that stands one, past one that fails", async () => {
+  it("sweeps the stack of every fixture that provisions one, past one that fails", async () => {
     const swept: string[] = [];
     const complaints: string[] = [];
 

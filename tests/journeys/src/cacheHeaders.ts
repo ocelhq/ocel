@@ -59,7 +59,7 @@ export function variesOn(vary: string | null, names: string[]): boolean {
 export function tierOf(res: Response): Tier {
   const stamped = res.headers.get(CACHE_HEADER);
   if (!stamped) {
-    throw new Error(`the response carried no ${CACHE_HEADER}`);
+    throw new Error(`the response sent no ${CACHE_HEADER}`);
   }
   const tier = TIERS.find((known) => known === stamped);
   if (!tier) {

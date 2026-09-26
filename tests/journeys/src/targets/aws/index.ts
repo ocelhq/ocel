@@ -51,7 +51,7 @@ export class AwsTarget implements Target, ReleaseCycle {
   }
 
   async prepareProcess(): Promise<void> {
-    await this.world.settle();
+    await this.world.detect();
   }
 
   async deploy(cell: CellUnderTest): Promise<Deployment> {

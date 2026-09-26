@@ -120,7 +120,7 @@ describe("the steps a cell walks through", () => {
     expect(() => planOf([one("deploy/node"), living], { releaseCycle: false })).not.toThrow();
   });
 
-  it("leaves destroy out of a lane that keeps its cells standing", () => {
+  it("leaves destroy out of a lane that keeps its cells deployed", () => {
     const planned = planOf([one("deploy/node")], { filter: { keep: true } });
     expect(titlesOf(planned, "deploy/node")).toEqual(["deploy", "ping"]);
     expect(planned.keep).toBe(true);
@@ -320,9 +320,9 @@ describe("the gaps a lane expects", () => {
         { on: ["aws"], variants: [edge], whileUnset: ["USER", "TOKEN"], fails: [step.deploy] },
       ]),
     ];
-    const held = { USER: "octocat", TOKEN: "ghs_t0ken" };
-    expect(planOf(matrix, { gaps, env: held }).expectedFailures).toEqual({});
-    for (const env of [{}, { USER: "octocat" }, { ...held, TOKEN: " " }]) {
+    const credentials = { USER: "octocat", TOKEN: "ghs_t0ken" };
+    expect(planOf(matrix, { gaps, env: credentials }).expectedFailures).toEqual({});
+    for (const env of [{}, { USER: "octocat" }, { ...credentials, TOKEN: " " }]) {
       expect(
         planOf(matrix, { gaps, env }).expectedFailures["deploy/node-edge/web"]?.deploy,
       ).toBeDefined();

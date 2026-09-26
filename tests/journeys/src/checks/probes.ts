@@ -64,7 +64,7 @@ export const httpProbeChecks: Check[] = [
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/stream`);
       assert.equal(res.status, 200);
-      assert.ok(res.body, "the stream carried no body");
+      assert.ok(res.body, "the stream sent no body");
       const chunks = (await res.text()).split("\n").filter((line) => line.length > 0);
       assert.deepEqual(chunks, [
         "ocel-stream-1",

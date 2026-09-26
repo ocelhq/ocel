@@ -2,7 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { repoRoot } from "../../paths";
-import { BOOTSTRAP_APIS, reachable, servedBy, servicesIn, standing, strayServices } from "./store";
+import {
+  BOOTSTRAP_APIS,
+  hasServicesUnder,
+  reachable,
+  servedBy,
+  servicesIn,
+  strayServices,
+} from "./store";
 
 describe("the apis a bootstrap wants on", () => {
   it("are the ones the provider refuses without", async () => {
@@ -57,11 +64,11 @@ describe("servedBy", () => {
   });
 });
 
-describe("standing", () => {
-  it("holds while any service of the project stands", () => {
+describe("hasServicesUnder", () => {
+  it("is true while any service of the project exists", () => {
     const services = servicesIn({ services: [web, api] });
-    expect(standing(services, ["ocel-j-1-deploy-node-prod-web"])).toBe(true);
-    expect(standing(services, ["ocel-j-1-deploy-next-prod-web"])).toBe(false);
+    expect(hasServicesUnder(services, ["ocel-j-1-deploy-node-prod-web"])).toBe(true);
+    expect(hasServicesUnder(services, ["ocel-j-1-deploy-next-prod-web"])).toBe(false);
   });
 });
 
@@ -75,13 +82,13 @@ describe("strayServices", () => {
     "ocel-j-2-deploy-node-prod-web-d4e5f6",
   ];
 
-  it("is what a run that died left standing under this namespace", () => {
+  it("is what a run that died left deployed under this namespace", () => {
     expect(strayServices(names, "ocel-nightly", mine)).toEqual([
       "ocel-nightly-j-2-deploy-node-prod-web-d4e5f6",
     ]);
   });
 
-  it("leaves the functions of an app this run stands", () => {
+  it("leaves the functions of an app this run deploys", () => {
     expect(strayServices(names, "ocel-nightly", mine)).not.toContain(
       "ocel-nightly-j-1-deploy-node-prod-web-index-a1b2c3",
     );

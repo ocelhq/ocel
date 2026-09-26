@@ -167,7 +167,7 @@ export abstract class AwsStack implements ExternalStack {
       },
       {
         title:
-          "each record is stamped with the publisher's URN and holds nothing beside the sealed value",
+          "each record is stamped with the publisher's URN and contains nothing beside the sealed value",
         run: async (cell) => {
           const records = await (await this.bindingStore()).records(cell.slug);
           for (const name of BINDING_NAMES) {
@@ -181,26 +181,26 @@ export abstract class AwsStack implements ExternalStack {
             assert.deepEqual(
               record!.redactedProperties,
               {},
-              `${name}'s record carries ${JSON.stringify(record!.redactedProperties)} in the clear`,
+              `${name}'s record contains ${JSON.stringify(record!.redactedProperties)} in the clear`,
             );
             this.noteOwner(cell.slug, record!.owner);
           }
         },
       },
       {
-        title: "the value row beside each record carries ciphertext",
+        title: "the value row beside each record contains ciphertext",
         run: async (cell) => {
           const values = await (await this.bindingStore()).values(cell.slug);
           for (const name of BINDING_NAMES) {
             const value = values.find((row) => row.name === name);
             assert.ok(value, `no value row is published for ${name}`);
-            assert.ok(value!.sealed.length > 0, `${name}'s value row carries no sealed bytes`);
+            assert.ok(value!.sealed.length > 0, `${name}'s value row contains no sealed bytes`);
           }
         },
       },
       {
         title:
-          "grants are scoped to the named resource: orders carries rds-db:connect, network carries none",
+          "grants are scoped to the named resource: orders has rds-db:connect, network has none",
         run: async (cell) => {
           const records = await (await this.bindingStore()).records(cell.slug);
           const orders = records.find((row) => row.name === BINDING_NAME);
@@ -214,14 +214,14 @@ export abstract class AwsStack implements ExternalStack {
           );
           assert.ok(
             orders!.grants.some((grant) => grant.actions.includes("rds-db:connect")),
-            `${BINDING_NAME} carries no rds-db:connect grant: ${JSON.stringify(orders!.grants)}`,
+            `${BINDING_NAME} has no rds-db:connect grant: ${JSON.stringify(orders!.grants)}`,
           );
           const network = records.find((row) => row.name === CUSTOM_BINDING_NAME);
           assert.ok(network, `no record named ${CUSTOM_BINDING_NAME} is published`);
           assert.deepEqual(
             network!.grants,
             [],
-            `${CUSTOM_BINDING_NAME} carries grants, and no consumer attaches a custom binding's grants`,
+            `${CUSTOM_BINDING_NAME} has grants, and no consumer attaches a custom binding's grants`,
           );
         },
       },
@@ -236,7 +236,7 @@ export abstract class AwsStack implements ExternalStack {
             assert.deepEqual(
               owned,
               [name],
-              `${record!.owner}'s index carries ${JSON.stringify(owned)}, want exactly [${JSON.stringify(name)}]`,
+              `${record!.owner}'s index contains ${JSON.stringify(owned)}, want exactly [${JSON.stringify(name)}]`,
             );
           }
         },
@@ -267,7 +267,7 @@ export abstract class AwsStack implements ExternalStack {
       },
       {
         title:
-          "every tagged function carries the postgres env key with no clear-text host, database or password",
+          "every tagged function has the postgres env key with no clear-text host, database or password",
         run: async (cell, serving) => {
           assert.ok(
             serving,
@@ -278,20 +278,20 @@ export abstract class AwsStack implements ExternalStack {
             return { body: (await res.json()) as { host: string; database: string } };
           })();
           const arns = await taggedFunctionArns(await this.cli(), cell.slug);
-          assert.ok(arns.length > 0, `${cell.slug} carries no tagged function`);
+          assert.ok(arns.length > 0, `${cell.slug} has no tagged function`);
           for (const arn of arns) {
             const configuration = await functionConfiguration(await this.cli(), arn);
             const variables = configuration.Environment?.Variables ?? {};
             const key = `OCEL_RESOURCE_POSTGRES_${BINDING_NAME}`;
-            assert.ok(key in variables, `${arn} carries no ${key}`);
+            assert.ok(key in variables, `${arn} has no ${key}`);
             for (const [envKey, value] of Object.entries(variables)) {
               assert.ok(
                 !value.includes(body.host),
-                `${arn}'s ${envKey} carries the host in the clear`,
+                `${arn}'s ${envKey} contains the host in the clear`,
               );
               assert.ok(
                 !value.includes(body.database),
-                `${arn}'s ${envKey} carries the database in the clear`,
+                `${arn}'s ${envKey} contains the database in the clear`,
               );
             }
           }
@@ -306,7 +306,7 @@ export abstract class AwsStack implements ExternalStack {
           const orders = records.find((row) => row.name === BINDING_NAME);
           assert.ok(orders, `no record named ${BINDING_NAME} is published`);
           const grant = orders!.grants.find((row) => row.actions.includes("rds-db:connect"));
-          assert.ok(grant, `${BINDING_NAME} carries no rds-db:connect grant`);
+          assert.ok(grant, `${BINDING_NAME} has no rds-db:connect grant`);
 
           for (const arn of await taggedFunctionArns(await this.cli(), cell.slug)) {
             const configuration = await functionConfiguration(await this.cli(), arn);
@@ -325,7 +325,7 @@ export abstract class AwsStack implements ExternalStack {
             const managed = await attachedManagedPolicyArns(await this.cli(), roleName);
             assert.ok(
               managed.includes(VPC_ACCESS_POLICY_ARN),
-              `${roleName} carries ${JSON.stringify(managed)}, none of which is ${VPC_ACCESS_POLICY_ARN}`,
+              `${roleName} has ${JSON.stringify(managed)} attached, none of which is ${VPC_ACCESS_POLICY_ARN}`,
             );
             for (const resource of grant!.resources) {
               const document = await inlinePolicyDocument(
@@ -335,7 +335,7 @@ export abstract class AwsStack implements ExternalStack {
               );
               assert.ok(
                 statementsGrant(document, "rds-db:connect", resource),
-                `${roleName} carries no inline policy allowing rds-db:connect on ${resource}`,
+                `${roleName} has no inline policy allowing rds-db:connect on ${resource}`,
               );
             }
           }
@@ -376,14 +376,14 @@ export abstract class AwsStack implements ExternalStack {
           assert.deepEqual(
             records,
             [],
-            `the bindings partition still carries ${JSON.stringify(records.map((row) => row.name))}`,
+            `the bindings partition still contains ${JSON.stringify(records.map((row) => row.name))}`,
           );
           for (const owner of this.ownersOf(cell.slug)) {
             const owned = await (await this.bindingStore()).ownerIndex(cell.slug, owner);
             assert.equal(
               owned,
               undefined,
-              `${owner}'s index still carries ${JSON.stringify(owned)} after the publisher was removed`,
+              `${owner}'s index still contains ${JSON.stringify(owned)} after the publisher was removed`,
             );
           }
         },
@@ -428,7 +428,7 @@ export abstract class AwsStack implements ExternalStack {
     assert.deepEqual(
       await taggedFunctionArns(await this.cli(), cell.slug),
       [],
-      `${cell.slug} carries a tagged function before anything published a binding`,
+      `${cell.slug} has a tagged function before anything published a binding`,
     );
     assert.ok(
       output.includes(BINDING_NAME),
@@ -460,7 +460,7 @@ export abstract class AwsStack implements ExternalStack {
     const found = this.placements.get(slug);
     if (!found) {
       throw new Error(
-        `${slug} carries no recorded placement; the stack's deploy records the subnet and security group ids it published before a check while serving reads them back`,
+        `${slug} has no recorded placement; the stack's deploy records the subnet and security group ids it published before a check while serving reads them back`,
       );
     }
     return found;

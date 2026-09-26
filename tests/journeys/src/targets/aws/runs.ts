@@ -1,8 +1,8 @@
 import { HARNESS_PREFIX } from "../../identity";
 
-export type Standing = "live" | "done" | "unknown";
+export type RunState = "live" | "done" | "unknown";
 
-export type Verdict = { standing: Standing; reason?: string };
+export type Verdict = { state: RunState; reason?: string };
 
 export type LookRun = (id: string) => Promise<Verdict>;
 
@@ -23,11 +23,11 @@ export async function livelyRuns(ids: Iterable<string>, look: LookRun): Promise<
   const unreadable: Unreadable[] = [];
   for (const id of new Set(ids)) {
     const verdict = await look(id);
-    if (verdict.standing === "done") {
+    if (verdict.state === "done") {
       continue;
     }
     keep.add(id);
-    if (verdict.standing === "unknown") {
+    if (verdict.state === "unknown") {
       unreadable.push({ id, reason: verdict.reason ?? "the run gave no reason" });
     }
   }
@@ -50,30 +50,30 @@ async function asked(
       },
     });
   } catch (error) {
-    return { standing: "unknown", reason: String(error) };
+    return { state: "unknown", reason: String(error) };
   }
   if (answer.status === 404) {
-    return { standing: "done" };
+    return { state: "done" };
   }
   if (!answer.ok) {
-    return { standing: "unknown", reason: `github answered ${answer.status}` };
+    return { state: "unknown", reason: `github answered ${answer.status}` };
   }
   let status: unknown;
   try {
     status = ((await answer.json()) as { status?: unknown }).status;
   } catch (error) {
-    return { standing: "unknown", reason: String(error) };
+    return { state: "unknown", reason: String(error) };
   }
   if (typeof status !== "string") {
-    return { standing: "unknown", reason: "the run carries no status" };
+    return { state: "unknown", reason: "the run has no status" };
   }
   if (LIVE.has(status)) {
-    return { standing: "live" };
+    return { state: "live" };
   }
   if (status === "completed") {
-    return { standing: "done" };
+    return { state: "done" };
   }
-  return { standing: "unknown", reason: `the run reads ${status}` };
+  return { state: "unknown", reason: `the run reads ${status}` };
 }
 
 export function githubRuns(env: NodeJS.ProcessEnv, fetching: typeof fetch = fetch): LookRun {
@@ -83,16 +83,16 @@ export function githubRuns(env: NodeJS.ProcessEnv, fetching: typeof fetch = fetc
   return (id) => {
     if (!repository || !token) {
       return Promise.resolve({
-        standing: "unknown",
+        state: "unknown",
         reason: "the environment names no repository and no token to read a run with",
       });
     }
-    let standing = seen.get(id);
-    if (!standing) {
-      standing = asked(fetching, repository, token, id);
-      seen.set(id, standing);
+    let verdict = seen.get(id);
+    if (!verdict) {
+      verdict = asked(fetching, repository, token, id);
+      seen.set(id, verdict);
     }
-    return standing;
+    return verdict;
   };
 }
 

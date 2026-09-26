@@ -70,10 +70,10 @@ async function pinAccountFiles(): Promise<void> {
 }
 
 export class AwsWorld {
-  private settled: Promise<Where> | undefined;
+  private detected: Promise<Where> | undefined;
 
-  settle(): Promise<Where> {
-    this.settled ??= (async () => {
+  detect(): Promise<Where> {
+    this.detected ??= (async () => {
       await pinAccountFiles();
       const where = await detectWorld(process.env, {
         answersAsFloci,
@@ -93,19 +93,19 @@ export class AwsWorld {
       }
       return where;
     })();
-    return this.settled;
+    return this.detected;
   }
 
   async lane(): Promise<Lane> {
-    return laneOf((await this.settle()).world);
+    return laneOf((await this.detect()).world);
   }
 
   async real(): Promise<boolean> {
-    return (await this.settle()).world === "real";
+    return (await this.detect()).world === "real";
   }
 
   async endpoint(): Promise<string | undefined> {
-    return (await this.settle()).endpoint;
+    return (await this.detect()).endpoint;
   }
 
   zone(): string {

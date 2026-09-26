@@ -60,7 +60,7 @@ describe("detectWorld", () => {
     );
   });
 
-  it("prefers the endpoint over an account the environment also carries", async () => {
+  it("prefers the endpoint over an account the environment also names", async () => {
     const where = await detectWorld(
       { AWS_ENDPOINT_URL: "http://127.0.0.1:4566", EXPECTED_AWS_ACCOUNT_ID: "111122223333" },
       probes(),

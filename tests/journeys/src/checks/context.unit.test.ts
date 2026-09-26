@@ -59,7 +59,7 @@ describe("json", () => {
 });
 
 describe("redact", () => {
-  it("masks each secret it is handed, wherever a log or evidence carries it", () => {
+  it("masks each secret it is handed, wherever a log or evidence contains it", () => {
     expect(
       redact("login ghs_s3cret ok, again ghs_s3cret as hunter2", ["ghs_s3cret", "hunter2"]),
     ).toBe(`login ${REDACTED} ok, again ${REDACTED} as ${REDACTED}`);
@@ -73,14 +73,14 @@ describe("redact", () => {
 });
 
 describe("secretsOf", () => {
-  it("holds the registry token among the journey's secrets when the run carries one", () => {
+  it("lists the registry token among the journey's secrets when the run has one", () => {
     expect(secretsOf({ OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_s3cret" })).toEqual([
       SECRET_TOKEN,
       "ghs_s3cret",
     ]);
   });
 
-  it("holds only the journey's own secret when the run carries no registry token", () => {
+  it("lists only the journey's own secret when the run has no registry token", () => {
     expect(secretsOf({})).toEqual([SECRET_TOKEN]);
     expect(secretsOf({ OCEL_JOURNEY_REGISTRY_TOKEN: " " })).toEqual([SECRET_TOKEN]);
   });

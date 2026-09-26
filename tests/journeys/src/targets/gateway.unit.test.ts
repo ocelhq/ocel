@@ -40,17 +40,17 @@ async function edging(): Promise<Edging> {
   };
 }
 
-const standing: Array<() => Promise<void>> = [];
+const closers: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
-  while (standing.length > 0) {
-    await standing.pop()?.();
+  while (closers.length > 0) {
+    await closers.pop()?.();
   }
 });
 
 async function forwarding(edge: Edge): Promise<string> {
   const server = forwarder(edge, "app.localhost");
-  standing.push(() => shut(server));
+  closers.push(() => shut(server));
   const { host, port } = await opened(server);
   return `http://${host}:${port}`;
 }
@@ -58,7 +58,7 @@ async function forwarding(edge: Edge): Promise<string> {
 describe("forwarder", () => {
   it("opens a connection of its own for every request rather than pooling one", async () => {
     const box = await edging();
-    standing.push(box.close);
+    closers.push(box.close);
     const url = await forwarding(box.edge);
 
     expect((await fetch(`${url}/one`)).status).toBe(204);
@@ -67,9 +67,9 @@ describe("forwarder", () => {
     expect(box.sockets()).toBe(2);
   });
 
-  it("serves what the edge served it after the edge closed every connection it held", async () => {
+  it("serves what the edge served it after the edge closed every connection it had open", async () => {
     const box = await edging();
-    standing.push(box.close);
+    closers.push(box.close);
     const url = await forwarding(box.edge);
 
     expect((await fetch(`${url}/before`)).status).toBe(204);

@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { awsBindingStore, awsStore, type Cli, namespacesStanding } from "./store";
+import { awsBindingStore, awsStore, type Cli, taggedNamespaces } from "./store";
 
 const TABLES: Record<string, string> = {
   StateTableName: "ocel-state",
@@ -76,7 +76,7 @@ describe("deployedSlugs", () => {
     );
   });
 
-  it("refuses when the stack stands but publishes no table name", async () => {
+  it("refuses when the stack exists but publishes no table name", async () => {
     const { cli } = cliOver(() => "None");
     await assert.rejects(awsStore(undefined, cli).deployedSlugs(), /publishes no StateTableName/);
   });
@@ -111,7 +111,7 @@ describe("deployedSlugs", () => {
   });
 });
 
-describe("stands", () => {
+describe("exists", () => {
   it("reaches the slug with a key condition rather than paging the partition", async () => {
     const { cli, calls } = cliOver((args) =>
       describeStacks(args) ? tableAsked(args) : page(["j-1-node"]),
@@ -134,7 +134,7 @@ describe("stands", () => {
     assert.equal(await awsStore(undefined, cli).exists("j-1-node"), false);
   });
 
-  it("carries the failure out rather than answering that the slug is gone", async () => {
+  it("passes the failure on rather than answering that the slug is gone", async () => {
     const { cli } = cliOver((args) => {
       if (describeStacks(args)) {
         throw Object.assign(new Error("Command failed"), { stderr: "ThrottlingException" });
@@ -322,7 +322,7 @@ describe("the namespace a store reads under", () => {
   });
 });
 
-describe("namespacesStanding", () => {
+describe("taggedNamespaces", () => {
   function tagged(namespaces: string[], next?: string): string {
     return JSON.stringify({
       ResourceTagMappingList: namespaces.map((namespace) => ({
@@ -334,16 +334,16 @@ describe("namespacesStanding", () => {
 
   it("asks the tag index for bootstrap stacks alone, never every stack in the account", async () => {
     const { cli, calls } = cliOver(() => tagged([]));
-    await namespacesStanding(cli);
+    await taggedNamespaces(cli);
     const asked = calls[0] ?? [];
     assert.equal(asked[0], "resourcegroupstaggingapi");
     assert.ok(asked.includes("cloudformation:stack"), asked.join(" "));
     assert.ok(asked.includes("Key=ocel:namespace"), asked.join(" "));
   });
 
-  it("reads every namespace the account carries, across pages", async () => {
+  it("reads every namespace the account has tagged, across pages", async () => {
     const pages = [tagged(["j-1799-one"], "more"), tagged(["j-1799-two", "ocel"])];
     const { cli } = cliOver(() => pages.shift() ?? tagged([]));
-    assert.deepEqual(await namespacesStanding(cli), ["j-1799-one", "j-1799-two", "ocel"]);
+    assert.deepEqual(await taggedNamespaces(cli), ["j-1799-one", "j-1799-two", "ocel"]);
   });
 });

@@ -39,7 +39,7 @@ export function appHostname(
   const label = `${app}-${slug}`;
   if (label.length > LONGEST_LABEL) {
     throw new Error(
-      `${label} is ${label.length} characters, and a dns label holds ${LONGEST_LABEL}. ` +
+      `${label} is ${label.length} characters, and a dns label allows at most ${LONGEST_LABEL}. ` +
         `Shorten the app name or the cell name behind ${slug}.`,
     );
   }

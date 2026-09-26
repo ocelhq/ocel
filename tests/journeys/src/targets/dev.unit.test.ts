@@ -12,7 +12,7 @@ describe("the project a dev stack is labelled with", () => {
 });
 
 describe("whether ocel dev started resources for a fixture", () => {
-  it("is read off what ocel dev said, so a fixture with a bucket and no schema is still held to a traceable stack", () => {
+  it("is read off what ocel dev said, so a fixture with a bucket and no schema is still required to have a traceable stack", () => {
     const said = [
       "resolved PORT from .env.",
       'bucket "uploads" → floci s3://dev-uploads-1a2b3c4d @ 127.0.0.1:49153',

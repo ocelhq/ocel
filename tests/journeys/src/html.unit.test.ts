@@ -73,7 +73,7 @@ describe("assetPath", () => {
 });
 
 describe("firstChunkWith", () => {
-  it("answers the index of the earliest chunk carrying the sentinel", () => {
+  it("answers the index of the earliest chunk containing the sentinel", () => {
     expect(firstChunkWith(["a", "ocel-shell", "ocel-deferred"], "ocel-deferred")).toBe(2);
   });
 

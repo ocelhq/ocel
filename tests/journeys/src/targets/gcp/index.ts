@@ -19,10 +19,10 @@ import type { Deployment, ReleaseCycle, Sweeper, Target } from "../types";
 import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
 import {
   deleteService,
+  hasServicesUnder,
   listServices,
   reachable,
   servedBy,
-  standing,
   strayServices,
   switchOn,
   type Where,
@@ -85,7 +85,9 @@ export function cellOfSlug(cells: Cell[], slug: string): Cell {
     .sort((a, b) => b.name.length - a.name.length)
     .find((cell) => slug.endsWith(`-${slugPart(cell.name)}`));
   if (!named) {
-    throw new Error(`${slug} names no cell this target runs, so nothing says which apps it stands`);
+    throw new Error(
+      `${slug} names no cell this target runs, so nothing says which apps it deploys`,
+    );
   }
   return named;
 }
@@ -117,10 +119,10 @@ export class GcpTarget implements Target, ReleaseCycle {
   private minted: Promise<string | undefined> | undefined;
 
   readonly sweeper: Sweeper = {
-    list: () => this.standingSlugs(),
+    list: () => this.deployedSlugs(),
     exists: async (slug) => {
       const cell = cellOfSlug(gcpCells(), slug);
-      return standing(await this.services(), leadsFor(slug, cell.fixture.apps));
+      return hasServicesUnder(await this.services(), leadsFor(slug, cell.fixture.apps));
     },
     sweepStale: (runId) => this.sweepStale(runId),
     sweepRun: (runId) => this.sweepRun(runId),
@@ -298,18 +300,18 @@ export class GcpTarget implements Target, ReleaseCycle {
     };
   }
 
-  private async standingSlugs(): Promise<string[]> {
+  private async deployedSlugs(): Promise<string[]> {
     const runId = currentRunIdentity();
     const found = await this.services();
     return gcpCells()
       .map((cell) => ({ cell, slug: projectSlug(cell.name, runId) }))
-      .filter(({ cell, slug }) => standing(found, leadsFor(slug, cell.fixture.apps)))
+      .filter(({ cell, slug }) => hasServicesUnder(found, leadsFor(slug, cell.fixture.apps)))
       .map(({ slug }) => slug);
   }
 
   private async sweepRun(runId: string): Promise<void> {
     const complaints: string[] = [];
-    for (const slug of await this.standingSlugs()) {
+    for (const slug of await this.deployedSlugs()) {
       const cell = cellOfSlug(gcpCells(), slug);
       const dir = await copyTree(
         fixtureDir(cell.fixture.name),

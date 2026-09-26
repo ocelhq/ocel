@@ -9,7 +9,7 @@ const METHODS_WITH_BODIES = ["POST", "PUT", "PATCH", "DELETE"] as const;
 
 function locationPath(res: Response): string {
   const location = res.headers.get("location");
-  assert.ok(location, `a ${res.status} carried no Location`);
+  assert.ok(location, `a ${res.status} sent no Location`);
   const url = new URL(location, "http://redirect.invalid");
   return `${url.pathname}${url.search}`;
 }

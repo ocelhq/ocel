@@ -13,7 +13,7 @@ import { BOOTSTRAP_DESTROY_ARGS } from "./bootstrap";
 import { namespaceFor, namespaceOfSlug, ocelEnvIn, strayNamespaces } from "./namespace";
 import { githubRuns, livelyRuns, ofRun, runIdOf } from "./runs";
 import { reclaimable, type Stranded, sweepable } from "./slugs";
-import { awsStore, cliAt, namespacesStanding, type Store } from "./store";
+import { awsStore, cliAt, type Store, taggedNamespaces } from "./store";
 import type { AwsWorld } from "./world";
 
 export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
@@ -99,11 +99,11 @@ function underway(name: string, live: Set<string>): boolean {
   return id !== undefined && live.has(id);
 }
 
-export function bootstrapHeldBy(namespace: string, standing: string[]): string | undefined {
-  if (standing.length === 0) {
+export function bootstrapBlockedBy(namespace: string, remaining: string[]): string | undefined {
+  if (remaining.length === 0) {
     return undefined;
   }
-  return `the ${namespace} bootstrap was left standing: ${standing.join(", ")} could not be destroyed out of it`;
+  return `the ${namespace} bootstrap was left in place: ${remaining.join(", ")} could not be destroyed out of it`;
 }
 
 export type Swept = { slug: string; fixture: Fixture; overlay: Overlay };
@@ -182,7 +182,7 @@ export class AwsSweeper implements Sweeper {
   }
 
   async sweepRun(runId: string): Promise<void> {
-    const where = await this.world.settle();
+    const where = await this.world.detect();
     if (where.world !== "real") {
       await this.sweepStale(runId);
       return;
@@ -195,7 +195,7 @@ export class AwsSweeper implements Sweeper {
     const complaints: string[] = [];
     await this.reclaimSlugs(runId, reclaim, byPart, fixtures, complaints, false);
 
-    for (const namespace of ofRun(await namespacesStanding(cliAt(where.endpoint)), runId)) {
+    for (const namespace of ofRun(await taggedNamespaces(cliAt(where.endpoint)), runId)) {
       await despite(complaints, `${namespace} sweep`, () =>
         this.sweepStrayNamespace(runId, namespace, byPart, complaints, false),
       );
@@ -218,15 +218,17 @@ export class AwsSweeper implements Sweeper {
     complaints: string[],
     dead: boolean,
   ): Promise<void> {
-    const held = await this.store(namespace);
+    const namespaceStore = await this.store(namespace);
     const fixtures = fixturesOn(matrix, "aws");
     const stranded: Stranded[] = [];
-    const standing: string[] = [];
-    for (const slug of await held.deployedSlugs()) {
+    const remaining: string[] = [];
+    for (const slug of await namespaceStore.deployedSlugs()) {
       const read = reclaimable(slug, [...byPart.keys()]);
       if (!read) {
-        complaints.push(`${slug} stands in the ${namespace} bootstrap and no harness run made it`);
-        standing.push(slug);
+        complaints.push(
+          `${slug} is deployed in the ${namespace} bootstrap and no harness run made it`,
+        );
+        remaining.push(slug);
         continue;
       }
       stranded.push(read);
@@ -236,18 +238,18 @@ export class AwsSweeper implements Sweeper {
     for (const one of swept) {
       await inFixture(one.fixture.name, runId, `sweep-${one.slug}`, async (dir) => {
         if (dead) {
-          await held.releaseLocks(one.slug);
+          await namespaceStore.releaseLocks(one.slug);
         }
         await writeJourneyConfig(dir, one.overlay);
         await ocel(dir, ["destroy", "production", "--yes"], ocelEnvIn(dir, namespace));
         process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
       }).catch((error) => {
         complaints.push(`${one.slug}: ${String(error)}`);
-        standing.push(one.slug);
+        remaining.push(one.slug);
       });
     }
 
-    const kept = bootstrapHeldBy(namespace, standing);
+    const kept = bootstrapBlockedBy(namespace, remaining);
     if (kept) {
       complaints.push(kept);
       return;
@@ -271,12 +273,12 @@ export class AwsSweeper implements Sweeper {
     complaints: string[],
     busy: Busy,
   ): Promise<void> {
-    const where = await this.world.settle();
+    const where = await this.world.detect();
     if (where.world !== "real") {
       return;
     }
     const mine = cells.map((cell) => namespaceFor(cell.name, runId));
-    const stray = strayNamespaces(await namespacesStanding(cliAt(where.endpoint)), mine);
+    const stray = strayNamespaces(await taggedNamespaces(cliAt(where.endpoint)), mine);
     const live = await busy(stray);
     for (const namespace of stray.filter((name) => !underway(name, live))) {
       await despite(complaints, `${namespace} sweep`, () =>
@@ -310,7 +312,7 @@ export class AwsSweeper implements Sweeper {
     const left = new Set(await this.list());
     for (const one of swept) {
       if (left.has(one.slug)) {
-        complaints.push(`${one.slug} still stands after the sweep destroyed it`);
+        complaints.push(`${one.slug} still exists after the sweep destroyed it`);
       }
     }
   }

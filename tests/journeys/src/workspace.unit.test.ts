@@ -22,7 +22,7 @@ describe("a multi-app fixture", () => {
     expect(migrateCommand()).toEqual(["pnpm", "run", "migrate"]);
   });
 
-  it("names the app directories that must hold no state of their own", () => {
+  it("names the app directories that must contain no state of their own", () => {
     expect(appHomes(workspace)).toEqual(["apps/next", "apps/express"]);
     expect(appHomes(composite)).toEqual([]);
   });
@@ -35,11 +35,11 @@ describe("the state a workspace writes", () => {
     expect(stateComplaint(home, [home])).toBeUndefined();
   });
 
-  it("complains when an app under it holds state", () => {
+  it("complains when an app under it contains state", () => {
     expect(stateComplaint(home, [home, `${home}/apps/next`])).toMatch(/workspace\/apps\/next/);
   });
 
-  it("complains when the config's directory holds none", () => {
-    expect(stateComplaint(home, [])).toMatch(/holds no \.ocel state/);
+  it("complains when the config's directory contains none", () => {
+    expect(stateComplaint(home, [])).toMatch(/contains no \.ocel state/);
   });
 });

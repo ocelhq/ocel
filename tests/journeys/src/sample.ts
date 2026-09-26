@@ -24,11 +24,11 @@ function sampleGroup(
     if (!cell) {
       return;
     }
-    const held = chosen.get(fixture.name) ?? [];
-    if (!held.some((one) => one.name === cell.name)) {
-      held.push(cell);
+    const picked = chosen.get(fixture.name) ?? [];
+    if (!picked.some((one) => one.name === cell.name)) {
+      picked.push(cell);
     }
-    chosen.set(fixture.name, held);
+    chosen.set(fixture.name, picked);
   };
   const cellOf = (fixture: Fixture, variant: string) =>
     cellsFor(fixture).find((cell) => cell.variant.name === variant);

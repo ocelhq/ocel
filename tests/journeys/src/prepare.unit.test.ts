@@ -19,7 +19,7 @@ describe("what a cell reads back out of the file the lane prepared", () => {
     writeFileSync(file, body, "utf8");
   }
 
-  it("carries the failure and the duration the lane wrote", () => {
+  it("reads back the failure and the duration the lane wrote", () => {
     const failures = { lane: "the emulator never showed a default VPC" };
     write(`${JSON.stringify({ ms: 4_200, failures })}\n`);
     expect(readPrepared(runId, target)).toEqual({ ms: 4_200, failures });
