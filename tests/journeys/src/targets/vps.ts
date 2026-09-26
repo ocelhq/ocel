@@ -19,15 +19,15 @@ import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
-import { engineSeries, unadopted } from "./engine";
+import { adoptionMissed, engineSeries } from "./engine";
 import {
   coveredNames,
   type Front,
   frontNamed,
   frontStep,
   holderOf,
+  refusalMissed,
   stepCommand,
-  unrefused,
 } from "./front";
 import { type Gateway, openGateway } from "./gateway";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
@@ -223,6 +223,7 @@ export class VpsTarget implements Target, ReleaseCycle {
       path.join(outputRoot, "vps", "box"),
       `${HARNESS_PREFIX}journey-bootstrap`,
       target.user,
+      front?.proxy,
     );
     const args = ["bootstrap", "production", "--yes"];
     const result = await spawnOcel(dir, args, this.boxEnv(target.user));
@@ -232,7 +233,7 @@ export class VpsTarget implements Target, ReleaseCycle {
       throw exitedBadly(args, result);
     }
     const series = engineSeries(process.env);
-    const missed = series === undefined ? undefined : unadopted(log, series);
+    const missed = series === undefined ? undefined : adoptionMissed(log, series);
     if (missed !== undefined) {
       throw new Error(missed);
     }
@@ -245,7 +246,7 @@ export class VpsTarget implements Target, ReleaseCycle {
       path.join(outputRoot, "vps", "box", "unfronted"),
       `${HARNESS_PREFIX}journey-bootstrap`,
       target.user,
-      false,
+      undefined,
     );
     const result = await spawnOcel(
       dir,
@@ -254,7 +255,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     );
     const said = redact(`${result.stdout}${result.stderr}`);
     await writeFile(path.join(dir, "bootstrap.log"), said, "utf8");
-    const missed = unrefused(result.code, said, holderOf(front));
+    const missed = refusalMissed(result.code, said, holderOf(front));
     if (missed !== undefined) {
       throw new Error(missed);
     }
@@ -368,10 +369,9 @@ export class VpsTarget implements Target, ReleaseCycle {
     dir: string,
     slug: string,
     login: string,
-    fronted = true,
+    proxy: unknown,
   ): Promise<string> {
     const target = this.box();
-    const front = fronted ? this.front() : undefined;
     await mkdir(dir, { recursive: true });
     await writeFile(
       path.join(dir, "ocel.json"),
@@ -381,7 +381,7 @@ export class VpsTarget implements Target, ReleaseCycle {
           provider: {
             vps: {
               ssh: { host: target.host, user: login, identityFile: target.identityFile },
-              ...(front ? { proxy: front.proxy } : {}),
+              ...(proxy === undefined ? {} : { proxy }),
             },
           },
           apps: [],
@@ -531,6 +531,7 @@ export class VpsTarget implements Target, ReleaseCycle {
         path.join(outputRoot, "vps", "sweep", slug),
         slug,
         DEPLOY_LOGIN,
+        this.front()?.proxy,
       );
       await ocel(dir, ["destroy", "production", "--yes"], this.boxEnv(DEPLOY_LOGIN));
     }
