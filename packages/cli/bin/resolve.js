@@ -1,7 +1,7 @@
 const supported = new Set(["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"]);
 
 /**
- * The name of the package carrying the `ocel` binary for a platform.
+ * The name of the package containing the `ocel` binary for a platform.
  *
  * @param {string} platform a `process.platform` value
  * @param {string} arch a `process.arch` value

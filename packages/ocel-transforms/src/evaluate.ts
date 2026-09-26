@@ -15,7 +15,7 @@ import { vpsOwnedFields } from "./vps";
 /**
  * What one ocel resource's rules came to: a patch per underlying resource the
  * provider constructs for it, keyed by the same key the rules were written
- * under and carrying the provider SDK's own property names.
+ * under, its properties keyed by the provider SDK's own names.
  */
 export type Patches = Record<string, Record<string, unknown>>;
 

@@ -401,7 +401,7 @@ test("maps each asset's blob name to its module id in the shim", async () => {
   expect(bundle.shim).toContain('url.startsWith("blob:")');
 });
 
-test("emits a loadable shim for an asset name carrying template syntax", async () => {
+test("emits a loadable shim for an asset name containing template syntax", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);

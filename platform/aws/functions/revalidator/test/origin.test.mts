@@ -42,13 +42,12 @@ function record(document: string = originDocument()): () => Response {
   return () => new Response(document, { status: 200 });
 }
 
-// a comment: `@ts-expect-error` is itself an error when the error it names does
 it("cannot be spelled from a literal, or from a copy of a real one", async () => {
   const { deps } = harness(record());
   const resolution = await resolve(deps, message());
   if (!resolution.ok) throw new Error(resolution.reason);
 
-  // @ts-expect-error
+  // @ts-expect-error a literal was never resolved
   const fabricated: Target = { url: "https://attacker.example.com/", region: "us-east-1" };
   // @ts-expect-error and copying a real one drops what made it one
   const copied: Target = { ...resolution.target, url: "https://attacker.example.com/" };

@@ -187,10 +187,10 @@ func TestHasJS(t *testing.T) {
 
 		hasJS, err := HasJS(&projectconfig.Config{Dir: root})
 		if err != nil {
-			t.Fatalf("HoldsJS: %v", err)
+			t.Fatalf("HasJS: %v", err)
 		}
 		if !hasJS {
-			t.Error("HoldsJS = false, want the ts declaration root read as JS")
+			t.Error("HasJS = false, want the ts declaration root read as JS")
 		}
 	})
 
@@ -201,10 +201,10 @@ func TestHasJS(t *testing.T) {
 
 		hasJS, err := HasJS(cfg)
 		if err == nil {
-			t.Fatalf("HoldsJS = %v, nil error, want the unreadable roots reported", hasJS)
+			t.Fatalf("HasJS = %v, nil error, want the unreadable roots reported", hasJS)
 		}
 		if hasJS {
-			t.Error("HoldsJS = true for roots it could not read")
+			t.Error("HasJS = true for roots it could not read")
 		}
 	})
 }

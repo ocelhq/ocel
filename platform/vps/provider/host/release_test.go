@@ -1197,7 +1197,7 @@ func strandedByWrite(t *testing.T, landed bool, back session.Result) (*flipped, 
 	return box, err
 }
 
-func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherAStandingContainerNorAHalfWrittenFile(t *testing.T) {
+func TestAFlipConfigurationThatCannotBeWrittenLeavesNeitherARunningContainerNorAHalfWrittenFile(t *testing.T) {
 	t.Parallel()
 
 	for what, landed := range map[string]bool{"a write that never landed": false, "a write that landed and reported failure": true} {
