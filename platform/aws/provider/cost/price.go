@@ -72,7 +72,7 @@ var (
 	secondsPerMonth = pricing.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))
 )
 
-var table = pricing.Table{
+var formulas = pricing.Table{
 	"aws_lambda_function":             lambdaFunction,
 	"aws_lambda_function_url":         free,
 	"aws_lambda_layer_version":        free,
@@ -102,11 +102,11 @@ func Price(req *costv1.PriceRequest, edges ...pricing.EdgeRates) (*costv1.Estima
 	if err != nil {
 		return nil, err
 	}
-	merged, formulas, err := pricing.Priced(priceCard, table, edges...)
+	merged, table, err := pricing.Priced(priceCard, formulas, edges...)
 	if err != nil {
 		return nil, err
 	}
-	estimate, err := pricing.Estimate(merged, formulas, req)
+	estimate, err := pricing.Estimate(merged, table, req)
 	if err != nil {
 		return nil, err
 	}

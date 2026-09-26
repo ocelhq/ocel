@@ -162,19 +162,19 @@ func match(skus []sku, query map[string]string) []sku {
 	return matched
 }
 
-func stepsOf(s sku) ([]pricing.PriceStep, string, error) {
+func stepsOf(s sku) ([]pricing.Step, string, error) {
 	if len(s.PricingInfo) == 0 {
 		return nil, "", fmt.Errorf("sku %s has no pricing", s.SKUID)
 	}
 	expression := s.PricingInfo[0].PricingExpression
-	var steps []pricing.PriceStep
+	var steps []pricing.Step
 	for _, tier := range expression.TieredRates {
 		units, err := decimal.NewFromString(tier.UnitPrice.Units)
 		if err != nil {
 			return nil, "", fmt.Errorf("sku %s: units %q: %w", s.SKUID, tier.UnitPrice.Units, err)
 		}
 		price := units.Add(decimal.NewFromInt(tier.UnitPrice.Nanos).Div(decimal.NewFromInt(nanosPerUnit)))
-		steps = append(steps, pricing.PriceStep{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
+		steps = append(steps, pricing.Step{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
 	}
 	if len(steps) == 0 {
 		return nil, "", fmt.Errorf("sku %s has no tiered rates", s.SKUID)

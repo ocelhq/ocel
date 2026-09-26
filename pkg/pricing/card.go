@@ -20,7 +20,7 @@ type Rate struct {
 	ID        string            `json:"id"`
 	Region    string            `json:"region,omitempty"`
 	Unit      string            `json:"unit"`
-	Steps     []PriceStep       `json:"steps"`
+	Steps     []Step            `json:"steps"`
 	Allowance Allowance         `json:"allowance,omitempty"`
 	Note      string            `json:"note,omitempty"`
 	Source    string            `json:"source"`
@@ -35,7 +35,7 @@ const (
 	AllowanceResource Allowance = "resource"
 )
 
-type PriceStep struct {
+type Step struct {
 	Start decimal.Decimal `json:"start"`
 	Price decimal.Decimal `json:"price"`
 }
