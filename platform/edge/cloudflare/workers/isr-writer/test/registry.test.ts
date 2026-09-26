@@ -19,13 +19,13 @@ describe("registry", () => {
     expect(await withStorage("prod/p/web/B1", registry.secretHash)).toBe(hash);
   });
 
-  it("holds the hash it carries against a different one, unless forced", async () => {
+  it("refuses a different hash while it has one, unless forced", async () => {
     const first = "b".repeat(64);
     const second = "c".repeat(64);
     await withStorage("prod/p/web/B2", (store) => registry.initialize(store, first, false));
     expect(
       await withStorage("prod/p/web/B2", (store) => registry.initialize(store, second, false)),
-    ).toBe("held");
+    ).toBe("refused");
     expect(await withStorage("prod/p/web/B2", registry.secretHash)).toBe(first);
 
     expect(

@@ -117,7 +117,7 @@ func TestRecordsFor(t *testing.T) {
 				t.Fatalf("RecordsFor error = %v", err)
 			}
 			if len(got) != 1 || got[0].Name != "shop.app.com" {
-				t.Errorf("RecordsFor on %s = %v, want the one record for shop.app.com: no DNS provider holds a localhost name, so none is owed", target.Kind, got)
+				t.Errorf("RecordsFor on %s = %v, want the one record for shop.app.com: no DNS provider serves a localhost name, so none needs writing", target.Kind, got)
 			}
 		}
 	})
@@ -217,7 +217,7 @@ func TestWrittenRecords(t *testing.T) {
 	state := StackState{Slug: "shop"}
 	state.RecordWrites(records)
 	if state.Slug != "shop" {
-		t.Errorf("slug = %q, want the rest of the state carried over", state.Slug)
+		t.Errorf("slug = %q, want the rest of the state left unchanged", state.Slug)
 	}
 	if len(state.Records) != 2 {
 		t.Fatalf("written records = %v, want the two distinct records", state.Records)
@@ -293,7 +293,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		}
 	})
 
-	t.Run("one front stands for every host that has none of its own", func(t *testing.T) {
+	t.Run("one front serves every host that has none of its own", func(t *testing.T) {
 		t.Parallel()
 
 		state := StackState{Front: "d123.cloudfront.net"}
@@ -338,7 +338,7 @@ func TestRecordsForPerHostFronts(t *testing.T) {
 		}
 	})
 
-	t.Run("forgetting a host front leaves the others standing", func(t *testing.T) {
+	t.Run("forgetting a host front leaves the others in place", func(t *testing.T) {
 		t.Parallel()
 
 		var state StackState

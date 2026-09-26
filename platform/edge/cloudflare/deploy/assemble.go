@@ -116,7 +116,7 @@ func validateRoutes(routes []string, r edge.Addresses) error {
 func signingBindings(r edge.Addresses) (vars, secrets map[string]string, err error) {
 	creds, ok := r.EdgeCredentials()
 	if !ok || creds.AccessKeyID == "" || creds.SecretKey == "" {
-		return nil, nil, errors.New("the Cloudflare edge signs every forward to the origin, and this bootstrap holds no edge credentials to sign with; re-run bootstrap so the origin mints them before deploying")
+		return nil, nil, errors.New("the Cloudflare edge signs every forward to the origin, and this bootstrap has no edge credentials to sign with; re-run bootstrap so the origin mints them before deploying")
 	}
 	return map[string]string{edge.EdgeAccessKeyIDVar: creds.AccessKeyID},
 		map[string]string{edge.EdgeSecretKeyVar: creds.SecretKey}, nil

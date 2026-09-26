@@ -148,14 +148,14 @@ func (p *cloudflare) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, e
 		Changes: []edge.PlanChange{
 			{Kind: kindWorkerRoute, Name: wildcard, Action: edge.PlanDelete},
 			{Kind: kindWorker, Name: previewEntryScript, Action: edge.PlanDelete,
-				Reason: "the shared entry worker this wildcard is held by"},
+				Reason: "the shared entry worker this wildcard is owned by"},
 		},
 	}
 	kept := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes what it stood up",
+		Reason: "bootstrap-scoped: `ocel bootstrap destroy preview` removes what bootstrap provisioned",
 	}
 	return removed, kept
 }
@@ -182,10 +182,10 @@ func (p *cloudflare) Bootstrap(ctx context.Context, class edge.Class) (edge.Boot
 	if err != nil {
 		return out, err
 	}
-	for _, settling := range state.workers {
-		offer, err := p.settleWorker(ctx, accountID, settling)
+	for _, worker := range state.workers {
+		offer, err := p.ensureWorker(ctx, accountID, worker)
 		if err != nil {
-			return out, fmt.Errorf("bootstrap %s: %w", settling.what, err)
+			return out, fmt.Errorf("bootstrap %s: %w", worker.what, err)
 		}
 		out.Offers = append(out.Offers, offer)
 	}
@@ -283,11 +283,11 @@ func bootstrapWorkers(namespace string, class edge.Class) ([]bootstrapWorker, er
 	}, nil
 }
 
-func (p *cloudflare) settleWorker(ctx context.Context, accountID string, state workerState) (edge.Offer, error) {
+func (p *cloudflare) ensureWorker(ctx context.Context, accountID string, state workerState) (edge.Offer, error) {
 	b := state.bootstrapWorker
 	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
 	var cred string
-	if !state.secretHeld {
+	if !state.secretPresent {
 		minted, err := mintSecret()
 		if err != nil {
 			return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
@@ -296,7 +296,7 @@ func (p *cloudflare) settleWorker(ctx context.Context, accountID string, state w
 	}
 
 	switch {
-	case !state.settled():
+	case !state.upToDate():
 		var inherited []string
 		if cred == "" {
 			inherited = []string{bootstrapSecretBinding}
@@ -312,7 +312,7 @@ func (p *cloudflare) settleWorker(ctx context.Context, accountID string, state w
 		}
 	}
 
-	endpoint, err := p.settleSubdomain(ctx, up, state.subdomainOn, b.what)
+	endpoint, err := p.ensureSubdomain(ctx, up, state.subdomainOn, b.what)
 	if err != nil {
 		return edge.Offer{}, err
 	}
@@ -327,7 +327,7 @@ func (p *cloudflare) settleWorker(ctx context.Context, accountID string, state w
 	return edge.Offer{Kind: b.offer, Values: values}, nil
 }
 
-func (p *cloudflare) settleSubdomain(ctx context.Context, up upload, on bool, what string) (string, error) {
+func (p *cloudflare) ensureSubdomain(ctx context.Context, up upload, on bool, what string) (string, error) {
 	if !on {
 		endpoint, err := p.setSubdomain(ctx, up, true)
 		if err != nil {

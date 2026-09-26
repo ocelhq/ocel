@@ -110,7 +110,7 @@
       "variantPartiallyStatic": null
     },
     {
-      "name": "a segment prefetch under an interception url carries both",
+      "name": "a segment prefetch under an interception url keys on both",
       "pathname": "/photo",
       "headers": {
         "rsc": "1",

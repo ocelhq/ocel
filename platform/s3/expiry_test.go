@@ -31,7 +31,7 @@ func TestASignedUrlOutlivesNothingLongerThanSigV4Allows(t *testing.T) {
 	}
 	seconds, err := strconv.Atoi(signed.Query().Get("X-Amz-Expires"))
 	if err != nil {
-		t.Fatalf("the signed url carries %q as its expiry", signed.Query().Get("X-Amz-Expires"))
+		t.Fatalf("the signed url has %q as its expiry", signed.Query().Get("X-Amz-Expires"))
 	}
 	if want := int((7 * 24 * time.Hour).Seconds()); seconds != want {
 		t.Errorf("a url asked to last 30 days was signed for %d seconds, want %d: sigv4 refuses anything longer and the store answers 403 to every one of them",
@@ -42,13 +42,13 @@ func TestASignedUrlOutlivesNothingLongerThanSigV4Allows(t *testing.T) {
 func TestAStoreWhoseClockDisagreesSaysSoInSoManyWords(t *testing.T) {
 	t.Parallel()
 
-	held := storeError("head a.png", &apiError{code: "RequestTimeTooSkewed"})
-	if held == nil {
+	refusal := storeError("head a.png", &apiError{code: "RequestTimeTooSkewed"})
+	if refusal == nil {
 		t.Fatal("a store that refused the signature came back as success")
 	}
 	for _, said := range []string{"clock", "head a.png"} {
-		if !strings.Contains(held.Error(), said) {
-			t.Errorf("the error never says %q:\n%v", said, held)
+		if !strings.Contains(refusal.Error(), said) {
+			t.Errorf("the error never says %q:\n%v", said, refusal)
 		}
 	}
 }

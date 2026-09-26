@@ -59,7 +59,7 @@ func presignIn(t *testing.T, svc bucketv1connect.BucketServiceHandler, bucket st
 	return resp.GetSessionId()
 }
 
-func TestTheRouterSendsEachBucketToTheBackendThatHoldsIt(t *testing.T) {
+func TestTheRouterSendsEachBucketToTheBackendThatStoresIt(t *testing.T) {
 	own := &ownBackend{}
 	uploads := boundBackend(t, "b0", "acme/uploads")
 	avatars := boundBackend(t, "b1", "acme-avatars")

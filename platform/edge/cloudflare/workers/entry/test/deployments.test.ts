@@ -30,12 +30,12 @@ function countingBinding(opts: {
   records: Record<string, DeploymentRecord>;
 }): DeploymentsBinding & {
   pointerRecordCalls: number;
-  lastCarriedRecord: boolean;
+  lastReturnedRecord: boolean;
   down: boolean;
 } {
   return {
     pointerRecordCalls: 0,
-    lastCarriedRecord: false,
+    lastReturnedRecord: false,
     down: false,
     async pointerRecord(args: {
       slug: string;
@@ -47,19 +47,19 @@ function countingBinding(opts: {
       if (this.down) throw new Error("store unreachable");
       const identity = opts.pointerIdentity[`${args.app}/${args.pointer ?? ""}`];
       if (!identity) {
-        this.lastCarriedRecord = false;
+        this.lastReturnedRecord = false;
         return { kind: "no-pointer" };
       }
       if (identity === args.knownIdentity) {
-        this.lastCarriedRecord = false;
+        this.lastReturnedRecord = false;
         return { kind: "unchanged", identity };
       }
       const record = opts.records[`${args.app}/${identity}`];
       if (!record) {
-        this.lastCarriedRecord = false;
+        this.lastReturnedRecord = false;
         return { kind: "dangling", identity };
       }
-      this.lastCarriedRecord = true;
+      this.lastReturnedRecord = true;
       return { kind: "record", identity, record };
     },
   };
@@ -136,7 +136,7 @@ describe("resolveDeployment", () => {
     clock.ms = 5_001; // TTL elapsed
     const resolution = await resolveDeployment(d);
     expect(binding.pointerRecordCalls).toBe(2);
-    expect(binding.lastCarriedRecord).toBe(false);
+    expect(binding.lastReturnedRecord).toBe(false);
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
 
@@ -163,7 +163,7 @@ describe("resolveDeployment", () => {
       kind: "found",
       record: makeRecord({ identity: "deploy-2" }),
     });
-    expect(binding.lastCarriedRecord).toBe(true);
+    expect(binding.lastReturnedRecord).toBe(true);
   });
 
   it("serves the cached record during a transient store outage", async () => {

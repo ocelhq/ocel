@@ -381,7 +381,7 @@ function remainingRecordKeys(store: SqlStore): string[] {
     .map((r) => recordKey(r.app, r.identity));
 }
 
-export type Initialization = "adopted" | "held";
+export type Initialization = "adopted" | "refused";
 
 export function initialize(
   store: SqlStore,
@@ -390,14 +390,14 @@ export function initialize(
   force: boolean,
 ): Initialization {
   return store.transactionSync(() => {
-    if (identityHeld(store) && !force) return "held";
+    if (identityRecorded(store) && !force) return "refused";
     setMeta(store, OWNER_KEY, ownerToken);
     setMeta(store, SECRET_KEY, secret);
     return "adopted";
   });
 }
 
-function identityHeld(store: SqlStore): boolean {
+function identityRecorded(store: SqlStore): boolean {
   return getMeta(store, OWNER_KEY) !== undefined && getMeta(store, SECRET_KEY) !== undefined;
 }
 

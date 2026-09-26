@@ -43,7 +43,7 @@ func TestCredentialPermissionsListsWhatEachTierMints(t *testing.T) {
 			}
 			for _, want := range tc.want {
 				if !strings.Contains(doc.Document, want) {
-					t.Errorf("DescribeCredentialPermissions(%v) = %q, want it to carry %q", tc.tier, doc.Document, want)
+					t.Errorf("DescribeCredentialPermissions(%v) = %q, want it to include %q", tc.tier, doc.Document, want)
 				}
 			}
 			for _, gone := range tc.gone {

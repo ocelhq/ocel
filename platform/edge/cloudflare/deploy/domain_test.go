@@ -46,7 +46,7 @@ func TestBindDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("a host another project's worker already routes is refused, and left where it stands", func(t *testing.T) {
+	t.Run("a host another project's worker already routes is refused, and left in place", func(t *testing.T) {
 		m := zoneMock()
 		m.existingRoutes = []map[string]any{
 			{"id": "theirs", "pattern": "shop.app.com/*", "script": "ocel-other-prod"},
@@ -58,7 +58,7 @@ func TestBindDomain(t *testing.T) {
 			t.Fatal("BindDomain err = nil, want a refusal: the route belongs to another project")
 		}
 		if !strings.Contains(err.Error(), "ocel-other-prod") {
-			t.Errorf("BindDomain err = %q, want it to name the worker holding the route", err)
+			t.Errorf("BindDomain err = %q, want it to name the worker that owns the route", err)
 		}
 		if len(m.repointedRoutes) != 0 || len(m.createdRoutes) != 0 {
 			t.Errorf("repointed = %v, created = %v, want the other project's route untouched", m.repointedRoutes, m.createdRoutes)
@@ -161,7 +161,7 @@ func TestBindDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("the shared preview entry worker refuses to carry a project's domain", func(t *testing.T) {
+	t.Run("the shared preview entry worker refuses to route a project's domain", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 		m := zoneMock()
 		s := stackOn(m.provider(t), edge.StackState{
@@ -270,7 +270,7 @@ func TestUnbindDomain(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves another worker's route where it stands", func(t *testing.T) {
+	t.Run("leaves another worker's route in place", func(t *testing.T) {
 		m := zoneMock()
 		m.existingRoutes = []map[string]any{
 			{"id": "theirs", "pattern": "shop.app.com/*", "script": "someone-else"},
@@ -330,7 +330,7 @@ func TestReconcileKeepsWhatABindingPut(t *testing.T) {
 		t.Errorf("routes = %v, want the bound host's route to survive the next deploy", m.existingRoutes)
 	}
 	if got := redeployed.State().Bound; len(got) != 1 || got[0] != "shop.app.com" {
-		t.Errorf("bound domains = %v, want the deploy to carry [shop.app.com] forward", got)
+		t.Errorf("bound domains = %v, want the deploy to keep [shop.app.com]", got)
 	}
 
 	if err := redeployed.Destroy(t.Context()); err != nil {

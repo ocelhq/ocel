@@ -306,7 +306,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
 		if len(m.putScripts) != 0 {
-			t.Errorf("uploaded scripts = %v, want none: the edge stack already carries this spec's stamp", m.putScripts)
+			t.Errorf("uploaded scripts = %v, want none: the edge stack already has this spec's stamp", m.putScripts)
 		}
 	})
 
@@ -493,11 +493,11 @@ func TestReconcile(t *testing.T) {
 		m := previewZoneMock()
 
 		_, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v3"), edge.StackState{})
-		if !errors.Is(err, errStoreIdentityHeld) {
-			t.Fatalf("Reconcile err = %v, want %v", err, errStoreIdentityHeld)
+		if !errors.Is(err, errStoreIdentityTaken) {
+			t.Fatalf("Reconcile err = %v, want %v", err, errStoreIdentityTaken)
 		}
 		if strings.Contains(err.Error(), "s3cr3t") {
-			t.Errorf("err = %v, want it to keep the standing secret out of the message", err)
+			t.Errorf("err = %v, want it to keep the current secret out of the message", err)
 		}
 	})
 
@@ -539,7 +539,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 		}
 		if own := ownOf(t, state); own.EnvelopeKey != "" {
-			t.Errorf("envelope key = %q, want none: a stack the shared entry serves holds no worker of its own to bind one to", own.EnvelopeKey)
+			t.Errorf("envelope key = %q, want none: a stack the shared entry serves has no worker of its own to bind one to", own.EnvelopeKey)
 		}
 	})
 
@@ -574,11 +574,11 @@ func TestReconcileEnvelopeKey(t *testing.T) {
 		meta := uploadedMetadata(t, m, spec.Program.Name)
 		secrets := bindingsByType(meta, "secret_text")
 		if len(secrets) != 1 || secrets[0]["name"] != envelopeKeyBinding || secrets[0]["text"] != own.EnvelopeKey {
-			t.Errorf("secret_text bindings = %v, want %s carrying the key the state holds", secrets, envelopeKeyBinding)
+			t.Errorf("secret_text bindings = %v, want %s containing the key the state records", secrets, envelopeKeyBinding)
 		}
 		for _, plain := range bindingsByType(meta, "plain_text") {
 			if plain["text"] == own.EnvelopeKey {
-				t.Errorf("plain_text binding %v carries the envelope key", plain)
+				t.Errorf("plain_text binding %v contains the envelope key", plain)
 			}
 		}
 	})
@@ -606,7 +606,7 @@ func TestReconcileEnvelopeKey(t *testing.T) {
 		}
 	})
 
-	t.Run("a stack handed to the shared entry carries no key and its records stay unwrapped", func(t *testing.T) {
+	t.Run("a stack handed to the shared entry has no key and its records stay unwrapped", func(t *testing.T) {
 		store := fakeStoreServer(t, "s3cr3t")
 		m := previewZoneMock()
 		spec := pruneOnlySpec(store.URL, "v2")
@@ -616,7 +616,7 @@ func TestReconcileEnvelopeKey(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 		if own := ownOf(t, state); own.wrapsEnvelopes() {
-			t.Errorf("state = %+v, want a stack the shared entry serves to wrap nothing: that worker holds no project's key", own)
+			t.Errorf("state = %+v, want a stack the shared entry serves to wrap nothing: that worker has no project's key", own)
 		}
 	})
 }
@@ -676,7 +676,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != dataKey {
-			t.Errorf("staged envelope = %q, want the bare data key: the shared entry holds no key to unwrap with", got.Envelope)
+			t.Errorf("staged envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Envelope)
 		}
 	})
 
@@ -756,7 +756,7 @@ func TestDestroy(t *testing.T) {
 			t.Errorf("deleted scripts = %v, want none: the workers to destroy were never established", m.deletedScripts)
 		}
 		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).History(t.Context(), ""); err != nil {
-			t.Errorf("history after a refused Destroy: %v, want the instance still holding the record of what was deployed", err)
+			t.Errorf("history after a refused Destroy: %v, want the instance still keeping the record of what was deployed", err)
 		}
 	})
 
@@ -826,28 +826,28 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("ensureInstance after a wipe: %v", err)
 		}
 		if len(stamps) != 0 {
-			t.Errorf("stamps = %v, want none: a wiped instance carries no version stamp", stamps)
+			t.Errorf("stamps = %v, want none: a wiped instance has no version stamp", stamps)
 		}
 		if id.secret == "" || id.ownerToken == "" {
-			t.Fatalf("identity = %+v, want the freshly seeded pair the wiped instance now carries", id)
+			t.Fatalf("identity = %+v, want the freshly seeded pair the wiped instance now has", id)
 		}
 		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", id.secret, "v2"); err != nil {
 			t.Fatalf("the re-seeded instance still rejects the project: %v", err)
 		}
 	})
 
-	t.Run("an already-seeded instance holds its identity against a state that lost it", func(t *testing.T) {
+	t.Run("an already-seeded instance keeps its identity against a state that lost it", func(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 
 		_, _, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), edge.StackState{})
-		if !errors.Is(err, errStoreIdentityHeld) {
-			t.Fatalf("ensureInstance err = %v, want %v", err, errStoreIdentityHeld)
+		if !errors.Is(err, errStoreIdentityTaken) {
+			t.Fatalf("ensureInstance err = %v, want %v", err, errStoreIdentityTaken)
 		}
 		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
-			t.Fatalf("the standing secret no longer authenticates: %v", err)
+			t.Fatalf("the existing secret no longer authenticates: %v", err)
 		}
 	})
 
@@ -862,7 +862,7 @@ func TestEnsureInstance(t *testing.T) {
 			t.Fatalf("ensureInstance: %v", err)
 		}
 		if stamps[""] != "stamp-v2" {
-			t.Errorf("stamps = %v, want the stamp the edge stack already carries", stamps)
+			t.Errorf("stamps = %v, want the stamp the edge stack already has", stamps)
 		}
 		if id.secret != "s3cr3t" {
 			t.Errorf("secret = %q, want the one already in state", id.secret)
@@ -1007,7 +1007,7 @@ func TestWorkerDecoration(t *testing.T) {
 	})
 }
 
-func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
+func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 	t.Parallel()
 
 	t.Run("the map reaches the entry worker as canonical json", func(t *testing.T) {
@@ -1057,7 +1057,7 @@ func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		moved.DomainApps = map[string]string{"shop.example": "admin"}
 
 		if specStampFor(t, spec, edge.StackState{}) == specStampFor(t, moved, edge.StackState{}) {
-			t.Error("the stamp holds still while the hostname moves app, so the entry worker is never re-uploaded")
+			t.Error("the stamp stays unchanged while the hostname moves app, so the entry worker is never re-uploaded")
 		}
 	})
 }

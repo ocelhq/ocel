@@ -47,7 +47,7 @@ func (e *Edge) Facts() edge.Facts {
 
 func (e *Edge) Hooks() edge.Hooks {
 	return edge.Hooks{
-		CheckBootstrapStands:          e.bootstrapStands,
+		CheckBootstrapInstalled:       e.bootstrapStands,
 		ListBoundHostnames:            e.boundHostnames,
 		DescribeCredentialPermissions: e.credentialPermissions,
 	}

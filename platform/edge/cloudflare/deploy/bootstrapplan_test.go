@@ -33,12 +33,12 @@ func seedBootstrapBundles(t *testing.T, store, writer string) (string, string) {
 	return storePath, writerPath
 }
 
-func bootstrapMock(t *testing.T, held bool) *cfMock {
+func bootstrapMock(t *testing.T, provisioned bool) *cfMock {
 	t.Helper()
 	t.Setenv(envAccountID, "acct")
 	t.Setenv(envAPIToken, "tok")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-	if held {
+	if provisioned {
 		m.existingBuckets = []string{cacheStoreName(edge.ClassProduction)}
 		m.existingTokens = []map[string]any{{"id": "token-1", "name": cacheStoreName(edge.ClassProduction)}}
 	}
@@ -75,13 +75,13 @@ func stripBinding(t *testing.T, m *cfMock, script, kind string) {
 	bindings, _ := m.scriptSettings[script]["bindings"].([]any)
 	kept := make([]any, 0, len(bindings))
 	for _, b := range bindings {
-		if held, ok := b.(map[string]any); ok && held["type"] == kind {
+		if declared, ok := b.(map[string]any); ok && declared["type"] == kind {
 			continue
 		}
 		kept = append(kept, b)
 	}
 	if len(kept) == len(bindings) {
-		t.Fatalf("worker %q carries no %s binding to strip; it has %v", script, kind, bindings)
+		t.Fatalf("worker %q has no %s binding to strip; it has %v", script, kind, bindings)
 	}
 	m.scriptSettings[script]["bindings"] = kept
 }
@@ -175,7 +175,7 @@ func TestPlanBootstrap(t *testing.T) {
 		}
 	})
 
-	t.Run("a binding the deployed worker no longer carries plans as an update", func(t *testing.T) {
+	t.Run("a binding the deployed worker no longer has plans as an update", func(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
@@ -267,7 +267,7 @@ func TestBootstrapConverges(t *testing.T) {
 		}
 	})
 
-	t.Run("a drifted bundle is re-uploaded inheriting the standing secret", func(t *testing.T) {
+	t.Run("a drifted bundle is re-uploaded inheriting the existing secret", func(t *testing.T) {
 		storePath, _ := seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
@@ -288,14 +288,14 @@ func TestBootstrapConverges(t *testing.T) {
 
 		meta := uploadedMetadata(t, m, sharedStoreScriptName)
 		if len(bindingsByType(meta, "secret_text")) != 0 {
-			t.Errorf("re-upload carries a fresh secret binding: %v", bindingsByType(meta, "secret_text"))
+			t.Errorf("re-upload includes a fresh secret binding: %v", bindingsByType(meta, "secret_text"))
 		}
 		inherited := bindingsByType(meta, inheritedBindingType)
 		if len(inherited) != 1 || inherited[0]["name"] != bootstrapSecretBinding {
 			t.Errorf("inherited bindings = %v, want %s alone", inherited, bootstrapSecretBinding)
 		}
 		if !slices.Contains(m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding) {
-			t.Errorf("secrets after re-upload = %v, want %s held", m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding)
+			t.Errorf("secrets after re-upload = %v, want %s kept", m.scriptSecrets[sharedStoreScriptName], bootstrapSecretBinding)
 		}
 		for _, offer := range out.Offers {
 			if offer.Kind == edge.OfferDeploymentsStore && credOf(t, offer) != "" {
@@ -316,7 +316,7 @@ func missingSecret(script string) []edge.PlanChange {
 }
 
 func TestBootstrapWithTheCredentialGone(t *testing.T) {
-	t.Run("a worker that lost its secret is planned and settled by setting the secret alone", func(t *testing.T) {
+	t.Run("a worker that lost its secret is planned and repaired by setting the secret alone", func(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
@@ -339,7 +339,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
 		if got := m.putScripts[uploads:]; len(got) != 0 {
-			t.Errorf("uploads = %v, want the standing script left where it is", got)
+			t.Errorf("uploads = %v, want the deployed script left where it is", got)
 		}
 		if len(m.putSecrets) != 1 || m.putSecrets[0].script != sharedStoreScriptName || m.putSecrets[0].name != bootstrapSecretBinding {
 			t.Errorf("secrets set = %+v, want %s alone on %s", m.putSecrets, bootstrapSecretBinding, sharedStoreScriptName)
@@ -352,17 +352,17 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 				}
 			case edge.OfferISRWriter:
 				if cred := credOf(t, offer); cred != "" {
-					t.Errorf("the isr writer was reoffered %q, want the credential it still holds left alone", cred)
+					t.Errorf("the isr writer was reoffered %q, want the credential it still has left alone", cred)
 				}
 			}
 		}
 
-		settled, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		replanned, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap after the secret was set: %v", err)
 		}
-		if want := productionPlan(edge.PlanKeep, reasonCurrent); !reflect.DeepEqual(settled, want) {
-			t.Errorf("plan after the secret was set = %+v, want everything kept", settled)
+		if want := productionPlan(edge.PlanKeep, reasonCurrent); !reflect.DeepEqual(replanned, want) {
+			t.Errorf("plan after the secret was set = %+v, want everything kept", replanned)
 		}
 	})
 }
@@ -375,7 +375,7 @@ func credOf(t *testing.T, offer edge.Offer) string {
 	case edge.OfferISRWriter:
 		return offer.Values[edge.OfferKeyISRWriterBootstrapCred]
 	default:
-		t.Fatalf("offer %q carries no bootstrap credential", offer.Kind)
+		t.Fatalf("offer %q includes no bootstrap credential", offer.Kind)
 		return ""
 	}
 }

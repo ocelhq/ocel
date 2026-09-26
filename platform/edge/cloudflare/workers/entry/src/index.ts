@@ -174,7 +174,7 @@ function routedDeps(
   const { edgeWorkers } = record;
   const manifest = record.routingManifest;
   if (!manifest) {
-    throw new Error(`deployment ${record.deploymentId} carries no routing manifest to route with`);
+    throw new Error(`deployment ${record.deploymentId} has no routing manifest to route with`);
   }
   const app = deployments.app ?? record.app;
   if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, deployments.slug, app)) {

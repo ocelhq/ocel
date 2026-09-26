@@ -28,7 +28,7 @@ function parseJson<T>(body: string): T | null {
 
 export class TagClock {
   private readonly key: string;
-  private held: TagSnapshot | null = null;
+  private cached: TagSnapshot | null = null;
   private pending = new Map<string, TagRecord>();
   private pendingAt = 0;
   private queued: Promise<PublishOutcome> | undefined;
@@ -88,7 +88,7 @@ export class TagClock {
   }
 
   private async prior(): Promise<TagSnapshot | null> {
-    return this.held ?? (this.held = await this.read());
+    return this.cached ?? (this.cached = await this.read());
   }
 
   private async read(): Promise<TagSnapshot | null> {
@@ -107,13 +107,13 @@ export class TagClock {
         httpMetadata: { contentType: "application/json" },
       });
       if (written !== null) {
-        this.held = snapshot;
+        this.cached = snapshot;
         return true;
       }
     } catch (err) {
       if (!isRateLimited(err)) throw err;
     }
-    this.held = null;
+    this.cached = null;
     return false;
   }
 }

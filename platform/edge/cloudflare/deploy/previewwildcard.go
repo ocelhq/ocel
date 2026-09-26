@@ -26,7 +26,7 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	}
 
 	if spec.Program == nil {
-		return "", errors.New("the Cloudflare edge runs the preview entry worker; this wildcard carries no program")
+		return "", errors.New("the Cloudflare edge runs the preview entry worker; this wildcard has no program")
 	}
 	up := upload{
 		accountID:  accountID,
@@ -55,11 +55,11 @@ func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	if err := p.stripPreviewWildcardRoute(ctx, accountID, snap, baseDomain); err != nil {
 		return err
 	}
-	held, err := p.previewEntryStillRouted(ctx, accountID, snap)
+	stillRouted, err := p.previewEntryStillRouted(ctx, accountID, snap)
 	if err != nil {
 		return err
 	}
-	if held {
+	if stillRouted {
 		return nil
 	}
 	var errs []error

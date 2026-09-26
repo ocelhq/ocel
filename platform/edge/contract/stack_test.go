@@ -97,7 +97,7 @@ type samplePrivateState struct {
 func TestStackState(t *testing.T) {
 	t.Parallel()
 
-	settled := func() StackState {
+	populated := func() StackState {
 		state := StackState{
 			Slug:          "shop",
 			Class:         ClassProduction,
@@ -126,7 +126,7 @@ func TestStackState(t *testing.T) {
 			"a private state": {Private: Own(samplePrivateState{Distribution: "E123"})},
 		} {
 			if state.Empty() {
-				t.Errorf("a state carrying %s reports itself empty", name)
+				t.Errorf("a state containing %s reports itself empty", name)
 			}
 		}
 	})
@@ -134,7 +134,7 @@ func TestStackState(t *testing.T) {
 	t.Run("everything a stack keeps survives the one encoding it is persisted through", func(t *testing.T) {
 		t.Parallel()
 
-		payload, err := json.Marshal(settled())
+		payload, err := json.Marshal(populated())
 		if err != nil {
 			t.Fatalf("Marshal: %v", err)
 		}
@@ -142,8 +142,8 @@ func TestStackState(t *testing.T) {
 		if err := json.Unmarshal(payload, &read); err != nil {
 			t.Fatalf("Unmarshal: %v", err)
 		}
-		if !read.Equal(settled()) {
-			t.Errorf("state read back = %+v, want %+v", read, settled())
+		if !read.Equal(populated()) {
+			t.Errorf("state read back = %+v, want %+v", read, populated())
 		}
 
 		var own samplePrivateState
@@ -170,7 +170,7 @@ func TestStackState(t *testing.T) {
 	t.Run("a change anywhere is reported, and no change is not", func(t *testing.T) {
 		t.Parallel()
 
-		if !settled().Equal(settled()) {
+		if !populated().Equal(populated()) {
 			t.Error("two states built the same way are reported different; the origin would rewrite the store on every call")
 		}
 		for name, change := range map[string]func(*StackState){
@@ -186,15 +186,15 @@ func TestStackState(t *testing.T) {
 				s.Private = Own(samplePrivateState{Distribution: "E456", Region: "eu-west-1"})
 			},
 		} {
-			changed := settled()
+			changed := populated()
 			change(&changed)
-			if changed.Equal(settled()) {
+			if changed.Equal(populated()) {
 				t.Errorf("%s changed and the state reports itself unchanged; the origin persists only what a call reports", name)
 			}
 		}
 	})
 
-	t.Run("an unread state and one read back from nothing carry nothing", func(t *testing.T) {
+	t.Run("an unread state and one read back from nothing contain nothing", func(t *testing.T) {
 		t.Parallel()
 
 		var own samplePrivateState

@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 
 import { dropEmptyBodySentinel, EMPTY_BODY_HEADER } from "../src/empty-body.mjs";
 
-it("restores the empty body a sentinel response stands for", async () => {
+it("restores the empty body a sentinel response represents", async () => {
   for (const status of [200, 302, 307, 404, 405, 500]) {
     const dropped = dropEmptyBodySentinel(
       new Response("\n", {

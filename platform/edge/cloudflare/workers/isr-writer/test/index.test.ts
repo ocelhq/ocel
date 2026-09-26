@@ -148,7 +148,7 @@ describe("entry writes", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects a write against a deploy the caller is not the one holding", async () => {
+  it("rejects a write against a deploy whose write secret the caller does not have", async () => {
     const mine = freshPrefix();
     const theirs = freshPrefix();
     await initialize(mine, "my-secret");
@@ -447,7 +447,7 @@ describe("tag raises", () => {
     return env.ISR_SNAPSHOT_DO.get(env.ISR_SNAPSHOT_DO.idFromName(prefix));
   }
 
-  it("leaves the R2 document holding the raised records before it answers", async () => {
+  it("leaves the R2 document containing the raised records before it answers", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
     await seedGenesis(prefix, 1_000);

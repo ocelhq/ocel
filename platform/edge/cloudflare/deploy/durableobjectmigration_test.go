@@ -103,7 +103,7 @@ func TestDeployedClasses(t *testing.T) {
 func TestDurableObjectMigrationAgainstLiveClasses(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 
-	t.Run("a class the script already carries is not redeclared", func(t *testing.T) {
+	t.Run("a class the script already declares is not redeclared", func(t *testing.T) {
 		classes, err := readDeployedClasses(t, settingsProvider(t, http.StatusOK, liveDeploymentsStoreSettings), "ocel-deployments-store-preview")
 		if err != nil {
 			t.Fatalf("read settings: %v", err)

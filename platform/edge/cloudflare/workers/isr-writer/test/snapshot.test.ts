@@ -37,7 +37,7 @@ function throttling(failures: number, bucket = env.OCEL_CACHE_STORE): R2Bucket {
 }
 
 describe("raise", () => {
-  it("leaves R2 holding the merged document before it answers", async () => {
+  it("leaves R2 containing the merged document before it answers", async () => {
     const prefix = freshPrefix();
     await seedGenesis(prefix, 1_000);
 
@@ -52,7 +52,7 @@ describe("raise", () => {
     });
   });
 
-  it("carries the deploy anchor forward across every publish", async () => {
+  it("keeps the deploy anchor across every publish", async () => {
     const prefix = freshPrefix();
     await seedGenesis(prefix, 1_000);
     const clock = clockFor(prefix);
@@ -122,7 +122,7 @@ describe("raise", () => {
     });
   });
 
-  it("writes nothing for a watermark the document already stands behind", async () => {
+  it("writes nothing for a watermark the document already covers", async () => {
     const prefix = freshPrefix();
     await seedGenesis(prefix, 1_000);
     const clock = clockFor(prefix);

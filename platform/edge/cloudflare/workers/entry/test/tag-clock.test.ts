@@ -430,7 +430,7 @@ describe("two builds sharing one binding", () => {
   });
 });
 
-describe("a store read that never settles", () => {
+describe("a store read that never finishes", () => {
   function neverSettlingStore() {
     let calls = 0;
     return {

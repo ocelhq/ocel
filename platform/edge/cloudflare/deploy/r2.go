@@ -111,10 +111,10 @@ func s3Objects(endpoint string, creds r2.TemporaryCredentialNewResponse) objectA
 }
 
 type cacheStoreState struct {
-	name       string
-	bucketHeld bool
-	token      shared.Token
-	tokenHeld  bool
+	name          string
+	bucketPresent bool
+	token         shared.Token
+	tokenPresent  bool
 }
 
 func (s cacheStore) read(ctx context.Context, accountID string, class edge.Class) (cacheStoreState, error) {
@@ -122,15 +122,15 @@ func (s cacheStore) read(ctx context.Context, accountID string, class edge.Class
 	if err != nil {
 		return cacheStoreState{}, err
 	}
-	bucketHeld, err := s.bucketPresent(ctx, accountID, name)
+	bucketPresent, err := s.bucketPresent(ctx, accountID, name)
 	if err != nil {
 		return cacheStoreState{}, err
 	}
-	token, tokenHeld, err := s.findToken(ctx, name)
+	token, tokenPresent, err := s.findToken(ctx, name)
 	if err != nil {
 		return cacheStoreState{}, err
 	}
-	return cacheStoreState{name: name, bucketHeld: bucketHeld, token: token, tokenHeld: tokenHeld}, nil
+	return cacheStoreState{name: name, bucketPresent: bucketPresent, token: token, tokenPresent: tokenPresent}, nil
 }
 
 func (s cacheStore) bucketPresent(ctx context.Context, accountID, name string) (bool, error) {
@@ -147,14 +147,14 @@ func (s cacheStore) bucketPresent(ctx context.Context, accountID, name string) (
 
 func (s cacheStore) bootstrap(ctx context.Context, accountID string, state cacheStoreState) (edge.BootstrapOutput, error) {
 	name := state.name
-	if !state.bucketHeld {
+	if !state.bucketPresent {
 		if err := s.createBucket(ctx, accountID, name); err != nil {
 			return edge.BootstrapOutput{}, err
 		}
 	}
 
 	token := mintedToken{ID: state.token.ID}
-	if !state.tokenHeld {
+	if !state.tokenPresent {
 		minted, err := s.mintToken(ctx, accountID, name)
 		if err != nil {
 			return edge.BootstrapOutput{}, err
@@ -184,11 +184,11 @@ func (s cacheStore) teardown(ctx context.Context, accountID string, class edge.C
 	if err != nil {
 		return err
 	}
-	token, held, err := s.findToken(ctx, name)
+	token, found, err := s.findToken(ctx, name)
 	if err != nil {
 		return err
 	}
-	if held {
+	if found {
 		if err := s.emptyBucket(ctx, accountID, name, token.ID); err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func (s cacheStore) teardown(ctx context.Context, accountID string, class edge.C
 	if err := s.deleteBucket(ctx, accountID, name); err != nil {
 		return err
 	}
-	if !held {
+	if !found {
 		return nil
 	}
 	if _, err := s.tokens.Delete(ctx, token.ID); err != nil && !hasStatus(err, http.StatusNotFound) {
@@ -211,7 +211,7 @@ func (s cacheStore) deleteBucket(ctx context.Context, accountID, name string) er
 	case err == nil, hasStatus(err, http.StatusNotFound):
 		return nil
 	case hasStatus(err, http.StatusConflict):
-		return fmt.Errorf("delete R2 bucket %q: it still holds objects and no %q API token is left to empty it with; empty it from the Cloudflare dashboard, then re-run: %w", name, name, err)
+		return fmt.Errorf("delete R2 bucket %q: it still contains objects and no %q API token is left to empty it with; empty it from the Cloudflare dashboard, then re-run: %w", name, name, err)
 	default:
 		return fmt.Errorf("delete R2 bucket %q: %w", name, err)
 	}
@@ -418,7 +418,7 @@ func mintPermissionError(op string, err error) error {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	return fmt.Errorf("%s: %w\n\n"+
-		"%s must carry the \"API Tokens Write\" permission (User scope) to provision the edge cache store. "+
+		"%s must have the \"API Tokens Write\" permission (User scope) to provision the edge cache store. "+
 		"Cloudflare does not offer that permission in the Custom Token builder, so reissue the token from its "+
 		"\"Create Additional Tokens\" template — adding it to the existing token is not possible",
 		op, err, envAPIToken)

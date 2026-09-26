@@ -254,7 +254,7 @@ describe("a prerender whose parent is a node bundle", () => {
     },
   });
 
-  it("carries the entry on the bypass path, which forwards the raw headers", async () => {
+  it("sends the entry on the bypass path, which forwards the raw headers", async () => {
     const origin = recorder();
     const res = await dispatchTo(
       "/blog",
@@ -269,7 +269,7 @@ describe("a prerender whose parent is a node bundle", () => {
     expect(origin.entries()).toEqual(["app/blog/page"]);
   });
 
-  it("carries the entry on the cached-miss path, past allowHeader's filter", async () => {
+  it("sends the entry on the cached-miss path, past allowHeader's filter", async () => {
     const origin = recorder();
     const res = await dispatchTo("/blog", blogDeps(origin, null));
 
@@ -277,7 +277,7 @@ describe("a prerender whose parent is a node bundle", () => {
     expect(origin.entries()).toEqual(["app/blog/page"]);
   });
 
-  it("revalidates a stale entry, carrying the entry on the blocking forward", async () => {
+  it("revalidates a stale entry, sending the entry on the blocking forward", async () => {
     const pending: Promise<unknown>[] = [];
     const origin = recorder();
     const res = await dispatchTo(
@@ -348,7 +348,7 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     });
   }
 
-  it("carries the entry on the resume forward that renders the dynamic half", async () => {
+  it("sends the entry on the resume forward that renders the dynamic half", async () => {
     const origin = recorder();
     const res = await dispatchTo("/ppr", pprDeps(origin, 1_000));
 
@@ -357,7 +357,7 @@ describe("a PPR prerender whose parent is a node bundle", () => {
     expect(origin.entries()).toEqual(["app/ppr/page"]);
   });
 
-  it("carries the entry on the stale shell's blocking revalidate", async () => {
+  it("sends the entry on the stale shell's blocking revalidate", async () => {
     const pending: Promise<unknown>[] = [];
     const origin = recorder();
     const res = await dispatchTo(

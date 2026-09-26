@@ -19,17 +19,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
-type heldRecords struct {
+type fixedRecords struct {
 	bindings []live.Binding
 	values   map[string]string
 }
 
-func (h heldRecords) Value(key string) string  { return h.values[key] }
-func (h heldRecords) Bindings() []live.Binding { return h.bindings }
-func (h heldRecords) Generation() uint32       { return 1 }
+func (h fixedRecords) Value(key string) string  { return h.values[key] }
+func (h fixedRecords) Bindings() []live.Binding { return h.bindings }
+func (h fixedRecords) Generation() uint32       { return 1 }
 
 func TestBackendsAreBuiltForTheBucketsARecordPointsAtAStore(t *testing.T) {
-	held := heldRecords{
+	records := fixedRecords{
 		bindings: []live.Binding{
 			{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
 			{Name: "avatars", Key: "OCEL_RESOURCE_BUCKET_avatars", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
@@ -42,17 +42,17 @@ func TestBackendsAreBuiltForTheBucketsARecordPointsAtAStore(t *testing.T) {
 		},
 	}
 
-	built, err := backends(held, &recordingPoster{})
+	built, err := backends(records, &recordingPoster{})
 	if err != nil {
 		t.Fatalf("backends: %v", err)
 	}
-	if len(built) != 1 || !built[0].holds("OCEL_RESOURCE_BUCKET_uploads") {
+	if len(built) != 1 || !built[0].hasBucket("OCEL_RESOURCE_BUCKET_uploads") {
 		t.Fatalf("backends = %d, want one serving the uploads binding", len(built))
 	}
 }
 
 func TestAnUploadSessionStaysWithItsBindingWhenAnotherBindingsRecordChanges(t *testing.T) {
-	held := heldRecords{
+	records := fixedRecords{
 		bindings: []live.Binding{
 			{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
 			{Name: "avatars", Key: "OCEL_RESOURCE_BUCKET_avatars", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
@@ -62,26 +62,26 @@ func TestAnUploadSessionStaysWithItsBindingWhenAnotherBindingsRecordChanges(t *t
 			"OCEL_RESOURCE_BUCKET_avatars": `{"name":"ocel:bucket.avatars","bucket":{"bucket":"acme","prefix":"avatars","endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
 		},
 	}
-	before, err := backends(held, &recordingPoster{})
+	before, err := backends(records, &recordingPoster{})
 	if err != nil {
 		t.Fatalf("backends: %v", err)
 	}
 	var session string
 	for _, backend := range before {
-		if backend.holds("OCEL_RESOURCE_BUCKET_avatars") {
+		if backend.hasBucket("OCEL_RESOURCE_BUCKET_avatars") {
 			session = backend.newID()
 		}
 	}
 
-	held.values["OCEL_RESOURCE_BUCKET_uploads"] = `{"name":"bucket--uploads","bucket":{"bucket":"shop-prod-uploads"}}`
-	after, err := backends(held, &recordingPoster{})
+	records.values["OCEL_RESOURCE_BUCKET_uploads"] = `{"name":"bucket--uploads","bucket":{"bucket":"shop-prod-uploads"}}`
+	after, err := backends(records, &recordingPoster{})
 	if err != nil {
 		t.Fatalf("backends: %v", err)
 	}
 
 	for _, backend := range after {
 		if backend.opened(session) {
-			if !backend.holds("OCEL_RESOURCE_BUCKET_avatars") {
+			if !backend.hasBucket("OCEL_RESOURCE_BUCKET_avatars") {
 				t.Fatal("the session avatars opened is claimed by another binding's backend after the uploads record changed")
 			}
 			return
@@ -91,7 +91,7 @@ func TestAnUploadSessionStaysWithItsBindingWhenAnotherBindingsRecordChanges(t *t
 }
 
 type arriving struct {
-	heldRecords
+	fixedRecords
 	arrived bool
 	reads   int
 }
@@ -112,7 +112,7 @@ func (a *arriving) Generation() uint32 {
 }
 
 func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
-	records := &arriving{heldRecords: heldRecords{
+	records := &arriving{fixedRecords: fixedRecords{
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values: map[string]string{
 			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"http://127.0.0.1:1","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
@@ -136,7 +136,7 @@ func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
 }
 
 func TestARouterRereadsNoRecordUntilTheirGenerationMoves(t *testing.T) {
-	records := &arriving{arrived: true, heldRecords: heldRecords{
+	records := &arriving{arrived: true, fixedRecords: fixedRecords{
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values: map[string]string{
 			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"http://127.0.0.1:1","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
@@ -161,11 +161,11 @@ func TestARouterRereadsNoRecordUntilTheirGenerationMoves(t *testing.T) {
 }
 
 func TestAnUnreadableBucketRecordIsRefusedWithoutItsValue(t *testing.T) {
-	held := heldRecords{
+	records := fixedRecords{
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values:   map[string]string{"OCEL_RESOURCE_BUCKET_uploads": `{"bucket": secret-key-here`},
 	}
-	_, err := backends(held, &recordingPoster{})
+	_, err := backends(records, &recordingPoster{})
 	if err == nil {
 		t.Fatal("backends = nil error, want an unreadable record refused")
 	}

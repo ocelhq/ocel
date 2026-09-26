@@ -9,12 +9,12 @@ import (
 )
 
 func TestARuntimeWithNoBucketStoreOfItsOwnServesOnlyTheBoundOnes(t *testing.T) {
-	none, err := ServeBound(heldRecords{bindings: []live.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}}, "127.0.0.1:1")
+	none, err := ServeBound(fixedRecords{bindings: []live.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}}, "127.0.0.1:1")
 	if err != nil || none.Env != nil {
 		t.Fatalf("ServeBound = %+v, %v, want nothing served for a deployment binding no bucket", none, err)
 	}
 
-	served, err := ServeBound(heldRecords{
+	served, err := ServeBound(fixedRecords{
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values: map[string]string{
 			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","accessKeyId":"AKID","secretAccessKey":"r2-secret"}}`,

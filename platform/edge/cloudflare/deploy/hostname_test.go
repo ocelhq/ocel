@@ -169,7 +169,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		if m.scriptSettings == nil {
 			m.scriptSettings = map[string]map[string]any{}
 		}
-		m.scriptSettings[name] = settledSettings(m.putBodies[name])
+		m.scriptSettings[name] = putSettings(m.putBodies[name])
 		writeResult(w, map[string]any{"id": name})
 	})
 
@@ -405,7 +405,7 @@ func putMetadata(put putBody) map[string]any {
 	}
 }
 
-func uploadedSecretNames(put putBody, held []string) []string {
+func uploadedSecretNames(put putBody, existing []string) []string {
 	meta := putMetadata(put)
 	if meta == nil {
 		return nil
@@ -415,14 +415,14 @@ func uploadedSecretNames(put putBody, held []string) []string {
 		names = append(names, fmt.Sprint(binding["name"]))
 	}
 	for _, binding := range bindingsByType(meta, inheritedBindingType) {
-		if name := fmt.Sprint(binding["name"]); slices.Contains(held, name) {
+		if name := fmt.Sprint(binding["name"]); slices.Contains(existing, name) {
 			names = append(names, name)
 		}
 	}
 	return names
 }
 
-func settledSettings(put putBody) map[string]any {
+func putSettings(put putBody) map[string]any {
 	meta := putMetadata(put)
 	if meta == nil {
 		return map[string]any{}
@@ -662,7 +662,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			warnings:      []string{"Advanced Certificate"},
 		},
 		{
-			name: "a route another project's worker holds is refused, not repointed",
+			name: "a route another project's worker owns is refused, not repointed",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
@@ -675,7 +675,7 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			wantErr: []string{"ocel-other-prod", "shop.app.com/*"},
 		},
 		{
-			name: "a route another worker of the same project holds is repointed",
+			name: "a route another worker of the same project owns is repointed",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
@@ -923,7 +923,7 @@ func TestRouteOwner(t *testing.T) {
 			want:     edge.PreviewEntryOwner,
 		},
 		{
-			name:     "a pattern nothing holds is unclaimed",
+			name:     "a pattern no worker owns is unclaimed",
 			mock:     &cfMock{zoneID: "zone1", zoneName: "app.com"},
 			hostname: "*.preview.app.com",
 		},

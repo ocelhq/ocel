@@ -44,9 +44,9 @@ export default class extends WorkerEntrypoint<Env> {
         return new Response("Bad Request", { status: 400 });
       }
       const outcome = await store.initialize(body.ownerToken, body.secret, body.force ?? false);
-      if (outcome === "held") {
+      if (outcome === "refused") {
         return new Response(
-          `project ${slug} already holds an identity; initialize with force to replace it`,
+          `project ${slug} already has an identity; initialize with force to replace it`,
           { status: 409 },
         );
       }

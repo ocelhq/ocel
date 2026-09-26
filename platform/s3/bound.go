@@ -23,9 +23,9 @@ func storeOf(record *bindingsv1.BucketProperties) Store {
 
 func bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Poster, objects ObjectAPI) *Service {
 	signer := storeOf(record).Presigner()
-	held := scope{bucket: record.GetBucket()}
+	granted := scope{bucket: record.GetBucket()}
 	if prefix := strings.Trim(record.GetPrefix(), "/"); prefix != "" {
-		held.prefix = prefix + "/"
+		granted.prefix = prefix + "/"
 	}
 	svc := New(Config{
 		Tag:          tag,
@@ -35,8 +35,8 @@ func bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Post
 		Callbacks:    callbacks,
 		SweepUploads: true,
 	})
-	svc.sessions = held
-	svc.granted = map[string]scope{name: held}
+	svc.sessions = granted
+	svc.granted = map[string]scope{name: granted}
 	return svc
 }
 

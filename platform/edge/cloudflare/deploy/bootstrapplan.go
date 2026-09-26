@@ -83,7 +83,7 @@ func (s bootstrapState) removals() []edge.PlanChange {
 	for _, worker := range s.workers {
 		changes = append(changes, worker.removals()...)
 	}
-	if s.store.bucketHeld {
+	if s.store.bucketPresent {
 		changes = append(changes, edge.PlanChange{
 			Kind:   kindR2Bucket,
 			Name:   s.store.name,
@@ -92,7 +92,7 @@ func (s bootstrapState) removals() []edge.PlanChange {
 			Slow:   true,
 		})
 	}
-	if s.store.tokenHeld {
+	if s.store.tokenPresent {
 		changes = append(changes, edge.PlanChange{Kind: kindAPIToken, Name: s.store.name, Action: edge.PlanDelete})
 	}
 	return changes
@@ -104,7 +104,7 @@ func (w workerState) removals() []edge.PlanChange {
 	}
 	name := w.scriptName
 	changes := []edge.PlanChange{{Kind: kindWorker, Name: name, Action: edge.PlanDelete}}
-	if w.secretHeld {
+	if w.secretPresent {
 		changes = append(changes, edge.PlanChange{
 			Kind:   kindWorkerSecret,
 			Name:   name + "/" + bootstrapSecretBinding,
@@ -155,8 +155,8 @@ func (p *cloudflare) readState(ctx context.Context, accountID string, class edge
 
 func (s bootstrapState) changes() []edge.PlanChange {
 	changes := []edge.PlanChange{
-		{Kind: kindR2Bucket, Name: s.store.name, Action: presence(s.store.bucketHeld), Reason: keptReason(s.store.bucketHeld)},
-		{Kind: kindAPIToken, Name: s.store.name, Action: presence(s.store.tokenHeld), Reason: keptReason(s.store.tokenHeld)},
+		{Kind: kindR2Bucket, Name: s.store.name, Action: presence(s.store.bucketPresent), Reason: keptReason(s.store.bucketPresent)},
+		{Kind: kindAPIToken, Name: s.store.name, Action: presence(s.store.tokenPresent), Reason: keptReason(s.store.tokenPresent)},
 	}
 	for _, worker := range s.workers {
 		changes = append(changes, worker.changes()...)
@@ -164,15 +164,15 @@ func (s bootstrapState) changes() []edge.PlanChange {
 	return changes
 }
 
-func presence(held bool) edge.PlanAction {
-	if held {
+func presence(present bool) edge.PlanAction {
+	if present {
 		return edge.PlanKeep
 	}
 	return edge.PlanCreate
 }
 
-func keptReason(held bool) string {
-	if held {
+func keptReason(present bool) string {
+	if present {
 		return reasonCurrent
 	}
 	return ""
@@ -183,7 +183,7 @@ type workerState struct {
 	present         bool
 	scriptCurrent   bool
 	metadataCurrent bool
-	secretHeld      bool
+	secretPresent   bool
 	subdomainOn     bool
 	classes         []string
 }
@@ -192,12 +192,12 @@ func (w workerState) changes() []edge.PlanChange {
 	name := w.scriptName
 	return []edge.PlanChange{
 		{Kind: kindWorker, Name: name, Action: w.scriptAction(), Reason: w.scriptReason()},
-		{Kind: kindWorkerSecret, Name: name + "/" + bootstrapSecretBinding, Action: presence(w.secretHeld), Reason: keptReason(w.secretHeld)},
+		{Kind: kindWorkerSecret, Name: name + "/" + bootstrapSecretBinding, Action: presence(w.secretPresent), Reason: keptReason(w.secretPresent)},
 		{Kind: kindWorkerSubdomain, Name: name, Action: presence(w.subdomainOn), Reason: keptReason(w.subdomainOn)},
 	}
 }
 
-func (w workerState) settled() bool {
+func (w workerState) upToDate() bool {
 	return w.present && w.scriptCurrent && w.metadataCurrent
 }
 
@@ -205,7 +205,7 @@ func (w workerState) scriptAction() edge.PlanAction {
 	switch {
 	case !w.present:
 		return edge.PlanCreate
-	case !w.settled():
+	case !w.upToDate():
 		return edge.PlanUpdate
 	default:
 		return edge.PlanKeep
@@ -246,7 +246,7 @@ func (p *cloudflare) readWorkerState(ctx context.Context, accountID string, b bo
 		return workerState{}, fmt.Errorf("list the secrets of worker %q: %w", b.scriptName, err)
 	}
 	if secrets != nil {
-		state.secretHeld = slices.ContainsFunc(secrets.Result, func(secret workers.ScriptSecretListResponse) bool {
+		state.secretPresent = slices.ContainsFunc(secrets.Result, func(secret workers.ScriptSecretListResponse) bool {
 			return secret.Name == bootstrapSecretBinding
 		})
 	}
@@ -290,9 +290,9 @@ func settingsCurrent(settings *workers.ScriptScriptAndVersionSettingGetResponse,
 	if !slices.Equal(deployed, wanted) {
 		return false
 	}
-	held := deployedBindings(settings)
+	current := deployedBindings(settings)
 	for _, want := range b.bindings() {
-		if !slices.Contains(held, want) {
+		if !slices.Contains(current, want) {
 			return false
 		}
 	}
@@ -335,7 +335,7 @@ func comparableBinding(kind string, declared map[string]any) (binding, bool) {
 }
 
 func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse) []binding {
-	var held []binding
+	var current []binding
 	for _, deployed := range settings.Bindings {
 		ref := binding{kind: string(deployed.Type), name: deployed.Name}
 		switch ref.kind {
@@ -351,9 +351,9 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 		default:
 			continue
 		}
-		held = append(held, ref)
+		current = append(current, ref)
 	}
-	return held
+	return current
 }
 
 func deployedClasses(settings *workers.ScriptScriptAndVersionSettingGetResponse) []string {
@@ -396,7 +396,7 @@ func moduleContent(res *http.Response, moduleName string) ([]byte, error) {
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
-			return nil, fmt.Errorf("no part is named %q; the deployed script carries modules this build does not", moduleName)
+			return nil, fmt.Errorf("no part is named %q; the deployed script contains modules this build does not", moduleName)
 		}
 		if err != nil {
 			return nil, err

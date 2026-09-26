@@ -630,7 +630,7 @@ describe("the ttl the browser is told", () => {
 });
 
 describe("a rejected request", () => {
-  it("carries none of the served-image headers", async () => {
+  it("has none of the served-image headers", async () => {
     const clock = { ms: 0 };
     const response = await get(
       deps({ slug: "rejected", cache: testDeps(clock) }),

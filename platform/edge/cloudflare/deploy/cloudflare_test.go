@@ -115,7 +115,7 @@ func TestScriptBindings(t *testing.T) {
 		want   []map[string]string
 	}{
 		{
-			name:   "a secret becomes a secret_text binding carrying its value",
+			name:   "a secret becomes a secret_text binding containing its value",
 			worker: edge.Worker{Main: mainModule(), Secrets: map[string]string{"OCEL_EDGE_SECRET_KEY": "shh"}},
 			typ:    "secret_text",
 			want:   []map[string]string{{"name": "OCEL_EDGE_SECRET_KEY", "text": "shh"}},
@@ -190,7 +190,7 @@ func TestScriptBindings(t *testing.T) {
 		})
 	}
 
-	t.Run("a worker holding only vars emits no other binding", func(t *testing.T) {
+	t.Run("a worker with only vars emits no other binding", func(t *testing.T) {
 		meta := metadataFromMultipart(t, edge.Worker{
 			Main: mainModule(),
 			Vars: map[string]string{"FUNCTION_URLS": "{}"},
@@ -289,7 +289,7 @@ func TestBindObjectStore(t *testing.T) {
 		}
 	})
 
-	t.Run("a bundle carrying no store still gets the binding", func(t *testing.T) {
+	t.Run("a bundle with no store still gets the binding", func(t *testing.T) {
 		composed := bindObjectStore(
 			withService(edge.Worker{Main: mainModule()}, "DEPLOYMENTS", "ocel-proj-store"),
 			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
@@ -307,7 +307,7 @@ func TestBindObjectStore(t *testing.T) {
 		}
 	})
 
-	t.Run("binding a store after a service leaves both bindings standing", func(t *testing.T) {
+	t.Run("binding a store after a service leaves both bindings in place", func(t *testing.T) {
 		worker := edge.Worker{
 			Main:        mainModule(),
 			ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"},
@@ -331,7 +331,7 @@ func TestBindObjectStore(t *testing.T) {
 }
 
 func TestBindCodeLoader(t *testing.T) {
-	t.Run("a bundle carrying no loader still gets the binding beside its store", func(t *testing.T) {
+	t.Run("a bundle with no loader still gets the binding beside its store", func(t *testing.T) {
 		composed := bindCodeLoader(bindObjectStore(
 			edge.Worker{Main: mainModule()},
 			map[string]string{valueKeyCacheBucket: "ocel-edge-cache"},
@@ -539,7 +539,7 @@ func TestTeardown(t *testing.T) {
 func TestCompatibility(t *testing.T) {
 	t.Parallel()
 
-	t.Run("reports the compat settings the uploaded script carries", func(t *testing.T) {
+	t.Run("reports the compat settings the uploaded script has", func(t *testing.T) {
 		t.Parallel()
 
 		compatibility := New("ocel").Facts().Compatibility

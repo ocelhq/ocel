@@ -60,14 +60,14 @@ func (f *fakeStore) put(bucket, key string, body []byte, contentType string) str
 func (f *fakeStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	held, ok := f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)]
+	object, ok := f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)]
 	if !ok {
 		return nil, &s3types.NotFound{}
 	}
 	return &s3.HeadObjectOutput{
-		ContentLength: aws.Int64(int64(len(held.body))),
-		ContentType:   aws.String(held.contentType),
-		ETag:          aws.String(held.etag),
+		ContentLength: aws.Int64(int64(len(object.body))),
+		ContentType:   aws.String(object.contentType),
+		ETag:          aws.String(object.etag),
 		LastModified:  aws.Time(time.Unix(1_700_000_000, 0).UTC()),
 	}, nil
 }
@@ -75,13 +75,13 @@ func (f *fakeStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...f
 func (f *fakeStore) GetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	held, ok := f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)]
+	object, ok := f.objects[aws.ToString(in.Bucket)][aws.ToString(in.Key)]
 	if !ok {
 		return nil, &s3types.NoSuchKey{}
 	}
 	return &s3.GetObjectOutput{
-		Body: io.NopCloser(bytes.NewReader(held.body)),
-		ETag: aws.String(held.etag),
+		Body: io.NopCloser(bytes.NewReader(object.body)),
+		ETag: aws.String(object.etag),
 	}, nil
 }
 
@@ -89,11 +89,11 @@ func (f *fakeStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...fun
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bucket, key := aws.ToString(in.Bucket), aws.ToString(in.Key)
-	held, exists := f.objects[bucket][key]
+	object, exists := f.objects[bucket][key]
 	if aws.ToString(in.IfNoneMatch) == "*" && exists {
 		return nil, &apiError{code: "PreconditionFailed"}
 	}
-	if match := aws.ToString(in.IfMatch); match != "" && (!exists || held.etag != match) {
+	if match := aws.ToString(in.IfMatch); match != "" && (!exists || object.etag != match) {
 		return nil, &apiError{code: "PreconditionFailed"}
 	}
 	body, err := io.ReadAll(in.Body)
@@ -125,11 +125,11 @@ func (f *fakeStore) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Input, 
 		out.NextContinuationToken = aws.String(keys[len(keys)-1])
 	}
 	for _, key := range keys {
-		held := f.objects[aws.ToString(in.Bucket)][key]
+		object := f.objects[aws.ToString(in.Bucket)][key]
 		out.Contents = append(out.Contents, s3types.Object{
 			Key:  aws.String(key),
-			Size: aws.Int64(int64(len(held.body))),
-			ETag: aws.String(held.etag),
+			Size: aws.Int64(int64(len(object.body))),
+			ETag: aws.String(object.etag),
 		})
 	}
 	return out, nil
@@ -152,11 +152,11 @@ func (f *fakeStore) CopyObject(_ context.Context, in *s3.CopyObjectInput, _ ...f
 		return nil, err
 	}
 	_, key, _ := strings.Cut(strings.TrimPrefix(source, "/"), "/")
-	held, ok := f.objects[aws.ToString(in.Bucket)][key]
+	object, ok := f.objects[aws.ToString(in.Bucket)][key]
 	if !ok {
 		return nil, &s3types.NoSuchKey{}
 	}
-	f.put(aws.ToString(in.Bucket), aws.ToString(in.Key), held.body, held.contentType)
+	f.put(aws.ToString(in.Bucket), aws.ToString(in.Key), object.body, object.contentType)
 	return &s3.CopyObjectOutput{}, nil
 }
 
@@ -187,11 +187,11 @@ type recordingPoster struct {
 func (p *recordingPoster) Post(_ context.Context, _ string, body []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var held callbackBody
-	if err := json.Unmarshal(body, &held); err != nil {
+	var posted callbackBody
+	if err := json.Unmarshal(body, &posted); err != nil {
 		return err
 	}
-	p.posts = append(p.posts, held)
+	p.posts = append(p.posts, posted)
 	return nil
 }
 
@@ -295,7 +295,7 @@ func TestTwoReplicasCannotOpenTheSameSession(t *testing.T) {
 	}
 }
 
-func TestCompleteUploadConfirmsWhatTheStoreActuallyHolds(t *testing.T) {
+func TestCompleteUploadConfirmsWhatTheStoreActuallyContains(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an object that is not there yet leaves the session pending", func(t *testing.T) {
@@ -315,7 +315,7 @@ func TestCompleteUploadConfirmsWhatTheStoreActuallyHolds(t *testing.T) {
 		}
 	})
 
-	t.Run("an object matching what was signed settles the session and tells the app once", func(t *testing.T) {
+	t.Run("an object matching what was signed finishes the session and tells the app once", func(t *testing.T) {
 		t.Parallel()
 		h := newHarness(t, nil)
 		h.presign(t, "a.png", 3, "image/png")
@@ -353,7 +353,7 @@ func TestCompleteUploadConfirmsWhatTheStoreActuallyHolds(t *testing.T) {
 		if resp.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED || resp.GetError() == "" {
 			t.Fatalf("resp = %+v, want the session refused with a reason", resp)
 		}
-		if _, held := h.store.objects["store"]["a.png"]; held {
+		if _, present := h.store.objects["store"]["a.png"]; present {
 			t.Fatal("the object nobody signed for is still in the store")
 		}
 		if len(h.poster.posts) != 0 {
@@ -375,13 +375,13 @@ func TestCompleteUploadConfirmsWhatTheStoreActuallyHolds(t *testing.T) {
 		if resp.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED {
 			t.Fatalf("state = %v, want EXPIRED", resp.GetState())
 		}
-		if _, held := h.store.objects["store"]["a.png"]; held {
+		if _, present := h.store.objects["store"]["a.png"]; present {
 			t.Fatal("an expired session left its object behind, and nothing will ever claim it")
 		}
 	})
 }
 
-func TestTheCallbackCarriesASignatureTheServiceItselfVerifies(t *testing.T) {
+func TestTheCallbackIncludesASignatureTheServiceItselfVerifies(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, nil)
 	h.presign(t, "a.png", 3, "image/png")
@@ -491,7 +491,7 @@ func TestAnExternalStoreNeverShowsItsPrefix(t *testing.T) {
 		t.Fatalf("Head: %v", err)
 	}
 	if head.GetObject().GetKey() != "a.png" {
-		t.Fatalf("Head = %q, want the key the app used, not the one the store holds", head.GetObject().GetKey())
+		t.Fatalf("Head = %q, want the key the app used, not the one the store files it under", head.GetObject().GetKey())
 	}
 
 	listed, err := h.svc.List(ctx, &bucketv1.ListRequest{Bucket: spec})
@@ -505,7 +505,7 @@ func TestAnExternalStoreNeverShowsItsPrefix(t *testing.T) {
 	if _, err := h.svc.Delete(ctx, &bucketv1.DeleteRequest{Bucket: spec, Keys: []string{"a.png"}}); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, held := h.store.objects["shared"]["shop/prod/uploads/a.png"]; held {
+	if _, present := h.store.objects["shared"]["shop/prod/uploads/a.png"]; present {
 		t.Fatal("the delete did not reach the object under this resource's prefix")
 	}
 }
@@ -552,7 +552,7 @@ func TestAStoreWithNoRoomSignsNoWrite(t *testing.T) {
 	}
 	_, err = full.svc.SignParts(context.Background(), parts)
 	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeResourceExhausted {
-		t.Fatalf("SignParts against a full volume = %v, want it refused: a part carries the same bytes a put would", err)
+		t.Fatalf("SignParts against a full volume = %v, want it refused: a part writes the same bytes a put would", err)
 	}
 	if _, err := roomy.svc.SignParts(context.Background(), parts); err != nil {
 		t.Fatalf("SignParts against a volume with room = %v, want it signed", err)
@@ -571,12 +571,12 @@ func TestAStoreThatSignsNoPolicyStillBoundsAnUploadByHead(t *testing.T) {
 	}
 	h.store.put("store", "a.png", []byte("much longer than three bytes"), "image/png")
 
-	settled, err := h.svc.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_fixed"})
+	completed, err := h.svc.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_fixed"})
 	if err != nil {
 		t.Fatalf("CompleteUpload: %v", err)
 	}
-	if settled.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED {
-		t.Fatalf("state = %v, want the oversized upload refused", settled.GetState())
+	if completed.GetState() != bucketv1.UploadState_UPLOAD_STATE_EXPIRED {
+		t.Fatalf("state = %v, want the oversized upload refused", completed.GetState())
 	}
 }
 
@@ -594,6 +594,6 @@ func TestABrowserUploadIsBoundedByPolicyWhereTheStoreSignsOne(t *testing.T) {
 		t.Fatalf("fields = %v, want the policy that bounds the body before a byte is sent", target.GetFields())
 	}
 	if got := target.GetFields()["Content-Type"]; got != "image/png" {
-		t.Fatalf("fields carry Content-Type %q, and a policy conditioned on one refuses a form that omits it", got)
+		t.Fatalf("fields include Content-Type %q, and a policy conditioned on one refuses a form that omits it", got)
 	}
 }

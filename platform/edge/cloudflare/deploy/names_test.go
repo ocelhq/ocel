@@ -94,7 +94,7 @@ func TestAccountNames(t *testing.T) {
 				}
 			})
 
-			t.Run("a name past what Cloudflare holds is refused", func(t *testing.T) {
+			t.Run("a name longer than Cloudflare allows is refused", func(t *testing.T) {
 				t.Parallel()
 
 				long := strings.Repeat("a", longestAccountName)

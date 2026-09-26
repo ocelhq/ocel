@@ -31,7 +31,7 @@ func (p *cloudflare) workersPlan(ctx context.Context, accountID string) (string,
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
 			"ocel cloudflare edge: could not read the subscriptions of account %s: %v\n"+
-				"%s must carry the \"Billing Read\" permission (Account scope) to tell whether the plan runs code at the edge. "+
+				"%s must have the \"Billing Read\" permission (Account scope) to tell whether the plan runs code at the edge. "+
 				"Without it this deploy proceeds, and an account on the Workers Free plan is rejected by Cloudflare when the "+
 				"worker is uploaded, after the deploy has begun changing your infrastructure\n",
 			accountID, err, envAPIToken)

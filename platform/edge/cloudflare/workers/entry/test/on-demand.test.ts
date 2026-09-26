@@ -39,7 +39,7 @@ function colo() {
   const pending: Promise<unknown>[] = [];
   return {
     entries,
-    settle: () => Promise.all(pending.splice(0)),
+    drain: () => Promise.all(pending.splice(0)),
     deps: coloDeps({
       cache: {
         match: async (request: Request) => entries.get(request.url)?.clone(),
@@ -116,7 +116,7 @@ describe("an on-demand revalidation arriving at the edge", () => {
     const routeDeps = deps(served, store);
 
     await dispatch(routeDeps, new Request("https://app.example/blog"));
-    await store.settle();
+    await store.drain();
 
     body = "<html>second</html>";
     await dispatch(routeDeps, revalidate("HEAD"));
@@ -136,7 +136,7 @@ describe("an on-demand revalidation arriving at the edge", () => {
     expect(store.entries.size).toBe(1);
   });
 
-  it("leaves a request carrying the wrong token a plain miss", async () => {
+  it("leaves a request with the wrong token a plain miss", async () => {
     const served = origin(() => "<html>fresh</html>");
     const store = colo();
 

@@ -13,7 +13,7 @@ describe("domainApp", () => {
     expect(domainApp(JSON.stringify({ "Shop.Example": "web" }), "SHOP.example")).toBe("web");
   });
 
-  it("ignores the port the request carries", () => {
+  it("ignores the port the request names", () => {
     expect(domainApp(BOUND, "shop.example:8787")).toBe("web");
   });
 

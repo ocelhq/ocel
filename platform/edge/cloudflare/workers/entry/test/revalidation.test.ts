@@ -120,7 +120,7 @@ describe("revalidationIds", () => {
 });
 
 describe("revalidationMessage", () => {
-  it("carries the route, the entry generation and the enqueue time", () => {
+  it("includes the route, the entry generation and the enqueue time", () => {
     expect(revalidationMessage(route, 1_000, 42)).toEqual({
       v: 1,
       headers: { ...route.headers, [refreshHeader]: "1000" },

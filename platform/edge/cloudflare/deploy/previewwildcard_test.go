@@ -203,7 +203,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		assertSet(t, "detached custom domains", m.deletedCustomDomains, nil)
 	})
 
-	t.Run("a wildcard another script holds is left standing", func(t *testing.T) {
+	t.Run("a wildcard another script owns is left in place", func(t *testing.T) {
 		m := &cfMock{
 			zoneID:   "zone1",
 			zoneName: "app.com",

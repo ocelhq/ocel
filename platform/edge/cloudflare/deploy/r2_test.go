@@ -229,7 +229,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		}
 		policies := tokens.minted[0].Policies.Value
 		if len(policies) != 1 {
-			t.Fatalf("token carries %d policies, want 1", len(policies))
+			t.Fatalf("token has %d policies, want 1", len(policies))
 		}
 		resources := policies[0].Resources.Value
 		wantResource := "com.cloudflare.edge.r2.bucket." + testAccountID + "_default_" + bucket
@@ -303,7 +303,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 			t.Errorf("offer access key id = %q, want the existing token's id", values[edge.OfferKeyAccessKeyID])
 		}
 		if _, ok := values[edge.OfferKeySecretAccessKey]; ok {
-			t.Error("a reused token has no readable value, so the offer must carry no secret")
+			t.Error("a reused token has no readable value, so the offer must include no secret")
 		}
 	})
 
@@ -336,7 +336,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 			t.Errorf("verified %d times, want a retry until the token propagates", tokens.verifyCalls)
 		}
 		if offerValues(t, out)[edge.OfferKeySecretAccessKey] == "" {
-			t.Error("offer must carry the minted secret once the token propagates")
+			t.Error("offer must include the minted secret once the token propagates")
 		}
 	})
 
@@ -495,7 +495,7 @@ func TestCacheStoreTeardown(t *testing.T) {
 			}
 		}
 		if len(buckets.deleted) != 0 || len(tokens.revoked) != 0 {
-			t.Error("nothing may be deleted while the bucket still holds objects")
+			t.Error("nothing may be deleted while the bucket still contains objects")
 		}
 	})
 

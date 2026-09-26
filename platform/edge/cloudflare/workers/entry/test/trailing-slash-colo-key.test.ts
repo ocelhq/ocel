@@ -47,18 +47,18 @@ describe("the resolved path is what keys the response", () => {
           },
         }),
       };
-      const settle = () => Promise.all(pending.splice(0));
-      return { scenario, settle, renders: () => renders, keys: () => [...stored.keys()] };
+      const drain = () => Promise.all(pending.splice(0));
+      return { scenario, drain, renders: () => renders, keys: () => [...stored.keys()] };
     }
 
     it("gives the canonical and the slash-free form one key under trailingSlash: true", async () => {
-      const { scenario, settle, renders, keys } = coloScenario(true);
+      const { scenario, drain, renders, keys } = coloScenario(true);
       const d = deps(scenario);
 
       const first = await serve(get("/p/"), d);
       expect(first.status).toBe(200);
       expect(first.headers.get("x-ocel-cache")).toBe("MISS");
-      await settle();
+      await drain();
 
       const redirect = await serve(get("/p"), d);
       expect(redirect.status).toBe(308);
@@ -72,12 +72,12 @@ describe("the resolved path is what keys the response", () => {
     });
 
     it("gives both served forms one key under skipTrailingSlashRedirect", async () => {
-      const { scenario, settle, renders, keys } = coloScenario(true, true);
+      const { scenario, drain, renders, keys } = coloScenario(true, true);
       const d = deps(scenario);
 
       const first = await serve(get("/p/"), d);
       expect(first.headers.get("x-ocel-cache")).toBe("MISS");
-      await settle();
+      await drain();
 
       const second = await serve(get("/p"), d);
       expect(second.headers.get("x-ocel-cache")).toBe("HIT");
@@ -87,14 +87,14 @@ describe("the resolved path is what keys the response", () => {
     });
 
     it("gives two apps of one project a key each", async () => {
-      const { scenario, settle, renders, keys } = coloScenario(true, true);
+      const { scenario, drain, renders, keys } = coloScenario(true, true);
       const web = deps(scenario);
       const admin = { ...web, app: "admin" };
 
       expect((await serve(get("/p"), web)).headers.get("x-ocel-cache")).toBe("MISS");
-      await settle();
+      await drain();
       expect((await serve(get("/p"), admin)).headers.get("x-ocel-cache")).toBe("MISS");
-      await settle();
+      await drain();
 
       expect(web.deploymentId).toBe(admin.deploymentId);
       expect(web.manifest.buildId).toBe(admin.manifest.buildId);
@@ -106,14 +106,14 @@ describe("the resolved path is what keys the response", () => {
     });
 
     it("gives two deployments of one app a key each", async () => {
-      const { scenario, settle, renders, keys } = coloScenario(true, true);
+      const { scenario, drain, renders, keys } = coloScenario(true, true);
       const first = deps(scenario);
       const second = { ...first, deploymentId: "d2" };
 
       expect((await serve(get("/p"), first)).headers.get("x-ocel-cache")).toBe("MISS");
-      await settle();
+      await drain();
       expect((await serve(get("/p"), second)).headers.get("x-ocel-cache")).toBe("MISS");
-      await settle();
+      await drain();
 
       expect(first.app).toBe(second.app);
       expect(first.manifest.buildId).toBe(second.manifest.buildId);

@@ -273,7 +273,7 @@ func TestPromotionHistory(t *testing.T) {
 func TestStorePointer(t *testing.T) {
 	t.Parallel()
 
-	t.Run("promote, history and prune carry the pointer only when there is one", func(t *testing.T) {
+	t.Run("promote, history and prune send the pointer only when there is one", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -328,7 +328,7 @@ func TestStorePointer(t *testing.T) {
 			t.Errorf("preview promote body = %v, want pointer pr-42 alongside the promotion", promoteBodies[0])
 		}
 		if _, ok := promoteBodies[1]["pointer"]; ok {
-			t.Errorf("production promote body carried a pointer field: %v", promoteBodies[1])
+			t.Errorf("production promote body included a pointer field: %v", promoteBodies[1])
 		}
 		if historyQuery[0] != "pr-42" || historyQuery[1] != "" {
 			t.Errorf("history pointer queries = %v, want [pr-42 <empty>]", historyQuery)
@@ -337,7 +337,7 @@ func TestStorePointer(t *testing.T) {
 			t.Errorf("preview prune body = %v, want pointer pr-42", pruneBodies[0])
 		}
 		if _, ok := pruneBodies[1]["pointer"]; ok {
-			t.Errorf("production prune body carried a pointer field: %v", pruneBodies[1])
+			t.Errorf("production prune body included a pointer field: %v", pruneBodies[1])
 		}
 	})
 
@@ -372,12 +372,12 @@ func TestStorePointer(t *testing.T) {
 func TestStoreRequest(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a state carrying no endpoint is an error", func(t *testing.T) {
+	t.Run("a state with no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
 		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"})
 		if err == nil {
-			t.Fatal("expected an error when the root-stack state carries no endpoint")
+			t.Fatal("expected an error when the root-stack state has no endpoint")
 		}
 	})
 
@@ -482,7 +482,7 @@ func TestVersionStamp(t *testing.T) {
 func TestDestroyInstance(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a state carrying no secret is a no-op", func(t *testing.T) {
+	t.Run("a state with no secret is a no-op", func(t *testing.T) {
 		t.Parallel()
 
 		if err := (&cloudflare{}).destroyInstance(t.Context(), edge.StackState{}); err != nil {
