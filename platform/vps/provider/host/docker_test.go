@@ -5,10 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 type engine struct {
@@ -188,26 +190,24 @@ func TestAHostThatRunsNoContainersIsProbedAsHavingNeither(t *testing.T) {
 	}
 }
 
-func TestADockerBinaryWithNoUnitBehindItStandsWithoutServingAndIsNeverRebuiltUnattended(t *testing.T) {
+func TestADockerBinaryWithNoUnitBehindItStandsWithoutServingAndIsRefusedRatherThanInstalledOver(t *testing.T) {
 	t.Parallel()
 
-	observed := probed(t, engine{installed: true})
+	held := engine{installed: true, dockerd: "28.3.1"}
+	observed := probed(t, held)
 	if _, stood := observed[unitItem().ID()]; stood {
 		t.Errorf("the probe read %s on a host whose docker binary carries no unit file", unitItem().ID())
 	}
-	read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: observed}
+	read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: observed, Engine: engineHeld(t, held)}
 	if !read.standing(KindEngine, dockerEngine) {
 		t.Fatalf("the probe read no engine on a host carrying a docker binary, and an unattended run would fetch %s and run it as root over an install that is already there", dockerSource)
 	}
 	if read.current(engineItem()) {
 		t.Fatalf("a docker binary with no %s reads as serving, and apply would enable a unit that does not exist, on every run, forever", dockerUnit)
 	}
-	if engine := planFor(planned(read), engineItem().ID()); engine.Action != providerkit.ActionUpdate {
-		t.Errorf("a host carrying a docker binary and no %s plans %q for the engine, want the install shown as a change over what stands", dockerUnit, engine.Action)
-	}
-	refused := refuseReplacements(read, EngineItems())
-	if refused == nil || !strings.Contains(refused.Error(), engineItem().ID()) {
-		t.Errorf("an unattended apply over a docker binary with no unit = %v, want it refused: rebuilding an engine is what nobody there cannot consent to", refused)
+	refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady)
+	if !strings.Contains(refused.Message, dockerUnit) || !strings.Contains(refused.Message, "ocel bootstrap production") {
+		t.Errorf("a docker binary no %s runs is refused with %q, want it to name the unit ocel needs and the bootstrap to run after", dockerUnit, refused.Message)
 	}
 }
 
@@ -420,5 +420,94 @@ func TestAnApplyOverAnAdoptedEngineNeverInstallsDockerAndStillStartsItsUnit(t *t
 	}
 	if stood.at("systemctl enable --now "+quoted(dockerUnit)) < 0 {
 		t.Errorf("the apply never started the idle %s the adopted engine runs under:\n%s", dockerUnit, strings.Join(stood.commands(), "\n"))
+	}
+}
+
+func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		held Engine
+		want string
+	}{
+		"an engine older than the floor": {Engine{Kind: engineStandard, Version: "26.1.4"},
+			"docker 26.1.4 on ada@ocelbox is older than 28.0, the oldest ocel runs on\nUpgrade docker to 28.0 or later and run `ocel bootstrap production`"},
+		"the snap package": {Engine{Kind: engineSnap, Version: "27.2.0"},
+			"docker on ada@ocelbox is the snap package, which ocel does not run on\nReplace it with docker 28.0 or later from docker's own packages; its containers do not carry over"},
+		"a rootless daemon": {Engine{Kind: engineRootless, Version: "28.3.1"},
+			"docker on ada@ocelbox runs rootless, and ocel needs the system daemon behind docker.service\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
+		"a binary nothing on systemd runs": {Engine{Kind: engineUnserved, Version: "28.3.1"},
+			"docker on ada@ocelbox is not run by docker.service, the system daemon ocel needs\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
+		"an engine whose version cannot be read": {Engine{Kind: engineStandard},
+			"docker on ada@ocelbox reports no version ocel can read\nCheck that `docker version` answers as root and run `ocel bootstrap production`"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			read := Reading{Class: providerkit.ClassProduction, Engine: tc.held}
+			if refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady); refused.Message != tc.want {
+				t.Errorf("the refusal reads\n%s\nwant\n%s", refused.Message, tc.want)
+			}
+		})
+	}
+}
+
+func TestAnEngineAtOrPastTheFloorAndNoEngineAtAllAreLetThrough(t *testing.T) {
+	t.Parallel()
+
+	for _, held := range []Engine{
+		{},
+		{Kind: engineStandard, Version: "28.0.0"},
+		{Kind: engineStandard, Version: "28.0.4"},
+		{Kind: engineStandard, Version: "28.3.1"},
+		{Kind: engineStandard, Version: "29.8.0"},
+		{Kind: engineStandard, Version: "30.0.0-rc.1"},
+	} {
+		if err := (Reading{Class: providerkit.ClassProduction, Engine: held}).runnableEngine("ada@ocelbox"); err != nil {
+			t.Errorf("an engine read as %+v = %v, want it let through", held, err)
+		}
+	}
+	if err := (Reading{Class: providerkit.ClassProduction, Engine: Engine{Kind: engineStandard, Version: "27.5.1"}}).runnableEngine("ada@ocelbox"); err == nil {
+		t.Error("docker 27.5.1 is let through, one minor release below the floor")
+	}
+}
+
+func carrying(stood *bench, held Engine) {
+	prior := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "for p in") {
+			said := stood.rendered(command)
+			said.Stdout = strings.ReplaceAll(said.Stdout,
+				kindEngineHeld+"\t"+dockerEngine+"\t0\t"+engineStandard+"\t28.3.1\n",
+				kindEngineHeld+"\t"+dockerEngine+"\t0\t"+held.Kind+"\t"+held.Version+"\n")
+			return said, true
+		}
+		if prior != nil {
+			return prior(command)
+		}
+		return session.Result{}, false
+	}
+}
+
+func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return item.Name == ClassDir(class) })
+	carrying(stood, Engine{Kind: engineStandard, Version: "26.1.4"})
+
+	boot := NewBootstrap(stood.host(), testVendor, "shop")
+	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
+		if refused := refusal(t, err, providerkit.CodeNotReady); !strings.Contains(refused.Message, "docker 26.1.4") {
+			t.Errorf("%s refused with %q, want it to name the docker it will not run on", step, refused.Message)
+		}
+	}
+	for _, command := range stood.commands() {
+		if strings.HasPrefix(command, "install ") || strings.Contains(command, dockerSource) {
+			t.Errorf("the refused bootstrap still wrote: %s", command)
+		}
 	}
 }
