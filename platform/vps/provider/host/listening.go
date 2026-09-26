@@ -48,14 +48,10 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var named []string
-	for line := range strings.Lines(said) {
-		if name := strings.TrimSpace(line); name != "" {
-			named = append(named, name)
-		}
-	}
-	return named, nil
+	return publishers(said), nil
 }
+
+func publishers(said string) []string { return strings.Fields(said) }
 
 func (h *Host) CheckSwitchboard(ctx context.Context, class providerkit.Class) providerkit.HostCheck {
 	board := switchboardStanding(nil, h.proxyOption)

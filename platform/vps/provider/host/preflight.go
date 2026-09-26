@@ -296,20 +296,13 @@ func stateField(state, label string) string {
 }
 
 func (h *Host) ServingPortsHeld(ctx context.Context) error {
-	held := h.portHeld
-	holder := caddy.Container
+	trouble, holder := h.ownProxyTrouble, caddy.Container
 	if h.proxyOption.adopted() {
-		held, holder = h.portAdopted, "your proxy"
+		trouble, holder = h.yourProxyTrouble, "your proxy"
 	}
-	var found []string
-	for _, port := range proxyServing() {
-		refusal, err := held(ctx, port)
-		if err != nil {
-			return err
-		}
-		if refusal != "" {
-			found = append(found, refusal)
-		}
+	found, err := trouble(ctx)
+	if err != nil {
+		return err
 	}
 	if len(found) == 0 {
 		return nil
@@ -319,41 +312,76 @@ func (h *Host) ServingPortsHeld(ctx context.Context) error {
 		holder, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
 }
 
-func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
-	named, err := h.Publishing(ctx, port)
+func (h *Host) ownProxyTrouble(ctx context.Context) ([]string, error) {
+	ports, err := servingHeld(ctx, h.Publishing, h.Listening)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	foreign := slices.DeleteFunc(slices.Clone(named), func(name string) bool { return name == caddy.Container })
-	if len(foreign) > 0 {
-		return fmt.Sprintf("port %s is published by %s; stop it or move it off %s",
-			port, strings.Join(foreign, ", "), port), nil
-	}
-	if slices.Contains(named, caddy.Container) {
-		return "", nil
-	}
-	held, err := h.portHolders(ctx, "")
-	if err != nil {
-		return "", err
-	}
-	if bound := listeners.On(held, portNumber(port)); len(bound) > 0 {
-		by := ""
-		if names := listeners.Holders(bound); len(names) > 0 {
-			by = " by " + strings.Join(names, " and ")
+	var found []string
+	for _, held := range ports {
+		switch {
+		case len(held.containers) > 0:
+			found = append(found, fmt.Sprintf("port %s is published by %s; stop it or move it off %s",
+				held.port, strings.Join(held.containers, ", "), held.port))
+		case held.ours:
+		case len(held.bound) > 0:
+			found = append(found, fmt.Sprintf("port %s is bound outside docker at %s; stop it and run `ocel bootstrap %s`",
+				held.port, strings.Join(listeners.Lines(held.bound), ", "), providerkit.ClassProduction))
+		default:
+			found = append(found, fmt.Sprintf("nothing holds port %s; run `ocel bootstrap %s`",
+				held.port, providerkit.ClassProduction))
 		}
-		return fmt.Sprintf("port %s is bound outside docker%s at %s; stop it and run `ocel bootstrap %s`",
-			port, by, strings.Join(listeners.Lines(bound), ", "), providerkit.ClassProduction), nil
 	}
-	return fmt.Sprintf("nothing holds port %s; run `ocel bootstrap %s`",
-		port, providerkit.ClassProduction), nil
+	return found, nil
 }
 
-func (h *Host) portAdopted(ctx context.Context, port string) (string, error) {
-	held, err := manual.PortHeld(ctx, frontBox{h}, port)
-	if err != nil || held.Trouble == "" {
-		return "", err
+func (h *Host) yourProxyTrouble(ctx context.Context) ([]string, error) {
+	var found []string
+	for _, port := range proxyServing() {
+		held, err := manual.PortHeld(ctx, frontBox{h}, port)
+		if err != nil {
+			return nil, err
+		}
+		if held.Trouble != "" {
+			found = append(found, held.Trouble+"; "+held.Fix)
+		}
 	}
-	return held.Trouble + "; " + held.Fix, nil
+	return found, nil
+}
+
+type servingPort struct {
+	port       string
+	ours       bool
+	containers []string
+	bound      []listeners.Listener
+}
+
+func servingHeld(ctx context.Context,
+	published func(context.Context, string) ([]string, error),
+	listening func(context.Context) ([]listeners.Listener, error),
+) ([]servingPort, error) {
+	var held []servingPort
+	var bound []listeners.Listener
+	listened := false
+	for _, port := range proxyServing() {
+		named, err := published(ctx, port)
+		if err != nil {
+			return nil, err
+		}
+		one := servingPort{port: port, ours: slices.Contains(named, caddy.Container)}
+		one.containers = slices.DeleteFunc(named, func(name string) bool { return name == caddy.Container })
+		if !one.ours && len(one.containers) == 0 {
+			if !listened {
+				if bound, err = listening(ctx); err != nil {
+					return nil, err
+				}
+				listened = true
+			}
+			one.bound = listeners.On(bound, portNumber(port))
+		}
+		held = append(held, one)
+	}
+	return held, nil
 }
 
 func portNumber(port string) int {
@@ -383,7 +411,7 @@ func (p portHolder) holds() string {
 	return p.name + " holds " + strings.Join(ports, " and ")
 }
 
-func holdingAlso(held []portHolder, name string, container bool, port string) []portHolder {
+func withHolder(held []portHolder, name string, container bool, port string) []portHolder {
 	for at := range held {
 		if held[at].name == name && held[at].container == container {
 			held[at].ports = append(held[at].ports, port)
@@ -401,43 +429,30 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 	if err != nil {
 		return err
 	}
-	var held []portHolder
-	var bound []listeners.Listener
-	listened := false
-	for _, port := range proxyServing() {
-		var named []string
-		if read.standing(KindEngine, dockerEngine) {
+	published := func(context.Context, string) ([]string, error) { return nil, nil }
+	if read.standing(KindEngine, dockerEngine) {
+		published = func(ctx context.Context, port string) ([]string, error) {
 			said, err := h.ran(ctx, "ask which container publishes port "+port, words(publishing(port))+" 2>/dev/null || true", nil, elevation)
-			if err != nil {
-				return err
-			}
-			named = strings.Fields(said)
+			return publishers(said), err
 		}
-		if slices.Contains(named, caddy.Container) {
-			continue
+	}
+	ports, err := servingHeld(ctx, published, func(ctx context.Context) ([]listeners.Listener, error) {
+		return h.portHolders(ctx, elevation)
+	})
+	if err != nil {
+		return err
+	}
+	var held []portHolder
+	for _, port := range ports {
+		for _, name := range port.containers {
+			held = withHolder(held, name, true, port.port)
 		}
-		if len(named) > 0 {
-			for _, name := range named {
-				held = holdingAlso(held, name, true, port)
-			}
-			continue
-		}
-		if !listened {
-			if bound, err = h.portHolders(ctx, elevation); err != nil {
-				return err
-			}
-			listened = true
-		}
-		on := listeners.On(bound, portNumber(port))
-		if len(on) == 0 {
-			continue
-		}
-		names := listeners.Holders(on)
-		if len(names) == 0 {
-			names = []string{"the process at " + strings.Join(listeners.Lines(on), ", ")}
+		names := listeners.Holders(port.bound)
+		if len(port.bound) > 0 && len(names) == 0 {
+			names = []string{"the process at " + strings.Join(listeners.Lines(port.bound), ", ")}
 		}
 		for _, name := range names {
-			held = holdingAlso(held, name, false, port)
+			held = withHolder(held, name, false, port.port)
 		}
 	}
 	if len(held) == 0 {
