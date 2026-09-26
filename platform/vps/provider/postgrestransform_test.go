@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/transform"
-	"github.com/ocelhq/ocel/pkg/transform/transformtest"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
 )
 
 const patchedImage = "public.ecr.aws/docker/library/postgres@sha256:1f0c2a5b8e3d4c6f7a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7"

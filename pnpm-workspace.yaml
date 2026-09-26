@@ -3,7 +3,7 @@ packages:
   - console/*
   - cli/node
   - packages/*
-  - pkg/transform
+  - pkg/provider/transform
   - ui/*
   - frameworks/*/*
   - platform/aws/functions/*

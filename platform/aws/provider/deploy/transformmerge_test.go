@@ -8,7 +8,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/transform"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 )
 
 func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {

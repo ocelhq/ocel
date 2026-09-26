@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/transform/transformtest"
+	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
 )
 
 func functionRequest() Request {

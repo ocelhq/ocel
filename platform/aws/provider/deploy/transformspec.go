@@ -12,11 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transform"
 )
 
-//go:generate go generate -C ../../../../pkg/transform ./...
+//go:generate go generate -C ../../../../pkg/provider/transform ./...
 
 const transformProvider = "aws"
 

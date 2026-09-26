@@ -176,7 +176,7 @@ jobs:
 
       - name: go generate (the transform runner pkg embeds)
         if: matrix.group.name == 'pkg, s3 and edge'
-        run: go generate -C pkg/transform ./...
+        run: go generate -C pkg/provider/transform ./...
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
