@@ -18,10 +18,7 @@ func keyedSchema(target reflect.Type, shorthands []string) object {
 		alternatives = append(alternatives, object{"type": "string", "enum": toAny(shorthands)})
 	}
 	for _, field := range jsonFields(target) {
-		property := schemaOf(field.kind)
-		if field.doc != "" {
-			property["description"] = field.doc
-		}
+		property := describedAs(schemaOf(field.kind), field.doc)
 		alternatives = append(alternatives, object{
 			"type":                 "object",
 			"properties":           object{field.name: property},
