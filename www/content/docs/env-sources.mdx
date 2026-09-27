@@ -280,6 +280,9 @@ Nothing in your account can run it, so a deployed tier reads it only at a deploy
 no scheduled sync, `ocel env sync` refuses and asks you to deploy again, and a change
 reaches a running app at the next deploy.
 
+When the command fails, ocel names it and its exit status but never repeats what it
+printed, which may hold a value it read. Run the command yourself to see why.
+
 ## Dev
 
 `ocel dev` and `ocel run` read the dev tier's env source on your machine, once, when they

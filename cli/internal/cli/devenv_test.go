@@ -764,8 +764,8 @@ export default {
 
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), devDeps(), false, root, []string{"sh", "-c", "touch " + startedPath}, &stdout, &stderr, strings.NewReader(""))
-		if err == nil || !strings.Contains(err.Error(), "vault is sealed") {
-			t.Fatalf("runDev err = %v, want the source's own complaint", err)
+		if err == nil || !strings.Contains(err.Error(), "exit status 3") || strings.Contains(err.Error(), "vault is sealed") {
+			t.Fatalf("runDev err = %v, want how the source's command exited and never what it printed", err)
 		}
 		if _, statErr := os.Stat(startedPath); statErr == nil {
 			t.Error("the app was started without its dev source")
