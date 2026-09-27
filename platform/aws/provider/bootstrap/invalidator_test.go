@@ -93,8 +93,8 @@ func TestTagInvalidator(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				env := parsePublisherTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
-				if env[tagInvalidatorClassEnvVar] != tc.class {
-					t.Errorf("%s = %q, want %q — the class scopes every ledger read to its own bootstrap", tagInvalidatorClassEnvVar, env[tagInvalidatorClassEnvVar], tc.class)
+				if env["OCEL_INFRA_CLASS"] != tc.class {
+					t.Errorf("%s = %q, want %q — the class scopes every ledger read to its own bootstrap", "OCEL_INFRA_CLASS", env["OCEL_INFRA_CLASS"], tc.class)
 				}
 				if env[tagInvalidatorStateTableEnvVar] != paramStateTableName {
 					t.Errorf("%s = %q, want the bootstrap's state table", tagInvalidatorStateTableEnvVar, env[tagInvalidatorStateTableEnvVar])

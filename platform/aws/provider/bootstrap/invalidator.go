@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -25,7 +26,6 @@ const (
 	tagInvalidatorDLQRetentionSeconds = 1209600
 
 	tagInvalidatorStateTableEnvVar = "OCEL_STATE_TABLE"
-	tagInvalidatorClassEnvVar      = "OCEL_INFRA_CLASS"
 )
 
 func tagInvalidatorPlacement(bucket string) payloads.Placement {
@@ -120,6 +120,6 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string
 `+lambdaLogGroupResource("TagInvalidator"), tagInvalidatorDLQRetentionSeconds, ns.PolicyName("tag-invalidator"),
 		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
-		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,
+		tagInvalidatorStateTableEnvVar, awsports.ClassEnvVar, class,
 		tagInvalidatorBatchSize, tagInvalidatorRetries, tagRecordStreamFilter)
 }

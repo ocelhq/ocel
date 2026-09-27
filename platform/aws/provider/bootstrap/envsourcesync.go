@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -20,10 +21,6 @@ const (
 	envSourceSyncTimeoutSeconds = 60
 
 	envSourceSyncRate = "rate(1 minute)"
-
-	envSourceSyncVarsTableEnvVar = "OCEL_VARS_TABLE"
-	envSourceSyncVarsKeyEnvVar   = "OCEL_VARS_KEY"
-	envSourceSyncClassEnvVar     = "OCEL_INFRA_CLASS"
 
 	schedulerServicePrincipal = "scheduler.amazonaws.com"
 )
@@ -144,7 +141,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, class, key st
 `, class, LambdaServicePrincipal, ns.PolicyName("envsourcesync"), paramVarsTableARN, key,
 		envSourceSyncRuntime, envSourceSyncArchitecture, envSourceSyncHandler, envSourceSyncMemoryMB, envSourceSyncTimeoutSeconds,
 		code.Bucket, code.Key,
-		envSourceSyncVarsTableEnvVar, paramVarsTableName, envSourceSyncVarsKeyEnvVar, envSourceSyncClassEnvVar,
+		awsports.VarsTableEnvVar, paramVarsTableName, awsports.VarsKeyEnvVar, awsports.ClassEnvVar,
 		ns.envSourceSyncScheduleGroupName(class), schedulerServicePrincipal, ns.PolicyName("envsourcesync-schedule"),
 		ns.envSourceSyncScheduleName(class), envSourceSyncRate)
 }
