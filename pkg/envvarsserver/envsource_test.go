@@ -266,6 +266,26 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 	}
 }
 
+func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	fake.secrets["/"]["DATABASE_URL"] = "postgres://prod"
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, false)); err != nil {
+		t.Fatal(err)
+	}
+
+	builtin := &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Builtin{Builtin: &envvarsv1.BuiltinEnvSource{}}}
+	if _, err := syncEnvSource(vars, production, builtin); err != nil {
+		t.Fatal(err)
+	}
+	got, err := vars.GetValue(context.Background(), &envvarsv1.GetValueRequest{Tier: production, Coordinate: cell("DATABASE_URL"), Reveal: true})
+	if err != nil || got.GetValue() != "postgres://prod" || got.GetMetadata().GetEnvSource() != "" {
+		t.Fatalf("GetValue(DATABASE_URL) after the switch back = %q from %q, %v, want the value kept and named as ocel's own", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
+	}
+}
+
 func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *testing.T) {
 	vars, _ := served(t)
 	production := environmentv1.Tier_TIER_PRODUCTION

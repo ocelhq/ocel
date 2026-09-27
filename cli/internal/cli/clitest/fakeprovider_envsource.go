@@ -117,6 +117,9 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 		descriptor, read := envsourcewire.Decode(req.GetEnvSource())
 		if descriptor.Kind == envsource.Builtin {
 			if registered {
+				if err := clearFakeProvenance(req.GetTier(), req.GetSlug()); err != nil {
+					return nil, err
+				}
 				delete(registrations, key)
 				if err := SaveFakeRegistrations(registrations); err != nil {
 					return nil, err
@@ -199,6 +202,28 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 		}
 	}
 	return resp, nil
+}
+
+func clearFakeProvenance(tier environmentv1.Tier, slug string) error {
+	store, err := LoadFakeStore()
+	if err != nil {
+		return err
+	}
+	for _, id := range sortedIDs(store) {
+		cell := store[id]
+		if cell.Tier != tier || cell.Coordinate.Slug != slug || cell.Coordinate.Environment != "" || cell.LiveVersion() == 0 {
+			continue
+		}
+		latest := cell.Versions[len(cell.Versions)-1]
+		if latest.EnvSource == "" || latest.Target != nil {
+			continue
+		}
+		at := &envvarsv1.Coordinate{Slug: slug, Folder: cell.Coordinate.Folder, Key: cell.Coordinate.Key}
+		if err := store.Write(tier, at, FakeCellData{Value: latest.Value}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func refuseFakeCredentialUnset(store FakeStore, tier environmentv1.Tier, slug string, descriptor envsource.Descriptor) error {

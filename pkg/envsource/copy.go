@@ -86,6 +86,30 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 	return result, nil
 }
 
+func ClearProvenance(ctx context.Context, store envvars.Store, scope envvars.Scope) error {
+	listed, err := store.List(ctx, scope)
+	if err != nil {
+		return err
+	}
+	for _, metadata := range listed {
+		if metadata.Coordinate.Environment != "" || metadata.Target != nil || metadata.Provenance.EnvSource == "" {
+			continue
+		}
+		copied, err := store.Get(ctx, scope, metadata.Coordinate, true)
+		if errors.Is(err, envvars.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		expected := copied.Version
+		if _, err := store.Set(ctx, scope, metadata.Coordinate, copied.Plaintext, &expected); err != nil && !errors.Is(err, envvars.ErrStaleVersion) {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *CopyResult) refuse(at envvars.Cell, err error) {
 	if r.Refused == nil {
 		r.Refused = map[envvars.Cell]string{}

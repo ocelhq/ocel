@@ -49,7 +49,8 @@ source and linking to where the value lives there.
 That includes a value the tier held before it switched to the env source. If the source
 lacks it, the first sync removes it, and the deploy names it as missing until you set it
 in the source. The credentials ocel logs in with, and a value that
-[references](/docs/cli/env) another project's, stay ocel's own.
+[references](/docs/cli/env) another project's, stay ocel's own. Switching the tier back to
+`builtin` keeps every value the source had copied, and they become ocel's own again.
 
 A value set for one named preview environment stays ocel's own, and overrides what the env
 source says for that environment alone:
