@@ -140,7 +140,7 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 	if err := refuseFakeCredentialUnset(store, req.GetTier(), req.GetSlug(), registration.Descriptor); err != nil {
 		return nil, err
 	}
-	if registration.Descriptor.Kind == envsource.Infisical {
+	if registration.Descriptor.Kind != envsource.Exec {
 		source, err := readFakeEnvSource()
 		if err != nil {
 			return nil, err
@@ -199,10 +199,7 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 }
 
 func refuseFakeCredentialUnset(store FakeStore, tier environmentv1.Tier, slug string, descriptor envsource.Descriptor) error {
-	if descriptor.Infisical == nil {
-		return nil
-	}
-	for _, name := range descriptor.Infisical.Auth.Variables() {
+	for _, name := range descriptor.CredentialVariables() {
 		if store[FakeCoordinateID(tier, &envvarsv1.Coordinate{Slug: slug, Key: name})].LiveVersion() > 0 {
 			continue
 		}
@@ -236,9 +233,7 @@ func (r FakeRegistration) status() *envvarsv1.EnvSourceStatus {
 		LastSuccessAt: r.LastSuccessAt,
 		LastError:     r.LastError,
 	}
-	if r.Descriptor.Infisical != nil {
-		status.Credentials = r.Descriptor.Infisical.Auth.Variables()
-	}
+	status.Credentials = r.Descriptor.CredentialVariables()
 	for _, folder := range slices.Sorted(maps.Keys(r.URLs)) {
 		status.Links = append(status.Links, &envvarsv1.FolderLink{Folder: folder, Url: r.URLs[folder]})
 	}
@@ -309,7 +304,7 @@ func refuseFakeEnvSourceOwned(store FakeStore, tier environmentv1.Tier, at *envv
 	if !registered {
 		return nil
 	}
-	if registration.Descriptor.Infisical != nil && at.GetFolder() == "" && slices.Contains(registration.Descriptor.Infisical.Auth.Variables(), at.GetKey()) {
+	if at.GetFolder() == "" && slices.Contains(registration.Descriptor.CredentialVariables(), at.GetKey()) {
 		return nil
 	}
 	if removing {

@@ -24,11 +24,7 @@ func DeployedEnvSource(cfg *projectconfig.Config, preview bool) envsource.Descri
 
 func configuredEnvSource(cfg *projectconfig.Config, preview bool) envgate.EnvSource {
 	descriptor := DeployedEnvSource(cfg, preview)
-	out := envgate.EnvSource{ID: descriptor.ID()}
-	if descriptor.Infisical != nil {
-		out.Credentials = descriptor.Infisical.Auth.Variables()
-	}
-	return out
+	return envgate.EnvSource{ID: descriptor.ID(), Credentials: descriptor.CredentialVariables()}
 }
 
 func Folders(cfg *projectconfig.Config) []string {
