@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 type Grant struct {
@@ -37,7 +38,7 @@ func grants(class edge.Class, arch string) []Grant {
 			Detail: "bootstrap writes nothing for " + deployer.name + " under " + sudoersRoot,
 		})
 	}
-	if helper := written(items, KindFile, recordsHelper); helper.Name != "" {
+	if helper := written(items, KindFile, boxstore.RecordsHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
 			Detail: fmt.Sprintf("root-owned at %04o; %s runs it to compare-and-set its records and cannot write it", helper.Mode, deployer.name),
@@ -85,7 +86,7 @@ func sealing(items []Item, class edge.Class, deployer login) []Grant {
 		return nil
 	}
 	return []Grant{{
-		Name: "runs " + SealHelper + " as root, through one line in " + fragment.Name,
+		Name: "runs " + boxstore.SealHelper + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
 			"\n\n    the only sudo " + deployer.name + " has. The helper seals and opens values under the " + string(class) +
 			" key only; it mints no key, reaches no other class, and never prints the key",

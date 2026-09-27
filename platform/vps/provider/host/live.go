@@ -5,11 +5,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
-	LiveBinary     = helperRoot + "/live"
+	LiveBinary     = boxstore.Dir + "/live"
 	LiveSocketUnit = "ocel-live.socket"
 	LiveService    = "ocel-live.service"
 	liveSocketFile = "/etc/systemd/system/" + LiveSocketUnit

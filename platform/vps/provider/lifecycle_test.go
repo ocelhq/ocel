@@ -30,6 +30,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -1360,7 +1361,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.gaveBack(t, repository)
 	for _, taken := range []string{
 		filepath.Dir(host.ClassDir(class)), host.ClassDir(class), host.StateDir(class),
-		filepath.Dir(host.SealHelper), host.ProxyData, host.ProxyConfig, vars.RoutingTable, host.SwitchboardBinary,
+		filepath.Dir(boxstore.SealHelper), host.ProxyData, host.ProxyConfig, vars.RoutingTable, host.SwitchboardBinary,
 	} {
 		if run.vm.exists(t, taken) {
 			t.Errorf("%s still exists after a destroy, so the machine was not given back", taken)

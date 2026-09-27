@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -72,11 +73,11 @@ func TestHealReassertsTheStateTheDeployLoginOwns(t *testing.T) {
 func TestHealRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, drifted(t, currentHost(), RecordsDir(edge.ClassProduction)), recordsHelper)
+	read := drifted(t, drifted(t, currentHost(), RecordsDir(edge.ClassProduction)), boxstore.RecordsHelper)
 	work, _, err := healable(read)
 	refused := refusalOf(t, err, refusal.CodeDenied)
-	if !strings.Contains(refused.Message, recordsHelper) {
-		t.Errorf("the refusal says %q, want it to name %s as what heal may not write", refused.Message, recordsHelper)
+	if !strings.Contains(refused.Message, boxstore.RecordsHelper) {
+		t.Errorf("the refusal says %q, want it to name %s as what heal may not write", refused.Message, boxstore.RecordsHelper)
 	}
 	if len(work) != 0 {
 		t.Errorf("healable() = %v alongside its refusal, want a mixed set refused whole", ids(work))
@@ -88,7 +89,7 @@ func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 
 	class := edge.ClassProduction
 	for _, name := range []string{
-		ClassDir(class), SealKeyPath(class), SealHelper, sudoersSeal(class), deployUser, sshDir, authorizedKeys,
+		ClassDir(class), SealKeyPath(class), boxstore.SealHelper, sudoersSeal(class), deployUser, sshDir, authorizedKeys,
 	} {
 		read := drifted(t, currentHost(), name)
 		refused := refusalOf(t, second(healable(read)), refusal.CodeDenied)
@@ -272,7 +273,7 @@ func TestAReplacementRefusingApplyWillNotWriteOverWhatAlreadyExists(t *testing.T
 	t.Parallel()
 
 	class := edge.ClassProduction
-	for _, name := range []string{recordsHelper, SealKeyPath(class), deployUser, dockerEngine} {
+	for _, name := range []string{boxstore.RecordsHelper, SealKeyPath(class), deployUser, dockerEngine} {
 		read := drifted(t, currentHost(), name)
 		refused := refusalOf(t, refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64, Front{})), refusal.CodeNotReady)
 		if !strings.Contains(refused.Message, name) {
@@ -288,7 +289,7 @@ func TestAReplacementRefusingApplyConvergesAHostRatherThanRefusingEveryChange(t 
 	t.Parallel()
 
 	class := edge.ClassProduction
-	for _, name := range []string{dockerUnit, RecordsDir(class), stateRoot, helperRoot} {
+	for _, name := range []string{dockerUnit, RecordsDir(class), stateRoot, boxstore.Dir} {
 		read := drifted(t, currentHost(), name)
 		if err := refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64, Front{})); err != nil {
 			t.Errorf("a replacement-refusing apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)

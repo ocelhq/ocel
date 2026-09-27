@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -173,7 +174,7 @@ func (b *box) catting(command string) (session.Result, bool) {
 const fakeSeal = "sealed:"
 
 func (b *box) sealing(command, input string) (session.Result, bool) {
-	if !strings.Contains(command, host.SealHelper) {
+	if !strings.Contains(command, boxstore.SealHelper) {
 		return session.Result{}, false
 	}
 	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(input))

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -125,7 +126,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	for kind, earlier := range map[string]string{
 		host.KindDir:     host.StateDir(class),
 		host.KindSealKey: host.SealKeyPath(class),
-		host.KindFile:    host.SealHelper,
+		host.KindFile:    boxstore.SealHelper,
 		host.KindUser:    deployLogin,
 	} {
 		if at := progress.removed(kind, earlier); at < 0 || at > stamped {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -91,7 +92,7 @@ func (h *Host) hasStore(ctx context.Context, class edge.Class) (bool, error) {
 		return true, nil
 	}
 	rendered, err := h.reach(ctx, "ask where "+string(class)+" keeps its records",
-		"if [ -x "+quoted(recordsHelper)+" ] && [ -d "+quoted(RecordsDir(class))+" ]; then echo present; fi", nil)
+		"if [ -x "+quoted(boxstore.RecordsHelper)+" ] && [ -d "+quoted(RecordsDir(class))+" ]; then echo present; fi", nil)
 	if err != nil || strings.TrimSpace(rendered) != "present" {
 		return false, err
 	}

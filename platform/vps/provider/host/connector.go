@@ -7,11 +7,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
-	ConnectorBinary   = helperRoot + "/connector"
+	ConnectorBinary   = boxstore.Dir + "/connector"
 	connectorRoot     = classRoot + "/connector"
 	ConnectorConfig   = connectorRoot + "/config.json"
 	ConnectorKey      = connectorRoot + "/key"

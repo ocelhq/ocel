@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -24,7 +25,7 @@ type Provider struct {
 	project string
 	host    *host.Host
 	records records.Store
-	cipher  *host.Cipher
+	cipher  *boxstore.Cipher
 
 	transform transform.Pass
 	resolve   Lookup

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -601,12 +602,12 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 			taking(KindDir, releasesRoot, "images stay"),
 			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, ""),
-			taking(KindFile, recordsHelper, ""),
+			taking(KindFile, boxstore.RecordsHelper, ""),
 			taking(KindFile, releasesHelper, ""),
-			taking(KindFile, SealHelper, ""),
+			taking(KindFile, boxstore.SealHelper, ""),
 			taking(KindFile, SwitchboardBinary, ""),
 			taking(KindDir, SwitchboardDir, ""),
-			sharing(helperRoot, ""),
+			sharing(boxstore.Dir, ""),
 		)
 		above = []removal{sharing(classRoot, "")}
 	}

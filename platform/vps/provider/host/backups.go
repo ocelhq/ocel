@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 //go:embed backups.sh
 var backupsScript []byte
 
 const (
-	BackupsHelper = helperRoot + "/backups"
+	BackupsHelper = boxstore.Dir + "/backups"
 
 	backupsServiceFile = "/etc/systemd/system/ocel-backups.service"
 	backupsTimerFile   = "/etc/systemd/system/ocel-backups.timer"
