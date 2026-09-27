@@ -18,15 +18,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func preflightPreview(ctx context.Context, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config) error {
-	return ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-		return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
-	})
+func preflightPreview(ctx context.Context, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config) error {
+	return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
 type preflightFacts struct {

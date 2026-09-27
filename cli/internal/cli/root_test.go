@@ -29,6 +29,12 @@ func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
 	}
 }
 
+func newTestDeps() cmddeps.Deps {
+	deps := newDeps()
+	deps.Events = events.NewBus(time.Now)
+	return deps
+}
+
 func shownRun(t *testing.T, format runui.Format) []string {
 	t.Helper()
 	origFormat := logFormatFlag

@@ -4,23 +4,30 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 func TestRunRollback(t *testing.T) {
 	t.Run("with no argument it rolls back to the immediately previous promotion", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -44,7 +51,7 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("--yes rolls back without asking", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		deps.StdinIsTerminal = func(io.Reader) bool { return true }
@@ -52,6 +59,7 @@ func TestRunRollback(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -67,7 +75,7 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("--to rolls back to the named promotion once consented to", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		deps.StdinIsTerminal = func(io.Reader) bool { return true }
@@ -75,6 +83,7 @@ func TestRunRollback(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runRollback(context.Background(), deps, root, rollbackOptions{to: "promo-1"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -92,7 +101,7 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("a declined confirmation rolls nothing back", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		deps.StdinIsTerminal = func(io.Reader) bool { return true }
@@ -100,6 +109,7 @@ func TestRunRollback(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runRollback(context.Background(), deps, root, rollbackOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -115,13 +125,14 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("--dry reads the history, prints the plan and rolls nothing back", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runRollback(context.Background(), deps, root, rollbackOptions{dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -139,13 +150,14 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("--tag rolls back to the tagged promotion and echoes the tag", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runRollback(context.Background(), deps, root, rollbackOptions{tag: "v1.0.0", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -163,11 +175,12 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("--to and --tag are mutually exclusive", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{to: "promo-1", tag: "v1.0.0"}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error when both --to and --tag are set")
@@ -179,13 +192,14 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("a tag no promotion has is refused before anything is rolled back", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{tag: "v9.9.9", yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error for a tag nothing has")
@@ -202,13 +216,14 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("an unlisted --to is refused before the rollback is asked for", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{to: "no-such-promotion", yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want an error for an unknown promotion id")
@@ -226,13 +241,14 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want a class-mismatch error")
@@ -247,13 +263,14 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("it refuses when the infrastructure is absent", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback err = nil, want a missing-infrastructure error")
@@ -268,10 +285,11 @@ func TestRunRollback(t *testing.T) {
 
 	t.Run("without --yes it refuses without a terminal", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runRollback without a TTY err = nil, want a refusal")
@@ -280,6 +298,58 @@ func TestRunRollback(t *testing.T) {
 			t.Errorf("err = %v, want the no-TTY refusal to point at --yes", err)
 		}
 	})
+}
+
+func TestARollbackAsksWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := runRollback(context.Background(), deps, root, rollbackOptions{}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		t.Fatalf("runRollback err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stream.String())
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return strings.Contains(ev.GetMessage(), "– target  promo-1") })
+	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Fatalf("the rollback plan was not shown in the plan phase: %s", stream.String())
+	}
+	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	if waiting < shown {
+		t.Fatalf("held at event %d, plan shown at %d: want the run held to ask once the plan is shown: %s", waiting, shown, stream.String())
+	}
+	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
+		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
+	}
+	result := evs[len(evs)-1].GetResult()
+	if !result.GetSuccess() || !strings.HasPrefix(result.GetHeadline(), "Rolled back to promotion promo-1") {
+		t.Errorf("result = %v, want the run to end reporting the rollback to promo-1", result)
+	}
+}
+
+func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var evs []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	return evs
 }
 
 func TestRollbackTarget(t *testing.T) {

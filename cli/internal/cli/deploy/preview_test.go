@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -414,6 +416,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -444,6 +447,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -463,6 +467,7 @@ func TestRunPreviewRm(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -475,6 +480,45 @@ func TestRunPreviewRm(t *testing.T) {
 			t.Errorf("stdout = %q, want --yes to skip the prompt", out)
 		}
 	})
+}
+
+func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	terminalStdin(&deps)
+	useJSONLogFormat(t, &deps)
+	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		t.Fatalf("runPreviewRm err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), `Tear down the named preview "staging"?`) {
+		t.Errorf("stdout = %q, want the teardown asked about by name", stdout.String())
+	}
+	evs := envelopes(t, stream.String())
+	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	if waiting < 0 {
+		t.Fatalf("the run was never held while it asked: %s", stream.String())
+	}
+	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" || !bytes.Equal(evs[resumed].GetSpanId(), evs[waiting].GetSpanId()) {
+		t.Fatalf("resumed at event %d, waiting at %d: want the held scope resumed once answered: %s", resumed, waiting, stream.String())
+	}
+	destroyed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return strings.Contains(ev.GetMessage(), "DESTROY project=test-app")
+	})
+	if destroyed < resumed {
+		t.Errorf("teardown at event %d, resumed at %d: want nothing torn down until the question is answered: %s", destroyed, resumed, stream.String())
+	}
+	result := evs[len(evs)-1].GetResult()
+	if !result.GetSuccess() || result.GetHeadline() != "Preview staging torn down" {
+		t.Errorf("result = %v, want the run to end reporting the preview torn down", result)
+	}
 }
 
 func TestRunPreviewPrune(t *testing.T) {
@@ -494,6 +538,7 @@ func TestRunPreviewPrune(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := previewPruneOptions{keep: defaultPreviewPruneKeepN}
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -521,6 +566,7 @@ func TestRunPreviewPrune(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := previewPruneOptions{ref: "release/v2", keep: defaultPreviewPruneKeepN}
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -541,6 +587,7 @@ func TestRunPreviewPrune(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -699,9 +746,11 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 		run  func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error
 	}{
 		{"rm", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+			deps.AttachTerminalSink(stdout)
 			return runPreviewRm(context.Background(), deps, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
 		}},
 		{"prune", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+			deps.AttachTerminalSink(stdout)
 			return runPreviewPrune(context.Background(), deps, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr, strings.NewReader(""))
 		}},
 	}

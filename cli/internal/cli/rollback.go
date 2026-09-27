@@ -18,7 +18,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type rollbackOptions struct {
@@ -55,7 +57,7 @@ func init() {
 	cmddeps.Yes(rollbackCmd, &rollbackOpts.yes)
 }
 
-func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollbackOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	if opts.to != "" && opts.tag != "" {
 		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
 	}
@@ -64,71 +66,110 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		return err
 	}
 
-	spec := deps.Spec(consent.PlanFirst, "ocel rollback", cfg, opts.yes, stdout, stdin)
-	spec.Dry = opts.dry
-	spec.Unattended = "pass --yes"
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	gate := deps.Gate(consent.PlanFirst, "ocel rollback", opts.yes, stdout, stdin)
+	gate.Dry = opts.dry
+	gate.Unattended = "pass --yes"
+	if err := gate.Refuse(); err != nil {
+		return err
+	}
 
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
-		}); err != nil {
-			return err
-		}
+	ctx, run, err := deps.Events.Begin(ctx, "ocel rollback", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
 
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
+	pins := providerclient.PinToLock
+	if opts.dry {
+		pins = providerclient.PinInMemory
+	}
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, pins)
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
 
-		spinner := ui.Spin("Reading this project's promotion history")
-		listed, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
+	history, err := promotionHistory(ctx, check, prov, cfg)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+	live := activePromotion(history)
+	target, err := rollbackTarget(history, opts.to, opts.tag)
+	if err != nil {
+		return err
+	}
+
+	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
+	showRollbackPlan(plan, cfg.Slug, live, target)
+	if opts.dry {
+		plan.Say("Run without --dry to roll back.")
+		plan.End(nil)
+		return nil
+	}
+
+	granted, err := gate.Consent(ctx, plan, nil, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
+	plan.End(err)
+	if err != nil {
+		return err
+	}
+	if !granted {
+		run.Finish("Nothing rolled back")
+		return nil
+	}
+
+	promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
+	promoted, err := promote(ctx, promoting, prov, cfg, target)
+	promoting.End(err)
+	if err != nil {
+		return err
+	}
+	tagSuffix := ""
+	if promoted.GetTag() != "" {
+		tagSuffix = fmt.Sprintf(", tag %s", promoted.GetTag())
+	}
+	flipSuffix := ""
+	if note := runui.FlipNote(promoted.GetFlipBound()); note != "" {
+		flipSuffix = "; " + note
+	}
+	run.Finish(fmt.Sprintf("Rolled back to promotion %s (created %s%s)%s", promoted.GetPromotionId(), runui.EpochDate(promoted.GetTs()), tagSuffix, flipSuffix))
+	return nil
+}
+
+func promotionHistory(ctx context.Context, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config) ([]*contractv1.PromotionHistoryEntry, error) {
+	if err := bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		return nil, err
+	}
+	unit := check.Unit(cfg.Slug, "Reading this project's promotion history")
+	var listed *contractv1.ListPromotionsResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
 			Edge: edgewire.Selection(cfg),
 		})
-		spinner.Stop()
-		if err != nil {
-			return err
-		}
+		return err
+	})
+	unit.End(err)
+	return listed.GetPromotions(), err
+}
 
-		history := listed.GetPromotions()
-		live := activePromotion(history)
-		target, err := rollbackTarget(history, opts.to, opts.tag)
-		if err != nil {
-			return err
-		}
-
-		showRollbackPlan(ui, cfg.Slug, live, target)
-		if opts.dry {
-			ui.Diagnostic("Run without --dry to roll back.")
-			return nil
-		}
-
-		granted, err := ui.Consent(ctx, fmt.Sprintf("Roll production of %q back to promotion %s?", cfg.Slug, target.GetPromotionId()))
-		if err != nil || !granted {
-			return err
-		}
-
-		resp, err := client.Rollback(ctx, &contractv1.RollbackRequest{
+func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.Promotion, error) {
+	unit := phase.Unit(cfg.Slug, fmt.Sprintf("Promoting %s", target.GetPromotionId()))
+	var resp *contractv1.RollbackResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
 			Slug: cfg.Slug,
 			To:   target.GetPromotionId(),
 			Edge: edgewire.Selection(cfg),
 		})
-		if err != nil {
-			return err
-		}
-
-		promoted := resp.GetPromoted()
-		tagSuffix := ""
-		if promoted.GetTag() != "" {
-			tagSuffix = fmt.Sprintf(", tag %s", promoted.GetTag())
-		}
-		flipSuffix := ""
-		if note := runui.FlipNote(promoted.GetFlipBound()); note != "" {
-			flipSuffix = "; " + note
-		}
-		ui.Finish(fmt.Sprintf("Rolled back to promotion %s (created %s%s)%s", promoted.GetPromotionId(), runui.EpochDate(promoted.GetTs()), tagSuffix, flipSuffix))
-		return nil
+		return err
 	})
+	unit.End(err)
+	return resp.GetPromoted(), err
 }
 
 func activePromotion(history []*contractv1.PromotionHistoryEntry) *contractv1.Promotion {
@@ -180,7 +221,7 @@ func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string)
 	return nil, fmt.Errorf("no promotion in this project's production history is live, so there is nothing to roll back from: pass --to with the promotion id to serve")
 }
 
-func showRollbackPlan(ui *runui.Session, slug string, live, target *contractv1.Promotion) {
+func showRollbackPlan(plan *events.Scope, slug string, live, target *contractv1.Promotion) {
 	lines := []string{fmt.Sprintf("This will roll production of project %q back to an earlier deployment", slug)}
 	if live != nil {
 		lines = append(lines, "– live    "+promotionLine(live))
@@ -190,7 +231,7 @@ func showRollbackPlan(ui *runui.Session, slug string, live, target *contractv1.P
 		lines = append(lines, note)
 	}
 	lines = append(lines, "`ocel deploy` puts the current build back.")
-	ui.Diagnostic(strings.Join(lines, "\n"))
+	plan.Say(strings.Join(lines, "\n"))
 }
 
 func promotionLine(p *contractv1.Promotion) string {

@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/events"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -371,7 +370,7 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	return nil
 }
 
-func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
@@ -382,38 +381,51 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 
-	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	gate := deps.Gate(consent.Convergent, "ocel preview rm", opts.yes, stdout, stdin)
 
-	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel preview rm", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if persistent {
-			proceed, err := ui.Guard(ctx, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
-			if err != nil {
-				if ctx.Err() != nil {
-					fmt.Fprintln(stdout, "Interrupted.")
-					return &exitsig.ExitError{Code: exitsig.InterruptCode}
-				}
-				return err
-			}
-			if !proceed {
-				return nil
-			}
-		}
+	ctx, run, err := deps.Events.Begin(ctx, "ocel preview rm", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
 
-		if err := preflightPreview(ctx, ui, runner, cfg); err != nil {
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+
+	if env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT {
+		proceed, err := gate.Guard(ctx, check, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
+		if err != nil {
 			return err
 		}
+		if !proceed {
+			run.Finish("Nothing torn down")
+			return nil
+		}
+	}
 
-		req := &contractv1.RemoveEnvironmentRequest{
-			Environment: env,
-			Slug:        cfg.Slug,
-			Edge:        edgewire.Selection(cfg),
-		}
-		if err := providerclient.StreamRunner(ctx, runner, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment, ui.Event); err != nil {
-			return err
-		}
-		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
-		return nil
-	})
+	err = preflightPreview(ctx, check, prov, cfg)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+
+	req := &contractv1.RemoveEnvironmentRequest{
+		Environment: env,
+		Slug:        cfg.Slug,
+		Edge:        edgewire.Selection(cfg),
+	}
+	if _, err := providerclient.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
+		return err
+	}
+	run.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
+	return nil
 }
 
 func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
@@ -438,7 +450,7 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, st
 	})
 }
 
-func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	env, err := resolvePreviewEnvironment(deps, cwd, opts.name, opts.ref)
 	if err != nil {
 		return err
@@ -449,22 +461,40 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := preflightPreview(ctx, ui, runner, cfg); err != nil {
-			return err
-		}
-		req := &contractv1.RemoveStalePromotionsRequest{
-			Slug:        cfg.Slug,
-			KeepN:       int32(opts.keep),
-			Environment: env,
-			Edge:        edgewire.Selection(cfg),
-		}
-		if err := providerclient.StreamRunner(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
-			return err
-		}
-		ui.Finish(fmt.Sprintf("Pruned preview %q", env.GetIdentity()))
-		return nil
-	})
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, "ocel preview prune", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+
+	err = preflightPreview(ctx, check, prov, cfg)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+
+	req := &contractv1.RemoveStalePromotionsRequest{
+		Slug:        cfg.Slug,
+		KeepN:       int32(opts.keep),
+		Environment: env,
+		Edge:        edgewire.Selection(cfg),
+	}
+	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+		return err
+	}
+	run.Finish(fmt.Sprintf("Pruned preview %q", env.GetIdentity()))
+	return nil
 }
 
 func persistentPreviewEnvironment(name string) (*environmentv1.Environment, error) {

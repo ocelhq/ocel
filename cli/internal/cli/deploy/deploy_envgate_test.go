@@ -417,6 +417,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		up("before the teardown")
 
 		var rm bytes.Buffer
+		deps.AttachTerminalSink(&rm)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; out=%s", err, rm.String())
 		}
