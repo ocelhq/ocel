@@ -101,7 +101,11 @@ var inlineForms = map[string]inlineForm{
 		check: func(path string, record map[string]any) error {
 			return checkObject(path, reflect.TypeFor[bucketShape](), record)
 		},
-		schema: func() object { return titled(objectSchema(reflect.TypeFor[bucketShape]()), "BucketBinding") },
+		schema: func() object {
+			schema := titled(objectSchema(reflect.TypeFor[bucketShape]()), "BucketBinding")
+			schema["description"] = "An existing S3-compatible bucket a tier binds rather than provisioning its own."
+			return schema
+		},
 		decode: func(raw json.RawMessage) (*InlineRecord, error) {
 			record := &BucketBinding{}
 			if err := json.Unmarshal(raw, record); err != nil {
@@ -278,7 +282,8 @@ var tlsModes = []string{"require", "verify-full"}
 
 func (PostgresBinding) jsonSchema() object {
 	return object{
-		"title": "PostgresBinding",
+		"title":       "PostgresBinding",
+		"description": "An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role.",
 		"oneOf": []any{
 			titled(objectSchema(reflect.TypeFor[postgresURL]()), "PostgresUrlBinding"),
 			titled(objectSchema(reflect.TypeFor[postgresHost]()), "PostgresHostBinding"),
@@ -305,6 +310,7 @@ type refShape struct {
 
 func (Ref) jsonSchema() object {
 	schema := titled(objectSchema(reflect.TypeFor[Ref]()), "VariableRef")
+	schema["description"] = "An ocel variable holding this value, written { \"$env\": \"NAME\" }, so the value itself never sits in the config."
 	schema["properties"].(object)["$env"].(object)["pattern"] = `^[A-Z_][A-Z0-9_]*$`
 	return schema
 }
@@ -348,9 +354,7 @@ func (Bindings) jsonSchema() object {
 			continue
 		}
 		tier := func(description string) object {
-			record := form.schema()
-			record["description"] = description
-			return record
+			return describedAs(form.schema(), description)
 		}
 		properties[name] = object{
 			"type": "object",
