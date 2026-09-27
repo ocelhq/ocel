@@ -20,6 +20,8 @@ func (Ignored) File() string { return "" }
 
 func (Ignored) Unrendered([]byte, proxy.Permission) string { return "" }
 
+func (Ignored) Unrouted(context.Context, []string) error { return nil }
+
 func (Ignored) Reload(context.Context) error { return nil }
 
 func (Ignored) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

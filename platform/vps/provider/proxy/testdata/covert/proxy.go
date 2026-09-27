@@ -16,6 +16,8 @@ func (o *Overt) File() string { return "" }
 
 func (o *Overt) Unrendered([]byte, proxy.Permission) string { return "" }
 
+func (o *Overt) Unrouted(context.Context, []string) error { return nil }
+
 func (o *Overt) Reload(context.Context) error { return nil }
 
 func (o *Overt) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

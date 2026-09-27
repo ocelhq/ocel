@@ -27,6 +27,8 @@ func (Builtin) Unrendered(config []byte, permission proxy.Permission) string {
 	return unrendered(config, permission)
 }
 
+func (Builtin) Unrouted(context.Context, []string) error { return nil }
+
 func (b Builtin) Reload(ctx context.Context) error {
 	_, err := b.Box.Ran(ctx, "reload "+Container+" onto "+ConfigMount, reloading())
 	return err

@@ -12,6 +12,7 @@ type Proxy interface {
 	Render(spec Spec) ([]byte, error)
 	File() string
 	Unrendered(config []byte, permission Permission) string
+	Unrouted(ctx context.Context, hostnames []string) error
 	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Checks, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
