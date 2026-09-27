@@ -298,7 +298,7 @@ railway dev`,
         },
         ocel: ocelDev,
         verdict:
-          "`railway run` injects the project's environment variables into a local command; `ocel dev` starts the postgres and buckets your app code asked for on your machine, and `ocel env set --dev` shares the values a team has in common.",
+          "`railway run` injects the project's environment variables into a local command; `ocel dev` starts the postgres and buckets your app code asked for on your machine, and the values a team has in common come from the dev env source the config names, such as Infisical.",
       },
       {
         key: "pick",
