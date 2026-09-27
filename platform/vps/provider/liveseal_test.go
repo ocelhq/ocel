@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -129,12 +130,12 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	}
 
 	key := host.SealKeyPath(class)
-	if _, err := vm.attempt(deployLogin, "sudo -n "+host.SealHelper+" "+string(class)+" init"); err == nil {
+	if _, err := vm.attempt(deployLogin, "sudo -n "+boxstore.SealHelper+" "+string(class)+" init"); err == nil {
 		t.Errorf("a second init over an existing key exited 0, and every value sealed to %s went with it", key)
 	}
 
 	vm.ssh(t, "sudo rm -f "+key)
-	vm.ssh(t, "sudo "+host.SealHelper+" "+string(class)+" init")
+	vm.ssh(t, "sudo "+boxstore.SealHelper+" "+string(class)+" init")
 
 	replaced, err := bootstrap.Describe(ctx, class)
 	if err != nil {

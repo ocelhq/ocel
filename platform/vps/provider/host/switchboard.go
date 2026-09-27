@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -17,7 +18,7 @@ const SwitchboardImage = "gcr.io/distroless/static-debian12@sha256:d75cdd72874d4
 
 const (
 	SwitchboardContainer = switchboard.Name
-	SwitchboardDir       = helperRoot + "/switchboard"
+	SwitchboardDir       = boxstore.Dir + "/switchboard"
 	SwitchboardBinary    = SwitchboardDir + "/" + switchboard.Name
 	switchboardMount     = "/ocel/switchboard"
 	SwitchboardMounted   = switchboardMount + "/" + switchboard.Name

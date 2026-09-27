@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -27,8 +28,8 @@ func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing
 	for name, want := range map[string]string{
 		classRoot:                        rootOwner,
 		ClassDir(edge.ClassProduction):   rootOwner,
-		helperRoot:                       rootOwner,
-		recordsHelper:                    rootOwner,
+		boxstore.Dir:                     rootOwner,
+		boxstore.RecordsHelper:           rootOwner,
 		releasesHelper:                   rootOwner,
 		stateRoot:                        deployUser,
 		releasesRoot:                     deployUser,

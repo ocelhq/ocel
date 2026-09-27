@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -109,7 +110,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	dying, kill := context.WithCancel(ctx)
 	defer kill()
 	err = bootstrap.Apply(dying, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"},
-		&killer{at: "wrote " + host.KindFile + " " + host.SealHelper, kill: kill})
+		&killer{at: "wrote " + host.KindFile + " " + boxstore.SealHelper, kill: kill})
 	if err == nil {
 		t.Fatal("the apply ran to completion, and a half-applied host is what this proves recovery from")
 	}
@@ -145,7 +146,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if group.Action != provider.ActionUpdate {
 		t.Errorf("Plan() over a half-applied host plans %q, want %q", group.Action, provider.ActionUpdate)
 	}
-	for _, name := range []string{helperDir, host.SealHelper} {
+	for _, name := range []string{helperDir, boxstore.SealHelper} {
 		if planned := planFor(group, name); planned.Action != provider.ActionKeep {
 			t.Errorf("Plan() shows %s as %q, want the work the dead apply already did left alone", name, planned.Action)
 		}
@@ -160,7 +161,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState}, &said); err != nil {
 		t.Fatalf("the same command over a half-applied host = %v, want recovery to be the first run's command", err)
 	}
-	unchanged := host.KindFile + " " + host.SealHelper + ": already current"
+	unchanged := host.KindFile + " " + boxstore.SealHelper + ": already current"
 	if !slices.Contains(said, unchanged) {
 		t.Errorf("the apply said %q, want %q: what the plan showed as a no-op is declared rather than passed over", said, unchanged)
 	}

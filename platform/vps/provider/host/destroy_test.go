@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -73,7 +74,7 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	if stamp < 0 {
 		t.Fatalf("Remove() never took %s:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
 	}
-	for _, beneath := range []string{StateDir(class), SealKeyPath(class), SealHelper, deployUser} {
+	for _, beneath := range []string{StateDir(class), SealKeyPath(class), boxstore.SealHelper, deployUser} {
 		if at := box.took(quoted(beneath)); at < 0 || at > stamp {
 			t.Errorf("Remove() took %s at command %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				beneath, at, stamp)
@@ -179,7 +180,7 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
-	for _, shared := range []string{stateRoot, helperRoot, classRoot} {
+	for _, shared := range []string{stateRoot, boxstore.Dir, classRoot} {
 		at := slices.IndexFunc(taken, func(command string) bool {
 			return strings.Contains(command, quoted(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
 		})
@@ -239,7 +240,7 @@ func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) 
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
 	for _, command := range box.commands() {
-		if strings.HasPrefix(command, quoted(recordsHelper)+" ") {
+		if strings.HasPrefix(command, quoted(boxstore.RecordsHelper)+" ") {
 			t.Errorf("Forget() ran %q against a host that has no helper at all", command)
 		}
 	}
@@ -284,7 +285,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *test
 	current := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	singletons := []string{
-		stateRoot, helperRoot, recordsHelper, SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, classRoot, deployUser,
+		stateRoot, boxstore.Dir, boxstore.RecordsHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, classRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {

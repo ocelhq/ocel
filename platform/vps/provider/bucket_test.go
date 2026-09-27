@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -177,7 +178,7 @@ func sealingStore(t *testing.T, declared ...string) string {
 		}
 	}
 	for _, command := range machine.commands() {
-		if strings.Contains(command, host.SealHelper) {
+		if strings.Contains(command, boxstore.SealHelper) {
 			return command
 		}
 	}

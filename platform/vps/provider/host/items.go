@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -26,11 +27,8 @@ const (
 	classRoot    = live.ClassRoot
 	stateRoot    = live.StateRoot
 	releasesRoot = stateRoot + "/releases"
-	helperRoot   = "/usr/local/lib/ocel"
 
-	recordsHelper  = helperRoot + "/records"
-	releasesHelper = helperRoot + "/releases"
-	SealHelper     = helperRoot + "/seal"
+	releasesHelper = boxstore.Dir + "/releases"
 
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"
@@ -81,10 +79,10 @@ func ClassItems(class edge.Class) []Item {
 
 func StorageItems(class edge.Class, keys []byte) []Item {
 	return []Item{
-		dir(helperRoot, 0o755, rootOwner, ""),
-		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "deploy records"},
+		dir(boxstore.Dir, 0o755, rootOwner, ""),
+		{Kind: KindFile, Name: boxstore.RecordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "deploy records"},
 		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "release window"},
-		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
+		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
 		principal(),
 		{Kind: KindFile, Name: sudoersSeal(class), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(class), Note: "sudo for the seal helper"},
 		dir(stateRoot, 0o750, stateOwner, ""),

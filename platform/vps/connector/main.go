@@ -7,8 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
-	"github.com/ocelhq/ocel/platform/vps/connector/hostports"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -56,8 +55,8 @@ func run(listen, config string, printing, reporting bool) error {
 		Addr:       listen,
 		ConfigPath: config,
 		EnvVars: envvarsserver.Backend{
-			Records: host.RecordsOver(hostports.Records{}),
-			Cipher:  host.CipherOver(hostports.Cipher{}),
+			Records: boxstore.NewRecords(boxstore.LocalTransport{}),
+			Cipher:  boxstore.NewCipher(boxstore.LocalTransport{Elevation: []string{"sudo", "-n"}}),
 		},
 	})
 }

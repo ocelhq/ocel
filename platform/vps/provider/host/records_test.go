@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -66,22 +67,22 @@ func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 		t.Fatalf("read back %q at %q, want %q at %q", body, revision, "one", first)
 	}
 
-	if _, code := helper(t, dir, "", "write", name, ""); code != ExitStale {
-		t.Errorf("a write at a taken name naming no revision exited %d, want %d", code, ExitStale)
+	if _, code := helper(t, dir, "", "write", name, ""); code != boxstore.ExitStale {
+		t.Errorf("a write at a taken name naming no revision exited %d, want %d", code, boxstore.ExitStale)
 	}
 	second := helperWrite(t, dir, name, first, "two")
-	if _, code := helper(t, dir, "", "write", name, first); code != ExitStale {
-		t.Errorf("a second write at a revision that moved exited %d, want %d", code, ExitStale)
+	if _, code := helper(t, dir, "", "write", name, first); code != boxstore.ExitStale {
+		t.Errorf("a second write at a revision that moved exited %d, want %d", code, boxstore.ExitStale)
 	}
 
-	if _, code := helper(t, dir, "", "remove", name, first); code != ExitStale {
-		t.Errorf("a removal at a revision that moved exited %d, want %d", code, ExitStale)
+	if _, code := helper(t, dir, "", "remove", name, first); code != boxstore.ExitStale {
+		t.Errorf("a removal at a revision that moved exited %d, want %d", code, boxstore.ExitStale)
 	}
 	if _, code := helper(t, dir, "", "remove", name, second); code != 0 {
 		t.Errorf("a removal at the current revision exited %d, want it gone", code)
 	}
-	if _, code := helper(t, dir, "", "read", name); code != ExitNoRecord {
-		t.Errorf("a read after a removal exited %d, want %d", code, ExitNoRecord)
+	if _, code := helper(t, dir, "", "read", name); code != boxstore.ExitNoRecord {
+		t.Errorf("a read after a removal exited %d, want %d", code, boxstore.ExitNoRecord)
 	}
 }
 
@@ -97,8 +98,8 @@ func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 	}
 	current, _ := helperRead(t, dir, one)
 	moved := "a revision nobody wrote"
-	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, current, two, moved); code != ExitStale {
-		t.Fatalf("a pair where one half moved exited %d, want %d", code, ExitStale)
+	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, current, two, moved); code != boxstore.ExitStale {
+		t.Fatalf("a pair where one half moved exited %d, want %d", code, boxstore.ExitStale)
 	}
 	for _, name := range []string{one, two} {
 		if _, body := helperRead(t, dir, name); body != "one" {
@@ -308,7 +309,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		switch {
 		case strings.Contains(command, "echo present"):
 			return session.Result{Stdout: "present\n"}, true
-		case strings.Contains(command, recordsHelper):
+		case strings.Contains(command, boxstore.RecordsHelper):
 			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t" + base64.StdEncoding.EncodeToString([]byte("{}")) + "\n"}, true
 		}
 		return session.Result{}, false
@@ -323,7 +324,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 	}
 	reached := 0
 	for _, command := range b.commands() {
-		if !strings.Contains(command, recordsHelper) {
+		if !strings.Contains(command, boxstore.RecordsHelper) {
 			continue
 		}
 		reached++
@@ -347,7 +348,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		switch {
 		case strings.Contains(command, "echo present"):
 			return session.Result{Stdout: "present\n"}, true
-		case strings.Contains(command, recordsHelper):
+		case strings.Contains(command, boxstore.RecordsHelper):
 			return session.Result{Code: 1, Stderr: "Permission denied"}, true
 		}
 		return session.Result{}, false

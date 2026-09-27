@@ -2,10 +2,12 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 const sealClass = "production"
@@ -104,6 +107,25 @@ var bound = records.SealScope{
 }
 
 var aCoordinate = sealFlags(bound)
+
+type argvTaken struct{ argv []string }
+
+func (a *argvTaken) Seal(_ context.Context, _ string, argv []string, _ io.Reader) (string, error) {
+	a.argv = argv
+	return "", nil
+}
+
+func sealArgv(verb string, at records.SealScope) ([]string, error) {
+	taken := &argvTaken{}
+	cipher := boxstore.NewCipher(taken)
+	var err error
+	if verb == "open" {
+		_, err = cipher.Open(context.Background(), at, nil)
+	} else {
+		_, err = cipher.Seal(context.Background(), at, nil)
+	}
+	return taken.argv, err
+}
 
 func sealFlags(at records.SealScope) []string {
 	argv, err := sealArgv("seal", at)
@@ -230,11 +252,11 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 		t.Error("the seal key is written with content from this machine, and a key that leaves the host is no key sealed to it")
 	}
 
-	helper := written(items, KindFile, SealHelper)
+	helper := written(items, KindFile, boxstore.SealHelper)
 	if helper.Name == "" || helper.Owner != rootOwner || helper.Mode&0o022 != 0 {
-		t.Errorf("%s is written %04o to %q, and a helper the caller can rewrite is a key the caller can read", SealHelper, helper.Mode, helper.Owner)
+		t.Errorf("%s is written %04o to %q, and a helper the caller can rewrite is a key the caller can read", boxstore.SealHelper, helper.Mode, helper.Owner)
 	}
-	if at(items, SealHelper) > at(items, key.Name) {
+	if at(items, boxstore.SealHelper) > at(items, key.Name) {
 		t.Error("the seal key is minted before the helper that mints it exists")
 	}
 }
@@ -259,7 +281,7 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) 
 		t.Errorf("%s is written %04o to %q, want 0440 to %s or sudo refuses to read it", fragment.Name, fragment.Mode, fragment.Owner, rootOwner)
 	}
 	written := strings.TrimSpace(string(fragment.Content))
-	if want := deployUser + " ALL=(root) NOPASSWD: " + SealHelper + " production seal *, " + SealHelper + " production open *"; written != want {
+	if want := deployUser + " ALL=(root) NOPASSWD: " + boxstore.SealHelper + " production seal *, " + boxstore.SealHelper + " production open *"; written != want {
 		t.Errorf("the fragment reads %q, want %q: one helper, the class it seals under, the two verbs a deploy uses and no path beside it", written, want)
 	}
 	if fragment.Name != sudoersSeal(edge.ClassProduction) || strings.ContainsAny(strings.TrimPrefix(fragment.Name, sudoersRoot+"/"), ".~") {
@@ -442,7 +464,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 	if index(alone, key.path) > index(alone, ClassDir(production)) {
 		t.Error("the class directory is removed before the key it contains is named, so the confirmation names bytes that are already gone")
 	}
-	for _, singleton := range []string{SealHelper, sudoersSeal(production)} {
+	for _, singleton := range []string{boxstore.SealHelper, sudoersSeal(production)} {
 		if removalOf(alone, singleton).path == "" {
 			t.Errorf("destroying the last class leaves %s behind", singleton)
 		}
@@ -450,8 +472,8 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 
 	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
 	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsPresent{})
-	if removalOf(shared, SealHelper).path != "" {
-		t.Errorf("destroying one class takes %s, which an installed sibling still seals through", SealHelper)
+	if removalOf(shared, boxstore.SealHelper).path != "" {
+		t.Errorf("destroying one class takes %s, which an installed sibling still seals through", boxstore.SealHelper)
 	}
 	if removalOf(shared, sudoersSeal(preview)).path != "" {
 		t.Errorf("destroying %s takes %s, the line the installed %s class seals through", production, sudoersSeal(preview), preview)
@@ -479,7 +501,7 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sealArgv() = %v", err)
 	}
-	if argv[0] != SealHelper {
+	if argv[0] != boxstore.SealHelper {
 		t.Errorf("the provider runs %q, want the helper it installed and nothing beside", argv[0])
 	}
 	command := words(argv)
@@ -524,9 +546,9 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 
 	ran := "sudo -n " + words(argv)
 	if strings.Contains(ran, "sh -c") {
-		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal(edge.ClassProduction), SealHelper)
+		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal(edge.ClassProduction), boxstore.SealHelper)
 	}
-	if want := "sudo -n " + quoted(SealHelper) + " "; !strings.HasPrefix(ran, want) {
+	if want := "sudo -n " + quoted(boxstore.SealHelper) + " "; !strings.HasPrefix(ran, want) {
 		t.Errorf("the deploy login runs %q, want it to begin %q: sudo matches the command it is handed, and nothing else runs", ran, want)
 	}
 }

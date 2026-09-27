@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 func TestEachClassIsWhitelistedOnItsOwnSudoersLineNamingItsClassAlone(t *testing.T) {
@@ -20,12 +21,12 @@ func TestEachClassIsWhitelistedOnItsOwnSudoersLineNamingItsClassAlone(t *testing
 		if class == edge.ClassProduction {
 			other = string(edge.ClassPreview)
 		}
-		for _, banned := range []string{" " + other + " ", " init", SealHelper + ","} {
+		for _, banned := range []string{" " + other + " ", " init", boxstore.SealHelper + ","} {
 			if strings.Contains(line, banned) {
 				t.Errorf("%s's line reads %q and contains %q, which lets the deploy login past the class or the verbs it needs", class, line, banned)
 			}
 		}
-		for _, wanted := range []string{SealHelper + " " + string(class) + " seal *", SealHelper + " " + string(class) + " open *"} {
+		for _, wanted := range []string{boxstore.SealHelper + " " + string(class) + " seal *", boxstore.SealHelper + " " + string(class) + " open *"} {
 			if !strings.Contains(line, wanted) {
 				t.Errorf("%s's line reads %q and never grants %q", class, line, wanted)
 			}
