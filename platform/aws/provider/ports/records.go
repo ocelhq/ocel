@@ -31,19 +31,20 @@ const (
 )
 
 var partitionSegments = map[string]int{
-	records.RootValues:          3,
-	records.RootValueRefs:       3,
-	records.RootEnvSources:      2,
-	records.RootEnvSourceStatus: 2,
-	records.RootStacks:          3,
-	records.RootEnvironments:    3,
-	records.RootConformance:     3,
-	records.RootLedger:          2,
-	records.RootEdgeStacks:      2,
-	records.RootSchema:          1,
-	records.RootProjects:        2,
-	records.RootBootstrap:       2,
-	records.RootWildcard:        2,
+	records.RootValues:             3,
+	records.RootValueRefs:          3,
+	records.RootEnvSources:         2,
+	records.RootEnvSourceStatus:    2,
+	records.RootEnvSourceDigestKey: 2,
+	records.RootStacks:             3,
+	records.RootEnvironments:       3,
+	records.RootConformance:        3,
+	records.RootLedger:             2,
+	records.RootEdgeStacks:         2,
+	records.RootSchema:             1,
+	records.RootProjects:           2,
+	records.RootBootstrap:          2,
+	records.RootWildcard:           2,
 }
 
 type DynamoAPI interface {
@@ -75,7 +76,7 @@ func isValueRecord(name records.Name) bool {
 		return false
 	}
 	switch name[0] {
-	case records.RootValues, records.RootValueRefs, records.RootEnvSources, records.RootEnvSourceStatus:
+	case records.RootValues, records.RootValueRefs, records.RootEnvSources, records.RootEnvSourceStatus, records.RootEnvSourceDigestKey:
 		return true
 	}
 	return false

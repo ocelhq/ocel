@@ -35,8 +35,10 @@ func TestAnExecEnvSourceRunsItsCommandOncePerFolderWithTheFolderSubstituted(t *t
 	if len(read) != 2 || string(read[cell("", "ROOT")].Plaintext) != "r" || string(read[cell("/web", "WEB")].Plaintext) != "w" {
 		t.Fatalf("Read() = %v, want ROOT at the root and WEB in /web, and the empty value unset", read)
 	}
-	if version := read[cell("", "ROOT")].Version; version == "" || version == read[cell("/web", "WEB")].Version {
-		t.Errorf("versions = %q and %q, want each named by its value", version, read[cell("/web", "WEB")].Version)
+	for at, got := range read {
+		if got.Version != "" {
+			t.Errorf("%s read at version %q, want no version: only the store a value is copied into keys one", at, got.Version)
+		}
 	}
 	if source.ID() != "exec" {
 		t.Errorf("ID() = %q, want exec", source.ID())

@@ -53,19 +53,20 @@ func LedgerRecord(scope string, rest ...string) records.Name {
 }
 
 var classSegment = map[string]int{
-	records.RootSchema:          1,
-	records.RootProjects:        1,
-	records.RootStacks:          1,
-	records.RootEnvironments:    1,
-	records.RootBootstrap:       1,
-	records.RootEdgeStacks:      1,
-	records.RootWildcard:        1,
-	records.RootLedger:          1,
-	records.RootConformance:     1,
-	records.RootValueRefs:       1,
-	records.RootEnvSources:      1,
-	records.RootEnvSourceStatus: 1,
-	records.RootValues:          2,
+	records.RootSchema:             1,
+	records.RootProjects:           1,
+	records.RootStacks:             1,
+	records.RootEnvironments:       1,
+	records.RootBootstrap:          1,
+	records.RootEdgeStacks:         1,
+	records.RootWildcard:           1,
+	records.RootLedger:             1,
+	records.RootConformance:        1,
+	records.RootValueRefs:          1,
+	records.RootEnvSources:         1,
+	records.RootEnvSourceStatus:    1,
+	records.RootEnvSourceDigestKey: 1,
+	records.RootValues:             2,
 }
 
 func ClassOf(name records.Name) (edge.Class, bool) {

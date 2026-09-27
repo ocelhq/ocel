@@ -2052,7 +2052,6 @@ type EnvSourceValue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Cell          *Cell                  `protobuf:"bytes,1,opt,name=cell,proto3" json:"cell,omitempty"`
 	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2097,13 +2096,6 @@ func (x *EnvSourceValue) GetCell() *Cell {
 func (x *EnvSourceValue) GetValue() string {
 	if x != nil {
 		return x.Value
-	}
-	return ""
-}
-
-func (x *EnvSourceValue) GetVersion() string {
-	if x != nil {
-		return x.Version
 	}
 	return ""
 }
@@ -3021,11 +3013,10 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"identityId\"p\n" +
 	"\rExecEnvSource\x12\"\n" +
 	"\acommand\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\acommand\x12;\n" +
-	"\x06values\x18\x02 \x03(\v2#.provider.envvars.v1.EnvSourceValueR\x06values\"|\n" +
+	"\x06values\x18\x02 \x03(\v2#.provider.envvars.v1.EnvSourceValueR\x06values\"b\n" +
 	"\x0eEnvSourceValue\x125\n" +
 	"\x04cell\x18\x01 \x01(\v2\x19.provider.envvars.v1.CellB\x06\xbaH\x03\xc8\x01\x01R\x04cell\x12\x19\n" +
-	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\tR\aversion\"\xaf\x01\n" +
+	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\"\xaf\x01\n" +
 	"\x04Cell\x12z\n" +
 	"\x06folder\x18\x01 \x01(\tBb\xbaH_r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
 	"\x03key\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\"\xb2\x02\n" +

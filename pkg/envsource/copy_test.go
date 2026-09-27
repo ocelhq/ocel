@@ -51,7 +51,7 @@ func TestCopyValuesWritesTheReadFoldersIntoClassWideValuesAndOnlyWhatChanged(t *
 		cell("/web", "SIGNED_BY"): value("k", "s4@1"),
 	}
 
-	result, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(10), read, []string{"", "/web"}, nil)
+	result, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(10), read, []string{"", "/web"}, nil)
 	if err != nil {
 		t.Fatalf("CopyValues() = %v", err)
 	}
@@ -59,7 +59,7 @@ func TestCopyValuesWritesTheReadFoldersIntoClassWideValuesAndOnlyWhatChanged(t *
 		t.Fatalf("result = %+v, want three values written from the two folders read", result)
 	}
 	database := reveal(t, store, scope, classWide("", "DATABASE_URL"))
-	if database.Plaintext != "postgres://one" || database.Provenance.EnvSource != fromInfisical || database.Provenance.Version != "s1@1" {
+	if database.Plaintext != "postgres://one" || database.Provenance.EnvSource != fromInfisical || !strings.HasPrefix(database.Provenance.Version, "s1@1#") {
 		t.Fatalf("DATABASE_URL = %+v", database)
 	}
 	if _, err := store.Get(ctx, scope, classWide("/other", "UNREAD"), false); !errors.Is(err, envvars.ErrNotFound) {
@@ -67,7 +67,7 @@ func TestCopyValuesWritesTheReadFoldersIntoClassWideValuesAndOnlyWhatChanged(t *
 	}
 
 	read[cell("", "DATABASE_URL")] = value("postgres://two", "s1@2")
-	again, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(20), read, []string{"", "/web"}, nil)
+	again, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(20), read, []string{"", "/web"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestCopyValuesNeverWritesAnOlderReadOverANewerOne(t *testing.T) {
 	ctx := context.Background()
 	copyOne := func(plaintext, version string) envsource.CopyResult {
 		t.Helper()
-		result, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(30), map[envvars.Cell]envsource.Value{cell("", "K"): value(plaintext, version)}, []string{""}, nil)
+		result, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(30), map[envvars.Cell]envsource.Value{cell("", "K"): value(plaintext, version)}, []string{""}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -111,26 +111,40 @@ func TestCopyValuesNeverWritesAnOlderReadOverANewerOne(t *testing.T) {
 func TestCopyValuesWritesAValueThatChangedUnderTheVersionItWasReadAt(t *testing.T) {
 	t.Parallel()
 	store, scope := storeFixture()
-	copyAt(t, store, scope, 1, map[envvars.Cell]envsource.Value{cell("", "K"): value("before", "s1@3#aaaa")})
+	copyAt(t, store, scope, 1, map[envvars.Cell]envsource.Value{cell("", "K"): value("before", "s1@3")})
 
-	if changed := copyAt(t, store, scope, 2, map[envvars.Cell]envsource.Value{cell("", "K"): value("after", "s1@3#bbbb")}); len(changed.Written) != 1 {
+	if changed := copyAt(t, store, scope, 2, map[envvars.Cell]envsource.Value{cell("", "K"): value("after", "s1@3")}); len(changed.Written) != 1 {
 		t.Fatalf("a value that changed under an unchanged secret version wrote %v, want it written", changed.Written)
 	}
 	if k := reveal(t, store, scope, classWide("", "K")); k.Plaintext != "after" {
 		t.Fatalf("K = %q, want the value a referenced secret's rotation changed", k.Plaintext)
 	}
-	if older := copyAt(t, store, scope, 3, map[envvars.Cell]envsource.Value{cell("", "K"): value("older", "s1@2#cccc")}); len(older.Written) != 0 {
+	if older := copyAt(t, store, scope, 3, map[envvars.Cell]envsource.Value{cell("", "K"): value("older", "s1@2")}); len(older.Written) != 0 {
 		t.Fatalf("a read of an older secret version wrote %v", older.Written)
 	}
 }
 
 func copyAt(t *testing.T, store envvars.Store, scope envvars.Scope, second int, read map[envvars.Cell]envsource.Value) envsource.CopyResult {
 	t.Helper()
-	result, err := envsource.CopyValues(context.Background(), store, scope, fromInfisical, readAt(second), read, []string{""}, nil)
+	return copyWith(t, store, scope, digestKeyOf(t, store, scope), second, read)
+}
+
+func copyWith(t *testing.T, store envvars.Store, scope envvars.Scope, key envsource.DigestKey, second int, read map[envvars.Cell]envsource.Value) envsource.CopyResult {
+	t.Helper()
+	result, err := envsource.CopyValues(context.Background(), store, scope, key, fromInfisical, readAt(second), read, []string{""}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return result
+}
+
+func digestKeyOf(t *testing.T, store envvars.Store, scope envvars.Scope) envsource.DigestKey {
+	t.Helper()
+	key, err := envsource.EnsureDigestKey(context.Background(), store, scope.Class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }
 
 func TestAReadOlderThanTheOneThatRemovedAKeyNeverBringsItBack(t *testing.T) {
@@ -172,7 +186,7 @@ func TestCopyValuesRemovesWhatTheSourceDroppedAndSparesNamedEnvironments(t *test
 	store, scope := storeFixture()
 	ctx := context.Background()
 	read := map[envvars.Cell]envsource.Value{cell("", "GONE"): value("x", "s1@1"), cell("", "KEPT"): value("y", "s2@1")}
-	if _, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(40), read, []string{""}, nil); err != nil {
+	if _, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(40), read, []string{""}, nil); err != nil {
 		t.Fatal(err)
 	}
 	override := envvars.Coordinate{Cell: envvars.Cell{Key: "GONE"}, Environment: "pr-1"}
@@ -181,7 +195,7 @@ func TestCopyValuesRemovesWhatTheSourceDroppedAndSparesNamedEnvironments(t *test
 	}
 
 	delete(read, cell("", "GONE"))
-	result, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(50), read, []string{""}, nil)
+	result, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(50), read, []string{""}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +215,7 @@ func TestATierSwitchedToAnEnvSourceKeepsNoClassWideValueTheSourceLacks(t *testin
 	store, scope := storeFixture()
 	ctx := context.Background()
 	before := map[envvars.Cell]envsource.Value{cell("", "FROM_STAGING"): value("s", "s7@1")}
-	if _, err := envsource.CopyValues(ctx, store, scope, "infisical:p/staging", readAt(60), before, []string{""}, nil); err != nil {
+	if _, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), "infisical:p/staging", readAt(60), before, []string{""}, nil); err != nil {
 		t.Fatal(err)
 	}
 	for key, plaintext := range map[string]string{"SET_IN_OCEL": "mine", "ALSO_IN_THE_SOURCE": "old", "INFISICAL_CLIENT_SECRET": "credential"} {
@@ -221,7 +235,7 @@ func TestATierSwitchedToAnEnvSourceKeepsNoClassWideValueTheSourceLacks(t *testin
 
 	read := map[envvars.Cell]envsource.Value{cell("", "ALSO_IN_THE_SOURCE"): value("new", "s1@1")}
 	keep := []envvars.Cell{cell("", "INFISICAL_CLIENT_SECRET")}
-	result, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(70), read, []string{""}, keep)
+	result, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(70), read, []string{""}, keep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +265,7 @@ func TestCopyValuesLeavesTheCellsItIsToldToKeep(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := map[envvars.Cell]envsource.Value{cell("", "INFISICAL_CLIENT_SECRET"): value("from-the-source", "s1@1")}
-	result, err := envsource.CopyValues(ctx, store, scope, fromInfisical, readAt(80), read, []string{""}, []envvars.Cell{cell("", "INFISICAL_CLIENT_SECRET")})
+	result, err := envsource.CopyValues(ctx, store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(80), read, []string{""}, []envvars.Cell{cell("", "INFISICAL_CLIENT_SECRET")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +284,7 @@ func TestCopyValuesRefusesAValueTooLargeToStoreAndWritesTheRest(t *testing.T) {
 		cell("", "HUGE"): value(strings.Repeat("x", envvars.MaxValueBytes+1), "s1@1"),
 		cell("", "FINE"): value("ok", "s2@1"),
 	}
-	result, err := envsource.CopyValues(context.Background(), store, scope, fromInfisical, readAt(90), read, []string{""}, nil)
+	result, err := envsource.CopyValues(context.Background(), store, scope, digestKeyOf(t, store, scope), fromInfisical, readAt(90), read, []string{""}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

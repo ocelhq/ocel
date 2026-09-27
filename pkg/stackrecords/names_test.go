@@ -17,6 +17,7 @@ func TestARecordNamesTheClassItBelongsTo(t *testing.T) {
 	}{
 		{name: records.Name{records.RootEnvSources, "preview", "shop"}, want: edge.ClassPreview},
 		{name: records.Name{records.RootEnvSourceStatus, "production", "0f3a"}, want: edge.ClassProduction},
+		{name: records.Name{records.RootEnvSourceDigestKey, "preview"}, want: edge.ClassPreview},
 		{name: records.Name{records.RootValues, "shop", "preview", "cells"}, want: edge.ClassPreview},
 	} {
 		class, named := stackrecords.ClassOf(c.name)
