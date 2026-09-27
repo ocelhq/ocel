@@ -11,10 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -223,11 +226,43 @@ func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 	run.End(&err)
 
 	logPath := sink.received()[0].GetResult().GetLogPath()
-	if logPath != traced.LogPath() || !strings.HasPrefix(logPath, filepath.Join(dir, ".ocel", "runs")) {
+	if logPath != traced.LogPath() || !strings.HasPrefix(logPath, filepath.Join(dir, constants.ProjectStateDirName, "runs")) {
 		t.Fatalf("log path = %q, want the trace's log %q under the project", logPath, traced.LogPath())
 	}
 	spans, readErr := os.ReadFile(filepath.Join(filepath.Dir(logPath), traced.TraceID()+".otlp.json"))
 	if readErr != nil || !strings.Contains(string(spans), "ocel deploy") {
 		t.Fatalf("trace file = %q (%v), want the run's root span", spans, readErr)
+	}
+}
+
+func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t *testing.T) {
+	bus := events.NewBus(time.Now)
+	bus.Attach(&recording{})
+	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logPath := runtrace.FromContext(ctx).LogPath()
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Debug("engine chatter")
+	build.End(nil)
+	run.End(&err)
+	bus.Send(&streamv1.RunEvent{Message: "after the run"})
+
+	raw, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var got []string
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("log line %q is not a run event: %v", line, err)
+		}
+		got = append(got, bodies([]*streamv1.RunEvent{ev})[0]+" "+ev.GetLevel().String())
+	}
+	want := []string{"started LEVEL_INFO", "message LEVEL_DEBUG", "ended LEVEL_INFO", "result LEVEL_INFO"}
+	if strings.Join(got, ", ") != strings.Join(want, ", ") {
+		t.Errorf("the run's log = %q, want %q", got, want)
 	}
 }

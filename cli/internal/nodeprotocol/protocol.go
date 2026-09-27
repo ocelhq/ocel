@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const Prefix = "@@OCEL_V1@@"
@@ -165,7 +166,7 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 	switch rec.Type {
 	case typeLog:
 		if p.Run != nil {
-			p.Run.Log(p.logContext(ctx, rec.App), runtrace.Level(rec.Level), runtrace.Stage(rec.Stage), runtrace.App(rec.App), rec.Message)
+			p.Run.Log(p.logContext(ctx, rec.App), level(rec.Level), rec.App, rec.Message)
 		}
 	case typeSpanStart:
 		p.startSpan(ctx, rec)
@@ -176,8 +177,21 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 		p.err = rec.Message
 		p.mu.Unlock()
 		if p.Run != nil {
-			p.Run.Error(p.logContext(ctx, rec.App), runtrace.Stage(rec.Stage), runtrace.App(rec.App), rec.Message)
+			p.Run.Log(p.logContext(ctx, rec.App), progressv1.Level_LEVEL_ERROR, rec.App, rec.Message)
 		}
+	}
+}
+
+func level(name string) progressv1.Level {
+	switch name {
+	case "debug":
+		return progressv1.Level_LEVEL_DEBUG
+	case "warn":
+		return progressv1.Level_LEVEL_WARN
+	case "error":
+		return progressv1.Level_LEVEL_ERROR
+	default:
+		return progressv1.Level_LEVEL_INFO
 	}
 }
 

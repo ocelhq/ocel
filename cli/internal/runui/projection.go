@@ -654,3 +654,10 @@ func (p *projector) logPointer(label, logPath string) []string {
 	}
 	return []string{"", p.faint(fmt.Sprintf("%s%s: %s", blockIndent, label, relLog(logPath)))}
 }
+
+func progressLogLine(message string, current uint32, total *uint32) string {
+	if total != nil {
+		return fmt.Sprintf("%s (%d/%d)", message, current, *total)
+	}
+	return message
+}

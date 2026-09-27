@@ -2,7 +2,6 @@ package runtrace
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,7 +11,11 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/ocelhq/ocel/pkg/constants"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type ctxKey struct{}
@@ -31,9 +34,15 @@ type Run struct {
 	logMu   sync.Mutex
 	logFile *os.File
 
+	scopesMu sync.Mutex
+	scopes   map[trace.SpanID]startedScope
+
 	tp       *sdktrace.TracerProvider
 	tracer   trace.Tracer
 	rootSpan trace.Span
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func Start(ctx context.Context, projectDir, command string) (context.Context, *Run, error) {
@@ -67,6 +76,7 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 		dir:     dir,
 		logPath: logPath,
 		logFile: logFile,
+		scopes:  map[trace.SpanID]startedScope{},
 		tp:      tp,
 		tracer:  tp.Tracer("github.com/ocelhq/ocel/cli"),
 	}
@@ -108,53 +118,27 @@ func (r *Run) StartSpan(ctx context.Context, stage string, attrs ...attribute.Ke
 	return r.tracer.Start(ctx, stage, opts...)
 }
 
-func (r *Run) Log(ctx context.Context, level Level, stage Stage, app App, message string, attrs ...attribute.KeyValue) {
-	rec := logRecord{
-		Time:    time.Now().UTC(),
+func (r *Run) Log(ctx context.Context, level progressv1.Level, app, message string) {
+	ev := &streamv1.RunEvent{
+		Time:    timestamppb.Now(),
 		Level:   level,
+		Phase:   progressv1.Phase_PHASE_BUILD,
+		Subject: app,
 		Message: message,
-		Stage:   string(stage),
-		App:     string(app),
-		TraceID: r.TraceID(),
 	}
 	if sc := trace.SpanContextFromContext(ctx); sc.HasSpanID() {
-		rec.SpanID = sc.SpanID().String()
+		id := sc.SpanID()
+		ev.SpanId = id[:]
 	}
-	if filtered := filterAttributes(attrs); len(filtered) > 0 {
-		rec.Attrs = make(map[string]any, len(filtered))
-		for _, a := range filtered {
-			rec.Attrs[string(a.Key)] = a.Value.AsInterface()
-		}
-	}
-
-	raw, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	raw = append(raw, '\n')
-
-	r.logMu.Lock()
-	defer r.logMu.Unlock()
-	_, _ = r.logFile.Write(raw)
-}
-
-func (r *Run) Debug(ctx context.Context, stage Stage, app App, message string, attrs ...attribute.KeyValue) {
-	r.Log(ctx, LevelDebug, stage, app, message, attrs...)
-}
-
-func (r *Run) Info(ctx context.Context, stage Stage, app App, message string, attrs ...attribute.KeyValue) {
-	r.Log(ctx, LevelInfo, stage, app, message, attrs...)
-}
-
-func (r *Run) Warn(ctx context.Context, stage Stage, app App, message string, attrs ...attribute.KeyValue) {
-	r.Log(ctx, LevelWarn, stage, app, message, attrs...)
-}
-
-func (r *Run) Error(ctx context.Context, stage Stage, app App, message string, attrs ...attribute.KeyValue) {
-	r.Log(ctx, LevelError, stage, app, message, attrs...)
+	r.record(ev)
 }
 
 func (r *Run) Close() error {
+	r.closeOnce.Do(func() { r.closeErr = r.shutdown() })
+	return r.closeErr
+}
+
+func (r *Run) shutdown() error {
 	r.rootSpan.End()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

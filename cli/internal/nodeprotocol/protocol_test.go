@@ -3,6 +3,7 @@ package nodeprotocol
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func newRun(t *testing.T) (context.Context, *runtrace.Run) {
@@ -30,6 +35,22 @@ func readTrace(t *testing.T, run *runtrace.Run) string {
 		t.Fatalf("read trace: %v", err)
 	}
 	return string(raw)
+}
+
+func loggedEvents(t *testing.T, run *runtrace.Run) []*streamv1.RunEvent {
+	t.Helper()
+	var out []*streamv1.RunEvent
+	for _, line := range strings.Split(strings.TrimSpace(readLog(t, run)), "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("log line %q is not a run event: %v", line, err)
+		}
+		out = append(out, ev)
+	}
+	return out
 }
 
 func readLog(t *testing.T, run *runtrace.Run) string {
@@ -265,25 +286,14 @@ func TestProcessorParentsALogRecordToItsOpenSpan(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	log := readLog(t, run)
-	var lines []map[string]any
-	for _, l := range strings.Split(strings.TrimSpace(log), "\n") {
-		var rec map[string]any
-		if err := json.Unmarshal([]byte(l), &rec); err != nil {
-			t.Fatalf("unmarshal log line %q: %v", l, err)
-		}
-		lines = append(lines, rec)
-	}
-
 	var spanID string
-	for _, rec := range lines {
-		if rec["message"] == "installing dependencies" {
-			id, _ := rec["span_id"].(string)
-			spanID = id
+	for _, ev := range loggedEvents(t, run) {
+		if ev.GetMessage() == "installing dependencies" {
+			spanID = hex.EncodeToString(ev.GetSpanId())
 		}
 	}
 	if spanID == "" {
-		t.Fatalf("log = %s, want the log record to include a span_id", log)
+		t.Fatalf("log = %s, want the log record to carry a span id", readLog(t, run))
 	}
 
 	trace := readTrace(t, run)
@@ -305,12 +315,12 @@ func TestProcessorWorksWithNoRun(t *testing.T) {
 	}
 }
 
-func TestProcessorParsesTheDocumentedWireFormat(t *testing.T) {
+func TestANodeBuildLogRecordIsARunEventInTheBuildPhaseNamingItsApp(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
 	p := &Processor{Run: run, Forward: &out}
 
-	raw, err := json.Marshal(record{Type: typeLog, App: "api", Stage: "build", Level: "info", Message: "installing dependencies"})
+	raw, err := json.Marshal(record{Type: typeLog, App: "api", Stage: "build", Level: "warn", Message: "installing dependencies"})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -319,9 +329,16 @@ func TestProcessorParsesTheDocumentedWireFormat(t *testing.T) {
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	log := readLog(t, run)
-	if !strings.Contains(log, "installing dependencies") || !strings.Contains(log, `"app":"api"`) {
-		t.Errorf("log = %s, want the log record keyed by app", log)
+	logged := loggedEvents(t, run)
+	if len(logged) != 1 {
+		t.Fatalf("the log holds %d events, want the one record", len(logged))
+	}
+	ev := logged[0]
+	if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "api" || ev.GetLevel() != progressv1.Level_LEVEL_WARN || ev.GetMessage() != "installing dependencies" {
+		t.Errorf("logged %s [%s] %s: %q, want WARN [PHASE_BUILD] api: \"installing dependencies\"", ev.GetLevel(), ev.GetPhase(), ev.GetSubject(), ev.GetMessage())
+	}
+	if ev.GetTime() == nil {
+		t.Error("the logged event has no time")
 	}
 }
 

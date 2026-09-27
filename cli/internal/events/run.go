@@ -50,6 +50,7 @@ func (r *Run) End(errp *error) {
 		}
 		r.bus.Send(&streamv1.RunEvent{Level: resultLevel(result), Body: &streamv1.RunEvent_Result{Result: result}})
 		if r.trace != nil {
+			r.bus.detach(r.trace)
 			_ = r.trace.Close()
 		}
 		if code != 0 {

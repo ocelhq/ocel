@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func TestStartNamesArtifactsByTraceID(t *testing.T) {
@@ -22,7 +23,7 @@ func TestStartNamesArtifactsByTraceID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start() = %v", err)
 	}
-	r.Info(ctx, "building", "web", "building project")
+	r.Log(ctx, progressv1.Level_LEVEL_INFO, "web", "building project")
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -39,37 +40,6 @@ func TestStartNamesArtifactsByTraceID(t *testing.T) {
 	}
 	if len(r.TraceID()) != 32 {
 		t.Errorf("TraceID() = %q, want a 32-char hex trace id", r.TraceID())
-	}
-}
-
-func TestLogRecordUsesTheVocabulary(t *testing.T) {
-	dir := t.TempDir()
-	ctx, r, err := Start(context.Background(), dir, "ocel deploy")
-	if err != nil {
-		t.Fatalf("Start() = %v", err)
-	}
-	spanCtx, span := r.StartSpan(ctx, "uploading")
-	r.Info(spanCtx, "uploading", "web", "uploading function artifacts")
-	span.End()
-	if err := r.Close(); err != nil {
-		t.Fatalf("Close() = %v", err)
-	}
-
-	lines := readLines(t, r.LogPath())
-	if len(lines) != 1 {
-		t.Fatalf("got %d log lines, want 1", len(lines))
-	}
-	var rec map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
-		t.Fatalf("unmarshal record: %v", err)
-	}
-	for _, field := range []string{"time", "level", "message", "stage", "app", "trace_id", "span_id"} {
-		if _, ok := rec[field]; !ok {
-			t.Errorf("record %v missing field %q", rec, field)
-		}
-	}
-	if rec["trace_id"] != r.TraceID() {
-		t.Errorf("trace_id = %v, want %v", rec["trace_id"], r.TraceID())
 	}
 }
 
@@ -150,11 +120,7 @@ func TestAttributesOutsideTheAllowlistNeverReachEitherArtifact(t *testing.T) {
 		attribute.String("ocel.stage", "provisioning"),
 	)
 	span.SetAttributes(attribute.String("env.DATABASE_URL", varValue))
-	r.Info(spanCtx, "provisioning", "web", "provisioning resources",
-		attribute.String("credential", secret),
-		attribute.String("env.DATABASE_URL", varValue),
-		AttrApp.String("web"),
-	)
+	r.Log(spanCtx, progressv1.Level_LEVEL_INFO, "web", "provisioning resources")
 
 	const statusSecret = "AKIAFAKESECRETACCESSKEY12345"
 	span.SetStatus(codes.Error, "connection failed: aws_secret_access_key="+statusSecret)
@@ -185,7 +151,7 @@ func TestAttributesOutsideTheAllowlistNeverReachEitherArtifact(t *testing.T) {
 		}
 	}
 	if !strings.Contains(string(logRaw), "web") {
-		t.Errorf("log file lost the allowlisted app attribute")
+		t.Errorf("log file lost the record's app")
 	}
 }
 
@@ -202,10 +168,16 @@ type otlpTestSpan struct {
 	TraceId      string `json:"traceId"`
 	SpanId       string `json:"spanId"`
 	ParentSpanId string `json:"parentSpanId"`
+	Start        string `json:"startTimeUnixNano"`
+	End          string `json:"endTimeUnixNano"`
 	Kind         string `json:"kind"`
 	Status       *struct {
 		Code string `json:"code"`
 	} `json:"status"`
+	Attributes []struct {
+		Key   string         `json:"key"`
+		Value map[string]any `json:"value"`
+	} `json:"attributes"`
 	Events []struct {
 		Name       string           `json:"name"`
 		Attributes []map[string]any `json:"attributes"`

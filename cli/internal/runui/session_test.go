@@ -187,6 +187,33 @@ func readLog(t *testing.T, path string) string {
 	return string(raw)
 }
 
+func loggedEvents(t *testing.T, path string) []*streamv1.RunEvent {
+	t.Helper()
+	var out []*streamv1.RunEvent
+	for line := range strings.SplitSeq(strings.TrimSpace(readLog(t, path)), "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("log line %q is not a run event: %v", line, err)
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+func loggedWith(t *testing.T, path, message string) *streamv1.RunEvent {
+	t.Helper()
+	for _, ev := range loggedEvents(t, path) {
+		if ev.GetMessage() == message {
+			return ev
+		}
+	}
+	t.Fatalf("the run log holds no event saying %q", message)
+	return nil
+}
+
 func TestSession(t *testing.T) {
 	t.Run("progress lands in its flushed block, and content with no stage behind it never reaches stdout", func(t *testing.T) {
 		t.Parallel()
@@ -202,7 +229,7 @@ func TestSession(t *testing.T) {
 			Success: true,
 			Apps:    []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.workers.dev"}}},
 		}}})
-		s.Deployed("Deployed", nil, Flip{}, nil, nil)
+		s.Deployed("Deployed", nil, Flip{})
 
 		got := out.String()
 		for _, want := range []string{
@@ -221,11 +248,11 @@ func TestSession(t *testing.T) {
 		if err := s.Close(); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
-		log := readLog(t, logPath)
-		for _, want := range []string{"[progress] Uploading function artifacts", "[log] pulumi engine line"} {
-			if !strings.Contains(log, want) {
-				t.Errorf("log = %q, want it to contain %q", log, want)
-			}
+		if ev := loggedWith(t, logPath, "Uploading function artifacts"); ev.GetLevel() != progressv1.Level_LEVEL_INFO {
+			t.Errorf("progress logged at %s, want INFO", ev.GetLevel())
+		}
+		if ev := loggedWith(t, logPath, "pulumi engine line"); ev.GetOutput() == nil || ev.GetLevel() != progressv1.Level_LEVEL_DEBUG {
+			t.Errorf("engine line logged as %s, want a DEBUG output line", protojson.Format(ev))
 		}
 	})
 
@@ -276,8 +303,9 @@ func TestSession(t *testing.T) {
 			t.Fatalf("Close() = %v", err)
 		}
 
-		if log := readLog(t, logPath); !strings.Contains(log, "(3/5)") {
-			t.Errorf("log = %q, want it to record the 3/5 count", log)
+		c := loggedWith(t, logPath, "Uploading function artifacts").GetCounter()
+		if c.GetCurrent() != 3 || c.GetTotal() != 5 {
+			t.Errorf("counter logged as %d/%d, want 3/5", c.GetCurrent(), c.GetTotal())
 		}
 	})
 
@@ -291,8 +319,8 @@ func TestSession(t *testing.T) {
 		if !strings.Contains(got, "creating rds: InsufficientCapacity") {
 			t.Errorf("stdout = %q, want the error message", got)
 		}
-		if !strings.Contains(got, ".log") {
-			t.Errorf("stdout = %q, want a pointer to the log file", got)
+		if !strings.Contains(got, ".ndjson") {
+			t.Errorf("stdout = %q, want a pointer to the run's log", got)
 		}
 	})
 
@@ -357,7 +385,7 @@ func TestSession(t *testing.T) {
 				t.Errorf("stdout = %q, want it to contain %q", got, want)
 			}
 		}
-		if raw, err := os.ReadFile(logPath); err == nil && !strings.Contains(string(raw), "waiting") {
+		if raw := readLog(t, logPath); !strings.Contains(raw, "waiting") {
 			t.Errorf("log = %s, want the wait recorded", raw)
 		}
 	})
@@ -390,8 +418,14 @@ func TestSession(t *testing.T) {
 		if strings.Contains(log, token) {
 			t.Errorf("log = %q, want the session token never persisted", log)
 		}
-		if !strings.Contains(log, "[waiting] http://127.0.0.1:41234/") {
-			t.Errorf("log = %q, want the wait recorded with the address", log)
+		var waited string
+		for _, ev := range loggedEvents(t, logPath) {
+			if ev.GetWaiting() != nil {
+				waited = ev.GetWaiting().GetUrl()
+			}
+		}
+		if waited != "http://127.0.0.1:41234/" {
+			t.Errorf("wait logged at %q, want the address without the token", waited)
 		}
 		if !strings.Contains(out.String(), token) {
 			t.Errorf("stdout = %q, want the full URL on screen", out.String())
@@ -503,22 +537,6 @@ func TestSession(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestAttributeKeyCoversEveryWireValue(t *testing.T) {
-	t.Parallel()
-	for raw, name := range progressv1.AttributeKey_name {
-		k := progressv1.AttributeKey(raw)
-		if k == progressv1.AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED {
-			continue
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			if _, ok := attributeKey(k); !ok {
-				t.Errorf("attributeKey(%s) = (_, false), want every declared AttributeKey to map somewhere — an unmapped key is silently dropped by spanAttributes, not rejected", name)
-			}
-		})
-	}
 }
 
 func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
@@ -705,8 +723,8 @@ func TestProviderProcessOutputShowsOnlyWhenVerboseAndNeverEntersABlock(t *testin
 			if at, block := strings.Index(got, marker), strings.Index(got, blockIndent+"a line the phase owns"); tc.shown && at > block {
 				t.Errorf("stdout = %q, want the line committed as it landed, before the block it interrupted flushed", got)
 			}
-			if log := readLog(t, s.LogPath()); !strings.Contains(log, "aws: "+marker) {
-				t.Errorf("log file = %q, want the raw output always recorded under the provider's name regardless of verbosity", log)
+			if ev := loggedWith(t, s.LogPath(), marker); ev.GetSubject() != "aws" || ev.GetLevel() != progressv1.Level_LEVEL_DEBUG {
+				t.Errorf("logged %s %q, want the raw output always recorded at DEBUG under the provider's name regardless of verbosity", ev.GetLevel(), ev.GetSubject())
 			}
 		})
 	}
@@ -892,7 +910,7 @@ func TestFormatAxis(t *testing.T) {
 
 		s.Building()
 		s.Event(progress("Uploading function artifacts"))
-		s.Deployed("Deployed", nil, Flip{}, nil, nil)
+		s.Deployed("Deployed", nil, Flip{})
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 		if len(lines) != 6 {
@@ -1258,7 +1276,7 @@ func TestAnOrphanWhoseStageIsNeverDeclaredNeverCommits(t *testing.T) {
 	s.Event(outputOp([]byte{1, 2, 3, 4, 5, 6, 7, 8}, "a stage nothing ever declared"))
 	startProvisioning(s)
 	s.Event(closeProvisioning())
-	s.Deployed("Deployed", nil, Flip{}, nil, nil)
+	s.Deployed("Deployed", nil, Flip{})
 
 	got := out.String()
 	if strings.Contains(got, "a stage nothing ever declared") {
@@ -1613,10 +1631,10 @@ func TestAnOutputLineAndACounterReachTheRunLog(t *testing.T) {
 		t.Fatalf("Close() = %v", err)
 	}
 
-	log := readLog(t, logPath)
-	for _, want := range []string{"[log] Packages: +812\n", "[progress] Generating static pages (28/28)\n"} {
-		if !strings.Contains(log, want) {
-			t.Errorf("run log = %q, want it to contain %q", log, want)
-		}
+	if ev := loggedWith(t, logPath, "Packages: +812"); ev.GetOutput().GetStream() != progressv1.Stream_STREAM_STDOUT {
+		t.Errorf("output logged as %s, want a stdout line", protojson.Format(ev))
+	}
+	if c := loggedWith(t, logPath, "Generating static pages").GetCounter(); c.GetCurrent() != 28 || c.GetTotal() != 28 {
+		t.Errorf("counter logged as %d/%d, want 28/28", c.GetCurrent(), c.GetTotal())
 	}
 }

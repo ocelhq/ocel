@@ -14,7 +14,6 @@ import (
 
 type deployOutcome struct {
 	bindings    []*bindingsv1.Binding
-	functions   []*progressv1.FunctionOutput
 	apps        []*progressv1.AppResult
 	urlNotes    []string
 	promotionID string
@@ -29,7 +28,6 @@ func (o *deployOutcome) collect(ui *runui.Session) func(*progressv1.OperationEve
 			return
 		}
 		o.bindings = res.GetBindings()
-		o.functions = res.GetFunctions()
 		o.apps = res.GetApps()
 		o.urlNotes = res.GetUrlNotes()
 		o.promotionID = res.GetPromotionId()

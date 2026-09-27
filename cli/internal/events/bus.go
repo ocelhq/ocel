@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -42,9 +43,16 @@ func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Co
 		if ctx, r.trace, err = runtrace.Start(ctx, projectDir, command); err != nil {
 			return ctx, nil, err
 		}
+		b.Attach(r.trace)
 	}
 	r.ctx = ctx
 	return ctx, r, nil
+}
+
+func (b *Bus) detach(s Sink) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sinks = slices.DeleteFunc(b.sinks, func(attached Sink) bool { return attached == s })
 }
 
 func (b *Bus) Send(ev *streamv1.RunEvent) {

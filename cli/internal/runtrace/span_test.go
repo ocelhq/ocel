@@ -1,22 +1,18 @@
 package runtrace
 
 import (
-	"context"
 	"testing"
 	"time"
+
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestIngestSpanWithNoParentAttachesToTheRunsRootSpan(t *testing.T) {
-	dir := t.TempDir()
-	_, r, err := Start(context.Background(), dir, "ocel deploy")
-	if err != nil {
-		t.Fatalf("Start() = %v", err)
-	}
-
-	spanID := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
+func TestAScopeStartedWithNoParentIsASpanUnderTheRunsRootSpan(t *testing.T) {
+	r := startRun(t)
+	id := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	now := time.Now()
-	r.IngestSpan(spanID, [8]byte{}, "aws:s3:Bucket create", now, now.Add(time.Second), SpanStatusOK, nil)
-
+	r.Receive(started(id, nil, "aws:s3:Bucket create"))
+	r.Receive(ended(id, now, now.Add(time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -35,30 +31,5 @@ func TestIngestSpanWithNoParentAttachesToTheRunsRootSpan(t *testing.T) {
 	}
 	if ingested.ParentSpanId != root.SpanId {
 		t.Errorf("ingested span parentSpanId = %q, want the run's root span id %q", ingested.ParentSpanId, root.SpanId)
-	}
-}
-
-func TestIngestSpanWithAParentKeepsIt(t *testing.T) {
-	dir := t.TempDir()
-	_, r, err := Start(context.Background(), dir, "ocel deploy")
-	if err != nil {
-		t.Fatalf("Start() = %v", err)
-	}
-
-	parentID := [8]byte{9, 9, 9, 9, 9, 9, 9, 9}
-	childID := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
-	now := time.Now()
-	r.IngestSpan(parentID, [8]byte{}, "stage", now, now.Add(time.Second), SpanStatusOK, nil)
-	r.IngestSpan(childID, parentID, "resource", now, now.Add(time.Second), SpanStatusOK, nil)
-
-	if err := r.Close(); err != nil {
-		t.Fatalf("Close() = %v", err)
-	}
-
-	spans := readTraceDoc(t, r)
-	child := spanNamed(t, spans, "resource")
-	parent := spanNamed(t, spans, "stage")
-	if child.ParentSpanId != parent.SpanId {
-		t.Errorf("child span parentSpanId = %q, want the explicit parent %q", child.ParentSpanId, parent.SpanId)
 	}
 }
