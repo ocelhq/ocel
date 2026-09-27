@@ -88,7 +88,7 @@ func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.
 		Environment: environment,
 		Bindings:    BindingVariables(cfg, tier),
 		OtherTiers:  BindingVariables(cfg, other),
-		EnvSource:   configuredEnvSource(cfg, preview),
+		EnvSource:   ConfiguredEnvSource(cfg, preview),
 	}
 }
 

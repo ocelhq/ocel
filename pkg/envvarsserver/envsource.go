@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -299,14 +300,39 @@ func refuseAuthWithoutLogin(descriptor envsource.Descriptor, login envsource.Log
 }
 
 func envSourceError(descriptor envsource.Descriptor, err error) error {
-	var credential *envsource.CredentialError
-	if errors.As(err, &credential) {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s logs in with %s, which %s", descriptor.ID(), credential.Variable, credential.Reason))
+	if refused := credentialErrors(err); len(refused) > 0 {
+		messages := make([]string, 0, len(refused))
+		for _, credential := range refused {
+			messages = append(messages, fmt.Sprintf("%s logs in with %s, which %s", descriptor.ID(), credential.Variable, credential.Reason))
+		}
+		wire := connect.NewError(connect.CodeFailedPrecondition, errors.New(strings.Join(messages, "\n")))
+		for _, credential := range refused {
+			if detail, err := connect.NewErrorDetail(&envvarsv1.CredentialRefusal{Variable: credential.Variable, Unset: credential.Unset, Reason: credential.Reason}); err == nil {
+				wire.AddDetail(detail)
+			}
+		}
+		return wire
 	}
 	if _, refused := provider.RefusedCode(err); refused {
 		return provider.RefusalError(err)
 	}
 	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s: %w", descriptor.ID(), err))
+}
+
+func credentialErrors(err error) []*envsource.CredentialError {
+	var joined interface{ Unwrap() []error }
+	if errors.As(err, &joined) {
+		var out []*envsource.CredentialError
+		for _, inner := range joined.Unwrap() {
+			out = append(out, credentialErrors(inner)...)
+		}
+		return out
+	}
+	var credential *envsource.CredentialError
+	if errors.As(err, &credential) {
+		return []*envsource.CredentialError{credential}
+	}
+	return nil
 }
 
 func cellProto(at envvars.Cell) *envvarsv1.Cell {

@@ -2364,6 +2364,66 @@ func (x *RefusedCell) GetReason() string {
 	return ""
 }
 
+type CredentialRefusal struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Variable      string                 `protobuf:"bytes,1,opt,name=variable,proto3" json:"variable,omitempty"`
+	Unset         bool                   `protobuf:"varint,2,opt,name=unset,proto3" json:"unset,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CredentialRefusal) Reset() {
+	*x = CredentialRefusal{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CredentialRefusal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CredentialRefusal) ProtoMessage() {}
+
+func (x *CredentialRefusal) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CredentialRefusal.ProtoReflect.Descriptor instead.
+func (*CredentialRefusal) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *CredentialRefusal) GetVariable() string {
+	if x != nil {
+		return x.Variable
+	}
+	return ""
+}
+
+func (x *CredentialRefusal) GetUnset() bool {
+	if x != nil {
+		return x.Unset
+	}
+	return false
+}
+
+func (x *CredentialRefusal) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type SyncEnvSourceRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Tier  v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
@@ -2380,7 +2440,7 @@ type SyncEnvSourceRequest struct {
 
 func (x *SyncEnvSourceRequest) Reset() {
 	*x = SyncEnvSourceRequest{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[40]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2392,7 +2452,7 @@ func (x *SyncEnvSourceRequest) String() string {
 func (*SyncEnvSourceRequest) ProtoMessage() {}
 
 func (x *SyncEnvSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[40]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2405,7 +2465,7 @@ func (x *SyncEnvSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncEnvSourceRequest.ProtoReflect.Descriptor instead.
 func (*SyncEnvSourceRequest) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{40}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SyncEnvSourceRequest) GetTier() v1.Tier {
@@ -2478,7 +2538,7 @@ type RegisteredEnvSource struct {
 
 func (x *RegisteredEnvSource) Reset() {
 	*x = RegisteredEnvSource{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[41]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2490,7 +2550,7 @@ func (x *RegisteredEnvSource) String() string {
 func (*RegisteredEnvSource) ProtoMessage() {}
 
 func (x *RegisteredEnvSource) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[41]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2503,7 +2563,7 @@ func (x *RegisteredEnvSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisteredEnvSource.ProtoReflect.Descriptor instead.
 func (*RegisteredEnvSource) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{41}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{42}
 }
 
 type SyncEnvSourceResponse struct {
@@ -2519,7 +2579,7 @@ type SyncEnvSourceResponse struct {
 
 func (x *SyncEnvSourceResponse) Reset() {
 	*x = SyncEnvSourceResponse{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[42]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2531,7 +2591,7 @@ func (x *SyncEnvSourceResponse) String() string {
 func (*SyncEnvSourceResponse) ProtoMessage() {}
 
 func (x *SyncEnvSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[42]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2544,7 +2604,7 @@ func (x *SyncEnvSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncEnvSourceResponse.ProtoReflect.Descriptor instead.
 func (*SyncEnvSourceResponse) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{42}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SyncEnvSourceResponse) GetStatus() *EnvSourceStatus {
@@ -2592,7 +2652,7 @@ type DescribeEnvSourceRequest struct {
 
 func (x *DescribeEnvSourceRequest) Reset() {
 	*x = DescribeEnvSourceRequest{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[43]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2604,7 +2664,7 @@ func (x *DescribeEnvSourceRequest) String() string {
 func (*DescribeEnvSourceRequest) ProtoMessage() {}
 
 func (x *DescribeEnvSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[43]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2617,7 +2677,7 @@ func (x *DescribeEnvSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeEnvSourceRequest.ProtoReflect.Descriptor instead.
 func (*DescribeEnvSourceRequest) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{43}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *DescribeEnvSourceRequest) GetTier() v1.Tier {
@@ -2643,7 +2703,7 @@ type DescribeEnvSourceResponse struct {
 
 func (x *DescribeEnvSourceResponse) Reset() {
 	*x = DescribeEnvSourceResponse{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[44]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2655,7 +2715,7 @@ func (x *DescribeEnvSourceResponse) String() string {
 func (*DescribeEnvSourceResponse) ProtoMessage() {}
 
 func (x *DescribeEnvSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[44]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2668,7 +2728,7 @@ func (x *DescribeEnvSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeEnvSourceResponse.ProtoReflect.Descriptor instead.
 func (*DescribeEnvSourceResponse) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{44}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *DescribeEnvSourceResponse) GetStatus() *EnvSourceStatus {
@@ -2690,7 +2750,7 @@ type CreateEnvSourceValueRequest struct {
 
 func (x *CreateEnvSourceValueRequest) Reset() {
 	*x = CreateEnvSourceValueRequest{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[45]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2702,7 +2762,7 @@ func (x *CreateEnvSourceValueRequest) String() string {
 func (*CreateEnvSourceValueRequest) ProtoMessage() {}
 
 func (x *CreateEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[45]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2715,7 +2775,7 @@ func (x *CreateEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnvSourceValueRequest.ProtoReflect.Descriptor instead.
 func (*CreateEnvSourceValueRequest) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{45}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CreateEnvSourceValueRequest) GetTier() v1.Tier {
@@ -2756,7 +2816,7 @@ type CreateEnvSourceValueResponse struct {
 
 func (x *CreateEnvSourceValueResponse) Reset() {
 	*x = CreateEnvSourceValueResponse{}
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2768,7 +2828,7 @@ func (x *CreateEnvSourceValueResponse) String() string {
 func (*CreateEnvSourceValueResponse) ProtoMessage() {}
 
 func (x *CreateEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2781,7 +2841,7 @@ func (x *CreateEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEnvSourceValueResponse.ProtoReflect.Descriptor instead.
 func (*CreateEnvSourceValueResponse) Descriptor() ([]byte, []int) {
-	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{46}
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *CreateEnvSourceValueResponse) GetAwaitingApproval() bool {
@@ -2986,7 +3046,11 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\x03url\x18\x02 \x01(\tR\x03url\"T\n" +
 	"\vRefusedCell\x12-\n" +
 	"\x04cell\x18\x01 \x01(\v2\x19.provider.envvars.v1.CellR\x04cell\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xa4\x04\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"]\n" +
+	"\x11CredentialRefusal\x12\x1a\n" +
+	"\bvariable\x18\x01 \x01(\tR\bvariable\x12\x14\n" +
+	"\x05unset\x18\x02 \x01(\bR\x05unset\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xa4\x04\n" +
 	"\x14SyncEnvSourceRequest\x12\xb2\x01\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x80\x01\xbaH}\xba\x01z\n" +
 	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
@@ -3053,7 +3117,7 @@ func file_provider_envvars_v1_envvars_proto_rawDescGZIP() []byte {
 	return file_provider_envvars_v1_envvars_proto_rawDescData
 }
 
-var file_provider_envvars_v1_envvars_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_provider_envvars_v1_envvars_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_provider_envvars_v1_envvars_proto_goTypes = []any{
 	(*Coordinate)(nil),                   // 0: provider.envvars.v1.Coordinate
 	(*ValueMetadata)(nil),                // 1: provider.envvars.v1.ValueMetadata
@@ -3095,50 +3159,51 @@ var file_provider_envvars_v1_envvars_proto_goTypes = []any{
 	(*EnvSourceStatus)(nil),              // 37: provider.envvars.v1.EnvSourceStatus
 	(*FolderLink)(nil),                   // 38: provider.envvars.v1.FolderLink
 	(*RefusedCell)(nil),                  // 39: provider.envvars.v1.RefusedCell
-	(*SyncEnvSourceRequest)(nil),         // 40: provider.envvars.v1.SyncEnvSourceRequest
-	(*RegisteredEnvSource)(nil),          // 41: provider.envvars.v1.RegisteredEnvSource
-	(*SyncEnvSourceResponse)(nil),        // 42: provider.envvars.v1.SyncEnvSourceResponse
-	(*DescribeEnvSourceRequest)(nil),     // 43: provider.envvars.v1.DescribeEnvSourceRequest
-	(*DescribeEnvSourceResponse)(nil),    // 44: provider.envvars.v1.DescribeEnvSourceResponse
-	(*CreateEnvSourceValueRequest)(nil),  // 45: provider.envvars.v1.CreateEnvSourceValueRequest
-	(*CreateEnvSourceValueResponse)(nil), // 46: provider.envvars.v1.CreateEnvSourceValueResponse
-	(v1.Tier)(0),                         // 47: common.environment.v1.Tier
-	(*v11.Binding)(nil),                  // 48: common.bindings.v1.Binding
-	(v11.BindingType)(0),                 // 49: common.bindings.v1.BindingType
+	(*CredentialRefusal)(nil),            // 40: provider.envvars.v1.CredentialRefusal
+	(*SyncEnvSourceRequest)(nil),         // 41: provider.envvars.v1.SyncEnvSourceRequest
+	(*RegisteredEnvSource)(nil),          // 42: provider.envvars.v1.RegisteredEnvSource
+	(*SyncEnvSourceResponse)(nil),        // 43: provider.envvars.v1.SyncEnvSourceResponse
+	(*DescribeEnvSourceRequest)(nil),     // 44: provider.envvars.v1.DescribeEnvSourceRequest
+	(*DescribeEnvSourceResponse)(nil),    // 45: provider.envvars.v1.DescribeEnvSourceResponse
+	(*CreateEnvSourceValueRequest)(nil),  // 46: provider.envvars.v1.CreateEnvSourceValueRequest
+	(*CreateEnvSourceValueResponse)(nil), // 47: provider.envvars.v1.CreateEnvSourceValueResponse
+	(v1.Tier)(0),                         // 48: common.environment.v1.Tier
+	(*v11.Binding)(nil),                  // 49: common.bindings.v1.Binding
+	(v11.BindingType)(0),                 // 50: common.bindings.v1.BindingType
 }
 var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	0,  // 0: provider.envvars.v1.ValueMetadata.coordinate:type_name -> provider.envvars.v1.Coordinate
 	0,  // 1: provider.envvars.v1.ValueMetadata.target:type_name -> provider.envvars.v1.Coordinate
-	47, // 2: provider.envvars.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 2: provider.envvars.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 3: provider.envvars.v1.SetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	1,  // 4: provider.envvars.v1.SetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	47, // 5: provider.envvars.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 5: provider.envvars.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
 	1,  // 6: provider.envvars.v1.ListValuesResponse.values:type_name -> provider.envvars.v1.ValueMetadata
-	47, // 7: provider.envvars.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 7: provider.envvars.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 8: provider.envvars.v1.GetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	1,  // 9: provider.envvars.v1.GetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	47, // 10: provider.envvars.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 10: provider.envvars.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 11: provider.envvars.v1.RevealValuesRequest.cells:type_name -> provider.envvars.v1.Coordinate
 	11, // 12: provider.envvars.v1.RevealValuesResponse.values:type_name -> provider.envvars.v1.RevealedValue
 	1,  // 13: provider.envvars.v1.RevealedValue.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	47, // 14: provider.envvars.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 14: provider.envvars.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 15: provider.envvars.v1.DeleteValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	47, // 16: provider.envvars.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 16: provider.envvars.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 17: provider.envvars.v1.SetReferenceRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	0,  // 18: provider.envvars.v1.SetReferenceRequest.target:type_name -> provider.envvars.v1.Coordinate
 	1,  // 19: provider.envvars.v1.SetReferenceResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	47, // 20: provider.envvars.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 20: provider.envvars.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 21: provider.envvars.v1.ListReferencesRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	0,  // 22: provider.envvars.v1.ListReferencesResponse.references:type_name -> provider.envvars.v1.Coordinate
-	47, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 24: provider.envvars.v1.ListVersionsRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	2,  // 25: provider.envvars.v1.ListVersionsResponse.versions:type_name -> provider.envvars.v1.VersionEntry
-	47, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
-	48, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
-	47, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
-	47, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
+	49, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
+	48, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
 	26, // 30: provider.envvars.v1.ListBindingsResponse.bindings:type_name -> provider.envvars.v1.BindingSummary
-	49, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
+	50, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
 	27, // 32: provider.envvars.v1.BindingSummary.properties:type_name -> provider.envvars.v1.PropertyShape
 	29, // 33: provider.envvars.v1.EnvSource.builtin:type_name -> provider.envvars.v1.BuiltinEnvSource
 	30, // 34: provider.envvars.v1.EnvSource.infisical:type_name -> provider.envvars.v1.InfisicalEnvSource
@@ -3150,15 +3215,15 @@ var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	36, // 40: provider.envvars.v1.EnvSourceValue.cell:type_name -> provider.envvars.v1.Cell
 	38, // 41: provider.envvars.v1.EnvSourceStatus.links:type_name -> provider.envvars.v1.FolderLink
 	36, // 42: provider.envvars.v1.RefusedCell.cell:type_name -> provider.envvars.v1.Cell
-	47, // 43: provider.envvars.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 43: provider.envvars.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
 	28, // 44: provider.envvars.v1.SyncEnvSourceRequest.env_source:type_name -> provider.envvars.v1.EnvSource
-	41, // 45: provider.envvars.v1.SyncEnvSourceRequest.registered:type_name -> provider.envvars.v1.RegisteredEnvSource
+	42, // 45: provider.envvars.v1.SyncEnvSourceRequest.registered:type_name -> provider.envvars.v1.RegisteredEnvSource
 	37, // 46: provider.envvars.v1.SyncEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
 	36, // 47: provider.envvars.v1.SyncEnvSourceResponse.present:type_name -> provider.envvars.v1.Cell
 	39, // 48: provider.envvars.v1.SyncEnvSourceResponse.refused:type_name -> provider.envvars.v1.RefusedCell
-	47, // 49: provider.envvars.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 49: provider.envvars.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
 	37, // 50: provider.envvars.v1.DescribeEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
-	47, // 51: provider.envvars.v1.CreateEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 51: provider.envvars.v1.CreateEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 52: provider.envvars.v1.CreateEnvSourceValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	1,  // 53: provider.envvars.v1.CreateEnvSourceValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
 	3,  // 54: provider.envvars.v1.EnvVarsService.SetValue:input_type -> provider.envvars.v1.SetValueRequest
@@ -3172,9 +3237,9 @@ var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	20, // 62: provider.envvars.v1.EnvVarsService.SetBinding:input_type -> provider.envvars.v1.SetBindingRequest
 	22, // 63: provider.envvars.v1.EnvVarsService.RemoveBinding:input_type -> provider.envvars.v1.RemoveBindingRequest
 	24, // 64: provider.envvars.v1.EnvVarsService.ListBindings:input_type -> provider.envvars.v1.ListBindingsRequest
-	40, // 65: provider.envvars.v1.EnvVarsService.SyncEnvSource:input_type -> provider.envvars.v1.SyncEnvSourceRequest
-	43, // 66: provider.envvars.v1.EnvVarsService.DescribeEnvSource:input_type -> provider.envvars.v1.DescribeEnvSourceRequest
-	45, // 67: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:input_type -> provider.envvars.v1.CreateEnvSourceValueRequest
+	41, // 65: provider.envvars.v1.EnvVarsService.SyncEnvSource:input_type -> provider.envvars.v1.SyncEnvSourceRequest
+	44, // 66: provider.envvars.v1.EnvVarsService.DescribeEnvSource:input_type -> provider.envvars.v1.DescribeEnvSourceRequest
+	46, // 67: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:input_type -> provider.envvars.v1.CreateEnvSourceValueRequest
 	4,  // 68: provider.envvars.v1.EnvVarsService.SetValue:output_type -> provider.envvars.v1.SetValueResponse
 	6,  // 69: provider.envvars.v1.EnvVarsService.ListValues:output_type -> provider.envvars.v1.ListValuesResponse
 	8,  // 70: provider.envvars.v1.EnvVarsService.GetValue:output_type -> provider.envvars.v1.GetValueResponse
@@ -3186,9 +3251,9 @@ var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	21, // 76: provider.envvars.v1.EnvVarsService.SetBinding:output_type -> provider.envvars.v1.SetBindingResponse
 	23, // 77: provider.envvars.v1.EnvVarsService.RemoveBinding:output_type -> provider.envvars.v1.RemoveBindingResponse
 	25, // 78: provider.envvars.v1.EnvVarsService.ListBindings:output_type -> provider.envvars.v1.ListBindingsResponse
-	42, // 79: provider.envvars.v1.EnvVarsService.SyncEnvSource:output_type -> provider.envvars.v1.SyncEnvSourceResponse
-	44, // 80: provider.envvars.v1.EnvVarsService.DescribeEnvSource:output_type -> provider.envvars.v1.DescribeEnvSourceResponse
-	46, // 81: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:output_type -> provider.envvars.v1.CreateEnvSourceValueResponse
+	43, // 79: provider.envvars.v1.EnvVarsService.SyncEnvSource:output_type -> provider.envvars.v1.SyncEnvSourceResponse
+	45, // 80: provider.envvars.v1.EnvVarsService.DescribeEnvSource:output_type -> provider.envvars.v1.DescribeEnvSourceResponse
+	47, // 81: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:output_type -> provider.envvars.v1.CreateEnvSourceValueResponse
 	68, // [68:82] is the sub-list for method output_type
 	54, // [54:68] is the sub-list for method input_type
 	54, // [54:54] is the sub-list for extension type_name
@@ -3213,18 +3278,18 @@ func file_provider_envvars_v1_envvars_proto_init() {
 		(*InfisicalAuth_Universal)(nil),
 		(*InfisicalAuth_Identity)(nil),
 	}
-	file_provider_envvars_v1_envvars_proto_msgTypes[40].OneofWrappers = []any{
+	file_provider_envvars_v1_envvars_proto_msgTypes[41].OneofWrappers = []any{
 		(*SyncEnvSourceRequest_EnvSource)(nil),
 		(*SyncEnvSourceRequest_Registered)(nil),
 	}
-	file_provider_envvars_v1_envvars_proto_msgTypes[46].OneofWrappers = []any{}
+	file_provider_envvars_v1_envvars_proto_msgTypes[47].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_envvars_v1_envvars_proto_rawDesc), len(file_provider_envvars_v1_envvars_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   47,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

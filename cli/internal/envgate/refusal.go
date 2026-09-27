@@ -68,16 +68,19 @@ func (r *Refusal) remedy() string {
 	if r.Scope.Browser {
 		return withPreview("ocel env ui", r.Scope)
 	}
+	key, folder := "<KEY>", "<FOLDER>"
+	if len(r.Problems) == 1 {
+		key, folder = r.Problems[0].GetKey(), r.Problems[0].GetFolder()
+	}
+	if r.Scope.EnvSource.areCredentials(r.Problems) {
+		return withPreview(fmt.Sprintf("ocel env set %s=<VALUE>", key), r.Scope)
+	}
 	if r.Scope.EnvSource.OwnsValues() {
 		return r.Scope.EnvSource.remedy(r.Problems, r.Scope)
 	}
-	key, folder := "<KEY>", "<FOLDER>"
 	inFolder := false
 	for _, problem := range r.Problems {
 		inFolder = inFolder || problem.GetFolder() != ""
-	}
-	if len(r.Problems) == 1 {
-		key, folder = r.Problems[0].GetKey(), r.Problems[0].GetFolder()
 	}
 	cmd := fmt.Sprintf("ocel env set %s=<VALUE>", key)
 	if inFolder {

@@ -24,6 +24,7 @@ type Credential interface {
 
 type CredentialError struct {
 	Variable string
+	Unset    bool
 	Reason   string
 }
 
@@ -39,12 +40,20 @@ func ReadCredential(ctx context.Context, store envvars.Store, scope envvars.Scop
 		return IdentityAuth(auth.IdentityID, login.ProveIdentity), nil
 	case AuthUniversal:
 		plaintexts := make([]string, 0, 2)
+		var refused []error
 		for _, name := range auth.Variables() {
 			plaintext, err := readCredentialValue(ctx, store, scope, name)
-			if err != nil {
+			var credential *CredentialError
+			switch {
+			case errors.As(err, &credential):
+				refused = append(refused, err)
+			case err != nil:
 				return nil, err
 			}
 			plaintexts = append(plaintexts, plaintext)
+		}
+		if len(refused) > 0 {
+			return nil, errors.Join(refused...)
 		}
 		return UniversalAuth(plaintexts[0], plaintexts[1]), nil
 	}
@@ -55,7 +64,7 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	found, err := store.GetDereferenced(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: name}}, true)
 	switch {
 	case errors.Is(err, envvars.ErrNotFound), errors.Is(err, envvars.ErrDangling):
-		return "", &CredentialError{Variable: name, Reason: fmt.Sprintf("has no value in %s: set it with `%s`", scope.Class, SetCommand(scope.Class, name))}
+		return "", &CredentialError{Variable: name, Unset: true, Reason: fmt.Sprintf("has no value in %s: set it with `%s`", scope.Class, SetCommand(scope.Class, name))}
 	case err != nil:
 		return "", fmt.Errorf("read %s: %w", name, err)
 	}

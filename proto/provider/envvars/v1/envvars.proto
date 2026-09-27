@@ -371,6 +371,14 @@ message RefusedCell {
   string reason = 2;
 }
 
+message CredentialRefusal {
+  string variable = 1;
+
+  bool unset = 2;
+
+  string reason = 3;
+}
+
 message SyncEnvSourceRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
     id: "envvars.envsource.tier"

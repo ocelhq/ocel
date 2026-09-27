@@ -2,8 +2,11 @@ package envwire
 
 import (
 	"context"
+	"errors"
 	"os"
 	"slices"
+
+	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -11,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
@@ -22,7 +26,7 @@ func DeployedEnvSource(cfg *projectconfig.Config, preview bool) envsource.Descri
 	return cfg.EnvSource.Production
 }
 
-func configuredEnvSource(cfg *projectconfig.Config, preview bool) envgate.EnvSource {
+func ConfiguredEnvSource(cfg *projectconfig.Config, preview bool) envgate.EnvSource {
 	descriptor := DeployedEnvSource(cfg, preview)
 	return envgate.EnvSource{ID: descriptor.ID(), Credentials: descriptor.CredentialVariables()}
 }
@@ -73,6 +77,30 @@ func SyncRegisteredEnvSource(ctx context.Context, runner *providerclient.Runner,
 		Slug: slug,
 		From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
 	})
+}
+
+func CredentialProblems(err error) []*resourcesv1.VariableProblem {
+	var wire *connect.Error
+	if !errors.As(err, &wire) {
+		return nil
+	}
+	var out []*resourcesv1.VariableProblem
+	for _, detail := range wire.Details() {
+		value, err := detail.Value()
+		if err != nil {
+			continue
+		}
+		refused, ok := value.(*envvarsv1.CredentialRefusal)
+		if !ok {
+			continue
+		}
+		problem := &resourcesv1.VariableProblem{Key: refused.GetVariable(), Kind: resourcesv1.VariableProblem_KIND_MISSING}
+		if !refused.GetUnset() {
+			problem.Kind, problem.Detail = resourcesv1.VariableProblem_KIND_INVALID, refused.GetReason()
+		}
+		out = append(out, problem)
+	}
+	return out
 }
 
 func EnvSourceOf(resp *envvarsv1.SyncEnvSourceResponse) envgate.EnvSource {
