@@ -7,8 +7,12 @@ import (
 )
 
 func NewTerminalSink(present Presentation, w io.Writer) events.Sink {
-	if present.Format == FormatJSON {
+	switch {
+	case present.Format == FormatJSON:
 		return NewJSONSink(w)
+	case present.Live():
+		return NewLineSink(w, present)
+	default:
+		return NewGroupedSink(w, present)
 	}
-	return NewGroupedSink(w, present)
 }

@@ -3,9 +3,13 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
@@ -36,11 +40,17 @@ func newTestDeps() cmddeps.Deps {
 
 func executeRoot(t *testing.T, args ...string) (stdout, stderr string) {
 	t.Helper()
-	origFormat := logFormatFlag
 	var out, errOut bytes.Buffer
+	executeRootOn(t, &out, &errOut, args...)
+	return out.String(), errOut.String()
+}
+
+func executeRootOn(t *testing.T, stdout, stderr io.Writer, args ...string) {
+	t.Helper()
+	origFormat := logFormatFlag
 	rootCmd.SetArgs(args)
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&errOut)
+	rootCmd.SetOut(stdout)
+	rootCmd.SetErr(stderr)
 	t.Cleanup(func() {
 		logFormatFlag = origFormat
 		rootCmd.SetArgs(nil)
@@ -48,10 +58,38 @@ func executeRoot(t *testing.T, args ...string) (stdout, stderr string) {
 		rootCmd.SetErr(nil)
 	})
 	if err := Execute(); err != nil {
-		t.Fatalf("ocel %s: %v; stdout=%s stderr=%s", strings.Join(args, " "), err, out.String(), errOut.String())
+		t.Fatalf("ocel %s: %v", strings.Join(args, " "), err)
 	}
-	return out.String(), errOut.String()
 }
+
+func aTerminal(t *testing.T, term string, columns uint16) (tty *os.File, screen func() string) {
+	t.Helper()
+	t.Setenv("TERM", term)
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Skipf("no pty available: %v", err)
+	}
+	t.Cleanup(func() {
+		ptmx.Close()
+		tty.Close()
+	})
+	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: columns}); err != nil {
+		t.Fatalf("size the pty: %v", err)
+	}
+	var got bytes.Buffer
+	drained := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&got, ptmx)
+		close(drained)
+	}()
+	return tty, func() string {
+		tty.Close()
+		<-drained
+		return got.String()
+	}
+}
+
+const liveFrame = "\x1b[?2026h"
 
 func inDeployFixture(t *testing.T) {
 	t.Helper()
@@ -92,6 +130,84 @@ func TestTheHumanLogFormatAttachesOnlyTheGroupedSink(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Pruned") {
 		t.Errorf("stdout = %q, want the run's headline in the human view", stdout)
+	}
+}
+
+func TestATerminalFortyColumnsWideGetsTheLiveLineView(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 40)
+
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+
+	if got := screen(); !strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
+		t.Errorf("the terminal shows %q, want the transcript drawn in live-line frames", got)
+	}
+}
+
+func TestADumbTerminalGetsTheGroupedView(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "dumb", 80)
+
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+
+	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
+		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
+	}
+}
+
+func TestATerminalNarrowerThanFortyColumnsGetsTheGroupedView(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 39)
+
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+
+	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
+		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
+	}
+}
+
+func TestAPipedStdoutGetsTheGroupedViewEvenWithATerminalOnStderr(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+	var stdout bytes.Buffer
+
+	executeRootOn(t, &stdout, tty, "deployments", "prune")
+
+	if got := stdout.String(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
+		t.Errorf("stdout = %q, want the grouped transcript with no live line", got)
+	}
+	if got := screen(); got != "" {
+		t.Errorf("the terminal on stderr shows %q, want nothing: the run draws on stdout", got)
+	}
+}
+
+func TestACommandWhoseStdoutIsItsDataDrawsTheLiveLineOnAStderrTerminal(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+	var stdout bytes.Buffer
+
+	executeRootOn(t, &stdout, tty, "deployments", "ls")
+
+	if got := stdout.String(); !strings.Contains(got, "promo-2") || strings.Contains(got, liveFrame) {
+		t.Errorf("stdout = %q, want the promotions table alone", got)
+	}
+	if got := screen(); !strings.Contains(got, liveFrame) {
+		t.Errorf("the terminal on stderr shows %q, want the run drawn in live-line frames", got)
+	}
+}
+
+func TestACommandWhoseStdoutIsItsDataDrawsTheGroupedViewOnAPipedStderr(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+	var stderr bytes.Buffer
+
+	executeRootOn(t, tty, &stderr, "deployments", "ls")
+
+	if got := stderr.String(); got == "" || strings.Contains(got, liveFrame) {
+		t.Errorf("stderr = %q, want the grouped view of the run", got)
+	}
+	if got := screen(); !strings.Contains(got, "promo-2") || strings.Contains(got, liveFrame) {
+		t.Errorf("the terminal on stdout shows %q, want the promotions table alone", got)
 	}
 }
 

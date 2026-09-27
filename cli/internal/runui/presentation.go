@@ -20,6 +20,7 @@ type Origin struct {
 	NoColor       bool
 	TTY           bool
 	Width         int
+	Dumb          bool
 	GitHubActions bool
 }
 
@@ -28,9 +29,12 @@ type Presentation struct {
 	Verbose       bool
 	Color         bool
 	TTY           bool
+	Dumb          bool
 	Width         int
 	GitHubActions bool
 }
+
+const minLiveWidth = 40
 
 func Resolve(o Origin) Presentation {
 	p := Presentation{
@@ -38,6 +42,7 @@ func Resolve(o Origin) Presentation {
 		Verbose:       o.Verbose,
 		Color:         o.TTY && !o.NoColor,
 		TTY:           o.TTY,
+		Dumb:          o.Dumb,
 		Width:         o.Width,
 		GitHubActions: o.GitHubActions,
 	}
@@ -51,7 +56,7 @@ func Resolve(o Origin) Presentation {
 }
 
 func (p Presentation) Live() bool {
-	return p.Format == FormatHuman && !p.Verbose && p.TTY
+	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && p.Width >= minLiveWidth
 }
 
 func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
@@ -61,6 +66,7 @@ func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
 		NoColor:       color.NoColor || os.Getenv("NO_COLOR") != "",
 		TTY:           IsTerminal(w),
 		Width:         termWidth(w),
+		Dumb:          os.Getenv("TERM") == "dumb",
 		GitHubActions: os.Getenv("GITHUB_ACTIONS") == "true",
 	})
 }
