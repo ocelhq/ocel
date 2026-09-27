@@ -79,7 +79,7 @@ func writeStatus(ctx context.Context, store records.Store, class edge.Class, ded
 			return err
 		}
 	}
-	return nil
+	return fmt.Errorf("the %s env source status was rewritten under each of %d attempts to record this sync, so this sync's outcome is lost", class, statusAttempts)
 }
 
 func ForgetProject(ctx context.Context, store envvars.Store, class edge.Class, project string) error {
