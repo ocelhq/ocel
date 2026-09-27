@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -177,10 +175,6 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:
 	case ev.GetOutput() != nil:
 		s.within(span, blockLine{text: ev.GetMessage(), raw: true}, blockLine{text: ev.GetMessage(), raw: true})
-	case ev.GetCounter() != nil:
-		counted := proto.CloneOf(ev)
-		counted.Message = progressLogLine(ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total)
-		s.within(span, s.detail(counted), s.alone(counted))
 	case ev.GetBody() == nil && ev.GetMessage() != "":
 		s.within(span, s.detail(ev), s.alone(ev))
 	}
@@ -412,13 +406,6 @@ func elapsed(start, end int64) time.Duration {
 		return 0
 	}
 	return time.Duration(end - start)
-}
-
-func progressLogLine(message string, current uint32, total *uint32) string {
-	if total != nil {
-		return fmt.Sprintf("%s (%d/%d)", message, current, *total)
-	}
-	return message
 }
 
 func formatDuration(d time.Duration) string {

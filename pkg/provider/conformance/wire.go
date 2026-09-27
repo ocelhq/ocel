@@ -203,8 +203,6 @@ func (s *streamed) observe(event *progressv1.OperationEvent) {
 		s.open[string(event.GetSpanId())] = true
 	case event.GetEnded() != nil:
 		delete(s.open, string(event.GetSpanId()))
-	case event.GetCounter() != nil:
-		s.progress = true
 	case event.GetOutput() != nil:
 		s.logged = true
 	case event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_INFO && len(event.GetSpanId()) > 0:

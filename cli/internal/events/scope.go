@@ -104,8 +104,6 @@ func lift(op *progressv1.OperationEvent) *streamv1.RunEvent {
 		ev.Body = &streamv1.RunEvent_Ended{Ended: body.Ended}
 	case *progressv1.OperationEvent_Output:
 		ev.Body = &streamv1.RunEvent_Output{Output: body.Output}
-	case *progressv1.OperationEvent_Counter:
-		ev.Body = &streamv1.RunEvent_Counter{Counter: body.Counter}
 	case *progressv1.OperationEvent_Plan:
 		ev.Body = &streamv1.RunEvent_Plan{Plan: body.Plan}
 	case *progressv1.OperationEvent_DnsManualRecords:

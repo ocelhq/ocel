@@ -21,7 +21,6 @@ message RunEvent {
     common.progress.v1.Started started = 14;
     common.progress.v1.Ended ended = 15;
     common.progress.v1.Output output = 16;
-    common.progress.v1.Counter counter = 17;
     common.plan.v1.ChangePlan plan = 1;
     common.progress.v1.DnsManualRecordsEvent dns_manual_records = 18;
     common.progress.v1.ResultEvent outcome = 19;

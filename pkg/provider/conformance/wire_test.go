@@ -32,15 +32,6 @@ func progressed() *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{SpanId: scope, Message: "working"})
 }
 
-func counted() *progressv1.OperationEvent {
-	total := uint32(3)
-	return stamped(&progressv1.OperationEvent{
-		SpanId:  scope,
-		Message: "uploading",
-		Body:    &progressv1.OperationEvent_Counter{Counter: &progressv1.Counter{Current: 1, Total: &total}},
-	})
-}
-
 func started(id string) *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{
 		SpanId:  []byte(id),
@@ -112,14 +103,6 @@ func TestARunThatSendsAnEventWithNoTimeOrLevelFails(t *testing.T) {
 		if len(found) != 1 || !strings.Contains(found[0], "time and a level") {
 			t.Errorf("the tier found %v against a run that sent an event with %s, want it failed for an unstamped event", found, name)
 		}
-	}
-}
-
-func TestARunWhoseOnlyProgressIsACounterPasses(t *testing.T) {
-	t.Parallel()
-
-	if found := faults(observed(planned()), observed(planned(), counted())); len(found) != 0 {
-		t.Fatalf("the tier found %v against a run that counted its work", found)
 	}
 }
 

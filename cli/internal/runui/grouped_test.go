@@ -203,27 +203,6 @@ func TestVerboseShowsDebugLinesInTheirUnit(t *testing.T) {
 	}
 }
 
-func TestAUnitsProgressCountsAreDetailLinesUnderItsHeader(t *testing.T) {
-	t.Parallel()
-
-	run, out, c := groupedRun(t, Presentation{})
-	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	start := c.now()
-	total := uint32(2)
-	deploy.Forward(providerStarted(1, "web", "uploaded 2 assets", start))
-	deploy.Forward(providerEvent(1, "web", &progressv1.OperationEvent{
-		Message: "uploading assets",
-		Body:    &progressv1.OperationEvent_Counter{Counter: &progressv1.Counter{Current: 1, Total: &total}},
-	}))
-	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
-
-	want := "INFO  [deploy] ✓ web: uploaded 2 assets in 1s\n" +
-		"      uploading assets (1/2)\n"
-	if got := out.String(); got != want {
-		t.Fatalf("got\n%s\nwant\n%s", got, want)
-	}
-}
-
 func TestAUnitStillOpenWhenTheSinkClosesPrintsWhatItBufferedAsUnfinished(t *testing.T) {
 	t.Parallel()
 
