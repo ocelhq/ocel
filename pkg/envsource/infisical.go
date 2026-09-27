@@ -89,7 +89,7 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 			if secret.Value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(secret.Value), Version: fmt.Sprintf("%s@%d", secret.ID, secret.Version)}
+			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(secret.Value), Version: fmt.Sprintf("%s@%d#%s", secret.ID, secret.Version, contentVersion(secret.Value))}
 		}
 	}
 	return out, nil
