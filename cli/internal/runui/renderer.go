@@ -16,8 +16,6 @@ import (
 )
 
 const (
-	okMark    = "✓"
-	failMark  = "✗"
 	warnMark  = "⚠"
 	startMark = "→"
 	pathSep   = " › "
@@ -333,13 +331,7 @@ func (r *Renderer) detailLocked(u liveUnit, room int) string {
 }
 
 func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {
-	c := color.New(attrs...)
-	if r.present.Color {
-		c.EnableColor()
-	} else {
-		c.DisableColor()
-	}
-	return c
+	return colorFor(r.present, attrs...)
 }
 
 func phaseLabel(p progressv1.Phase) string {
