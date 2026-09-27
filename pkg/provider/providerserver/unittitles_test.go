@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -177,4 +178,26 @@ func TestTheRecordsADeployAsksYouToWriteAreAWarningOnTheUnitAttachingTheHostname
 	if want := "Point shop.example at the relay edge"; event.GetMessage() != want {
 		t.Errorf("the records are asked for with %q, want %q", event.GetMessage(), want)
 	}
+}
+
+func TestTheSharedResourceUnitOfADeployDeclaringNoneNamesItsStackInstead(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	req := deployRequest()
+	req.Manifest.Resources = nil
+	req.Manifest.Usages = nil
+
+	result, events := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	for _, unit := range openedUnits(events) {
+		if unit.subject == "production" && strings.HasPrefix(unit.message, "Provisioning ") {
+			if want := "Provisioning stack prod--infra"; unit.message != want {
+				t.Errorf("the shared resource unit opened as %q, want %q", unit.message, want)
+			}
+			return
+		}
+	}
+	t.Errorf("the deploy opened units %v, want one provisioning its infra stack", openedUnits(events))
 }
