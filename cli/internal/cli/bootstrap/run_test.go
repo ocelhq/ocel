@@ -11,7 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/consent"
@@ -27,6 +31,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -51,6 +56,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
+		deps.AttachTerminalSink(&stdout)
 		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -71,6 +77,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
+		deps.AttachTerminalSink(&stdout)
 		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the mismatched-bypass refusal")
@@ -87,6 +94,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Dry: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -130,6 +138,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -153,6 +162,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Dry: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -173,6 +183,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
+		deps.AttachTerminalSink(&stdout)
 		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the no-terminal refusal")
@@ -183,6 +194,40 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t *testing.T) {
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{}, &stdout, &stderr, strings.NewReader("production\n")); err != nil {
+		t.Fatalf("RunDestroy err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stream.String())
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
+	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Fatalf("the removal plan was not shown in the plan phase: %s", stream.String())
+	}
+	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	if waiting < shown {
+		t.Fatalf("held at event %d, plan shown at %d: want the run held to ask once the plan is shown: %s", waiting, shown, stream.String())
+	}
+	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
+		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Removed the production bootstrap" {
+		t.Errorf("result = %v, want the run to end reporting the removal", result)
+	}
+	if got := clitest.ReadJournal(t, journal); len(got) != 2 {
+		t.Errorf("provider saw %v, want the plan and the teardown consented to", got)
+	}
 }
 
 func TestRunBootstrap(t *testing.T) {
@@ -224,6 +269,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -256,6 +302,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -286,6 +333,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true}
+		deps.AttachTerminalSink(&stdout)
 		err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runBootstrap err = nil, want the missing credential to stop the plan; stdout=%s", stdout.String())
@@ -312,6 +360,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -333,6 +382,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "keep")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -351,6 +401,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "silent")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -369,6 +420,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Remove: "isr", Force: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -387,6 +439,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Features: "isr", FeaturesDeclared: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -402,6 +455,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Features: "isr", FeaturesDeclared: true, Remove: "isr"}
+		deps.AttachTerminalSink(&stdout)
 		err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runBootstrap err = nil, want a feature named both ways refused")
@@ -422,6 +476,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Remove: "image-optimization"}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -439,6 +494,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Remove: "image-optimization", Features: "isr", FeaturesDeclared: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -458,6 +514,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Features: "isr", FeaturesDeclared: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -481,6 +538,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Features: "image-optimization", FeaturesDeclared: true, Remove: "isr"}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -504,6 +562,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Features: "none", FeaturesDeclared: true, Remove: "isr"}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -531,6 +590,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Features: "none", FeaturesDeclared: true, Remove: "isr"}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -544,6 +604,60 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 			t.Errorf("the disclosure also went out beside the stream; got:\n%s", stdout.String())
 		}
 	})
+}
+
+func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "")
+	deps.StdinIsTerminal = func(io.Reader) bool { return true }
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
+	t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	opts := Options{Features: "isr", FeaturesDeclared: true}
+	deps.AttachTerminalSink(&stdout)
+	if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
+		t.Fatalf("Run err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stream.String())
+	shown := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetPlan() != nil })
+	if shown < 0 || evs[shown].GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Fatalf("the bootstrap plan was not shown in the plan phase: %s", stream.String())
+	}
+	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	if waiting < shown {
+		t.Fatalf("held at event %d, plan shown at %d: want the run held to ask once the plan is shown: %s", waiting, shown, stream.String())
+	}
+	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
+		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Bootstrapped" {
+		t.Errorf("result = %v, want the run to end reporting the bootstrap", result)
+	}
+	if got := clitest.ReadJournal(t, journal); len(got) != 1 {
+		t.Errorf("provider saw %v, want the one apply consented to", got)
+	}
+}
+
+func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var evs []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	return evs
 }
 
 func streamMessages(t *testing.T, out string) []string {
@@ -582,6 +696,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Dry: true, Remove: "isr"}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -600,6 +715,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Dry: true, Remove: "isr"}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -619,6 +735,7 @@ func TestBootstrapDryPreviewsEverything(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -644,6 +761,7 @@ func TestBootstrapSendsAutoHeal(t *testing.T) {
 			t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 			var stdout, stderr bytes.Buffer
+			deps.AttachTerminalSink(&stdout)
 			if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, tt.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -661,6 +779,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -675,6 +794,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -689,6 +809,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true, Features: "isr,cloudflare-edge", FeaturesDeclared: true}
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}

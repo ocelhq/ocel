@@ -16,9 +16,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -121,57 +121,10 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		return err
 	}
 
-	spec := deps.Spec(consent.PlanFirst, "ocel destroy production", cfg, yes || bypass, stdout, stdin)
-	spec.Dry = dry
-	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
-
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
-		}); err != nil {
-			return err
-		}
-
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-
-		spinner := ui.Spin("Enumerating what would be destroyed")
-		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
-			Slug: cfg.Slug,
-			Edge: edgewire.Selection(cfg),
-		})
-		spinner.Stop()
-		if err != nil {
-			return err
-		}
-		if len(plan.GetGroups()) == 0 {
-			ui.Finish("Nothing to destroy")
-			return nil
-		}
-
-		consented := showDestroyPlan(ui, cfg.Slug, false, plan)
-		if dry {
-			ui.Diagnostic("Run without --dry to destroy.")
-			return nil
-		}
-		granted, err := ui.ConsentByName(ctx, "project name", plan.GetSubject())
-		if err != nil || !granted {
-			return err
-		}
-
-		req := &contractv1.ProjectRequest{
-			Slug:      cfg.Slug,
-			Edge:      edgewire.Selection(cfg),
-			Consented: consented,
-		}
-		if err := providerclient.StreamRunner(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
-			return err
-		}
-		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
-		return nil
-	})
+	gate := deps.Gate(consent.PlanFirst, "ocel destroy production", yes || bypass, stdout, stdin)
+	gate.Dry = dry
+	gate.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
+	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PRODUCTION)
 }
 
 func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -180,70 +133,105 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 		return err
 	}
 
-	spec := deps.Spec(consent.PlanFirst, "ocel destroy preview", cfg, yes, stdout, stdin)
-	spec.Dry = dry
-	spec.Unattended = "pass --yes"
-
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
-		}); err != nil {
-			return err
-		}
-
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-
-		spinner := ui.Spin("Enumerating what would be destroyed")
-		plan, err := client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
-			Slug:        cfg.Slug,
-			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
-			Edge:        edgewire.Selection(cfg),
-		})
-		spinner.Stop()
-		if err != nil {
-			return err
-		}
-		if len(plan.GetGroups()) == 0 {
-			ui.Finish("Nothing to destroy")
-			return nil
-		}
-
-		consented := showDestroyPlan(ui, cfg.Slug, true, plan)
-		if dry {
-			ui.Diagnostic("Run without --dry to destroy.")
-			return nil
-		}
-
-		granted, err := ui.ConsentByName(ctx, "project name", plan.GetSubject())
-		if err != nil || !granted {
-			return err
-		}
-
-		req := &contractv1.ProjectRequest{
-			Slug:        cfg.Slug,
-			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW},
-			Edge:        edgewire.Selection(cfg),
-			Consented:   consented,
-		}
-		if err := providerclient.StreamRunner(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
-			return err
-		}
-		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
-		return nil
-	})
+	gate := deps.Gate(consent.PlanFirst, "ocel destroy preview", yes, stdout, stdin)
+	gate.Dry = dry
+	gate.Unattended = "pass --yes"
+	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PREVIEW)
 }
 
-func showDestroyPlan(ui *runui.Session, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {
+func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate consent.Gate, tier environmentv1.Tier) (err error) {
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	if err := gate.Refuse(); err != nil {
+		return err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, gate.Command, cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(gate.Dry))
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+
+	err = bootstrap.Ready(ctx, check, prov, cfg, tier, "ocel bootstrap "+bootstrap.Name(tier))
+	check.End(err)
+	if err != nil {
+		return err
+	}
+
+	preview := tier == environmentv1.Tier_TIER_PREVIEW
+	var env *environmentv1.Environment
 	if preview {
-		return ui.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
+		env = &environmentv1.Environment{Tier: tier}
+	}
+
+	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
+	unit := planning.Unit(cfg.Slug, "Enumerating what would be destroyed")
+	var plan *planv1.ChangePlan
+	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
+			Slug:        cfg.Slug,
+			Environment: env,
+			Edge:        edgewire.Selection(cfg),
+		})
+		return err
+	})
+	unit.End(err)
+	if err != nil {
+		return err
+	}
+	if len(plan.GetGroups()) == 0 {
+		run.Finish("Nothing to destroy")
+		return nil
+	}
+
+	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
+	if gate.Dry {
+		planning.Say("Run without --dry to destroy.")
+		return nil
+	}
+	granted, err := gate.ConsentByName(ctx, planning, consented, "project name", plan.GetSubject())
+	planning.End(err)
+	if err != nil {
+		return err
+	}
+	if !granted {
+		run.Finish("Nothing destroyed")
+		return nil
+	}
+
+	req := &contractv1.ProjectRequest{
+		Slug:        cfg.Slug,
+		Environment: env,
+		Edge:        edgewire.Selection(cfg),
+		Consented:   consented,
+	}
+	if _, err := providerclient.Stream(ctx, prov, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
+		return err
+	}
+	if preview {
+		run.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
+		return nil
+	}
+	run.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
+	return nil
+}
+
+func showDestroyPlan(planning *events.Scope, slug string, preview bool, plan *planv1.ChangePlan) *planv1.ChangePlan {
+	if preview {
+		return planning.Plan(fmt.Sprintf("This will permanently destroy the ENTIRE preview footprint of project %q", slug), plan,
 			"– all stored preview assets belonging to this project",
 			"– every preview variable value this project has, including each preview's own overrides",
 			"The account-level preview bootstrap is left intact. This cannot be undone.")
 	}
-	return ui.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
+	return planning.Plan(fmt.Sprintf("This will permanently destroy production project %q", slug), plan,
 		"– all stored assets belonging to this project",
 		"– every production variable value this project has, and their history",
 		"This cannot be undone.")

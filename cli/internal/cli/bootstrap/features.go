@@ -12,8 +12,10 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/style"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -45,7 +47,7 @@ func needsNote(stdout io.Writer, note string) string {
 	return gated(stdout, color.RGB(0xff, 0xb8, 0x6c)).Sprint(note)
 }
 
-func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
+func chooseFeatures(ctx context.Context, scope *events.Scope, opts Options, catalogue []*contractv1.Feature, installed, going []string, kind string, tier environmentv1.Tier, interactive bool, stdout io.Writer) ([]string, bool, error) {
 	if opts.FeaturesDeclared {
 		requested, err := parseFeatureFlag(opts.Features, catalogue)
 		return requested, err == nil, err
@@ -53,6 +55,8 @@ func chooseFeatures(ctx context.Context, opts Options, catalogue []*contractv1.F
 	if !interactive {
 		return without(installed, going), true, nil
 	}
+	resume := scope.Hold(&streamv1.WaitingEvent{})
+	defer resume("answered")
 	return pickFeatures(ctx, catalogue, installed, going, kind, tier, stdout)
 }
 

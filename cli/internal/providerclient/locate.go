@@ -17,6 +17,13 @@ const (
 	PinInMemory
 )
 
+func ChoosePinning(dry bool) Pinning {
+	if dry {
+		return PinInMemory
+	}
+	return PinToLock
+}
+
 func locateProvider(ctx context.Context, projectDir, name string, mode Pinning) (string, error) {
 	store, err := providers.New(version.Version)
 	if err != nil {

@@ -26,6 +26,7 @@ func TestOnlyWhatRendersDependentsPaysForThem(t *testing.T) {
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stderr=%s", err, stderr.String())
 		}

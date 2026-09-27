@@ -11,7 +11,7 @@ import (
 
 func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	root, _ := clitest.SetUpDeployFixture(t)
-	deps := newDeps()
+	deps := newTestDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, nil)
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
@@ -19,11 +19,12 @@ func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("a command reading a bootstrap that lacks a feature this project needs ran on regardless")
 	}
-	if !strings.Contains(err.Error(), "ocel bootstrap production --features image-optimization,isr") {
-		t.Errorf("refusal = %q, want the literal command to run", err)
+	if out := stdout.String(); !strings.Contains(out, "ocel bootstrap production --features image-optimization,isr") {
+		t.Errorf("refusal = %q, want the literal command to run", out)
 	}
 }

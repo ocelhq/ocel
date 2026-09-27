@@ -14,13 +14,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -80,53 +79,88 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 		return err
 	}
 
-	return providerclient.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		if err := runui.PlainCheck(deps.Presentation(stdout), stdout, runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
-		}); err != nil {
-			return err
-		}
+	promotions, err := listPromotions(ctx, deps, cfg)
+	if err != nil {
+		return err
+	}
+	renderPromotions(stdout, promotions)
+	return nil
+}
 
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-		resp, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
+func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (promotions []*contractv1.PromotionHistoryEntry, err error) {
+	if _, err := cfg.RequireProvider(); err != nil {
+		return nil, err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, "ocel deployments ls", cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return nil, err
+	}
+	defer prov.Close()
+
+	err = bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
+	check.End(err)
+	if err != nil {
+		return nil, err
+	}
+
+	var listed *contractv1.ListPromotionsResponse
+	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
 			Slug: cfg.Slug,
 			Edge: edgewire.Selection(cfg),
 		})
-		if err != nil {
-			return err
-		}
-		renderPromotions(stdout, resp.GetPromotions())
-		return nil
+		return err
 	})
+	return listed.GetPromotions(), err
 }
 
-func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int, yes bool, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel deployments prune", cfg, yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
-		}); err != nil {
-			return err
-		}
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
 
-		req := &contractv1.RemoveStalePromotionsRequest{
-			Slug:  cfg.Slug,
-			KeepN: int32(keepN),
-			Edge:  edgewire.Selection(cfg),
-		}
-		if err := providerclient.StreamRunner(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
-			return err
-		}
-		ui.Finish("Pruned")
-		return nil
-	})
+	ctx, run, err := deps.Events.Begin(ctx, "ocel deployments prune", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+
+	err = bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
+	check.End(err)
+	if err != nil {
+		return err
+	}
+
+	req := &contractv1.RemoveStalePromotionsRequest{
+		Slug:  cfg.Slug,
+		KeepN: int32(keepN),
+		Edge:  edgewire.Selection(cfg),
+	}
+	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
+		return err
+	}
+	run.Finish("Pruned")
+	return nil
 }
 
 func renderPromotions(stdout io.Writer, promotions []*contractv1.PromotionHistoryEntry) {

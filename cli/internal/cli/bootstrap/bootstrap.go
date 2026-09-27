@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -158,154 +157,181 @@ func environmentArg(args []string) (environmentv1.Tier, error) {
 	}
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	cfg, err := resolveProject(ctx, deps, cwd)
 	if err != nil {
 		return err
 	}
 
-	spec := deps.Spec(consent.PlanFirst, "ocel bootstrap "+Name(tier), cfg, opts.Yes, stdout, stdin)
-	spec.Dry = opts.Dry
-	spec.Unattended = "pass --yes"
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	command := "ocel bootstrap " + Name(tier)
+	gate := deps.Gate(consent.PlanFirst, command, opts.Yes, stdout, stdin)
+	gate.Dry = opts.Dry
+	gate.Unattended = "pass --yes"
+	if err := gate.Refuse(); err != nil {
+		return err
+	}
 
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			return preflight.Announce(ctx, check, prov, cfg, tier)
-		}); err != nil {
-			return err
+	ctx, run, err := deps.Events.Begin(ctx, command, cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(opts.Dry))
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+
+	planned, err := describeBootstrap(ctx, check, prov, cfg, tier)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+	catalogue := planned.GetFeatures()
+
+	named, err := parseRemoveFlag(opts.Remove, catalogue)
+	if err != nil {
+		return err
+	}
+	installed := enabledFeatures(catalogue)
+	going := goingFeatures(catalogue, installed, named)
+	if absent := without(named, installed); len(absent) > 0 {
+		fmt.Fprintf(stdout, "%s is not in the %s bootstrap, so there is nothing to remove.\n",
+			strings.Join(absent, ", "), Name(tier))
+	}
+	if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
+		return nil
+	}
+
+	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
+	asking := gate.Asking()
+	picked := asking && !opts.FeaturesDeclared
+	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout)
+	if err != nil {
+		return err
+	}
+	if !selected {
+		fmt.Fprintln(stdout, "Aborted.")
+		run.Finish("Nothing bootstrapped")
+		return nil
+	}
+	if err := bothWays(requested, named); err != nil {
+		return err
+	}
+
+	request := func(dry bool) *contractv1.BootstrapRequest {
+		req := &contractv1.BootstrapRequest{
+			Tier:     tier,
+			Features: requested,
+			Remove:   going,
+			Force:    opts.Force,
+			Edge:     edgewire.Selection(cfg),
+			Dry:      dry,
 		}
-		client, err := runner.Client()
+		if opts.AutoHealDeclared {
+			req.AutoHeal = &opts.AutoHeal
+		}
+		return req
+	}
+
+	unit := planning.Unit(Name(tier), "Planning changes")
+	plan, err := providerclient.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
+	unit.End(err)
+	if err != nil {
+		return err
+	}
+	var consented *planv1.ChangePlan
+	rendered := len(plan.GetGroups()) > 0
+	switch {
+	case rendered:
+		var notes []string
+		if !consent.Mutates(plan) {
+			notes = append(notes, "No infrastructure changes — applying refreshes bootstrap seals and records.")
+		}
+		consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
+	case len(going) > 0:
+		planning.Warn(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), Name(tier)))
+		if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
+			planning.Warn(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
+		}
+	default:
+		planning.Say("No infrastructure changes — applying refreshes bootstrap seals and records.")
+	}
+	if !picked {
+		edgeID := plan.GetEdgeKind()
+		if edgeID == "" {
+			edgeID = string(cfg.EdgeID())
+		}
+		printImplied(stdout, impliedFeatures(catalogue, requested, edgeID))
+	}
+	status := planned.GetBootstrap()
+	if status.GetDowngrade() {
+		fmt.Fprintln(stdout, downgradeWarning(tier, status))
+	}
+	if opts.Dry {
+		planning.Say("Run without --dry to apply.")
+		return nil
+	}
+
+	if status.GetDowngrade() {
+		proceed, err := gate.Guard(ctx, planning, "Write the older content anyway?")
 		if err != nil {
 			return err
 		}
-		planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+		if !proceed {
+			run.Finish("Nothing bootstrapped")
+			return nil
+		}
+	}
+
+	title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), prov.Name())
+	if rendered {
+		title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), prov.Name())
+	}
+	granted, err := gate.Consent(ctx, planning, consented, title)
+	if err != nil {
+		return err
+	}
+	if !granted {
+		run.Finish("Nothing bootstrapped")
+		return nil
+	}
+	planning.End(nil)
+
+	req := request(false)
+	req.Consented = consented
+	req.AcceptReplacements = rendered
+	req.Force = req.Force || len(going) > 0
+
+	if _, err := providerclient.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+		return err
+	}
+	run.Finish("Bootstrapped")
+	return nil
+}
+
+func describeBootstrap(ctx context.Context, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+	if err := preflight.Announce(ctx, check, prov, cfg, tier); err != nil {
+		return nil, err
+	}
+	var planned *contractv1.DescribeBootstrapResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 			Tier:           tier,
 			WithDependents: true,
 			Edge:           edgewire.Selection(cfg),
 		})
-		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", runner.Name())
-			}
-			return err
-		}
-		catalogue := planned.GetFeatures()
-
-		named, err := parseRemoveFlag(opts.Remove, catalogue)
-		if err != nil {
-			return err
-		}
-		installed := enabledFeatures(catalogue)
-		going := goingFeatures(catalogue, installed, named)
-		if absent := without(named, installed); len(absent) > 0 {
-			fmt.Fprintf(stdout, "%s is not in the %s bootstrap, so there is nothing to remove.\n",
-				strings.Join(absent, ", "), Name(tier))
-		}
-		if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
-			return nil
-		}
-
-		asking := ui.Asking()
-		picked := asking && !opts.FeaturesDeclared
-		requested, selected, err := chooseFeatures(ctx, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout)
-		if err != nil {
-			return err
-		}
-		if !selected {
-			fmt.Fprintln(stdout, "Aborted.")
-			return nil
-		}
-		if err := bothWays(requested, named); err != nil {
-			return err
-		}
-
-		request := func(dry bool) *contractv1.BootstrapRequest {
-			req := &contractv1.BootstrapRequest{
-				Tier:     tier,
-				Features: requested,
-				Remove:   going,
-				Force:    opts.Force,
-				Edge:     edgewire.Selection(cfg),
-				Dry:      dry,
-			}
-			if opts.AutoHealDeclared {
-				req.AutoHeal = &opts.AutoHeal
-			}
-			return req
-		}
-
-		var plan *planv1.ChangePlan
-		spinner := ui.Spin("Planning changes")
-		err = providerclient.StreamRunner(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
-			func(ev *progressv1.OperationEvent) {
-				if shown := ev.GetPlan(); shown != nil {
-					plan = shown
-				}
-			})
-		spinner.Stop()
-		if err != nil {
-			return err
-		}
-		var consented *planv1.ChangePlan
-		rendered := len(plan.GetGroups()) > 0
-		switch {
-		case rendered:
-			var notes []string
-			if !consent.Mutates(plan) {
-				notes = append(notes, "No infrastructure changes — applying refreshes bootstrap seals and records.")
-			}
-			consented = ui.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
-		case len(going) > 0:
-			ui.Warning(fmt.Sprintf("Removing %s from the %s bootstrap tears down what it installed.", strings.Join(going, ", "), Name(tier)))
-			if dependents := dependentProjects(catalogue, going); len(dependents) > 0 {
-				ui.Warning(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
-			}
-		default:
-			ui.Diagnostic("No infrastructure changes — applying refreshes bootstrap seals and records.")
-		}
-		if !picked {
-			edgeID := plan.GetEdgeKind()
-			if edgeID == "" {
-				edgeID = string(cfg.EdgeID())
-			}
-			printImplied(stdout, impliedFeatures(catalogue, requested, edgeID))
-		}
-		status := planned.GetBootstrap()
-		if status.GetDowngrade() {
-			fmt.Fprintln(stdout, downgradeWarning(tier, status))
-		}
-		if opts.Dry {
-			ui.Diagnostic("Run without --dry to apply.")
-			return nil
-		}
-
-		if status.GetDowngrade() {
-			proceed, err := ui.Guard(ctx, "Write the older content anyway?")
-			if err != nil || !proceed {
-				return err
-			}
-		}
-
-		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Name())
-		if rendered {
-			title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), runner.Name())
-		}
-		granted, err := ui.Consent(ctx, title)
-		if err != nil || !granted {
-			return err
-		}
-
-		req := request(false)
-		req.Consented = consented
-		req.AcceptReplacements = rendered
-		req.Force = req.Force || len(going) > 0
-
-		if err := providerclient.StreamRunner(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
-			return err
-		}
-		ui.Finish("Bootstrapped")
-		return nil
+		return err
 	})
+	if connect.CodeOf(err) == connect.CodeUnimplemented {
+		return nil, fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", prov.Name())
+	}
+	return planned, err
 }
 
 func resolveProject(ctx context.Context, deps cmddeps.Deps, cwd string) (*projectconfig.Config, error) {

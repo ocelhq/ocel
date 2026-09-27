@@ -70,7 +70,7 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 
 func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
-	deps := newDeps()
+	deps := newTestDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, nil)
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
@@ -78,6 +78,7 @@ func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
 	t.Setenv(clitest.FakeFlipBoundEnvVar, "5000")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 		t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

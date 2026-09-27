@@ -3,22 +3,28 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func TestRunDeploymentsLs(t *testing.T) {
 	t.Run("it renders promotions newest first with the active marker", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -41,13 +47,14 @@ func TestRunDeploymentsLs(t *testing.T) {
 
 	t.Run("it shows each app's shipped identity under an aligned column", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -59,11 +66,12 @@ func TestRunDeploymentsLs(t *testing.T) {
 			}
 		}
 
-		cut := strings.LastIndex(out, "\n\n")
-		if cut < 0 || !strings.HasPrefix(out, "\nocel  dev  test-app › production\n") {
+		banner := strings.Index(out, "ocel  dev  test-app › production\n")
+		cut := strings.Index(out, "ID  ")
+		if banner < 0 || cut < banner {
 			t.Fatalf("stdout = %q, want the identity banner above the table", out)
 		}
-		table := out[cut+2:]
+		table := out[cut:]
 		lines := strings.Split(strings.TrimRight(table, "\n"), "\n")
 		if len(lines) != 3 {
 			t.Fatalf("stdout = %q, want a header and two rows", out)
@@ -77,19 +85,20 @@ func TestRunDeploymentsLs(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runPromotionsLs err = nil, want a class-mismatch error")
 		}
-		if !strings.Contains(err.Error(), "this command needs production infrastructure") {
-			t.Errorf("err = %v, want the concrete class-mismatch message", err)
+		if out := stdout.String(); !strings.Contains(out, "this command needs production infrastructure") {
+			t.Errorf("stdout = %q, want the concrete class-mismatch message", out)
 		}
 	})
 }
@@ -105,13 +114,14 @@ func runeIndex(line, substr string) int {
 func TestRunDeploymentsPrune(t *testing.T) {
 	t.Run("it reports the reclaimed and the kept promotions", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -129,13 +139,14 @@ func TestRunDeploymentsPrune(t *testing.T) {
 
 	t.Run("it refuses on preview infrastructure", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
-		deps := newDeps()
+		deps := newTestDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
@@ -148,4 +159,66 @@ func TestRunDeploymentsPrune(t *testing.T) {
 			t.Errorf("stdout = %q, want no prune to have been driven against preview infra", out)
 		}
 	})
+}
+
+func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBesideTheStream(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		t.Fatalf("runPromotionsLs err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stream.String())
+	if len(evs) == 0 {
+		t.Fatalf("the run reported nothing on its stream; stdout=%s", stdout.String())
+	}
+	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
+	if identity < 0 || evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("the listing never said who it acts as in the check phase: %s", stream.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+		t.Errorf("result = %v, want the listing's run to succeed", result)
+	}
+	if !strings.Contains(stdout.String(), "promo-2") || strings.Contains(stream.String(), "promo-2") {
+		t.Errorf("stdout = %q, stream = %q: want the table on stdout and not on the stream", stdout.String(), stream.String())
+	}
+}
+
+func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := newTestDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPromotionsPrune err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stream.String())
+	if len(evs) == 0 {
+		t.Fatalf("the run reported nothing on its stream; stdout=%s", stdout.String())
+	}
+	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return strings.Contains(ev.GetMessage(), "Reclaimed 1 promotion(s): promo-1")
+	}) {
+		t.Errorf("the stream never said what was reclaimed: %s", stream.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Pruned" {
+		t.Errorf("result = %v, want the run to end reporting the prune", result)
+	}
 }

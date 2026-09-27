@@ -82,12 +82,8 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 	}
 	defer run.End(&err)
 
-	pins := providerclient.PinToLock
-	if opts.dry {
-		pins = providerclient.PinInMemory
-	}
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, pins)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(opts.dry))
 	if err != nil {
 		return err
 	}
