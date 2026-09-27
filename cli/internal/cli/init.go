@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,10 +14,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/slug"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const sdkPackage = "ocel"
@@ -61,7 +62,7 @@ var initCmd = &cobra.Command{
 		opts := initOpts
 		opts.configPath = explicitConfigPath()
 
-		return runInit(cmd.Context(), newDeps(), cwd, slug, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runInit(cmd.Context(), newDeps(), cwd, slug, opts)
 	},
 }
 
@@ -129,7 +130,7 @@ func detectLanguage(dir string) (language, bool, error) {
 	}
 }
 
-func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
+func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions) error {
 	configPath, err := initConfigPath(cwd, opts)
 	if err != nil {
 		return err
@@ -165,23 +166,34 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 		return fmt.Errorf("%s already contains %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
 	}
 
+	ctx, initializing, err := deps.Events.Begin(ctx, "ocel init", "")
+	if err != nil {
+		return err
+	}
+	err = writeProject(ctx, deps, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, lang, detected)
+	if err == nil {
+		initializing.Finish("Initialized " + slug)
+	}
+	initializing.End(&err)
+	return err
+}
+
+func writeProject(ctx context.Context, deps cmddeps.Deps, build *events.Scope, configPath, slug, provider string, lang language, detected bool) error {
+	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", name, err)
 	}
 	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
-	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", name, slug)
+	build.Say(fmt.Sprintf("Wrote %s (slug: %s)", name, slug))
 
 	if detected {
-		addSDK(ctx, deps, projectDir, lang, stdout, stderr)
+		addSDK(ctx, deps, build, projectDir, lang)
 	} else {
-		fmt.Fprintf(stdout, "! No %s here — add the ocel SDK once this directory contains one.\n", strings.Join(manifestNames(), ", "))
+		build.Warn(fmt.Sprintf("No %s here — add the ocel SDK once this directory contains one.", strings.Join(manifestNames(), ", ")))
 	}
-
-	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
-
+	build.Say("Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
 	return nil
 }
 
@@ -339,16 +351,14 @@ func addCommand(dir string, lang language) []string {
 	return []string{pm.name, pm.addCommand, sdkPackage}
 }
 
-func addSDK(ctx context.Context, deps cmddeps.Deps, dir string, lang language, stdout, stderr io.Writer) {
+func addSDK(ctx context.Context, deps cmddeps.Deps, build *events.Scope, dir string, lang language) {
 	argv := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
-	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", sdkPackage), func() error {
-		return deps.RunPackageManager(ctx, dir, argv, stderr)
-	})
+	unit := build.Unit(sdkPackage, fmt.Sprintf("Adding it with `%s`", command))
+	err := deps.RunPackageManager(ctx, dir, argv, unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	if err != nil {
-		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", sdkPackage, err, command)
-		return
+		unit.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
 	}
-	fmt.Fprintf(stdout, "✓ Added %s\n", sdkPackage)
+	unit.End(err)
 }

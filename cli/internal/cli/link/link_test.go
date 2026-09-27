@@ -5,18 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 type cloudServer struct {
@@ -26,6 +35,7 @@ type cloudServer struct {
 	created        []map[string]string
 	setActive      int
 	createConflict bool
+	slow           time.Duration
 }
 
 func newCloudServer(t *testing.T, projects ...map[string]string) *cloudServer {
@@ -37,6 +47,7 @@ func newCloudServer(t *testing.T, projects ...map[string]string) *cloudServer {
 	c.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/api/auth/organization/list":
+			time.Sleep(c.slow)
 			json.NewEncoder(w).Encode(c.orgs)
 		case r.URL.Path == "/api/auth/organization/set-active":
 			c.setActive++
@@ -137,13 +148,9 @@ func TestRunLink(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
-		opts := options{apiURL: srv.URL}
-		err := run(context.Background(), deps, t.TempDir(), "nope", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("run err = nil, want error")
-		}
-		if !strings.Contains(err.Error(), "my-app") {
-			t.Fatalf("err = %v, want it to list the available slugs", err)
+		out := failedLink(t, deps, t.TempDir(), "nope", options{apiURL: srv.URL})
+		if !strings.Contains(out, "my-app") {
+			t.Fatalf("output = %q, want it to list the available slugs", out)
 		}
 	})
 
@@ -155,13 +162,9 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
 
 		dir := t.TempDir()
-		opts := options{apiURL: srv.URL}
-		err := run(context.Background(), deps, dir, "", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("run err = nil, want error")
-		}
-		if !strings.Contains(err.Error(), "--create") {
-			t.Fatalf("err = %v, want it to mention --create", err)
+		out := failedLink(t, deps, dir, "", options{apiURL: srv.URL})
+		if !strings.Contains(out, "--create") {
+			t.Fatalf("output = %q, want it to mention --create", out)
 		}
 		if readLink(t, dir, srv.URL) != nil {
 			t.Fatal("a link was written despite the error")
@@ -218,13 +221,9 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t)
 		srv.createConflict = true
 
-		opts := options{apiURL: srv.URL, create: true}
-		err := run(context.Background(), deps, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-		if err == nil {
-			t.Fatal("run err = nil, want error")
-		}
-		if !strings.Contains(err.Error(), "ocel link my-app") {
-			t.Fatalf("err = %v, want it to suggest `ocel link my-app`", err)
+		out := failedLink(t, deps, t.TempDir(), "My App", options{apiURL: srv.URL, create: true})
+		if !strings.Contains(out, "ocel link my-app") {
+			t.Fatalf("output = %q, want it to suggest `ocel link my-app`", out)
 		}
 	})
 
@@ -236,10 +235,9 @@ func TestRunLink(t *testing.T) {
 		srv := newCloudServer(t)
 		srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
 
-		opts := options{apiURL: srv.URL, create: true}
-		err := run(context.Background(), deps, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-		if err == nil || !strings.Contains(err.Error(), "--org") {
-			t.Fatalf("run err = %v, want it to mention --org", err)
+		out := failedLink(t, deps, t.TempDir(), "My App", options{apiURL: srv.URL, create: true})
+		if !strings.Contains(out, "--org") {
+			t.Fatalf("output = %q, want it to mention --org", out)
 		}
 	})
 
@@ -269,10 +267,9 @@ func TestRunLink(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		srv := newCloudServer(t)
 
-		opts := options{apiURL: srv.URL, create: true, org: "nope"}
-		err := run(context.Background(), deps, t.TempDir(), "My App", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-		if err == nil || !strings.Contains(err.Error(), "acme-inc") {
-			t.Fatalf("run err = %v, want it to list the available org slugs", err)
+		out := failedLink(t, deps, t.TempDir(), "My App", options{apiURL: srv.URL, create: true, org: "nope"})
+		if !strings.Contains(out, "acme-inc") {
+			t.Fatalf("output = %q, want it to list the available org slugs", out)
 		}
 	})
 
@@ -291,6 +288,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		opts := options{apiURL: srv.URL}
 		if err := run(context.Background(), deps, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
@@ -318,6 +316,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		opts := options{apiURL: srv.URL}
 		if err := run(context.Background(), deps, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
@@ -332,6 +331,100 @@ func TestRunLink(t *testing.T) {
 			t.Fatalf("link = %+v, want the old record replaced", record)
 		}
 	})
+}
+
+func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTerminal(t *testing.T) {
+	t.Parallel()
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON, TTY: true, Width: 80})
+	}
+	var stdout safeBuffer
+	deps.AttachTerminalSink(&stdout)
+	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
+	srv.slow = 300 * time.Millisecond
+
+	if err := run(context.Background(), deps, t.TempDir(), "other", options{apiURL: srv.URL}, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
+		t.Fatalf("run err = %v", err)
+	}
+
+	evs := runEvents(t, stdout.String())
+	var units []string
+	ended := map[string]bool{}
+	for _, ev := range evs {
+		switch {
+		case ev.GetStarted() != nil && ev.GetMessage() != "":
+			units = append(units, ev.GetSubject()+": "+ev.GetMessage())
+		case ev.GetEnded() != nil:
+			ended[string(ev.GetSpanId())] = true
+		}
+	}
+	want := []string{"127.0.0.1: Loading your organizations", "acme-inc: Loading the projects in Acme Inc"}
+	if !slices.Equal(units, want) {
+		t.Fatalf("units = %q, want %q", units, want)
+	}
+	for _, ev := range evs {
+		if ev.GetStarted() != nil && !ended[string(ev.GetSpanId())] {
+			t.Errorf("scope %q never ended", ev.GetMessage())
+		}
+	}
+	result := evs[len(evs)-1].GetResult()
+	if !result.GetSuccess() || result.GetHeadline() != "Linked this directory to other (Acme Inc)" {
+		t.Fatalf("result = %v, want the run to succeed saying what it linked", result)
+	}
+}
+
+func failedLink(t *testing.T, deps cmddeps.Deps, dir, projectRef string, opts options) string {
+	t.Helper()
+	var out bytes.Buffer
+	deps.AttachTerminalSink(&out)
+	err := run(context.Background(), deps, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
+	var exitErr *exitsig.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
+		t.Fatalf("run err = %v, want the run to fail with exit code 1", err)
+	}
+	if !strings.Contains(out.String(), "✗ Failed") {
+		t.Fatalf("output = %q, want the run's failure", out.String())
+	}
+	return out.String()
+}
+
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var evs []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	if len(evs) == 0 {
+		t.Fatal("the run drew nothing")
+	}
+	return evs
 }
 
 func TestRunUnlink(t *testing.T) {

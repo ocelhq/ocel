@@ -4,15 +4,22 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 func stubPackageManager(deps *cmddeps.Deps, result error) *[]string {
@@ -22,6 +29,61 @@ func stubPackageManager(deps *cmddeps.Deps, result error) *[]string {
 		return result
 	}
 	return &argv
+}
+
+func initDeps() cmddeps.Deps {
+	deps := newDeps()
+	deps.Events = events.NewBus(time.Now)
+	return deps
+}
+
+func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *testing.T) {
+	t.Parallel()
+
+	deps := initDeps()
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON, TTY: true, Width: 80})
+	}
+	deps.RunPackageManager = func(_ context.Context, _ string, _ []string, output io.Writer) error {
+		time.Sleep(300 * time.Millisecond)
+		fmt.Fprintln(output, "added 1 package in 2s")
+		return nil
+	}
+	var stdout, stderr syncBuffer
+	deps.AttachTerminalSink(&stdout)
+	dir := initTestDir(t, "proj")
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+
+	if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
+		t.Fatalf("runInit err = %v", err)
+	}
+
+	var unit []byte
+	var said []string
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		switch {
+		case ev.GetStarted() != nil && ev.GetSubject() == sdkPackage:
+			unit = ev.GetSpanId()
+			said = append(said, "started: "+ev.GetMessage())
+		case ev.GetOutput() != nil && bytes.Equal(ev.GetSpanId(), unit):
+			said = append(said, "output: "+ev.GetMessage())
+		case ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), unit):
+			said = append(said, "ended: "+ev.GetEnded().GetStatus().String())
+		}
+	}
+	want := []string{"started: Adding it with `pnpm add " + sdkPackage + "`", "output: added 1 package in 2s", "ended: SPAN_STATUS_OK"}
+	if !slices.Equal(said, want) {
+		t.Fatalf("the sdk unit said %q, want %q", said, want)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want the package manager heard only through the run", stderr.String())
+	}
 }
 
 func initTestDir(t *testing.T, name string) string {
@@ -51,12 +113,13 @@ func TestRunInit(t *testing.T) {
 	t.Run("no argument defaults the slug to the directory name", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "My Cool App")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}, &stdout, &bytes.Buffer{}); err != nil {
+		deps.AttachTerminalSink(&stdout)
+		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -69,12 +132,13 @@ func TestRunInit(t *testing.T) {
 	t.Run("an explicit slug writes a deployable config", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "ignored-dir-name")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &stdout, &bytes.Buffer{}); err != nil {
+		deps.AttachTerminalSink(&stdout)
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -93,11 +157,11 @@ func TestRunInit(t *testing.T) {
 			t.Run(slug, func(t *testing.T) {
 				t.Parallel()
 
-				deps := newDeps()
+				deps := initDeps()
 				argv := stubPackageManager(&deps, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), deps, dir, slug, initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{})
+				err := runInit(context.Background(), deps, dir, slug, initOptions{provider: "aws"})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -114,11 +178,11 @@ func TestRunInit(t *testing.T) {
 	t.Run("an unslugifiable directory name errors asking for a slug", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"})
 		if err == nil || !strings.Contains(err.Error(), "ocel init my-app") {
 			t.Fatalf("err = %v, want it to ask for a slug", err)
 		}
@@ -127,7 +191,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("an existing config is never overwritten", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 		configPath := filepath.Join(dir, projectconfig.DefaultFileName)
@@ -135,7 +199,7 @@ func TestRunInit(t *testing.T) {
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"})
 		if err == nil || !strings.Contains(err.Error(), projectconfig.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
@@ -151,12 +215,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("--provider names the provider the config is scaffolded with, with options for it to fill in", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{provider: "gcp"}
-		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 
@@ -169,11 +233,11 @@ func TestRunInit(t *testing.T) {
 	t.Run("no provider is refused, naming the flag, and nothing is written", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
-		err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{})
 		if err == nil || !strings.Contains(err.Error(), "--provider") {
 			t.Fatalf("err = %v, want it to ask for --provider", err)
 		}
@@ -201,14 +265,14 @@ func TestRunInit(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
-				deps := newDeps()
+				deps := initDeps()
 				argv := stubPackageManager(&deps, nil)
 				dir := initTestDir(t, "proj")
 				if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
 					t.Fatalf("write lockfile: %v", err)
 				}
 
-				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, want) {
@@ -221,7 +285,7 @@ func TestRunInit(t *testing.T) {
 	t.Run("a failing package manager keeps the config and prints the command", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		stubPackageManager(&deps, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
 		dir := initTestDir(t, "proj")
 		if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
@@ -229,7 +293,8 @@ func TestRunInit(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &stdout, &bytes.Buffer{}); err != nil {
+		deps.AttachTerminalSink(&stdout)
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
@@ -258,12 +323,13 @@ func TestRunInit(t *testing.T) {
 			}
 		}
 
-		deps := newDeps()
+		deps := initDeps()
 		argv := stubPackageManager(&deps, nil)
 		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", projectconfig.DefaultFileName)}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
+		deps.AttachTerminalSink(&stdout)
+		if err := runInit(context.Background(), deps, cwd, "", opts); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -285,12 +351,12 @@ func TestRunInit(t *testing.T) {
 	t.Run("--config creates the directories leading to the path", func(t *testing.T) {
 		t.Parallel()
 
-		deps := newDeps()
+		deps := initDeps()
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
 		opts := initOptions{provider: "aws", configPath: filepath.Join("nested", "deep", projectconfig.DefaultFileName)}
-		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", opts); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "nested", "deep", projectconfig.DefaultFileName)); err != nil {

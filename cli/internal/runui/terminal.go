@@ -54,10 +54,6 @@ func positiveEnvInt(name string) (int, bool) {
 	return n, true
 }
 
-func truncateToWidth(s string, width int) string {
-	return fitToWidth(s, max(width-1, 1))
-}
-
 func fitToWidth(s string, columns int) string {
 	if columns < 1 {
 		return ""

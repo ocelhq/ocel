@@ -16,7 +16,14 @@ import (
 const (
 	liveGutter = "  "
 	liveHold   = 1500 * time.Millisecond
+	frameRate  = 100 * time.Millisecond
 )
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func spinnerFrame(n int) string {
+	return spinnerFrames[n%len(spinnerFrames)]
+}
 
 type liveLine struct {
 	now    func() time.Time
