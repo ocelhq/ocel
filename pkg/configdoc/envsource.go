@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/envsource"
 )
 
 const (
@@ -32,6 +34,41 @@ type EnvSourceConfig struct {
 	Production *EnvSourceDescriptor    `json:"production,omitempty" doc:"Where production's values are read from. Left off, ocel's own store in your account (\"builtin\")."`
 	Preview    *EnvSourceDescriptor    `json:"preview,omitempty" doc:"Where every preview's class-wide values are read from. Left off, ocel's own store in your account (\"builtin\"). A value set for one named preview stays ocel's own."`
 	Dev        *DevEnvSourceDescriptor `json:"dev,omitempty" doc:"Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads."`
+}
+
+func (c *EnvSourceConfig) Tiers() envsource.Tiers {
+	tiers := envsource.DefaultTiers()
+	if c == nil {
+		return tiers
+	}
+	if c.Production != nil {
+		tiers.Production = descriptorOf(c.Production.Infisical, c.Production.Exec, envsource.Builtin)
+	}
+	if c.Preview != nil {
+		tiers.Preview = descriptorOf(c.Preview.Infisical, c.Preview.Exec, envsource.Builtin)
+	}
+	if c.Dev != nil {
+		tiers.Dev = descriptorOf(c.Dev.Infisical, c.Dev.Exec, envsource.Dotenv)
+	}
+	return tiers
+}
+
+func descriptorOf(infisical *InfisicalOptions, exec *ExecOptions, fallback envsource.Kind) envsource.Descriptor {
+	switch {
+	case infisical != nil:
+		options := envsource.InfisicalOptions{
+			Project:     infisical.Project,
+			Environment: infisical.Environment,
+			Path:        infisical.Path,
+			Host:        infisical.Host,
+			Write:       envsource.WritePolicy(infisical.Write),
+			Auth:        infisical.Auth.auth(),
+		}.Normalize()
+		return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options}
+	case exec != nil:
+		return envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: exec.Command, Format: envsource.Format(exec.Format)}}
+	}
+	return envsource.Descriptor{Kind: fallback}
 }
 
 type EnvSourceDescriptor struct {
@@ -221,6 +258,18 @@ type InfisicalAuth struct {
 }
 
 func (InfisicalAuth) Shorthands() []string { return nil }
+
+func (a *InfisicalAuth) auth() envsource.InfisicalAuth {
+	switch {
+	case a == nil:
+		return envsource.InfisicalAuth{}
+	case a.Universal != nil:
+		return envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: a.Universal.ClientID.Env, ClientSecretVariable: a.Universal.ClientSecret.Env}
+	case a.Identity != nil:
+		return envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: a.Identity.IdentityID}
+	}
+	return envsource.InfisicalAuth{}
+}
 
 type UniversalAuth struct {
 	ClientID     Ref `json:"clientId" doc:"The ocel variable containing the Universal Auth client id."`
