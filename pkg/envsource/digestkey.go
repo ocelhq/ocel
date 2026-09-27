@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -111,6 +112,11 @@ func (k DigestKey) version(scope envvars.Scope, at envvars.Cell, read Value) (st
 		return digest, nil
 	}
 	return read.Version + "#" + digest, nil
+}
+
+func sourceVersionOf(copiedVersion string) string {
+	sourceVersion, _, _ := strings.Cut(copiedVersion, "#")
+	return sourceVersion
 }
 
 func writeLengthPrefixed(h hash.Hash, part string) {

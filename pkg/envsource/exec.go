@@ -55,6 +55,8 @@ func (s execSource) Read(ctx context.Context, folders []string) (map[envvars.Cel
 
 func (execSource) Create(context.Context, envvars.Cell, []byte, string) error { return ErrReadOnly }
 
+func (execSource) Update(context.Context, envvars.Cell, []byte, string) error { return ErrReadOnly }
+
 func (execSource) URL(envvars.Cell) string { return "" }
 
 func folderArgument(folder string) string {

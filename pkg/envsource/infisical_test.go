@@ -131,6 +131,10 @@ func (f *fakeInfisical) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.list(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v4/secrets/"):
 		f.create(w, r, strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/"))
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/secrets/"):
+		f.get(w, r, strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/"))
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/v4/secrets/"):
+		f.update(w, r, strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/"))
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v2/folders":
 		f.folder(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/projects/p-1":
@@ -236,6 +240,54 @@ func (f *fakeInfisical) create(w http.ResponseWriter, r *http.Request, name stri
 	created := fakeSecret{id: "new-" + name, key: name, value: body.SecretValue, comment: body.Comment, version: 1}
 	f.secrets[body.SecretPath] = append(f.secrets[body.SecretPath], created)
 	_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": created.id, "secretKey": name, "version": 1}})
+}
+
+func (f *fakeInfisical) get(w http.ResponseWriter, r *http.Request, name string) {
+	query := r.URL.Query()
+	if query.Get("projectId") != "p-1" || query.Get("environment") != "prod" || query.Get("type") != "shared" || query.Get("includeImports") != "false" {
+		f.fail(w, http.StatusBadRequest, "BadRequest", "unexpected get "+query.Encode())
+		return
+	}
+	for _, secret := range f.secrets[query.Get("secretPath")] {
+		if secret.key == name {
+			_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": secret.id, "secretKey": secret.key, "version": secret.version}})
+			return
+		}
+	}
+	f.fail(w, http.StatusNotFound, "NotFound", fmt.Sprintf("Secret with name '%s' not found", name))
+}
+
+func (f *fakeInfisical) update(w http.ResponseWriter, r *http.Request, name string) {
+	var body struct {
+		ProjectID   string `json:"projectId"`
+		Environment string `json:"environment"`
+		SecretPath  string `json:"secretPath"`
+		SecretValue string `json:"secretValue"`
+		Type        string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		f.fail(w, http.StatusBadRequest, "BadRequest", err.Error())
+		return
+	}
+	if body.Type != "shared" || body.ProjectID != "p-1" || body.Environment != "prod" {
+		f.fail(w, http.StatusBadRequest, "BadRequest", fmt.Sprintf("unexpected update %+v", body))
+		return
+	}
+	for i, secret := range f.secrets[body.SecretPath] {
+		if secret.key != name {
+			continue
+		}
+		if f.approval {
+			_ = json.NewEncoder(w).Encode(map[string]any{"approval": map[string]any{"id": "a-2"}})
+			return
+		}
+		secret.value = body.SecretValue
+		secret.version++
+		f.secrets[body.SecretPath][i] = secret
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": secret.id, "secretKey": name, "version": secret.version}})
+		return
+	}
+	f.fail(w, http.StatusNotFound, "NotFound", fmt.Sprintf("Secret with name '%s' not found", name))
 }
 
 func (f *fakeInfisical) folder(w http.ResponseWriter, r *http.Request) {
@@ -454,6 +506,76 @@ func TestInfisicalRefusesToWriteUnlessToldItMay(t *testing.T) {
 	_, server := newFakeInfisical(t)
 	if err := signedIn(server, "/", envsource.WriteNever).Create(context.Background(), cell("", "K"), []byte("v"), ""); !errors.Is(err, envsource.ErrReadOnly) {
 		t.Fatalf("Create() on a read-only source = %v, want ErrReadOnly", err)
+	}
+}
+
+func TestInfisicalUpdatesAValueStillAtTheVersionOcelCopied(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/acme/web", fakeSecret{id: "s1", key: "API_KEY", value: "old", version: 2})
+
+	if err := signedIn(server, "/acme", envsource.WriteValues).Update(context.Background(), cell("/web", "API_KEY"), []byte("new"), "s1@2#0f3a"); err != nil {
+		t.Fatalf("Update() = %v", err)
+	}
+	if stored := fake.stored("/acme/web"); len(stored) != 1 || stored[0].value != "new" || stored[0].version != 3 {
+		t.Fatalf("stored = %+v, want the value updated in place", stored)
+	}
+}
+
+func TestInfisicalRefusesToUpdateAValueChangedSinceOcelCopiedIt(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/acme", fakeSecret{id: "s1", key: "EDITED", value: "theirs", version: 3}, fakeSecret{id: "s9", key: "RECREATED", value: "theirs", version: 1})
+	source := signedIn(server, "/acme", envsource.WriteValues)
+
+	for key, copied := range map[string]string{"EDITED": "s1@2#0f3a", "RECREATED": "s1@1#0f3a", "DELETED": "s2@1#0f3a"} {
+		if err := source.Update(context.Background(), cell("", key), []byte("mine"), copied); !errors.Is(err, envsource.ErrChangedSinceRead) {
+			t.Errorf("Update(%s) copied at %s = %v, want ErrChangedSinceRead", key, copied, err)
+		}
+	}
+	for _, secret := range fake.stored("/acme") {
+		if secret.value != "theirs" {
+			t.Errorf("%s = %q, want the edit made in Infisical kept", secret.key, secret.value)
+		}
+	}
+}
+
+func TestInfisicalUpdatesOnlyWhenItsWritePolicyIsValues(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	for _, write := range []envsource.WritePolicy{envsource.WriteNever, envsource.WriteMissing} {
+		if err := signedIn(server, "/", write).Update(context.Background(), cell("", "K"), []byte("w"), "s1@1"); !errors.Is(err, envsource.ErrReadOnly) {
+			t.Errorf("Update() under write %q = %v, want ErrReadOnly", write, err)
+		}
+	}
+	if err := signedIn(server, "/", envsource.WriteValues).Create(context.Background(), cell("", "NEW"), []byte("v"), ""); err != nil {
+		t.Errorf("Create() under write values = %v, want a missing key created", err)
+	}
+}
+
+func TestInfisicalReportsAnUpdateHeldForApproval(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	fake.set(func(f *fakeInfisical) { f.approval = true })
+	if err := signedIn(server, "/", envsource.WriteValues).Update(context.Background(), cell("", "K"), []byte("w"), "s1@1"); !errors.Is(err, envsource.ErrAwaitingApproval) {
+		t.Fatalf("Update() under an approval policy = %v, want ErrAwaitingApproval", err)
+	}
+}
+
+func TestInfisicalNeverUpdatesOutsideItsPath(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/other", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	source := signedIn(server, "/acme", envsource.WriteValues)
+	for _, folder := range []string{"/..", "/../other", "/web/../../other"} {
+		if err := source.Update(context.Background(), cell(folder, "K"), []byte("w"), "s1@1"); err == nil {
+			t.Errorf("Update() in folder %q = nil, want a refusal", folder)
+		}
+	}
+	if stored := fake.stored("/other"); stored[0].value != "v" {
+		t.Errorf("/other K = %q, want it untouched", stored[0].value)
 	}
 }
 
