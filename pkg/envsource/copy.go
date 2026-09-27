@@ -123,7 +123,7 @@ func isNewerVersion(read, stored string) bool {
 	}
 	readID, readNumber, readNumbered := numberedVersion(read)
 	storedID, storedNumber, storedNumbered := numberedVersion(stored)
-	if readNumbered && storedNumbered && readID == storedID {
+	if readNumbered && storedNumbered && readID == storedID && readNumber != storedNumber {
 		return readNumber > storedNumber
 	}
 	return true
@@ -134,6 +134,7 @@ func numberedVersion(version string) (string, int64, bool) {
 	if !split {
 		return "", 0, false
 	}
+	number, _, _ = strings.Cut(number, "#")
 	parsed, err := strconv.ParseInt(number, 10, 64)
 	return id, parsed, err == nil
 }

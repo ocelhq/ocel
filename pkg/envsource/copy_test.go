@@ -108,6 +108,22 @@ func TestCopyValuesNeverWritesAnOlderReadOverANewerOne(t *testing.T) {
 	}
 }
 
+func TestCopyValuesWritesAValueThatChangedUnderTheVersionItWasReadAt(t *testing.T) {
+	t.Parallel()
+	store, scope := storeFixture()
+	copyAt(t, store, scope, 1, map[envvars.Cell]envsource.Value{cell("", "K"): value("before", "s1@3#aaaa")})
+
+	if changed := copyAt(t, store, scope, 2, map[envvars.Cell]envsource.Value{cell("", "K"): value("after", "s1@3#bbbb")}); len(changed.Written) != 1 {
+		t.Fatalf("a value that changed under an unchanged secret version wrote %v, want it written", changed.Written)
+	}
+	if k := reveal(t, store, scope, classWide("", "K")); k.Plaintext != "after" {
+		t.Fatalf("K = %q, want the value a referenced secret's rotation changed", k.Plaintext)
+	}
+	if older := copyAt(t, store, scope, 3, map[envvars.Cell]envsource.Value{cell("", "K"): value("older", "s1@2#cccc")}); len(older.Written) != 0 {
+		t.Fatalf("a read of an older secret version wrote %v", older.Written)
+	}
+}
+
 func copyAt(t *testing.T, store envvars.Store, scope envvars.Scope, second int, read map[envvars.Cell]envsource.Value) envsource.CopyResult {
 	t.Helper()
 	result, err := envsource.CopyValues(context.Background(), store, scope, fromInfisical, readAt(second), read, []string{""}, nil)
