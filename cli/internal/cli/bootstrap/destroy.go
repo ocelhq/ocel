@@ -18,17 +18,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
+func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) error {
 	cfg, err := resolveProject(ctx, deps, cwd)
 	if err != nil {
 		return err
 	}
-	return runDestroy(ctx, deps, cfg, tier, opts, stdout, stderr, stdin)
+	return runDestroy(ctx, deps, cfg, tier, opts, stdout, stdin)
 }
 
-func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout io.Writer, stdin io.Reader) (err error) {
 	name := Name(tier)
-	bypass, err := consent.Bypass{
+	bypass, notice, err := consent.Bypass{
 		Noun:          "bootstrap",
 		Subject:       name,
 		Action:        fmt.Sprintf("removing the %s bootstrap", name),
@@ -37,7 +37,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		Dry:           opts.Dry,
 		GrantsWhenDry: true,
 		TTY:           deps.StdinIsTerminal(stdin),
-	}.Granted(stderr)
+	}.Granted()
 	if err != nil {
 		return err
 	}
@@ -59,6 +59,9 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	if notice != "" {
+		check.Warn(notice)
+	}
 	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(opts.Dry))
 	if err != nil {
 		return err

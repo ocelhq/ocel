@@ -29,11 +29,11 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{Yes: true}
 		deps.AttachTerminalSink(&stdout)
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
 		if strings.Contains(out, "Type the environment name") {
@@ -54,17 +54,17 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(consent.BypassEnv, "production")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{}
 		deps.AttachTerminalSink(&stdout)
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
 		}
 		if strings.Contains(stdout.String(), "Type the environment name") {
 			t.Errorf("stdout = %q, want the bypass to skip the typed phrase", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), consent.BypassEnv) {
-			t.Errorf("stderr = %q, want it to name %s so an unconfirmed teardown is never silent", stderr.String(), consent.BypassEnv)
+		if want := "WARN  [check] " + consent.BypassEnv + "=production: removing the production bootstrap without confirmation"; !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want the run to warn %q so an unconfirmed teardown is never silent", stdout.String(), want)
 		}
 	})
 
@@ -75,10 +75,10 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(consent.BypassEnv, "preview")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{}
 		deps.AttachTerminalSink(&stdout)
-		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
+		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the mismatched-bypass refusal")
 		}
@@ -92,11 +92,11 @@ func TestRunBootstrapDestroy(t *testing.T) {
 	t.Run("--dry prints the plan, removes nothing, and needs no terminal", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{Dry: true}
 		deps.AttachTerminalSink(&stdout)
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
 		for _, want := range []string{
@@ -136,11 +136,11 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{Yes: true}
 		deps.AttachTerminalSink(&stdout)
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
 		if !strings.Contains(out, "Nothing to destroy: the production environment is not bootstrapped") {
@@ -160,11 +160,11 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{Dry: true}
 		deps.AttachTerminalSink(&stdout)
-		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
+			t.Fatalf("RunDestroy err = %v; stdout=%s", err, stdout.String())
 		}
 		out := stdout.String()
 		if !strings.Contains(out, "Nothing to destroy: the production environment is not bootstrapped") {
@@ -181,10 +181,10 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		opts := Options{}
 		deps.AttachTerminalSink(&stdout)
-		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader(""))
+		err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the no-terminal refusal")
 		}
@@ -203,10 +203,10 @@ func TestRemovingABootstrapAsksForItsNameWhileTheRunIsHeldAfterThePlanItShows(t 
 		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
 	}
 
-	var stream, stdout, stderr bytes.Buffer
+	var stream, stdout bytes.Buffer
 	deps.AttachTerminalSink(&stream)
-	if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{}, &stdout, &stderr, strings.NewReader("production\n")); err != nil {
-		t.Fatalf("RunDestroy err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	if err := RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{}, &stdout, strings.NewReader("production\n")); err != nil {
+		t.Fatalf("RunDestroy err = %v; stream=%s stdout=%s", err, stream.String(), stdout.String())
 	}
 
 	evs := runEvents(t, stream.String())

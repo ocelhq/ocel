@@ -114,7 +114,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			opts := bootstrap.Options{Yes: true}
 			deps.AttachTerminalSink(&stdout)
-			if err := bootstrap.RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := bootstrap.RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
 				t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
@@ -154,7 +154,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 			deps.AttachTerminalSink(&stdout)
-			if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {
+			if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 

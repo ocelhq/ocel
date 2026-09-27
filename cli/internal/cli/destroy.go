@@ -58,7 +58,7 @@ var destroyProductionCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		return runDestroyProduction(cmd.Context(), newDeps(), cwd, destroyProductionYes, destroyProductionDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroyProduction(cmd.Context(), newDeps(), cwd, destroyProductionYes, destroyProductionDry, cmd.OutOrStdout(), cmd.InOrStdin())
 	},
 }
 
@@ -84,7 +84,7 @@ func init() {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return runDestroyPreviewProject(cmd.Context(), newDeps(), cwd, destroyPreviewYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(cmd.Context(), newDeps(), cwd, destroyPreviewYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 	cmddeps.Yes(previewCmd, &destroyPreviewYes)
@@ -96,13 +96,13 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 }
 
-func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
 
-	bypass, err := consent.Bypass{
+	bypass, notice, err := consent.Bypass{
 		Noun:    "project",
 		Subject: cfg.Slug,
 		Action:  "destroying production",
@@ -110,7 +110,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		Yes:     yes,
 		Dry:     dry,
 		TTY:     deps.StdinIsTerminal(stdin),
-	}.Granted(stderr)
+	}.Granted()
 	if err != nil {
 		return err
 	}
@@ -118,10 +118,10 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 	gate := deps.Gate(consent.PlanFirst, "ocel destroy production", yes || bypass, stdout, stdin)
 	gate.Dry = dry
 	gate.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
-	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PRODUCTION)
+	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PRODUCTION, notice)
 }
 
-func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string, yes, dry bool, stdout io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -130,10 +130,10 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 	gate := deps.Gate(consent.PlanFirst, "ocel destroy preview", yes, stdout, stdin)
 	gate.Dry = dry
 	gate.Unattended = "pass --yes"
-	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PREVIEW)
+	return destroyProject(ctx, deps, cfg, gate, environmentv1.Tier_TIER_PREVIEW, "")
 }
 
-func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate consent.Gate, tier environmentv1.Tier) (err error) {
+func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate consent.Gate, tier environmentv1.Tier, bypassNotice string) (err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return err
 	}
@@ -148,6 +148,9 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	defer run.End(&err)
 
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	if bypassNotice != "" {
+		check.Warn(bypassNotice)
+	}
 	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.ChoosePinning(gate.Dry))
 	if err != nil {
 		return err

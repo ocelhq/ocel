@@ -2,7 +2,6 @@ package consent
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"strings"
 )
@@ -20,21 +19,20 @@ type Bypass struct {
 	TTY           bool
 }
 
-func (b Bypass) Granted(stderr io.Writer) (bool, error) {
+func (b Bypass) Granted() (granted bool, notice string, err error) {
 	requested := strings.TrimSpace(os.Getenv(BypassEnv))
 	switch {
 	case b.Dry:
-		return b.GrantsWhenDry && requested == b.Subject, nil
+		return b.GrantsWhenDry && requested == b.Subject, "", nil
 	case requested == b.Subject:
-		fmt.Fprintf(stderr, "%s=%s: %s without confirmation\n", BypassEnv, b.Subject, b.Action)
-		return true, nil
+		return true, fmt.Sprintf("%s=%s: %s without confirmation", BypassEnv, b.Subject, b.Action), nil
 	case requested == "" || b.Yes:
 	case !b.TTY:
-		return false, fmt.Errorf("%s is set to %q, but this %s is %q; it must name the %s being %s",
+		return false, "", fmt.Errorf("%s is set to %q, but this %s is %q; it must name the %s being %s",
 			BypassEnv, requested, b.Noun, b.Subject, b.Noun, b.Verb)
 	default:
-		fmt.Fprintf(stderr, "%s is set to %q, not this %s (%s); confirming interactively instead\n",
-			BypassEnv, requested, b.Noun, b.Subject)
+		return false, fmt.Sprintf("%s is set to %q, not this %s (%s); confirming interactively instead",
+			BypassEnv, requested, b.Noun, b.Subject), nil
 	}
-	return false, nil
+	return false, "", nil
 }

@@ -126,7 +126,7 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return RunDestroy(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return RunDestroy(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.InOrStdin())
 		},
 	}
 
