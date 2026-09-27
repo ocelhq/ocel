@@ -688,6 +688,65 @@ func withoutEnvelopes(out string) string {
 	return strings.Join(loose, "\n")
 }
 
+func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		edge  string
+		env   map[string]string
+		opts  Options
+		wants []string
+	}{
+		{
+			name:  "removing a feature that is not there",
+			env:   map[string]string{clitest.FakeEnabledFeaturesEnvVar: "isr"},
+			opts:  Options{Yes: true, Remove: "image-optimization"},
+			wants: []string{"image-optimization is not in the production bootstrap, so there is nothing to remove."},
+		},
+		{
+			name:  "features the edge pulls in",
+			edge:  "  edge: \"cloudflare\",\n",
+			opts:  Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true},
+			wants: []string{"Also adding: cloudflare-edge — this project's edge needs it", "Also adding: isr — cloudflare-edge needs it"},
+		},
+		{
+			name: "content going backwards",
+			env: map[string]string{
+				clitest.FakeEnabledFeaturesEnvVar: "isr",
+				clitest.FakeBootstrapEnvVar:       "downgrade",
+				clitest.FakeBootstrapPlanEnvVar:   "keep",
+			},
+			opts:  Options{Yes: true, Dry: true},
+			wants: []string{"the same shape, older content"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, _, deps := clitest.SetUpEdgeFixture(t, tc.edge)
+			deps.Presentation = func(io.Writer) runui.Presentation {
+				return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+			}
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+
+			var stdout, stderr bytes.Buffer
+			deps.AttachTerminalSink(&stdout)
+			if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, tc.opts, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+
+			if loose := withoutEnvelopes(strings.TrimRight(stdout.String(), "\n")); loose != "" {
+				t.Errorf("stdout holds %q beside the stream, want only NDJSON", loose)
+			}
+			said := strings.Join(streamMessages(t, stdout.String()), "\n")
+			for _, want := range tc.wants {
+				if !strings.Contains(said, want) {
+					t.Errorf("the stream said %q, want it to say %q", said, want)
+				}
+			}
+		})
+	}
+}
+
 func TestBootstrapDryPreviewsEverything(t *testing.T) {
 	t.Run("--dry previews a removal instead of demanding --force", func(t *testing.T) {
 		root, journal, deps := clitest.SetUpEdgeFixture(t, "")

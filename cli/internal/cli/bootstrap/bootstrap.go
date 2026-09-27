@@ -200,15 +200,14 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	}
 	installed := enabledFeatures(catalogue)
 	going := goingFeatures(catalogue, installed, named)
+	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	if absent := without(named, installed); len(absent) > 0 {
-		fmt.Fprintf(stdout, "%s is not in the %s bootstrap, so there is nothing to remove.\n",
-			strings.Join(absent, ", "), Name(tier))
+		planning.Say(fmt.Sprintf("%s is not in the %s bootstrap, so there is nothing to remove.", strings.Join(absent, ", "), Name(tier)))
 	}
 	if len(named) > 0 && len(going) == 0 && !opts.FeaturesDeclared {
 		return nil
 	}
 
-	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
 	asking := gate.Asking()
 	picked := asking && !opts.FeaturesDeclared
 	requested, selected, err := chooseFeatures(ctx, planning, opts, catalogue, installed, going, string(cfg.EdgeID()), tier, asking, stdout)
@@ -216,7 +215,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 	if !selected {
-		fmt.Fprintln(stdout, "Aborted.")
+		planning.Say("Aborted.")
 		run.Finish("Nothing bootstrapped")
 		return nil
 	}
@@ -267,11 +266,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		if edgeID == "" {
 			edgeID = string(cfg.EdgeID())
 		}
-		printImplied(stdout, impliedFeatures(catalogue, requested, edgeID))
+		sayImplied(planning, impliedFeatures(catalogue, requested, edgeID))
 	}
 	status := planned.GetBootstrap()
 	if status.GetDowngrade() {
-		fmt.Fprintln(stdout, downgradeWarning(tier, status))
+		planning.Warn(downgradeWarning(tier, status))
 	}
 	if opts.Dry {
 		planning.Say("Run without --dry to apply.")

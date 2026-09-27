@@ -245,9 +245,9 @@ func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
 	return ""
 }
 
-func printImplied(stdout io.Writer, pulled []implication) {
+func sayImplied(scope *events.Scope, pulled []implication) {
 	for _, p := range pulled {
-		fmt.Fprintf(stdout, "Also adding: %s %s\n", p.name, needsNote(stdout, "— "+p.reason))
+		scope.Say(fmt.Sprintf("Also adding: %s — %s", p.name, p.reason))
 	}
 }
 
