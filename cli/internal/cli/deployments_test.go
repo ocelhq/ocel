@@ -120,10 +120,10 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		deps.AttachTerminalSink(&stdout)
-		if err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader("")); err != nil {
-			t.Fatalf("runPromotionsPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		if err := runPromotionsPrune(context.Background(), deps, root, 10); err != nil {
+			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
 
 		out := stdout.String()
@@ -145,9 +145,9 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
-		var stdout, stderr bytes.Buffer
+		var stdout bytes.Buffer
 		deps.AttachTerminalSink(&stdout)
-		err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader(""))
+		err := runPromotionsPrune(context.Background(), deps, root, 10)
 		if err == nil {
 			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
 		}
@@ -203,15 +203,15 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
-	var stream, stdout, stderr bytes.Buffer
+	var stream bytes.Buffer
 	deps.AttachTerminalSink(&stream)
-	if err := runPromotionsPrune(context.Background(), deps, root, 10, false, &stdout, &stderr, strings.NewReader("")); err != nil {
-		t.Fatalf("runPromotionsPrune err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
+	if err := runPromotionsPrune(context.Background(), deps, root, 10); err != nil {
+		t.Fatalf("runPromotionsPrune err = %v; stream=%s", err, stream.String())
 	}
 
 	evs := runEvents(t, stream.String())
 	if len(evs) == 0 {
-		t.Fatalf("the run reported nothing on its stream; stdout=%s", stdout.String())
+		t.Fatal("the run reported nothing on its stream")
 	}
 	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
 		return strings.Contains(ev.GetMessage(), "Reclaimed 1 promotion(s): promo-1")

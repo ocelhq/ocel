@@ -62,7 +62,7 @@ var deploymentsPruneCmd = &cobra.Command{
 		}
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
-		return runPromotionsPrune(ctx, newDeps(), cwd, pruneKeepN, pruneYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runPromotionsPrune(ctx, newDeps(), cwd, pruneKeepN)
 	},
 }
 
@@ -122,7 +122,7 @@ func listPromotions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 	return listed.GetPromotions(), err
 }
 
-func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int, yes bool, stdout, stderr io.Writer, stdin io.Reader) (err error) {
+func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keepN int) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
