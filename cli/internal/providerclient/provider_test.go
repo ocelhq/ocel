@@ -187,6 +187,40 @@ func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetrie
 	}
 }
 
+func TestAHostKeyPromptAfterTheStartingPhaseEndedHoldsTheRunNotThatPhase(t *testing.T) {
+	t.Parallel()
+
+	seen := &recording{}
+	bus := events.NewBus(time.Now)
+	bus.Attach(seen)
+	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	fake := newHostTrustFake(t, "unknown-host-key")
+	p := startFake(t, ctx, "unknown-host-key", check, trustAsking(&scriptedAsker{attended: true, answer: true}, io.Discard), fake.env()...)
+	check.End(nil)
+
+	if _, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
+		t.Fatalf("Stream() error = %v, want the retried call to succeed", err)
+	}
+
+	held := 0
+	for _, ev := range seen.received() {
+		if ev.GetWaiting() == nil && ev.GetResumed() == nil {
+			continue
+		}
+		held++
+		if ev.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(ev.GetSpanId()) != 0 {
+			t.Errorf("the prompt's hold arrived in %s on span %x, want it on the run, not the check phase that had ended", ev.GetPhase(), ev.GetSpanId())
+		}
+	}
+	if held != 2 {
+		t.Errorf("saw %d hold events, want waiting then resumed", held)
+	}
+}
+
 func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *testing.T) {
 	t.Parallel()
 

@@ -112,6 +112,22 @@ func resultLevel(result *streamv1.RunResultEvent) progressv1.Level {
 	return progressv1.Level_LEVEL_INFO
 }
 
+func (r *Run) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)) {
+	return r.holdOn(func(ev *streamv1.RunEvent) *streamv1.RunEvent { return ev }, waiting)
+}
+
+func (r *Run) holdOn(scoped func(*streamv1.RunEvent) *streamv1.RunEvent, waiting *streamv1.WaitingEvent) (resume func(reason string)) {
+	r.bus.Send(scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
+	var once sync.Once
+	return func(reason string) {
+		once.Do(func() {
+			r.bus.Send(scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
+				Resumed: &streamv1.ResumedEvent{Reason: reason},
+			}}))
+		})
+	}
+}
+
 func (r *Run) Phase(phase progressv1.Phase) *Scope {
 	r.mu.Lock()
 	defer r.mu.Unlock()

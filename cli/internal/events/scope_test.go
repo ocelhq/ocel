@@ -126,6 +126,25 @@ func TestHoldEmitsWaitingThenResumedAroundTheInteraction(t *testing.T) {
 	}
 }
 
+func TestARunHeldOutsideAnyScopeWaitsAndResumesInNoPhaseAndOnNoSpan(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.End(nil)
+
+	run.Hold(&streamv1.WaitingEvent{})("answered")
+
+	got := sink.received()[2:]
+	if len(got) != 2 || got[0].GetWaiting() == nil || got[1].GetResumed().GetReason() != "answered" {
+		t.Fatalf("events = %v, want waiting then resumed", bodies(got))
+	}
+	for _, ev := range got {
+		if ev.GetPhase() != progressv1.Phase_PHASE_UNSPECIFIED || len(ev.GetSpanId()) != 0 {
+			t.Errorf("%v arrived in %s on span %x, want the run's, in no phase and on no span", bodies([]*streamv1.RunEvent{ev}), ev.GetPhase(), ev.GetSpanId())
+		}
+	}
+}
+
 func bodies(evs []*streamv1.RunEvent) []string {
 	var out []string
 	for _, ev := range evs {

@@ -59,16 +59,10 @@ func (s *Scope) Output(level progressv1.Level, stream progressv1.Stream) io.Writ
 }
 
 func (s *Scope) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)) {
-	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
-	var once sync.Once
-	return func(reason string) {
-		once.Do(func() {
-			s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
-				Resumed: &streamv1.ResumedEvent{Reason: reason},
-			}}))
-		})
-	}
+	return s.run.holdOn(s.scoped, waiting)
 }
+
+func (s *Scope) Run() *Run { return s.run }
 
 func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)

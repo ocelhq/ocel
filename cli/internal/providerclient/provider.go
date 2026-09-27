@@ -36,7 +36,7 @@ func Start(ctx context.Context, cfg *projectconfig.Config, scope *events.Scope, 
 func start(ctx context.Context, scope *events.Scope, trust Trust, config Config) (*Provider, error) {
 	config.Stdout = processLines{scope: scope, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
 	config.Stderr = processLines{scope: scope, subject: config.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
-	trust.Hold = scope.Hold
+	trust.Hold = scope.Run().Hold
 	p := &Provider{ctx: ctx, scope: scope, trust: trust, config: config}
 	runner, err := p.spawn()
 	if err != nil {
