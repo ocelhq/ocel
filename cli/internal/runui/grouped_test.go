@@ -1000,3 +1000,32 @@ func TestAPromptsHoldDrawsNothingAroundTheQuestion(t *testing.T) {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestARunThatFailedBeforeAnyChangingPhaseSaysNothingChangedAndWhatProductionStillServes(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := productionRun(t)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Unit("web", "Building web").End(errors.New("npm run build exited with status 1"))
+	ended(run, errors.New("building web: npm run build exited with status 1"))
+
+	want := "ERROR [build] ✗ web: Building web failed after 0s: npm run build exited with status 1\n" +
+		"\n" +
+		"✗ Failed in 0s — building web: npm run build exited with status 1\n" +
+		"  nothing was changed; production still serves what it served before this run\n"
+	if got := strings.TrimPrefix(out.String(), productionHead); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestARunThatFailedOnceAChangingPhaseStartedClaimsNothingChanged(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := productionRun(t)
+	run.Phase(progressv1.Phase_PHASE_PROVISION).Unit("", "Environment").End(errors.New("the stack is locked"))
+	ended(run, errors.New("the stack is locked"))
+
+	if got := out.String(); strings.Contains(got, "nothing was changed") || strings.Contains(got, "still serves") {
+		t.Fatalf("a run that may have changed resources claims otherwise:\n%s", got)
+	}
+}

@@ -205,6 +205,8 @@ var changingPhases = map[progressv1.Phase]bool{
 	progressv1.Phase_PHASE_DESTROY:   true,
 }
 
+func IsChanging(phase progressv1.Phase) bool { return changingPhases[phase] }
+
 func (r *Run) enter(phase progressv1.Phase) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

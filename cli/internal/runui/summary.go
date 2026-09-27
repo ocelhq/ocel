@@ -23,10 +23,11 @@ const (
 )
 
 type summary struct {
-	result    *streamv1.RunResultEvent
-	tier      environmentv1.Tier
-	promotion string
-	present   Presentation
+	result        *streamv1.RunResultEvent
+	tier          environmentv1.Tier
+	promotion     string
+	changeStarted bool
+	present       Presentation
 }
 
 func (s summary) lines() []string {
@@ -76,7 +77,13 @@ func (s summary) failed(took string) []string {
 	for _, line := range detail[1:] {
 		out = append(out, blockIndent+line)
 	}
-	return append(out, s.unpromoted()...)
+	if unpromoted := s.unpromoted(); len(unpromoted) > 0 {
+		return append(out, unpromoted...)
+	}
+	if place := servedPlace(s.tier); place != "" && !s.changeStarted {
+		out = append(out, blockIndent+"nothing was changed; "+place+" still serves what it served before this run")
+	}
+	return out
 }
 
 func (s summary) unpromoted() []string {
@@ -168,7 +175,7 @@ func (s summary) appURLs() []string {
 func (s *GroupedSink) conclude(ev *streamv1.RunEvent) {
 	s.unfinished()
 	s.gap()
-	for _, text := range (summary{result: ev.GetResult(), tier: s.tier, promotion: s.promotion, present: s.present}).lines() {
+	for _, text := range (summary{result: ev.GetResult(), tier: s.tier, promotion: s.promotion, changeStarted: s.changeStarted, present: s.present}).lines() {
 		s.print(blockLine{text: text})
 	}
 }

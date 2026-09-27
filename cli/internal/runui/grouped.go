@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/events"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -50,21 +51,22 @@ type GroupedSink struct {
 	w       io.Writer
 	present Presentation
 
-	mu           sync.Mutex
-	units        map[string]*unitBlock
-	started      []string
-	owners       map[string]string
-	verbatim     bool
-	failed       bool
-	tallies      map[progressv1.Phase]*phaseTally
-	beatAt       time.Time
-	silenceBroke bool
-	held         bool
-	wrote        bool
-	blank        bool
-	gated        bool
-	tier         environmentv1.Tier
-	promotion    string
+	mu            sync.Mutex
+	units         map[string]*unitBlock
+	started       []string
+	owners        map[string]string
+	verbatim      bool
+	failed        bool
+	tallies       map[progressv1.Phase]*phaseTally
+	beatAt        time.Time
+	silenceBroke  bool
+	held          bool
+	wrote         bool
+	blank         bool
+	gated         bool
+	tier          environmentv1.Tier
+	promotion     string
+	changeStarted bool
 
 	stopBeats func()
 	stopTicks func()
@@ -154,6 +156,7 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	defer s.mu.Unlock()
 	s.silenceBroke = false
 	defer s.heard(ev)
+	s.changeStarted = s.changeStarted || events.IsChanging(ev.GetPhase())
 	span := stageKey(ev.GetSpanId())
 	switch {
 	case ev.GetStarted() != nil:
