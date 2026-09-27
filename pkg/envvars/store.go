@@ -44,6 +44,7 @@ type Metadata struct {
 	UpdatedAt  int64
 	Size       int64
 	Target     *Target
+	Provenance Provenance
 }
 
 type Target struct {
@@ -69,6 +70,7 @@ type storedValue struct {
 	Sealed    []byte  `json:"sealed,omitempty"`
 	Deleted   bool    `json:"deleted,omitempty"`
 	Target    *Target `json:"target,omitempty"`
+	Provenance
 }
 
 func (c storedValue) live() int64 {
@@ -86,6 +88,10 @@ func (s Store) now() int64 {
 }
 
 func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext string, expected *int64) (Metadata, error) {
+	return s.write(ctx, scope, at, plaintext, Provenance{}, expected)
+}
+
+func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected *int64) (Metadata, error) {
 	if len(plaintext) > MaxValueBytes {
 		return Metadata{}, fmt.Errorf("value for %s is too large: %d bytes, limit %d: %w", at.Key, len(plaintext), MaxValueBytes, ErrTooLarge)
 	}
@@ -101,7 +107,7 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 	if err != nil {
 		return Metadata{}, err
 	}
-	return s.commit(ctx, scope, at, recorded, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext))})
+	return s.commit(ctx, scope, at, recorded, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext)), Provenance: from})
 }
 
 func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded records.Record, current storedValue, expected *int64, next storedValue) (Metadata, error) {
@@ -472,6 +478,7 @@ func metadataOf(at Coordinate, cell storedValue) Metadata {
 		UpdatedAt:  cell.UpdatedAt,
 		Size:       cell.Size,
 		Target:     cell.Target,
+		Provenance: cell.Provenance,
 	}
 }
 
