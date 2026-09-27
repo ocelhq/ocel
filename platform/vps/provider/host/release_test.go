@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -35,34 +36,6 @@ var (
 	apiRetired = apiRetiring + ":" + appbuild.InjectedPortText
 	apiFlipTo  = apiCurrent + ":" + appbuild.InjectedPortText
 )
-
-type watched struct {
-	said  []string
-	told  []string
-	lines []string
-}
-
-func (w *watched) Say(message string) {
-	w.said = append(w.said, message)
-	w.lines = append(w.lines, message)
-}
-
-func (w *watched) Warn(message string) { w.Say(message) }
-
-func (w *watched) Error(message string) { w.Say(message) }
-
-func (w *watched) Detail(message string) {
-	w.told = append(w.told, message)
-	w.lines = append(w.lines, message)
-}
-
-func (w *watched) Debug(line string) { w.Detail(line) }
-
-func (w *watched) at(fragment string) int {
-	return slices.IndexFunc(w.lines, func(line string) bool { return strings.Contains(line, fragment) })
-}
-
-func (w *watched) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
 func aRelease() Release {
 	return Release{
@@ -437,7 +410,7 @@ func TestATargetTheBoxAlreadyServesIsNeverRemovedByAFailedRelease(t *testing.T) 
 func TestTheOldContainerIsStoppedOnlyAfterTheFlipReturnsAndNothingReloadsTheProxyAfterIt(t *testing.T) {
 	t.Parallel()
 
-	box, err := released(t, aRelease(), session.Result{}, session.Result{}, &watched{})
+	box, err := released(t, aRelease(), session.Result{}, session.Result{}, &fake.Progress{})
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -675,37 +648,51 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T) {
 	t.Parallel()
 
-	progress := &watched{}
+	progress := &fake.Progress{}
 	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, progress)
 	if err != nil {
 		t.Fatalf("Release() over a drain that read zero = %v", err)
 	}
-	drained := progress.at(retiring + " reported nothing in flight")
+	lines := progress.Lines()
+	drained := slices.Index(lines, "INFO Drained retired container shop-web-older00000: nothing was in flight")
 	if drained < 0 {
-		t.Fatalf("the release said %v and never that the drain read the retired upstream empty: the count reaches zero for about one drain poll before the config that names the upstream is rewritten, so the drain's own word is the only thing that can witness it", progress.lines)
+		t.Fatalf("the release said %v and never that the drain read the retired upstream empty: the count reaches zero for about one drain poll before the config that names the upstream is rewritten, so the drain's own word is the only thing that can witness it", lines)
 	}
-	if stopping := progress.at("Stopping " + retiring); stopping < 0 || drained > stopping {
-		t.Errorf("the release said %v, want the drain's outcome before %q: a report that names the stop first reads as though the container went while it was still serving", progress.lines, "Stopping "+retiring)
+	if stopping := slices.Index(lines, "INFO Stopping retired container shop-web-older00000"); stopping < 0 || drained > stopping {
+		t.Errorf("the release said %v, want the drain's outcome before the stop: a report that names the stop first reads as though the container went while it was still serving", lines)
 	}
 }
 
 func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
-	progress := &watched{}
+	progress := &fake.Progress{}
 	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, progress)
 	if err != nil {
 		t.Fatalf("Release() over an expired drain = %v, want the new release serving", err)
 	}
-	warned := strings.Join(progress.told, "\n")
-	if !strings.Contains(warned, retired) || !strings.Contains(warned, "2") {
-		t.Errorf("an expired drain warned %q, want the count still in flight at expiry", warned)
+	want := "WARN Retired container shop-web-older00000 still had 2 requests in flight when its 30s drain window closed: " +
+		"open requests get 502 or a truncated response; websockets and server-sent-events reconnect"
+	if !slices.Contains(progress.Lines(), want) {
+		t.Errorf("an expired drain said\n%s\nwant %q", strings.Join(progress.Lines(), "\n"), want)
 	}
-	if !strings.Contains(warned, "502") {
-		t.Errorf("the warning reads %q and never states the ceiling's outcome", warned)
+}
+
+func TestARetiringReleaseSaysWhatItWaitsForAndHowLongTheRetireeDrains(t *testing.T) {
+	t.Parallel()
+
+	progress := &fake.Progress{}
+	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
+		t.Fatalf("Release() = %v", err)
 	}
-	if !strings.Contains(strings.ToLower(warned), "websocket") {
-		t.Errorf("the warning reads %q and leaves the fate of a hijacked connection implied", warned)
+	for _, want := range []string{
+		"INFO Waiting up to 30s for web to answer 2xx on shop-web-abc123def456:8080/healthz, then switching the proxy to it",
+		"INFO Draining retired container shop-web-older00000 for up to 30s: past that, " +
+			"open requests get 502 or a truncated response; websockets and server-sent-events reconnect",
+	} {
+		if !slices.Contains(progress.Lines(), want) {
+			t.Errorf("the release said\n%s\nwant %q", strings.Join(progress.Lines(), "\n"), want)
+		}
 	}
 }
 
@@ -985,7 +972,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	progress := &watched{}
+	progress := &fake.Progress{}
 	box := benched(t, session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"})
 	proxied := box.answer
 	box.answer = func(command string) (session.Result, bool) {
@@ -1017,8 +1004,8 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 			t.Errorf("a failure after the flip is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
 		}
 	}
-	warned := strings.Join(progress.told, "\n")
-	if !strings.Contains(warned, retired) || !strings.Contains(warned, "502") {
+	warned := strings.Join(progress.Lines(), "\n")
+	if !strings.Contains(warned, "WARN Retired container "+retiring) || !strings.Contains(warned, "502") {
 		t.Errorf("the release reported %q; the drain expired holding requests open and the stop that failed after the flip swallowed the warning", warned)
 	}
 }
@@ -1254,11 +1241,11 @@ func TestAFlipConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWoul
 func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T) {
 	t.Parallel()
 
-	progress := &watched{}
+	progress := &fake.Progress{}
 	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	stated := strings.Join(progress.told, "\n")
+	stated := strings.Join(progress.Lines(), "\n")
 	for what, wanted := range map[string]string{
 		"the window in-flight requests are given": "30s",
 		"what a client past it receives":          "502",
@@ -1270,13 +1257,13 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 		}
 	}
 
-	quiet := &watched{}
+	quiet := &fake.Progress{}
 	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
 	if err := first.host().Release(context.Background(), aRelease(), quiet); err != nil {
 		t.Fatal(err)
 	}
-	if len(quiet.told) != 0 {
-		t.Errorf("a first deploy states a drain contract for a container it does not have: %v", quiet.told)
+	if stated := strings.Join(quiet.Lines(), "\n"); strings.Contains(stated, "Draining") {
+		t.Errorf("a first deploy states a drain contract for a container it does not have:\n%s", stated)
 	}
 }
 

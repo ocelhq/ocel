@@ -104,9 +104,6 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err := dialable(hostname); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	if progress != nil {
-		progress.Say("connector " + install.Version + " onto " + hostname)
-	}
 	installed, err := host.NewConnector(p.host).Install(ctx, hostname, install.Binary, install.Config, progress)
 	if err != nil {
 		return provider.ConnectorAddress{}, err

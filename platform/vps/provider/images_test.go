@@ -102,7 +102,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 			ref := unquoted(fields[2])
 			b.hasImage = true
 			b.name(ref, b.served(ref))
-			said = "Status: Downloaded newer image\n"
+			said = "sha256-abc: Pulling from shop/web\nDigest: sha256:abc\nStatus: Downloaded newer image for " + ref + "\n"
 		case fields[1] == "tag" && len(fields) > 3:
 			b.name(unquoted(fields[3]), b.images[unquoted(fields[2])])
 		case fields[1] == "image" && len(fields) > 2 && fields[2] == "ls":

@@ -257,7 +257,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		return provider.Binding{}, err
 	}
 	if progress != nil {
-		progress.Say("Provisioning bucket " + in.Resource.Name + " in " + spec.Name)
+		progress.Say("Provisioning bucket " + in.Resource.Name + " in object store " + spec.Name)
 	}
 
 	var sessions host.BucketState
@@ -528,7 +528,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, bindin
 	}
 	if root.secret == "" {
 		if progress != nil {
-			progress.Say("Leaving bucket " + binding.Name + ": no credential kept for " + store)
+			progress.Say("Skipped removing bucket " + binding.Name + ": the box keeps no credential for object store " + store)
 		}
 		return nil
 	}
@@ -537,7 +537,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, bindin
 		bucket = storeBucketName(ref, binding.Name)
 	}
 	if progress != nil {
-		progress.Say("Taking bucket " + binding.Name + " and its objects down")
+		progress.Say("Removing bucket " + binding.Name + " and its objects from object store " + store)
 	}
 	return p.host.RemoveBucket(ctx, host.BucketRef{
 		Class:       ref.Class,
@@ -581,7 +581,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool,
 func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
 	store := storeName(ref)
 	if progress != nil {
-		progress.Say("Taking the store " + store + " down")
+		progress.Say("Removing object store " + store + ": no bucket in this environment uses it any more")
 	}
 	if err := p.host.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err

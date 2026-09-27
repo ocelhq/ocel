@@ -83,7 +83,7 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 		return provider.Binding{}, err
 	}
 	if progress != nil {
-		progress.Say("Provisioning postgres " + in.Resource.Name + " as " + spec.Name)
+		progress.Say("Provisioning postgres " + in.Resource.Name + " in container " + spec.Name)
 	}
 	secret, err := p.postgresSecret(ctx, in, spec.Name)
 	if err != nil {

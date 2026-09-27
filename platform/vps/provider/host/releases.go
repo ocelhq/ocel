@@ -60,7 +60,7 @@ func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, pro
 		if removed == "" {
 			continue
 		}
-		progress.Detail("Removed " + removed + ": unused image of " + app)
+		progress.Say("Removed " + app + "'s unused image " + removed)
 	}
 	return nil
 }

@@ -169,7 +169,7 @@ func declaredBy(record edge.DeploymentRecord) []string {
 func (s *stack) rerun(ctx context.Context, release promotable, progress edge.Progress) error {
 	record := release.record
 	if progress != nil {
-		progress.Say("Starting " + release.app + " again as " + record.Physical)
+		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
 	}
 	if err := s.e.machine.RunContainer(ctx, host.Container{
 		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Class: s.state.Class,
@@ -228,7 +228,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, progress edge
 		return edge.PruneResult{}, err
 	}
 	if err := s.applyOrigins(ctx); err != nil {
-		progress.Say(s.released("preview "+pointer, err).Error())
+		progress.Warn(s.released("Preview "+pointer, err).Error())
 	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err

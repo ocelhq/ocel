@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -106,14 +107,16 @@ func TestAPreviewWhoseBucketOriginsCannotBeAppliedIsStillRemovedAndWarns(t *test
 	previewed(t, stack, "pr-7", "web")
 	m.refuseOn("ApplyOrigins", errors.New("the store answered 503"))
 
-	said := &reported{}
+	said := &fake.Progress{}
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", said); err != nil {
 		t.Fatalf("RemovePointer = %v, want the preview removed: its hostnames are already released, and a CORS rule the next deploy rewrites is no reason to leave its routes in place", err)
 	}
 	if !slices.Contains(m.calls, "unroute ocel--"+slug+"--preview/pr-7") {
 		t.Errorf("the preview's routes were never removed: %v", m.calls)
 	}
-	if !slices.ContainsFunc(said.lines, func(line string) bool { return strings.Contains(line, "503") }) {
-		t.Errorf("the removal said %v, want the origins it could not apply named", said.lines)
+	want := "WARN Preview pr-7 is released, but this project's buckets still answer it as an origin until the next deploy " +
+		"brings them in line with what the project claims: the store answered 503"
+	if !slices.Contains(said.Lines(), want) {
+		t.Errorf("the removal said %v, want %q", said.Lines(), want)
 	}
 }

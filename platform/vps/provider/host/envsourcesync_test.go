@@ -91,20 +91,22 @@ func TestAnApplyOverAHostBootstrappedBeforeTheEnvSourceSyncWritesAndStartsIt(t *
 	t.Parallel()
 
 	class := edge.ClassProduction
-	missing := []string{
-		KindFile + " " + envSourceSyncTemplateFile,
-		KindUnit + " " + EnvSourceSyncService(class),
+	missing := []Item{
+		{Kind: KindFile, Name: envSourceSyncTemplateFile},
+		{Kind: KindUnit, Name: EnvSourceSyncService(class)},
 	}
 	older := bootstrappedOn(t, class)
-	older.installed[class] = slices.DeleteFunc(older.installed[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
+	older.installed[class] = slices.DeleteFunc(older.installed[class], func(item Item) bool {
+		return slices.ContainsFunc(missing, func(gone Item) bool { return gone.ID() == item.ID() })
+	})
 	progress := &said{}
 	if err := NewBootstrap(older.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	for _, id := range missing {
-		if progress.at("wrote "+id) < 0 {
-			t.Errorf("an apply never wrote %s:\n%s", id, strings.Join(progress.lines, "\n"))
+	for _, item := range missing {
+		if progress.at("Installed "+item.phrase()) < 0 {
+			t.Errorf("an apply never wrote %s:\n%s", item.ID(), strings.Join(progress.lines, "\n"))
 		}
 	}
 	if older.at("systemctl restart "+quoted(EnvSourceSyncService(class))) < 0 {

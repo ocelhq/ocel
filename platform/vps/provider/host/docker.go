@@ -152,7 +152,8 @@ func (h *Host) installEngine(ctx context.Context, progress edge.Progress) error 
 			return h.refuse("install docker, "+attempt+",", result, elevation)
 		}
 		if progress != nil {
-			progress.Detail("docker's install failed, " + attempt + ", and is tried again; it said:")
+			progress.Warn(fmt.Sprintf("Docker's install on %s failed on try %d of %d and runs again",
+				h.named(), try, engineInstallTries))
 			for _, line := range strings.Split(spoken(result), "\n") {
 				progress.Detail(line)
 			}

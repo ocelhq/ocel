@@ -304,10 +304,10 @@ func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	for _, id := range missing {
-		if progress.at("wrote "+id) < 0 {
+	for _, item := range BackupItems() {
+		if progress.at("Installed "+item.phrase()) < 0 {
 			t.Errorf("bootstrap says a host has %s and an apply never wrote it, so every status after it reads drifted and every re-plan moves it:\n%s",
-				id, strings.Join(progress.lines, "\n"))
+				item.ID(), strings.Join(progress.lines, "\n"))
 		}
 	}
 }

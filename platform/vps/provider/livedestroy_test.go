@@ -45,8 +45,8 @@ func (s *said) at(fragment string) int {
 	return slices.IndexFunc(s.lines, func(line string) bool { return strings.Contains(line, fragment) })
 }
 
-func (s *said) removed(kind, path string) int {
-	return slices.Index(s.lines, "removed "+kind+" "+path)
+func (s *said) removed(what string) int {
+	return slices.Index(s.lines, "Removed "+what)
 }
 
 func (vm machine) exists(t *testing.T, path string) bool {
@@ -123,19 +123,19 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	stamped := progress.removed(host.KindDir, host.ClassDir(class))
+	stamped := progress.removed("directory " + host.ClassDir(class))
 	if stamped < 0 {
 		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", host.ClassDir(class), strings.Join(progress.lines, "\n"))
 	}
-	for kind, earlier := range map[string]string{
-		host.KindDir:     host.StateDir(class),
-		host.KindSealKey: host.SealKeyPath(class),
-		host.KindFile:    boxstore.SealHelper,
-		host.KindUser:    deployLogin,
+	for _, earlier := range []string{
+		"directory " + host.StateDir(class),
+		"seal key " + host.SealKeyPath(class),
+		"file " + boxstore.SealHelper,
+		"user " + deployLogin,
 	} {
-		if at := progress.removed(kind, earlier); at < 0 || at > stamped {
-			t.Errorf("Remove() took %s %s at line %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
-				kind, earlier, at, stamped)
+		if at := progress.removed(earlier); at < 0 || at > stamped {
+			t.Errorf("Remove() took %s at line %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
+				earlier, at, stamped)
 		}
 	}
 	if note := progress.at("ssh-keygen -R"); note < 0 {

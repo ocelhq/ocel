@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -1024,30 +1023,19 @@ func TestAPromotionPutsTheReleaseItServesAtTheHeadOfTheBoxsWindow(t *testing.T) 
 	}
 }
 
-type reported struct{ lines []string }
-
-func (r *reported) Say(message string)  { r.lines = append(r.lines, message) }
-func (r *reported) Warn(message string) { r.lines = append(r.lines, message) }
-
-func (r *reported) Error(message string)  { r.lines = append(r.lines, message) }
-func (r *reported) Detail(message string) { r.lines = append(r.lines, message) }
-func (r *reported) Debug(line string)     { r.lines = append(r.lines, line) }
-
-func (r *reported) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
-
 func TestAPromotionSaysItIsRestartingTheContainerBeforeItStartsIt(t *testing.T) {
 	t.Parallel()
 
 	_, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
-	heard := &reported{}
+	heard := &fake.Progress{}
 	if err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", heard); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if !slices.ContainsFunc(heard.lines, func(line string) bool { return strings.Contains(line, "shop-web-1111") }) {
-		t.Errorf("the promotion reported %v and never named the container it started; a rollback provisions nothing, so this is the only row saying the box put a container back before the flip", heard.lines)
+	if !slices.Contains(heard.Lines(), "INFO Starting web's container shop-web-1111 again") {
+		t.Errorf("the promotion reported %v and never named the container it started; a rollback provisions nothing, so this is the only row saying the box put a container back before the flip", heard.Lines())
 	}
 }
 

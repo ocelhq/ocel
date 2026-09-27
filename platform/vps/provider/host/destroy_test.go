@@ -43,16 +43,16 @@ func TestRemoveTakesWhatIsInstalledAndSaysWhatItTookAndWhatItLeft(t *testing.T) 
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
-		"removed " + KindDir + " " + StateDir(class),
-		"removed " + KindSealKey + " " + SealKeyPath(class),
-		"removed " + KindUser + " " + deployUser,
-		"removed " + KindDir + " " + ClassDir(class),
+		"Removed directory " + StateDir(class),
+		"Removed seal key " + SealKeyPath(class),
+		"Removed user " + deployUser,
+		"Removed directory " + ClassDir(class),
 	} {
 		if !slices.Contains(progress.lines, taken) {
 			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 		}
 	}
-	if !slices.Contains(progress.lines, "kept "+KindEngine+" "+dockerEngine) {
+	if !slices.Contains(progress.lines, "Kept the Docker engine: docker and its containers stay") {
 		t.Errorf("Remove() never says the engine stays:\n%s", strings.Join(progress.lines, "\n"))
 	}
 	if progress.at("ssh-keygen -R") < 0 {

@@ -142,18 +142,18 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	}
 	for _, item := range items {
 		if observed[item.ID()] == item.Digest() {
-			say(progress, item.ID()+": "+reasonCurrent)
+			debug(progress, capitalized(item.phrase())+" is "+reasonCurrent)
 			continue
 		}
 		if err := c.host.Install(ctx, item); err != nil {
 			return ConnectorState{}, err
 		}
-		say(progress, "wrote "+item.ID())
+		say(progress, "Installed "+item.phrase())
 	}
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorState{}, err
 	}
-	say(progress, "routed "+hostname+switchboard.ConnectorPath)
+	say(progress, "Routed https://"+hostname+switchboard.ConnectorPath+" to the connector")
 	if route := c.host.RouteBy(hostname); route != "" {
 		say(progress, route)
 	}
@@ -164,11 +164,11 @@ func (c *Connector) Remove(ctx context.Context, progress edge.Progress) error {
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}
-	say(progress, "unrouted "+switchboard.ConnectorPath)
+	say(progress, "Stopped routing "+switchboard.ConnectorPath+" to the connector")
 	if _, err := c.host.run(ctx, "take the connector off this host", connectorRemoval(), nil); err != nil {
 		return err
 	}
-	say(progress, "removed "+ConnectorUnit+", "+ConnectorBinary+" and "+connectorRoot)
+	say(progress, "Removed the connector's systemd unit "+ConnectorUnit+", its binary "+ConnectorBinary+" and directory "+connectorRoot)
 	return nil
 }
 

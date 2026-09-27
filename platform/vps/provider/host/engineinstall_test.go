@@ -9,12 +9,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -63,41 +62,14 @@ func installedOn(dir, command string) session.Result {
 	return session.Result{Stdout: stdout.String(), Stderr: stderr.String()}
 }
 
-type told struct {
-	mu      sync.Mutex
-	details []string
-}
-
-func (r *told) Say(string) {}
-
-func (r *told) Warn(string) {}
-
-func (r *told) Error(string) {}
-
-func (r *told) Debug(line string) { r.Detail(line) }
-
-func (r *told) Detail(message string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.details = append(r.details, message)
-}
-
-func (r *told) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
-
-func (r *told) said() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]string(nil), r.details...)
-}
-
-func installsOn(dir string, progress *told) (*bench, *[]int) {
+func installsOn(dir string, progress *fake.Progress) (*bench, *[]int) {
 	box := machine(nil)
 	var toldBefore []int
 	box.answer = func(command string) (session.Result, bool) {
 		if !strings.Contains(command, dockerSource) {
 			return session.Result{}, false
 		}
-		toldBefore = append(toldBefore, len(progress.said()))
+		toldBefore = append(toldBefore, len(progress.Lines()))
 		return installedOn(dir, command), true
 	}
 	return box, &toldBefore
@@ -107,7 +79,7 @@ func TestAnInstallScriptThatFailedTwiceIsRunAgainRatherThanFailingTheApply(t *te
 	t.Parallel()
 
 	dir, attempts := installer(t, 2)
-	box, _ := installsOn(dir, &told{})
+	box, _ := installsOn(dir, &fake.Progress{})
 	if err := box.host().installEngine(context.Background(), nil); err != nil {
 		t.Fatalf("installEngine() = %v on a host whose install script failed twice and then succeeded", err)
 	}
@@ -124,7 +96,7 @@ func TestAnInstallScriptThatNeverSucceedsIsRefusedWithABound(t *testing.T) {
 	t.Parallel()
 
 	dir, attempts := installer(t, 99)
-	box, _ := installsOn(dir, &told{})
+	box, _ := installsOn(dir, &fake.Progress{})
 	refused := refusalOf(t, box.host().installEngine(context.Background(), nil), refusal.CodeNotReady)
 	ran, err := os.ReadFile(attempts)
 	if err != nil {
@@ -144,7 +116,7 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 	spread := map[string]bool{}
 	for range 6 {
 		dir, _ := installer(t, 99)
-		box, _ := installsOn(dir, &told{})
+		box, _ := installsOn(dir, &fake.Progress{})
 		if err := box.host().installEngine(context.Background(), nil); err == nil {
 			t.Fatal("installEngine() succeeded on a host whose install script never succeeded")
 		}
@@ -175,19 +147,22 @@ func TestEveryFailedInstallTryIsToldBeforeTheNextOneRuns(t *testing.T) {
 
 	dir, _ := installerSaying(t, 99, `echo 'E: Failed to fetch http://us-east-1.ec2.archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  Could not connect' >&2
 echo 'E: Some index files failed to download.' >&2`)
-	progress := &told{}
+	progress := &fake.Progress{}
 	box, toldBefore := installsOn(dir, progress)
 	if err := box.host().installEngine(context.Background(), progress); err == nil {
 		t.Fatal("installEngine() succeeded on a host whose install script never succeeded")
 	}
-	details := progress.said()
+	details := progress.Lines()
 	if len(*toldBefore) != engineInstallTries {
 		t.Fatalf("the install tried %d times, want %d", len(*toldBefore), engineInstallTries)
 	}
 	for try := 1; try < engineInstallTries; try++ {
 		before := details[(*toldBefore)[try-1]:(*toldBefore)[try]]
-		for _, want := range []string{fmt.Sprintf("try %d of %d", try, engineInstallTries), "E: Some index files failed to download."} {
-			if !slices.ContainsFunc(before, func(detail string) bool { return strings.Contains(detail, want) }) {
+		for _, want := range []string{
+			fmt.Sprintf("WARN Docker's install on ada@ocelbox failed on try %d of %d and runs again", try, engineInstallTries),
+			"OUTPUT E: Some index files failed to download.",
+		} {
+			if !slices.Contains(before, want) {
 				t.Errorf("try %d ran after the install told\n%s\nwant %q among it: a user watching a twenty-minute install hears nothing until the last try fails", try+1, strings.Join(before, "\n"), want)
 			}
 		}

@@ -114,8 +114,8 @@ func TestHealLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
 		if len(work) != 1 || work[0].Name != RecordsDir(class) {
 			t.Errorf("healing() over a drifted %s = %v, want only the record tier", name, ids(work))
 		}
-		if !slices.ContainsFunc(left, func(id string) bool { return strings.HasSuffix(id, " "+name) }) {
-			t.Errorf("heal left %v over a drifted %s, and a box told nothing about what heal declined is one nobody can read the exit code of", left, name)
+		if !slices.ContainsFunc(left, func(item Item) bool { return item.Name == name }) {
+			t.Errorf("heal left %v over a drifted %s, and a box told nothing about what heal declined is one nobody can read the exit code of", ids(left), name)
 		}
 	}
 
@@ -249,7 +249,7 @@ func TestHealHasNothingToReassertWhereNoBootstrapRan(t *testing.T) {
 	refusalOf(t, second(healable(fresh)), refusal.CodeDenied)
 }
 
-func second(_ []Item, _ []string, err error) error { return err }
+func second(_ []Item, _ []Item, err error) error { return err }
 
 func ids(items []Item) []string {
 	var out []string

@@ -53,8 +53,6 @@ func (l loaded) load(ctx context.Context, push provider.ImagePush, progress edge
 	if err != nil {
 		return err
 	}
-	if progress != nil && said != "" {
-		progress.Detail(said)
-	}
+	echo(progress, said)
 	return nil
 }

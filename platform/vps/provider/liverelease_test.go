@@ -254,12 +254,12 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheSlowRequest
 		t.Errorf("the request held open against the retired upstream was never counted against it in %s:\n%v\nthe drain reads that count, so a proxy that stops attributing in-flight requests to the address it dialled has the drain stop the old container under them",
 			"/reverse_proxy/upstreams", samples)
 	}
-	drained := told.at(one.physical + " reported nothing in flight")
+	drained := told.at("Drained retired container " + one.physical + ": nothing was in flight")
 	if drained < 0 {
 		t.Errorf("the release said %v and never that the drain read %s empty, so nothing here says it waited rather than expired: the retired address leaves the pool the moment its count reaches zero, which is too short a window for an outside sampler to rely on",
 			told.lines, one.physical)
 	}
-	if stopping := told.at("Stopping " + one.physical); stopping < 0 || drained > stopping {
+	if stopping := told.at("Stopping retired container " + one.physical); stopping < 0 || drained > stopping {
 		t.Errorf("the release said %v, want the drain's outcome before it stopped %s: the drain that waits for the count is the whole of why the old container goes second", told.lines, one.physical)
 	}
 	if vm.running(t, one.physical) {

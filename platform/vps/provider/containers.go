@@ -52,7 +52,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		}
 	}
 	if progress != nil {
-		progress.Say("Starting " + app.App + " as " + physical)
+		progress.Say("Starting " + app.App + "'s container " + physical)
 	}
 	if err := p.host.RunContainer(ctx, host.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
@@ -77,7 +77,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 			continue
 		}
 		if progress != nil {
-			progress.Say("Taking " + container.Physical + " down")
+			progress.Say("Removing " + container.Name + "'s container " + container.Physical)
 		}
 		if err := p.host.TakeDown(ctx, ref.Class, container.Physical); err != nil {
 			return err

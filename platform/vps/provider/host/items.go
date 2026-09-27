@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -104,6 +106,42 @@ func dir(name string, mode fs.FileMode, owner string, note string) Item {
 }
 
 func (i Item) ID() string { return i.Kind + " " + i.Name }
+
+func (i Item) phrase() string { return phrase(i.Kind, i.Name) }
+
+var kindNouns = map[string]string{
+	KindDir:             "directory",
+	KindFile:            "file",
+	KindUser:            "user",
+	KindSealKey:         "seal key",
+	KindUnit:            "systemd unit",
+	KindNetwork:         "Docker network",
+	KindContainer:       "container",
+	KindProxyConfig:     "proxy config",
+	KindRoutingTable:    "routing table",
+	KindApps:            "app containers labelled",
+	KindAppNetworks:     "app networks labelled",
+	KindResourceVolumes: "resource volumes labelled",
+}
+
+func phrase(kind, name string) string {
+	switch kind {
+	case KindEngine:
+		return "the Docker engine"
+	case KindApps, KindAppNetworks, KindResourceVolumes:
+		return "the " + kindNouns[kind] + " " + name
+	}
+	noun, known := kindNouns[kind]
+	if !known {
+		noun = kind
+	}
+	return noun + " " + name
+}
+
+func capitalized(phrase string) string {
+	first, size := utf8.DecodeRuneInString(phrase)
+	return string(unicode.ToUpper(first)) + phrase[size:]
+}
 
 func (i Item) stdin() io.Reader {
 	if i.Kind == KindFile {

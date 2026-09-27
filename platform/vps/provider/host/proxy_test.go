@@ -652,8 +652,8 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 		t.Errorf("healable() = %v, want only the record tier", ids(work))
 	}
 	for _, said := range []string{proxyConfigItem().ID(), routingTableItem().ID()} {
-		if !slices.Contains(left, said) {
-			t.Errorf("heal left %v without %s, and a box told nothing about the item it declined to write is one nobody can read the exit code of", left, said)
+		if !slices.Contains(ids(left), said) {
+			t.Errorf("heal left %v without %s, and a box told nothing about the item it declined to write is one nobody can read the exit code of", ids(left), said)
 		}
 	}
 	if err := refuseReplacements(read, work); err != nil {
@@ -682,8 +682,8 @@ func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing
 		t.Errorf("heal writes %v, and heal refuses replacements, so it does not install a proxy", ids(work))
 	}
 	for _, said := range []string{frontItem().ID(), proxyConfigItem().ID(), routingTableItem().ID()} {
-		if !slices.Contains(left, said) {
-			t.Errorf("heal left %v and never names %s, so a box with no proxy at all exits zero saying nothing", left, said)
+		if !slices.Contains(ids(left), said) {
+			t.Errorf("heal left %v and never names %s, so a box with no proxy at all exits zero saying nothing", ids(left), said)
 		}
 	}
 }
@@ -837,9 +837,9 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 			t.Fatalf("destroying over %s = %v", what, err)
 		}
 
-		want := "removed " + KindDir + " " + caddy.PinsDir
+		want := "Removed directory " + caddy.PinsDir
 		if pinned {
-			want = "kept " + KindDir + " " + caddy.PinsDir
+			want = "Kept directory " + caddy.PinsDir
 		}
 		if !slices.ContainsFunc(said, func(line string) bool { return strings.HasPrefix(line, want) }) {
 			t.Errorf("destroying over %s reported %v, want a line opening %q: the report names the private key an operator still has as one ocel deleted",
@@ -1129,7 +1129,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	if at := progress.at("wrote " + KindContainer + " " + caddy.Container); at < 0 {
+	if at := progress.at("Installed container " + caddy.Container); at < 0 {
 		t.Errorf("the apply installed the engine, the proxy went down under it, and the apply still called the container current:\n%s",
 			strings.Join(progress.lines, "\n"))
 	}

@@ -258,13 +258,13 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	if err != nil {
 		return err
 	}
-	for _, id := range left {
-		say(progress, id+": left as is")
+	for _, item := range left {
+		say(progress, "Left "+item.phrase()+" as it is: a refresh rewrites only what deploys own")
 	}
 	return b.writing(ctx, read, work, progress, b.host.Reassert)
 }
 
-func healing(read Reading, refuse bool) ([]Item, []string, error) {
+func healing(read Reading, refuse bool) ([]Item, []Item, error) {
 	work, left, err := healable(read)
 	if err != nil {
 		return nil, nil, err
@@ -277,7 +277,7 @@ func healing(read Reading, refuse bool) ([]Item, []string, error) {
 	return work, left, nil
 }
 
-func healable(read Reading) ([]Item, []string, error) {
+func healable(read Reading) ([]Item, []Item, error) {
 	command := provider.BootstrapCommand(read.Class)
 	if !read.Present {
 		return nil, nil, refusal.Refuse(refusal.CodeDenied,
@@ -292,8 +292,8 @@ func healable(read Reading) ([]Item, []string, error) {
 	if err := read.adopting(); err != nil {
 		return nil, nil, err
 	}
-	var work []Item
-	var left, denied []string
+	var work, left []Item
+	var denied []string
 	for _, item := range read.Items() {
 		if read.current(item) {
 			continue
@@ -303,7 +303,7 @@ func healable(read Reading) ([]Item, []string, error) {
 			continue
 		}
 		if daemonState(item) || routingState(item) || rewrittenByDeploys(item) || !read.observed(item.Kind, item.Name) {
-			left = append(left, item.ID())
+			left = append(left, item)
 			continue
 		}
 		denied = append(denied, item.ID())
@@ -397,13 +397,13 @@ func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, prog
 	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if read.current(item) {
-			say(progress, item.ID()+": "+reasonCurrent)
+			debug(progress, capitalized(item.phrase())+" is "+reasonCurrent)
 			continue
 		}
 		if err := install(ctx, item); err != nil {
 			return err
 		}
-		say(progress, "wrote "+item.ID())
+		say(progress, "Installed "+item.phrase())
 	}
 	return nil
 }
@@ -411,6 +411,12 @@ func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, prog
 func say(progress edge.Progress, message string) {
 	if progress != nil {
 		progress.Say(message)
+	}
+}
+
+func debug(progress edge.Progress, line string) {
+	if progress != nil {
+		progress.Debug(line)
 	}
 }
 
@@ -453,7 +459,7 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 	}
 	for _, removal := range removals {
 		if removal.action != provider.ActionDelete {
-			say(progress, "kept "+removal.kind+" "+removal.path)
+			say(progress, removal.kept())
 			continue
 		}
 		taken, err := b.host.remove(ctx, removal)
@@ -461,17 +467,17 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 			return err
 		}
 		if !taken {
-			say(progress, "kept "+removal.kind+" "+removal.path+", still in use")
+			say(progress, "Kept "+removal.phrase()+": something else on this box still uses it")
 			continue
 		}
-		say(progress, "removed "+removal.kind+" "+removal.path)
+		say(progress, "Removed "+removal.phrase())
 	}
 	say(progress, leavingKnownHosts(forget))
 	return nil
 }
 
 func leavingKnownHosts(forget string) string {
-	return "to drop this host from known_hosts: " + forget
+	return "Your known_hosts still trusts this box: to drop it, run `" + forget + "`"
 }
 
 const dirNonEmpty = "dir=nonempty"
@@ -482,6 +488,15 @@ type removal struct {
 	reason string
 	action provider.ChangeAction
 	shared bool
+}
+
+func (r removal) phrase() string { return phrase(r.kind, r.path) }
+
+func (r removal) kept() string {
+	if r.reason == "" {
+		return "Kept " + r.phrase()
+	}
+	return "Kept " + r.phrase() + ": " + r.reason
 }
 
 func taking(kind, path, reason string) removal {

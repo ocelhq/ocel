@@ -26,7 +26,8 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 			return provider.Certificate{}, current.Trouble
 		}
 		if err != nil && req.Progress != nil {
-			req.Progress.Say("could not read the certificate the proxy has for " + req.Hostname + ": " + err.Error())
+			req.Progress.Warn("Could not read the front proxy's certificate state for " + req.Hostname +
+				", so its rate limits go unchecked: " + err.Error())
 		}
 		return provider.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}

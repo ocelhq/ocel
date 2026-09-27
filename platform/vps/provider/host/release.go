@@ -53,6 +53,27 @@ func (r Release) apps() string { return listed(r.Apps, func(app AppRelease) stri
 
 func (r Release) names() string { return listed(r.Apps, AppRelease.name) }
 
+func (r Release) waiting() string {
+	them := "it"
+	if len(r.Apps) > 1 {
+		them = "them"
+	}
+	apps := make([]string, 0, len(r.Apps))
+	gates := make([]string, 0, len(r.Apps))
+	for _, app := range r.Apps {
+		apps, gates = append(apps, app.App), append(gates, app.gate())
+	}
+	return fmt.Sprintf("Waiting up to %s for %s to answer 2xx on %s, then switching the proxy to %s",
+		r.DeployTimeout, inWords(apps), inWords(gates), them)
+}
+
+func inWords(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
 func listed[T any](items []T, name func(T) string) string {
 	named := make([]string, 0, len(items))
 	for _, item := range items {
@@ -92,7 +113,7 @@ func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress)
 	for _, app := range rel.Apps {
 		gates = append(gates, app.gate())
 	}
-	say(progress, "Checking "+strings.Join(gates, ", ")+", then flipping the proxy")
+	say(progress, rel.waiting())
 	gated, err := h.stream(ctx, words(gateCommand(rel.DeployTimeout, gates)), nil, elevation)
 	if err != nil {
 		return h.ungated(ctx, rel, "never came back with an exit code", err.Error(), "", elevation)
@@ -122,11 +143,9 @@ func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress)
 		return h.unfronted(ctx, rel, err, elevation)
 	}
 
-	if progress != nil {
-		for _, retiree := range cut.retiring {
-			progress.Detail(fmt.Sprintf("%s has %s to drain, then %s",
-				containerOf(retiree), rel.DrainTimeout, drainCeiling))
-		}
+	for _, retiree := range cut.retiring {
+		say(progress, fmt.Sprintf("Draining retired container %s for up to %s: past that, %s",
+			containerOf(retiree), rel.DrainTimeout, drainCeiling))
 	}
 	flipped, err := h.stream(ctx, words(flipCommand(rel.DrainTimeout, cut.retiring)), nil, elevation)
 	if err != nil {
@@ -135,7 +154,7 @@ func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress)
 	if flipped.Code != 0 {
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
-	tellDrain(progress, flipped.Stdout)
+	tellDrain(progress, flipped.Stdout, rel.DrainTimeout)
 	return h.stopRetired(ctx, rel, cut, progress, elevation)
 }
 
@@ -151,7 +170,7 @@ func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progre
 	}
 	refused := map[string]error{}
 	for _, retiree := range idle {
-		say(progress, "Stopping "+containerOf(retiree))
+		say(progress, "Stopping retired container "+containerOf(retiree))
 		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
 			unstopped = append(unstopped, retiree)
 			refused[retiree] = err
@@ -269,7 +288,7 @@ func (c cutover) back(table RoutingTable) (RoutingTable, error) {
 	return table, nil
 }
 
-func tellDrain(progress edge.Progress, said string) {
+func tellDrain(progress edge.Progress, said string, window time.Duration) {
 	if progress == nil {
 		return
 	}
@@ -277,12 +296,19 @@ func tellDrain(progress edge.Progress, said string) {
 		fields := strings.Fields(line)
 		switch {
 		case len(fields) == 3 && fields[0] == switchboard.DrainExpired:
-			progress.Detail(fmt.Sprintf("%s still had %s request(s) in flight when the drain window closed: %s",
-				fields[1], fields[2], drainCeiling))
+			progress.Warn(fmt.Sprintf("Retired container %s still had %s in flight when its %s drain window closed: %s",
+				containerOf(fields[1]), requests(fields[2]), window, drainCeiling))
 		case len(fields) == 2 && fields[0] == switchboard.Drained:
-			progress.Detail(containerOf(fields[1]) + " reported nothing in flight")
+			progress.Say("Drained retired container " + containerOf(fields[1]) + ": nothing was in flight")
 		}
 	}
+}
+
+func requests(count string) string {
+	if count == "1" {
+		return "1 request"
+	}
+	return count + " requests"
 }
 
 type routingPair struct {

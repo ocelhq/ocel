@@ -62,7 +62,7 @@ func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThe
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v, and a class that kept a volume can never be destroyed", err)
 	}
-	if taken := "removed " + KindResourceVolumes + " " + classSelector(class); !slices.Contains(progress.lines, taken) {
+	if taken := "Removed the resource volumes labelled " + classSelector(class); !slices.Contains(progress.lines, taken) {
 		t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 	}
 	containers := box.at("xargs -r docker rm --force")

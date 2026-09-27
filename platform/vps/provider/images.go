@@ -3,6 +3,7 @@ package vps
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -61,8 +62,17 @@ func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress edge
 	if err != nil {
 		return err
 	}
-	if progress != nil && said != "" {
-		progress.Detail(said)
-	}
+	echo(progress, said)
 	return nil
+}
+
+func echo(progress edge.Progress, said string) {
+	if progress == nil {
+		return
+	}
+	for line := range strings.Lines(said) {
+		if line = strings.TrimRight(line, "\r\n"); line != "" {
+			progress.Detail(line)
+		}
+	}
 }

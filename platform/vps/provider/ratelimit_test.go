@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -125,7 +126,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 		}
 		return session.Result{}, false
 	}
-	spoken := &saying{Progress: edge.DiscardProgress()}
+	spoken := &fake.Progress{}
 	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: spoken,
 	})
@@ -135,15 +136,9 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 	if !cert.Issued() {
 		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
 	}
-	said := strings.Join(spoken.said, "\n")
-	if !strings.Contains(said, "Cannot connect to the Docker daemon") {
+	said := strings.Join(spoken.Lines(), "\n")
+	if !strings.HasPrefix(said, "WARN Could not read the front proxy's certificate state for pr-9.preview.acme.com, so its rate limits go unchecked: ") ||
+		!strings.Contains(said, "Cannot connect to the Docker daemon") {
 		t.Errorf("a box whose engine answered nothing said %q: the read that never happened is reported without the engine's own words, and the two silences read as one", said)
 	}
 }
-
-type saying struct {
-	edge.Progress
-	said []string
-}
-
-func (s *saying) Say(message string) { s.said = append(s.said, message) }

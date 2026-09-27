@@ -169,8 +169,8 @@ func TestAClassDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemF
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
-		"removed " + KindApps + " " + classSelector(class),
-		"removed " + KindAppNetworks + " " + classSelector(class),
+		"Removed the app containers labelled " + classSelector(class),
+		"Removed the app networks labelled " + classSelector(class),
 	} {
 		if !slices.Contains(progress.lines, taken) {
 			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
