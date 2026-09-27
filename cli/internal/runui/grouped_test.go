@@ -156,6 +156,31 @@ func TestOnceAUnitHasFailedALaterSuccessfulUnitShowsOnlyItsHeader(t *testing.T) 
 	}
 }
 
+func TestASuccessfulUnitAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	web := build.Unit("web", "Building web")
+	api := build.Unit("api", "Building api")
+	output(t, web, "web compiled")
+	web.Say("bundled 12 routes")
+	web.Warn("next.config.js sets images.unoptimized")
+	web.Error("a route failed to prerender and serves dynamically")
+	c.pass(time.Second)
+	api.End(errors.New("npm run build exited with status 1"))
+	c.pass(time.Second)
+	web.End(nil)
+
+	want := "ERROR [build] ✗ api: Building api failed after 1s: npm run build exited with status 1\n" +
+		"INFO  [build] ✓ web: Building web in 2s\n" +
+		"      WARN  next.config.js sets images.unoptimized\n" +
+		"      ERROR a route failed to prerender and serves dynamically\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func output(t *testing.T, unit *events.Scope, text string) {
 	t.Helper()
 	if _, err := unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT).Write([]byte(text + "\n")); err != nil {

@@ -255,6 +255,10 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	s.print(header)
 	if failed || !s.failed {
 		s.print(unit.body...)
+	} else {
+		s.print(slices.DeleteFunc(slices.Clone(unit.body), func(l blockLine) bool {
+			return l.raw || l.from.level < progressv1.Level_LEVEL_WARN
+		})...)
 	}
 	s.failed = s.failed || failed
 }
