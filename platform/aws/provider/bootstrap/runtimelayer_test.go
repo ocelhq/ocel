@@ -271,7 +271,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks.seed(runtimeStack(ClassProduction), staleRuntimeBody())
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
@@ -285,8 +285,8 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 				t.Errorf("the %s runtime payload the stack points at was never placed", architecture)
 			}
 		}
-		if !log.says("published this build's runtime") {
-			t.Errorf("the deploy said %v, want it to say it published the runtime", log.lines)
+		if !log.says("INFO This deploy published this build's runtime") {
+			t.Errorf("the deploy said %v, want it to say it published the runtime", log.Lines())
 		}
 	})
 
@@ -297,7 +297,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		creates, updates := stacks.creates, stacks.updates
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
@@ -318,7 +318,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks.busyWriting(runtimeStack(ClassProduction), 4, runtimeLayerBody(t, ClassProduction))
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers over a stack another deploy is writing: %v", err)
 		}
@@ -326,8 +326,8 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		if stacks.updates != 0 {
 			t.Errorf("executed %d change sets against a stack another deploy was writing", stacks.updates)
 		}
-		if !log.says("under another run") {
-			t.Errorf("the deploy said %v, want it to say it waited while another run wrote the runtime", log.lines)
+		if !log.says("INFO Stack " + runtimeStack(ClassProduction) + " is") {
+			t.Errorf("the deploy said %v, want it to say it waited while another run wrote the runtime", log.Lines())
 		}
 	})
 
@@ -337,11 +337,27 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks.claimedMidCreate(runtimeStack(ClassProduction), runtimeLayerBody(t, ClassProduction))
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers against a runtime another deploy created: %v", err)
 		}
 		assertShipsThisBuild(t, stacks, layers)
+	})
+
+	t.Run("a runtime this build cannot publish is a warning naming its stack", func(t *testing.T) {
+		recordWaits(t)
+		stacks, store := newFakeCFN(), preloadedStore()
+		stacks.seed(runtimeStack(ClassProduction), staleRuntimeBody())
+		apis := ensuringAPIs(stacks, store)
+		apis.CFN = deniedChangeSets{stacks}
+		var log healLog
+
+		if _, err := EnsureRuntimeLayers(context.Background(), apis, defaultNamespace, ClassProduction, ensureRuntimeRequest(), &log); err != nil {
+			t.Fatalf("EnsureRuntimeLayers with credentials that may not write: %v", err)
+		}
+		if !log.says("WARN Could not publish this build's runtime into stack " + runtimeStack(ClassProduction)) {
+			t.Errorf("the deploy said %v, want a warning that names the runtime stack it could not write", log.Lines())
+		}
 	})
 
 	t.Run("a runtime whose stack stays busy and behind is left for the deploy to refuse", func(t *testing.T) {
@@ -351,7 +367,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		stacks.busyWriting(runtimeStack(ClassProduction), idleAttempts*4, staleRuntimeBody())
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), log.write)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, ClassProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers over a stack that never goes idle: %v", err)
 		}

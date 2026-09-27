@@ -183,16 +183,23 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix st
 		sweeps = append(sweeps, CacheBucket{Name: cache.Name, S3: a.reach(cache)})
 	}
 	var errs []error
+	swept := 0
 	for _, sweeping := range sweeps {
 		if sweeping.Name == "" {
 			continue
 		}
 		if err := a.sweep(ctx, sweeping.S3, sweeping.Name, prefix); err != nil {
 			errs = append(errs, err)
+			continue
 		}
+		swept++
 	}
-	if progress != nil {
-		progress.Detail("removed " + prefix)
+	if progress != nil && len(errs) == 0 {
+		buckets := "buckets"
+		if swept == 1 {
+			buckets = "bucket"
+		}
+		progress.Say(fmt.Sprintf("Removed the %s artifacts under %s from %d %s", class, prefix, swept, buckets))
 	}
 	return errors.Join(errs...)
 }

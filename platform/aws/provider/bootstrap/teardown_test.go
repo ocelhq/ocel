@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -208,8 +209,8 @@ func TestTeardownReleasesTheAppBoundaryBeforeTheCoreStackGoes(t *testing.T) {
 	var coreDeletedWhenListed bool
 	iamc.onList = func() { coreDeletedWhenListed = slices.Contains(stacks.deleted, coreStackName) }
 
-	var logged []string
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, func(msg string) { logged = append(logged, msg) }); err != nil {
+	var progress fake.Progress
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, &progress); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if want := []string{"app-role-a", "app-role-b"}; !slices.Equal(iamc.released, want) {
@@ -218,8 +219,12 @@ func TestTeardownReleasesTheAppBoundaryBeforeTheCoreStackGoes(t *testing.T) {
 	if coreDeletedWhenListed {
 		t.Error("the boundary was looked up after the core stack delete began; CloudFormation refuses a policy still in use")
 	}
-	if !slices.ContainsFunc(logged, func(msg string) bool { return strings.Contains(msg, "app-role-a") }) {
-		t.Errorf("log = %v, want each released role named", logged)
+	for _, role := range []string{"app-role-a", "app-role-b"} {
+		if !slices.ContainsFunc(progress.Lines(), func(line string) bool {
+			return strings.HasPrefix(line, "INFO Released the app boundary from role "+role)
+		}) {
+			t.Errorf("teardown said %v, want each released role named", progress.Lines())
+		}
 	}
 }
 
@@ -227,7 +232,7 @@ func TestTeardownTakesAnAppBoundaryNoRoleUses(t *testing.T) {
 	t.Parallel()
 
 	apis, stacks, _, _ := teardownFakes(t)
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if !slices.Contains(stacks.deleted, coreStackName) {
@@ -244,7 +249,7 @@ func TestTeardownEmptiesEveryPage(t *testing.T) {
 		{keys: []string{"b"}},
 	}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if !slices.Contains(buckets.deleted, "a") || !slices.Contains(buckets.deleted, "b") {
@@ -266,7 +271,7 @@ func TestTeardownReportsRefusedObjects(t *testing.T) {
 		Message: aws.String("Object is under legal hold"),
 	}}
 
-	err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil)
+	err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil)
 	if err == nil {
 		t.Fatal("Teardown = nil, want the objects S3 refused to delete reported")
 	}
@@ -292,7 +297,7 @@ func TestTeardownRetriesAfterAPartialStackDelete(t *testing.T) {
 	}
 	buckets.pages["ocel-state"] = []objectPage{{keys: []string{"state.json"}}}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if !slices.Contains(buckets.listed, "ocel-assets") {
@@ -307,7 +312,7 @@ func TestTeardownKeepsEverythingWhenTheStackDeleteFails(t *testing.T) {
 	stacks.deleteErr = errors.New("DeleteStack refused")
 
 	before := len(ssmc.params)
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err == nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err == nil {
 		t.Fatal("Teardown = nil, want the failed stack delete surfaced")
 	}
 	if len(ssmc.params) != before {
@@ -336,7 +341,7 @@ func TestTeardownRereadsTheSiblingBeforeDroppingThePassphrase(t *testing.T) {
 			apis, stacks, ssmc, _ := teardownFakes(t)
 			stacks.onDelete = func(c *teardownCFN) { c.stacks[previewStackName] = tc.sibling }
 
-			if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+			if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
 			if _, present := ssmc.params[passphraseParam]; !present {
@@ -385,7 +390,7 @@ func TestTeardownReclaimsTheClassOriginSecret(t *testing.T) {
 				Buckets: &teardownS3{pages: map[string][]objectPage{}},
 			}
 
-			if err := Teardown(context.Background(), apis, defaultNamespace, tc.class, nil, nil); err != nil {
+			if err := Teardown(context.Background(), apis, defaultNamespace, tc.class, nil); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
 			if _, present := ssmc.params[tc.mine]; present {
@@ -403,7 +408,7 @@ func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 
 	apis, _, ssmc, _ := teardownFakes(t)
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	for _, name := range []string{passphraseParam, originSecretParam, cloudflareNames(ClassProduction).credentialsParam} {
@@ -428,7 +433,7 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	want := []string{
@@ -459,7 +464,7 @@ func TestTeardownLeavesAFeatureStackThatWasNeverThere(t *testing.T) {
 		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	want := []string{defaultNamespace.FeatureStackName(FeatureISR, ClassProduction), coreStackName}
@@ -482,7 +487,7 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	want := []string{defaultNamespace.FeatureStackName(FeatureISR, ClassProduction), coreStackName}
@@ -509,7 +514,7 @@ func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
 		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	want := []string{feature, runtime, coreStackName}
@@ -533,7 +538,7 @@ func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
 		Buckets: &teardownS3{pages: map[string][]objectPage{}},
 	}
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if want := []string{feature}; !slices.Equal(stacks.deleted, want) {

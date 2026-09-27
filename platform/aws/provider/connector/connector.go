@@ -57,7 +57,7 @@ type Wake struct {
 
 const WakeHeartbeat = "heartbeat"
 
-func reviewing(ns bootstrap.Namespace, progress func(string)) cfn.ChangeReview {
+func reviewing(ns bootstrap.Namespace, progress edge.Progress) cfn.ChangeReview {
 	return bootstrap.AdmitReplacements(ns, false, progress)
 }
 
@@ -157,7 +157,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer provider.WrittenBy, progress func(string)) (Installation, error) {
+	writer provider.WrittenBy, progress edge.Progress) (Installation, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
 		return Installation{}, err
@@ -176,12 +176,12 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	if err != nil {
 		return Installation{}, err
 	}
-	say(progress, "connector "+release.Version+" staged at "+at.Key)
+	progress.Say(fmt.Sprintf("Staged connector %s at s3://%s/%s", release.Version, bucket, at.Key))
 
 	if release.PublicKey, err = mintKey(ctx, apis.SSM, ns); err != nil {
 		return Installation{}, err
 	}
-	say(progress, "the connector's key is at "+KeyParameter(ns))
+	progress.Say(fmt.Sprintf("Stored the connector's key in parameter %s", KeyParameter(ns)))
 
 	template, err := templateFor(ns, at, release, keys)
 	if err != nil {
@@ -204,34 +204,34 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	return installed, nil
 }
 
-func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress func(string)) error {
+func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress edge.Progress) error {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return err
 	}
 	if stack == nil {
-		say(progress, StackName(ns)+" does not exist")
+		progress.Say(fmt.Sprintf("Nothing to remove: stack %s does not exist", StackName(ns)))
 		return nil
 	}
 	if bucket := cfn.OutputsOf(stack)[outputBucket]; bucket != "" {
 		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 			return err
 		}
-		say(progress, "emptied "+bucket)
+		progress.Say(fmt.Sprintf("Emptied bucket %s, where the connector's code was staged", bucket))
 	}
 	if err := cfn.Delete(ctx, apis.CFN, StackName(ns)); err != nil {
 		return err
 	}
-	say(progress, "deleted "+StackName(ns))
+	progress.Say("Deleted stack " + StackName(ns))
 	if err := takeKey(ctx, apis.SSM, ns); err != nil {
 		return err
 	}
-	say(progress, "deleted "+KeyParameter(ns))
+	progress.Say(fmt.Sprintf("Deleted parameter %s, the connector's key", KeyParameter(ns)))
 	return nil
 }
 
 func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
-	writer provider.WrittenBy, progress func(string)) (string, error) {
+	writer provider.WrittenBy, progress edge.Progress) (string, error) {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return "", err
@@ -258,7 +258,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 	}
 
 	template := codeTemplate()
-	say(progress, "opening "+StackName(ns)+" to stage the connector's code in")
+	progress.Say(fmt.Sprintf("Creating stack %s to stage the connector's code in", StackName(ns)))
 	if err := cfn.Create(ctx, apis.CFN, StackName(ns), template, nil, nil,
 		tagsFor(ns, template, writer)); err != nil {
 		return "", err
@@ -480,12 +480,6 @@ func codeBucketResource() map[string]any {
 				}},
 			},
 		},
-	}
-}
-
-func say(progress func(string), message string) {
-	if progress != nil {
-		progress(message)
 	}
 }
 

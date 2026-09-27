@@ -144,7 +144,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 		return nil
 	}
 	discarded := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
-	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws}).Discard(ctx, discarded, progress.Say)
+	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws}).Discard(ctx, discarded, progress)
 }
 
 func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress edge.Progress) (certs.Certificates, error) {
@@ -155,7 +155,7 @@ func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress edg
 	}
 	certificates := registry.Certificates(front, certs.Deps{AWS: p.aws})
 	if note := edges.IgnoredPinNote(front, certificates, hostname); note != "" {
-		progress.Detail(note)
+		progress.Warn(note)
 	}
 	return certificates, nil
 }

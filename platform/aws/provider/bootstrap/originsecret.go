@@ -61,10 +61,10 @@ func OriginSecretOf(raw string) (OriginSecret, error) {
 func StaleOriginSecretNotice(s OriginSecret, now time.Time, class string) string {
 	switch {
 	case s.Rotating():
-		return fmt.Sprintf("the %s origin secret was rotated %d days ago; this deploy answers to the new one, and every other project in the class must be re-deployed by %s, when `ocel bootstrap` retires the old one and a release still expecting it stops answering",
+		return fmt.Sprintf("The %s origin secret was rotated %d days ago; this deploy answers to the new one, and every other project in the class must be re-deployed by %s, when `ocel bootstrap` retires the old one and a release still expecting it stops answering",
 			class, int(now.Sub(s.RotatedAt).Hours()/24), s.RotatedAt.Add(OriginSecretGrace).UTC().Format(time.DateOnly))
 	case s.Stale(now):
-		return fmt.Sprintf("the %s origin secret every front presents to reach a release is %d days old; run `ocel bootstrap` to rotate it (secrets older than %d days are rotated there), then re-deploy each project so its releases accept the new one",
+		return fmt.Sprintf("The %s origin secret every front presents to reach a release is %d days old; run `ocel bootstrap` to rotate it (secrets older than %d days are rotated there), then re-deploy each project so its releases accept the new one",
 			class, int(now.Sub(s.CreatedAt).Hours()/24), int(OriginSecretMaxAge.Hours()/24))
 	}
 	return ""

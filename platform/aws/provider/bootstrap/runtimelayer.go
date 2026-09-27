@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -138,8 +139,8 @@ func runtimeStackDescription(class string) string {
 	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", class)
 }
 
-func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progressf, logf func(string)) error {
-	progressf(runtimeStackStep)
+func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progress edge.Progress) error {
+	progress.Say(runtimeStackStep)
 	code, err := placeRuntimeLayers(ctx, apis.Store, bucket)
 	if err != nil {
 		return err
@@ -150,7 +151,7 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, body, nil, nil, tags, nil); err != nil {
 		return err
 	}
-	logf(fmt.Sprintf("applied %s", stackName))
+	progress.Say("Applied stack " + stackName)
 	return nil
 }
 
@@ -159,10 +160,8 @@ type RuntimeLayerRequest struct {
 	Writer         provider.WrittenBy
 }
 
-func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, log func(string)) (map[string]string, error) {
-	if log == nil {
-		log = func(string) {}
-	}
+func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, progress edge.Progress) (map[string]string, error) {
+	progress = reporting(progress)
 	stackName := ns.runtimeStackName(class)
 	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
 	if err != nil || len(missingRuntimeLayers(current)) == 0 {
@@ -173,15 +172,14 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 		return nil, err
 	}
 
-	silent := func(string) {}
 	published := true
-	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, silent, silent); err != nil {
+	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, edge.DiscardProgress()); err != nil {
 		if !runtimeStackWrittenElsewhere(err) {
-			log(fmt.Sprintf("could not publish this build's runtime into %s: %v", stackName, err))
+			progress.Warn(fmt.Sprintf("Could not publish this build's runtime into stack %s: %v", stackName, err))
 			return current, nil
 		}
 		published = false
-		if _, err := awaitStackIdle(ctx, apis.CFN, stackName, log); err != nil {
+		if _, err := awaitStackIdle(ctx, apis.CFN, stackName, progress); err != nil {
 			return nil, err
 		}
 	}
@@ -193,11 +191,11 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	if len(missingRuntimeLayers(latest)) > 0 {
 		return latest, nil
 	}
-	who := "another deploy"
+	who := "Another deploy"
 	if published {
-		who = "this deploy"
+		who = "This deploy"
 	}
-	log(fmt.Sprintf("%s published this build's runtime for %s into %s", who, strings.Join(shippedRuntimeArches(), ", "), stackName))
+	progress.Say(fmt.Sprintf("%s published this build's runtime for %s into stack %s", who, strings.Join(shippedRuntimeArches(), ", "), stackName))
 	return latest, nil
 }
 
@@ -266,7 +264,7 @@ func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) prov
 	return planDelete(ctx, stacks, group, body)
 }
 
-func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, log func(string)) error {
+func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, progress edge.Progress) error {
 	stackName := ns.runtimeStackName(class)
 	stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 	if err != nil || stack == nil {
@@ -275,8 +273,6 @@ func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Nam
 	if err := cfn.Delete(ctx, stacks, stackName); err != nil {
 		return err
 	}
-	if log != nil {
-		log(fmt.Sprintf("removed %s", stackName))
-	}
+	progress.Say("Removed stack " + stackName)
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -138,8 +139,12 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", nil); err != nil {
+	var progress fake.Progress
+	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", &progress); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
+	}
+	if want := []string{"INFO Removed the production artifacts under shop/prod/ from 3 buckets"}; !slices.Equal(progress.Lines(), want) {
+		t.Errorf("RemovePrefix() said %q, want %q", progress.Lines(), want)
 	}
 	for _, ref := range everyStoreRef() {
 		body, err := store.Open(ctx, ref)

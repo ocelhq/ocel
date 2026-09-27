@@ -67,6 +67,13 @@ func (c Certificate) CoversAll(hostnames []string) bool {
 	return true
 }
 
+func (c Certificate) named() string {
+	if len(c.Domains) == 0 {
+		return c.ARN
+	}
+	return strings.Join(c.Domains, ", ")
+}
+
 func nameCovers(covered, hostname string) bool {
 	if strings.EqualFold(covered, hostname) {
 		return true
@@ -174,7 +181,7 @@ func (i ACM) AwaitValidation(ctx context.Context, cert Certificate, say func(str
 	for attempt := range i.attempts() {
 		if attempt > 0 {
 			if attempt == 1 {
-				say(fmt.Sprintf("Waiting up to %s for ACM to name the record that proves you own this domain", i.window()))
+				say(fmt.Sprintf("Waiting up to %s for ACM to name the record that proves you own %s", i.window(), cert.named()))
 			}
 			if err := i.waitInterval(ctx); err != nil {
 				return cert, err
@@ -199,7 +206,7 @@ func (i ACM) AwaitIssued(ctx context.Context, cert Certificate, say func(string)
 	for attempt := range i.attempts() {
 		if attempt > 0 {
 			if attempt == 1 {
-				say(fmt.Sprintf("Waiting up to %s for ACM to issue the certificate, which it does once the record resolves", i.window()))
+				say(fmt.Sprintf("Waiting up to %s for ACM to issue the certificate for %s, which it does once the record resolves", i.window(), cert.named()))
 			}
 			if err := i.waitInterval(ctx); err != nil {
 				return cert, err
@@ -212,7 +219,7 @@ func (i ACM) AwaitIssued(ctx context.Context, cert Certificate, say func(string)
 		cert = described
 		switch cert.Status {
 		case StatusIssued:
-			say(fmt.Sprintf("Certificate issued for %s", cert.ARN))
+			say(fmt.Sprintf("ACM issued certificate %s for %s", cert.ARN, cert.named()))
 			return cert, nil
 		case string(acmtypes.CertificateStatusFailed), string(acmtypes.CertificateStatusValidationTimedOut), string(acmtypes.CertificateStatusRevoked):
 			return cert, fmt.Errorf("certificate %s is %s: delete it in ACM and run this again", cert.ARN, strings.ToLower(cert.Status))
@@ -291,23 +298,23 @@ func outstanding(records []edge.Record) string {
 	return strings.Join(wanted, "; ")
 }
 
-func (i ACM) Discard(ctx context.Context, cert Certificate, say func(string)) error {
+func (i ACM) Discard(ctx context.Context, cert Certificate, progress edge.Progress) error {
 	if i.API == nil || cert.ARN == "" {
 		return nil
 	}
 	if cert.Adopted {
-		say(fmt.Sprintf("Leaving certificate %s in place: ocel did not request it, so it is not ocel's to delete", cert.ARN))
+		progress.Say(fmt.Sprintf("Leaving certificate %s in place: ocel did not request it, so it is not ocel's to delete", cert.ARN))
 		return nil
 	}
 	err := i.delete(ctx, cert)
 	if InUse(err) {
-		say(fmt.Sprintf("Waiting up to %s for the edge to release certificate %s", releaseBudget, cert.ARN))
+		progress.Say(fmt.Sprintf("Waiting up to %s for the edge to release certificate %s", releaseBudget, cert.ARN))
 		err = i.awaitRelease(ctx, cert)
 	}
 	if err == nil || Gone(err) {
 		return nil
 	}
-	say(fmt.Sprintf("Leaving certificate %s in place: %v — delete it in ACM once nothing uses it", cert.ARN, err))
+	progress.Warn(fmt.Sprintf("Leaving certificate %s in place: %v — delete it in ACM once nothing uses it", cert.ARN, err))
 	if InUse(err) {
 		return nil
 	}

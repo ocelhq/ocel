@@ -26,7 +26,7 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 
 			req := everything()
 			req.AcceptReplacements = accept
-			err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil, nil)
+			err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil)
 			if err == nil {
 				t.Fatal("a bootstrap that would replace the core's state table was allowed through")
 			}
@@ -53,7 +53,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 
 		req := everything()
 		req.Writer = "9.9.9"
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if got := stacks.stampOf(coreStackName).WrittenBy; got != "9.9.9" {
@@ -71,7 +71,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		before := stacks.restamps
 
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if stacks.restamps != before {
@@ -84,13 +84,13 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	built := everything()
 	built.Writer = "1.4.0"
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, built, nil, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, built, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	for _, sha := range []string{"dev+1111111", "dev+2222222"} {
 		rebuilt := everything()
 		rebuilt.Writer = provider.WrittenBy(sha)
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 	}
@@ -98,7 +98,7 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 
 	rebuilt := everything()
 	rebuilt.Writer = "dev+3333333"
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if stacks.restamps != before {
@@ -249,15 +249,15 @@ func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	apis.CFN = deniedChangeSets{stacks}
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if !errors.Is(err, ErrHealNotPermitted) {
 		t.Fatalf("Heal err = %v, want ErrHealNotPermitted", err)
 	}
 	if healed {
 		t.Error("a heal that was refused outright reported that it wrote something")
 	}
-	if log.says("could not refresh") {
-		t.Errorf("heal said %v, want no alarming per-stack failure for a credential that simply may not write", log.lines)
+	if log.says("Could not refresh") {
+		t.Errorf("heal said %v, want no alarming per-stack failure for a credential that simply may not write", log.Lines())
 	}
 }
 
@@ -269,14 +269,14 @@ func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
 	stacks.busy(stack, idleAttempts*4)
 	var log healLog
 
-	if _, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write); err != nil {
+	if _, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log); err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
 	if len(*waits) >= cfn.ChangeSetAttempts {
 		t.Errorf("waited %d times on a stack another run is writing; that budget belongs to building a change set, not to waiting on a busy stack", len(*waits))
 	}
-	if !log.says("before this deploy stops waiting") {
-		t.Errorf("heal said %v, want it to report progress while it waited", log.lines)
+	if !log.says("INFO Stack " + stack + " is UPDATE_IN_PROGRESS under another run") {
+		t.Errorf("heal said %v, want it to report progress while it waited", log.Lines())
 	}
 }
 
@@ -295,15 +295,15 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 	)
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
 	if !healed {
-		t.Fatalf("the edge stack was refused a refresh: %v", log.lines)
+		t.Fatalf("the edge stack was refused a refresh: %v", log.Lines())
 	}
 	if log.says("is a AWS::IAM::User") {
-		t.Errorf("heal said %v, want a stack tag landing on the edge user to count for nothing", log.lines)
+		t.Errorf("heal said %v, want a stack tag landing on the edge user to count for nothing", log.Lines())
 	}
 }
 
@@ -319,12 +319,12 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 	})
 	var log healLog
 
-	healed, _ := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, _ := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if healed {
 		t.Error("a heal rewrote the policy of the identity the edge signs its calls with")
 	}
-	if !log.says("EdgeUser") {
-		t.Errorf("heal said %v, want it to name what stopped it", log.lines)
+	if !log.says("WARN Could not refresh stack "+stack) || !log.says("EdgeUser") {
+		t.Errorf("heal said %v, want it to name what stopped it", log.Lines())
 	}
 }
 
@@ -333,7 +333,7 @@ func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
 	stacks.fallBehind(isrStack(ClassProduction))
 	stacks.fallBehind(runtimeStack(ClassProduction))
 
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	planned := stacks.changeSetsPlanned()

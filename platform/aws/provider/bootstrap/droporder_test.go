@@ -9,7 +9,7 @@ func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	edge, dropped := edgeStack(ClassProduction), optStack(ClassProduction)
 
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

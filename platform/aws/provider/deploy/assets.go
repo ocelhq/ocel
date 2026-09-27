@@ -175,7 +175,7 @@ func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) 
 }
 
 func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, progress edge.Progress) error {
-	say(progress, "Uploading "+app+"'s static assets")
+	say(progress, "Uploading "+app+"'s "+plural(len(uploads), "static asset", "static assets"))
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)

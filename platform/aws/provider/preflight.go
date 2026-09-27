@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
@@ -49,7 +48,7 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPrefl
 		return nil
 	}
 	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Deploy.Class)); notice != "" {
-		pre.Progress.Detail(notice)
+		pre.Progress.Warn(notice)
 	}
 	return nil
 }
@@ -71,7 +70,7 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 		return err
 	}
 	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Deploy.Class)); notice != "" {
-		pre.Progress.Detail(notice)
+		pre.Progress.Warn(notice)
 	}
 	return nil
 }
@@ -91,7 +90,7 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 	}, p.namespace, string(class), bootstrap.RuntimeLayerRequest{
 		ArtifactBucket: deployed.ArtifactBucket,
 		Writer:         pre.WrittenBy,
-	}, saying(pre.Progress))
+	}, pre.Progress)
 	if err != nil {
 		return err
 	}
@@ -99,13 +98,6 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 		p.deployed.forget()
 	}
 	return nil
-}
-
-func saying(progress edge.Progress) func(string) {
-	if progress == nil {
-		return nil
-	}
-	return progress.Say
 }
 
 func refuseContainersBehindFunctionEdge(pre provider.DeployPreflight) error {

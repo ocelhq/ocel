@@ -109,7 +109,7 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 		return nil
 	}
 
-	say(progress, "Uploading "+app+"'s prerendered pages")
+	say(progress, "Uploading "+app+"'s "+plural(len(uploads), "prerender cache entry", "prerender cache entries"))
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)

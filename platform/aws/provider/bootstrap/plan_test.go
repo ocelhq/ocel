@@ -354,7 +354,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore())
 	req := Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, req, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

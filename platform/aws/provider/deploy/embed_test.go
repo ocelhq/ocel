@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,8 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func TestBytecodeEmbedEnabled(t *testing.T) {
@@ -353,7 +356,7 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeFunctionCode, inv
 		}},
 		budget:     time.Minute,
 		updateWait: embedUpdateWait,
-		log:        log,
+		progress:   log,
 	}, out
 }
 
@@ -369,8 +372,8 @@ func TestEmbedPass(t *testing.T) {
 
 		log := out()
 		for _, want := range []string{
-			"embedding compile caches into 1 bundle", "web_bundle", "app=web",
-			constants.ProjectStateDirName + "/bytecode/node24.3.1-arm64.tar", "embedded 1/1 compile caches",
+			"INFO Embedding compile caches into 1 bundle", "web_bundle", "of app web",
+			constants.ProjectStateDirName + "/bytecode/node24.3.1-arm64.tar", "INFO Embedded 1/1 compile caches",
 		} {
 			if !strings.Contains(log, want) {
 				t.Errorf("embed log missing %q:\n%s", want, log)
@@ -457,7 +460,7 @@ func TestEmbedPass(t *testing.T) {
 				if !strings.Contains(log, tc.want) {
 					t.Errorf("embed log missing %q:\n%s", tc.want, log)
 				}
-				if !strings.Contains(log, "embedded 0/1 compile caches") {
+				if !strings.Contains(log, "WARN Embedded 0/1 compile caches") {
 					t.Errorf("embed log counted a success it did not have:\n%s", log)
 				}
 			})
@@ -499,7 +502,7 @@ func TestEmbedPass(t *testing.T) {
 			t.Errorf("the pass issued a code update it could not wait out: %v", code.updated)
 		}
 		log := out()
-		for _, want := range []string{"too little to finish", "left on its original package", "embedded 0/1"} {
+		for _, want := range []string{"too little to finish", "left on its original package", "Embedded 0/1"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("embed log missing %q:\n%s", want, log)
 			}
@@ -518,7 +521,7 @@ func TestEmbedPass(t *testing.T) {
 		if strings.Contains(log, "left on its original package") {
 			t.Errorf("the pass reported an in-flight update as untouched:\n%s", log)
 		}
-		for _, want := range []string{"did not finish in time", "moving onto", "embedded 0/1"} {
+		for _, want := range []string{"did not finish in time", "moving onto", "Embedded 0/1"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("embed log missing %q:\n%s", want, log)
 			}
@@ -577,4 +580,18 @@ func readTestZip(t *testing.T, path string) map[string]testZipEntry {
 		entries[f.Name] = testZipEntry{body: string(body), method: f.Method, crc: f.CRC32}
 	}
 	return entries
+}
+
+func TestAnEmbedAskedForWithoutTheCompileCacheIsAWarning(t *testing.T) {
+	t.Setenv(bytecodeEmbedEnv, "1")
+	t.Setenv(bytecodeCacheEnv, "")
+	var progress fake.Progress
+
+	if err := (&Stacks{}).EmbedCode(context.Background(), "ocel-web-1", provider.ArtifactRef{}, &progress); err != nil {
+		t.Fatalf("EmbedCode() = %v", err)
+	}
+	want := []string{"WARN " + bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1, so no compile cache is embedded"}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("EmbedCode() said %q, want %q", got, want)
+	}
 }

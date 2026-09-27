@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 
 	"context"
 	"errors"
@@ -100,7 +101,7 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, names []string, log func(string)) error {
+func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, names []string, progress edge.Progress) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
@@ -117,19 +118,13 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 		if err := cfn.Delete(ctx, stacks, stackName); err != nil {
 			return err
 		}
-		if log != nil {
-			log(fmt.Sprintf("removed %s", stackName))
-		}
+		progress.Say("Removed stack " + stackName)
 	}
 	return nil
 }
 
-func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress, log func(string)) error {
-	say := func(f func(string), msg string) {
-		if f != nil {
-			f(msg)
-		}
-	}
+func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress edge.Progress) error {
+	progress = reporting(progress)
 
 	stackName, err := ns.StackNameFor(class)
 	if err != nil {
@@ -154,12 +149,12 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	}
 	switch {
 	case core == nil:
-		say(log, fmt.Sprintf("no %s stack in this account; whatever exists beside it is still removed", stackName))
+		progress.Say(fmt.Sprintf("No stack %s in this account, so only what exists beside it is removed", stackName))
 	case !deployed.Present:
-		say(log, fmt.Sprintf("%s is %s and names none of its resources; whatever exists beside it is still removed", stackName, core.StackStatus))
+		progress.Warn(fmt.Sprintf("Stack %s is %s and names none of its resources, so only what exists beside it is removed", stackName, core.StackStatus))
 	}
 
-	say(progress, fmt.Sprintf("Deleting the access key of edge reader %s", userName))
+	progress.Say(fmt.Sprintf("Deleting the access key of edge reader %s", userName))
 	if err := deleteAccessKeys(ctx, apis.IAM, userName); err != nil {
 		return err
 	}
@@ -168,7 +163,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		if bucket == "" {
 			continue
 		}
-		say(progress, fmt.Sprintf("Emptying %s", bucket))
+		progress.Say("Emptying bucket " + bucket)
 		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 			return err
 		}
@@ -180,38 +175,38 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	}
 	present := installed.Names()
 	if len(present) > 0 {
-		say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
-		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { say(log, msg) }); err != nil {
+		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
+		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, progress); err != nil {
 			return err
 		}
 	}
 
-	say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
-	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, func(msg string) { say(log, msg) }); err != nil {
+	progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
+	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, progress); err != nil {
 		return err
 	}
 
 	if deployed.AppBoundaryARN != "" {
-		say(progress, "Releasing the app boundary from every role still under it")
-		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { say(log, msg) }); err != nil {
+		progress.Say("Releasing the app boundary from every role still under it")
+		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, progress); err != nil {
 			return err
 		}
 	}
 
 	if core != nil {
-		say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
+		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
 		if err := cfn.Delete(ctx, apis.CFN, stackName); err != nil {
 			return err
 		}
 	}
 
-	say(progress, "Deleting the bootstrap's stored parameters (SSM)")
+	progress.Say(fmt.Sprintf("Deleting the %s bootstrap's stored parameters (SSM)", class))
 	shared, err := SiblingSharesPassphrase(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
 	if shared {
-		say(log, fmt.Sprintf("the %s bootstrap is still installed and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
+		progress.Say(fmt.Sprintf("Keeping the Pulumi passphrase in %s: the %s bootstrap is still installed and its Pulumi state is encrypted under it", ns.PassphraseParamName(), siblingName(class)))
 	} else {
 		params = append(params, ns.PassphraseParamName())
 	}
@@ -266,7 +261,7 @@ func deleteAccessKeys(ctx context.Context, iamClient IAMKeyAPI, userName string)
 	return nil
 }
 
-func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, log func(string)) error {
+func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, progress edge.Progress) error {
 	var marker *string
 	for {
 		out, err := iamClient.ListEntitiesForPolicy(ctx, &iam.ListEntitiesForPolicyInput{
@@ -291,7 +286,7 @@ func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN
 				}
 				return fmt.Errorf("release the app boundary from role %s: %w", name, err)
 			}
-			log(fmt.Sprintf("released the app boundary from role %s; it keeps running under its own policies alone", name))
+			progress.Say(fmt.Sprintf("Released the app boundary from role %s, which keeps running under its own policies alone", name))
 		}
 		if !out.IsTruncated {
 			return nil

@@ -54,8 +54,7 @@ type stepDeps struct {
 	class    string
 	ssm      SSMAPI
 	iam      IAMAPI
-	progress func(string)
-	log      func(string)
+	progress edge.Progress
 }
 
 type feature struct {

@@ -158,12 +158,12 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil); err != nil {
 		t.Fatalf("the bootstrap that installs the edge: %v", err)
 	}
 
 	drop := Request{Features: []string{FeatureISR}, Remove: []string{FeatureCloudflareEdge}}
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, drop, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, drop, nil); err != nil {
 		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
 	}
 	if front.torn != 1 {
@@ -176,7 +176,7 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store for an edge that is no longer installed")
 	}
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil); err != nil {
 		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
 	}
 }

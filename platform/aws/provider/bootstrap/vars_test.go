@@ -319,7 +319,7 @@ func TestRunVars(t *testing.T) {
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := Request{Features: []string{provider.FeatureVarsKey}}
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
@@ -338,7 +338,7 @@ func TestRunVars(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, Request{}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 

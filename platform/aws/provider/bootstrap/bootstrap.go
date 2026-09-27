@@ -9,7 +9,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -353,12 +352,19 @@ func bootstrapFor(ns Namespace, class string) (spec, error) {
 	}
 }
 
-func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request, progress, log func(string)) error {
+func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request, progress edge.Progress) error {
 	target, err := specFor(ns, class)
 	if err != nil {
 		return err
 	}
-	return run(ctx, apis, target, req, progress, log)
+	return run(ctx, apis, target, req, reporting(progress))
+}
+
+func reporting(progress edge.Progress) edge.Progress {
+	if progress == nil {
+		return edge.DiscardProgress()
+	}
+	return progress
 }
 
 func specFor(ns Namespace, class string) (spec, error) {
@@ -372,40 +378,28 @@ func specFor(ns Namespace, class string) (spec, error) {
 	}
 }
 
-func run(ctx context.Context, apis APIs, target spec, req Request, progress, log func(string)) error {
-	var reporting sync.Mutex
-	say := func(f func(string), msg string) {
-		if f == nil {
-			return
-		}
-		reporting.Lock()
-		defer reporting.Unlock()
-		f(msg)
-	}
-	progressf := func(msg string) { say(progress, msg) }
-	logf := func(msg string) { say(log, msg) }
-
+func run(ctx context.Context, apis APIs, target spec, req Request, progress edge.Progress) error {
 	requested := req.Features
 	levels, err := featureLevels(requested)
 	if err != nil {
 		return err
 	}
 
-	progressf("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
+	progress.Say("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
 	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.class, time.Now())
 	if err != nil {
 		return err
 	}
 	if secret.retired {
-		logf("retired the origin secret a rotation replaced; a release not re-deployed since no longer answers its front")
+		progress.Warn(fmt.Sprintf("Retired the %s origin secret a rotation replaced: a release not re-deployed since no longer answers its front", target.class))
 	}
 	switch {
 	case secret.rotated:
-		logf(fmt.Sprintf("rotated the origin secret: it was older than %d days; re-deploy each project in the class so its releases accept the new one, and the old one is retired by the next bootstrap after %d days", int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24)))
+		progress.Warn(fmt.Sprintf("Rotated the %s origin secret, which was older than %d days: re-deploy each project in the class so its releases accept the new one; the first bootstrap after %d days retires the old one", target.class, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24)))
 	case secret.minted:
-		logf("minted a new origin secret")
+		progress.Say(fmt.Sprintf("Minted a new %s origin secret", target.class))
 	default:
-		logf("reused the existing origin secret")
+		progress.Debug(fmt.Sprintf("Reused the existing %s origin secret", target.class))
 	}
 
 	alongside := FeatureSet{}
@@ -413,9 +407,9 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		alongside[name] = true
 	}
 
-	progressf(target.stackStep)
+	progress.Say(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	review := AdmitReplacements(target.ns, req.AcceptReplacements, logf)
+	review := AdmitReplacements(target.ns, req.AcceptReplacements, progress)
 	coreBody := target.core(coreVarsKey(alongside, req.VarsKey))
 	coreTags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
@@ -425,10 +419,10 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	if err != nil {
 		return err
 	}
-	if err := applyRuntimeLayers(ctx, apis, target, req, deployed.ArtifactBucket, progressf, logf); err != nil {
+	if err := applyRuntimeLayers(ctx, apis, target, req, deployed.ArtifactBucket, progress); err != nil {
 		return err
 	}
-	steps := stepDeps{ns: target.ns, class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
+	steps := stepDeps{ns: target.ns, class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progress}
 	dropped := Removing(req.Features, req.Remove)
 	if err := tearDownEdges(ctx, apis, steps, dropped); err != nil {
 		return err
@@ -437,23 +431,23 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		return err
 	}
 
-	progressf("Ensuring Pulumi passphrase (SSM SecureString)")
+	progress.Say("Ensuring the Pulumi passphrase (SSM SecureString)")
 	created, err := ensurePassphrase(ctx, apis.SSM, target.ns)
 	if err != nil {
 		return err
 	}
 	if created {
-		logf("generated a new Pulumi passphrase")
+		progress.Say("Generated a new Pulumi passphrase")
 	} else {
-		logf("reused the existing Pulumi passphrase")
+		progress.Debug("Reused the existing Pulumi passphrase")
 	}
 
-	if err := dropFeatures(ctx, apis.CFN, steps, req.Remove, progressf, logf); err != nil {
+	if err := dropFeatures(ctx, apis.CFN, steps, req.Remove); err != nil {
 		return err
 	}
 
 	for _, level := range levels {
-		progressf(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(target.ns, level, target.class), ", ")))
+		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(target.ns, level, target.class), ", ")))
 		produced := make([]map[string]string, len(level))
 		group, gctx := errgroup.WithContext(ctx)
 		for i, name := range level {
@@ -478,7 +472,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 				if produced[i], err = cfn.StackOutputs(gctx, apis.CFN, stackName); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
-				logf(fmt.Sprintf("applied %s", stackName))
+				progress.Say("Applied stack " + stackName)
 				return nil
 			})
 		}
@@ -505,11 +499,11 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	return nil
 }
 
-func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder []string, progressf, logf func(string)) error {
+func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder []string) error {
 	if len(dropOrder) == 0 {
 		return nil
 	}
-	progressf(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(steps.ns, dropOrder, steps.class), ", ")))
+	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(steps.ns, dropOrder, steps.class), ", ")))
 	for _, name := range dropOrder {
 		f, _ := featureNamed(name)
 		if f.drop == nil {
@@ -519,7 +513,7 @@ func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return deleteFeatureStacks(ctx, stacks, steps.ns, steps.class, dropOrder, logf)
+	return deleteFeatureStacks(ctx, stacks, steps.ns, steps.class, dropOrder, steps.progress)
 }
 
 func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
@@ -568,7 +562,7 @@ func tearDownEdges(ctx context.Context, apis APIs, d stepDeps, dropped []string)
 }
 
 func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
-	d.progress(fmt.Sprintf("Tearing the %s edge down", front.Kind()))
+	d.progress.Say(fmt.Sprintf("Tearing the %s edge down", front.Kind()))
 	if err := front.Teardown(ctx, edge.Class(d.class)); err != nil {
 		return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 	}
@@ -576,7 +570,7 @@ func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 }
 
 func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
-	d.progress(fmt.Sprintf("Bootstrapping the %s edge", front.Kind()))
+	d.progress.Say(fmt.Sprintf("Bootstrapping the %s edge", front.Kind()))
 	out, err := front.Bootstrap(ctx, edge.Class(d.class))
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", front.Kind(), err)
@@ -584,17 +578,17 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	for _, offer := range out.Offers {
 		switch offer.Kind {
 		case edge.OfferCacheStore:
-			d.progress("Adopting the edge cache store (SSM SecureString)")
+			d.progress.Say(fmt.Sprintf("Adopting the %s edge's cache store (SSM SecureString)", front.Kind()))
 			if err := adoptCacheStore(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferDeploymentsStore:
-			d.progress("Adopting the deployments-store worker (SSM SecureString)")
+			d.progress.Say(fmt.Sprintf("Adopting the %s edge's deployments-store worker (SSM SecureString)", front.Kind()))
 			if err := adoptDeploymentsStore(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferISRWriter:
-			d.progress("Adopting the ISR writer worker (SSM SecureString)")
+			d.progress.Say(fmt.Sprintf("Adopting the %s edge's ISR writer worker (SSM SecureString)", front.Kind()))
 			if err := adoptISRWriter(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
@@ -602,13 +596,13 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 				return err
 			}
 		default:
-			d.log(fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
+			d.progress.Warn(fmt.Sprintf("Ignoring the %s edge's %q offer: nothing in this bootstrap adopts it", front.Kind(), offer.Kind))
 		}
 	}
 	if len(out.Values) == 0 {
 		return nil
 	}
-	d.progress("Storing edge bootstrap outputs (SSM SecureString)")
+	d.progress.Say(fmt.Sprintf("Storing the %s edge's %d bootstrap outputs (SSM SecureString)", front.Kind(), len(out.Values)))
 	return writeEdgeValues(ctx, d.ssm, d.ns, d.class, front.Kind(), out.Values)
 }
 

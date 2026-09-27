@@ -552,8 +552,8 @@ func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, wor
 		if !priorityTaken(err) {
 			return provider.StackResult{}, err
 		}
-		if progress != nil {
-			progress.Detail(fmt.Sprintf("Another deploy claimed listener rule priority %d while %s was placing its own (attempt %d of %d); picking another", work.priority, work.app, attempt+1, rulePlacements))
+		if progress != nil && attempt+1 < rulePlacements {
+			progress.Say(fmt.Sprintf("Placing %s's listener rule again: another deploy claimed priority %d first (attempt %d of %d)", work.app, work.priority, attempt+2, rulePlacements))
 		}
 	}
 	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)

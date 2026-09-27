@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -213,8 +214,8 @@ func TestIssuerAwaitValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("AwaitValidation: %v", err)
 		}
-		if len(said) != 1 || !strings.Contains(said[0], "Waiting") {
-			t.Errorf("said = %v, want the wait announced once, so the run does not look stuck", said)
+		if len(said) != 1 || !strings.HasPrefix(said[0], "Waiting") || !strings.Contains(said[0], wildcard) {
+			t.Errorf("said = %v, want the wait announced once, naming the hostname, so the run does not look stuck", said)
 		}
 		if len(cert.Validation) != 1 || cert.Validation[0] != validationRecord {
 			t.Fatalf("validation = %+v, want the trailing dots trimmed off %+v", cert.Validation, validationRecord)
@@ -258,8 +259,11 @@ func TestIssuerAwaitIssued(t *testing.T) {
 		if !got.Issued() {
 			t.Fatalf("cert = %+v, want it issued", got)
 		}
-		if len(said) != 2 || !strings.Contains(said[0], "Waiting") {
-			t.Errorf("said = %v, want the wait announced before the issue, so the run does not look stuck", said)
+		if len(said) != 2 || !strings.HasPrefix(said[0], "Waiting") || !strings.Contains(said[0], wildcard) {
+			t.Errorf("said = %v, want the wait announced before the issue, naming the hostname, so the run does not look stuck", said)
+		}
+		if want := "ACM issued certificate " + testARN + " for " + wildcard; said[1] != want {
+			t.Errorf("said = %v, want the issue said as %q", said, want)
 		}
 	})
 
@@ -314,7 +318,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {}); err != nil {
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, edge.DiscardProgress()); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if len(api.deleted) != 1 || api.deleted[0] != testARN {
@@ -326,14 +330,14 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		var said []string
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN, Adopted: true}, func(m string) { said = append(said, m) }); err != nil {
+		var progress fake.Progress
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN, Adopted: true}, &progress); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if len(api.deleted) != 0 {
 			t.Errorf("deleted = %v, want a certificate ocel adopted left alone", api.deleted)
 		}
-		if len(said) != 1 || !strings.Contains(said[0], testARN) {
+		if said := progress.Lines(); len(said) != 1 || !strings.HasPrefix(said[0], "INFO Leaving certificate "+testARN+" in place") {
 			t.Errorf("said = %v, want the certificate left in place named", said)
 		}
 	})
@@ -342,7 +346,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{refusals: 2}
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {}); err != nil {
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, edge.DiscardProgress()); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if api.deletes != 3 {
@@ -357,15 +361,15 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: &acmtypes.ResourceInUseException{}}
-		var said []string
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) }); err != nil {
+		var progress fake.Progress
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, &progress); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if api.deletes < 2 {
 			t.Errorf("deletes = %d, want the refusal retried", api.deletes)
 		}
-		if len(said) == 0 || !strings.Contains(said[len(said)-1], "in place") || !strings.Contains(said[len(said)-1], testARN) {
-			t.Errorf("said = %v, want the certificate left in place named", said)
+		if said := progress.Lines(); len(said) == 0 || !strings.HasPrefix(said[len(said)-1], "WARN Leaving certificate "+testARN+" in place") {
+			t.Errorf("said = %v, want a warning naming the certificate left in place", said)
 		}
 	})
 
@@ -373,23 +377,25 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{deleteErr: errors.New("AccessDeniedException")}
-		var said []string
-		err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, func(m string) { said = append(said, m) })
+		var progress fake.Progress
+		err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, &progress)
 		if err == nil {
 			t.Fatal("Discard err = nil, want the refusal reported so nothing forgets the certificate")
 		}
-		if len(said) != 1 || !strings.Contains(said[0], testARN) {
-			t.Errorf("said = %v, want the certificate left in place named", said)
+		if said := progress.Lines(); len(said) != 1 || !strings.HasPrefix(said[0], "WARN Leaving certificate "+testARN+" in place") {
+			t.Errorf("said = %v, want a warning naming the certificate left in place", said)
 		}
 	})
 
 	t.Run("an edge that needs no certificate has nothing to delete", func(t *testing.T) {
 		t.Parallel()
 
-		if err := (ACM{}).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {
-			t.Error("said something with no ACM client in hand")
-		}); err != nil {
+		var progress fake.Progress
+		if err := (ACM{}).Discard(t.Context(), Certificate{ARN: testARN}, &progress); err != nil {
 			t.Fatalf("Discard: %v", err)
+		}
+		if said := progress.Lines(); len(said) != 0 {
+			t.Errorf("said %v with no ACM client in hand", said)
 		}
 	})
 }

@@ -222,7 +222,7 @@ func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackDeployed(t *testing.T) 
 	if fn.Bytecode == nil || fn.Bytecode.Prefix != spec.App.Bytecode.Prefix {
 		t.Errorf("bytecode = %+v, want the cache prefix the spec passed", fn.Bytecode)
 	}
-	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, nil); err != nil {
+	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, edge.DiscardProgress()); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
 	}
 }

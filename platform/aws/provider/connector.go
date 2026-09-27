@@ -65,7 +65,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		Binary:  install.Binary,
 		Version: install.Version,
 		Config:  install.Config,
-	}, provider.WrittenByVersion(install.Version), saying(progress))
+	}, provider.WrittenByVersion(install.Version), progress)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
@@ -73,7 +73,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 }
 
 func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
-	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, saying(progress))
+	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, progress)
 }
 
 func hostOf(rawURL string) string {

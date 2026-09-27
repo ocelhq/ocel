@@ -24,7 +24,7 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 			for _, kind := range everyEdgeKind {
 				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), &fakeEdge{kind: kind})
-				if err := Run(context.Background(), apis, defaultNamespace, class, Request{}, nil, nil); err != nil {
+				if err := Run(context.Background(), apis, defaultNamespace, class, Request{}, nil); err != nil {
 					t.Fatalf("bootstrapping behind the %s edge: %v", kind, err)
 				}
 				if got := cfn.TemplateDigest(stacks.template(core)); got != want {
@@ -81,7 +81,7 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 	store := preloadedStore()
 
 	cloudflare := apisFronting(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudflare})
-	if err := Run(ctx, cloudflare, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil); err != nil {
+	if err := Run(ctx, cloudflare, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudflare edge: %v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 	restamps := stacks.restamps
 
 	cloudfront := apisFronting(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront})
-	if err := Run(ctx, cloudfront, defaultNamespace, ClassProduction, Request{Features: []string{FeatureCloudFrontEdge}}, nil, nil); err != nil {
+	if err := Run(ctx, cloudfront, defaultNamespace, ClassProduction, Request{Features: []string{FeatureCloudFrontEdge}}, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudfront edge: %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestAnEdgeFeatureInstallsItsOwnEdgeWhateverFrontsTheRun(t *testing.T) {
 	apis := apisAcross(stacks, ssmc, iamc, preloadedStore(), &fakeEdge{kind: KindCloudFront}, registry)
 
 	if err := Run(ctx, apis, defaultNamespace, ClassProduction,
-		Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}, nil, nil); err != nil {
+		Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}, nil); err != nil {
 		t.Fatalf("bootstrapping the cloudflare edge feature behind the cloudfront front: %v", err)
 	}
 
@@ -143,7 +143,7 @@ func TestTheFrontThisRunPicksIsBootstrappedOnce(t *testing.T) {
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 
 	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction,
-		Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil); err != nil {
+		Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudflare edge: %v", err)
 	}
 	if front.bootstraps != 1 {
@@ -159,7 +159,7 @@ func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *tes
 	install := Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}
 	apis := apisAcross(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront}, registry)
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, install, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, install, nil); err != nil {
 		t.Fatalf("installing the cloudflare edge behind the cloudfront front: %v", err)
 	}
 
@@ -178,7 +178,7 @@ func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *tes
 	}
 
 	drop := Request{Features: []string{FeatureISR, FeatureCloudFrontEdge}, Remove: []string{FeatureCloudflareEdge}}
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, drop, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, drop, nil); err != nil {
 		t.Fatalf("removing the cloudflare edge feature behind the cloudfront front: %v", err)
 	}
 	if front.teardowns != 1 {
@@ -211,7 +211,7 @@ func TestEachEdgeKeepsItsOwnParameters(t *testing.T) {
 			},
 		}}
 		apis := apisFronting(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore(), front)
-		if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{}, nil, nil); err != nil {
+		if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{}, nil); err != nil {
 			t.Fatalf("bootstrapping behind the %s edge: %v", kind, err)
 		}
 	}

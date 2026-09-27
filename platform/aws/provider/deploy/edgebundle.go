@@ -86,7 +86,7 @@ func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBu
 }
 
 func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, progress edge.Progress) error {
-	say(progress, "Uploading "+app+"'s edge bundle")
+	say(progress, "Uploading "+app+"'s edge bundle to bucket "+cfg.CacheStoreBucket)
 	if err := tracedPut(ctx, cfg.CacheStoreObjects, cfg.CacheStoreBucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
 		return err
 	}

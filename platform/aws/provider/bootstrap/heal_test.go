@@ -4,12 +4,14 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 
 	"context"
+	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func change(action cfntypes.ChangeAction, logicalID, resourceType string, replacement cfntypes.Replacement) cfntypes.ResourceChange {
@@ -198,26 +200,10 @@ func TestHealable(t *testing.T) {
 	}
 }
 
-type healLog struct {
-	mu    sync.Mutex
-	lines []string
-}
+type healLog struct{ fake.Progress }
 
-func (l *healLog) write(line string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.lines = append(l.lines, line)
-}
-
-func (l *healLog) says(substr string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for _, line := range l.lines {
-		if strings.Contains(line, substr) {
-			return true
-		}
-	}
-	return false
+func (l *healLog) says(line string) bool {
+	return slices.ContainsFunc(l.Lines(), func(said string) bool { return strings.Contains(said, line) })
 }
 
 func installedBootstrap(t *testing.T) (*fakeCFN, APIs) {
@@ -225,7 +211,7 @@ func installedBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	return stacks, apis
@@ -236,7 +222,7 @@ func TestChangeSets(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		before := stacks.updates
 
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if stacks.updates != before {
@@ -253,7 +239,7 @@ func TestChangeSets(t *testing.T) {
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
-		err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil)
+		err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil)
 		if err == nil {
 			t.Fatal("a bootstrap that would replace a live queue was allowed through")
 		}
@@ -273,7 +259,7 @@ func TestChangeSets(t *testing.T) {
 
 		req := everything()
 		req.AcceptReplacements = true
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if stacks.template(stack) == behindTemplate {
@@ -291,7 +277,7 @@ func TestHeal(t *testing.T) {
 		stacks.fallBehind(stack)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -301,8 +287,8 @@ func TestHeal(t *testing.T) {
 		if stacks.template(stack) == behindTemplate {
 			t.Error("the stale template is still what the account has deployed")
 		}
-		if !log.says("refreshed " + stack) {
-			t.Errorf("heal said %v, want it to name what it refreshed", log.lines)
+		if !log.says("INFO Refreshed stack " + stack) {
+			t.Errorf("heal said %v, want it to name what it refreshed", log.Lines())
 		}
 	})
 
@@ -311,7 +297,7 @@ func TestHeal(t *testing.T) {
 		stacks.fallBehind(coreStackName)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -326,7 +312,7 @@ func TestHeal(t *testing.T) {
 		stacks.fallBehind(stack)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, log.write)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -342,15 +328,15 @@ func TestHeal(t *testing.T) {
 		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
 		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a refused change was applied anyway")
 		}
-		if !log.says("RevalidateQueue") {
-			t.Errorf("heal said %v, want it to name what stopped it", log.lines)
+		if !log.says("WARN Could not refresh stack "+stack) || !log.says("RevalidateQueue") {
+			t.Errorf("heal said %v, want it to name what stopped it", log.Lines())
 		}
 		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
@@ -365,15 +351,15 @@ func TestHeal(t *testing.T) {
 		stacks.busy(stack, cfn.ChangeSetAttempts*2)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
 		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a stack another run was still writing was written over")
 		}
-		if !log.says("still being written") {
-			t.Errorf("heal said %v, want it to say the stack was still being written", log.lines)
+		if !log.says("WARN Stack " + stack + " is still being written by another run") {
+			t.Errorf("heal said %v, want it to say the stack was still being written", log.Lines())
 		}
 	})
 
@@ -385,15 +371,15 @@ func TestHeal(t *testing.T) {
 		stacks.busy(stack, 3)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
 		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a stack that had just been written by another run was written over")
 		}
-		if !log.says("still behind") {
-			t.Errorf("heal said %v, want it to say the stack went idle behind the template this build renders", log.lines)
+		if !log.says("WARN Stack " + stack + " was written by another run and is still behind") {
+			t.Errorf("heal said %v, want it to say the stack went idle behind the template this build renders", log.Lines())
 		}
 	})
 }

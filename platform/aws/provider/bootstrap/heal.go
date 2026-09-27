@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var healPrincipals = map[string]bool{
@@ -77,7 +78,8 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 	return nil
 }
 
-func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeReview {
+func AdmitReplacements(ns Namespace, accept bool, progress edge.Progress) cfn.ChangeReview {
+	progress = reporting(progress)
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
 		for _, c := range changes {
@@ -89,9 +91,7 @@ func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeRe
 		if len(replaced) == 0 {
 			return nil
 		}
-		if log != nil {
-			log(fmt.Sprintf("%s replaces rather than updates: %s", stackName, strings.Join(replaced, ", ")))
-		}
+		progress.Warn(fmt.Sprintf("Stack %s would replace %s rather than update it in place", stackName, strings.Join(replaced, ", ")))
 		if isCoreStack(ns, stackName) {
 			return fmt.Errorf(
 				"writing %s would replace %s rather than update it in place, and every Pulumi state this account stores lives in it: every app deployed from this bootstrap would be orphaned.\nNo flag writes it anyway. Upgrade to a CLI whose core is an in-place update of this one",
@@ -128,18 +128,15 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRequest, log func(string)) (bool, error) {
+func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRequest, progress edge.Progress) (bool, error) {
 	target, err := specFor(ns, class)
 	if err != nil {
 		return false, err
 	}
-	return heal(ctx, apis, target, req, log)
+	return heal(ctx, apis, target, req, reporting(progress))
 }
 
-func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func(string)) (bool, error) {
-	if log == nil {
-		log = func(string) {}
-	}
+func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress edge.Progress) (bool, error) {
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
 	if err != nil {
 		return false, err
@@ -166,12 +163,12 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 			if i < 0 {
 				continue
 			}
-			done, err := healStack(ctx, apis, target.ns, target.class, stale[i], deployed, refs, req.Writer, log)
+			done, err := healStack(ctx, apis, target.ns, target.class, stale[i], deployed, refs, req.Writer, progress)
 			if err != nil {
 				if RefusedWrite(err) {
 					return healed, ErrHealNotPermitted
 				}
-				log(fmt.Sprintf("could not refresh %s, and this deploy runs against it unchanged: %v", stale[i].Name, err))
+				progress.Warn(fmt.Sprintf("Could not refresh stack %s, so this deploy runs against it unchanged: %v", stale[i].Name, err))
 				continue
 			}
 			healed = healed || done
@@ -180,7 +177,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, log func(string)) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress edge.Progress) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
@@ -191,7 +188,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 		return false, err
 	}
 	if stackBusy(current.StackStatus) {
-		return false, waitOutRun(ctx, apis.CFN, stale, log)
+		return false, waitOutRun(ctx, apis.CFN, stale, progress)
 	}
 
 	stack, err := f.staged(ctx, apis.Store, featureInputs{
@@ -210,17 +207,17 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 	if err := cfn.Update(ctx, apis.CFN, ns.ChangeSetNameFor, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
 		return false, err
 	}
-	log(fmt.Sprintf("refreshed %s", stale.Name))
+	progress.Say("Refreshed stack " + stale.Name)
 	return true, nil
 }
 
-func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, log func(string)) error {
-	idle, err := awaitStackIdle(ctx, stacks, stale.Name, log)
+func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress edge.Progress) error {
+	idle, err := awaitStackIdle(ctx, stacks, stale.Name, progress)
 	if err != nil {
 		return err
 	}
 	if !idle {
-		log(fmt.Sprintf("%s is still being written by another run, and this deploy runs against it unchanged", stale.Name))
+		progress.Warn(fmt.Sprintf("Stack %s is still being written by another run, so this deploy runs against it unchanged", stale.Name))
 		return nil
 	}
 	stack, err := cfn.DescribeStack(ctx, stacks, stale.Name)
@@ -230,13 +227,13 @@ func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, log func(
 	if stack != nil && readStamp(stack.Tags).Digest == stale.Intended {
 		return nil
 	}
-	log(fmt.Sprintf("%s was written by another run and is still behind the template this build renders, so this deploy leaves it to whoever is writing it", stale.Name))
+	progress.Warn(fmt.Sprintf("Stack %s was written by another run and is still behind the template this build renders, so this deploy leaves it to whoever is writing it", stale.Name))
 	return nil
 }
 
 const idleAttempts = 6
 
-func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, log func(string)) (bool, error) {
+func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, progress edge.Progress) (bool, error) {
 	for attempt := 0; ; attempt++ {
 		stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 		if err != nil {
@@ -248,7 +245,7 @@ func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, log f
 		if attempt+1 >= idleAttempts {
 			return false, nil
 		}
-		log(fmt.Sprintf("%s is %s under another run; look %d of %d before this deploy stops waiting on it", stackName, stack.StackStatus, attempt+1, idleAttempts))
+		progress.Say(fmt.Sprintf("Stack %s is %s under another run; look %d of %d before this deploy stops waiting on it", stackName, stack.StackStatus, attempt+1, idleAttempts))
 		if err := cfn.WaitBefore(ctx, cfn.ChangeSetDelay(attempt)); err != nil {
 			return false, err
 		}

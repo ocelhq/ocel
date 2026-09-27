@@ -14,14 +14,14 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsFeatureIsRequested(t 
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore())
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{VarsKey: broughtKeyARN}, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{VarsKey: broughtKeyARN}, nil); err != nil {
 		t.Fatalf("Run without the feature: %v", err)
 	}
 	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, ClassProduction, ""); got != want {
 		t.Error("a run that never asked for the vars-key feature wrote the brought key into the core boundary")
 	}
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}, nil); err != nil {
 		t.Fatalf("Run with the feature: %v", err)
 	}
 	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, ClassProduction, broughtKeyARN); got != want {

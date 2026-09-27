@@ -270,7 +270,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
-	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Class), b.request(req), say(progress), detail(progress))
+	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Class), b.request(req), progress)
 	if bootstrap.RefusedWrite(err) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
@@ -281,7 +281,7 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Class), bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
-	}, detail(progress))
+	}, progress)
 	if errors.Is(err, bootstrap.ErrHealNotPermitted) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
@@ -289,7 +289,6 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 }
 
 func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
-	sayf, logf := say(progress), detail(progress)
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return err
@@ -299,7 +298,9 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 		return err
 	}
 	for _, front := range fronts {
-		sayf(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
+		if progress != nil {
+			progress.Say(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
+		}
 		if err := front.Teardown(ctx, class); err != nil {
 			return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 		}
@@ -309,25 +310,11 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 		SSM:     b.SSM,
 		IAM:     b.IAM,
 		Buckets: b.Buckets,
-	}, b.Namespace, string(class), sayf, logf)
+	}, b.Namespace, string(class), progress)
 }
 
 func (b Bootstrap) apis() bootstrap.APIs {
 	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Store: b.Store, Edge: b.Edge, Edges: b.Edges}
-}
-
-func say(progress edge.Progress) func(string) {
-	if progress == nil {
-		return func(string) {}
-	}
-	return progress.Say
-}
-
-func detail(progress edge.Progress) func(string) {
-	if progress == nil {
-		return func(string) {}
-	}
-	return progress.Detail
 }
 
 var _ provider.Bootstrap = Bootstrap{}

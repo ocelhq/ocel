@@ -105,7 +105,7 @@ func TestSSMDescriptionsFitTheirLimits(t *testing.T) {
 			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-			if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, class, everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, class, everything(), nil); err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			if len(ssmc.descriptions) == 0 {

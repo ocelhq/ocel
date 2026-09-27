@@ -4,13 +4,19 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
@@ -70,5 +76,50 @@ func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t 
 	}
 	if _, err := p.Runtime().Arch(context.Background(), "web", "riscv64"); err == nil {
 		t.Error("ContainerArch(riscv64) named an architecture, and no Fargate task runs on it")
+	}
+}
+
+func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
+		return bootstrap.ClassParams{
+			EdgeCredentials: bootstrap.EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: time.Now().Add(-2 * bootstrap.EdgeKeyMaxAge)},
+			OriginSecret:    bootstrap.OriginSecret{Current: "s1", CreatedAt: time.Now().Add(-2 * bootstrap.OriginSecretMaxAge)},
+		}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var progress fake.Progress
+	pre := provider.DeployPreflight{
+		Deploy:   provider.DeploySpec{Class: edge.ClassProduction},
+		Edge:     cloudflare.Kind,
+		Progress: &progress,
+	}
+
+	if err := p.nagStaleEdgeKey(context.Background(), pre); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.nagStaleOriginSecret(context.Background(), pre); err != nil {
+		t.Fatal(err)
+	}
+	lines := progress.Lines()
+	if len(lines) != 2 ||
+		!strings.HasPrefix(lines[0], "WARN The production edge signs into this account with access key AKOLD") ||
+		!strings.HasPrefix(lines[1], "WARN The production origin secret") {
+		t.Errorf("preflight said %q, want both ageing credentials warned about, each naming its class", lines)
+	}
+}
+
+func TestACertificatePinTheEdgeIgnoresIsAWarning(t *testing.T) {
+	const host = "shop.app.com"
+	p := NewProvider(Options{Certificates: map[string]string{host: "arn:aws:acm:us-east-1:111122223333:certificate/pinned"}}, nil, aws.Config{}, defaultNamespace)
+	var progress fake.Progress
+
+	if _, err := p.certificatesFor(cloudflare.Kind, host, &progress); err != nil {
+		t.Fatalf("certificatesFor() = %v", err)
+	}
+	lines := progress.Lines()
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "WARN The certificate pinned for "+host+" is ignored") {
+		t.Errorf("certificatesFor() said %q, want the ignored pin warned about", lines)
 	}
 }

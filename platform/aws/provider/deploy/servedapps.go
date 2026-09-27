@@ -72,7 +72,6 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress edge.Progr
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
-	say := sayTo(progress)
 	warming := map[*release][]warmTarget{}
 	for _, physical := range targets {
 		fn, known := r.served.byPhysicalName(physical)
@@ -83,7 +82,7 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress edge.Progr
 			warmTarget{App: fn.App, LogicalName: fn.Logical, FunctionName: physical})
 	}
 	for from, batch := range warming {
-		for _, result := range (warmPass{invoker: from.cfg.Invoker, targets: batch, budget: warmPassDeadline, log: say}).run(ctx) {
+		for _, result := range (warmPass{invoker: from.cfg.Invoker, targets: batch, budget: warmPassDeadline, progress: progress}).run(ctx) {
 			r.served.warmed(result.Target.FunctionName, result.Reply)
 		}
 	}
@@ -94,9 +93,8 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 	if !bytecodeEmbedRequested() {
 		return nil
 	}
-	say := sayTo(progress)
 	if !bytecodeEmbedEnabled() {
-		say("ocel: " + bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1; not embedding")
+		progress.Warn(bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1, so no compile cache is embedded")
 		return nil
 	}
 	fn, known := r.served.byPhysicalName(physical)
@@ -105,7 +103,7 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 	}
 	from := fn.from
 	if missing := missingEmbedClients(from.cfg); missing != "" {
-		say("ocel: " + bytecodeEmbedEnv + "=1 but this deploy has no " + missing + "; not embedding")
+		progress.Warn(bytecodeEmbedEnv + "=1 but this deploy has no " + missing + ", so no compile cache is embedded")
 		return nil
 	}
 	code, err := from.artifactAt(artifact)
@@ -128,14 +126,7 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 		}},
 		budget:     embedPassDeadline,
 		updateWait: embedUpdateWait,
-		log:        say,
+		progress:   progress,
 	}.run(ctx)
 	return nil
-}
-
-func sayTo(progress edge.Progress) func(string) {
-	if progress == nil {
-		return func(string) {}
-	}
-	return progress.Detail
 }

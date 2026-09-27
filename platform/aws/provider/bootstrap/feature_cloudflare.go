@@ -201,11 +201,11 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 	if err != nil {
 		return err
 	}
-	d.progress(fmt.Sprintf("Deleting the access key of edge reader %s", names.user))
+	d.progress.Say(fmt.Sprintf("Deleting the access key of edge reader %s", names.user))
 	if err := deleteAccessKeys(ctx, d.iam, names.user); err != nil {
 		return err
 	}
-	d.progress("Deleting what the edge was reached through (SSM)")
+	d.progress.Say(fmt.Sprintf("Deleting the %d parameters the %s edge was reached through (SSM)", len(names.edgeParams()), KindCloudflare))
 	for _, param := range names.edgeParams() {
 		if err := deleteParam(ctx, d.ssm, param); err != nil {
 			return err
@@ -215,21 +215,21 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 }
 
 func mintEdgeCredentials(ctx context.Context, d stepDeps) error {
-	d.progress("Ensuring edge reader credentials (SSM SecureString)")
+	d.progress.Say("Ensuring the edge reader's credentials (SSM SecureString)")
 	outcome, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.ns, d.class, KindCloudflare, time.Now())
 	if err != nil {
 		return err
 	}
 	if outcome.retired != "" {
-		d.log(fmt.Sprintf("retired the superseded edge reader access key %s, idle since every worker moved off it", outcome.retired))
+		d.progress.Say(fmt.Sprintf("Retired the superseded edge reader access key %s, idle since every worker moved off it", outcome.retired))
 	}
 	switch {
 	case outcome.rotated:
-		d.log(fmt.Sprintf("rotated the edge reader access key: it was older than %d days; re-deploy each project so its worker signs with the new one, and the old key is retired by the next bootstrap once idle", int(EdgeKeyMaxAge.Hours()/24)))
+		d.progress.Warn(fmt.Sprintf("Rotated the edge reader access key, which was older than %d days: re-deploy each project so its worker signs with the new one; the next bootstrap retires the old key once it is idle", int(EdgeKeyMaxAge.Hours()/24)))
 	case outcome.minted:
-		d.log("minted a new edge reader access key")
+		d.progress.Say("Minted a new edge reader access key")
 	default:
-		d.log("reused the existing edge reader access key")
+		d.progress.Debug("Reused the existing edge reader access key")
 	}
 	return nil
 }

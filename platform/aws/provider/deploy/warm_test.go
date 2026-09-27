@@ -13,6 +13,7 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 type fakeInvoke struct {
@@ -53,19 +54,15 @@ func answering(body string) *fakeInvoke {
 	}}
 }
 
-func collectLog() (func(string), func() string) {
-	var mu sync.Mutex
-	var b strings.Builder
-	return func(line string) {
-			mu.Lock()
-			defer mu.Unlock()
-			b.WriteString(line)
-			b.WriteString("\n")
-		}, func() string {
-			mu.Lock()
-			defer mu.Unlock()
-			return b.String()
+func collectLog() (*fake.Progress, func() string) {
+	progress := &fake.Progress{}
+	return progress, func() string {
+		var b strings.Builder
+		for _, line := range progress.Lines() {
+			b.WriteString(line + "\n")
 		}
+		return b.String()
+	}
 }
 
 func warmTestTargets(n int) []warmTarget {
@@ -83,7 +80,7 @@ func warmTestTargets(n int) []warmTarget {
 func runWarm(t *testing.T, invoker InvokeAPI, targets []warmTarget, budget time.Duration) string {
 	t.Helper()
 	log, dump := collectLog()
-	warmPass{invoker: invoker, targets: targets, budget: budget, log: log}.run(context.Background())
+	warmPass{invoker: invoker, targets: targets, budget: budget, progress: log}.run(context.Background())
 	return dump()
 }
 
@@ -156,8 +153,8 @@ func TestWarmPass(t *testing.T) {
 			warmTestTargets(1), time.Minute)
 
 		for _, want := range []string{
-			"warming 1 bundle (", "web_bundle_a", "app=web", "47/51 entries", "61.0 MiB published",
-			"node24.3.1-arm64.tar.gz", "warmed 1/1 bundles",
+			"Warming 1 bundle, ", "web_bundle_a", "of app web", "47/51 entries", "61.0 MiB published",
+			"node24.3.1-arm64.tar.gz", "Warmed 1/1 bundles",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("warm log missing %q:\n%s", want, out)
@@ -168,7 +165,7 @@ func TestWarmPass(t *testing.T) {
 	t.Run("counts bundles in words", func(t *testing.T) {
 		out := runWarm(t, answering(`{"state":"published","uploaded":true}`), warmTestTargets(1), time.Minute)
 
-		if strings.Contains(out, "warming 1 bundles") {
+		if strings.Contains(out, "Warming 1 bundles") {
 			t.Errorf("warm log = %s, want a singular bundle", out)
 		}
 	})
@@ -193,7 +190,7 @@ func TestWarmPass(t *testing.T) {
 		if !strings.Contains(out, "entry counts unknown (node did not report back") {
 			t.Errorf("warm log = %s, want the counts reported as unknown with the reason", out)
 		}
-		if !strings.Contains(out, "warmed 1/1 bundles") {
+		if !strings.Contains(out, "Warmed 1/1 bundles") {
 			t.Errorf("warm log = %s, want a published cache counted as warmed", out)
 		}
 		if strings.Contains(out, "0/0 entries") {
@@ -205,7 +202,7 @@ func TestWarmPass(t *testing.T) {
 		out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":51,"uploaded":false}`),
 			warmTestTargets(1), time.Minute)
 
-		if !strings.Contains(out, "without uploading") || !strings.Contains(out, "warmed 0/1 bundles") {
+		if !strings.Contains(out, "without uploading") || !strings.Contains(out, "Warmed 0/1 bundles") {
 			t.Errorf("warm log = %s, want the contradiction reported as not warmed", out)
 		}
 	})
@@ -213,8 +210,32 @@ func TestWarmPass(t *testing.T) {
 	t.Run("reports already cached", func(t *testing.T) {
 		out := runWarm(t, answering(`{"state":"already-cached","entries":51,"loaded":51}`), warmTestTargets(1), time.Minute)
 
-		if !strings.Contains(out, "already cached") || !strings.Contains(out, "warmed 1/1 bundles") {
+		if !strings.Contains(out, "already cached") || !strings.Contains(out, "Warmed 1/1 bundles") {
 			t.Errorf("warm log = %s, want an already-cached success", out)
+		}
+	})
+
+	t.Run("a pass that warmed every bundle says so, keeping each bundle's outcome at debug", func(t *testing.T) {
+		out := runWarm(t, answering(`{"state":"already-cached","entries":51,"loaded":51}`), warmTestTargets(1), time.Minute)
+
+		for _, want := range []string{
+			"INFO Warming 1 bundle, 4 at a time\n",
+			"DEBUG web_bundle_a of app web: 51/51 entries, already cached in ",
+			"INFO Warmed 1/1 bundles in ",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("warm log missing %q:\n%s", want, out)
+			}
+		}
+	})
+
+	t.Run("a bundle that did not warm is a warning, and so is the pass that left it cold", func(t *testing.T) {
+		out := runWarm(t, answering(`{"state":"failed","error":"boom"}`), warmTestTargets(1), time.Minute)
+
+		for _, want := range []string{"WARN web_bundle_a of app web: ", "WARN Warmed 0/1 bundles in "} {
+			if !strings.Contains(out, want) {
+				t.Errorf("warm log missing %q:\n%s", want, out)
+			}
 		}
 	})
 
@@ -234,7 +255,7 @@ func TestWarmPass(t *testing.T) {
 				if !strings.Contains(out, tc.want) || !strings.Contains(out, "not warmed") {
 					t.Errorf("warm log = %s, want %q and a not-warmed line", out, tc.want)
 				}
-				if !strings.Contains(out, "warmed 0/1 bundles") {
+				if !strings.Contains(out, "Warmed 0/1 bundles") {
 					t.Errorf("warm log = %s, want no bundle counted warm", out)
 				}
 			})
@@ -287,7 +308,7 @@ func TestWarmPass(t *testing.T) {
 				if !strings.Contains(out, tc.want) {
 					t.Errorf("warm log = %s, want %q", out, tc.want)
 				}
-				if !strings.Contains(out, "warmed 0/1 bundles") {
+				if !strings.Contains(out, "Warmed 0/1 bundles") {
 					t.Errorf("warm log = %s, want the pass to complete reporting nothing warmed", out)
 				}
 			})
@@ -318,7 +339,7 @@ func TestWarmPass(t *testing.T) {
 
 		out := runWarm(t, invoker, warmTestTargets(8), 20*time.Millisecond)
 
-		if !strings.Contains(out, "warmed 0/8 bundles") {
+		if !strings.Contains(out, "Warmed 0/8 bundles") {
 			t.Errorf("warm log = %s, want nothing warmed", out)
 		}
 		for _, target := range warmTestTargets(8)[warmConcurrency:] {
@@ -366,7 +387,7 @@ func TestWarmPass(t *testing.T) {
 
 		out := runWarm(t, answering(framed), warmTestTargets(1), time.Minute)
 
-		if !strings.Contains(out, "9/9 entries") || !strings.Contains(out, "warmed 1/1 bundles") {
+		if !strings.Contains(out, "9/9 entries") || !strings.Contains(out, "Warmed 1/1 bundles") {
 			t.Errorf("warm log = %s, want a prelude-framed answer read as a published cache", out)
 		}
 	})

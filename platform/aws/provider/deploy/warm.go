@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const warmPayload = `{"ocel":{"warm":1}}`
@@ -51,17 +52,17 @@ func warmTargets(manifest *contractv1.Manifest, bytecode map[string]*bytecodeCon
 }
 
 type warmPass struct {
-	invoker InvokeAPI
-	targets []warmTarget
-	budget  time.Duration
-	log     func(string)
+	invoker  InvokeAPI
+	targets  []warmTarget
+	budget   time.Duration
+	progress edge.Progress
 }
 
 func (p warmPass) run(ctx context.Context) []warmResult {
 	if len(p.targets) == 0 || p.invoker == nil {
 		return nil
 	}
-	p.log(fmt.Sprintf("ocel: warming %s (%d at a time)", plural(len(p.targets), "bundle", "bundles"), warmConcurrency))
+	p.progress.Say(fmt.Sprintf("Warming %s, %d at a time", plural(len(p.targets), "bundle", "bundles"), warmConcurrency))
 
 	ctx, cancel := context.WithTimeout(ctx, p.budget)
 	defer cancel()
@@ -89,7 +90,7 @@ func (p warmPass) run(ctx context.Context) []warmResult {
 			if ok {
 				warmed++
 			}
-			p.log(fmt.Sprintf("  %s app=%s  %s  %.1fs", target.LogicalName, target.App, outcome, time.Since(at).Seconds()))
+			bundleOutcome(p.progress, ok)(fmt.Sprintf("%s of app %s: %s in %.1fs", target.LogicalName, target.App, outcome, time.Since(at).Seconds()))
 			return nil
 		})
 	}
@@ -98,18 +99,32 @@ func (p warmPass) run(ctx context.Context) []warmResult {
 	var results []warmResult
 	for i, target := range p.targets {
 		if skipped[i] {
-			p.log(fmt.Sprintf("  %s app=%s  the warm pass ran out of time; not warmed", target.LogicalName, target.App))
+			p.progress.Warn(fmt.Sprintf("%s of app %s: the warm pass ran out of time; not warmed", target.LogicalName, target.App))
 			continue
 		}
 		results = append(results, warmResult{Target: target, Reply: replies[i]})
 	}
-	p.log(fmt.Sprintf("ocel: warmed %d/%d bundles in %.0fs", warmed, len(p.targets), time.Since(start).Seconds()))
+	passOutcome(p.progress, warmed, len(p.targets))(fmt.Sprintf("Warmed %d/%d bundles in %.0fs", warmed, len(p.targets), time.Since(start).Seconds()))
 	return results
 }
 
 type warmResult struct {
 	Target warmTarget
 	Reply  warmReply
+}
+
+func bundleOutcome(progress edge.Progress, ok bool) func(string) {
+	if ok {
+		return progress.Debug
+	}
+	return progress.Warn
+}
+
+func passOutcome(progress edge.Progress, done, of int) func(string) {
+	if done == of {
+		return progress.Say
+	}
+	return progress.Warn
 }
 
 func plural(n int, one, many string) string {

@@ -3,7 +3,9 @@ package deploy
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
@@ -63,9 +65,14 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 		return errors.New("creating ELBv2 Listener Rule: PriorityInUse: Priority '" + strconv.Itoa(rulePriority(containerPhysical, nil)) + "' is currently in use")
 	}
 	stacks := stacksWith(cfg, engine)
+	var progress fake.Progress
 
-	if _, err := stacks.Provision(context.Background(), spec, edge.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(context.Background(), spec, &progress); err != nil {
 		t.Fatalf("Provision() = %v, want the rule placed again at the next free priority", err)
+	}
+	claimed := "INFO Placing web's listener rule again: another deploy claimed priority " + strconv.Itoa(rulePriority(containerPhysical, nil)) + " first (attempt 2 of "
+	if !slices.ContainsFunc(progress.Lines(), func(line string) bool { return strings.HasPrefix(line, claimed) }) {
+		t.Errorf("Provision() said %q, want the retry said as a sentence naming the app and the claimed priority", progress.Lines())
 	}
 	if attempts != 2 {
 		t.Errorf("the app stack ran %d times, want 2: once into the claimed priority and once more past it", attempts)

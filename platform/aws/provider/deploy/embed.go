@@ -24,6 +24,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const embedCacheCeiling = 32 << 20
@@ -84,14 +85,14 @@ type embedPass struct {
 	targets    []embedTarget
 	budget     time.Duration
 	updateWait time.Duration
-	log        func(string)
+	progress   edge.Progress
 }
 
 func (p embedPass) run(ctx context.Context) {
 	if len(p.targets) == 0 || p.objects == nil || p.code == nil {
 		return
 	}
-	p.log(fmt.Sprintf("ocel: embedding compile caches into %s (%d at a time)", plural(len(p.targets), "bundle", "bundles"), embedConcurrency))
+	p.progress.Say(fmt.Sprintf("Embedding compile caches into %s, %d at a time", plural(len(p.targets), "bundle", "bundles"), embedConcurrency))
 
 	ctx, cancel := context.WithTimeout(ctx, p.budget)
 	defer cancel()
@@ -117,7 +118,7 @@ func (p embedPass) run(ctx context.Context) {
 			if ok {
 				embedded++
 			}
-			p.log(fmt.Sprintf("  %s app=%s  %s  %.1fs", target.LogicalName, target.App, outcome, time.Since(at).Seconds()))
+			bundleOutcome(p.progress, ok)(fmt.Sprintf("%s of app %s: %s in %.1fs", target.LogicalName, target.App, outcome, time.Since(at).Seconds()))
 			return nil
 		})
 	}
@@ -125,10 +126,10 @@ func (p embedPass) run(ctx context.Context) {
 
 	for i, target := range p.targets {
 		if skipped[i] {
-			p.log(fmt.Sprintf("  %s app=%s  the embed pass ran out of time; not embedded", target.LogicalName, target.App))
+			p.progress.Warn(fmt.Sprintf("%s of app %s: the embed pass ran out of time; not embedded", target.LogicalName, target.App))
 		}
 	}
-	p.log(fmt.Sprintf("ocel: embedded %d/%d compile caches in %.0fs", embedded, len(p.targets), time.Since(start).Seconds()))
+	passOutcome(p.progress, embedded, len(p.targets))(fmt.Sprintf("Embedded %d/%d compile caches in %.0fs", embedded, len(p.targets), time.Since(start).Seconds()))
 }
 
 func (p embedPass) embedOne(ctx context.Context, target embedTarget) (string, bool) {
