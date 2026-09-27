@@ -70,7 +70,7 @@ func LoadFakeRegistrations() (FakeRegistrations, error) {
 	return registrations, json.Unmarshal(raw, &registrations)
 }
 
-func saveFakeRegistrations(registrations FakeRegistrations) error {
+func SaveFakeRegistrations(registrations FakeRegistrations) error {
 	path, err := fakeRegistrationsPath()
 	if err != nil {
 		return err
@@ -117,7 +117,7 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 		if descriptor.Kind == envsource.Builtin {
 			if registered {
 				delete(registrations, key)
-				if err := saveFakeRegistrations(registrations); err != nil {
+				if err := SaveFakeRegistrations(registrations); err != nil {
 					return nil, err
 				}
 			}
@@ -155,7 +155,7 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 		registration.LastAttemptAt, registration.LastSuccessAt = 1_700_000_100, 1_700_000_100
 	}
 	registrations[key] = registration
-	if err := saveFakeRegistrations(registrations); err != nil {
+	if err := SaveFakeRegistrations(registrations); err != nil {
 		return nil, err
 	}
 
@@ -285,7 +285,7 @@ func (s *deployFakeProviderServer) CreateEnvSourceValue(_ context.Context, req *
 	}
 	registration.Created = append(registration.Created, FakeEnvSourceValue{Folder: at.GetFolder(), Key: at.GetKey(), Value: req.GetValue()})
 	registrations[key] = registration
-	if err := saveFakeRegistrations(registrations); err != nil {
+	if err := SaveFakeRegistrations(registrations); err != nil {
 		return nil, err
 	}
 	if req.GetValue() == "" {
