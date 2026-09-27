@@ -89,10 +89,7 @@ func run(addr, region, config, keyParameter string) error {
 		Vendor:     "aws",
 		Addr:       addr,
 		ConfigPath: config,
-		EnvVars: envvarsserver.Backend{
-			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
-			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: bootstraps},
-		},
+		EnvVars:    envVars(cfg, bootstraps),
 	}
 	if keyParameter != "" {
 		if spec.Identity, err = keyed(ctx, ssm.NewFromConfig(cfg), keyParameter); err != nil {
@@ -110,6 +107,14 @@ func run(addr, region, config, keyParameter string) error {
 	}
 	lambda.StartWithOptions(invoked(spec, httpadapter.NewV2(mux)), lambda.WithContext(ctx))
 	return nil
+}
+
+func envVars(cfg aws.Config, bootstraps *deployments) envvarsserver.Backend {
+	return envvarsserver.Backend{
+		Records:       awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
+		Cipher:        awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: bootstraps},
+		ProveIdentity: awsports.CallerIdentity{Config: cfg}.Prove,
+	}
 }
 
 const deploymentsTTL = 5 * time.Minute
