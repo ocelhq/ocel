@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -221,6 +222,64 @@ func TestEnvSetOnAValueTheEnvSourceOwnsSaysWhereToChangeIt(t *testing.T) {
 		t.Fatalf("runEnvSet err = %v, want the env source that owns the value named", err)
 	}
 	envSet(t, root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
+}
+
+func writing(write envsource.WritePolicy) envsource.Descriptor {
+	options := *infisicalProduction.Infisical
+	options.Write = write
+	return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options}
+}
+
+func productionRegistration(t *testing.T) clitest.FakeRegistration {
+	t.Helper()
+	registrations, err := clitest.LoadFakeRegistrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registrations[clitest.FakeRegistrationKey(environmentv1.Tier_TIER_PRODUCTION, clitest.FixtureSlug)]
+}
+
+func TestEnvSetUpdatesAValueTheEnvSourceOwnsWhenItsWritePolicyIsValues(t *testing.T) {
+	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
+
+	out := envSet(t, root, "STRIPE_API_KEY", "sk_rotated", envOptions{})
+	if !strings.Contains(out, "infisical:p-1/prod") {
+		t.Errorf("stdout = %q, want the env source it was written to named", out)
+	}
+	if updated := productionRegistration(t).Updated; !slices.Contains(updated, clitest.FakeEnvSourceValue{Key: "STRIPE_API_KEY", Value: "sk_rotated"}) {
+		t.Fatalf("updated = %+v, want STRIPE_API_KEY written through to the env source", updated)
+	}
+	var got, chatter bytes.Buffer
+	if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &got, &chatter); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.String(), "sk_rotated") {
+		t.Errorf("ocel env get = %q, want the value synced straight back", got.String())
+	}
+}
+
+func TestEnvSetCreatesAValueTheEnvSourceLacksWhenItsWritePolicyIsMissing(t *testing.T) {
+	root := syncedEnvSourceFixture(t, writing(envsource.WriteMissing))
+
+	envSet(t, root, "API_TOKEN", "tok", envOptions{})
+	if created := productionRegistration(t).Created; !slices.Contains(created, clitest.FakeEnvSourceValue{Key: "API_TOKEN", Value: "tok"}) {
+		t.Fatalf("created = %+v, want API_TOKEN created in the env source", created)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_rotated", envOptions{}, nil, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), `"values"`) {
+		t.Fatalf("runEnvSet over a value the env source holds = %v, want it refused naming write \"values\"", err)
+	}
+}
+
+func TestEnvSetKeepsANamedEnvironmentsOverrideAndACredentialInOcelsOwnStore(t *testing.T) {
+	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
+
+	envSet(t, root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
+	if registration := productionRegistration(t); len(registration.Updated)+len(registration.Created) != 0 {
+		t.Fatalf("registration = %+v, want a credential never written to the env source", registration)
+	}
 }
 
 func TestTheSourceColumnNamesWhereEachValueComesFrom(t *testing.T) {
