@@ -68,7 +68,7 @@ func (r *deployRun) newStages() deployStages {
 	s := deployStages{
 		Environment: UnitStage(naming.UnitEnvironment, env,
 			"Checking the bootstrap, domains and bindings for "+r.spec.Slug, progressv1.Phase_PHASE_PROVISION),
-		Infra: UnitStage(r.spec.Infra.String(), env, fmt.Sprintf(infra, r.infraObject()), progressv1.Phase_PHASE_PROVISION),
+		Infra: UnitStage(r.spec.Infra.String(), env, fmt.Sprintf(infra, r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
 		Edge:  UnitStage(naming.UnitEdge, kind, fmt.Sprintf(routes, r.spec.Slug, where), progressv1.Phase_PHASE_PROVISION),
 		Hostnames: UnitStage(naming.UnitHostnames, kind,
 			"Attaching "+namedList("production hostname", "production hostnames", r.hostnames()), progressv1.Phase_PHASE_PROVISION),
@@ -83,7 +83,7 @@ func (r *deployRun) newStages() deployStages {
 	return s
 }
 
-func (r *deployRun) infraObject() string {
+func (r *deployRun) describeInfra() string {
 	names := r.manifestResourceNames()
 	if len(names) == 0 {
 		return "stack " + r.spec.Infra.String()

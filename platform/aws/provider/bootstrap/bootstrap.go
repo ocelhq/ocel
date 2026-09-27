@@ -357,10 +357,10 @@ func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request
 	if err != nil {
 		return err
 	}
-	return run(ctx, apis, target, req, reporting(progress))
+	return run(ctx, apis, target, req, ensureProgress(progress))
 }
 
-func reporting(progress edge.Progress) edge.Progress {
+func ensureProgress(progress edge.Progress) edge.Progress {
 	if progress == nil {
 		return edge.DiscardProgress()
 	}

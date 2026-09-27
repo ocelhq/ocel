@@ -79,7 +79,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 }
 
 func AdmitReplacements(ns Namespace, accept bool, progress edge.Progress) cfn.ChangeReview {
-	progress = reporting(progress)
+	progress = ensureProgress(progress)
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
 		for _, c := range changes {
@@ -133,7 +133,7 @@ func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRe
 	if err != nil {
 		return false, err
 	}
-	return heal(ctx, apis, target, req, reporting(progress))
+	return heal(ctx, apis, target, req, ensureProgress(progress))
 }
 
 func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress edge.Progress) (bool, error) {

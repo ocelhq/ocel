@@ -204,7 +204,7 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress edge.P
 	})
 	switch {
 	case absent(err):
-		reporting(progress).Say("Creating Cloud Run service " + s.service + " in " + clients.region)
+		ensureProgress(progress).Say("Creating Cloud Run service " + s.service + " in " + clients.region)
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.
 				Create(clients.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
@@ -212,7 +212,7 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress edge.P
 	case err != nil:
 		return release{}, fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
 	default:
-		reporting(progress).Say("Releasing a new revision of Cloud Run service " + s.service + " in " + clients.region)
+		ensureProgress(progress).Say("Releasing a new revision of Cloud Run service " + s.service + " in " + clients.region)
 		err = p.retryWrite(ctx, "release "+s.service+" onto Cloud Run", func() error {
 			current, err := p.read(ctx, services, path, s.service)
 			if err != nil {
@@ -386,7 +386,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, progress edge.P
 	if err != nil {
 		return err
 	}
-	reporting(progress).Say("Deleting Cloud Run service " + service + " in " + clients.region)
+	ensureProgress(progress).Say("Deleting Cloud Run service " + service + " in " + clients.region)
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Delete(clients.servicePath(service)).Context(ctx).Do(call...)
 	})

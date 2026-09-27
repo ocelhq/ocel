@@ -320,7 +320,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if err != nil {
 		return fmt.Errorf("read the certificate %s: %w", cert.ID, err)
 	}
-	reporting(progress).Say(discarding(cert.ID, current))
+	ensureProgress(progress).Say(discarding(cert.ID, current))
 	if err := p.awaitCertificates(ctx, certificates, "discard "+cert.ID,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.Certificates.Delete(cert.ID).Context(ctx).Do(call...)

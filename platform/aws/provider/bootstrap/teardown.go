@@ -124,7 +124,7 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 }
 
 func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress edge.Progress) error {
-	progress = reporting(progress)
+	progress = ensureProgress(progress)
 
 	stackName, err := ns.StackNameFor(class)
 	if err != nil {

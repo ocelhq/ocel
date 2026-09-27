@@ -102,7 +102,7 @@ func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (st
 		if err != nil {
 			return "", fmt.Errorf("read the connector key %s stores: %w", name, err)
 		}
-		reporting(progress).Debug("Reused the connector's key stored in secret " + name)
+		ensureProgress(progress).Debug("Reused the connector's key stored in secret " + name)
 		return public, nil
 	case err != nil && !absent(err):
 		return "", fmt.Errorf("read whether %s stores a connector key: %w", name, err)
@@ -118,7 +118,7 @@ func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (st
 	}).Context(ctx).Do); err != nil {
 		return "", fmt.Errorf("write the connector's key into %s: %w", name, err)
 	}
-	reporting(progress).Say("Minted the connector's key into secret " + name)
+	ensureProgress(progress).Say("Minted the connector's key into secret " + name)
 	return publicKeyOf(payload)
 }
 
@@ -180,6 +180,6 @@ func (p *Provider) takeConnectorKey(ctx context.Context, progress edge.Progress)
 	if _, err := attempted(ctx, service.Projects.Secrets.Delete(secretPath(clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
-	reporting(progress).Say("Deleted secret " + name + ", the connector's key")
+	ensureProgress(progress).Say("Deleted secret " + name + ", the connector's key")
 	return nil
 }

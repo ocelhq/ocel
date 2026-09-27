@@ -295,17 +295,17 @@ func (b bootstrap) provision(ctx context.Context, read survey, target item, prog
 		if err := b.mend(ctx, read, target); err != nil {
 			return err
 		}
-		reporting(progress).Say("Mended " + target.phrase() + ": " + mends)
+		ensureProgress(progress).Say("Mended " + target.phrase() + ": " + mends)
 		return nil
 	}
 	if read.has(target) {
-		reporting(progress).Debug("The " + target.phrase() + " is " + reasonCurrent)
+		ensureProgress(progress).Debug("The " + target.phrase() + " is " + reasonCurrent)
 		return nil
 	}
 	if err := b.make(ctx, read, target); err != nil {
 		return err
 	}
-	reporting(progress).Say("Created " + target.phrase())
+	ensureProgress(progress).Say("Created " + target.phrase())
 	return nil
 }
 
@@ -930,7 +930,7 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 }
 
 func (r removal) report(progress edge.Progress) {
-	progress = reporting(progress)
+	progress = ensureProgress(progress)
 	switch {
 	case r.action == provider.ActionKeep && r.reason == reasonAbsent:
 		progress.Debug("Nothing to remove: " + r.item.phrase() + " does not exist")

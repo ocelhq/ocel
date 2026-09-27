@@ -35,7 +35,7 @@ func warnPreviewOpen(spec provider.StackSpec, service string, progress edge.Prog
 	if spec.Edge != nil {
 		kind = spec.Edge.Kind()
 	}
-	reporting(progress).Warn("Cloud Run service " + service + " " + fmt.Sprintf(previewOpenWarning, kind))
+	ensureProgress(progress).Warn("Cloud Run service " + service + " " + fmt.Sprintf(previewOpenWarning, kind))
 }
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.Function, error) {

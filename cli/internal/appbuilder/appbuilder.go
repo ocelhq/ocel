@@ -597,22 +597,22 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
 
-	said, speaks, err := os.Pipe()
+	reader, writer, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("node-builder failed: %w", err)
 	}
-	cmd.Stdout, cmd.Stderr = speaks, speaks
+	cmd.Stdout, cmd.Stderr = writer, writer
 
 	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin}
 
 	startErr := cmd.Start()
-	_ = speaks.Close()
+	_ = writer.Close()
 	if startErr != nil {
-		_ = said.Close()
+		_ = reader.Close()
 		return fmt.Errorf("node-builder failed: %w", startErr)
 	}
-	proc.Scan(ctx, said)
-	_ = said.Close()
+	proc.Scan(ctx, reader)
+	_ = reader.Close()
 	runErr := cmd.Wait()
 	unended := proc.Abort(ctx)
 

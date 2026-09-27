@@ -161,7 +161,7 @@ type RuntimeLayerRequest struct {
 }
 
 func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, progress edge.Progress) (map[string]string, error) {
-	progress = reporting(progress)
+	progress = ensureProgress(progress)
 	stackName := ns.runtimeStackName(class)
 	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
 	if err != nil || len(missingRuntimeLayers(current)) == 0 {
