@@ -441,10 +441,36 @@ func TestInGitHubActionsAWarningIsMirroredAsAnAnnotationWithItsNewlinesAndPercen
 	}
 
 	want := "WARN  [check] the zone is 100% over quota\r\n" +
-		"      ::error::forged\n" +
+		"      \u200b::error::forged\n" +
 		"::warning::[check] the zone is 100%25 over quota%0D%0A::error::forged\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestInGitHubActionsNoLineOfAMessageCanStartAWorkflowCommandButVerbatimToolOutputStillCan(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	web := build.Unit("web", "Building web")
+	web.Warn("tsc reported\n\t::error::forged in a detail\n##[error]forged the old way")
+	output(t, web, "::error file=app.ts,line=3::Type 'string' is not assignable")
+	c.pass(time.Second)
+	web.End(errors.New("npm run build exited\n  ::add-mask::forged in a reason"))
+	ended(run, errors.New("the build failed\n\u00a0::stop-commands::forged in the summary"))
+
+	got := out.String()
+	for _, want := range []string{
+		"\t\u200b::error::forged in a detail\n",
+		"\n      \u200b##[error]forged the old way\n",
+		"\n    ::error file=app.ts,line=3::Type 'string' is not assignable\n",
+		"  \u200b::add-mask::forged in a reason\n",
+		"\u00a0\u200b::stop-commands::forged in the summary\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output has no line %q:\n%s", want, got)
+		}
 	}
 }
 

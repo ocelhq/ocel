@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -30,6 +31,10 @@ var annotationCommands = map[progressv1.Level]string{
 }
 
 var workflowData = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+
+var workflowCommandStart = regexp.MustCompile(`(\A|[\r\n])([\t\v\f \x{85}\p{Z}]*)(::|##\[)`)
+
+const commandBreak = "\u200b"
 
 var phaseGerunds = map[progressv1.Phase]string{
 	progressv1.Phase_PHASE_CHECK:     "checking",
@@ -67,9 +72,10 @@ type GroupedSink struct {
 }
 
 type blockLine struct {
-	text string
-	raw  bool
-	from line
+	text    string
+	raw     bool
+	command bool
+	from    line
 }
 
 type phaseTally struct {
@@ -240,10 +246,10 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	}
 	header := unit.header(ev.GetLevel(), ended.GetStatus(), message, s.present)
 	if s.present.GitHubActions && !failed && len(unit.body) > 0 {
-		header.text = "::group::" + workflowData.Replace(header.text)
+		header.text, header.command = "::group::"+workflowData.Replace(header.text), true
 		s.print(header)
 		s.print(unit.body...)
-		s.print(blockLine{text: "::endgroup::"})
+		s.print(blockLine{text: "::endgroup::", command: true})
 		return
 	}
 	s.print(header)
@@ -341,7 +347,11 @@ func (s *GroupedSink) print(lines ...blockLine) {
 			fmt.Fprintln(s.w, verbatimIndent+l.text)
 			continue
 		}
-		fmt.Fprintln(s.w, l.text)
+		text := l.text
+		if s.present.GitHubActions && !l.command {
+			text = workflowCommandStart.ReplaceAllString(text, "${1}${2}"+commandBreak+"${3}")
+		}
+		fmt.Fprintln(s.w, text)
 		if command, ok := annotationCommands[l.from.level]; ok && s.present.GitHubActions {
 			fmt.Fprintf(s.w, "::%s::%s\n", command, workflowData.Replace(l.from.annotation()))
 		}
