@@ -118,6 +118,10 @@ export async function readState(projectId: string, env: string): Promise<Answer<
     if (!answer.done) {
       return refused(dialled.id, "list", answer.refusal);
     }
+    const described = await envvars.describeEnvSource(dialled, environmentClass, found.slug);
+    if (!described.done) {
+      return refused(dialled.id, "describe", described.refusal);
+    }
     return {
       ok: true,
       result: stateOf(
@@ -127,6 +131,8 @@ export async function readState(projectId: string, env: string): Promise<Answer<
         answer.result,
         environments,
         can,
+        "live",
+        described.result,
       ),
     };
   });
@@ -165,6 +171,42 @@ export async function setValue(
       return refused(connector.id, "set", answer.refusal);
     }
     return { ok: true, result: null };
+  });
+}
+
+export async function createValue(
+  projectId: string,
+  env: string,
+  at: Address,
+  value: string,
+): Promise<Answer<{ awaitingApproval: boolean }>> {
+  return attempt(async () => {
+    if (at.environment !== "") {
+      return failed(
+        400,
+        `a value for ${at.environment} alone is stored by ocel, never by the env source: save it as an override for ${at.environment} instead`,
+      );
+    }
+    const reached = await reach(projectId, env);
+    if (!reached.ok) return reached;
+    const { slug, projectId: id, connector, environmentClass } = reached.result;
+    const latest = await latestTopology(id, environmentClass);
+    const description =
+      (latest.error ? undefined : latest.row?.topology.apps)
+        ?.flatMap((app) => app.variables)
+        .find((variable) => variable.key === at.key)?.description ?? "";
+    const answer = await envvars.createEnvSourceValue(
+      connector,
+      environmentClass,
+      slug,
+      at,
+      value,
+      description,
+    );
+    if (!answer.done) {
+      return refused(connector.id, "create", answer.refusal);
+    }
+    return { ok: true, result: answer.result };
   });
 }
 

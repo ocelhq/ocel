@@ -51,6 +51,7 @@ export const search = signal("");
 export const unfilledOnly = signal(false);
 export const selected = signal<ReadonlySet<string>>(new Set());
 export const extras = signal<readonly Address[]>([]);
+export const awaitingApproval = signal<ReadonlySet<string>>(new Set());
 export const expanded = signal<ReadonlySet<string>>(new Set());
 export const spotlight = signal<string | null>(null);
 export const focusing = signal<string | null>(null);
@@ -99,7 +100,9 @@ const emptyState: State = {
 
 export const ability = computed(() => abilityOf(state.value));
 
-export const catalogue = computed(() => catalogueOf(state.value ?? emptyState, extras.value));
+export const catalogue = computed(() =>
+  catalogueOf(state.value ?? emptyState, extras.value, awaitingApproval.value),
+);
 
 export const variants = computed(() => catalogue.value.variants);
 
@@ -461,7 +464,9 @@ export async function save(): Promise<void> {
   const savable = pending.filter((draft) => open(draft.at));
   const dropping = [...variableGroupRemovals.value].flatMap((key) => {
     const variant = variants.value.get(key);
-    return variant?.set && !variant.reference && open(variant.at) ? [variant] : [];
+    return variant?.set && !variant.reference && !variant.owner && open(variant.at)
+      ? [variant]
+      : [];
   });
   const refused = blocked.size === 0 ? null : variableGroupBlockLine(states);
   if (savable.length === 0 && dropping.length === 0) {
@@ -470,10 +475,20 @@ export async function save(): Promise<void> {
   }
   saving.value = true;
   outcome.value = null;
+  const created: Address[] = [];
+  const awaiting: Address[] = [];
+  const envSource = state.value?.envSource?.id;
   try {
     const results = await Promise.all(
       savable.map((draft) =>
-        attempt(draft.at, () => port().set(draft.at, draft.value, draft.version)),
+        attempt(draft.at, async () => {
+          if (variants.value.get(addressKey(draft.at))?.creatable) {
+            const answer = await port().create(draft.at, draft.value);
+            (answer.awaitingApproval ? awaiting : created).push(draft.at);
+            return;
+          }
+          await port().set(draft.at, draft.value, draft.version);
+        }),
       ),
     );
     const removed = await Promise.all(
@@ -481,6 +496,9 @@ export async function save(): Promise<void> {
         attempt(variant.at, () => port().remove(variant.at, variant.version)),
       ),
     );
+    if (awaiting.length > 0) {
+      awaitingApproval.value = new Set([...awaitingApproval.value, ...awaiting.map(addressKey)]);
+    }
     const attempted = new Set(dropping.map((variant) => addressKey(variant.at)));
     variableGroupRemovals.value = new Set([
       ...[...variableGroupRemovals.value].filter((key) => !attempted.has(key)),
@@ -498,15 +516,25 @@ export async function save(): Promise<void> {
         .filter((key) => switched.has(key)),
     );
     const cleared = removed.filter((result) => result.ok).length;
+    const sent = new Set([...created, ...awaiting].map(addressKey));
+    const stored = results.filter((result) => !sent.has(addressKey(result.at)));
     outcome.value = {
       text: [
-        saveSummary(reduced),
+        stored.length > 0 || sent.size === 0
+          ? saveSummary(reduceSave(new Map(), new Map(), new Map(), stored))
+          : "",
+        created.length > 0 ? `Created ${names(created.map((at) => at.key))} in ${envSource}.` : "",
+        awaiting.length > 0
+          ? `${names(awaiting.map((at) => at.key))} ${awaiting.length === 1 ? "waits" : "wait"} for approval in ${envSource} before ocel can read ${awaiting.length === 1 ? "it" : "them"}.`
+          : "",
         cleared > 0 ? `Removed ${plural(cleared, "group value")}.` : "",
         refused ?? "",
       ]
         .filter((part) => part !== "")
         .join(" "),
-      ...((reduced.saved < results.length || refused !== null) && { tone: "error" as const }),
+      ...((reduced.saved < results.length || refused !== null || awaiting.length > 0) && {
+        tone: "error" as const,
+      }),
     };
     await reveal(
       results
@@ -549,7 +577,7 @@ export function toggleVariableGroup(group: string, folder: string, on: boolean):
       const key = addressKey(address);
       remaining.delete(key);
       const variant = variants.value.get(key);
-      if (variant?.set && !variant.reference) removals.add(key);
+      if (variant?.set && !variant.reference && !variant.owner) removals.add(key);
     }
   }
   variableGroupsOn.value = switchedOn;
@@ -560,7 +588,7 @@ export function toggleVariableGroup(group: string, folder: string, on: boolean):
 export function askRemoval(cells: readonly Address[]): void {
   const stored = cells
     .map((at) => variants.value.get(addressKey(at)))
-    .filter((v) => v?.set && !v.reference)
+    .filter((v) => v?.set && !v.reference && !v.owner)
     .map((v) => ({ at: v!.at, version: v!.version }));
   if (stored.length === 0) return;
   removing.value = { cells: stored };

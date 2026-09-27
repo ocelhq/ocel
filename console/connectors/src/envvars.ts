@@ -15,6 +15,14 @@ export interface Stored extends Cell {
   updatedAt: number;
   size: number;
   reference?: { slug: string; folder: string; key: string };
+  envSource?: string;
+}
+
+export interface EnvSourceStatus {
+  id: string;
+  writable: boolean;
+  urls: Record<string, string>;
+  credentials: string[];
 }
 
 export interface Revealed extends Cell {
@@ -54,7 +62,46 @@ export function list(
           key: value.target.key,
         },
       }),
+      ...(value.envSource && { envSource: value.envSource }),
     }));
+  });
+}
+
+export function describeEnvSource(
+  connector: Connector,
+  environmentClass: EnvironmentClass,
+  slug: string,
+): Promise<Outcome<EnvSourceStatus>> {
+  return ask(async () => {
+    const { status } = await vars(connector).describeEnvSource({
+      tier: tierOf(environmentClass),
+      slug,
+    });
+    return {
+      id: status?.envSource || "builtin",
+      writable: status?.writable ?? false,
+      urls: Object.fromEntries((status?.links ?? []).map((link) => [link.folder, link.url])),
+      credentials: status?.credentials ?? [],
+    };
+  });
+}
+
+export function createEnvSourceValue(
+  connector: Connector,
+  environmentClass: EnvironmentClass,
+  slug: string,
+  at: Cell,
+  value: string,
+  description: string,
+): Promise<Outcome<{ awaitingApproval: boolean }>> {
+  return ask(async () => {
+    const answer = await vars(connector).createEnvSourceValue({
+      tier: tierOf(environmentClass),
+      coordinate: { slug, ...at },
+      value,
+      description,
+    });
+    return { awaitingApproval: answer.awaitingApproval };
   });
 }
 
