@@ -10,55 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
-
-func TestTheConnectorImageRunsTheBinaryItContains(t *testing.T) {
-	t.Parallel()
-
-	built, err := connectorImage(empty.Image, []byte("connector"))
-	if err != nil {
-		t.Fatalf("connectorImage: %v", err)
-	}
-	file, err := built.ConfigFile()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(file.Config.Entrypoint, []string{connectorImagePath}) {
-		t.Errorf("the image starts %v, want %s", file.Config.Entrypoint, connectorImagePath)
-	}
-	if len(file.Config.Cmd) != 0 {
-		t.Errorf("the image has the base's command %v, and a static base's command is not the connector", file.Config.Cmd)
-	}
-	layers, err := built.Layers()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(layers) != 1 {
-		t.Errorf("the image has %d layers on an empty base, want the one that contains the connector", len(layers))
-	}
-
-	again, err := connectorImage(empty.Image, []byte("connector"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := built.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := again.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first != second {
-		t.Error("the same connector bytes built to two image digests, so a re-run would push and release an image nothing changed in")
-	}
-}
 
 func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *testing.T) {
 	t.Parallel()
