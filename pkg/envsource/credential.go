@@ -8,13 +8,77 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/envvars"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Credential interface {
 	logIn(ctx context.Context, client *infisicalClient) (session, error)
+}
+
+type CredentialError struct {
+	Variable string
+	Reason   string
+}
+
+func (e *CredentialError) Error() string { return e.Variable + " " + e.Reason }
+
+func ReadCredential(ctx context.Context, store envvars.Store, scope envvars.Scope, descriptor Descriptor, login Login) (Credential, error) {
+	if descriptor.Kind != Infisical || descriptor.Infisical == nil {
+		return nil, fmt.Errorf("a %s env source is read where ocel runs, never with a credential a target stores", descriptor.Kind)
+	}
+	auth := descriptor.Infisical.Auth
+	switch auth.Method {
+	case AuthIdentity:
+		return IdentityAuth(auth.IdentityID, login.ProveIdentity), nil
+	case AuthUniversal:
+		plaintexts := make([]string, 0, 2)
+		for _, name := range auth.Variables() {
+			plaintext, err := readCredentialValue(ctx, store, scope, name)
+			if err != nil {
+				return nil, err
+			}
+			plaintexts = append(plaintexts, plaintext)
+		}
+		return UniversalAuth(plaintexts[0], plaintexts[1]), nil
+	}
+	return nil, fmt.Errorf("%s names no identity to log in to Infisical as", descriptor.ID())
+}
+
+func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars.Scope, name string) (string, error) {
+	found, err := store.GetDereferenced(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: name}}, true)
+	switch {
+	case errors.Is(err, envvars.ErrNotFound), errors.Is(err, envvars.ErrDangling):
+		return "", &CredentialError{Variable: name, Reason: fmt.Sprintf("has no value in %s: set it with `ocel env set %s=<VALUE>%s`", scope.Class, name, previewFlag(scope))}
+	case err != nil:
+		return "", fmt.Errorf("read %s: %w", name, err)
+	}
+	if wrote := found.Provenance.EnvSource; wrote != "" {
+		return "", &CredentialError{Variable: name, Reason: fmt.Sprintf("reads a value %s wrote, and an env source cannot store the credential it is read with: set %s in ocel's own store", wrote, name)}
+	}
+	if found.Project == scope.Project {
+		return found.Plaintext, nil
+	}
+	registration, registered, err := Registered(ctx, store.Records, scope.Class, found.Project)
+	if err != nil {
+		return "", err
+	}
+	if registered && !slices.Contains(registration.Credentials(), found.Coordinate.Cell) {
+		return "", &CredentialError{Variable: name, Reason: fmt.Sprintf("references %s in %s, which reads that value from its own env source: reference a value %s stores in ocel's own store", found.Coordinate.Key, found.Project, found.Project)}
+	}
+	return found.Plaintext, nil
+}
+
+func previewFlag(scope envvars.Scope) string {
+	if scope.Class == edge.ClassPreview {
+		return " --preview"
+	}
+	return ""
 }
 
 type session struct {
