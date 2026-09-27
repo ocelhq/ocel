@@ -484,9 +484,9 @@ func (w watcher) Warn(message string) { w.said(message) }
 
 func (w watcher) Error(message string) { w.said(message) }
 
-func (watcher) Detail(string) {}
+func (w watcher) Detail(message string) { w.said(message) }
 
-func (watcher) Debug(string) {}
+func (w watcher) Debug(message string) { w.said(message) }
 
 func (watcher) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
