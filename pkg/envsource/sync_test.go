@@ -144,6 +144,32 @@ func TestAFailingSourceKeepsItsValuesAndIsReadAgainOnlyAfterABackoff(t *testing.
 	}
 }
 
+func TestAnEnvSourceWhoseRootIsGoneKeepsEveryValueItCopied(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "DATABASE_URL", value: "postgres://prod", version: 1})
+	fake.put("/web", fakeSecret{id: "s2", key: "API_KEY", value: "web-key", version: 1})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "", "/web")
+	register(t, store, registration)
+	ctx := context.Background()
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	fake.set(func(f *fakeInfisical) { f.folders = map[string]bool{} })
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, at := range []envvars.Coordinate{classWide("", "DATABASE_URL"), classWide("/web", "API_KEY")} {
+		if _, err := store.Get(ctx, scopeOf("shop"), at, false); err != nil {
+			t.Errorf("%s after its env source's root went missing = %v, want the copied value kept", at, err)
+		}
+	}
+	if status := statusOf(t, store, registration); !strings.Contains(status.LastError, "404") {
+		t.Fatalf("status = %+v, want the missing root recorded as a failure", status)
+	}
+}
+
 func TestAnUnsetCredentialIsRecordedAndTheSourceNeverLoggedInTo(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)

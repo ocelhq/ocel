@@ -62,7 +62,7 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 			} `json:"imports"`
 		}
 		err := s.client.call(ctx, http.MethodGet, "/api/v4/secrets?"+query.Encode(), nil, &listed, true)
-		if isInfisicalStatus(err, http.StatusNotFound) {
+		if folder != "" && isInfisicalStatus(err, http.StatusNotFound) {
 			continue
 		}
 		if err != nil {
