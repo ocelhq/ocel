@@ -47,6 +47,7 @@ type fakeInfisical struct {
 	loginBodies []map[string]string
 	loginPaths  []string
 	approval    bool
+	refuseList  bool
 }
 
 func newFakeInfisical(t *testing.T) (*fakeInfisical, *httptest.Server) {
@@ -161,6 +162,10 @@ func (f *fakeInfisical) list(w http.ResponseWriter, r *http.Request) {
 	}
 	path := query.Get("secretPath")
 	f.listed = append(f.listed, path)
+	if f.refuseList {
+		f.fail(w, http.StatusForbidden, "PermissionDenied", "You are not allowed to read secrets")
+		return
+	}
 	if !f.folders[path] {
 		f.fail(w, http.StatusNotFound, "SecretPathNotFound", "Folder with path '"+path+"' not found")
 		return

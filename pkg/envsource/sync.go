@@ -1,0 +1,210 @@
+package envsource
+
+import (
+	"context"
+	"errors"
+	"math/rand/v2"
+	"slices"
+	"sync"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/envvars"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+const (
+	defaultSyncInterval = 60 * time.Second
+	syncBackoffCeiling  = 15 * time.Minute
+	maxBackoffDoublings = 16
+)
+
+type Sync struct {
+	Store    envvars.Store
+	Class    edge.Class
+	Login    Login
+	Now      func() time.Time
+	Interval time.Duration
+
+	mu     sync.Mutex
+	opened map[string]Source
+}
+
+func (s *Sync) now() time.Time {
+	if s.Now == nil {
+		return time.Now()
+	}
+	return s.Now()
+}
+
+func (s *Sync) interval() time.Duration {
+	if s.Interval <= 0 {
+		return defaultSyncInterval
+	}
+	return s.Interval
+}
+
+func (s *Sync) CopyScheduledEveryInterval(ctx context.Context, report func(error)) {
+	for {
+		if err := s.CopyScheduled(ctx); err != nil && report != nil && ctx.Err() == nil {
+			report(err)
+		}
+		wait := s.interval()
+		wait += time.Duration(rand.Int64N(int64(wait)/5+1)) - wait/10
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
+func (s *Sync) CopyScheduled(ctx context.Context) error {
+	registrations, err := Registrations(ctx, s.Store.Records, s.Class)
+	if err != nil {
+		return err
+	}
+	var keys []string
+	groups := map[string][]Registration{}
+	for _, registration := range registrations {
+		if !registration.Descriptor.IsScheduled() {
+			continue
+		}
+		key := DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor)
+		if _, seen := groups[key]; !seen {
+			keys = append(keys, key)
+		}
+		groups[key] = append(groups[key], registration)
+	}
+	var failed []error
+	for _, key := range keys {
+		status, _, err := readStatus(ctx, s.Store.Records, s.Class, key)
+		if err != nil {
+			failed = append(failed, err)
+			continue
+		}
+		if status.RetryAt.After(s.now()) {
+			continue
+		}
+		if _, _, err := s.copyGroup(ctx, key, groups[key], nil); err != nil {
+			failed = append(failed, err)
+		}
+	}
+	return errors.Join(failed...)
+}
+
+func (s *Sync) CopyProject(ctx context.Context, registration Registration) (CopyResult, error) {
+	return s.CopyProjectFrom(ctx, registration, nil)
+}
+
+func (s *Sync) CopyProjectFrom(ctx context.Context, registration Registration, source Source) (CopyResult, error) {
+	key := DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor)
+	results, failure, err := s.copyGroup(ctx, key, []Registration{registration}, source)
+	if failure != nil {
+		return CopyResult{}, failure
+	}
+	if err != nil {
+		return CopyResult{}, err
+	}
+	return results[0], nil
+}
+
+func (s *Sync) Open(ctx context.Context, registration Registration) (Source, error) {
+	return s.open(ctx, DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor), registration)
+}
+
+func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, error, error) {
+	attemptedAt := s.now()
+	results, urls, failure := s.readAndCopy(ctx, key, group, source)
+	err := writeStatus(ctx, s.Store.Records, s.Class, key, func(status *Status) {
+		status.LastAttemptAt = attemptedAt
+		if failure == nil {
+			status.EnvSource = results[0].EnvSource
+			status.URLs = urls
+			status.LastSuccessAt = attemptedAt
+			status.LastError = ""
+			status.ConsecutiveFailures = 0
+			status.RetryAt = time.Time{}
+			return
+		}
+		status.EnvSource = group[0].Descriptor.ID()
+		status.LastError = failure.Error()
+		status.ConsecutiveFailures++
+		status.RetryAt = attemptedAt.Add(s.backoff(status.ConsecutiveFailures))
+	})
+	if failure != nil {
+		s.forgetOpened(key)
+	}
+	return results, failure, err
+}
+
+func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, map[string]string, error) {
+	if source == nil {
+		opened, err := s.open(ctx, key, group[0])
+		if err != nil {
+			return nil, nil, err
+		}
+		source = opened
+	}
+	var folders []string
+	for _, registration := range group {
+		folders = append(folders, registration.Folders...)
+	}
+	folders = slices.Compact(slices.Sorted(slices.Values(folders)))
+	read, err := source.Read(ctx, folders)
+	if err != nil {
+		return nil, nil, err
+	}
+	results := make([]CopyResult, 0, len(group))
+	for _, registration := range group {
+		result, err := CopyValues(ctx, s.Store, s.scope(registration), source.ID(), read, registration.Folders, registration.Credentials())
+		if err != nil {
+			return nil, nil, err
+		}
+		results = append(results, result)
+	}
+	urls := map[string]string{}
+	for _, folder := range folders {
+		if url := source.URL(envvars.Cell{Folder: folder}); url != "" {
+			urls[folder] = url
+		}
+	}
+	return results, urls, nil
+}
+
+func (s *Sync) open(ctx context.Context, key string, registration Registration) (Source, error) {
+	s.mu.Lock()
+	source, found := s.opened[key]
+	s.mu.Unlock()
+	if found {
+		return source, nil
+	}
+	credential, err := ReadCredential(ctx, s.Store, s.scope(registration), registration.Descriptor, s.Login)
+	if err != nil {
+		return nil, err
+	}
+	source = NewInfisical(*registration.Descriptor.Infisical, credential, s.Login.Client)
+	s.mu.Lock()
+	if s.opened == nil {
+		s.opened = map[string]Source{}
+	}
+	s.opened[key] = source
+	s.mu.Unlock()
+	return source, nil
+}
+
+func (s *Sync) forgetOpened(key string) {
+	s.mu.Lock()
+	delete(s.opened, key)
+	s.mu.Unlock()
+}
+
+func (s *Sync) backoff(failures int) time.Duration {
+	ceiling := min(s.interval()<<min(failures-1, maxBackoffDoublings), syncBackoffCeiling)
+	return ceiling/2 + time.Duration(rand.Int64N(int64(ceiling/2)+1))
+}
+
+func (s *Sync) scope(registration Registration) envvars.Scope {
+	return envvars.Scope{Project: registration.Project, Class: s.Class}
+}
