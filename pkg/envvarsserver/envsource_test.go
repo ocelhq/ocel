@@ -327,6 +327,30 @@ func TestAWritableEnvSourceCreatesAMissingKeyThenCopiesIt(t *testing.T) {
 	}
 }
 
+func TestAValueIsCreatedOnlyInAFolderTheDeployRegistered(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, true)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, folder := range []string{"/..", "/web/..", "/.", "/api"} {
+		_, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{
+			Tier:       production,
+			Coordinate: &envvarsv1.Coordinate{Slug: slug, Folder: folder, Key: "PLANTED"},
+			Value:      "v",
+		})
+		if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+			t.Errorf("CreateEnvSourceValue() in folder %q = %v, want InvalidArgument", folder, err)
+		}
+	}
+	if len(fake.created) != 0 {
+		t.Fatalf("created = %v, want nothing written outside the registered folders", fake.created)
+	}
+}
+
 func TestACredentialIsNeverCreatedInTheEnvSourceItLogsInTo(t *testing.T) {
 	vars, _ := served(t)
 	fake, server := newInfisical(t)
