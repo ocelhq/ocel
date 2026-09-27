@@ -123,18 +123,18 @@ no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelle
 Your proxy manages the certificates, so `certificates` and `proxy` can't be set together. One
 proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
 doesn't is refused with the value to write. Moving a box from one proxy to another isn't
-supported yet. `{ "traefik": … }`, below, is refused for now.
+supported yet.
 
-| | Ocel's own proxy | `manual` | `caddy` |
-| --- | --- | --- | --- |
-| Listens on ports 80 and 443 | ocel | you | your Caddy |
-| Routes each hostname to ocel | ocel | you | ocel writes `ocel.caddy` |
-| Issues and renews certificates | ocel, over http-01 | your proxy | your Caddy |
-| Serves the certificates you pin | yes | no, configure them in your proxy | no, configure them in your Caddy |
-| Forgets a certificate when a hostname goes | yes | no, your proxy keeps it | yes, 14 days after it expires |
-| Reports a Let's Encrypt rate limit | yes | no | no |
-| Answers every preview hostname under a base | yes | once you route `*.<base>` | each preview hostname as it is claimed |
-| Switches releases without dropping requests | yes | yes, the switchboard does it | yes, the switchboard does it |
+| | Ocel's own proxy | `manual` | `traefik` | `caddy` |
+| --- | --- | --- | --- | --- |
+| Listens on ports 80 and 443 | ocel | you | your Traefik | your Caddy |
+| Routes each hostname to ocel | ocel | you | ocel writes the routers | ocel writes `ocel.caddy` |
+| Issues and renews certificates | ocel, over http-01 | your proxy | your Traefik, through `resolver` | your Caddy |
+| Serves the certificates you pin | yes | no, configure them in your proxy | no, configure them in your Traefik | no, configure them in your Caddy |
+| Forgets a certificate when a hostname goes | yes | no, your proxy keeps it | no, Traefik keeps it | yes, 14 days after it expires |
+| Reports a Let's Encrypt rate limit | yes | no | no | no |
+| Answers every preview hostname under a base | yes | once you route `*.<base>` | each claimed preview hostname | each preview hostname as it is claimed |
+| Switches releases without dropping requests | yes | yes, the switchboard does it | yes, the switchboard does it | yes, the switchboard does it |
 
 ### The `proxy` option
 
@@ -184,6 +184,77 @@ always published and `network` is joined as well.
 
 A preset and the same fields written out are the same proxy, so projects on one box can name it
 either way.
+
+### Behind your Traefik
+
+With `"proxy": { "traefik": … }` ocel writes the routers itself, into one file,
+`ocel.yml`, in the directory your Traefik's file provider watches. For `shop.example.com` it
+writes a router on your https entry point that names `resolver` and forwards to the
+switchboard, and one on your http entry point that redirects to https. Your Traefik orders the
+certificate the first time it reads the router. Every router is named
+`ocel-<hostname with dashes>-<hash>` and carries priority 1000000, so it wins over any router
+of yours that Traefik would otherwise sort against it. Ocel writes no catch-all, so a hostname
+it hasn't claimed stays with whatever your Traefik does with it now.
+
+The switchboard sits behind your Traefik one of two ways:
+
+- With `network`, the switchboard joins that network and your Traefik forwards to
+  `http://ocel-switchboard:8443`. Both presets work this way.
+- Without it, the switchboard is published on `127.0.0.1:<port>`. Only a Traefik in the host's
+  network namespace can dial that: a host process, or a container with `network_mode: host`.
+  Bootstrap refuses a Traefik container that publishes 443 from a docker network, and names
+  `network` as the fix.
+
+The directory is often not writable by `ocel-deploy` (Coolify's is `0700` and owned by
+another user), so bootstrap mounts it into the switchboard, and the switchboard writes
+`ocel.yml` there under a temporary name and renames it into place. Before each write ocel
+decodes what it is about to write, and refuses it if it doesn't decode or contains `{{`, which
+Traefik reads as a template. One file Traefik can't parse stops it from taking up a change to
+any file in that directory, and after a restart it serves none of them. If
+someone deletes `ocel.yml` or rewrites it, from a host tool's editor for instance, the next
+deploy writes it back.
+
+After each change, ocel waits up to 30 seconds for every hostname to answer on
+`127.0.0.1:443` through the switchboard, whatever certificate Traefik has for it yet. If one
+doesn't, the change is put back and the refusal says what the probe met. When a file of yours
+in the directory fails to parse, it names that file. When Coolify has been switched to Caddy,
+it says so and gives `{ "caddy": { "preset": "coolify" } }` as the value to write.
+
+**Your routes stay yours.** Before ocel claims a hostname (a binding, a preview, the connector),
+it reads the rules of every router your Traefik has: every `.yml`, `.yaml` and `.toml` file in
+the directory besides `ocel.yml`, the `traefik.http.routers.<name>.rule` labels of every
+running container, and the same labels on swarm services when the box manages a swarm. A
+`Host()` equal to the hostname, or a `HostRegexp` that matches it, refuses the claim and names
+the router and where it is defined. A `HostRegexp` that matches any hostname at all is a
+catch-all and claims nothing. `ocel doctor` runs the same check, so a router you add after the
+bind, which ocel's priority now wins over, is named too. Routers from Traefik's other
+providers, such as Consul or Kubernetes, are invisible to ocel, so it can't check them.
+
+**Previews.** Set `previewResolver` to a resolver that can issue a wildcard over DNS-01, and
+your Traefik orders one certificate for `*.<preview base>`, through a router on
+`ocel-edge-probe.<preview base>` that ocel writes as soon as the preview base is set. Each preview
+hostname is then served that certificate. Without `previewResolver`, each preview hostname
+gets a certificate of its own from `resolver`, the same as any other hostname.
+
+**Certificate lifetimes.** Your Traefik renews every certificate it stores, for as long as its
+`acme.json` holds it, and it deletes none. A certificate for a hostname ocel no longer serves
+stays in `acme.json` and keeps being renewed until you remove it there. If Traefik fails to
+get a certificate, usually because the hostname's DNS doesn't point at the box yet, it tries
+again only the next time its configuration changes, with no backoff. `ocel doctor` flags a
+hostname Traefik holds no certificate for: fix the DNS, then restart Traefik or change any route
+it serves.
+
+**Coolify and Dokploy.** Both keep running their Traefik as they do now. A prune one of them
+runs can remove the switchboard and its `ocel` network while it is stopped; the next deploy
+recreates both. `ocel destroy` removes `ocel.yml`, then the switchboard, which takes it off
+their network.
+
+A Traefik ocel writes to reaches a switchboard listener that takes every request as https for
+the `Host` it asked for, and hears no `X-Forwarded-*` header at all. Every other container on
+that network, which on Coolify and Dokploy means their apps and databases, can reach that
+listener too. Any of them can make a plaintext request your apps take as https, for a `Host` it
+could send anyway. None of them can choose `X-Forwarded-Host` or `X-Forwarded-For`. This is
+the same kind of concession `manual` makes to every process on the machine.
 
 ### Behind your Caddy
 
