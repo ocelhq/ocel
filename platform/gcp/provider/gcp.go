@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const Vendor provider.Vendor = "gcp"
@@ -92,6 +93,7 @@ func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenDirectImages:    p.OpenDirectImages,
+		ProveIdentity:       ports.ProveIdentity,
 		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 		FunctionImages:      &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
 	}
