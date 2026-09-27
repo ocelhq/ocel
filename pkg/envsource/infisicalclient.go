@@ -22,6 +22,7 @@ const (
 	infisicalWaitCeiling    = 60 * time.Second
 	infisicalTokenMargin    = 60 * time.Second
 	infisicalBodyLimitBytes = 8 << 20
+	infisicalRequestTimeout = 30 * time.Second
 )
 
 type infisicalClient struct {

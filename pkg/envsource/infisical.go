@@ -25,7 +25,7 @@ type infisical struct {
 
 func NewInfisical(options InfisicalOptions, credential Credential, client *http.Client) Source {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: infisicalRequestTimeout}
 	}
 	options = options.Normalize()
 	return &infisical{options: options, client: &infisicalClient{host: options.Host, http: client, credential: credential}}
