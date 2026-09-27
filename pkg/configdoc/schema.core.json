@@ -1536,10 +1536,11 @@
                               "type": "string"
                             },
                             "write": {
-                              "description": "Whether a deploy may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\". Refused for dev, which only reads.",
+                              "description": "What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads.",
                               "enum": [
+                                "never",
                                 "missing",
-                                "never"
+                                "values"
                               ],
                               "type": "string"
                             }
@@ -1752,10 +1753,11 @@
                               "type": "string"
                             },
                             "write": {
-                              "description": "Whether a deploy may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\". Refused for dev, which only reads.",
+                              "description": "What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads.",
                               "enum": [
+                                "never",
                                 "missing",
-                                "never"
+                                "values"
                               ],
                               "type": "string"
                             }
@@ -1968,10 +1970,11 @@
                               "type": "string"
                             },
                             "write": {
-                              "description": "Whether a deploy may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\". Refused for dev, which only reads.",
+                              "description": "What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads.",
                               "enum": [
+                                "never",
                                 "missing",
-                                "never"
+                                "values"
                               ],
                               "type": "string"
                             }

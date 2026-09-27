@@ -20,19 +20,26 @@ func TestOnlyInfisicalIsSyncedOnASchedule(t *testing.T) {
 	}
 }
 
-func TestADeployWritesIntoInfisicalOnlyWhenItsWritePolicyIsMissing(t *testing.T) {
+func TestOcelCreatesInInfisicalUnderMissingOrValuesAndUpdatesOnlyUnderValues(t *testing.T) {
+	writing := func(write envsource.WritePolicy) envsource.Descriptor {
+		return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Write: write}}
+	}
 	for _, c := range []struct {
-		name       string
-		descriptor envsource.Descriptor
-		want       bool
+		name             string
+		descriptor       envsource.Descriptor
+		creates, updates bool
 	}{
-		{"infisical writing missing keys", envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Write: envsource.WriteMissing}}, true},
-		{"infisical never writing", envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Write: envsource.WriteNever}}, false},
-		{"exec", envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{}}, false},
-		{"builtin", envsource.Descriptor{Kind: envsource.Builtin}, false},
+		{"infisical writing values", writing(envsource.WriteValues), true, true},
+		{"infisical writing missing keys", writing(envsource.WriteMissing), true, false},
+		{"infisical never writing", writing(envsource.WriteNever), false, false},
+		{"exec", envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{}}, false, false},
+		{"builtin", envsource.Descriptor{Kind: envsource.Builtin}, false, false},
 	} {
-		if got := c.descriptor.CanWrite(); got != c.want {
-			t.Errorf("%s CanWrite() = %v, want %v", c.name, got, c.want)
+		if got := c.descriptor.CanCreate(); got != c.creates {
+			t.Errorf("%s CanCreate() = %v, want %v", c.name, got, c.creates)
+		}
+		if got := c.descriptor.CanUpdate(); got != c.updates {
+			t.Errorf("%s CanUpdate() = %v, want %v", c.name, got, c.updates)
 		}
 	}
 }

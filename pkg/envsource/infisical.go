@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -167,12 +168,13 @@ func (s *infisical) Update(ctx context.Context, at envvars.Cell, value []byte, c
 	if err != nil {
 		return err
 	}
+	neverCopied := copiedVersion == ""
 	query := url.Values{
 		"projectId":              {s.options.Project},
 		"environment":            {s.options.Environment},
 		"secretPath":             {secretPath},
 		"type":                   {"shared"},
-		"viewSecretValue":        {"false"},
+		"viewSecretValue":        {strconv.FormatBool(neverCopied)},
 		"expandSecretReferences": {"false"},
 		"includeImports":         {"false"},
 	}
@@ -186,7 +188,11 @@ func (s *infisical) Update(ctx context.Context, at envvars.Cell, value []byte, c
 	if err != nil {
 		return fmt.Errorf("read %s in %s: %w", at.Key, secretPath, err)
 	}
-	if infisicalVersion(current.Secret) != sourceVersionOf(copiedVersion) {
+	unchanged := infisicalVersion(current.Secret) == sourceVersionOf(copiedVersion)
+	if neverCopied {
+		unchanged = current.Secret.Value == "" && !current.Secret.ValueHidden
+	}
+	if !unchanged {
 		return fmt.Errorf("%s in %s: %w", at.Key, secretPath, ErrChangedSinceRead)
 	}
 	var updated struct {

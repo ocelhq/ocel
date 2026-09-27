@@ -372,6 +372,7 @@ func TestAConnectorSyncsOnlyTheEnvSourceADeployRegistered(t *testing.T) {
 			Project:     "p-1",
 			Environment: "prod",
 			Host:        "https://infisical.example.com",
+			Write:       envvarsv1.WritePolicy_WRITE_POLICY_NEVER,
 			Auth: &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Universal{Universal: &envvarsv1.InfisicalUniversalAuth{
 				ClientIdVariable:     "INFISICAL_CLIENT_ID",
 				ClientSecretVariable: "STRIPE_KEY",

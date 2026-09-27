@@ -24,6 +24,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type WritePolicy int32
+
+const (
+	WritePolicy_WRITE_POLICY_UNSPECIFIED WritePolicy = 0
+	WritePolicy_WRITE_POLICY_NEVER       WritePolicy = 1
+	WritePolicy_WRITE_POLICY_MISSING     WritePolicy = 2
+	WritePolicy_WRITE_POLICY_VALUES      WritePolicy = 3
+)
+
+// Enum value maps for WritePolicy.
+var (
+	WritePolicy_name = map[int32]string{
+		0: "WRITE_POLICY_UNSPECIFIED",
+		1: "WRITE_POLICY_NEVER",
+		2: "WRITE_POLICY_MISSING",
+		3: "WRITE_POLICY_VALUES",
+	}
+	WritePolicy_value = map[string]int32{
+		"WRITE_POLICY_UNSPECIFIED": 0,
+		"WRITE_POLICY_NEVER":       1,
+		"WRITE_POLICY_MISSING":     2,
+		"WRITE_POLICY_VALUES":      3,
+	}
+)
+
+func (x WritePolicy) Enum() *WritePolicy {
+	p := new(WritePolicy)
+	*p = x
+	return p
+}
+
+func (x WritePolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WritePolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_provider_envvars_v1_envvars_proto_enumTypes[0].Descriptor()
+}
+
+func (WritePolicy) Type() protoreflect.EnumType {
+	return &file_provider_envvars_v1_envvars_proto_enumTypes[0]
+}
+
+func (x WritePolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WritePolicy.Descriptor instead.
+func (WritePolicy) EnumDescriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{0}
+}
+
 type Coordinate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
@@ -1741,7 +1793,7 @@ type InfisicalEnvSource struct {
 	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
 	Host          string                 `protobuf:"bytes,4,opt,name=host,proto3" json:"host,omitempty"`
 	Auth          *InfisicalAuth         `protobuf:"bytes,5,opt,name=auth,proto3" json:"auth,omitempty"`
-	WriteMissing  bool                   `protobuf:"varint,6,opt,name=write_missing,json=writeMissing,proto3" json:"write_missing,omitempty"`
+	Write         WritePolicy            `protobuf:"varint,6,opt,name=write,proto3,enum=provider.envvars.v1.WritePolicy" json:"write,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1811,11 +1863,11 @@ func (x *InfisicalEnvSource) GetAuth() *InfisicalAuth {
 	return nil
 }
 
-func (x *InfisicalEnvSource) GetWriteMissing() bool {
+func (x *InfisicalEnvSource) GetWrite() WritePolicy {
 	if x != nil {
-		return x.WriteMissing
+		return x.Write
 	}
-	return false
+	return WritePolicy_WRITE_POLICY_UNSPECIFIED
 }
 
 type InfisicalAuth struct {
@@ -2156,7 +2208,8 @@ type EnvSourceStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvSource     string                 `protobuf:"bytes,1,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
 	Scheduled     bool                   `protobuf:"varint,2,opt,name=scheduled,proto3" json:"scheduled,omitempty"`
-	Writable      bool                   `protobuf:"varint,3,opt,name=writable,proto3" json:"writable,omitempty"`
+	CanCreate     bool                   `protobuf:"varint,3,opt,name=can_create,json=canCreate,proto3" json:"can_create,omitempty"`
+	CanUpdate     bool                   `protobuf:"varint,9,opt,name=can_update,json=canUpdate,proto3" json:"can_update,omitempty"`
 	LastAttemptAt int64                  `protobuf:"varint,4,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
 	LastSuccessAt int64                  `protobuf:"varint,5,opt,name=last_success_at,json=lastSuccessAt,proto3" json:"last_success_at,omitempty"`
 	LastError     string                 `protobuf:"bytes,6,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
@@ -2210,9 +2263,16 @@ func (x *EnvSourceStatus) GetScheduled() bool {
 	return false
 }
 
-func (x *EnvSourceStatus) GetWritable() bool {
+func (x *EnvSourceStatus) GetCanCreate() bool {
 	if x != nil {
-		return x.Writable
+		return x.CanCreate
+	}
+	return false
+}
+
+func (x *EnvSourceStatus) GetCanUpdate() bool {
+	if x != nil {
+		return x.CanUpdate
 	}
 	return false
 }
@@ -2730,7 +2790,7 @@ func (x *DescribeEnvSourceResponse) GetStatus() *EnvSourceStatus {
 	return nil
 }
 
-type CreateEnvSourceValueRequest struct {
+type SetEnvSourceValueRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Coordinate    *Coordinate            `protobuf:"bytes,2,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
@@ -2740,20 +2800,20 @@ type CreateEnvSourceValueRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreateEnvSourceValueRequest) Reset() {
-	*x = CreateEnvSourceValueRequest{}
+func (x *SetEnvSourceValueRequest) Reset() {
+	*x = SetEnvSourceValueRequest{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateEnvSourceValueRequest) String() string {
+func (x *SetEnvSourceValueRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateEnvSourceValueRequest) ProtoMessage() {}
+func (*SetEnvSourceValueRequest) ProtoMessage() {}
 
-func (x *CreateEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
+func (x *SetEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2765,61 +2825,62 @@ func (x *CreateEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateEnvSourceValueRequest.ProtoReflect.Descriptor instead.
-func (*CreateEnvSourceValueRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetEnvSourceValueRequest.ProtoReflect.Descriptor instead.
+func (*SetEnvSourceValueRequest) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *CreateEnvSourceValueRequest) GetTier() v1.Tier {
+func (x *SetEnvSourceValueRequest) GetTier() v1.Tier {
 	if x != nil {
 		return x.Tier
 	}
 	return v1.Tier(0)
 }
 
-func (x *CreateEnvSourceValueRequest) GetCoordinate() *Coordinate {
+func (x *SetEnvSourceValueRequest) GetCoordinate() *Coordinate {
 	if x != nil {
 		return x.Coordinate
 	}
 	return nil
 }
 
-func (x *CreateEnvSourceValueRequest) GetValue() string {
+func (x *SetEnvSourceValueRequest) GetValue() string {
 	if x != nil {
 		return x.Value
 	}
 	return ""
 }
 
-func (x *CreateEnvSourceValueRequest) GetDescription() string {
+func (x *SetEnvSourceValueRequest) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
 }
 
-type CreateEnvSourceValueResponse struct {
+type SetEnvSourceValueResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	AwaitingApproval bool                   `protobuf:"varint,1,opt,name=awaiting_approval,json=awaitingApproval,proto3" json:"awaiting_approval,omitempty"`
 	Metadata         *ValueMetadata         `protobuf:"bytes,2,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	Created          bool                   `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *CreateEnvSourceValueResponse) Reset() {
-	*x = CreateEnvSourceValueResponse{}
+func (x *SetEnvSourceValueResponse) Reset() {
+	*x = SetEnvSourceValueResponse{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateEnvSourceValueResponse) String() string {
+func (x *SetEnvSourceValueResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateEnvSourceValueResponse) ProtoMessage() {}
+func (*SetEnvSourceValueResponse) ProtoMessage() {}
 
-func (x *CreateEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
+func (x *SetEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2831,23 +2892,30 @@ func (x *CreateEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateEnvSourceValueResponse.ProtoReflect.Descriptor instead.
-func (*CreateEnvSourceValueResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetEnvSourceValueResponse.ProtoReflect.Descriptor instead.
+func (*SetEnvSourceValueResponse) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{47}
 }
 
-func (x *CreateEnvSourceValueResponse) GetAwaitingApproval() bool {
+func (x *SetEnvSourceValueResponse) GetAwaitingApproval() bool {
 	if x != nil {
 		return x.AwaitingApproval
 	}
 	return false
 }
 
-func (x *CreateEnvSourceValueResponse) GetMetadata() *ValueMetadata {
+func (x *SetEnvSourceValueResponse) GetMetadata() *ValueMetadata {
 	if x != nil {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *SetEnvSourceValueResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
 }
 
 var File_provider_envvars_v1_envvars_proto protoreflect.FileDescriptor
@@ -2992,15 +3060,16 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\tinfisical\x18\x02 \x01(\v2'.provider.envvars.v1.InfisicalEnvSourceH\x00R\tinfisical\x128\n" +
 	"\x04exec\x18\x03 \x01(\v2\".provider.envvars.v1.ExecEnvSourceH\x00R\x04execB\r\n" +
 	"\x04kind\x12\x05\xbaH\x02\b\x01\"\x12\n" +
-	"\x10BuiltinEnvSource\"\x99\x02\n" +
+	"\x10BuiltinEnvSource\"\xb8\x02\n" +
 	"\x12InfisicalEnvSource\x12!\n" +
 	"\aproject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aproject\x12)\n" +
 	"\venvironment\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\venvironment\x12#\n" +
 	"\x04path\x18\x03 \x01(\tB\x0f\xbaH\fr\n" +
 	"2\b^(/.*)?$R\x04path\x12+\n" +
 	"\x04host\x18\x04 \x01(\tB\x17\xbaH\x14r\x122\x10^(https?://.+)?$R\x04host\x12>\n" +
-	"\x04auth\x18\x05 \x01(\v2\".provider.envvars.v1.InfisicalAuthB\x06\xbaH\x03\xc8\x01\x01R\x04auth\x12#\n" +
-	"\rwrite_missing\x18\x06 \x01(\bR\fwriteMissing\"\xb7\x01\n" +
+	"\x04auth\x18\x05 \x01(\v2\".provider.envvars.v1.InfisicalAuthB\x06\xbaH\x03\xc8\x01\x01R\x04auth\x12B\n" +
+	"\x05write\x18\x06 \x01(\x0e2 .provider.envvars.v1.WritePolicyB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05write\"\xb7\x01\n" +
 	"\rInfisicalAuth\x12K\n" +
 	"\tuniversal\x18\x01 \x01(\v2+.provider.envvars.v1.InfisicalUniversalAuthH\x00R\tuniversal\x12H\n" +
 	"\bidentity\x18\x02 \x01(\v2*.provider.envvars.v1.InfisicalIdentityAuthH\x00R\bidentityB\x0f\n" +
@@ -3019,12 +3088,15 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\"\xaf\x01\n" +
 	"\x04Cell\x12z\n" +
 	"\x06folder\x18\x01 \x01(\tBb\xbaH_r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
-	"\x03key\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\"\xb2\x02\n" +
+	"\x03key\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\"\xd4\x02\n" +
 	"\x0fEnvSourceStatus\x12\x1d\n" +
 	"\n" +
 	"env_source\x18\x01 \x01(\tR\tenvSource\x12\x1c\n" +
-	"\tscheduled\x18\x02 \x01(\bR\tscheduled\x12\x1a\n" +
-	"\bwritable\x18\x03 \x01(\bR\bwritable\x12&\n" +
+	"\tscheduled\x18\x02 \x01(\bR\tscheduled\x12\x1d\n" +
+	"\n" +
+	"can_create\x18\x03 \x01(\bR\tcanCreate\x12\x1d\n" +
+	"\n" +
+	"can_update\x18\t \x01(\bR\tcanUpdate\x12&\n" +
 	"\x0flast_attempt_at\x18\x04 \x01(\x03R\rlastAttemptAt\x12&\n" +
 	"\x0flast_success_at\x18\x05 \x01(\x03R\rlastSuccessAt\x12\x1d\n" +
 	"\n" +
@@ -3065,19 +3137,25 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
 	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\"Y\n" +
 	"\x19DescribeEnvSourceResponse\x12<\n" +
-	"\x06status\x18\x01 \x01(\v2$.provider.envvars.v1.EnvSourceStatusR\x06status\"\xe1\x02\n" +
-	"\x1bCreateEnvSourceValueRequest\x12\xb2\x01\n" +
+	"\x06status\x18\x01 \x01(\v2$.provider.envvars.v1.EnvSourceStatusR\x06status\"\xde\x02\n" +
+	"\x18SetEnvSourceValueRequest\x12\xb2\x01\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x80\x01\xbaH}\xba\x01z\n" +
 	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12G\n" +
 	"\n" +
 	"coordinate\x18\x02 \x01(\v2\x1f.provider.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\x12\x19\n" +
 	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x12)\n" +
-	"\vdescription\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18xR\vdescription\"\x9d\x01\n" +
-	"\x1cCreateEnvSourceValueResponse\x12+\n" +
+	"\vdescription\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18xR\vdescription\"\xb4\x01\n" +
+	"\x19SetEnvSourceValueResponse\x12+\n" +
 	"\x11awaiting_approval\x18\x01 \x01(\bR\x10awaitingApproval\x12C\n" +
-	"\bmetadata\x18\x02 \x01(\v2\".provider.envvars.v1.ValueMetadataH\x00R\bmetadata\x88\x01\x01B\v\n" +
-	"\t_metadata2\xa2\v\n" +
+	"\bmetadata\x18\x02 \x01(\v2\".provider.envvars.v1.ValueMetadataH\x00R\bmetadata\x88\x01\x01\x12\x18\n" +
+	"\acreated\x18\x03 \x01(\bR\acreatedB\v\n" +
+	"\t_metadata*v\n" +
+	"\vWritePolicy\x12\x1c\n" +
+	"\x18WRITE_POLICY_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12WRITE_POLICY_NEVER\x10\x01\x12\x18\n" +
+	"\x14WRITE_POLICY_MISSING\x10\x02\x12\x17\n" +
+	"\x13WRITE_POLICY_VALUES\x10\x032\x99\v\n" +
 	"\x0eEnvVarsService\x12W\n" +
 	"\bSetValue\x12$.provider.envvars.v1.SetValueRequest\x1a%.provider.envvars.v1.SetValueResponse\x12]\n" +
 	"\n" +
@@ -3093,8 +3171,8 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\rRemoveBinding\x12).provider.envvars.v1.RemoveBindingRequest\x1a*.provider.envvars.v1.RemoveBindingResponse\x12c\n" +
 	"\fListBindings\x12(.provider.envvars.v1.ListBindingsRequest\x1a).provider.envvars.v1.ListBindingsResponse\x12f\n" +
 	"\rSyncEnvSource\x12).provider.envvars.v1.SyncEnvSourceRequest\x1a*.provider.envvars.v1.SyncEnvSourceResponse\x12r\n" +
-	"\x11DescribeEnvSource\x12-.provider.envvars.v1.DescribeEnvSourceRequest\x1a..provider.envvars.v1.DescribeEnvSourceResponse\x12{\n" +
-	"\x14CreateEnvSourceValue\x120.provider.envvars.v1.CreateEnvSourceValueRequest\x1a1.provider.envvars.v1.CreateEnvSourceValueResponseB@Z>github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1b\x06proto3"
+	"\x11DescribeEnvSource\x12-.provider.envvars.v1.DescribeEnvSourceRequest\x1a..provider.envvars.v1.DescribeEnvSourceResponse\x12r\n" +
+	"\x11SetEnvSourceValue\x12-.provider.envvars.v1.SetEnvSourceValueRequest\x1a..provider.envvars.v1.SetEnvSourceValueResponseB@Z>github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1b\x06proto3"
 
 var (
 	file_provider_envvars_v1_envvars_proto_rawDescOnce sync.Once
@@ -3108,148 +3186,151 @@ func file_provider_envvars_v1_envvars_proto_rawDescGZIP() []byte {
 	return file_provider_envvars_v1_envvars_proto_rawDescData
 }
 
+var file_provider_envvars_v1_envvars_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_provider_envvars_v1_envvars_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_provider_envvars_v1_envvars_proto_goTypes = []any{
-	(*Coordinate)(nil),                   // 0: provider.envvars.v1.Coordinate
-	(*ValueMetadata)(nil),                // 1: provider.envvars.v1.ValueMetadata
-	(*VersionEntry)(nil),                 // 2: provider.envvars.v1.VersionEntry
-	(*SetValueRequest)(nil),              // 3: provider.envvars.v1.SetValueRequest
-	(*SetValueResponse)(nil),             // 4: provider.envvars.v1.SetValueResponse
-	(*ListValuesRequest)(nil),            // 5: provider.envvars.v1.ListValuesRequest
-	(*ListValuesResponse)(nil),           // 6: provider.envvars.v1.ListValuesResponse
-	(*GetValueRequest)(nil),              // 7: provider.envvars.v1.GetValueRequest
-	(*GetValueResponse)(nil),             // 8: provider.envvars.v1.GetValueResponse
-	(*RevealValuesRequest)(nil),          // 9: provider.envvars.v1.RevealValuesRequest
-	(*RevealValuesResponse)(nil),         // 10: provider.envvars.v1.RevealValuesResponse
-	(*RevealedValue)(nil),                // 11: provider.envvars.v1.RevealedValue
-	(*DeleteValueRequest)(nil),           // 12: provider.envvars.v1.DeleteValueRequest
-	(*DeleteValueResponse)(nil),          // 13: provider.envvars.v1.DeleteValueResponse
-	(*SetReferenceRequest)(nil),          // 14: provider.envvars.v1.SetReferenceRequest
-	(*SetReferenceResponse)(nil),         // 15: provider.envvars.v1.SetReferenceResponse
-	(*ListReferencesRequest)(nil),        // 16: provider.envvars.v1.ListReferencesRequest
-	(*ListReferencesResponse)(nil),       // 17: provider.envvars.v1.ListReferencesResponse
-	(*ListVersionsRequest)(nil),          // 18: provider.envvars.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil),         // 19: provider.envvars.v1.ListVersionsResponse
-	(*SetBindingRequest)(nil),            // 20: provider.envvars.v1.SetBindingRequest
-	(*SetBindingResponse)(nil),           // 21: provider.envvars.v1.SetBindingResponse
-	(*RemoveBindingRequest)(nil),         // 22: provider.envvars.v1.RemoveBindingRequest
-	(*RemoveBindingResponse)(nil),        // 23: provider.envvars.v1.RemoveBindingResponse
-	(*ListBindingsRequest)(nil),          // 24: provider.envvars.v1.ListBindingsRequest
-	(*ListBindingsResponse)(nil),         // 25: provider.envvars.v1.ListBindingsResponse
-	(*BindingSummary)(nil),               // 26: provider.envvars.v1.BindingSummary
-	(*PropertyShape)(nil),                // 27: provider.envvars.v1.PropertyShape
-	(*EnvSource)(nil),                    // 28: provider.envvars.v1.EnvSource
-	(*BuiltinEnvSource)(nil),             // 29: provider.envvars.v1.BuiltinEnvSource
-	(*InfisicalEnvSource)(nil),           // 30: provider.envvars.v1.InfisicalEnvSource
-	(*InfisicalAuth)(nil),                // 31: provider.envvars.v1.InfisicalAuth
-	(*InfisicalUniversalAuth)(nil),       // 32: provider.envvars.v1.InfisicalUniversalAuth
-	(*InfisicalIdentityAuth)(nil),        // 33: provider.envvars.v1.InfisicalIdentityAuth
-	(*ExecEnvSource)(nil),                // 34: provider.envvars.v1.ExecEnvSource
-	(*EnvSourceValue)(nil),               // 35: provider.envvars.v1.EnvSourceValue
-	(*Cell)(nil),                         // 36: provider.envvars.v1.Cell
-	(*EnvSourceStatus)(nil),              // 37: provider.envvars.v1.EnvSourceStatus
-	(*FolderLink)(nil),                   // 38: provider.envvars.v1.FolderLink
-	(*RefusedCell)(nil),                  // 39: provider.envvars.v1.RefusedCell
-	(*CredentialRefusal)(nil),            // 40: provider.envvars.v1.CredentialRefusal
-	(*SyncEnvSourceRequest)(nil),         // 41: provider.envvars.v1.SyncEnvSourceRequest
-	(*RegisteredEnvSource)(nil),          // 42: provider.envvars.v1.RegisteredEnvSource
-	(*SyncEnvSourceResponse)(nil),        // 43: provider.envvars.v1.SyncEnvSourceResponse
-	(*DescribeEnvSourceRequest)(nil),     // 44: provider.envvars.v1.DescribeEnvSourceRequest
-	(*DescribeEnvSourceResponse)(nil),    // 45: provider.envvars.v1.DescribeEnvSourceResponse
-	(*CreateEnvSourceValueRequest)(nil),  // 46: provider.envvars.v1.CreateEnvSourceValueRequest
-	(*CreateEnvSourceValueResponse)(nil), // 47: provider.envvars.v1.CreateEnvSourceValueResponse
-	(v1.Tier)(0),                         // 48: common.environment.v1.Tier
-	(*v11.Binding)(nil),                  // 49: common.bindings.v1.Binding
-	(v11.BindingType)(0),                 // 50: common.bindings.v1.BindingType
+	(WritePolicy)(0),                  // 0: provider.envvars.v1.WritePolicy
+	(*Coordinate)(nil),                // 1: provider.envvars.v1.Coordinate
+	(*ValueMetadata)(nil),             // 2: provider.envvars.v1.ValueMetadata
+	(*VersionEntry)(nil),              // 3: provider.envvars.v1.VersionEntry
+	(*SetValueRequest)(nil),           // 4: provider.envvars.v1.SetValueRequest
+	(*SetValueResponse)(nil),          // 5: provider.envvars.v1.SetValueResponse
+	(*ListValuesRequest)(nil),         // 6: provider.envvars.v1.ListValuesRequest
+	(*ListValuesResponse)(nil),        // 7: provider.envvars.v1.ListValuesResponse
+	(*GetValueRequest)(nil),           // 8: provider.envvars.v1.GetValueRequest
+	(*GetValueResponse)(nil),          // 9: provider.envvars.v1.GetValueResponse
+	(*RevealValuesRequest)(nil),       // 10: provider.envvars.v1.RevealValuesRequest
+	(*RevealValuesResponse)(nil),      // 11: provider.envvars.v1.RevealValuesResponse
+	(*RevealedValue)(nil),             // 12: provider.envvars.v1.RevealedValue
+	(*DeleteValueRequest)(nil),        // 13: provider.envvars.v1.DeleteValueRequest
+	(*DeleteValueResponse)(nil),       // 14: provider.envvars.v1.DeleteValueResponse
+	(*SetReferenceRequest)(nil),       // 15: provider.envvars.v1.SetReferenceRequest
+	(*SetReferenceResponse)(nil),      // 16: provider.envvars.v1.SetReferenceResponse
+	(*ListReferencesRequest)(nil),     // 17: provider.envvars.v1.ListReferencesRequest
+	(*ListReferencesResponse)(nil),    // 18: provider.envvars.v1.ListReferencesResponse
+	(*ListVersionsRequest)(nil),       // 19: provider.envvars.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil),      // 20: provider.envvars.v1.ListVersionsResponse
+	(*SetBindingRequest)(nil),         // 21: provider.envvars.v1.SetBindingRequest
+	(*SetBindingResponse)(nil),        // 22: provider.envvars.v1.SetBindingResponse
+	(*RemoveBindingRequest)(nil),      // 23: provider.envvars.v1.RemoveBindingRequest
+	(*RemoveBindingResponse)(nil),     // 24: provider.envvars.v1.RemoveBindingResponse
+	(*ListBindingsRequest)(nil),       // 25: provider.envvars.v1.ListBindingsRequest
+	(*ListBindingsResponse)(nil),      // 26: provider.envvars.v1.ListBindingsResponse
+	(*BindingSummary)(nil),            // 27: provider.envvars.v1.BindingSummary
+	(*PropertyShape)(nil),             // 28: provider.envvars.v1.PropertyShape
+	(*EnvSource)(nil),                 // 29: provider.envvars.v1.EnvSource
+	(*BuiltinEnvSource)(nil),          // 30: provider.envvars.v1.BuiltinEnvSource
+	(*InfisicalEnvSource)(nil),        // 31: provider.envvars.v1.InfisicalEnvSource
+	(*InfisicalAuth)(nil),             // 32: provider.envvars.v1.InfisicalAuth
+	(*InfisicalUniversalAuth)(nil),    // 33: provider.envvars.v1.InfisicalUniversalAuth
+	(*InfisicalIdentityAuth)(nil),     // 34: provider.envvars.v1.InfisicalIdentityAuth
+	(*ExecEnvSource)(nil),             // 35: provider.envvars.v1.ExecEnvSource
+	(*EnvSourceValue)(nil),            // 36: provider.envvars.v1.EnvSourceValue
+	(*Cell)(nil),                      // 37: provider.envvars.v1.Cell
+	(*EnvSourceStatus)(nil),           // 38: provider.envvars.v1.EnvSourceStatus
+	(*FolderLink)(nil),                // 39: provider.envvars.v1.FolderLink
+	(*RefusedCell)(nil),               // 40: provider.envvars.v1.RefusedCell
+	(*CredentialRefusal)(nil),         // 41: provider.envvars.v1.CredentialRefusal
+	(*SyncEnvSourceRequest)(nil),      // 42: provider.envvars.v1.SyncEnvSourceRequest
+	(*RegisteredEnvSource)(nil),       // 43: provider.envvars.v1.RegisteredEnvSource
+	(*SyncEnvSourceResponse)(nil),     // 44: provider.envvars.v1.SyncEnvSourceResponse
+	(*DescribeEnvSourceRequest)(nil),  // 45: provider.envvars.v1.DescribeEnvSourceRequest
+	(*DescribeEnvSourceResponse)(nil), // 46: provider.envvars.v1.DescribeEnvSourceResponse
+	(*SetEnvSourceValueRequest)(nil),  // 47: provider.envvars.v1.SetEnvSourceValueRequest
+	(*SetEnvSourceValueResponse)(nil), // 48: provider.envvars.v1.SetEnvSourceValueResponse
+	(v1.Tier)(0),                      // 49: common.environment.v1.Tier
+	(*v11.Binding)(nil),               // 50: common.bindings.v1.Binding
+	(v11.BindingType)(0),              // 51: common.bindings.v1.BindingType
 }
 var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
-	0,  // 0: provider.envvars.v1.ValueMetadata.coordinate:type_name -> provider.envvars.v1.Coordinate
-	0,  // 1: provider.envvars.v1.ValueMetadata.target:type_name -> provider.envvars.v1.Coordinate
-	48, // 2: provider.envvars.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 3: provider.envvars.v1.SetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	1,  // 4: provider.envvars.v1.SetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	48, // 5: provider.envvars.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
-	1,  // 6: provider.envvars.v1.ListValuesResponse.values:type_name -> provider.envvars.v1.ValueMetadata
-	48, // 7: provider.envvars.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 8: provider.envvars.v1.GetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	1,  // 9: provider.envvars.v1.GetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	48, // 10: provider.envvars.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 11: provider.envvars.v1.RevealValuesRequest.cells:type_name -> provider.envvars.v1.Coordinate
-	11, // 12: provider.envvars.v1.RevealValuesResponse.values:type_name -> provider.envvars.v1.RevealedValue
-	1,  // 13: provider.envvars.v1.RevealedValue.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	48, // 14: provider.envvars.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 15: provider.envvars.v1.DeleteValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	48, // 16: provider.envvars.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 17: provider.envvars.v1.SetReferenceRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	0,  // 18: provider.envvars.v1.SetReferenceRequest.target:type_name -> provider.envvars.v1.Coordinate
-	1,  // 19: provider.envvars.v1.SetReferenceResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	48, // 20: provider.envvars.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 21: provider.envvars.v1.ListReferencesRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	0,  // 22: provider.envvars.v1.ListReferencesResponse.references:type_name -> provider.envvars.v1.Coordinate
-	48, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 24: provider.envvars.v1.ListVersionsRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	2,  // 25: provider.envvars.v1.ListVersionsResponse.versions:type_name -> provider.envvars.v1.VersionEntry
-	48, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
-	49, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
-	48, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
-	48, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
-	26, // 30: provider.envvars.v1.ListBindingsResponse.bindings:type_name -> provider.envvars.v1.BindingSummary
-	50, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
-	27, // 32: provider.envvars.v1.BindingSummary.properties:type_name -> provider.envvars.v1.PropertyShape
-	29, // 33: provider.envvars.v1.EnvSource.builtin:type_name -> provider.envvars.v1.BuiltinEnvSource
-	30, // 34: provider.envvars.v1.EnvSource.infisical:type_name -> provider.envvars.v1.InfisicalEnvSource
-	34, // 35: provider.envvars.v1.EnvSource.exec:type_name -> provider.envvars.v1.ExecEnvSource
-	31, // 36: provider.envvars.v1.InfisicalEnvSource.auth:type_name -> provider.envvars.v1.InfisicalAuth
-	32, // 37: provider.envvars.v1.InfisicalAuth.universal:type_name -> provider.envvars.v1.InfisicalUniversalAuth
-	33, // 38: provider.envvars.v1.InfisicalAuth.identity:type_name -> provider.envvars.v1.InfisicalIdentityAuth
-	35, // 39: provider.envvars.v1.ExecEnvSource.values:type_name -> provider.envvars.v1.EnvSourceValue
-	36, // 40: provider.envvars.v1.EnvSourceValue.cell:type_name -> provider.envvars.v1.Cell
-	38, // 41: provider.envvars.v1.EnvSourceStatus.links:type_name -> provider.envvars.v1.FolderLink
-	36, // 42: provider.envvars.v1.RefusedCell.cell:type_name -> provider.envvars.v1.Cell
-	48, // 43: provider.envvars.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
-	28, // 44: provider.envvars.v1.SyncEnvSourceRequest.env_source:type_name -> provider.envvars.v1.EnvSource
-	42, // 45: provider.envvars.v1.SyncEnvSourceRequest.registered:type_name -> provider.envvars.v1.RegisteredEnvSource
-	37, // 46: provider.envvars.v1.SyncEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
-	36, // 47: provider.envvars.v1.SyncEnvSourceResponse.present:type_name -> provider.envvars.v1.Cell
-	39, // 48: provider.envvars.v1.SyncEnvSourceResponse.refused:type_name -> provider.envvars.v1.RefusedCell
-	48, // 49: provider.envvars.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
-	37, // 50: provider.envvars.v1.DescribeEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
-	48, // 51: provider.envvars.v1.CreateEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 52: provider.envvars.v1.CreateEnvSourceValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	1,  // 53: provider.envvars.v1.CreateEnvSourceValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	3,  // 54: provider.envvars.v1.EnvVarsService.SetValue:input_type -> provider.envvars.v1.SetValueRequest
-	5,  // 55: provider.envvars.v1.EnvVarsService.ListValues:input_type -> provider.envvars.v1.ListValuesRequest
-	7,  // 56: provider.envvars.v1.EnvVarsService.GetValue:input_type -> provider.envvars.v1.GetValueRequest
-	9,  // 57: provider.envvars.v1.EnvVarsService.RevealValues:input_type -> provider.envvars.v1.RevealValuesRequest
-	12, // 58: provider.envvars.v1.EnvVarsService.DeleteValue:input_type -> provider.envvars.v1.DeleteValueRequest
-	14, // 59: provider.envvars.v1.EnvVarsService.SetReference:input_type -> provider.envvars.v1.SetReferenceRequest
-	16, // 60: provider.envvars.v1.EnvVarsService.ListReferences:input_type -> provider.envvars.v1.ListReferencesRequest
-	18, // 61: provider.envvars.v1.EnvVarsService.ListVersions:input_type -> provider.envvars.v1.ListVersionsRequest
-	20, // 62: provider.envvars.v1.EnvVarsService.SetBinding:input_type -> provider.envvars.v1.SetBindingRequest
-	22, // 63: provider.envvars.v1.EnvVarsService.RemoveBinding:input_type -> provider.envvars.v1.RemoveBindingRequest
-	24, // 64: provider.envvars.v1.EnvVarsService.ListBindings:input_type -> provider.envvars.v1.ListBindingsRequest
-	41, // 65: provider.envvars.v1.EnvVarsService.SyncEnvSource:input_type -> provider.envvars.v1.SyncEnvSourceRequest
-	44, // 66: provider.envvars.v1.EnvVarsService.DescribeEnvSource:input_type -> provider.envvars.v1.DescribeEnvSourceRequest
-	46, // 67: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:input_type -> provider.envvars.v1.CreateEnvSourceValueRequest
-	4,  // 68: provider.envvars.v1.EnvVarsService.SetValue:output_type -> provider.envvars.v1.SetValueResponse
-	6,  // 69: provider.envvars.v1.EnvVarsService.ListValues:output_type -> provider.envvars.v1.ListValuesResponse
-	8,  // 70: provider.envvars.v1.EnvVarsService.GetValue:output_type -> provider.envvars.v1.GetValueResponse
-	10, // 71: provider.envvars.v1.EnvVarsService.RevealValues:output_type -> provider.envvars.v1.RevealValuesResponse
-	13, // 72: provider.envvars.v1.EnvVarsService.DeleteValue:output_type -> provider.envvars.v1.DeleteValueResponse
-	15, // 73: provider.envvars.v1.EnvVarsService.SetReference:output_type -> provider.envvars.v1.SetReferenceResponse
-	17, // 74: provider.envvars.v1.EnvVarsService.ListReferences:output_type -> provider.envvars.v1.ListReferencesResponse
-	19, // 75: provider.envvars.v1.EnvVarsService.ListVersions:output_type -> provider.envvars.v1.ListVersionsResponse
-	21, // 76: provider.envvars.v1.EnvVarsService.SetBinding:output_type -> provider.envvars.v1.SetBindingResponse
-	23, // 77: provider.envvars.v1.EnvVarsService.RemoveBinding:output_type -> provider.envvars.v1.RemoveBindingResponse
-	25, // 78: provider.envvars.v1.EnvVarsService.ListBindings:output_type -> provider.envvars.v1.ListBindingsResponse
-	43, // 79: provider.envvars.v1.EnvVarsService.SyncEnvSource:output_type -> provider.envvars.v1.SyncEnvSourceResponse
-	45, // 80: provider.envvars.v1.EnvVarsService.DescribeEnvSource:output_type -> provider.envvars.v1.DescribeEnvSourceResponse
-	47, // 81: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:output_type -> provider.envvars.v1.CreateEnvSourceValueResponse
-	68, // [68:82] is the sub-list for method output_type
-	54, // [54:68] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	1,  // 0: provider.envvars.v1.ValueMetadata.coordinate:type_name -> provider.envvars.v1.Coordinate
+	1,  // 1: provider.envvars.v1.ValueMetadata.target:type_name -> provider.envvars.v1.Coordinate
+	49, // 2: provider.envvars.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 3: provider.envvars.v1.SetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	2,  // 4: provider.envvars.v1.SetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
+	49, // 5: provider.envvars.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
+	2,  // 6: provider.envvars.v1.ListValuesResponse.values:type_name -> provider.envvars.v1.ValueMetadata
+	49, // 7: provider.envvars.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 8: provider.envvars.v1.GetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	2,  // 9: provider.envvars.v1.GetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
+	49, // 10: provider.envvars.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 11: provider.envvars.v1.RevealValuesRequest.cells:type_name -> provider.envvars.v1.Coordinate
+	12, // 12: provider.envvars.v1.RevealValuesResponse.values:type_name -> provider.envvars.v1.RevealedValue
+	2,  // 13: provider.envvars.v1.RevealedValue.metadata:type_name -> provider.envvars.v1.ValueMetadata
+	49, // 14: provider.envvars.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 15: provider.envvars.v1.DeleteValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	49, // 16: provider.envvars.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 17: provider.envvars.v1.SetReferenceRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	1,  // 18: provider.envvars.v1.SetReferenceRequest.target:type_name -> provider.envvars.v1.Coordinate
+	2,  // 19: provider.envvars.v1.SetReferenceResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
+	49, // 20: provider.envvars.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 21: provider.envvars.v1.ListReferencesRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	1,  // 22: provider.envvars.v1.ListReferencesResponse.references:type_name -> provider.envvars.v1.Coordinate
+	49, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 24: provider.envvars.v1.ListVersionsRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	3,  // 25: provider.envvars.v1.ListVersionsResponse.versions:type_name -> provider.envvars.v1.VersionEntry
+	49, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
+	50, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
+	49, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
+	49, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
+	27, // 30: provider.envvars.v1.ListBindingsResponse.bindings:type_name -> provider.envvars.v1.BindingSummary
+	51, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
+	28, // 32: provider.envvars.v1.BindingSummary.properties:type_name -> provider.envvars.v1.PropertyShape
+	30, // 33: provider.envvars.v1.EnvSource.builtin:type_name -> provider.envvars.v1.BuiltinEnvSource
+	31, // 34: provider.envvars.v1.EnvSource.infisical:type_name -> provider.envvars.v1.InfisicalEnvSource
+	35, // 35: provider.envvars.v1.EnvSource.exec:type_name -> provider.envvars.v1.ExecEnvSource
+	32, // 36: provider.envvars.v1.InfisicalEnvSource.auth:type_name -> provider.envvars.v1.InfisicalAuth
+	0,  // 37: provider.envvars.v1.InfisicalEnvSource.write:type_name -> provider.envvars.v1.WritePolicy
+	33, // 38: provider.envvars.v1.InfisicalAuth.universal:type_name -> provider.envvars.v1.InfisicalUniversalAuth
+	34, // 39: provider.envvars.v1.InfisicalAuth.identity:type_name -> provider.envvars.v1.InfisicalIdentityAuth
+	36, // 40: provider.envvars.v1.ExecEnvSource.values:type_name -> provider.envvars.v1.EnvSourceValue
+	37, // 41: provider.envvars.v1.EnvSourceValue.cell:type_name -> provider.envvars.v1.Cell
+	39, // 42: provider.envvars.v1.EnvSourceStatus.links:type_name -> provider.envvars.v1.FolderLink
+	37, // 43: provider.envvars.v1.RefusedCell.cell:type_name -> provider.envvars.v1.Cell
+	49, // 44: provider.envvars.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	29, // 45: provider.envvars.v1.SyncEnvSourceRequest.env_source:type_name -> provider.envvars.v1.EnvSource
+	43, // 46: provider.envvars.v1.SyncEnvSourceRequest.registered:type_name -> provider.envvars.v1.RegisteredEnvSource
+	38, // 47: provider.envvars.v1.SyncEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
+	37, // 48: provider.envvars.v1.SyncEnvSourceResponse.present:type_name -> provider.envvars.v1.Cell
+	40, // 49: provider.envvars.v1.SyncEnvSourceResponse.refused:type_name -> provider.envvars.v1.RefusedCell
+	49, // 50: provider.envvars.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	38, // 51: provider.envvars.v1.DescribeEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
+	49, // 52: provider.envvars.v1.SetEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
+	1,  // 53: provider.envvars.v1.SetEnvSourceValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	2,  // 54: provider.envvars.v1.SetEnvSourceValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
+	4,  // 55: provider.envvars.v1.EnvVarsService.SetValue:input_type -> provider.envvars.v1.SetValueRequest
+	6,  // 56: provider.envvars.v1.EnvVarsService.ListValues:input_type -> provider.envvars.v1.ListValuesRequest
+	8,  // 57: provider.envvars.v1.EnvVarsService.GetValue:input_type -> provider.envvars.v1.GetValueRequest
+	10, // 58: provider.envvars.v1.EnvVarsService.RevealValues:input_type -> provider.envvars.v1.RevealValuesRequest
+	13, // 59: provider.envvars.v1.EnvVarsService.DeleteValue:input_type -> provider.envvars.v1.DeleteValueRequest
+	15, // 60: provider.envvars.v1.EnvVarsService.SetReference:input_type -> provider.envvars.v1.SetReferenceRequest
+	17, // 61: provider.envvars.v1.EnvVarsService.ListReferences:input_type -> provider.envvars.v1.ListReferencesRequest
+	19, // 62: provider.envvars.v1.EnvVarsService.ListVersions:input_type -> provider.envvars.v1.ListVersionsRequest
+	21, // 63: provider.envvars.v1.EnvVarsService.SetBinding:input_type -> provider.envvars.v1.SetBindingRequest
+	23, // 64: provider.envvars.v1.EnvVarsService.RemoveBinding:input_type -> provider.envvars.v1.RemoveBindingRequest
+	25, // 65: provider.envvars.v1.EnvVarsService.ListBindings:input_type -> provider.envvars.v1.ListBindingsRequest
+	42, // 66: provider.envvars.v1.EnvVarsService.SyncEnvSource:input_type -> provider.envvars.v1.SyncEnvSourceRequest
+	45, // 67: provider.envvars.v1.EnvVarsService.DescribeEnvSource:input_type -> provider.envvars.v1.DescribeEnvSourceRequest
+	47, // 68: provider.envvars.v1.EnvVarsService.SetEnvSourceValue:input_type -> provider.envvars.v1.SetEnvSourceValueRequest
+	5,  // 69: provider.envvars.v1.EnvVarsService.SetValue:output_type -> provider.envvars.v1.SetValueResponse
+	7,  // 70: provider.envvars.v1.EnvVarsService.ListValues:output_type -> provider.envvars.v1.ListValuesResponse
+	9,  // 71: provider.envvars.v1.EnvVarsService.GetValue:output_type -> provider.envvars.v1.GetValueResponse
+	11, // 72: provider.envvars.v1.EnvVarsService.RevealValues:output_type -> provider.envvars.v1.RevealValuesResponse
+	14, // 73: provider.envvars.v1.EnvVarsService.DeleteValue:output_type -> provider.envvars.v1.DeleteValueResponse
+	16, // 74: provider.envvars.v1.EnvVarsService.SetReference:output_type -> provider.envvars.v1.SetReferenceResponse
+	18, // 75: provider.envvars.v1.EnvVarsService.ListReferences:output_type -> provider.envvars.v1.ListReferencesResponse
+	20, // 76: provider.envvars.v1.EnvVarsService.ListVersions:output_type -> provider.envvars.v1.ListVersionsResponse
+	22, // 77: provider.envvars.v1.EnvVarsService.SetBinding:output_type -> provider.envvars.v1.SetBindingResponse
+	24, // 78: provider.envvars.v1.EnvVarsService.RemoveBinding:output_type -> provider.envvars.v1.RemoveBindingResponse
+	26, // 79: provider.envvars.v1.EnvVarsService.ListBindings:output_type -> provider.envvars.v1.ListBindingsResponse
+	44, // 80: provider.envvars.v1.EnvVarsService.SyncEnvSource:output_type -> provider.envvars.v1.SyncEnvSourceResponse
+	46, // 81: provider.envvars.v1.EnvVarsService.DescribeEnvSource:output_type -> provider.envvars.v1.DescribeEnvSourceResponse
+	48, // 82: provider.envvars.v1.EnvVarsService.SetEnvSourceValue:output_type -> provider.envvars.v1.SetEnvSourceValueResponse
+	69, // [69:83] is the sub-list for method output_type
+	55, // [55:69] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_provider_envvars_v1_envvars_proto_init() }
@@ -3279,13 +3360,14 @@ func file_provider_envvars_v1_envvars_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_envvars_v1_envvars_proto_rawDesc), len(file_provider_envvars_v1_envvars_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_provider_envvars_v1_envvars_proto_goTypes,
 		DependencyIndexes: file_provider_envvars_v1_envvars_proto_depIdxs,
+		EnumInfos:         file_provider_envvars_v1_envvars_proto_enumTypes,
 		MessageInfos:      file_provider_envvars_v1_envvars_proto_msgTypes,
 	}.Build()
 	File_provider_envvars_v1_envvars_proto = out.File

@@ -84,7 +84,7 @@ func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
 
 func (r gateRecovery) createInEnvSource(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) {
 	source := gate.Scope().EnvSource
-	if !source.Writable || r.ui.Dry() {
+	if !source.CanCreate || r.ui.Dry() {
 		return
 	}
 	vars, err := r.runner.Vars()
@@ -95,7 +95,7 @@ func (r gateRecovery) createInEnvSource(ctx context.Context, gate *envgate.Gate,
 		if problem.GetKind() != resourcesv1.VariableProblem_KIND_MISSING {
 			continue
 		}
-		resp, err := vars.CreateEnvSourceValue(ctx, &envvarsv1.CreateEnvSourceValueRequest{
+		resp, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
 			Tier:        gate.Scope().Tier(),
 			Coordinate:  &envvarsv1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
 			Description: refusal.Description(problem.GetKey()),

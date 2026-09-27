@@ -20,7 +20,8 @@ export interface Stored extends Cell {
 
 export interface EnvSourceStatus {
   id: string;
-  writable: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
   urls: Record<string, string>;
   credentials: string[];
 }
@@ -79,14 +80,15 @@ export function describeEnvSource(
     });
     return {
       id: status?.envSource || "builtin",
-      writable: status?.writable ?? false,
+      canCreate: status?.canCreate ?? false,
+      canUpdate: status?.canUpdate ?? false,
       urls: Object.fromEntries((status?.links ?? []).map((link) => [link.folder, link.url])),
       credentials: status?.credentials ?? [],
     };
   });
 }
 
-export function createEnvSourceValue(
+export function setEnvSourceValue(
   connector: Connector,
   environmentClass: EnvironmentClass,
   slug: string,
@@ -95,7 +97,7 @@ export function createEnvSourceValue(
   description: string,
 ): Promise<Outcome<{ awaitingApproval: boolean }>> {
   return ask(async () => {
-    const answer = await vars(connector).createEnvSourceValue({
+    const answer = await vars(connector).setEnvSourceValue({
       tier: tierOf(environmentClass),
       coordinate: { slug, ...at },
       value,

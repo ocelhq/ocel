@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
@@ -26,6 +27,7 @@ func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
 		{name: "infisical with universal auth that may create a missing key", descriptor: infisical(envsource.InfisicalAuth{
 			Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET",
 		}, envsource.WriteMissing)},
+		{name: "infisical that may create or update a value", descriptor: infisical(envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "id-1"}, envsource.WriteValues)},
 		{name: "infisical logging in as the target's cloud identity", descriptor: infisical(envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "id-1"}, envsource.WriteNever)},
 		{
 			name:       "exec with what its command printed",
@@ -66,6 +68,9 @@ func TestADecodedInfisicalEnvSourceIsNormalized(t *testing.T) {
 		Project: "p-1", Environment: "prod", Auth: envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "id"},
 	}}, nil)
 
+	if sent.GetInfisical().GetWrite() != envvarsv1.WritePolicy_WRITE_POLICY_NEVER {
+		t.Errorf("write = %v, want never sent for a write left off", sent.GetInfisical().GetWrite())
+	}
 	descriptor, _ := envsourcewire.Decode(sent)
 	if got := *descriptor.Infisical; got.Path != "/" || got.Host != "https://app.infisical.com" || got.Write != envsource.WriteNever {
 		t.Errorf("options = %+v, want the root path, Infisical's cloud and write never filled in", got)

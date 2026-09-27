@@ -112,7 +112,7 @@ func EnvSourceOf(resp *envvarsv1.SyncEnvSourceResponse) envgate.EnvSource {
 }
 
 func EnvSourceOfStatus(status *envvarsv1.EnvSourceStatus) envgate.EnvSource {
-	out := envgate.EnvSource{ID: status.GetEnvSource(), Writable: status.GetWritable(), Credentials: status.GetCredentials()}
+	out := envgate.EnvSource{ID: status.GetEnvSource(), CanCreate: status.GetCanCreate(), CanUpdate: status.GetCanUpdate(), Credentials: status.GetCredentials()}
 	for _, link := range status.GetLinks() {
 		if out.URLs == nil {
 			out.URLs = map[string]string{}
@@ -145,12 +145,12 @@ func (c EnvSourceClient) Sync(ctx context.Context) error {
 	return err
 }
 
-func (c EnvSourceClient) Create(ctx context.Context, at envgate.Cell, value, description string) (bool, error) {
+func (c EnvSourceClient) Set(ctx context.Context, at envgate.Cell, value, description string) (bool, error) {
 	vars, err := c.Runner.Vars()
 	if err != nil {
 		return false, err
 	}
-	resp, err := vars.CreateEnvSourceValue(ctx, &envvarsv1.CreateEnvSourceValueRequest{
+	resp, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{
 		Tier:        tierOf(c.Preview),
 		Coordinate:  &envvarsv1.Coordinate{Slug: c.Config.Slug, Folder: at.Folder, Key: at.Key},
 		Value:       value,

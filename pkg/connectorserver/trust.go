@@ -198,7 +198,7 @@ func scopeOf(procedure string, message any) (string, bool) {
 		envvarsv1connect.EnvVarsServiceSetBindingProcedure,
 		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure,
 		envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure,
-		envvarsv1connect.EnvVarsServiceCreateEnvSourceValueProcedure:
+		envvarsv1connect.EnvVarsServiceSetEnvSourceValueProcedure:
 		return CapabilityEnvVarsWrite, true
 	case envvarsv1connect.EnvVarsServiceRevealValuesProcedure:
 		return CapabilityEnvVarsReveal, true

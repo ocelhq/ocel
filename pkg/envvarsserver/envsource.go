@@ -169,7 +169,7 @@ func (h *Service) DescribeEnvSource(ctx context.Context, req *envvarsv1.Describe
 	return &envvarsv1.DescribeEnvSourceResponse{Status: status}, nil
 }
 
-func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.CreateEnvSourceValueRequest) (*envvarsv1.CreateEnvSourceValueResponse, error) {
+func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSourceValueRequest) (*envvarsv1.SetEnvSourceValueResponse, error) {
 	at := req.GetCoordinate()
 	if at.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
@@ -184,25 +184,29 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if !registered || !registration.Descriptor.CanWrite() {
+	if !registered || !registration.Descriptor.CanCreate() {
 		current := envsource.Descriptor{Kind: envsource.Builtin}
 		if registered {
 			current = registration.Descriptor
 		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s in %s reads from %s, which ocel may not write into: set write to \"missing\" on the tier's env source to let ocel create a key it lacks",
+			"%s in %s reads from %s, which ocel may not write into: set write to \"values\" on the tier's env source to let ocel create and update its values, or to \"missing\" to let it create a key it lacks",
 			at.GetKey(), scope.Class, current.ID()))
 	}
 	cell := envvars.Cell{Folder: at.GetFolder(), Key: at.GetKey()}
 	if !slices.Contains(registration.Folders, cell.Folder) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"%s is not a folder %s reads from %s in %s: ocel creates a value only in the root or in the folder of one of %s's apps",
+			"%s is not a folder %s reads from %s in %s: ocel writes a value only in the root or in the folder of one of %s's apps",
 			cell.Folder, scope.Project, registration.Descriptor.ID(), scope.Class, scope.Project))
 	}
 	if slices.Contains(registration.Credentials(), cell) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"%s is what ocel logs in to %s with, so ocel stores it itself: set it with `%s`",
 			at.GetKey(), registration.Descriptor.ID(), envsource.SetCommand(scope.Class, at.GetKey())))
+	}
+	copied, err := copiedFrom(ctx, store, scope, cell, registration.Descriptor.ID())
+	if err != nil {
+		return nil, err
 	}
 	envSync, err := h.envSourceSync(store, scope.Class)
 	if err != nil {
@@ -215,15 +219,32 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 	if err != nil {
 		return nil, envSourceError(registration.Descriptor, err)
 	}
-	err = source.Create(ctx, cell, []byte(req.GetValue()), req.GetDescription())
+	url := func() string {
+		status, _ := envsource.StatusOf(ctx, store, scope.Class, registration)
+		return parenthesized(status.URLs[cell.Folder])
+	}
+	creating := copied == nil
+	switch {
+	case creating:
+		err = source.Create(ctx, cell, []byte(req.GetValue()), req.GetDescription())
+		if errors.Is(err, envsource.ErrExists) && registration.Descriptor.CanUpdate() {
+			creating = false
+			err = source.Update(ctx, cell, []byte(req.GetValue()), "")
+		}
+	case registration.Descriptor.CanUpdate():
+		err = source.Update(ctx, cell, []byte(req.GetValue()), copied.Provenance.Version)
+	default:
+		return nil, refuseOverwrite(source.ID(), at.GetKey(), url())
+	}
 	switch {
 	case errors.Is(err, envsource.ErrAwaitingApproval):
-		return &envvarsv1.CreateEnvSourceValueResponse{AwaitingApproval: true}, nil
+		return &envvarsv1.SetEnvSourceValueResponse{AwaitingApproval: true, Created: creating}, nil
+	case errors.Is(err, envsource.ErrChangedSinceRead):
+		return nil, connect.NewError(connect.CodeAborted, fmt.Errorf(
+			"%s changed in %s since ocel last read it, so ocel wrote nothing over it: run `%s` to read it, then set it again",
+			at.GetKey(), source.ID(), syncCommand(scope.Class)))
 	case errors.Is(err, envsource.ErrExists):
-		status, _ := envsource.StatusOf(ctx, store, scope.Class, registration)
-		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-			"%s already has %s, and ocel never overwrites a value there: change it in %s%s",
-			source.ID(), at.GetKey(), source.ID(), parenthesized(status.URLs[cell.Folder])))
+		return nil, refuseOverwrite(source.ID(), at.GetKey(), url())
 	case err != nil:
 		return nil, envSourceError(registration.Descriptor, err)
 	}
@@ -232,12 +253,39 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 	}
 	value, err := store.Get(ctx, scope, envvars.Coordinate{Cell: cell}, false)
 	if errors.Is(err, envvars.ErrNotFound) {
-		return &envvarsv1.CreateEnvSourceValueResponse{}, nil
+		return &envvarsv1.SetEnvSourceValueResponse{Created: creating}, nil
 	}
 	if err != nil {
 		return nil, valuesError(err)
 	}
-	return &envvarsv1.CreateEnvSourceValueResponse{Metadata: metadataProto(scope, value.Metadata)}, nil
+	return &envvarsv1.SetEnvSourceValueResponse{Metadata: metadataProto(scope, value.Metadata), Created: creating}, nil
+}
+
+func refuseOverwrite(envSource, key, url string) error {
+	return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
+		"%s already has %s, and write \"missing\" never overwrites a value there: change it in %s%s, or set write to \"values\" to let ocel update it",
+		envSource, key, envSource, url))
+}
+
+func copiedFrom(ctx context.Context, store envvars.Store, scope envvars.Scope, at envvars.Cell, envSource string) (*envvars.Value, error) {
+	stored, err := store.Get(ctx, scope, envvars.Coordinate{Cell: at}, false)
+	if errors.Is(err, envvars.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, valuesError(err)
+	}
+	if stored.Target != nil || stored.Provenance.EnvSource != envSource {
+		return nil, nil
+	}
+	return &stored, nil
+}
+
+func syncCommand(class edge.Class) string {
+	if class == edge.ClassPreview {
+		return "ocel env sync --preview"
+	}
+	return "ocel env sync"
 }
 
 func envSourceStatus(ctx context.Context, store envvars.Store, scope envvars.Scope, registration envsource.Registration) (*envvarsv1.EnvSourceStatus, error) {
@@ -248,7 +296,8 @@ func envSourceStatus(ctx context.Context, store envvars.Store, scope envvars.Sco
 	out := &envvarsv1.EnvSourceStatus{
 		EnvSource:     registration.Descriptor.ID(),
 		Scheduled:     registration.Descriptor.IsScheduled(),
-		Writable:      registration.Descriptor.CanWrite(),
+		CanCreate:     registration.Descriptor.CanCreate(),
+		CanUpdate:     registration.Descriptor.CanUpdate(),
 		LastAttemptAt: unixSeconds(status.LastAttemptAt),
 		LastSuccessAt: unixSeconds(status.LastSuccessAt),
 		LastError:     status.LastError,

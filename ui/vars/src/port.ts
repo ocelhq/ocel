@@ -26,7 +26,7 @@ export interface VarsPort {
   read(): Promise<State>;
   reveal(cells: readonly Address[]): Promise<Revealed>;
   set(at: Address, value: string, version: number): Promise<void>;
-  create(at: Address, value: string): Promise<{ awaitingApproval: boolean }>;
+  setInEnvSource(at: Address, value: string): Promise<{ awaitingApproval: boolean }>;
   remove(at: Address, version: number): Promise<void>;
   history(at: Address): Promise<Version[]>;
   other(): Promise<{ tier: string; values: OtherValue[] }>;

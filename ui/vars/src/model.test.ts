@@ -880,7 +880,8 @@ describe("abilityOf", () => {
 
 const infisical: EnvSource = {
   id: "infisical:p-1/prod",
-  writable: false,
+  canCreate: false,
+  canUpdate: false,
   urls: { "": "https://infisical.example/root", "/web": "https://infisical.example/web" },
   credentials: ["INFISICAL_CLIENT_SECRET"],
 };
@@ -929,7 +930,8 @@ describe("who owns a value under an env source", () => {
   it("gives the env source every class-wide cell, with the URL for its folder", () => {
     expect(variantOf(current, at("DATABASE_URL")).owner).toEqual({
       id: infisical.id,
-      writable: false,
+      canCreate: false,
+      canUpdate: false,
       url: "https://infisical.example/root",
     });
     expect(variantOf(current, at("DATABASE_URL", "/web")).owner?.url).toBe(
@@ -946,7 +948,11 @@ describe("who owns a value under an env source", () => {
   });
 
   it("gives nothing away when ocel stores the tier's values itself", () => {
-    const builtin = readingFrom(current.matrix.rows, { id: "builtin", writable: false });
+    const builtin = readingFrom(current.matrix.rows, {
+      id: "builtin",
+      canCreate: false,
+      canUpdate: false,
+    });
     expect(variantOf(builtin, at("DATABASE_URL")).owner).toBeUndefined();
     expect(variantOf(readingFrom(current.matrix.rows, null), at("DATABASE_URL")).owner).toBe(
       undefined,
@@ -971,7 +977,7 @@ describe("what an owned cell allows", () => {
     row("STRIPE_KEY", [cell({ state: "required" })], { description: "charges cards" }),
   ];
   const readOnly = readingFrom(rows);
-  const writable = readingFrom(rows, { ...infisical, writable: true });
+  const writable = readingFrom(rows, { ...infisical, canCreate: true });
 
   it("locks every class-wide cell an env source ocel may not write owns", () => {
     expect(locked(variantOf(readOnly, at("DATABASE_URL")))).toBe(true);

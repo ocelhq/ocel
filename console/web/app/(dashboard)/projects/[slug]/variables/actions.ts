@@ -174,7 +174,7 @@ export async function setValue(
   });
 }
 
-export async function createValue(
+export async function setInEnvSource(
   projectId: string,
   env: string,
   at: Address,
@@ -195,7 +195,7 @@ export async function createValue(
       (latest.error ? undefined : latest.row?.topology.apps)
         ?.flatMap((app) => app.variables)
         .find((variable) => variable.key === at.key)?.description ?? "";
-    const answer = await envvars.createEnvSourceValue(
+    const answer = await envvars.setEnvSourceValue(
       connector,
       environmentClass,
       slug,
@@ -204,7 +204,7 @@ export async function createValue(
       description,
     );
     if (!answer.done) {
-      return refused(connector.id, "create", answer.refusal);
+      return refused(connector.id, "set", answer.refusal);
     }
     return { ok: true, result: answer.result };
   });

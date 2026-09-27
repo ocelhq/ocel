@@ -61,7 +61,8 @@ type State struct {
 
 type EnvSource struct {
 	ID          string            `json:"id"`
-	Writable    bool              `json:"writable"`
+	CanCreate   bool              `json:"canCreate"`
+	CanUpdate   bool              `json:"canUpdate"`
 	URLs        map[string]string `json:"urls,omitempty"`
 	Credentials []string          `json:"credentials,omitempty"`
 }
@@ -69,7 +70,7 @@ type EnvSource struct {
 type EnvSourceClient interface {
 	Describe(ctx context.Context) (envgate.EnvSource, error)
 	Sync(ctx context.Context) error
-	Create(ctx context.Context, at envgate.Cell, value, description string) (awaitingApproval bool, err error)
+	Set(ctx context.Context, at envgate.Cell, value, description string) (awaitingApproval bool, err error)
 }
 
 type Options struct {
@@ -168,7 +169,7 @@ func (s *Session) handler() http.Handler {
 	api.HandleFunc("GET /api/state", s.handleState)
 	api.HandleFunc("PUT /api/value", s.handleSet)
 	api.HandleFunc("DELETE /api/value", s.handleDelete)
-	api.HandleFunc("POST /api/env-source/value", s.handleCreate)
+	api.HandleFunc("POST /api/env-source/value", s.handleSetInEnvSource)
 	api.HandleFunc("POST /api/reveal", s.handleReveal)
 	api.HandleFunc("GET /api/history", s.handleHistory)
 	api.HandleFunc("GET /api/other", s.handleOther)
@@ -237,9 +238,9 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, struct{}{})
 }
 
-func (s *Session) handleCreate(w http.ResponseWriter, r *http.Request) {
+func (s *Session) handleSetInEnvSource(w http.ResponseWriter, r *http.Request) {
 	if s.opts.EnvSource == nil {
-		fail(w, http.StatusNotFound, errors.New("this tier reads from no env source ocel can create a value in"))
+		fail(w, http.StatusNotFound, errors.New("this tier reads from no env source ocel can write a value into"))
 		return
 	}
 	var req valueRequest
@@ -248,11 +249,11 @@ func (s *Session) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	at := req.address()
-	if err := s.creatable(at); err != nil {
+	if err := s.settableInEnvSource(at); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	awaiting, err := s.opts.EnvSource.Create(r.Context(), at.Cell, req.Value, s.description(at.Cell.Key))
+	awaiting, err := s.opts.EnvSource.Set(r.Context(), at.Cell, req.Value, s.description(at.Cell.Key))
 	if err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
@@ -261,7 +262,7 @@ func (s *Session) handleCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"awaitingApproval": awaiting})
 }
 
-func (s *Session) creatable(at envgate.Address) error {
+func (s *Session) settableInEnvSource(at envgate.Address) error {
 	if at.Environment != "" {
 		return fmt.Errorf("a value for %s alone is stored by ocel, never by the env source: save it as an override for %s instead", at.Environment, at.Environment)
 	}
@@ -669,7 +670,7 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 			fail(w, http.StatusBadGateway, fmt.Errorf("read which env source this tier reads from: %w", err))
 			return
 		}
-		out.EnvSource = &EnvSource{ID: described.ID, Writable: described.Writable, URLs: described.URLs, Credentials: described.Credentials}
+		out.EnvSource = &EnvSource{ID: described.ID, CanCreate: described.CanCreate, CanUpdate: described.CanUpdate, URLs: described.URLs, Credentials: described.Credentials}
 	}
 	writeJSON(w, out)
 }

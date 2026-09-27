@@ -483,7 +483,7 @@ export async function save(): Promise<void> {
       savable.map((draft) =>
         attempt(draft.at, async () => {
           if (variants.value.get(addressKey(draft.at))?.creatable) {
-            const answer = await port().create(draft.at, draft.value);
+            const answer = await port().setInEnvSource(draft.at, draft.value);
             (answer.awaitingApproval ? awaiting : created).push(draft.at);
             return;
           }

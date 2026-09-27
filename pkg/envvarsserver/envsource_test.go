@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,13 +23,16 @@ import (
 type infisical struct {
 	mu       sync.Mutex
 	secrets  map[string]map[string]string
+	versions map[string]int
 	created  []string
+	updated  []string
 	loggedIn []string
+	approval bool
 }
 
 func newInfisical(t *testing.T) (*infisical, *httptest.Server) {
 	t.Helper()
-	fake := &infisical{secrets: map[string]map[string]string{"/": {}, "/web": {}}}
+	fake := &infisical{secrets: map[string]map[string]string{"/": {}, "/web": {}}, versions: map[string]int{}}
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
 	return fake, server
@@ -60,7 +64,7 @@ func (f *infisical) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		secrets := []map[string]any{}
 		for key, value := range folder {
-			secrets = append(secrets, map[string]any{"id": key, "secretKey": key, "secretValue": value, "version": len(value)})
+			secrets = append(secrets, map[string]any{"id": key, "secretKey": key, "secretValue": value, "version": f.version(r.URL.Query().Get("secretPath"), key)})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"secrets": secrets})
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v4/secrets/"):
@@ -75,9 +79,44 @@ func (f *infisical) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.secrets[body["secretPath"]][key] = body["secretValue"]
 		f.created = append(f.created, body["secretPath"]+" "+key+" "+body["secretComment"])
 		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": key}})
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v4/secrets/"):
+		path, key := r.URL.Query().Get("secretPath"), strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/")
+		if _, exists := f.secrets[path][key]; !exists {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		secret := map[string]any{"id": key, "secretKey": key, "version": f.version(path, key)}
+		if r.URL.Query().Get("viewSecretValue") == "true" {
+			secret["secretValue"] = f.secrets[path][key]
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": secret})
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/v4/secrets/"):
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		key := strings.TrimPrefix(r.URL.Path, "/api/v4/secrets/")
+		if _, exists := f.secrets[body["secretPath"]][key]; !exists {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if f.approval {
+			_ = json.NewEncoder(w).Encode(map[string]any{"approval": map[string]any{"id": "a-1"}})
+			return
+		}
+		f.edit(body["secretPath"], key, body["secretValue"])
+		f.updated = append(f.updated, body["secretPath"]+" "+key)
+		_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": key}})
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+func (f *infisical) version(path, key string) int {
+	return f.versions[path+" "+key] + 1
+}
+
+func (f *infisical) edit(path, key, value string) {
+	f.secrets[path][key] = value
+	f.versions[path+" "+key]++
 }
 
 func loggedIn(method string, body map[string]string) bool {
@@ -90,13 +129,13 @@ func loggedIn(method string, body map[string]string) bool {
 	return false
 }
 
-func infisicalSource(host string, writeMissing bool) *envvarsv1.EnvSource {
+func infisicalSource(host string, write envvarsv1.WritePolicy) *envvarsv1.EnvSource {
 	return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{
-		Project:      "p-1",
-		Environment:  "prod",
-		Path:         "/",
-		Host:         host,
-		WriteMissing: writeMissing,
+		Project:     "p-1",
+		Environment: "prod",
+		Path:        "/",
+		Host:        host,
+		Write:       write,
 		Auth: &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Universal{Universal: &envvarsv1.InfisicalUniversalAuth{
 			ClientIdVariable:     "INFISICAL_CLIENT_ID",
 			ClientSecretVariable: "INFISICAL_CLIENT_SECRET",
@@ -105,10 +144,16 @@ func infisicalSource(host string, writeMissing bool) *envvarsv1.EnvSource {
 }
 
 func identitySource(host string, auth *envvarsv1.InfisicalAuth) *envvarsv1.EnvSource {
-	source := infisicalSource(host, false)
+	source := infisicalSource(host, never)
 	source.GetInfisical().Auth = auth
 	return source
 }
+
+const (
+	never   = envvarsv1.WritePolicy_WRITE_POLICY_NEVER
+	missing = envvarsv1.WritePolicy_WRITE_POLICY_MISSING
+	values  = envvarsv1.WritePolicy_WRITE_POLICY_VALUES
+)
 
 var identityAuth = &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Identity{Identity: &envvarsv1.InfisicalIdentityAuth{IdentityId: "identity-1"}}}
 
@@ -168,18 +213,18 @@ func TestADeploySyncReadsInfisicalWithTheCredentialOcelStores(t *testing.T) {
 	fake.secrets["/web"]["API_KEY"] = "web-key"
 	production := environmentv1.Tier_TIER_PRODUCTION
 
-	_, err := syncEnvSource(vars, production, infisicalSource(server.URL, false))
+	_, err := syncEnvSource(vars, production, infisicalSource(server.URL, never))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "INFISICAL_CLIENT_ID") {
 		t.Fatalf("SyncEnvSource() with no credential set = %v, want the credential named", err)
 	}
 
 	setCredentials(t, vars, production)
-	synced, err := syncEnvSource(vars, production, infisicalSource(server.URL, false))
+	synced, err := syncEnvSource(vars, production, infisicalSource(server.URL, never))
 	if err != nil {
 		t.Fatalf("SyncEnvSource() = %v", err)
 	}
 	status := synced.GetStatus()
-	if status.GetEnvSource() != "infisical:p-1/prod" || !status.GetScheduled() || status.GetWritable() || status.GetLastSuccessAt() == 0 {
+	if status.GetEnvSource() != "infisical:p-1/prod" || !status.GetScheduled() || (status.GetCanCreate() || status.GetCanUpdate()) || status.GetLastSuccessAt() == 0 {
 		t.Fatalf("status = %+v, want a scheduled, read-only Infisical source that was just read", status)
 	}
 	if synced.GetWritten() != 2 || len(synced.GetPresent()) != 2 {
@@ -231,7 +276,7 @@ func TestASyncRefusedForItsCredentialsNamesEachOneForTheCallerToSet(t *testing.T
 	_, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 
-	_, err := syncEnvSource(vars, production, infisicalSource(server.URL, false))
+	_, err := syncEnvSource(vars, production, infisicalSource(server.URL, never))
 	refused := credentialRefusals(err)
 	if len(refused) != 2 || !refused["INFISICAL_CLIENT_ID"].GetUnset() || !refused["INFISICAL_CLIENT_SECRET"].GetUnset() {
 		t.Fatalf("SyncEnvSource() with no credential set = %v, want both credentials refused as unset", err)
@@ -240,7 +285,7 @@ func TestASyncRefusedForItsCredentialsNamesEachOneForTheCallerToSet(t *testing.T
 	if err := setValue(t, vars, production, cell("INFISICAL_CLIENT_ID"), "id"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = syncEnvSource(vars, production, infisicalSource(server.URL, false))
+	_, err = syncEnvSource(vars, production, infisicalSource(server.URL, never))
 	if refused := credentialRefusals(err); len(refused) != 1 || refused["INFISICAL_CLIENT_SECRET"] == nil {
 		t.Fatalf("SyncEnvSource() with the client secret unset = %v, want the client secret alone refused", err)
 	}
@@ -265,7 +310,7 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 	if err := setValue(t, vars, preview, cell("LEFTOVER"), "set-before-the-env-source"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := syncEnvSource(vars, preview, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(vars, preview, infisicalSource(server.URL, never)); err != nil {
 		t.Fatalf("SyncEnvSource() = %v", err)
 	}
 
@@ -309,7 +354,7 @@ func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) 
 	fake.secrets["/"]["DATABASE_URL"] = "postgres://prod"
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, vars, production)
-	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -349,38 +394,162 @@ func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *
 	}
 }
 
-func TestAWritableEnvSourceCreatesAMissingKeyThenCopiesIt(t *testing.T) {
+func TestAnEnvSourceWritingMissingKeysCreatesOneThenCopiesItButNeverUpdatesOne(t *testing.T) {
 	vars, _ := served(t)
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, vars, production)
-	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, true)); err != nil {
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, missing)); err != nil {
 		t.Fatal(err)
 	}
 
-	created, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{
+	created, err := vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{
 		Tier:        production,
 		Coordinate:  &envvarsv1.Coordinate{Slug: slug, Folder: "/web", Key: "STRIPE_KEY"},
 		Value:       "sk_live",
 		Description: "The key Stripe signs with",
 	})
 	if err != nil {
-		t.Fatalf("CreateEnvSourceValue() = %v", err)
+		t.Fatalf("SetEnvSourceValue() = %v", err)
 	}
 	if created.GetMetadata().GetEnvSource() != "infisical:p-1/prod" || created.GetMetadata().GetVersion() != 1 {
-		t.Fatalf("CreateEnvSourceValue() = %+v, want the created key copied back", created)
+		t.Fatalf("SetEnvSourceValue() = %+v, want the created key copied back", created)
 	}
 	if len(fake.created) != 1 || fake.created[0] != "/web STRIPE_KEY The key Stripe signs with" {
 		t.Fatalf("created = %v", fake.created)
 	}
 
-	_, err = vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{
+	_, err = vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{
 		Tier:       production,
 		Coordinate: &envvarsv1.Coordinate{Slug: slug, Folder: "/web", Key: "STRIPE_KEY"},
 		Value:      "clobber",
 	})
-	if connect.CodeOf(err) != connect.CodeAlreadyExists {
-		t.Fatalf("CreateEnvSourceValue() over a key the env source has = %v, want AlreadyExists", err)
+	if connect.CodeOf(err) != connect.CodeAlreadyExists || !strings.Contains(err.Error(), `"values"`) {
+		t.Fatalf("SetEnvSourceValue() over a key the env source has = %v, want AlreadyExists naming write \"values\"", err)
+	}
+	if len(fake.updated) != 0 {
+		t.Fatalf("updated = %v, want nothing overwritten under write missing", fake.updated)
+	}
+}
+
+func setInEnvSource(vars envvarsv1connect.EnvVarsServiceClient, key, value string) (*envvarsv1.SetEnvSourceValueResponse, error) {
+	return vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: &envvarsv1.Coordinate{Slug: slug, Folder: "/web", Key: key},
+		Value:      value,
+	})
+}
+
+func TestAnEnvSourceWritingValuesUpdatesOneItHoldsThenCopiesIt(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	fake.secrets["/web"]["API_KEY"] = "old"
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	synced, err := syncEnvSource(vars, production, infisicalSource(server.URL, values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status := synced.GetStatus(); !status.GetCanCreate() || !status.GetCanUpdate() {
+		t.Fatalf("status = %+v, want an env source ocel may create and update values in", status)
+	}
+
+	set, err := setInEnvSource(vars, "API_KEY", "new")
+	if err != nil {
+		t.Fatalf("SetEnvSourceValue() = %v", err)
+	}
+	if set.GetCreated() || set.GetMetadata().GetEnvSource() != "infisical:p-1/prod" {
+		t.Fatalf("SetEnvSourceValue() = %+v, want an update copied back", set)
+	}
+	if !slices.Equal(fake.updated, []string{"/web API_KEY"}) || fake.secrets["/web"]["API_KEY"] != "new" {
+		t.Fatalf("updated = %v, want API_KEY updated in place", fake.updated)
+	}
+	got, err := vars.GetValue(context.Background(), &envvarsv1.GetValueRequest{Tier: production, Coordinate: &envvarsv1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"}, Reveal: true})
+	if err != nil || got.GetValue() != "new" {
+		t.Fatalf("GetValue() = %q, %v, want the updated value synced straight back", got.GetValue(), err)
+	}
+
+	created, err := setInEnvSource(vars, "NEW_KEY", "v")
+	if err != nil || !created.GetCreated() || len(fake.created) != 1 {
+		t.Fatalf("SetEnvSourceValue(NEW_KEY) = %+v, %v, want a key the env source lacks created", created, err)
+	}
+}
+
+func TestAnUpdateOfAValueEditedInTheEnvSourceSinceOcelCopiedItIsRefused(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	fake.secrets["/web"]["API_KEY"] = "copied"
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, values)); err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	fake.edit("/web", "API_KEY", "edited in infisical")
+	fake.mu.Unlock()
+
+	_, err := setInEnvSource(vars, "API_KEY", "mine")
+	if connect.CodeOf(err) != connect.CodeAborted || !strings.Contains(err.Error(), "ocel env sync") {
+		t.Fatalf("SetEnvSourceValue() over an edit made since the copy = %v, want Aborted pointing at ocel env sync", err)
+	}
+	if fake.secrets["/web"]["API_KEY"] != "edited in infisical" || len(fake.updated) != 0 {
+		t.Fatalf("API_KEY = %q, updated %v, want the edit kept", fake.secrets["/web"]["API_KEY"], fake.updated)
+	}
+}
+
+func TestAKeyTheEnvSourceGainedSinceOcelLastReadItIsNeverOverwritten(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, values)); err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	fake.edit("/web", "API_KEY", "added in infisical")
+	fake.mu.Unlock()
+
+	_, err := setInEnvSource(vars, "API_KEY", "mine")
+	if connect.CodeOf(err) != connect.CodeAborted || !strings.Contains(err.Error(), "ocel env sync") {
+		t.Fatalf("SetEnvSourceValue() of a key added since the copy = %v, want Aborted pointing at ocel env sync", err)
+	}
+	if fake.secrets["/web"]["API_KEY"] != "added in infisical" {
+		t.Fatalf("API_KEY = %q, want the value added in Infisical kept", fake.secrets["/web"]["API_KEY"])
+	}
+}
+
+func TestAKeyADeployCreatedEmptyIsFilledInUnderWriteValues(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	fake.secrets["/web"]["STRIPE_KEY"] = ""
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, values)); err != nil {
+		t.Fatal(err)
+	}
+
+	set, err := setInEnvSource(vars, "STRIPE_KEY", "sk_live")
+	if err != nil || set.GetCreated() || fake.secrets["/web"]["STRIPE_KEY"] != "sk_live" {
+		t.Fatalf("SetEnvSourceValue() = %+v, %v, STRIPE_KEY %q, want the empty key filled in", set, err, fake.secrets["/web"]["STRIPE_KEY"])
+	}
+}
+
+func TestAnUpdateHeldForApprovalIsReportedAsWaiting(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	fake.secrets["/web"]["API_KEY"] = "old"
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, values)); err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	fake.approval = true
+	fake.mu.Unlock()
+
+	set, err := setInEnvSource(vars, "API_KEY", "new")
+	if err != nil || !set.GetAwaitingApproval() {
+		t.Fatalf("SetEnvSourceValue() under an approval policy = %+v, %v, want it reported as waiting", set, err)
 	}
 }
 
@@ -389,18 +558,18 @@ func TestAValueIsCreatedOnlyInAFolderTheDeployRegistered(t *testing.T) {
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, vars, production)
-	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, true)); err != nil {
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, missing)); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, folder := range []string{"/..", "/web/..", "/.", "/api"} {
-		_, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{
+		_, err := vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{
 			Tier:       production,
 			Coordinate: &envvarsv1.Coordinate{Slug: slug, Folder: folder, Key: "PLANTED"},
 			Value:      "v",
 		})
 		if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
-			t.Errorf("CreateEnvSourceValue() in folder %q = %v, want InvalidArgument", folder, err)
+			t.Errorf("SetEnvSourceValue() in folder %q = %v, want InvalidArgument", folder, err)
 		}
 	}
 	if len(fake.created) != 0 {
@@ -413,13 +582,13 @@ func TestACredentialIsNeverCreatedInTheEnvSourceItLogsInTo(t *testing.T) {
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, vars, production)
-	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, true)); err != nil {
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, missing)); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{Tier: production, Coordinate: cell("INFISICAL_CLIENT_SECRET"), Value: "v"})
+	_, err := vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{Tier: production, Coordinate: cell("INFISICAL_CLIENT_SECRET"), Value: "v"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "ocel env set") {
-		t.Fatalf("CreateEnvSourceValue(INFISICAL_CLIENT_SECRET) = %v, want it refused pointing at ocel env set", err)
+		t.Fatalf("SetEnvSourceValue(INFISICAL_CLIENT_SECRET) = %v, want it refused pointing at ocel env set", err)
 	}
 	if len(fake.created) != 0 {
 		t.Fatalf("created = %v, want nothing sent to the env source", fake.created)
@@ -431,26 +600,26 @@ func TestAReadOnlyEnvSourceTakesNoWrite(t *testing.T) {
 	_, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, vars, production)
-	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{Tier: production, Coordinate: cell("NEW"), Value: "v"})
+	_, err := vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{Tier: production, Coordinate: cell("NEW"), Value: "v"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "write") {
-		t.Fatalf("CreateEnvSourceValue() into a read-only env source = %v, want a refusal naming write", err)
+		t.Fatalf("SetEnvSourceValue() into a read-only env source = %v, want a refusal naming write", err)
 	}
 }
 
 func TestAValueForANamedPreviewEnvironmentIsNeverCreatedInTheEnvSource(t *testing.T) {
 	vars, _ := served(t)
 
-	_, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{
+	_, err := vars.SetEnvSourceValue(context.Background(), &envvarsv1.SetEnvSourceValueRequest{
 		Tier:       environmentv1.Tier_TIER_PREVIEW,
 		Coordinate: &envvarsv1.Coordinate{Slug: slug, Key: "NEW", Environment: "pr-12"},
 		Value:      "v",
 	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "ocel env set") {
-		t.Fatalf("CreateEnvSourceValue() for pr-12 = %v, want it refused pointing at ocel env set", err)
+		t.Fatalf("SetEnvSourceValue() for pr-12 = %v, want it refused pointing at ocel env set", err)
 	}
 }
 
@@ -493,18 +662,18 @@ func TestAConnectorCallerNamingItsOwnEnvSourceIsRefused(t *testing.T) {
 	if err := setValue(t, deploy, production, cell("STRIPE_KEY"), "sk_live"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, never)); err != nil {
 		t.Fatalf("SyncEnvSource() on the deploy path = %v, want the descriptor a deploy names accepted", err)
 	}
 
-	otherCredential := infisicalSource(server.URL, false)
+	otherCredential := infisicalSource(server.URL, never)
 	otherCredential.GetInfisical().GetAuth().GetUniversal().ClientSecretVariable = "STRIPE_KEY"
 	exec := &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Exec{Exec: &envvarsv1.ExecEnvSource{
 		Command: []string{"op"},
 		Values:  []*envvarsv1.EnvSourceValue{{Cell: &envvarsv1.Cell{Key: "DATABASE_URL"}, Value: "postgres://mine"}},
 	}}}
 	for name, source := range map[string]*envvarsv1.EnvSource{
-		"another host":                infisicalSource(other.URL, false),
+		"another host":                infisicalSource(other.URL, never),
 		"another credential variable": otherCredential,
 		"exec values":                 exec,
 	} {
@@ -527,7 +696,7 @@ func TestAConnectorSyncsTheEnvSourceADeployRegistered(t *testing.T) {
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, deploy, production)
-	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 	fake.secrets["/web"]["API_KEY"] = "added-since"
@@ -569,7 +738,7 @@ func TestARegisteredExecEnvSourceIsReReadOnlyByADeploy(t *testing.T) {
 }
 
 func unreadable(host string) *envvarsv1.EnvSource {
-	source := infisicalSource(host, false)
+	source := infisicalSource(host, never)
 	source.GetInfisical().Path = "/gone"
 	return source
 }
@@ -579,7 +748,7 @@ func TestADeployWhoseNewEnvSourceCannotBeReadLeavesTheOneItReplacedSyncing(t *te
 	fake, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, deploy, production)
-	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -617,10 +786,10 @@ func TestADeployWhoseNewEnvSourceLacksItsCredentialRegistersItSoTheCredentialCan
 	_, server := newInfisical(t)
 	production := environmentv1.Tier_TIER_PRODUCTION
 	setCredentials(t, vars, production)
-	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, false)); err != nil {
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, never)); err != nil {
 		t.Fatal(err)
 	}
-	renamed := infisicalSource(server.URL, false)
+	renamed := infisicalSource(server.URL, never)
 	renamed.GetInfisical().GetAuth().GetUniversal().ClientIdVariable = "OTHER_CLIENT_ID"
 
 	_, err := syncEnvSource(vars, production, renamed)

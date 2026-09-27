@@ -4,12 +4,12 @@ import { VarsError } from "@ui/vars";
 import {
   type Answer,
   copyValues,
-  createValue,
   listVersions,
   otherValues,
   readState,
   removeValue,
   revealValues,
+  setInEnvSource,
   setValue,
 } from "./actions";
 
@@ -27,7 +27,8 @@ export function consolePort(projectId: string, environment: string): VarsPort {
     set: async (at, value, version) => {
       resultOf(await setValue(projectId, environment, at, value, version));
     },
-    create: async (at, value) => resultOf(await createValue(projectId, environment, at, value)),
+    setInEnvSource: async (at, value) =>
+      resultOf(await setInEnvSource(projectId, environment, at, value)),
     remove: async (at, version) => {
       resultOf(await removeValue(projectId, environment, at, version));
     },

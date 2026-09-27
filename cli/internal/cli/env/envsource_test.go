@@ -186,6 +186,26 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 	}
 }
 
+func TestEnvSourceSaysWhatOcelMayWriteIntoIt(t *testing.T) {
+	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{})
+	for write, want := range map[envsource.WritePolicy]string{
+		envsource.WriteValues:  "create or update a value there, never delete one",
+		envsource.WriteMissing: "created there, never overwritten",
+		envsource.WriteNever:   "",
+	} {
+		options := *infisicalProduction.Infisical
+		options.Write = write
+		registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options})
+		var stdout, stderr bytes.Buffer
+		if err := runEnvSource(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvSource err = %v; stderr=%s", err, stderr.String())
+		}
+		if writes := strings.Contains(stdout.String(), "writes"); writes != (want != "") || !strings.Contains(stdout.String(), want) {
+			t.Errorf("write %q: stdout = %q, want %q", write, stdout.String(), want)
+		}
+	}
+}
+
 func TestEnvSetOnAValueTheEnvSourceOwnsSaysWhereToChangeIt(t *testing.T) {
 	root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk"}}})
 	setCredentials(t, root)

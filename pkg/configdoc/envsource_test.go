@@ -57,7 +57,7 @@ func TestEveryTierLeftOffOrNamedAloneReadsItsDefaultEnvSource(t *testing.T) {
 func TestEachTierReadsTheEnvSourceItNamesWithItsDefaultsFilledIn(t *testing.T) {
 	doc, err := Decode([]byte(`{"slug":"acme","envSource":{
 		"production":{"infisical":{"project":"p-1","environment":"prod","auth":{"universal":{"clientId":{"$env":"ID"},"clientSecret":{"$env":"SECRET"}}}}},
-		"preview":{"infisical":{"project":"p-1","environment":"staging","path":"acme/","host":"https://infisical.example.com/","write":"missing","auth":{"identity":{"identityId":"ident"}}}},
+		"preview":{"infisical":{"project":"p-1","environment":"staging","path":"acme/","host":"https://infisical.example.com/","write":"values","auth":{"identity":{"identityId":"ident"}}}},
 		"dev":{"exec":{"command":["op","run","{folder}"],"format":"json"}}
 	}}`), env(nil))
 	if err != nil {
@@ -78,7 +78,7 @@ func TestEachTierReadsTheEnvSourceItNamesWithItsDefaultsFilledIn(t *testing.T) {
 			Environment: "staging",
 			Path:        "/acme",
 			Host:        "https://infisical.example.com",
-			Write:       envsource.WriteMissing,
+			Write:       envsource.WriteValues,
 			Auth:        envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "ident"},
 		}},
 		Dev: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{
@@ -165,7 +165,7 @@ func TestDecodeRefusesAnEnvSourceTheTierCannotRead(t *testing.T) {
 		{"a deployed infisical with no auth", `{"production":{"infisical":{"project":"p","environment":"prod"}}}`, []string{`"envSource.production.infisical.auth"`, "machine identity"}},
 		{"a dev infisical with auth", `{"dev":{"infisical":{"project":"p","environment":"dev","auth":{"identity":{"identityId":"i"}}}}}`, []string{`"envSource.dev.infisical.auth"`, "INFISICAL_TOKEN"}},
 		{"a dev infisical that writes", `{"dev":{"infisical":{"project":"p","environment":"dev","write":"missing"}}}`, []string{`"envSource.dev.infisical.write"`, "only reads"}},
-		{"an unknown write policy", `{"production":{"infisical":{"project":"p","environment":"prod","auth":{"identity":{"identityId":"i"}},"write":"always"}}}`, []string{`"envSource.production.infisical.write"`, "missing, never"}},
+		{"an unknown write policy", `{"production":{"infisical":{"project":"p","environment":"prod","auth":{"identity":{"identityId":"i"}},"write":"always"}}}`, []string{`"envSource.production.infisical.write"`, "never, missing, values"}},
 		{"auth keyed twice", `{"production":{"infisical":{"project":"p","environment":"prod","auth":{"identity":{"identityId":"i"},"universal":{"clientId":{"$env":"ID"},"clientSecret":{"$env":"SECRET"}}}}}}`, []string{`"envSource.production.infisical.auth"`, "universal, identity"}},
 		{"auth as text", `{"production":{"infisical":{"project":"p","environment":"prod","auth":"identity"}}}`, []string{`"envSource.production.infisical.auth"`, "universal, identity"}},
 		{"auth keyed by a cloud", `{"production":{"infisical":{"project":"p","environment":"prod","auth":{"aws":{"identityId":"i"}}}}}`, []string{`"envSource.production.infisical.auth.aws"`, "universal, identity"}},
