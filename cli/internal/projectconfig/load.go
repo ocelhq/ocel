@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/envsource"
 )
 
 const (
@@ -155,7 +156,7 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 	configPath := defaultConfigFile(root)
 	if configPath == "" {
 		if optional {
-			return &Config{Dir: root, Path: filepath.Join(root, DefaultFileName)}, nil
+			return &Config{Dir: root, Path: filepath.Join(root, DefaultFileName), EnvSource: envsource.DefaultTiers()}, nil
 		}
 		return nil, NoConfigError{Names: fileNames(""), StartDir: startDir}
 	}
