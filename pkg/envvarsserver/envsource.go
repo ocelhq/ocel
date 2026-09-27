@@ -44,7 +44,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	}
 	descriptor, read := envsourcewire.Decode(req.GetEnvSource())
 	if descriptor.Kind == envsource.Builtin {
-		if err := envsource.ForgetProject(ctx, store, scope.Class, scope.Project); err != nil {
+		if err := switchToBuiltin(ctx, store, scope); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 		return &envvarsv1.SyncEnvSourceResponse{Status: &envvarsv1.EnvSourceStatus{EnvSource: descriptor.ID()}}, nil
@@ -76,6 +76,17 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 		return nil, envSourceError(descriptor, err)
 	}
 	return syncResponse(ctx, store, scope, registration, copied)
+}
+
+func switchToBuiltin(ctx context.Context, store envvars.Store, scope envvars.Scope) error {
+	_, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	if err != nil || !registered {
+		return err
+	}
+	if err := envsource.ClearProvenance(ctx, store, scope); err != nil {
+		return err
+	}
+	return envsource.ForgetProject(ctx, store, scope.Class, scope.Project)
 }
 
 func (h *Service) syncRegistered(ctx context.Context, store envvars.Store, scope envvars.Scope) (*envvarsv1.SyncEnvSourceResponse, error) {
