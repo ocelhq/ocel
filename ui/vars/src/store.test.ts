@@ -142,7 +142,7 @@ describe("toggleVariableGroup", () => {
 });
 
 interface Sent {
-  verb: "set" | "create" | "remove";
+  verb: "set" | "setInEnvSource" | "remove";
   at: Address;
   value?: string;
   version?: number;
@@ -157,7 +157,7 @@ function record(current: State, awaitingApproval = false): Sent[] {
       sent.push({ verb: "set", at, value, version });
     },
     setInEnvSource: async (at, value) => {
-      sent.push({ verb: "create", at, value });
+      sent.push({ verb: "setInEnvSource", at, value });
       return { awaitingApproval };
     },
     remove: async (at, version) => {
@@ -462,7 +462,7 @@ describe("saving under an env source", () => {
     const sent = record(readingFrom(infisical));
     store.setDraft(at("STRIPE_KEY"), "sk_live");
     await store.save();
-    expect(sent).toEqual([{ verb: "create", at: at("STRIPE_KEY"), value: "sk_live" }]);
+    expect(sent).toEqual([{ verb: "setInEnvSource", at: at("STRIPE_KEY"), value: "sk_live" }]);
     expect(store.outcome.value).toEqual({ text: "Created STRIPE_KEY in infisical:p-1/prod." });
   });
 
@@ -482,12 +482,45 @@ describe("saving under an env source", () => {
     await store.save();
     store.setDraft(at("STRIPE_KEY"), "sk_live_again");
     await store.save();
-    expect(sent).toEqual([{ verb: "create", at: at("STRIPE_KEY"), value: "sk_live" }]);
-    expect(store.variants.value.get(addressKey(at("STRIPE_KEY")))?.creatable).toBe(false);
+    expect(sent).toEqual([{ verb: "setInEnvSource", at: at("STRIPE_KEY"), value: "sk_live" }]);
+    expect(store.variants.value.get(addressKey(at("STRIPE_KEY")))?.writesToEnvSource).toBe(false);
   });
 
   it("never offers to remove a value the env source owns", () => {
     record(readingFrom(infisical));
+    store.askRemoval([at("DATABASE_URL")]);
+    expect(store.removing.value).toBeNull();
+  });
+});
+
+describe("saving under an env source ocel may update", () => {
+  const updating: EnvSource = { ...infisical, canUpdate: true };
+  beforeEach(() => {
+    reset(readingFrom(updating));
+  });
+
+  it("updates a value the env source holds there rather than storing it in ocel", async () => {
+    const sent = record(readingFrom(updating));
+    store.setDraft(at("DATABASE_URL"), "postgres://rotated");
+    await store.save();
+    expect(sent).toEqual([
+      { verb: "setInEnvSource", at: at("DATABASE_URL"), value: "postgres://rotated" },
+    ]);
+    expect(store.outcome.value).toEqual({ text: "Updated DATABASE_URL in infisical:p-1/prod." });
+  });
+
+  it("never sends an update again while the first waits for approval", async () => {
+    const sent = record(readingFrom(updating), true);
+    store.setDraft(at("DATABASE_URL"), "postgres://rotated");
+    await store.save();
+    store.setDraft(at("DATABASE_URL"), "postgres://again");
+    await store.save();
+    expect(sent).toHaveLength(1);
+    expect(store.outcome.value?.text).toContain("waits for approval in infisical:p-1/prod");
+  });
+
+  it("still never offers to remove a value the env source owns", () => {
+    record(readingFrom(updating));
     store.askRemoval([at("DATABASE_URL")]);
     expect(store.removing.value).toBeNull();
   });

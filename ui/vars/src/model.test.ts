@@ -986,9 +986,20 @@ describe("what an owned cell allows", () => {
   });
 
   it("lets a missing value be created in an env source ocel may write, never a present one changed", () => {
-    expect(variantOf(writable, at("STRIPE_KEY")).creatable).toBe(true);
+    expect(variantOf(writable, at("STRIPE_KEY")).writesToEnvSource).toBe(true);
     expect(locked(variantOf(writable, at("STRIPE_KEY")))).toBe(false);
     expect(locked(variantOf(writable, at("DATABASE_URL")))).toBe(true);
+  });
+
+  it("lets a present value be changed in an env source ocel may update, and a missing one created", () => {
+    const updating = readingFrom(rows, { ...infisical, canCreate: true, canUpdate: true });
+    expect(variantOf(updating, at("DATABASE_URL")).writesToEnvSource).toBe(true);
+    expect(locked(variantOf(updating, at("DATABASE_URL")))).toBe(false);
+    expect(locked(variantOf(updating, at("STRIPE_KEY")))).toBe(false);
+    const drafts = new Map([[addressKey(at("DATABASE_URL")), "postgres://mine"]]);
+    expect(dirtyEntries(catalogueOf(updating, []), drafts, new Map()).map((d) => d.at.key)).toEqual(
+      ["DATABASE_URL"],
+    );
   });
 
   it("drops a .env line for a locked cell, naming where to change it", () => {

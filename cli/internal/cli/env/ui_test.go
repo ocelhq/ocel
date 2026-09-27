@@ -298,6 +298,24 @@ func TestEnvUINamesTheEnvSourceAndWhatItCopied(t *testing.T) {
 	})
 }
 
+func TestEnvUIUpdatesAValueTheEnvSourceHoldsUnderWriteValues(t *testing.T) {
+	root := syncedEnvSourceFixture(t, writing(envsource.WriteValues))
+
+	withVarsUI(t, root, func(s *varsui.Session) {
+		if source := varsUIState(t, s).EnvSource; source == nil || !source.CanCreate || !source.CanUpdate {
+			t.Fatalf("env source = %+v, want one ocel may create and update values in", source)
+		}
+		res := callVarsUI(t, s, http.MethodPost, "/api/env-source/value", map[string]string{"key": "STRIPE_API_KEY", "value": "sk_rotated"})
+		if res.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(res.Body)
+			t.Fatalf("POST = %d: %s", res.StatusCode, body)
+		}
+	})
+	if updated := productionRegistration(t).Updated; !slices.Contains(updated, clitest.FakeEnvSourceValue{Key: "STRIPE_API_KEY", Value: "sk_rotated"}) {
+		t.Errorf("updated %+v, want STRIPE_API_KEY updated in the env source", updated)
+	}
+}
+
 func TestEnvUICreatesAValueTheEnvSourceLacksThere(t *testing.T) {
 	writable := infisicalProduction
 	options := *writable.Infisical
