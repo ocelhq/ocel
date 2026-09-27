@@ -273,6 +273,28 @@ func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t 
 	}
 }
 
+func TestPinningTrafficLeavesWhoMayReachTheServiceAsTheReleaseSetIt(t *testing.T) {
+	server := &runServer{}
+	behind := serving{
+		service: "ocel-shop-prod-web",
+		compute: provider.ComputeServerless,
+		public:  true,
+		ingress: ingressLoadBalancer,
+	}
+	released(t, server, behind)
+	behind.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, behind)
+
+	service := server.serving()
+	if service.Ingress != ingressLoadBalancer {
+		t.Errorf("the service takes %q after its traffic was pinned, want %q: a patch replaces what it is handed, so pinning traffic alone must say it changes the traffic alone",
+			service.Ingress, ingressLoadBalancer)
+	}
+	if !service.InvokerIamDisabled {
+		t.Error("the service checks its invoker again after its traffic was pinned, and every visitor to a public app would be refused")
+	}
+}
+
 func serves(service string) serving {
 	return serving{
 		service: service,

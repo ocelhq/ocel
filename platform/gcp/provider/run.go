@@ -23,6 +23,7 @@ import (
 
 const (
 	trafficByRevision = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"
+	trafficField      = "traffic"
 )
 
 const (
@@ -287,12 +288,11 @@ func (p *Provider) route(
 			return nil
 		}
 		routed := &run.GoogleCloudRunV2Service{
-			Etag:     current.Etag,
-			Template: current.Template,
-			Traffic:  trafficTo(revision),
+			Etag:    current.Etag,
+			Traffic: trafficTo(revision),
 		}
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Services.Patch(path, routed).Context(ctx).Do(call...)
+			return services.Projects.Locations.Services.Patch(path, routed).UpdateMask(trafficField).Context(ctx).Do(call...)
 		})
 	})
 	if err != nil {
