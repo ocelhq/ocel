@@ -67,7 +67,7 @@ var deploymentsPruneCmd = &cobra.Command{
 }
 
 func init() {
-	deploymentsCmd.AddCommand(deploymentsLsCmd)
+	deploymentsCmd.AddCommand(cmddeps.ReserveStdout(deploymentsLsCmd))
 	deploymentsPruneCmd.Flags().IntVar(&pruneKeepN, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
 	cmddeps.Yes(deploymentsPruneCmd, &pruneYes)
 	deploymentsCmd.AddCommand(deploymentsPruneCmd)

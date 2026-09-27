@@ -95,6 +95,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 		{"cost", "scan"},
 		{"domain", "ls"}, {"domain", "status"},
 		{"preview", "ls"},
+		{"deployments", "ls"},
 	} {
 		cmd, _, err := rootCmd.Find(path)
 		if err != nil {
