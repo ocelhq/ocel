@@ -66,7 +66,7 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 
 	for _, metadata := range listed {
 		at := metadata.Coordinate.Cell
-		if metadata.Coordinate.Environment != "" || metadata.Provenance.EnvSource != envSource || !copied(at) {
+		if metadata.Coordinate.Environment != "" || metadata.Target != nil || !copied(at) {
 			continue
 		}
 		if _, present := read[at]; present {

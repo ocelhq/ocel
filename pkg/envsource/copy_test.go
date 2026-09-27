@@ -105,15 +105,12 @@ func TestCopyValuesNeverWritesAnOlderReadOverANewerOne(t *testing.T) {
 	}
 }
 
-func TestCopyValuesRemovesWhatTheSourceDroppedAndSparesWhatOcelOwns(t *testing.T) {
+func TestCopyValuesRemovesWhatTheSourceDroppedAndSparesNamedEnvironments(t *testing.T) {
 	t.Parallel()
 	store, scope := storeFixture()
 	ctx := context.Background()
 	read := map[envvars.Cell]envsource.Value{cell("", "GONE"): value("x", "s1@1"), cell("", "KEPT"): value("y", "s2@1")}
 	if _, err := envsource.CopyValues(ctx, store, scope, fromInfisical, read, []string{""}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Set(ctx, scope, classWide("", "SET_BEFORE_THE_SOURCE"), "mine", nil); err != nil {
 		t.Fatal(err)
 	}
 	override := envvars.Coordinate{Cell: envvars.Cell{Key: "GONE"}, Environment: "pr-1"}
@@ -132,11 +129,55 @@ func TestCopyValuesRemovesWhatTheSourceDroppedAndSparesWhatOcelOwns(t *testing.T
 	if _, err := store.Get(ctx, scope, classWide("", "GONE"), false); !errors.Is(err, envvars.ErrNotFound) {
 		t.Fatalf("GONE = %v, want it removed", err)
 	}
-	if mine := reveal(t, store, scope, classWide("", "SET_BEFORE_THE_SOURCE")); mine.Plaintext != "mine" {
-		t.Fatal("a value ocel stored before the source was removed")
-	}
 	if kept := reveal(t, store, scope, override); kept.Plaintext != "override" {
 		t.Fatal("a named environment's override was removed")
+	}
+}
+
+func TestATierSwitchedToAnEnvSourceKeepsNoClassWideValueTheSourceLacks(t *testing.T) {
+	t.Parallel()
+	store, scope := storeFixture()
+	ctx := context.Background()
+	before := map[envvars.Cell]envsource.Value{cell("", "FROM_STAGING"): value("s", "s7@1")}
+	if _, err := envsource.CopyValues(ctx, store, scope, "infisical:p/staging", before, []string{""}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for key, plaintext := range map[string]string{"SET_IN_OCEL": "mine", "ALSO_IN_THE_SOURCE": "old", "INFISICAL_CLIENT_SECRET": "credential"} {
+		if _, err := store.Set(ctx, scope, classWide("", key), plaintext, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.Set(ctx, scope, classWide("/other", "UNREAD_FOLDER"), "kept", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Set(ctx, envvars.Scope{Project: "shared", Class: scope.Class}, classWide("", "TARGET"), "t", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetReference(ctx, scope, classWide("", "REFERENCED"), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: "TARGET"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	read := map[envvars.Cell]envsource.Value{cell("", "ALSO_IN_THE_SOURCE"): value("new", "s1@1")}
+	keep := []envvars.Cell{cell("", "INFISICAL_CLIENT_SECRET")}
+	result, err := envsource.CopyValues(ctx, store, scope, fromInfisical, read, []string{""}, keep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []envvars.Cell{cell("", "FROM_STAGING"), cell("", "SET_IN_OCEL")}; !slices.Equal(result.Removed, want) {
+		t.Fatalf("removed = %v, want %v: the source is the one writer of every class-wide value it reads", result.Removed, want)
+	}
+	for _, key := range []string{"SET_IN_OCEL", "FROM_STAGING"} {
+		if _, err := store.Get(ctx, scope, classWide("", key), false); !errors.Is(err, envvars.ErrNotFound) {
+			t.Errorf("%s = %v, want it removed so the gate reads it as missing", key, err)
+		}
+	}
+	if taken := reveal(t, store, scope, classWide("", "ALSO_IN_THE_SOURCE")); taken.Plaintext != "new" || taken.Provenance.EnvSource != fromInfisical {
+		t.Errorf("ALSO_IN_THE_SOURCE = %+v, want the source's value", taken)
+	}
+	for _, at := range []envvars.Coordinate{classWide("", "INFISICAL_CLIENT_SECRET"), classWide("", "REFERENCED"), classWide("/other", "UNREAD_FOLDER")} {
+		if _, err := store.Get(ctx, scope, at, false); err != nil {
+			t.Errorf("%s = %v, want a credential, a reference and a folder the source does not read left alone", at, err)
+		}
 	}
 }
 

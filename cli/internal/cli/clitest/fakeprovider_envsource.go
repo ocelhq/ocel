@@ -184,7 +184,9 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 		if cell.Tier != req.GetTier() || cell.Coordinate.Slug != req.GetSlug() || cell.Coordinate.Environment != "" || cell.LiveVersion() == 0 {
 			continue
 		}
-		if cell.Versions[len(cell.Versions)-1].EnvSource != registration.Descriptor.ID() || present[cell.Coordinate] {
+		latest := cell.Versions[len(cell.Versions)-1]
+		credential := cell.Coordinate.Folder == "" && slices.Contains(registration.Descriptor.CredentialVariables(), cell.Coordinate.Key)
+		if latest.Target != nil || credential || !slices.Contains(registration.Folders, cell.Coordinate.Folder) || present[cell.Coordinate] {
 			continue
 		}
 		cell.Deleted = true

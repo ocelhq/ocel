@@ -252,8 +252,8 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 	if err := setValue(t, vars, preview, cell("INFISICAL_CLIENT_SECRET"), "secret"); err != nil {
 		t.Fatalf("SetValue() on the credential = %v, want it stored by ocel", err)
 	}
-	if _, err := vars.DeleteValue(context.Background(), &envvarsv1.DeleteValueRequest{Tier: preview, Coordinate: cell("LEFTOVER")}); err != nil {
-		t.Fatalf("DeleteValue() of a value set before the env source = %v, want it removed", err)
+	if leftover, err := vars.GetValue(context.Background(), &envvarsv1.GetValueRequest{Tier: preview, Coordinate: cell("LEFTOVER")}); err != nil || leftover.GetFound() {
+		t.Fatalf("GetValue() of a value set before the env source found=%t, %v, want it removed by the sync, which is the one writer now", leftover.GetFound(), err)
 	}
 
 	builtin := &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Builtin{Builtin: &envvarsv1.BuiltinEnvSource{}}}
