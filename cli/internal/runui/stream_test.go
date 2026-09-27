@@ -200,7 +200,11 @@ func TestADebugLineReachesNDJSONAtItsLevel(t *testing.T) {
 
 	got := recorded(t, &streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Message: "+  aws:s3:Bucket assets creating (0s)"})
 	if len(got) != 1 || got[0].GetLevel() != progressv1.Level_LEVEL_DEBUG || got[0].GetMessage() != "+  aws:s3:Bucket assets creating (0s)" {
-		t.Errorf("ndjson = %v, want the debug line at DEBUG", got)
+		var lines []string
+		for _, ev := range got {
+			lines = append(lines, ev.GetLevel().String()+" "+ev.GetMessage())
+		}
+		t.Errorf("ndjson = %q, want the one debug line at DEBUG", lines)
 	}
 }
 
