@@ -215,6 +215,19 @@ func TestAnEmojiLineFitsATerminalThatCountsEachCodePointsWidth(t *testing.T) {
 	}
 }
 
+func TestAtAnyWidthTheLiveLineLeadsWithItsSpinnerOrShowsNothing(t *testing.T) {
+	t.Parallel()
+
+	run, live, _ := liveRun(t)
+	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+
+	for width := 0; width <= 12; width++ {
+		if got := live.render(width); got != "" && !strings.HasPrefix(got, spinnerFrame(0)) {
+			t.Errorf("render(%d) = %q, want it to lead with the spinner or be empty", width, got)
+		}
+	}
+}
+
 func TestAUnitWithoutASubjectIsNamedByWhatItDoes(t *testing.T) {
 	t.Parallel()
 

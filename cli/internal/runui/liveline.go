@@ -164,7 +164,7 @@ func (l *liveLine) render(width int) string {
 	}
 	took := formatDuration(at.Sub(tally.since))
 	room := width - 1 - displayWidth(took) - len(liveGutter)
-	if room < 0 {
+	if room < 1 {
 		return fitToWidth(head, width-1)
 	}
 	head = fitToWidth(head, room)
