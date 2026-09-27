@@ -174,7 +174,7 @@ func TestBindingVariables(t *testing.T) {
 		second := envgate.BindingVariables{Group: "bucket.second", Site: "bindings.bucket.second", Keys: []string{"R2_ACCESS_KEY_ID"}}
 		bound := []envgate.BindingVariables{first, second}
 
-		definitions, groups := envgate.Declarations(bound)
+		definitions, groups := envgate.Declarations(envgate.Scope{Bindings: bound})
 		for _, group := range groups {
 			members := 0
 			for _, definition := range definitions {
@@ -192,10 +192,10 @@ func TestBindingVariables(t *testing.T) {
 			}
 		}
 
-		err := envgate.CheckBindingVariableWritable(bound, "R2_ACCESS_KEY_ID", "/web")
+		err := envgate.CheckImpliedWritable(envgate.Scope{Bindings: bound}, "R2_ACCESS_KEY_ID", "/web")
 		for _, site := range []string{first.Site, second.Site} {
 			if err == nil || !strings.Contains(err.Error(), site) {
-				t.Errorf("CheckBindingVariableWritable = %v, want it to name %s", err, site)
+				t.Errorf("CheckImpliedWritable = %v, want it to name %s", err, site)
 			}
 		}
 	})

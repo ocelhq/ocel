@@ -66,6 +66,7 @@ type Scope struct {
 	Browser     bool
 	Bindings    []BindingVariables
 	OtherTiers  []BindingVariables
+	EnvSource   EnvSource
 }
 
 func (s Scope) Tier() environmentv1.Tier {
@@ -298,8 +299,8 @@ func (g *Gate) Check() error {
 	if len(problems) == 0 {
 		return nil
 	}
-	definitions = append(definitions, bound...)
-	groups = append(groups, g.scope.bindingGroups()...)
+	definitions = append(definitions, g.scope.impliedDefinitions()...)
+	groups = append(groups, g.scope.impliedGroups()...)
 	slices.SortStableFunc(problems, func(a, b *resourcesv1.VariableProblem) int {
 		if c := cmp.Compare(declaredAt(definitions, a.GetKey()), declaredAt(definitions, b.GetKey())); c != 0 {
 			return c

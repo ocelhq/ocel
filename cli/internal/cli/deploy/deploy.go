@@ -107,7 +107,9 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			deps:   deps,
 			cfg:    cfg,
 			runner: runner,
-			newGate: func() *envgate.Gate {
+			newGate: func(synced envgate.EnvSource) *envgate.Gate {
+				scope := scope
+				scope.EnvSource = synced
 				return envgate.New(envwire.Values{
 					Runner: runner,
 					Slug:   cfg.Slug,

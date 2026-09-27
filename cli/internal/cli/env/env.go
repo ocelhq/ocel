@@ -186,7 +186,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			return err
 		}
 		for _, pair := range pairs {
-			if err := envgate.CheckBindingVariableWritable(envwire.BindingVariables(cfg, envTier(opts)), pair.key, opts.folder); err != nil {
+			if err := envgate.CheckImpliedWritable(envwire.Scope(cfg, opts.preview, ""), pair.key, opts.folder); err != nil {
 				return err
 			}
 			if err := envgate.CheckWritable(definitions, pair.key, opts.folder); err != nil {
@@ -227,7 +227,7 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 	cache, cacheErr := declcache.Open()
 	if cacheErr == nil {
 		if definitions, groups, ok := cache.LoadContaining(cfg.Dir, fingerprint, key); ok {
-			return withBindingVariables(cfg, opts, definitions, groups)
+			return withImpliedDeclarations(cfg, opts, definitions, groups)
 		}
 	}
 
@@ -240,15 +240,15 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 	if cacheErr == nil {
 		_ = cache.Save(cfg.Dir, fingerprint, definitions, groups)
 	}
-	return withBindingVariables(cfg, opts, definitions, groups)
+	return withImpliedDeclarations(cfg, opts, definitions, groups)
 }
 
-func withBindingVariables(cfg *projectconfig.Config, opts envOptions, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
+func withImpliedDeclarations(cfg *projectconfig.Config, opts envOptions, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	if opts.dev {
 		return definitions, groups, nil
 	}
-	bound, bindingGroups := envgate.Declarations(envwire.BindingVariables(cfg, envTier(opts)))
-	return append(definitions, bound...), append(groups, bindingGroups...), nil
+	implied, impliedGroups := envgate.Declarations(envwire.Scope(cfg, opts.preview, ""))
+	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 
 func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
