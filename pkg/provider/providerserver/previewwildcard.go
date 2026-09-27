@@ -125,7 +125,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		Certificate: w.recorded.Host.Certificate.ID,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
-		Warn:        progress.Detail,
+		Warn:        progress.Warn,
 		Program:     program.Spec,
 		Values:      program.Values,
 	})

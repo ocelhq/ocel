@@ -123,6 +123,7 @@ type Edge struct {
 	refusal  error
 	unbound  error
 	bindSays string
+	warns    string
 	verify   func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable  error
@@ -181,6 +182,21 @@ func (e *Edge) SayOnBind(said string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.bindSays = said
+}
+
+func (e *Edge) WarnOnReconcile(warning string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.warns = warning
+}
+
+func (e *Edge) warn(warn func(string)) {
+	e.mu.Lock()
+	warning := e.warns
+	e.mu.Unlock()
+	if warning != "" && warn != nil {
+		warn(warning)
+	}
 }
 
 func (e *Edge) WarnOnUnbind(err error) {
@@ -285,6 +301,7 @@ func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.Stac
 	e.mu.Lock()
 	e.stacks = append(e.stacks, spec)
 	e.mu.Unlock()
+	e.warn(spec.Warn)
 	state := prior
 	state.Slug, state.Class = spec.Slug, spec.Class
 	state.Front = e.front(spec.Slug)
@@ -317,6 +334,7 @@ func (e *Edge) front(slug string) string {
 }
 
 func (e *Edge) ReconcilePreviewWildcard(_ context.Context, spec edge.PreviewWildcardSpec) (string, error) {
+	e.warn(spec.Warn)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.refusal != nil {

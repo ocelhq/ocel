@@ -347,17 +347,18 @@ func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 				return nil
 			}
 			progress.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
-			return r.reconcileEdge(ctx)
+			return r.reconcileEdge(ctx, progress)
 		})
 	})
 }
 
-func (r *deployRun) reconcileEdge(ctx context.Context) error {
+func (r *deployRun) reconcileEdge(ctx context.Context, progress edge.Progress) error {
 	spec := edge.StackSpec{
 		Version:     stackVersion,
 		Class:       r.spec.Class,
 		Slug:        r.spec.Slug,
 		PruneRoutes: true,
+		Warn:        progress.Warn,
 	}
 	var base string
 	switch r.hostingMode() {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -380,5 +381,33 @@ func assertWildcardRenewal(t *testing.T, what string, wildcard *contractv1.Previ
 	}
 	if !wildcard.GetExpiringSoon() {
 		t.Errorf("%s does not call a wildcard nine days out expiring soon", what)
+	}
+}
+
+func TestUsePreviewWildcardPassesOnAWarningTheEdgeRaisesAsAWarning(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).WarnOnReconcile("*.preview.acme.com is more than one label below acme.com")
+
+	stream, err := client.UsePreviewWildcard(context.Background(), &contractv1.UsePreviewWildcardRequest{
+		Tier:       environmentv1.Tier_TIER_PREVIEW,
+		BaseDomain: "preview.acme.com",
+		Edge:       edged(fake.KindRelay, "acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("UsePreviewWildcard() error = %v", err)
+	}
+	defer stream.Close()
+	var warned []string
+	for stream.Receive() {
+		if stream.Msg().GetLevel() == progressv1.Level_LEVEL_WARN {
+			warned = append(warned, stream.Msg().GetMessage())
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(warned, func(line string) bool { return strings.Contains(line, "more than one label below") }) {
+		t.Errorf("UsePreviewWildcard() warned %q, want the edge's warning passed on as a warning", warned)
 	}
 }

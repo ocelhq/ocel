@@ -1429,3 +1429,22 @@ func TestADeployOpensItsDNSForTheEdgeTheProviderDefaultsTo(t *testing.T) {
 		t.Errorf("the deploy opened its DNS under %v, want the %s edge the provider defaults to", fronts, fake.KindRelay)
 	}
 }
+
+func TestADeployPassesOnAWarningTheEdgeRaisesWhileItReconciles(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).WarnOnReconcile("shop.a.acme.com is more than one label below acme.com")
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want a warning to leave the deploy standing", result.GetError())
+	}
+	if !slices.ContainsFunc(events, func(event *progressv1.OperationEvent) bool {
+		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.Contains(event.GetMessage(), "more than one label below")
+	}) {
+		t.Error("the deploy dropped the warning the edge raised while it reconciled")
+	}
+}
