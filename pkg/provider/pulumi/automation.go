@@ -564,7 +564,8 @@ func (e *maskedError) Error() string { return maskSecrets(e.err.Error(), e.secre
 func (e *maskedError) Unwrap() error { return e.err }
 
 func maskSecrets(text string, secrets []string) string {
-	for _, secret := range secrets {
+	longestFirst := slices.SortedFunc(slices.Values(secrets), func(a, b string) int { return len(b) - len(a) })
+	for _, secret := range longestFirst {
 		text = strings.ReplaceAll(text, secret, redactedSecret)
 	}
 	return text

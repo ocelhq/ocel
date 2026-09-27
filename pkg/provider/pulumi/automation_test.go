@@ -439,3 +439,20 @@ func TestALockedStackStillReadsAsBusyWhenTheEngineErrorCarriesASecret(t *testing
 		t.Fatalf("Run() over a locked stack = %v, want a busy refusal", err)
 	}
 }
+
+func TestASecretInsideALongerSecretLeavesNoPartOfTheLongerOneBehind(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{err: errors.New("stderr: passphrase a-passphrase rejected")}
+	_, err := pulumi.New(pulumi.Config{
+		Backend: backend(),
+		Program: program{}.Run,
+		Configure: configuring{program{config: auto.ConfigMap{
+			"app:prefix": {Value: "a-pass", Secret: true},
+		}}}.Configure,
+		Engine: engine,
+	}).Run(context.Background(), spec(), nil)
+	if got, want := err.Error(), "stderr: passphrase [secret] rejected"; got != want {
+		t.Errorf("Run() reads %q, want %q", got, want)
+	}
+}
