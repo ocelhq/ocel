@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -43,6 +44,27 @@ func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 
 	if got := ddb.tablesUsed(); !slices.Equal(got, []string{fakeVarsTable}) {
 		t.Errorf("a set value reached tables %v, want %v alone", got, []string{fakeVarsTable})
+	}
+}
+
+func TestAnEnvSourceRegistrationAndItsSyncStatusLiveBesideTheValues(t *testing.T) {
+	table, ddb := newSplitRecords()
+	ctx := context.Background()
+	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
+	if err := envsource.Register(ctx, table, edge.ClassProduction, registration); err != nil {
+		t.Fatalf("Register err = %v", err)
+	}
+	listed, err := envsource.Registrations(ctx, table, edge.ClassProduction)
+	if err != nil || len(listed) != 1 || listed[0].Project != "shop" {
+		t.Fatalf("Registrations = %+v, %v", listed, err)
+	}
+	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: mustSealer()}, Class: edge.ClassProduction}
+	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", nil)); err != nil {
+		t.Fatalf("CopyProjectFrom err = %v", err)
+	}
+
+	if got := ddb.tablesUsed(); !slices.Equal(got, []string{fakeVarsTable}) {
+		t.Errorf("an env source reached tables %v, want %v alone: a scheduled sync's role reaches the vars table and nothing else", got, []string{fakeVarsTable})
 	}
 }
 
