@@ -23,6 +23,12 @@ func (c *Credentials) Deny(hint string) {
 	c.refusal = refusal.Refuse(refusal.CodeDenied, "%s", hint)
 }
 
+func (c *Credentials) RefuseHostKey(trust provider.HostTrust) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refusal = provider.RefuseHostTrust(trust)
+}
+
 func (c *Credentials) Admit() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -147,6 +147,34 @@ func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	}
 }
 
+func TestPreflightRefusesAnUnknownHostKeyAsACallTheCallerCanAnswerAndReportsAChangedOne(t *testing.T) {
+	t.Parallel()
+
+	for reason, wantRefused := range map[provider.HostTrustReason]bool{
+		provider.UnknownHostKey:  true,
+		provider.HostKeyMismatch: false,
+	} {
+		client, vendor := contractServed(t, "1.2.3")
+		vendor.Credentials().(*fake.Credentials).RefuseHostKey(provider.HostTrust{
+			Reason:  reason,
+			Address: "203.0.113.7",
+			Got:     provider.HostKey{Type: "ssh-ed25519", Key: "AAAA", Fingerprint: "SHA256:got"},
+		})
+
+		resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+			RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		})
+		trust, refused := provider.HostTrustOf(err)
+		if refused != wantRefused || (refused && trust.Reason != reason) {
+			t.Errorf("Preflight() over a %s = %v, want a host-trust refusal %v: only a refusal the caller can answer by trusting the key is lifted out of the answer, so a retried call answers clean",
+				reason, err, wantRefused)
+		}
+		if !wantRefused && len(resp.GetCredentialProblems()) != 1 {
+			t.Errorf("Preflight() over a %s reported %v, want it as the one credential problem", reason, resp.GetCredentialProblems())
+		}
+	}
+}
+
 func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 	t.Parallel()
 

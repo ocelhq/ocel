@@ -32,6 +32,9 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 
 	principal, err := p.Credentials().Whoami(ctx)
+	if trust, askable := provider.HostTrustOf(err); askable && !trust.Terminal() {
+		return nil, provider.RefusalError(err)
+	}
 	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(p.Facts().Vendor, err))
 		return resp, nil
