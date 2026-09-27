@@ -63,6 +63,12 @@ func (s *eventStream) send(ev *progressv1.OperationEvent) {
 	if s.closed {
 		return
 	}
+	if ev.GetTimeUnixNano() == 0 {
+		ev.TimeUnixNano = time.Now().UnixNano()
+	}
+	if ev.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
+		ev.Level = progressv1.Level_LEVEL_INFO
+	}
 	select {
 	case s.events <- ev:
 	case <-s.ctx.Done():
@@ -151,19 +157,20 @@ func newProgress(sender *eventStream, stage Stage) edge.Progress {
 }
 
 func (r *stageProgress) Say(message string) {
-	r.sender.send(stageProgressEvent(r.stage.ID, sanitizeMessage(message)))
+	r.sender.send(r.stage.scoped(stageProgressEvent(r.stage.ID, sanitizeMessage(message))))
 }
 
 func (r *stageProgress) Detail(message string) {
-	r.sender.send(logEvent(r.stage.ID, sanitizeMessage(message)))
+	r.sender.send(r.stage.scoped(logEvent(r.stage.ID, sanitizeMessage(message))))
 }
 
 func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...edge.Attr) {
-	r.trace.Span(newStageID(), r.stage.ID, sanitizeTitle(name), start, end, err, attrs...)
+	r.trace.Span(NewStage(r.stage, name), r.stage.Phase, start, end, err, attrs...)
 }
 
 func stageProgressEvent(id StageID, message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
+		Message: message,
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
 			Message: message,
 			StageId: id[:],
@@ -173,6 +180,7 @@ func stageProgressEvent(id StageID, message string) *progressv1.OperationEvent {
 
 func degradedEvent(need edge.Need, detail string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
+		Level: progressv1.Level_LEVEL_WARN,
 		Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{
 			Need:   string(need),
 			Detail: detail,
@@ -201,7 +209,8 @@ func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...stri
 
 func logEvent(id StageID, message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message, StageId: id[:]}},
+		Message: message,
+		Event:   &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message, StageId: id[:]}},
 	}
 }
 
@@ -211,6 +220,7 @@ func refusedRequest(err error) bool {
 
 func failureResult(err error) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
+		Level: progressv1.Level_LEVEL_ERROR,
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success: false,
 			Error:   err.Error(),

@@ -44,7 +44,7 @@ func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 			t.Fatalf("buildDeploySpec() error = %v", err)
 		}
 		want := []string{"Environment", "Shared infrastructure", "web", "admin", "api", "Edge", "Hostnames", "Promotion"}
-		if got := rosterTitles(newDeployStages(spec).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
+		if got := rosterTitles(newDeployStages(spec, "").Roster); strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("roster = %v, want %v", got, want)
 		}
 	})
@@ -62,7 +62,7 @@ func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 			t.Fatalf("buildDeploySpec() error = %v", err)
 		}
 		want := []string{"Environment", "web", "Edge", "Promotion"}
-		if got := rosterTitles(newDeployStages(spec).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
+		if got := rosterTitles(newDeployStages(spec, "").Roster); strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("roster = %v, want %v", got, want)
 		}
 	})

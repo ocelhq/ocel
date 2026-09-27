@@ -119,7 +119,7 @@ func TestEventTraceSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	child := NewStage(root, "web")
 	start := time.Unix(1000, 0)
 	end := time.Unix(1005, 0)
-	tracer.Span(child.ID, child.ParentID, child.Title, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
+	tracer.Span(child, progressv1.Phase_PHASE_PROVISION, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -157,7 +157,7 @@ func TestEventTraceSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 
 	secret := "postgres://user:hunter2@10.0.0.1:5432/db AKIAABCDEF1234567890"
 	stage := UnitStage(naming.UnitEnvironment, "Environment")
-	tracer.Span(stage.ID, stage.ParentID, stage.Title, time.Now(), time.Now(), errors.New(secret))
+	tracer.Span(stage, progressv1.Phase_PHASE_PROVISION, time.Now(), time.Now(), errors.New(secret))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)

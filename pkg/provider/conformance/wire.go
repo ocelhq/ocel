@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -169,18 +170,25 @@ func faults(drawn, applied streamed) []string {
 	if !applied.progress {
 		found = append(found, "a bootstrap reported no progress, so the run is silent between its plan and its result")
 	}
+	if unstamped := drawn.unstamped + applied.unstamped; unstamped > 0 {
+		found = append(found, fmt.Sprintf("%d events on a bootstrap stream lack a time and a level, and every event a provider streams carries both", unstamped))
+	}
 	return found
 }
 
 type streamed struct {
-	plan     *planv1.ChangePlan
-	progress bool
-	logged   bool
+	plan      *planv1.ChangePlan
+	progress  bool
+	logged    bool
+	unstamped int
 }
 
 func (s streamed) worked() bool { return s.progress || s.logged }
 
 func (s *streamed) observe(event *progressv1.OperationEvent) {
+	if event.GetTimeUnixNano() == 0 || event.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
+		s.unstamped++
+	}
 	if shown := event.GetPlan(); shown != nil {
 		s.plan = shown
 	}

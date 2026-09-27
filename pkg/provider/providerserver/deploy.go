@@ -58,7 +58,7 @@ type deployStages struct {
 	Roster      []Stage
 }
 
-func newDeployStages(spec provider.DeploySpec) deployStages {
+func newDeployStages(spec provider.DeploySpec, front edge.Kind) deployStages {
 	s := deployStages{
 		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISION),
 		Infra:       UnitStage(spec.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISION),
@@ -67,12 +67,14 @@ func newDeployStages(spec provider.DeploySpec) deployStages {
 		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_PROMOTE),
 		Apps:        make(map[string]Stage, len(spec.Apps)),
 	}
+	s.Edge.Subject = string(front)
 	s.Roster = append(s.Roster, s.Environment)
 	if !spec.Infra.IsZero() {
 		s.Roster = append(s.Roster, s.Infra)
 	}
 	for _, entry := range spec.Apps {
-		app := UnitStage(entry.Stack.String(), entry.App, progressv1.Phase_PHASE_PROVISION)
+		app := UnitStage(entry.Stack.String(), entry.App, progressv1.Phase_PHASE_DEPLOY)
+		app.Subject = entry.App
 		s.Apps[entry.App] = app
 		s.Roster = append(s.Roster, app)
 	}
@@ -192,7 +194,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
-	run.stages = newDeployStages(spec)
+	run.stages = newDeployStages(spec, front.Kind())
 	run.outcomes = pendingOutcomes(spec.Apps)
 	run.dryRunPlan.apps = make([]provider.Plan, len(spec.Apps))
 	run.tracked.declare(run.stages.Roster...)
@@ -735,7 +737,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) error {
 	return r.tracked.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISION, func(progress edge.Progress) error {
+		return u.phase(progressv1.Phase_PHASE_DEPLOY, func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
 			}

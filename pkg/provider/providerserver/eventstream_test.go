@@ -182,6 +182,37 @@ func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {
 	}
 }
 
+func TestAFailedResultIsAnErrorEventAndASuccessfulOneIsInfo(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+
+	if err := sender.fail(errors.New("the engine gave up")); err != nil {
+		t.Fatalf("fail() = %v, want the failure sent as a result", err)
+	}
+	sender.send(okResult())
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+
+	events := stream.recorded()
+	if got := events[0].GetLevel(); got != progressv1.Level_LEVEL_ERROR {
+		t.Errorf("a failed result is %v, want ERROR", got)
+	}
+	if got := events[1].GetLevel(); got != progressv1.Level_LEVEL_INFO {
+		t.Errorf("a successful result is %v, want INFO", got)
+	}
+}
+
+func TestADegradedNeedIsAWarnEvent(t *testing.T) {
+	t.Parallel()
+
+	if got := degradedEvent(edge.NeedEdgeMiddleware, "the edge cannot run code").GetLevel(); got != progressv1.Level_LEVEL_WARN {
+		t.Errorf("a degraded need is %v, want WARN", got)
+	}
+}
+
 func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	t.Parallel()
 
@@ -239,6 +270,68 @@ func TestStageProgressTagsEverythingWithItsStage(t *testing.T) {
 	}
 	if span := events[2].GetSpan(); StageID(span.GetParentSpanId()) != stage.ID {
 		t.Errorf("Span() ParentSpanId = %x, want the reporter's stage %x", span.GetParentSpanId(), stage.ID)
+	}
+}
+
+func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
+	progress := newProgress(sender, stage)
+
+	before := time.Now().UnixNano()
+	progress.Say("provisioning the infra stack")
+	progress.Detail("engine said something")
+	progress.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
+	after := time.Now().UnixNano()
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want 3", len(events))
+	}
+	for i, event := range events {
+		if at := event.GetTimeUnixNano(); at < before || at > after {
+			t.Errorf("event %d is stamped %d, want the time it was sent, between %d and %d", i, at, before, after)
+		}
+		if event.GetLevel() != progressv1.Level_LEVEL_INFO {
+			t.Errorf("event %d level = %v, want INFO", i, event.GetLevel())
+		}
+		if event.GetPhase() != progressv1.Phase_PHASE_PROVISION {
+			t.Errorf("event %d phase = %v, want the stage's provision phase", i, event.GetPhase())
+		}
+	}
+	for i, event := range events[:2] {
+		if string(event.GetSpanId()) != string(stage.ID[:]) {
+			t.Errorf("event %d span id = %x, want the stage's id %x", i, event.GetSpanId(), stage.ID)
+		}
+	}
+	if span := events[2]; len(span.GetSpanId()) == 0 || string(span.GetSpanId()) != string(span.GetSpan().GetSpanId()) {
+		t.Errorf("a span's envelope names span %x, want the span it closes, %x", span.GetSpanId(), span.GetSpan().GetSpanId())
+	}
+}
+
+func TestProgressMessagesTravelOnTheEnvelope(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	progress := newProgress(sender, testStage)
+
+	progress.Say("provisioning the infra stack")
+	progress.Detail("engine said something")
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	for i, want := range []string{"provisioning the infra stack", "engine said something"} {
+		if got := stream.recorded()[i].GetMessage(); got != want {
+			t.Errorf("event %d message = %q, want %q", i, got, want)
+		}
 	}
 }
 

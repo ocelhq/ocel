@@ -38,6 +38,14 @@ type Stage struct {
 	Title    string
 	Phase    progressv1.Phase
 	Phases   []progressv1.Phase
+	Subject  string
+}
+
+func (s Stage) scoped(ev *progressv1.OperationEvent) *progressv1.OperationEvent {
+	ev.Phase = s.Phase
+	ev.Subject = s.Subject
+	ev.SpanId = s.ID[:]
+	return ev
 }
 
 func (s Stage) phaseStages() []Stage {
@@ -117,7 +125,7 @@ func PhaseStage(unitName string, phase progressv1.Phase) Stage {
 }
 
 func NewStage(parent Stage, title string) Stage {
-	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title)}
+	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title), Subject: parent.Subject}
 }
 
 var attributeKeys = map[string]progressv1.AttributeKey{
@@ -163,22 +171,26 @@ func (s *stageScope) declare(stages ...Stage) {
 func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 	s.declare(stage)
 	start := time.Now()
-	err := do(&unitRun{scope: s, stage: stage})
-	s.trace.Span(stage.ID, stage.ParentID, stage.Title, start, time.Now(), err)
+	run := &unitRun{scope: s, stage: stage}
+	err := do(run)
+	s.trace.Span(stage, run.last, start, time.Now(), err)
 	return err
 }
 
 type unitRun struct {
 	scope *stageScope
 	stage Stage
+	last  progressv1.Phase
 }
 
 func (u *unitRun) phase(phase progressv1.Phase, do func(edge.Progress) error) error {
 	working := PhaseStage(u.stage.Name, phase)
+	working.Subject = u.stage.Subject
 	u.scope.declare(working)
+	u.last = phase
 	start := time.Now()
 	err := do(newProgress(u.scope.sender, working))
-	u.scope.trace.Span(working.ID, working.ParentID, working.Title, start, time.Now(), err)
+	u.scope.trace.Span(working, phase, start, time.Now(), err)
 	return err
 }
 
@@ -208,7 +220,7 @@ func (t *eventTrace) DeclareStages(stages ...Stage) {
 	})
 }
 
-func (t *eventTrace) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...edge.Attr) {
+func (t *eventTrace) Span(stage Stage, phase progressv1.Phase, start, end time.Time, err error, attrs ...edge.Attr) {
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
@@ -221,10 +233,13 @@ func (t *eventTrace) Span(id, parentID StageID, name string, start, end time.Tim
 	}
 
 	t.sender.send(&progressv1.OperationEvent{
+		Phase:   phase,
+		Subject: stage.Subject,
+		SpanId:  stage.ID[:],
 		Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-			SpanId:            id[:],
-			ParentSpanId:      nonZeroStageID(parentID),
-			Name:              name,
+			SpanId:            stage.ID[:],
+			ParentSpanId:      nonZeroStageID(stage.ParentID),
+			Name:              stage.Title,
 			StartTimeUnixNano: start.UnixNano(),
 			EndTimeUnixNano:   end.UnixNano(),
 			Status:            status,

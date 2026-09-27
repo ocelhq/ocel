@@ -11,6 +11,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -155,6 +156,73 @@ func TestADeploysPromotionRunsInThePromotePhase(t *testing.T) {
 	got := phasesUnder(events, "Promotion")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_PROMOTE {
 		t.Errorf("the Promotion unit runs in %v, want the promote phase", got)
+	}
+}
+
+func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	if got := phasesUnder(events, "web"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
+		t.Errorf("the web unit runs in %v, want the deploy phase", got)
+	}
+
+	app := map[string]bool{}
+	for _, event := range events {
+		for _, stage := range event.GetStagePlan().GetStages() {
+			if stage.GetTitle() == "web" || app[string(stage.GetParentId())] {
+				app[string(stage.GetId())] = true
+			}
+		}
+	}
+	var scoped int
+	for _, event := range events {
+		if !app[string(event.GetSpanId())] {
+			continue
+		}
+		scoped++
+		if event.GetSubject() != "web" || event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+			t.Errorf("an event of the web unit is scoped %q in %v, want \"web\" in the deploy phase", event.GetSubject(), event.GetPhase())
+		}
+	}
+	if scoped == 0 {
+		t.Fatal("no event names the web unit's span, want its progress and spans scoped to it")
+	}
+}
+
+func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	unit := map[string]bool{}
+	for _, event := range events {
+		for _, stage := range event.GetStagePlan().GetStages() {
+			if stage.GetTitle() == "Edge" || unit[string(stage.GetParentId())] {
+				unit[string(stage.GetId())] = true
+			}
+		}
+	}
+	var scoped int
+	for _, event := range events {
+		if !unit[string(event.GetSpanId())] {
+			continue
+		}
+		scoped++
+		if event.GetSubject() != string(fake.KindRelay) {
+			t.Errorf("an event of the Edge unit names %q, want the edge it deploys, %q", event.GetSubject(), fake.KindRelay)
+		}
+	}
+	if scoped == 0 {
+		t.Fatal("no event names the Edge unit's span, want its progress and spans scoped to it")
 	}
 }
 
