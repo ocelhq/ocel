@@ -6,6 +6,7 @@ import (
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type Grant struct {
@@ -65,6 +66,15 @@ func grants(class edge.Class, arch string) []Grant {
 			Detail: "root's agent at " + agent.Name + ", run by systemd as " + LiveService + ", not by " + deployer.name +
 				". App containers get " + LiveSocketDir + " read-only; the agent identifies them by connecting process, " +
 				"opens values under the class key, and answers no process outside a container",
+		})
+	}
+	if unit := written(items, KindUnit, EnvSourceSyncService(class)); unit.Name != "" {
+		grants = append(grants, Grant{
+			Name: "no hand in " + unit.Name,
+			Detail: "root's env source sync, " + LiveBinary + " " + live.EnvSourceSyncCommand + ", run by systemd, not by " + deployer.name +
+				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + RecordsDir(class) +
+				" and nothing beside, seals through " + boxstore.SealHelper + " without sudo, and logs in to each env source with the credential " +
+				string(class) + " stores in ocel's own values",
 		})
 	}
 	for _, item := range items {

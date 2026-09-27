@@ -51,6 +51,7 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 | `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. A certificate for a hostname the box stopped serving stays until it has been expired for 14 days, when Caddy removes it. If Caddy still has that certificate in memory when it removes it, the next TLS connection for the hostname can get a new certificate without the switchboard's confirmation. A restart of `ocel-proxy` clears that memory. Left out behind your own proxy. |
 | `/etc/ocel/certs` | Certificates you pin yourself. The proxy serves a pinned certificate for every hostname it covers, ahead of any certificate it got itself, and gets none of its own for those hostnames. Left out behind your own proxy. `ocel destroy` removes the directory only if it is empty. |
 | `ocel-live.socket`, `ocel-live.service` | Serve each app container its secret values over a unix socket. |
+| `ocel-envsourcesync@<class>.service` | Once a minute, copies each env source a deploy registered into the class's values. It runs as root, and may write `/var/lib/ocel/<class>/records` and nothing else. |
 | `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
 
 ## Behind your own proxy

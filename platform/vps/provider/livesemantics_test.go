@@ -292,8 +292,9 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 		t.Fatal(err)
 	}
 
-	vm.sshAs(t, deployLogin, "rmdir "+recordsDir+" && ln -s /etc "+recordsDir)
-	defer vm.ssh(t, "sudo rm -f "+recordsDir+" && sudo install -d -m 750 -o "+deployLogin+" -g "+deployLogin+" "+recordsDir)
+	aside := recordsDir + ".aside"
+	vm.sshAs(t, deployLogin, "mv "+recordsDir+" "+aside+" && ln -s /etc "+recordsDir)
+	defer vm.ssh(t, "sudo rm -f "+recordsDir+" && sudo mv "+aside+" "+recordsDir+" && sudo systemctl try-restart "+host.EnvSourceSyncService(class))
 
 	got := refused(t, bootstrap.Apply(ctx,
 		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}, nil),
