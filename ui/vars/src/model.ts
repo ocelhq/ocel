@@ -32,6 +32,7 @@ export interface MatrixCell {
   overrides?: Override[];
   reference?: Reference;
   problem?: string;
+  envSource?: string;
 }
 
 export interface MatrixRow {
@@ -65,6 +66,25 @@ export interface Ability {
   reveal: boolean;
 }
 
+export interface EnvSource {
+  id: string;
+  writable: boolean;
+  urls?: Record<string, string>;
+  credentials?: string[];
+}
+
+export interface Owner {
+  id: string;
+  writable: boolean;
+  url?: string;
+}
+
+export interface UndeclaredCell extends Cell {
+  envSource: string;
+}
+
+export const envSourceGroup = "env source";
+
 export interface State {
   slug: string;
   tier: string;
@@ -77,8 +97,10 @@ export interface State {
     rows: MatrixRow[];
     groups?: VariableGroup[];
     apps: AppResolution[];
+    undeclared?: UndeclaredCell[];
   };
   recovery?: Recovery;
+  envSource?: EnvSource;
 }
 
 export interface Version {
@@ -102,6 +124,10 @@ export interface Variant {
   missing: boolean;
   reference?: Reference;
   problem?: string;
+  envSource?: string;
+  owner?: Owner;
+  creatable: boolean;
+  awaitingApproval?: true;
 }
 
 export function addressKey(at: Address): string {
@@ -159,6 +185,15 @@ const forbiddenRoot: MatrixCell = {
   version: 0,
 };
 
+export function ownerOf(envSource: EnvSource | undefined, at: Address): Owner | undefined {
+  if (envSource === undefined || envSource.id === "builtin" || at.environment !== "") {
+    return undefined;
+  }
+  if (at.folder === "" && (envSource.credentials ?? []).includes(at.key)) return undefined;
+  const url = envSource.urls?.[at.folder];
+  return { id: envSource.id, writable: envSource.writable, ...(url && { url }) };
+}
+
 export function variantOf(
   row: MatrixRow,
   cell: MatrixCell,
@@ -166,12 +201,15 @@ export function variantOf(
   extra: boolean,
   off: ReadonlySet<string>,
   unknown = false,
+  envSource?: EnvSource,
 ): Variant {
   const override = environment === "" ? undefined : overrideOf(cell, environment);
   const reference = environment === "" ? cell.reference : override?.reference;
   const set = environment === "" ? cell.set || reference !== undefined : override !== undefined;
+  const at = { key: row.key, folder: cell.folder, environment };
+  const owner = ownerOf(envSource, at);
   return {
-    at: { key: row.key, folder: cell.folder, environment },
+    at,
     kind: environment !== "" ? "environment" : cell.folder === "" ? "root" : "folder",
     unknown,
     class: row.class,
@@ -188,7 +226,21 @@ export function variantOf(
       !offVariableGroup(row, cell.folder, off),
     ...(reference && { reference }),
     ...(environment === "" && cell.problem && { problem: cell.problem }),
+    ...(environment === "" && cell.envSource && { envSource: cell.envSource }),
+    ...(owner && { owner }),
+    creatable: owner?.writable === true && !set,
   };
+}
+
+export function provenanceOf(variant: Variant): string {
+  if (variant.reference) return referenceLine(variant.reference);
+  if (variant.envSource) return variant.envSource;
+  if (variant.owner) return variant.owner.id;
+  return variant.set ? "builtin" : "";
+}
+
+export function locked(variant: Variant): boolean {
+  return variant.owner !== undefined && !variant.creatable;
 }
 
 function materialised(cell: MatrixCell): boolean {
@@ -216,15 +268,27 @@ export interface Catalogue {
   variants: ReadonlyMap<string, Variant>;
   off: ReadonlySet<string>;
   unknown: boolean;
+  envSource?: EnvSource;
 }
 
-export function catalogueOf(current: State, extras: readonly Address[]): Catalogue {
+export function catalogueOf(
+  current: State,
+  extras: readonly Address[],
+  awaitingApproval: ReadonlySet<string> = new Set(),
+): Catalogue {
   const off = offVariableGroupsOf(current);
   const unknown = unknownValues(current);
+  const envSource = current.envSource;
   const variants = new Map<string, Variant>();
   const put = (variant: Variant) => {
     const key = addressKey(variant.at);
-    if (!variants.has(key)) variants.set(key, variant);
+    if (variants.has(key)) return;
+    variants.set(
+      key,
+      variant.creatable && awaitingApproval.has(key)
+        ? { ...variant, creatable: false, awaitingApproval: true }
+        : variant,
+    );
   };
   for (const row of current.matrix.rows) {
     const asked = extras.filter((at) => at.key === row.key);
@@ -232,18 +296,18 @@ export function catalogueOf(current: State, extras: readonly Address[]): Catalog
     for (const cell of cells) {
       const real = cell.folder === "" || materialised(cell);
       const wanted = asked.some((at) => at.folder === cell.folder && at.environment === "");
-      if (real || wanted) put(variantOf(row, cell, "", !real, off, unknown));
+      if (real || wanted) put(variantOf(row, cell, "", !real, off, unknown, envSource));
       for (const override of cell.overrides ?? []) {
-        put(variantOf(row, cell, override.environment, false, off, unknown));
+        put(variantOf(row, cell, override.environment, false, off, unknown, envSource));
       }
       for (const at of asked) {
         if (at.folder === cell.folder && at.environment !== "") {
-          put(variantOf(row, cell, at.environment, true, off, unknown));
+          put(variantOf(row, cell, at.environment, true, off, unknown, envSource));
         }
       }
     }
   }
-  return { rows: current.matrix.rows, variants, off, unknown };
+  return { rows: current.matrix.rows, variants, off, unknown, ...(envSource && { envSource }) };
 }
 
 export function variantsOf(catalogue: Catalogue): Variant[] {
@@ -256,7 +320,15 @@ export function variantAt(catalogue: Catalogue, at: Address): Variant | undefine
   const row = catalogue.rows.find((candidate) => candidate.key === at.key);
   const cell = row && cellOf(row, at.folder);
   if (!row || !cell) return undefined;
-  return variantOf(row, cell, at.environment, true, catalogue.off, catalogue.unknown);
+  return variantOf(
+    row,
+    cell,
+    at.environment,
+    true,
+    catalogue.off,
+    catalogue.unknown,
+    catalogue.envSource,
+  );
 }
 
 export type VariableGroupStatus = "off" | "partial" | "complete";
@@ -549,6 +621,7 @@ export interface Listing {
   groups: Group[];
   keys: KeyLine[];
   bundles: Bundle[];
+  credentials: KeyLine[];
 }
 
 function lineOf(
@@ -561,7 +634,7 @@ function lineOf(
   const at = { key: row.key, folder: cell.folder, environment };
   const variant =
     catalogue.variants.get(addressKey(at)) ??
-    variantOf(row, cell, environment, true, catalogue.off, catalogue.unknown);
+    variantOf(row, cell, environment, true, catalogue.off, catalogue.unknown, catalogue.envSource);
   const root = cellOf(row, "");
   let inherits: Inherits = null;
   if (environment !== "") {
@@ -608,6 +681,7 @@ export function listingOf(
   const bundled = (row: MatrixRow): VariableGroup | undefined =>
     flat ? undefined : optional.get(row.group ?? "");
   const keys: KeyLine[] = [];
+  const credentials: KeyLine[] = [];
   for (const row of current.matrix.rows) {
     if (lens.unfilledOnly) {
       for (const cell of row.cells) {
@@ -629,7 +703,8 @@ export function listingOf(
     }
     if (bundled(row)) continue;
     const root = cellOf(row, "") ?? forbiddenRoot;
-    keys.push(lineOf(catalogue, missing, row, root, listed(root) ? lens.environment : ""));
+    const into = row.group === envSourceGroup ? credentials : keys;
+    into.push(lineOf(catalogue, missing, row, root, listed(root) ? lens.environment : ""));
   }
   const groups: Group[] = [];
   const bundles: Bundle[] = [];
@@ -678,7 +753,21 @@ export function listingOf(
       bundles.push({ group, root, folders, keys: count, unfilled });
     }
   }
-  return { flat, groups, keys, bundles };
+  return { flat, groups, keys, bundles, credentials };
+}
+
+export interface UndeclaredKey extends UndeclaredCell {
+  url?: string;
+}
+
+export function undeclaredOf(current: State): UndeclaredKey[] {
+  return (current.matrix.undeclared ?? []).map((found) => {
+    const url =
+      found.envSource === current.envSource?.id
+        ? current.envSource.urls?.[found.folder]
+        : undefined;
+    return { ...found, ...(url && { url }) };
+  });
 }
 
 export function setForOptions(catalogue: Catalogue, row: MatrixRow): string[] {
@@ -759,7 +848,7 @@ export function dirtyEntries(
 ): Draft[] {
   const out: Draft[] = [];
   for (const variant of catalogue.variants.values()) {
-    if (variant.reference) continue;
+    if (variant.reference || locked(variant)) continue;
     if (!isDirty(variant.at, drafts, baselines)) continue;
     out.push({
       at: variant.at,
@@ -893,6 +982,14 @@ export function applyDotenv(
       });
       continue;
     }
+    const owned = variantAt(catalogue, at);
+    if (owned?.owner && locked(owned)) {
+      out.skipped.push({
+        key: entry.key,
+        reason: `${entry.key} in ${where} is read from ${owned.owner.id}; change it there`,
+      });
+      continue;
+    }
     out.fills.push({
       at,
       value: entry.value,
@@ -956,6 +1053,14 @@ export function planCopy(
       plan.skipped.push({
         key: value.key,
         reason: `${value.key} in ${where} reads ${variant.reference.slug} here; a copy would break the link`,
+      });
+      continue;
+    }
+    const owner = ownerOf(catalogue.envSource, at);
+    if (owner) {
+      plan.skipped.push({
+        key: value.key,
+        reason: `${value.key} in ${where} is read from ${owner.id} here`,
       });
       continue;
     }
@@ -1033,7 +1138,7 @@ export function stillMissingOf(
 ): Variant[] {
   return variantsOf(catalogue).filter((variant) => {
     const key = addressKey(variant.at);
-    if (!missing.has(key)) return false;
+    if (!missing.has(key) || locked(variant)) return false;
     if (isDirty(variant.at, drafts, baselines)) return false;
     return !variant.set || variant.problem !== undefined;
   });

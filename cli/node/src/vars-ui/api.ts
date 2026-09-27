@@ -40,6 +40,7 @@ export const loopback: VarsPort = {
   read: () => api<State>("GET", "/api/state"),
   reveal: (cells) => api<Revealed>("POST", "/api/reveal", { cells }),
   set: (at, value, version) => api("PUT", "/api/value", { ...at, value, version }),
+  create: (at, value) => api("POST", "/api/env-source/value", { ...at, value }),
   remove: (at, version) => api("DELETE", `/api/value?${query(at)}&version=${version}`),
   history: async (at) =>
     (await api<{ versions: Version[] }>("GET", `/api/history?${query(at)}`)).versions,

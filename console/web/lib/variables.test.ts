@@ -135,3 +135,65 @@ describe("stateOf", () => {
     ).toMatchObject({ can: { write: false, reveal: false }, values: "unknown" });
   });
 });
+
+describe("an env source", () => {
+  const declared = topology([
+    app("web", undefined, [{ key: "API", class: "plain", required: true }]),
+  ]);
+  const infisical = {
+    id: "infisical:p-1/prod",
+    writable: false,
+    urls: { "": "https://infisical.example/root" },
+    credentials: ["INFISICAL_CLIENT_ID"],
+  };
+
+  it("names the env source a stored value was copied from", () => {
+    const matrix = matrixOf(
+      declared,
+      [{ ...stored("API"), envSource: infisical.id }],
+      [],
+      infisical,
+    );
+    expect(cellAt(matrix, "API", "")?.envSource).toBe(infisical.id);
+  });
+
+  it("lists what the env source has and nothing declares as undeclared, not as a row", () => {
+    const matrix = matrixOf(
+      declared,
+      [{ ...stored("RETIRED"), envSource: infisical.id }, stored("GONE")],
+      [],
+      infisical,
+    );
+    expect(matrix.undeclared).toEqual([{ key: "RETIRED", folder: "", envSource: infisical.id }]);
+    expect(matrix.rows.map((row) => row.key)).toEqual(["API", "GONE", "INFISICAL_CLIENT_ID"]);
+  });
+
+  it("offers the credentials it logs in with as secrets in the env source group", () => {
+    const matrix = matrixOf(declared, [], [], infisical);
+    expect(matrix.rows.find((row) => row.key === "INFISICAL_CLIENT_ID")).toMatchObject({
+      class: "secret",
+      group: "env source",
+      cells: [{ folder: "", state: "required", set: false }],
+    });
+    expect(matrix.groups).toContainEqual({
+      key: "env source",
+      required: true,
+      description: "How ocel logs in to infisical:p-1/prod.",
+    });
+  });
+
+  it("rides on the state the table renders", () => {
+    expect(
+      stateOf(
+        "acme",
+        "production",
+        declared,
+        [],
+        [],
+        { write: true, reveal: true },
+        "live",
+        infisical,
+      ),
+    ).toMatchObject({ envSource: infisical });
+  });
+});

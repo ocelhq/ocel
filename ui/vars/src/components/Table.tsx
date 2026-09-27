@@ -1,6 +1,7 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowSquareOutIcon,
   CaretRightIcon,
   ClockCounterClockwiseIcon,
   DotsThreeIcon,
@@ -15,7 +16,7 @@ import {
   WarningIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { type DragEvent, Fragment, useEffect, useRef, useState } from "react";
+import { type DragEvent, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { glyph, role } from "../lib/type";
 import { cn } from "../lib/utils";
 import {
@@ -25,17 +26,23 @@ import {
   baselineOf,
   type Class,
   editable,
+  envSourceGroup,
   folderName,
   type Group,
   isDirty,
   type KeyLine,
+  locked,
   names,
+  type Owner,
   overrideOptions,
   plural,
+  provenanceOf,
   type Reference,
   referenceLine,
   revealable,
   setForOptions,
+  type UndeclaredKey,
+  undeclaredOf,
   type Variant,
   variableGroupTally,
 } from "../model";
@@ -143,9 +150,11 @@ const note = cn(role.meta, "text-muted-foreground");
 const prose = cn(role.body, "text-body");
 const rule = "border-r border-border";
 const rowHeight = "h-10";
-const cellKey = cn("w-[40%] py-0 pr-3 text-left align-middle font-normal", rule);
-const cellValue = cn("w-[47%] p-0 align-middle", rule);
+const cellKey = cn("w-[36%] py-0 pr-3 text-left align-middle font-normal", rule);
+const cellValue = cn("w-[39%] p-0 align-middle", rule);
+const cellSource = cn("w-[12%] px-3 align-middle", rule);
 const cellTools = "w-[13%] min-w-28 px-1.5 text-right align-middle";
+const columns = 4;
 const indent = ["pl-4", "pl-11", "pl-18"] as const;
 const gutter = "flex w-4 shrink-0 items-center justify-center";
 const maskText = "********";
@@ -227,6 +236,9 @@ export function Table() {
                 <th scope="col" className={cn(cellValue, "px-3 text-left", label)}>
                   Value
                 </th>
+                <th scope="col" className={cn(cellSource, "text-left", label)}>
+                  Source
+                </th>
                 <th scope="col" className={cellTools}>
                   {can.reveal && (
                     <Button
@@ -255,6 +267,8 @@ export function Table() {
             {list.bundles.map((bundle) => (
               <BundleSection bundle={bundle} key={bundle.group.key} />
             ))}
+            {list.credentials.length > 0 && <CredentialSection lines={list.credentials} />}
+            <UndeclaredSection />
           </table>
         </div>
         {total === 0 && <Empty />}
@@ -268,6 +282,12 @@ export function Table() {
             {!list.flat && <span>{plural(list.groups.length, "folder")}</span>}
             <span>{plural(total, "key")}</span>
           </span>
+          {current.envSource && current.envSource.id !== "builtin" && (
+            <span data-slot="env-source" className="inline-flex min-w-0 items-center gap-1">
+              {current.tier} reads from
+              <Provenance label={current.envSource.id} url={current.envSource.urls?.[""]} />
+            </span>
+          )}
           <span>Drop a .env file to fill values</span>
         </footer>
         {target !== null && (
@@ -295,6 +315,127 @@ export function Table() {
   );
 }
 
+function OpenIn({ owner, url }: { owner: string; url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      data-action="open-in-env-source"
+      className={cn(
+        role.meta,
+        "inline-flex min-w-0 items-center gap-1 text-foreground underline decoration-electric underline-offset-4 outline-none focus-visible:ring-1 focus-visible:ring-ring",
+      )}
+    >
+      <span className="truncate">Open in {owner}</span>
+      <ArrowSquareOutIcon className={cn(glyph.inline, "shrink-0")} />
+    </a>
+  );
+}
+
+function Provenance({ label, url }: { label: string; url?: string | undefined }) {
+  if (!url) {
+    return (
+      <span data-slot="provenance" title={label} className={cn(note, "block truncate")}>
+        {label}
+      </span>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      data-slot="provenance"
+      title={`Open in ${label}`}
+      className={cn(
+        note,
+        "flex min-w-0 items-center gap-1 underline decoration-electric underline-offset-4 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
+      )}
+    >
+      <span className="truncate">{label}</span>
+      <ArrowSquareOutIcon className={cn(glyph.inline, "shrink-0")} />
+    </a>
+  );
+}
+
+function SectionHead({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <tr className="border-b border-border">
+      <th
+        scope="rowgroup"
+        colSpan={columns}
+        className={cn("py-2.5 pr-4 text-left font-normal", indent[0])}
+      >
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <span className={pathName}>{title}</span>
+          {children}
+        </span>
+      </th>
+    </tr>
+  );
+}
+
+function CredentialSection({ lines }: { lines: KeyLine[] }) {
+  const current = useValue(state)!;
+  const description = current.matrix.groups?.find(
+    (group) => group.key === envSourceGroup,
+  )?.description;
+  return (
+    <tbody data-slot="env-source-credentials">
+      <SectionHead title={envSourceGroup}>
+        {description && <span className={cn(note, "min-w-0 truncate")}>{description}</span>}
+      </SectionHead>
+      {lines.map((line) => (
+        <KeyRow line={line} flat={false} depth={1} key={addressKey(line.variant.at)} />
+      ))}
+    </tbody>
+  );
+}
+
+function UndeclaredSection() {
+  const current = useValue(state)!;
+  const undeclared = undeclaredOf(current);
+  if (undeclared.length === 0) return null;
+  const one = undeclared.length === 1;
+  return (
+    <tbody data-slot="undeclared">
+      <SectionHead title="Undeclared">
+        <span className={cn(note, "min-w-0")}>
+          {one
+            ? "an env source has a key"
+            : `an env source has ${plural(undeclared.length, "key")}`}{" "}
+          nothing this project declares reads: declare {one ? "it" : "them"}, or remove{" "}
+          {one ? "it" : "them"} from the env source
+        </span>
+      </SectionHead>
+      {undeclared.map((found) => (
+        <UndeclaredRow found={found} key={`${found.key} ${found.folder}`} />
+      ))}
+    </tbody>
+  );
+}
+
+function UndeclaredRow({ found }: { found: UndeclaredKey }) {
+  return (
+    <tr data-slot="undeclared-row" className={cn(rowHeight, "border-b border-border")}>
+      <th scope="row" className={cn(cellKey, indent[1])}>
+        <span className={cn(datum, "min-w-0 truncate")}>{found.key}</span>
+      </th>
+      <td className={cn(cellValue, prose, "px-3")}>
+        <span className="flex items-center gap-2">
+          <Chip tone="warn">undeclared</Chip>
+          {folderName(found.folder)}
+        </span>
+      </td>
+      <td className={cellSource}>
+        <Provenance label={found.envSource} url={found.url} />
+      </td>
+      <td className={cellTools} />
+    </tr>
+  );
+}
+
 function BundleSection({ bundle }: { bundle: Bundle }) {
   const current = useValue(state);
   const unknown = current?.values === "unknown";
@@ -309,7 +450,7 @@ function BundleSection({ bundle }: { bundle: Bundle }) {
       <tr className="border-b border-border">
         <th
           scope="rowgroup"
-          colSpan={3}
+          colSpan={columns}
           className={cn("py-2.5 pr-4 text-left font-normal", indent[0])}
         >
           <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -367,7 +508,7 @@ function BundleSection({ bundle }: { bundle: Bundle }) {
               >
                 <th
                   scope="rowgroup"
-                  colSpan={3}
+                  colSpan={columns}
                   className={cn("py-2 pr-4 text-left font-normal", indent[1])}
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
@@ -574,7 +715,7 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
         <th
           scope="rowgroup"
           className={cn("py-2.5 pr-4 text-left font-normal", indent[0])}
-          colSpan={3}
+          colSpan={columns}
         >
           <span className="flex min-w-0 flex-wrap items-center gap-2.5">
             <button
@@ -609,7 +750,7 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
         ))}
       {open && group.keys === 0 && (
         <tr className="border-b border-border">
-          <td colSpan={3} className={cn(prose, "py-3 pr-4", indent[1])}>
+          <td colSpan={columns} className={cn(prose, "py-3 pr-4", indent[1])}>
             Nothing set here — every key inherits the root.
           </td>
         </tr>
@@ -697,6 +838,9 @@ function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: nu
             </span>
           )}
         </td>
+        <td className={cellSource}>
+          {open && <Provenance label={provenanceOf(variant)} url={variant.owner?.url} />}
+        </td>
         <td className={cellTools}>{open && <Actions line={line} />}</td>
       </tr>
       <Notes line={line} depth={depth} />
@@ -713,7 +857,7 @@ function Notes({ line, depth }: { line: KeyLine; depth: number }) {
   if (!trouble && !unreadable && !variant.orphaned && !variant.problem) return null;
   return (
     <tr data-slot="key-notes" className="border-b border-border">
-      <td colSpan={3} className={cn("py-2 pr-4", noteIndent[depth] ?? noteIndent[2])}>
+      <td colSpan={columns} className={cn("py-2 pr-4", noteIndent[depth] ?? noteIndent[2])}>
         <div className="flex flex-col gap-1">
           {trouble && (
             <Fault>
@@ -729,6 +873,13 @@ function Notes({ line, depth }: { line: KeyLine; depth: number }) {
             </span>
           )}
           {variant.problem && <Fault>fails its schema: {variant.problem}</Fault>}
+          {variant.problem &&
+            variant.owner &&
+            (variant.owner.url ? (
+              <OpenIn owner={variant.owner.id} url={variant.owner.url} />
+            ) : (
+              <span className={cn(role.meta, "text-body")}>fix it in {variant.owner.id}</span>
+            ))}
         </div>
       </td>
     </tr>
@@ -752,6 +903,9 @@ function Value({ line }: { line: KeyLine }) {
   if (variant.reference) {
     return <Linked variant={variant} reference={variant.reference} />;
   }
+  if (variant.owner && locked(variant) && !variant.set) {
+    return <Absent owner={variant.owner} awaitingApproval={variant.awaitingApproval === true} />;
+  }
   const revealed = known.has(key);
   const draft = typed.get(key) ?? baselineOf(variant.at, known);
   const dirty = isDirty(variant.at, typed, known);
@@ -759,9 +913,11 @@ function Value({ line }: { line: KeyLine }) {
   const concealing = variant.set && !revealed;
   const stamp = variant.unknown
     ? "the console cannot read this value"
-    : variant.set
-      ? `set · v${variant.version}`
-      : "not set";
+    : variant.owner && locked(variant)
+      ? `read from ${variant.owner.id} · change it there`
+      : variant.set
+        ? `set · v${variant.version}`
+        : "not set";
   const marks = [
     dirty && (
       <Chip tone="accent" data-slot="unsaved" key="unsaved">
@@ -819,7 +975,7 @@ function Value({ line }: { line: KeyLine }) {
         value={draft}
         autoComplete="off"
         spellCheck={false}
-        disabled={variant.orphaned || variant.unknown || !can.write}
+        disabled={variant.orphaned || variant.unknown || !can.write || locked(variant)}
         title={can.write ? stamp : `${stamp} · your role cannot change it`}
         placeholder={
           variant.unknown
@@ -829,7 +985,9 @@ function Value({ line }: { line: KeyLine }) {
                 ? "inherits the root value"
                 : line.inherits === "base"
                   ? "inherits the base value"
-                  : "not set"
+                  : variant.creatable
+                    ? `not set · saving creates it in ${variant.owner?.id}`
+                    : "not set"
               : revealed
                 ? ""
                 : maskText
@@ -842,6 +1000,20 @@ function Value({ line }: { line: KeyLine }) {
           {marks}
         </span>
       )}
+    </div>
+  );
+}
+
+function Absent({ owner, awaitingApproval }: { owner: Owner; awaitingApproval: boolean }) {
+  return (
+    <div
+      data-slot="absent-in-env-source"
+      className={cn(rowHeight, prose, "flex min-w-0 items-center gap-3 px-3")}
+    >
+      <span className="shrink-0">
+        {awaitingApproval ? `waits for approval in ${owner.id}` : `not set in ${owner.id}`}
+      </span>
+      {owner.url && <OpenIn owner={owner.id} url={owner.url} />}
     </div>
   );
 }
@@ -884,9 +1056,12 @@ function Actions({ line }: { line: KeyLine }) {
       ? "Remove value"
       : `Remove the ${env} override`;
   const overrides = can.write ? overrideOptions(current, known, variant.at) : [];
-  const folders = can.write && variant.at.folder === "" ? setForOptions(known, row) : [];
+  const folders =
+    can.write && variant.at.folder === "" && !(variant.owner && !variant.owner.writable)
+      ? setForOptions(known, row)
+      : [];
   const showValue = can.reveal && revealable(variant);
-  const removable = can.write && variant.set && !variant.reference;
+  const removable = can.write && variant.set && !variant.reference && !variant.owner;
   return (
     <span className="inline-flex items-center justify-end gap-1">
       {showValue && (

@@ -10,12 +10,15 @@ import type {
   AppResolution,
   Cell,
   Class,
+  EnvSource,
   MatrixCell,
   MatrixRow,
   Override,
   State,
+  UndeclaredCell,
   VariableGroup,
 } from "@ui/vars";
+import { envSourceGroup } from "@ui/vars";
 
 type Declared = DeploymentVariable & { folders: Set<string>; scopes: Set<string> };
 
@@ -68,6 +71,7 @@ interface StoredCell {
   set: boolean;
   version: number;
   reference?: Stored["reference"];
+  envSource?: string;
 }
 
 function keyOf(at: Cell & { environment: string }): string {
@@ -81,9 +85,14 @@ function storedOf(stored: readonly Stored[]): Map<string, StoredCell> {
       set: true,
       version: value.version,
       ...(value.reference && { reference: value.reference }),
+      ...(copiedFromEnvSource(value) && { envSource: value.envSource }),
     });
   }
   return out;
+}
+
+function copiedFromEnvSource(value: Stored): boolean {
+  return value.environment === "" && value.envSource !== undefined && value.envSource !== "builtin";
 }
 
 function overridesOf(
@@ -133,21 +142,67 @@ function cellOf(
     version: found?.version ?? 0,
     ...(overrides.length > 0 && { overrides }),
     ...(found?.reference && { reference: found.reference }),
+    ...(found?.envSource && { envSource: found.envSource }),
   };
+}
+
+function withCredentials(
+  declared: Map<string, Declared>,
+  envSource: EnvSource | undefined,
+): Map<string, Declared> {
+  const out = new Map(declared);
+  for (const key of envSource?.credentials ?? []) {
+    if (out.has(key)) {
+      continue;
+    }
+    out.set(key, {
+      key,
+      class: "secret",
+      required: true,
+      group: envSourceGroup,
+      description: `Read by ocel alone to log in to ${envSource?.id}; never handed to an app.`,
+      folders: new Set([""]),
+      scopes: new Set(),
+    });
+  }
+  return out;
+}
+
+function undeclaredOf(
+  declared: Map<string, Declared>,
+  stored: readonly Stored[],
+): UndeclaredCell[] {
+  return stored
+    .filter((value) => copiedFromEnvSource(value) && !declared.has(value.key))
+    .map((value) => ({ key: value.key, folder: value.folder, envSource: value.envSource ?? "" }))
+    .sort((a, b) => a.key.localeCompare(b.key) || a.folder.localeCompare(b.folder));
 }
 
 export function matrixOf(
   topology: DeploymentTopology,
   stored: readonly Stored[],
   environments: readonly string[],
+  envSource?: EnvSource,
 ): State["matrix"] {
-  const declared = declaredOf(topology);
+  const declared = withCredentials(declaredOf(topology), envSource);
   const columns = foldersOf(topology, declared);
   const recorded = storedOf(stored);
+  const undeclared = undeclaredOf(declared, stored);
+  const undeclaredKeys = new Set(
+    undeclared
+      .map((cell) => cell.key)
+      .filter((key) =>
+        stored.every(
+          (value) => value.key !== key || (copiedFromEnvSource(value) && !declared.has(key)),
+        ),
+      ),
+  );
 
   const keys = new Set<string>(declared.keys());
   for (const value of stored) {
-    keys.add(value.key);
+    if (!undeclaredKeys.has(value.key)) {
+      keys.add(value.key);
+    }
   }
 
   const rows: MatrixRow[] = [...keys].sort().map((key) => {
@@ -167,8 +222,21 @@ export function matrixOf(
     required: group.required,
     ...(group.description && { description: group.description }),
   }));
+  if (envSource !== undefined && rows.some((row) => row.group === envSourceGroup)) {
+    groups.push({
+      key: envSourceGroup,
+      required: true,
+      description: `How ocel logs in to ${envSource.id}.`,
+    });
+  }
 
-  return { columns, rows, groups, apps: appsOf(topology) };
+  return {
+    columns,
+    rows,
+    groups,
+    apps: appsOf(topology),
+    ...(undeclared.length > 0 && { undeclared }),
+  };
 }
 
 export function stateOf(
@@ -179,6 +247,7 @@ export function stateOf(
   environments: readonly string[],
   can: Ability,
   values: "live" | "unknown" = "live",
+  envSource?: EnvSource,
 ): State {
   return {
     slug,
@@ -187,7 +256,13 @@ export function stateOf(
     values,
     can,
     environments: [...environments],
-    matrix: matrixOf(topology, stored, environmentClass === "preview" ? environments : []),
+    matrix: matrixOf(
+      topology,
+      stored,
+      environmentClass === "preview" ? environments : [],
+      envSource,
+    ),
+    ...(envSource && { envSource }),
   };
 }
 

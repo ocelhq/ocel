@@ -27,7 +27,7 @@ export function BulkBar() {
     .map((v) => v!.at);
   const removable = cells.filter((at) => {
     const v = known.get(addressKey(at));
-    return v?.set && !v.reference;
+    return v?.set && !v.reference && !v.owner;
   });
   return (
     <div
