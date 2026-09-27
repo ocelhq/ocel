@@ -239,6 +239,10 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSo
 	switch {
 	case errors.Is(err, envsource.ErrAwaitingApproval):
 		return &envvarsv1.SetEnvSourceValueResponse{AwaitingApproval: true, Created: creating}, nil
+	case errors.Is(err, envsource.ErrNotInFolder):
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"%s no longer keeps %s in %s itself, so ocel wrote nothing: if it was deleted there, run `%s` and set it again; if it is imported from another folder, change it where it lives%s",
+			source.ID(), at.GetKey(), folderName(cell.Folder), syncCommand(scope.Class), url()))
 	case errors.Is(err, envsource.ErrChangedSinceRead):
 		return nil, connect.NewError(connect.CodeAborted, fmt.Errorf(
 			"%s changed in %s since ocel last read it, so ocel wrote nothing over it: run `%s` to read it, then set it again",
@@ -279,6 +283,13 @@ func copiedFrom(ctx context.Context, store envvars.Store, scope envvars.Scope, a
 		return nil, nil
 	}
 	return &stored, nil
+}
+
+func folderName(folder string) string {
+	if folder == "" {
+		return "the root"
+	}
+	return folder
 }
 
 func syncCommand(class edge.Class) string {

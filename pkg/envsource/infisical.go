@@ -183,7 +183,7 @@ func (s *infisical) Update(ctx context.Context, at envvars.Cell, value []byte, c
 	}
 	err = s.client.call(ctx, http.MethodGet, "/api/v4/secrets/"+url.PathEscape(at.Key)+"?"+query.Encode(), nil, &current, true)
 	if isInfisicalStatus(err, http.StatusNotFound) {
-		return fmt.Errorf("%s is no longer in %s as ocel copied it: %w", at.Key, secretPath, ErrChangedSinceRead)
+		return fmt.Errorf("%s in %s: %w", at.Key, secretPath, ErrNotInFolder)
 	}
 	if err != nil {
 		return fmt.Errorf("read %s in %s: %w", at.Key, secretPath, err)

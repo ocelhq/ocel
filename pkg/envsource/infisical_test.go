@@ -532,7 +532,7 @@ func TestInfisicalRefusesToUpdateAValueChangedSinceOcelCopiedIt(t *testing.T) {
 	fake.put("/acme", fakeSecret{id: "s1", key: "EDITED", value: "theirs", version: 3}, fakeSecret{id: "s9", key: "RECREATED", value: "theirs", version: 1})
 	source := signedIn(server, "/acme", envsource.WriteValues)
 
-	for key, copied := range map[string]string{"EDITED": "s1@2#0f3a", "RECREATED": "s1@1#0f3a", "DELETED": "s2@1#0f3a"} {
+	for key, copied := range map[string]string{"EDITED": "s1@2#0f3a", "RECREATED": "s1@1#0f3a"} {
 		if err := source.Update(context.Background(), cell("", key), []byte("mine"), copied); !errors.Is(err, envsource.ErrChangedSinceRead) {
 			t.Errorf("Update(%s) copied at %s = %v, want ErrChangedSinceRead", key, copied, err)
 		}
@@ -541,6 +541,20 @@ func TestInfisicalRefusesToUpdateAValueChangedSinceOcelCopiedIt(t *testing.T) {
 		if secret.value != "theirs" {
 			t.Errorf("%s = %q, want the edit made in Infisical kept", secret.key, secret.value)
 		}
+	}
+}
+
+func TestInfisicalRefusesToUpdateAKeyItDoesNotKeepInTheFolder(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/acme/web")
+	fake.set(func(f *fakeInfisical) {
+		f.imports["/acme/web"] = []fakeImport{{path: "/shared", secrets: []fakeSecret{{id: "s3", key: "IMPORTED", value: "shared", version: 1}}}}
+	})
+
+	err := signedIn(server, "/acme", envsource.WriteValues).Update(context.Background(), cell("/web", "IMPORTED"), []byte("mine"), "s3@1#0f3a")
+	if !errors.Is(err, envsource.ErrNotInFolder) {
+		t.Fatalf("Update() of a key imported into the folder = %v, want ErrNotInFolder", err)
 	}
 }
 
