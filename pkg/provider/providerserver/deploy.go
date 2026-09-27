@@ -55,7 +55,6 @@ type deployStages struct {
 	Edge        Stage
 	Hostnames   Stage
 	Promotion   Stage
-	Roster      []Stage
 }
 
 func newDeployStages(spec provider.DeploySpec, front edge.Kind) deployStages {
@@ -68,21 +67,11 @@ func newDeployStages(spec provider.DeploySpec, front edge.Kind) deployStages {
 		Apps:        make(map[string]Stage, len(spec.Apps)),
 	}
 	s.Edge.Subject = string(front)
-	s.Roster = append(s.Roster, s.Environment)
-	if !spec.Infra.IsZero() {
-		s.Roster = append(s.Roster, s.Infra)
-	}
 	for _, entry := range spec.Apps {
 		app := UnitStage(entry.Stack.String(), entry.App, progressv1.Phase_PHASE_DEPLOY)
 		app.Subject = entry.App
 		s.Apps[entry.App] = app
-		s.Roster = append(s.Roster, app)
 	}
-	s.Roster = append(s.Roster, s.Edge)
-	if spec.Class != edge.ClassPreview {
-		s.Roster = append(s.Roster, s.Hostnames)
-	}
-	s.Roster = append(s.Roster, s.Promotion)
 	return s
 }
 
@@ -197,7 +186,6 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	run.stages = newDeployStages(spec, front.Kind())
 	run.outcomes = pendingOutcomes(spec.Apps)
 	run.dryRunPlan.apps = make([]provider.Plan, len(spec.Apps))
-	run.tracked.declare(run.stages.Roster...)
 	sender.detailing(run.reportApps)
 	return run, nil
 }

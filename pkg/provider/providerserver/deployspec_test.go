@@ -23,51 +23,6 @@ func productionRequest(apps ...*contractv1.ManifestApp) *contractv1.DeployReques
 	}
 }
 
-func rosterTitles(stages []Stage) []string {
-	titles := make([]string, len(stages))
-	for i, s := range stages {
-		titles[i] = s.Title
-	}
-	return titles
-}
-
-func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
-	t.Parallel()
-
-	t.Run("environment, shared infrastructure, apps in manifest order, edge, hostnames, promotion", func(t *testing.T) {
-		spec, err := buildDeploySpec(productionRequest(
-			&contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID},
-			&contractv1.ManifestApp{Name: "admin", DeploymentId: deploymentID},
-			&contractv1.ManifestApp{Name: "api", DeploymentId: deploymentID},
-		), "p1")
-		if err != nil {
-			t.Fatalf("buildDeploySpec() error = %v", err)
-		}
-		want := []string{"Environment", "Shared infrastructure", "web", "admin", "api", "Edge", "Hostnames", "Promotion"}
-		if got := rosterTitles(newDeployStages(spec, "").Roster); strings.Join(got, ",") != strings.Join(want, ",") {
-			t.Errorf("roster = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("an ephemeral preview has no shared infrastructure to walk through", func(t *testing.T) {
-		spec, err := buildDeploySpec(&contractv1.DeployRequest{
-			Manifest: &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{{Name: "web", DeploymentId: deploymentID}}},
-			Environment: &environmentv1.Environment{
-				Tier:      environmentv1.Tier_TIER_PREVIEW,
-				Identity:  "pr-7",
-				Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
-			},
-		}, "p1")
-		if err != nil {
-			t.Fatalf("buildDeploySpec() error = %v", err)
-		}
-		want := []string{"Environment", "web", "Edge", "Promotion"}
-		if got := rosterTitles(newDeployStages(spec, "").Roster); strings.Join(got, ",") != strings.Join(want, ",") {
-			t.Errorf("roster = %v, want %v", got, want)
-		}
-	})
-}
-
 func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	t.Parallel()
 

@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestDeclaringStagesStartsEachOneTitledUnderItsParent(t *testing.T) {
+func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -61,7 +61,7 @@ func TestDeclaringStagesStartsEachOneTitledUnderItsParent(t *testing.T) {
 	}
 }
 
-func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
+func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}

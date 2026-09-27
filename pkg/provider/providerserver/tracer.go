@@ -3,7 +3,6 @@ package providerserver
 import (
 	"crypto/rand"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -140,40 +139,16 @@ func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key
 type stageScope struct {
 	sender *eventStream
 	trace  *eventTrace
-
-	mu       sync.Mutex
-	declared map[StageID]bool
 }
 
 func newStageScope(sender *eventStream) *stageScope {
-	return &stageScope{sender: sender, trace: newEventTrace(sender), declared: map[StageID]bool{}}
-}
-
-func (s *stageScope) declare(stages ...Stage) {
-	s.mu.Lock()
-	var fresh []Stage
-	for _, stage := range stages {
-		declaring := []Stage{stage}
-		if stage.ParentID == (StageID{}) {
-			declaring = append(declaring, stage.phaseStage())
-		}
-		for _, declaring := range declaring {
-			if s.declared[declaring.ID] {
-				continue
-			}
-			s.declared[declaring.ID] = true
-			fresh = append(fresh, declaring)
-		}
-	}
-	s.mu.Unlock()
-	s.trace.Start(time.Now(), fresh...)
+	return &stageScope{sender: sender, trace: newEventTrace(sender)}
 }
 
 func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
-	s.declare(stage)
 	start := time.Now()
-	run := &unitRun{scope: s, stage: stage}
-	err := do(run)
+	s.trace.Start(start, stage)
+	err := do(&unitRun{scope: s, stage: stage})
 	s.trace.End(stage, start, time.Now(), err)
 	return err
 }
@@ -185,8 +160,8 @@ type unitRun struct {
 
 func (u *unitRun) phase(do func(edge.Progress) error) error {
 	working := u.stage.phaseStage()
-	u.scope.declare(working)
 	start := time.Now()
+	u.scope.trace.Start(start, working)
 	err := do(newProgress(u.scope.sender, working))
 	u.scope.trace.End(working, start, time.Now(), err)
 	return err

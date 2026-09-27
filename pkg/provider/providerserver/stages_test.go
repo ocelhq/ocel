@@ -3,7 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"errors"
-	"strings"
+	"slices"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -86,17 +86,47 @@ func recorded(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) 
 }
 
 func TestEveryScopeADeployOpensIsEndedExactlyOnce(t *testing.T) {
-	builtProject(t)
-	client, _ := deployServed(t)
+	for _, tc := range []struct {
+		name     string
+		preview  bool
+		request  func(t *testing.T, vendor *fake.Provider) *contractv1.DeployRequest
+		succeeds bool
+	}{
+		{name: "a production deploy", request: func(*testing.T, *fake.Provider) *contractv1.DeployRequest { return deployRequest() }, succeeds: true},
+		{name: "a dry run", request: func(*testing.T, *fake.Provider) *contractv1.DeployRequest {
+			req := deployRequest()
+			req.Dry = true
+			return req
+		}, succeeds: true},
+		{name: "a preview deploy", preview: true, request: func(*testing.T, *fake.Provider) *contractv1.DeployRequest { return previewRequest() }, succeeds: true},
+		{name: "a deploy that fails attaching its hostnames", request: func(t *testing.T, vendor *fake.Provider) *contractv1.DeployRequest {
+			writer, err := vendor.DNS().Open(fake.KindZone, "shop.example", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			writer.(*fake.DNSRecords).Refuse(errors.New("the zone's api answered 500"))
+			req := deployRequest()
+			req.Edge = writtenBy("shop.example")
+			return req
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			builtProject(t)
+			client, vendor := deployServed(t)
+			if tc.preview {
+				previewBootstrapped(t, client)
+			}
 
-	result, events := deploy(t, client, deployRequest())
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+			result, events := deploy(t, client, tc.request(t, vendor))
+			if result.GetSuccess() != tc.succeeds {
+				t.Fatalf("Deploy() success = %v (%q), want %v", result.GetSuccess(), result.GetError(), tc.succeeds)
+			}
+			assertStagesClose(t, events)
+		})
 	}
-	assertStagesClose(t, events)
 }
 
-func TestDeployStartsEveryUnitAndItsPhasesBeforeAnyScopeEnds(t *testing.T) {
+func TestAUnitStartsWhenItRunsNotWhenTheDeployBegins(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -105,43 +135,21 @@ func TestDeployStartsEveryUnitAndItsPhasesBeforeAnyScopeEnds(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	var roster []string
-	phases := map[string][]string{}
 	units := map[string]string{}
-	ending := false
+	var sequence []string
 	for _, event := range events {
-		if event.GetEnded() != nil {
-			ending = true
-		}
-		started := event.GetStarted()
-		if started == nil {
-			continue
-		}
-		parent := string(started.GetParentSpanId())
-		if parent == "" {
-			if ending {
-				t.Errorf("unit %q starts after a scope ended, want every unit on the spine named up front", event.GetMessage())
-			}
+		if started := event.GetStarted(); started != nil && len(started.GetParentSpanId()) == 0 {
 			units[string(event.GetSpanId())] = event.GetMessage()
-			roster = append(roster, event.GetMessage())
-			continue
+			sequence = append(sequence, "started "+event.GetMessage())
 		}
-		unit, isUnit := units[parent]
-		if !isUnit {
-			continue
+		if unit, ok := units[string(event.GetSpanId())]; ok && event.GetEnded() != nil {
+			sequence = append(sequence, "ended "+unit)
 		}
-		if ending {
-			t.Errorf("phase %q starts after a scope ended, want every phase named with the unit that runs it", event.GetMessage())
-		}
-		phases[unit] = append(phases[unit], event.GetMessage())
 	}
-
-	want := []string{"Environment", "Shared infrastructure", "web", "Edge", "Hostnames", "Promotion"}
-	if strings.Join(roster, ",") != strings.Join(want, ",") {
-		t.Errorf("roster = %v, want %v", roster, want)
-	}
-	if got := strings.Join(phases["Environment"], ","); got != "Provisioning" {
-		t.Errorf("Environment starts the phases %q, want it named before the first one closes", got)
+	hostnamesEnded := slices.Index(sequence, "ended Hostnames")
+	promotionStarted := slices.Index(sequence, "started Promotion")
+	if hostnamesEnded < 0 || promotionStarted < hostnamesEnded {
+		t.Errorf("units ran as %v, want Promotion started only after Hostnames ended: a started event says the unit is running", sequence)
 	}
 }
 
