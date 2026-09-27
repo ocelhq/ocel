@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
@@ -254,4 +256,74 @@ func attributeValue(attrs []*progressv1.SpanAttribute, key progressv1.AttributeK
 		}
 	}
 	return ""
+}
+
+func reasonsSaid(events []*progressv1.OperationEvent) []*progressv1.OperationEvent {
+	var said []*progressv1.OperationEvent
+	for _, event := range events {
+		if event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_ERROR {
+			said = append(said, event)
+		}
+	}
+	return said
+}
+
+func TestAFailedUnitSaysWhyAtErrorInItsPhaseOnceBeforeThePhaseEnds(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	unit := UnitStage("web", "web", progressv1.Phase_PHASE_DEPLOY)
+	_ = newStageScope(sender).unit(unit, func(u *unitRun) error {
+		return u.phase(func(edge.Progress) error {
+			return errors.New("the web stack could not be provisioned\x1b[0m")
+		})
+	})
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	said := reasonsSaid(events)
+	if len(said) != 1 {
+		t.Fatalf("the failure is said %d times, want once", len(said))
+	}
+	reason := said[0]
+	working := unit.phaseStage()
+	if StageID(reason.GetSpanId()) != working.ID || reason.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+		t.Errorf("the reason is scoped to %x in %v, want the unit's phase %x in the deploy phase", reason.GetSpanId(), reason.GetPhase(), working.ID)
+	}
+	if got, want := reason.GetMessage(), "the web stack could not be provisioned[0m"; got != want {
+		t.Errorf("the reason reads %q, want the error sanitized like any message: %q", got, want)
+	}
+	at := slices.Index(events, reason)
+	for _, event := range events[:at] {
+		if event.GetEnded() != nil {
+			t.Fatalf("a scope ended before the reason was said, want the reason inside its phase")
+		}
+	}
+	for _, event := range events {
+		if event.GetEnded() != nil && event.GetMessage() != "" {
+			t.Errorf("an Ended carries %q, want Ended without text", event.GetMessage())
+		}
+	}
+}
+
+func TestAUnitThatFailsOutsideItsPhaseSaysWhyInItsOwnScope(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	unit := UnitStage("web", "web", progressv1.Phase_PHASE_DEPLOY)
+	_ = newStageScope(sender).unit(unit, func(*unitRun) error {
+		return errors.New("the web stack is locked")
+	})
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	said := reasonsSaid(stream.recorded())
+	if len(said) != 1 || StageID(said[0].GetSpanId()) != unit.ID || said[0].GetMessage() != "the web stack is locked" {
+		t.Fatalf("said %d reasons, want the reason once in the unit's own scope", len(said))
+	}
 }

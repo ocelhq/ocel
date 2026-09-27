@@ -236,7 +236,11 @@ func (endedScopes) WrapStreamingHandler(next connect.StreamingHandlerFunc) conne
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		scoped := &scopedConn{StreamingHandlerConn: conn}
 		err := next(ctx, scoped)
-		if endErr := scoped.endOpen(err == nil); err == nil {
+		failure := ""
+		if err != nil {
+			failure = err.Error()
+		}
+		if endErr := scoped.endOpen(err == nil, failure); err == nil {
 			return endErr
 		}
 		return err
@@ -256,7 +260,7 @@ func (c *scopedConn) Send(msg any) error {
 		case ev.GetEnded() != nil:
 			c.open = slices.DeleteFunc(c.open, func(open *progressv1.OperationEvent) bool { return bytes.Equal(open.GetSpanId(), ev.GetSpanId()) })
 		case ev.GetResult() != nil:
-			if err := c.endOpen(ev.GetResult().GetSuccess()); err != nil {
+			if err := c.endOpen(ev.GetResult().GetSuccess(), ev.GetResult().GetError()); err != nil {
 				return err
 			}
 		}
@@ -264,10 +268,21 @@ func (c *scopedConn) Send(msg any) error {
 	return c.StreamingHandlerConn.Send(msg)
 }
 
-func (c *scopedConn) endOpen(succeeded bool) error {
+func (c *scopedConn) endOpen(succeeded bool, failure string) error {
 	level, status := progressv1.Level_LEVEL_INFO, progressv1.SpanStatus_SPAN_STATUS_OK
 	if !succeeded {
 		level, status = progressv1.Level_LEVEL_ERROR, progressv1.SpanStatus_SPAN_STATUS_ERROR
+	}
+	if innermost := len(c.open) - 1; !succeeded && failure != "" && innermost >= 0 {
+		if err := c.StreamingHandlerConn.Send(&progressv1.OperationEvent{
+			TimeUnixNano: time.Now().UnixNano(),
+			Level:        progressv1.Level_LEVEL_ERROR,
+			Phase:        c.open[innermost].GetPhase(),
+			SpanId:       c.open[innermost].GetSpanId(),
+			Message:      failure,
+		}); err != nil {
+			return err
+		}
 	}
 	for len(c.open) > 0 {
 		started := c.open[len(c.open)-1]

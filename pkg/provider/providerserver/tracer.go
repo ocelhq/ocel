@@ -2,6 +2,7 @@ package providerserver
 
 import (
 	"crypto/rand"
+	"errors"
 	"strings"
 	"time"
 
@@ -149,7 +150,11 @@ func newStageScope(sender *eventStream) *stageScope {
 func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 	start := time.Now()
 	s.trace.Start(start, stage)
-	err := do(&unitRun{scope: s, stage: stage})
+	run := &unitRun{scope: s, stage: stage}
+	err := do(run)
+	if err != nil && !errors.Is(err, run.said) {
+		newProgress(s.sender, stage).Error(err.Error())
+	}
 	s.trace.End(stage, start, time.Now(), err)
 	return err
 }
@@ -157,13 +162,19 @@ func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 type unitRun struct {
 	scope *stageScope
 	stage Stage
+	said  error
 }
 
 func (u *unitRun) phase(do func(edge.Progress) error) error {
 	working := u.stage.phaseStage()
 	start := time.Now()
 	u.scope.trace.Start(start, working)
-	err := do(newProgress(u.scope.sender, working))
+	progress := newProgress(u.scope.sender, working)
+	err := do(progress)
+	if err != nil {
+		progress.Error(err.Error())
+		u.said = err
+	}
 	u.scope.trace.End(working, start, time.Now(), err)
 	return err
 }

@@ -78,3 +78,41 @@ func TestEveryScopeTheFakeProviderOpensEndsBeforeItsResult(t *testing.T) {
 		})
 	}
 }
+
+func TestAFailedResultIsSaidAtErrorInTheInnermostOpenScopeBeforeItEndsLikeTheRealProvider(t *testing.T) {
+	t.Parallel()
+
+	stream, err := fakeProviderClient(t).Deploy(context.Background(), &contractv1.DeployRequest{})
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	defer stream.Close()
+
+	var said *progressv1.OperationEvent
+	var failure string
+	for stream.Receive() {
+		ev := stream.Msg()
+		switch {
+		case ev.GetBody() == nil && ev.GetLevel() == progressv1.Level_LEVEL_ERROR:
+			said = ev
+		case ev.GetEnded() != nil && ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR:
+			if failure != "" {
+				continue
+			}
+			if said == nil || hex.EncodeToString(said.GetSpanId()) != hex.EncodeToString(ev.GetSpanId()) {
+				t.Fatalf("the innermost scope ended in error before its failure was said in it")
+			}
+			failure = said.GetMessage()
+		case ev.GetResult() != nil:
+			if want := ev.GetResult().GetError(); failure != want {
+				t.Errorf("the failure said is %q, want the result's error %q", failure, want)
+			}
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatalf("stream error = %v", err)
+	}
+	if failure == "" {
+		t.Fatal("no scope ended in error, want the refused deploy to fail its open scope")
+	}
+}
