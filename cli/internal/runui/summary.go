@@ -175,9 +175,30 @@ func (s summary) appURLs() []string {
 func (s *GroupedSink) conclude(ev *streamv1.RunEvent) {
 	s.unfinished()
 	s.gap()
-	for _, text := range (summary{result: ev.GetResult(), tier: s.tier, promotion: s.promotion, changeStarted: s.changeStarted, present: s.present}).lines() {
+	result := summary{result: ev.GetResult(), tier: s.tier, promotion: s.promotion, changeStarted: s.changeStarted, present: s.present}
+	for _, text := range result.lines() {
 		s.print(blockLine{text: text})
 	}
+	if !result.result.GetSuccess() {
+		s.annotate(ev.GetLevel(), result.annotation())
+	}
+}
+
+func (s summary) annotation() string {
+	result := s.result
+	if missing := result.GetMissing(); missing != nil {
+		text := headlineOr(result, "Failed") + ": " + envgate.Headline(len(missing.GetCells())) +
+			"\n" + strings.TrimLeft(envgate.RemedyLine(missing.GetRemedy()), " ")
+		if detail := strings.TrimRight(result.GetDetail(), "\n"); detail != "" {
+			text += "\n" + detail
+		}
+		return text
+	}
+	text := headlineOr(result, "Failed")
+	if detail := strings.TrimRight(result.GetDetail(), "\n"); detail != "" {
+		text += " — " + detail
+	}
+	return text
 }
 
 func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {

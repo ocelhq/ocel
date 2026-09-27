@@ -383,9 +383,13 @@ func (s *GroupedSink) print(lines ...blockLine) {
 			text = workflowCommandStart.ReplaceAllString(text, "${1}${2}"+commandBreak+"${3}")
 		}
 		fmt.Fprintln(s.w, text)
-		if command, ok := annotationCommands[l.from.level]; ok && s.present.GitHubActions {
-			fmt.Fprintf(s.w, "::%s::%s\n", command, workflowData.Replace(l.from.annotation()))
-		}
+		s.annotate(l.from.level, l.from.annotation())
+	}
+}
+
+func (s *GroupedSink) annotate(level progressv1.Level, text string) {
+	if command, ok := annotationCommands[level]; ok && s.present.GitHubActions {
+		fmt.Fprintf(s.w, "::%s::%s\n", command, workflowData.Replace(text))
 	}
 }
 

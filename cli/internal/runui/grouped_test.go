@@ -607,6 +607,69 @@ func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
 	}
 }
 
+func TestInGitHubActionsAFailedRunsResultIsAnErrorAnnotation(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{GitHubActions: true})
+	ended(run, errors.New("the project has no provider credentials\n100% of ::checks:: failed"))
+
+	want := "✗ Deploy failed in 0s — the project has no provider credentials\n" +
+		"  100% of ::checks:: failed\n" +
+		"::error::Deploy failed — the project has no provider credentials%0A100%25 of ::checks:: failed\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestInGitHubActionsACancelledRunsResultIsAWarningAnnotation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var out bytes.Buffer
+	c := &clock{at: time.Unix(1_700_000_000, 0)}
+	_, run := onABus(t, ctx, c.now, newGroupedSink(&out, Presentation{GitHubActions: true}, nil))
+	cancel()
+	ended(run, context.Canceled)
+
+	want := "✗ Deploy cancelled in 0s\n" +
+		"::warning::Deploy cancelled\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestInGitHubActionsARunRefusedForMissingVariablesIsAnErrorAnnotationNamingHowManyAndWhereToFillThemIn(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newGroupedSink(&out, Presentation{GitHubActions: true}, nil)
+	sink.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_ERROR, Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+		Headline: "Deploy failed", DurationMs: 3000, Missing: missingStripeKey(),
+	}}})
+
+	want := "✗ 1 variable is not ready — nothing has been built.\n" +
+		"\n" +
+		"  ✗ STRIPE_API_KEY  root  no value\n" +
+		"\n" +
+		"  Fill them in: ocel env ui\n" +
+		"::error::Deploy failed: 1 variable is not ready — nothing has been built.%0AFill them in: ocel env ui\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestOutsideGitHubActionsAFailedRunsResultIsNotAnnotated(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	ended(run, errors.New("the project has no provider credentials"))
+
+	want := "✗ Deploy failed in 0s — the project has no provider credentials\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
 func providerChild(span, parent byte, subject, message string, at time.Time) *progressv1.OperationEvent {
 	started := providerStarted(span, subject, message, at)
 	started.GetStarted().ParentSpanId = []byte{parent, 0, 0, 0, 0, 0, 0, 1}
