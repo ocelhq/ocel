@@ -313,6 +313,16 @@ func TestInfisicalReadsAFolderItLacksAsEmpty(t *testing.T) {
 	}
 }
 
+func TestInfisicalRefusesToReadARootItLacks(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/acme/web", fakeSecret{id: "s1", key: "API_KEY", value: "web-key", version: 1})
+	_, err := signedIn(server, "/renamed", envsource.WriteNever).Read(context.Background(), []string{"", "/web"})
+	if err == nil || !strings.Contains(err.Error(), "/renamed") {
+		t.Fatalf("Read() under a root Infisical lacks = %v, want a failure naming the root, never an empty read", err)
+	}
+}
+
 func TestInfisicalReadsAnEmptyValueAsUnset(t *testing.T) {
 	t.Parallel()
 	fake, server := newFakeInfisical(t)
