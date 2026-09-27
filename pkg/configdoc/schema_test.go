@@ -161,3 +161,10 @@ func TestAValueIsCheckedAgainstItsPattern(t *testing.T) {
 		t.Errorf("error = %q, want it to name the key and the pattern", err)
 	}
 }
+func TestANamedTypeUsedInMoreThanOnePlaceIsDocumentedAsItselfEverywhere(t *testing.T) {
+	for title, described := range namedTypeDocs(t) {
+		if len(described) > 1 {
+			t.Errorf("%s is described as %q in different places, want its own description wherever a field uses it", title, described)
+		}
+	}
+}

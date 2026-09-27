@@ -106,6 +106,7 @@ export interface HealthConfig {
   path?: string;
 }
 
+/** An existing S3-compatible bucket a tier binds rather than provisioning its own. */
 export interface BucketBinding {
   /** The public half of the key pair the runtime reaches the store with. */
   accessKeyId: VariableRef;
@@ -125,12 +126,13 @@ export interface BucketBinding {
   secretAccessKey: VariableRef;
 }
 
-/** The public half of the key pair the runtime reaches the store with. */
+/** An ocel variable holding this value, written { "$env": "NAME" }, so the value itself never sits in the config. */
 export interface VariableRef {
   /** The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
   $env: string;
 }
 
+/** An existing Postgres database a tier binds rather than provisioning its own, reached by a connection string or by host and role. */
 export type PostgresBinding = PostgresUrlBinding | PostgresHostBinding;
 
 export interface PostgresUrlBinding {
