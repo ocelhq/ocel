@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +15,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const fakeBindingPassword = "pw-never-listed-7c31"
@@ -45,7 +49,7 @@ func postgresBindingJSON(name, host string) string {
 func bindingSet(t *testing.T, root, body string, opts bindingsOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runBindingsSet(context.Background(), newDeps(), root, strings.NewReader(body), opts, &stdout, &stderr); err != nil {
+	if err := runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(body), opts, &stdout); err != nil {
 		t.Fatalf("runBindingsSet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -54,10 +58,16 @@ func bindingSet(t *testing.T, root, body string, opts bindingsOptions) string {
 func bindingLs(t *testing.T, root string, opts bindingsOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runBindingsLs(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
+	if err := runBindingsLs(context.Background(), bindingDeps(&stderr), root, opts, &stdout); err != nil {
 		t.Fatalf("runBindingsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
+}
+
+func bindingDeps(stderr io.Writer) cmddeps.Deps {
+	deps := newTestDeps()
+	deps.AttachTerminalSink(stderr)
+	return deps
 }
 
 func asJSON(t *testing.T, out string) map[string]any {
@@ -92,7 +102,7 @@ func TestRunBindingsSet(t *testing.T) {
 		}
 
 		var rm, stderr bytes.Buffer
-		if err := runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &rm, &stderr); err != nil {
+		if err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
 			t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(rm.String(), "main") {
@@ -109,14 +119,14 @@ func TestRunBindingsSet(t *testing.T) {
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsSet(context.Background(), newDeps(), root,
-			strings.NewReader(postgresBindingJSON("main", "other.internal")), bindingsOptions{owner: "cli"}, &stdout, &stderr)
+		err := runBindingsSet(context.Background(), bindingDeps(&stderr), root,
+			strings.NewReader(postgresBindingJSON("main", "other.internal")), bindingsOptions{owner: "cli"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsSet over another publisher's binding err = nil, want a refusal")
 		}
 		for _, want := range []string{"terraform", "cli"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want it to name %q", err, want)
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stderr = %q, want the refusal to name %q", stderr.String(), want)
 			}
 		}
 	})
@@ -125,13 +135,13 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsSet(context.Background(), newDeps(), root,
-			strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{owner: "OCEL"}, &stdout, &stderr)
+		err := runBindingsSet(context.Background(), bindingDeps(&stderr), root,
+			strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{owner: "OCEL"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsSet --owner OCEL err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "OCEL") {
-			t.Errorf("err = %v, want it to name the publisher it refused", err)
+		if !strings.Contains(stderr.String(), "OCEL") {
+			t.Errorf("stderr = %q, want the refusal to name the publisher it refused", stderr.String())
 		}
 		if listed := bindingLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
 			t.Errorf("ls = %q, want the refused binding never published", listed)
@@ -142,8 +152,8 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsSet(context.Background(), newDeps(), root,
-			strings.NewReader(postgresBindingJSON("ocel:postgres.orders", "db.internal")), bindingsOptions{owner: "ocel-config"}, &stdout, &stderr)
+		err := runBindingsSet(context.Background(), bindingDeps(&stderr), root,
+			strings.NewReader(postgresBindingJSON("ocel:postgres.orders", "db.internal")), bindingsOptions{owner: "ocel-config"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsSet --owner ocel-config err = nil, want a refusal")
 		}
@@ -156,7 +166,7 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsRm(context.Background(), newDeps(), root, "ocel:postgres.orders", bindingsOptions{}, &stdout, &stderr)
+		err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "ocel:postgres.orders", bindingsOptions{}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsRm ocel:postgres.orders err = nil, want a refusal")
 		}
@@ -184,7 +194,7 @@ func TestRunBindingsSet(t *testing.T) {
 		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &stdout, &stderr); err != nil {
+		if err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &stdout); err != nil {
 			t.Fatalf("runBindingsRm over another publisher's binding err = %v; stderr=%s", err, stderr.String())
 		}
 		if after := bindingLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
@@ -196,7 +206,7 @@ func TestRunBindingsSet(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runBindingsRm(context.Background(), newDeps(), root, "never-published", bindingsOptions{}, &stdout, &stderr); err != nil {
+		if err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "never-published", bindingsOptions{}, &stdout); err != nil {
 			t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "never-published") {
@@ -216,7 +226,7 @@ func TestRunBindingsSet(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				err := runBindingsSet(context.Background(), newDeps(), root, strings.NewReader(body), bindingsOptions{}, &stdout, &stderr)
+				err := runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(body), bindingsOptions{}, &stdout)
 				if err == nil {
 					t.Fatalf("runBindingsSet(%q) err = nil, want a refusal", body)
 				}
@@ -270,7 +280,7 @@ func customBindingJSON(name string) string {
 func bindingGenerate(t *testing.T, root string, opts bindingsOptions) (string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runBindingsGenerate(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
+	if err := runBindingsGenerate(context.Background(), bindingDeps(&stderr), root, opts, &stdout); err != nil {
 		t.Fatalf("runBindingsGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	written, err := os.ReadFile(filepath.Join(root, bindingTypesFileName))
@@ -364,7 +374,7 @@ func TestRunBindingsGenerate(t *testing.T) {
 		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runBindingsGenerate(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr)
+		err := runBindingsGenerate(context.Background(), bindingDeps(&stderr), root, bindingsOptions{environment: "staging"}, &stdout)
 		if err == nil {
 			t.Fatal("runBindingsGenerate --environment against production err = nil, want a refusal")
 		}
@@ -395,9 +405,9 @@ func TestBindingBootstrap(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		for name, err := range map[string]error{
-			"set": runBindingsSet(context.Background(), newDeps(), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{environment: "staging"}, &stdout, &stderr),
-			"rm":  runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{environment: "staging"}, &stdout, &stderr),
-			"ls":  runBindingsLs(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr),
+			"set": runBindingsSet(context.Background(), bindingDeps(&stderr), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{environment: "staging"}, &stdout),
+			"rm":  runBindingsRm(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{environment: "staging"}, &stdout),
+			"ls":  runBindingsLs(context.Background(), bindingDeps(&stderr), root, bindingsOptions{environment: "staging"}, &stdout),
 		} {
 			if err == nil {
 				t.Errorf("`ocel bindings %s --environment` against production err = nil, want a refusal", name)
@@ -452,7 +462,7 @@ func TestRunBindingsJSONOutput(t *testing.T) {
 	}
 
 	var rm, stderr bytes.Buffer
-	if err := runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &rm, &stderr); err != nil {
+	if err := runBindingsRm(context.Background(), bindingDeps(&stderr), root, "main", bindingsOptions{}, &rm); err != nil {
 		t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 	}
 	removed := asJSON(t, rm.String())
@@ -522,4 +532,29 @@ func TestBindingCommands(t *testing.T) {
 			t.Errorf("`ocel bindings` hangs off %v, want the root command", bindingsCmd.Parent())
 		}
 	})
+}
+
+func TestListingBindingsAsJSONSaysWhoItActsAsOnItsRunAndPrintsOneJSONDocumentAloneOnStdout(t *testing.T) {
+	root := setUpBindingFixture(t)
+	bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{})
+	jsonOutput(t)
+	deps := newTestDeps()
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := runBindingsLs(context.Background(), deps, root, bindingsOptions{}, &stdout); err != nil {
+		t.Fatalf("runBindingsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stderr.String())
+	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
+	if identity < 0 || evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("the listing never said who it acts as in the check phase: %s", stderr.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+		t.Errorf("result = %v, want the listing's run to succeed", result)
+	}
+	if listed := asJSON(t, stdout.String()); listed["bindings"] == nil {
+		t.Errorf("stdout = %q, want the listing as one JSON document", stdout.String())
+	}
 }
