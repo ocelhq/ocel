@@ -74,6 +74,10 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"preview queue":         previewQueue,
 		"preview dlq":           previewDLQ,
 		"cache policy name":     n.PolicyName("edge-cache"),
+		"schedule group":        n.envSourceSyncScheduleGroupName(ClassProduction),
+		"preview schedules":     n.envSourceSyncScheduleGroupName(ClassPreview),
+		"schedule":              n.envSourceSyncScheduleName(ClassProduction),
+		"preview schedule":      n.envSourceSyncScheduleName(ClassPreview),
 	}
 }
 
@@ -108,6 +112,10 @@ func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 		"preview queue":         "ocel-revalidate-preview.fifo",
 		"preview dlq":           "ocel-revalidate-preview-dlq.fifo",
 		"cache policy name":     "ocel-edge-cache",
+		"schedule group":        "ocel-bootstrap",
+		"preview schedules":     "ocel-bootstrap-preview",
+		"schedule":              "ocel-env-sync",
+		"preview schedule":      "ocel-env-sync-preview",
 	}
 	for what, got := range namesOf(t, defaultNamespace) {
 		if want[what] != got {
@@ -158,6 +166,10 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		"preview queue":         80,
 		"preview dlq":           80,
 		"cache policy name":     128,
+		"schedule group":        64,
+		"preview schedules":     64,
+		"schedule":              64,
+		"preview schedule":      64,
 	}
 
 	longest := Namespace(strings.Repeat("a", provider.MaxNamespaceLength))

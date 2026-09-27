@@ -16,33 +16,52 @@ import (
 )
 
 var varsKeyFeature = feature{
-	name:      provider.FeatureVarsKey,
-	summary:   "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
-	template:  varsKeyTemplate,
-	afterPlan: validateBroughtKey,
+	name:       provider.FeatureVarsKey,
+	summary:    "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly, and the sync that keeps scheduled env sources current",
+	template:   varsKeyTemplate,
+	payloads:   varsKeyPayloads,
+	placements: varsKeyPlacements,
+	afterPlan:  validateBroughtKey,
+}
+
+func varsKeyPayloads(ctx context.Context, store ObjectStore, bucket string) (stackPayloads, error) {
+	code, err := ensureEnvSourceSyncPayload(ctx, store, bucket)
+	return stackPayloads{envSourceSync: code}, err
+}
+
+func varsKeyPlacements(bucket string) stackPayloads {
+	return stackPayloads{envSourceSync: envSourceSyncPlacement(bucket)}
 }
 
 func varsKeyTemplate(in featureInputs) featureStack {
+	params, values := crossStack([]crossStackParam{
+		{paramVarsTableName, "The core bootstrap's vars table, which the env source sync reads registrations from and writes values into.", in.refs.varsTable},
+		{paramVarsTableARN, "ARN of that table, so the env source sync's role reaches this table and no other.", in.refs.varsTableARN},
+	})
 	if in.varsKey != "" {
-		return featureStack{body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this class is sealed under. Ocel owns no key here and puts nothing on it."
-Resources:
+		return featureStack{params: values, body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this class is sealed under, and the env source sync that encrypts under it. Ocel owns no key here and puts nothing on it."
+%sResources:
   VarsKeyRecord:
     Type: AWS::CloudFormation::WaitConditionHandle
     Metadata:
       Description: "Placeholder for the %s class's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
-Outputs:
-%s`,
-			provider.FeatureVarsKey, in.class, in.class, broughtVarsKeyOutput(in.varsKey))}
-	}
-	return featureStack{
-		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this class is sealed under, and the alias naming it."
-Resources:
 %sOutputs:
 %s`,
-			provider.FeatureVarsKey, in.class,
+			provider.FeatureVarsKey, in.class, params, in.class,
+			envSourceSyncResources(in.ns, in.code.envSourceSync, in.class, fmt.Sprintf("%q", in.varsKey)),
+			broughtVarsKeyOutput(in.varsKey))}
+	}
+	return featureStack{
+		params: values,
+		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this class is sealed under, the alias naming it, and the env source sync that encrypts under it."
+%sResources:
+%s%sOutputs:
+%s`,
+			provider.FeatureVarsKey, in.class, params,
 			varsKeyResources(in.ns, in.class),
+			envSourceSyncResources(in.ns, in.code.envSourceSync, in.class, "!GetAtt VarsKey.Arn"),
 			varsKeyOutputs()),
 	}
 }
@@ -119,7 +138,7 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class
 
 func refuseBroughtKey(named, why string, args ...any) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s cannot seal this account's variables: %s.\nIts key policy must admit this principal and the app execution roles that read a value; ocel never edits a key policy it does not own",
+		"%s cannot seal this account's variables: %s.\nIts key policy must admit this principal, the app execution roles that read a value and the env source sync that writes one; ocel never edits a key policy it does not own",
 		named, fmt.Sprintf(why, args...))
 }
 

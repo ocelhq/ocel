@@ -115,8 +115,8 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	if counts["aws_cloudfront_distribution"] != 1 || counts["aws_lb"] != 1 || counts["aws_rds_cluster"] != 1 || counts["aws_kms_key"] != 1 || counts["aws_data_transfer"] != 0 {
 		t.Errorf("counts = %v, want the distribution, the container infrastructure's load balancer, the cluster, the vars key and no origin egress behind CloudFront", counts)
 	}
-	if counts["aws_lambda_function"] != 1+1+3 {
-		t.Errorf("lambdas = %d, want the app's, the upload completer's and the three the next runtime's features provision", counts["aws_lambda_function"])
+	if counts["aws_lambda_function"] != 1+1+3+1 {
+		t.Errorf("lambdas = %d, want the app's, the upload completer's, the three the next runtime's features provision and the vars key's env source sync", counts["aws_lambda_function"])
 	}
 	for _, r := range set.GetResources() {
 		if r.GetVendor() != "aws" || r.GetRegion() != "us-east-1" {

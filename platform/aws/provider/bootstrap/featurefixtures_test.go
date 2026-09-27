@@ -21,6 +21,8 @@ func fixtureRefs() stackRefs {
 		stateTableStreamARN: "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-state/stream/2026-01-01T00:00:00.000",
 		revalidateQueueARN:  "arn:aws:sqs:us-east-1:111122223333:ocel-revalidate.fifo",
 		imageOptimizerARN:   "arn:aws:lambda:us-east-1:111122223333:function:ocel-image-optimizer",
+		varsTable:           "ocel-vars",
+		varsTableARN:        "arn:aws:dynamodb:us-east-1:111122223333:table/ocel-vars",
 	}
 }
 
