@@ -3,12 +3,14 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -104,6 +106,46 @@ func digest(argv []string, out, errs io.Writer) int {
 		}
 		return nil
 	})
+}
+
+var readByTraefik = []string{".yml", ".yaml", ".toml"}
+
+func beside(argv []string, out, errs io.Writer) int {
+	return confined(argv, errs, func(path string) error {
+		dir := filepath.Dir(path)
+		found := []switchboard.Neighbour{}
+		err := filepath.WalkDir(dir, func(at string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !entry.Type().IsRegular() || at == path || !slices.Contains(readByTraefik, strings.ToLower(filepath.Ext(at))) {
+				return nil
+			}
+			content, err := regularContent(at)
+			if err != nil {
+				return err
+			}
+			name, err := filepath.Rel(dir, at)
+			if err != nil {
+				return err
+			}
+			found = append(found, switchboard.Neighbour{Name: name, Content: content})
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("read what is beside %s: %w", path, err)
+		}
+		return json.NewEncoder(out).Encode(found)
+	})
+}
+
+func regularContent(path string) ([]byte, error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return io.ReadAll(file)
 }
 
 func regularSum(path string) (string, error) {

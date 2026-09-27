@@ -3,8 +3,10 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -277,6 +279,58 @@ func TestAPlaceOrUnplaceOverALinkReplacesOrRemovesTheLinkAndNeverWhatItLeadsTo(t
 	}
 }
 
+func TestBesideSaysEveryFileTraefikReadsAroundThePlacedOneAndFollowsNoLink(t *testing.T) {
+	dir := placing(t)
+	outside := filepath.Join(t.TempDir(), "secret.yml")
+	written := map[string]string{
+		"ocel.yml":           "ocel's own routes\n",
+		"dapp-lekbai.yml":    "http: {}\n",
+		"middlewares.yaml":   "http: {}\n",
+		"legacy.TOML":        "[http]\n",
+		"acme.json":          "{}\n",
+		".ocel.1234.tmp":     "staged\n",
+		"certificates/a.yml": "tls: {}\n",
+		outside:              "the host's\n",
+	}
+	if err := os.Mkdir(filepath.Join(dir, "certificates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range written {
+		at := name
+		if !filepath.IsAbs(name) {
+			at = filepath.Join(dir, name)
+		}
+		if err := os.WriteFile(at, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "linked.yml")); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errs := fed(t, strings.NewReader(""), "beside", filepath.Join(dir, "ocel.yml"))
+	if code != 0 {
+		t.Fatalf("beside = %d: %s", code, errs)
+	}
+	var said []switchboard.Neighbour
+	if err := json.Unmarshal([]byte(out), &said); err != nil {
+		t.Fatalf("beside said %q, which is not the files it read: %v", out, err)
+	}
+	got := map[string]string{}
+	for _, file := range said {
+		got[file.Name] = string(file.Content)
+	}
+	want := map[string]string{
+		"certificates/a.yml": "tls: {}\n",
+		"dapp-lekbai.yml":    "http: {}\n",
+		"legacy.TOML":        "[http]\n",
+		"middlewares.yaml":   "http: {}\n",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("beside said %v, want %v: every .yml, .yaml and .toml Traefik reads from the directory and beneath it, not ocel's own and not through a link", got, want)
+	}
+}
+
 func TestEveryPathOutsideTheMountedDirectoryIsRefusedAndNothingIsTouched(t *testing.T) {
 	dir := placing(t)
 	outside := t.TempDir()
@@ -299,7 +353,7 @@ func TestEveryPathOutsideTheMountedDirectoryIsRefusedAndNothingIsTouched(t *test
 		"the directory's parent":  filepath.Dir(dir),
 		"nothing but a separator": "/",
 	} {
-		for _, verb := range []string{"place", "unplace", "placed"} {
+		for _, verb := range []string{"place", "unplace", "placed", "beside"} {
 			code, out, errs := fed(t, strings.NewReader("ocel's routes\n"), verb, path)
 			if code != exitRefused || out != "" {
 				t.Errorf("%s of %s (%s) = %d, %q, want refused with nothing said", verb, what, path, code, out)
@@ -321,7 +375,7 @@ func TestASwitchboardWithNoDirectoryMountedPlacesNothing(t *testing.T) {
 	t.Setenv(switchboard.PlaceEnv, "")
 	at := filepath.Join(t.TempDir(), "ocel.yml")
 
-	for _, verb := range []string{"place", "unplace", "placed"} {
+	for _, verb := range []string{"place", "unplace", "placed", "beside"} {
 		if code, _, errs := fed(t, strings.NewReader("ocel's routes\n"), verb, at); code != exitRefused || !strings.Contains(errs, switchboard.PlaceEnv) {
 			t.Errorf("%s with no directory mounted = %d, %q, want refused naming %s", verb, code, errs, switchboard.PlaceEnv)
 		}

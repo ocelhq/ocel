@@ -95,6 +95,8 @@ func run(ctx context.Context, argv []string, in io.Reader, out, errs io.Writer) 
 		return unplace(rest, errs)
 	case "placed":
 		return digest(rest, out, errs)
+	case "beside":
+		return beside(rest, out, errs)
 	default:
 		return usage(errs)
 	}
@@ -113,7 +115,8 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       answers <socket> <path> |")
 	fmt.Fprintln(errs, "       place <path> < <file> |")
 	fmt.Fprintln(errs, "       unplace <path> |")
-	fmt.Fprintln(errs, "       placed <path>")
+	fmt.Fprintln(errs, "       placed <path> |")
+	fmt.Fprintln(errs, "       beside <path>")
 	return exitRefused
 }
 
