@@ -100,10 +100,12 @@ func TestEnvSourceSchemaNamesWhatEachTierMayRead(t *testing.T) {
 		Properties struct {
 			EnvSource struct {
 				Properties map[string]struct {
-					OneOf []struct {
-						Enum     []string `json:"enum"`
-						Required []string `json:"required"`
-					} `json:"oneOf"`
+					AllOf []struct {
+						OneOf []struct {
+							Enum     []string `json:"enum"`
+							Required []string `json:"required"`
+						} `json:"oneOf"`
+					} `json:"allOf"`
 				} `json:"properties"`
 			} `json:"envSource"`
 		} `json:"properties"`
@@ -113,7 +115,7 @@ func TestEnvSourceSchemaNamesWhatEachTierMayRead(t *testing.T) {
 	}
 	for tier, alone := range map[string]string{"production": "builtin", "preview": "builtin", "dev": "dotenv"} {
 		var named, keyed []string
-		for _, alternative := range schema.Properties.EnvSource.Properties[tier].OneOf {
+		for _, alternative := range schema.Properties.EnvSource.Properties[tier].AllOf[0].OneOf {
 			named = append(named, alternative.Enum...)
 			keyed = append(keyed, alternative.Required...)
 		}
@@ -122,6 +124,23 @@ func TestEnvSourceSchemaNamesWhatEachTierMayRead(t *testing.T) {
 		}
 		if !slices.Equal(keyed, []string{"infisical", "exec"}) {
 			t.Errorf("envSource.%s keyed by %v, want infisical and exec", tier, keyed)
+		}
+	}
+}
+
+func TestEachEnvSourceTypeIsDocumentedAsItselfNotAsAFieldThatUsesIt(t *testing.T) {
+	docs := namedTypeDocs(t)
+	for title, own := range map[string]string{
+		"EnvSourceDescriptor":    EnvSourceDescriptor{}.Doc(),
+		"DevEnvSourceDescriptor": DevEnvSourceDescriptor{}.Doc(),
+		"InfisicalOptions":       InfisicalOptions{}.Doc(),
+		"InfisicalAuth":          InfisicalAuth{}.Doc(),
+		"UniversalAuth":          UniversalAuth{}.Doc(),
+		"IdentityAuth":           IdentityAuth{}.Doc(),
+		"ExecOptions":            ExecOptions{}.Doc(),
+	} {
+		if got := docs[title]; !slices.Equal(got, []string{own}) {
+			t.Errorf("%s is described as %q, want only its own %q", title, got, own)
 		}
 	}
 }

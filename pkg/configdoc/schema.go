@@ -156,9 +156,6 @@ func tagged(generate func() ([]byte, error)) (generated []byte, err error) {
 
 func fieldSchema(field jsonField) object {
 	property := schemaOf(field.kind)
-	if field.doc != "" {
-		property["description"] = field.doc
-	}
 	if field.pattern != "" {
 		property["anyOf"] = []any{
 			object{"pattern": field.pattern},
@@ -175,6 +172,17 @@ func fieldSchema(field jsonField) object {
 			property["enum"] = toAny(field.enum)
 		}
 	}
+	return describedAs(property, field.doc)
+}
+
+func describedAs(property object, doc string) object {
+	if doc == "" {
+		return property
+	}
+	if _, own := property["description"]; own {
+		return object{"description": doc, "allOf": []any{property}}
+	}
+	property["description"] = doc
 	return property
 }
 
@@ -186,9 +194,16 @@ func closedObject(properties object, required []any) object {
 	return schema
 }
 
+type documented interface {
+	Doc() string
+}
+
 func named(target reflect.Type, schema object) object {
 	if name := typeName(target); name != "" {
 		schema["title"] = name
+	}
+	if own, ok := reflect.New(target).Elem().Interface().(documented); ok {
+		schema["description"] = own.Doc()
 	}
 	return schema
 }

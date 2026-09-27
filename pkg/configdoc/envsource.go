@@ -78,6 +78,10 @@ type EnvSourceDescriptor struct {
 
 func (EnvSourceDescriptor) Shorthands() []string { return []string{envSourceBuiltin} }
 
+func (EnvSourceDescriptor) Doc() string {
+	return "Where production or preview reads its values from: ocel's own store in your account (\"builtin\"), or an env source keyed by its identifier with its options as the value."
+}
+
 func (d *EnvSourceDescriptor) UnmarshalJSON(data []byte) error {
 	type keyed EnvSourceDescriptor
 	return unmarshalEnvSource(data, (*keyed)(d))
@@ -89,6 +93,10 @@ type DevEnvSourceDescriptor struct {
 }
 
 func (DevEnvSourceDescriptor) Shorthands() []string { return []string{envSourceDotenv} }
+
+func (DevEnvSourceDescriptor) Doc() string {
+	return "Where ocel dev and ocel run read values from on your machine: the project's .env file (\"dotenv\"), or an env source keyed by its identifier with its options as the value."
+}
 
 func (d *DevEnvSourceDescriptor) UnmarshalJSON(data []byte) error {
 	type keyed DevEnvSourceDescriptor
@@ -252,12 +260,18 @@ type InfisicalOptions struct {
 	Write       string         `json:"write,omitempty" enum:"missing,never" doc:"Whether a deploy may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\". Refused for dev, which only reads."`
 }
 
+func (InfisicalOptions) Doc() string {
+	return "The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you."
+}
+
 type InfisicalAuth struct {
 	Universal *UniversalAuth `json:"universal,omitempty" doc:"Universal Auth: a client id and client secret, each an ocel variable."`
 	Identity  *IdentityAuth  `json:"identity,omitempty" doc:"This target's own cloud identity signs in, so no secret is stored."`
 }
 
 func (InfisicalAuth) Shorthands() []string { return nil }
+
+func (InfisicalAuth) Doc() string { return "How ocel logs in to Infisical, keyed by the login method." }
 
 func (a *InfisicalAuth) auth() envsource.InfisicalAuth {
 	switch {
@@ -276,11 +290,23 @@ type UniversalAuth struct {
 	ClientSecret Ref `json:"clientSecret" doc:"The ocel variable containing the Universal Auth client secret."`
 }
 
+func (UniversalAuth) Doc() string {
+	return "Logs in to Infisical with a Universal Auth client id and client secret, each an ocel variable."
+}
+
 type IdentityAuth struct {
 	IdentityID string `json:"identityId" doc:"The id of the Infisical machine identity to sign in as."`
+}
+
+func (IdentityAuth) Doc() string {
+	return "Logs in to Infisical as the target's own cloud identity, so no secret is stored."
 }
 
 type ExecOptions struct {
 	Command []string `json:"command" doc:"The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read."`
 	Format  string   `json:"format" enum:"json,dotenv" doc:"What the command prints: a JSON object of names to values, or KEY=VALUE lines."`
+}
+
+func (ExecOptions) Doc() string {
+	return "A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev."
 }

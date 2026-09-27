@@ -114,6 +114,40 @@ func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
 	}
 }
 
+func namedTypeDocs(t *testing.T) map[string][]string {
+	t.Helper()
+	generated, err := Schema()
+	if err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	var root any
+	if err := json.Unmarshal(generated, &root); err != nil {
+		t.Fatal(err)
+	}
+	docs := map[string][]string{}
+	var walk func(node any)
+	walk = func(node any) {
+		switch typed := node.(type) {
+		case map[string]any:
+			if title, ok := typed["title"].(string); ok {
+				description, _ := typed["description"].(string)
+				if !slices.Contains(docs[title], description) {
+					docs[title] = append(docs[title], description)
+				}
+			}
+			for _, child := range typed {
+				walk(child)
+			}
+		case []any:
+			for _, child := range typed {
+				walk(child)
+			}
+		}
+	}
+	walk(root)
+	return docs
+}
+
 func TestAValueIsCheckedAgainstItsPattern(t *testing.T) {
 	options := map[string]any{"key": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}
 	if err := Check("provider.aws", patterned{}, options); err != nil {

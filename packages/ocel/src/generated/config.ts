@@ -262,7 +262,7 @@ export interface EnvSourceConfig {
   production?: EnvSourceDescriptor;
 }
 
-/** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
+/** Where ocel dev and ocel run read values from on your machine: the project's .env file ("dotenv"), or an env source keyed by its identifier with its options as the value. */
 export type DevEnvSourceDescriptor =
   | "dotenv"
   | {
@@ -276,7 +276,7 @@ export type DevEnvSourceDescriptor =
       infisical?: never;
     };
 
-/** Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to. */
+/** The Infisical project and environment a tier reads its values from. Production and preview read it as the machine identity auth names; dev reads it as you. */
 export interface InfisicalOptions {
   /** The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you. */
   auth?: InfisicalAuth;
@@ -292,7 +292,7 @@ export interface InfisicalOptions {
   write?: "missing" | "never";
 }
 
-/** The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you. */
+/** How ocel logs in to Infisical, keyed by the login method. */
 export type InfisicalAuth =
   | {
       /** Universal Auth: a client id and client secret, each an ocel variable. */
@@ -305,7 +305,7 @@ export type InfisicalAuth =
       universal?: never;
     };
 
-/** Universal Auth: a client id and client secret, each an ocel variable. */
+/** Logs in to Infisical with a Universal Auth client id and client secret, each an ocel variable. */
 export interface UniversalAuth {
   /** The ocel variable containing the Universal Auth client id. */
   clientId: VariableRef;
@@ -313,13 +313,13 @@ export interface UniversalAuth {
   clientSecret: VariableRef;
 }
 
-/** This target's own cloud identity signs in, so no secret is stored. */
+/** Logs in to Infisical as the target's own cloud identity, so no secret is stored. */
 export interface IdentityAuth {
   /** The id of the Infisical machine identity to sign in as. */
   identityId: string;
 }
 
-/** A command run on your machine, whose output is the values. */
+/** A command whose output is a tier's values: run on the machine that deploys for production and preview, and on yours for dev. */
 export interface ExecOptions {
   /** The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read. */
   command: string[];
@@ -327,7 +327,7 @@ export interface ExecOptions {
   format: "json" | "dotenv";
 }
 
-/** Where every preview's class-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's own. */
+/** Where production or preview reads its values from: ocel's own store in your account ("builtin"), or an env source keyed by its identifier with its options as the value. */
 export type EnvSourceDescriptor =
   | "builtin"
   | {
