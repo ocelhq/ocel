@@ -1,5 +1,5 @@
 import { buildApps, detectApp, writeBuildPlan } from "./build.js";
-import { isReported, reportError } from "./protocol.js";
+import { reportFailure } from "./protocol.js";
 import type { AppInput, BuildOptions } from "./types.js";
 
 interface BuildRequest extends BuildOptions {
@@ -30,8 +30,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  const stack = err instanceof Error ? (err.stack ?? err.message) : String(err);
-  if (!isReported(err)) reportError(stack);
-  process.stderr.write(`${stack}\n`);
+  reportFailure(err);
   process.exitCode = 1;
 });

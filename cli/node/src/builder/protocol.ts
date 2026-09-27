@@ -34,6 +34,10 @@ export function isReported(err: unknown): boolean {
   return typeof err === "object" && err !== null && reported.has(err);
 }
 
+export function reportFailure(err: unknown): void {
+  if (!isReported(err)) reportError(errorMessage(err));
+}
+
 let spanCounter = 0;
 
 export async function withSpan<T>(

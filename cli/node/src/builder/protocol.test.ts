@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isReported, log, PROTOCOL_PREFIX, reportError, withSpan } from "./protocol.js";
+import {
+  isReported,
+  log,
+  PROTOCOL_PREFIX,
+  reportError,
+  reportFailure,
+  withSpan,
+} from "./protocol.js";
 
 function captureStdout(): { lines: string[] } {
   const lines: string[] = [];
@@ -97,5 +104,36 @@ describe("protocol records", () => {
       type: "error",
       message: "could not detect a runtime",
     });
+  });
+
+  it("reports a failure no span reported as one error record, and writes nothing to stderr", () => {
+    const { lines } = captureStdout();
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    reportFailure(new Error("could not read the build request"));
+
+    expect(lines).toHaveLength(1);
+    expect(parseRecord(lines[0]!)).toMatchObject({ type: "error" });
+    expect((parseRecord(lines[0]!) as { message: string }).message).toContain(
+      "could not read the build request",
+    );
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it("reports nothing again for a failure a span already reported", async () => {
+    const { lines } = captureStdout();
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const failure = new Error("no entrypoint resolved");
+    await expect(
+      withSpan("build", "api", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    const reported = lines.length;
+
+    reportFailure(failure);
+
+    expect(lines).toHaveLength(reported);
+    expect(stderr).not.toHaveBeenCalled();
   });
 });
