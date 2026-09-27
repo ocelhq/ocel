@@ -8,6 +8,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -328,6 +329,9 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, certificates [
 func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress) error {
 	progress.Say("Removing the project's stored variable values")
 	store := envvars.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
+	if err := envsource.ForgetProject(ctx, store, r.class, r.slug); err != nil {
+		return fmt.Errorf("forget %s's env source: %w", r.slug, err)
+	}
 	if _, err := store.Purge(ctx, envvars.Scope{Project: r.slug, Class: r.class}); err != nil {
 		return fmt.Errorf("remove %s's stored variable values: %w", r.slug, err)
 	}

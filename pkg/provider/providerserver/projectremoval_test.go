@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -138,6 +139,35 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 	if len(names) != 0 {
 		t.Errorf("the removal left bindings %v published, want the project's values purged", names)
+	}
+}
+
+func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
+	client, vendor := deployedProject(t)
+	ctx := context.Background()
+	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
+	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
+	if err := envsource.Register(ctx, store.Records, edge.ClassProduction, registration); err != nil {
+		t.Fatal(err)
+	}
+	sync := &envsource.Sync{Store: store, Class: edge.ClassProduction}
+	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	stream, err := client.RemoveProject(ctx, projectRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
+	}
+
+	if _, registered, err := envsource.Registered(ctx, store.Records, edge.ClassProduction, "shop"); err != nil || registered {
+		t.Errorf("Registered() after the removal = %v, %v, want a scheduled sync to stop reading for a project that is gone", registered, err)
+	}
+	if status, err := envsource.StatusOf(ctx, store, edge.ClassProduction, registration); err != nil || !status.LastAttemptAt.IsZero() {
+		t.Errorf("StatusOf() after the removal = %+v, %v, want the status record removed with the project", status, err)
 	}
 }
 
