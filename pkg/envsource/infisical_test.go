@@ -1,6 +1,7 @@
 package envsource_test
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/envsource"
@@ -48,6 +50,8 @@ type fakeInfisical struct {
 	loginPaths  []string
 	approval    bool
 	refuseList  bool
+	retryAfter  string
+	hangList    atomic.Bool
 }
 
 func newFakeInfisical(t *testing.T) (*fakeInfisical, *httptest.Server) {
@@ -97,11 +101,15 @@ func (f *fakeInfisical) set(change func(*fakeInfisical)) {
 }
 
 func (f *fakeInfisical) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if f.hangList.Load() && r.URL.Path == "/api/v4/secrets" {
+		<-r.Context().Done()
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.throttle > 0 {
 		f.throttle--
-		w.Header().Set("Retry-After", "0")
+		w.Header().Set("Retry-After", cmp.Or(f.retryAfter, "0"))
 		f.fail(w, http.StatusTooManyRequests, "RateLimitExceeded", "Rate limit exceeded. Please try again in 0 seconds")
 		return
 	}
