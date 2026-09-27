@@ -1,0 +1,186 @@
+package events_test
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+)
+
+func TestAUnitsEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseScope(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	web.Say("Bundling")
+	web.Debug("esbuild 0.25")
+	web.Error("the bundle is too large")
+
+	got := sink.received()
+	if len(got) != 5 {
+		t.Fatalf("got %d events, want 5", len(got))
+	}
+	phase, unit := got[0], got[1]
+	if !bytes.Equal(unit.GetStarted().GetParentSpanId(), phase.GetSpanId()) || len(phase.GetSpanId()) != 8 {
+		t.Fatalf("unit parent = %x, want the phase span %x", unit.GetStarted().GetParentSpanId(), phase.GetSpanId())
+	}
+	if unit.GetMessage() != "Building web" {
+		t.Fatalf("unit started message = %q, want %q", unit.GetMessage(), "Building web")
+	}
+	levels := []progressv1.Level{progressv1.Level_LEVEL_INFO, progressv1.Level_LEVEL_DEBUG, progressv1.Level_LEVEL_ERROR}
+	for i, ev := range got[1:] {
+		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "web" || !bytes.Equal(ev.GetSpanId(), unit.GetSpanId()) {
+			t.Fatalf("event %d = phase %s subject %q span %x, want the build phase, web and the unit's span %x",
+				i+1, ev.GetPhase(), ev.GetSubject(), ev.GetSpanId(), unit.GetSpanId())
+		}
+		if i > 0 && ev.GetLevel() != levels[i-1] {
+			t.Fatalf("event %d level = %s, want %s", i+1, ev.GetLevel(), levels[i-1])
+		}
+	}
+	if bytes.Equal(unit.GetSpanId(), phase.GetSpanId()) {
+		t.Fatal("the unit shares its phase's span id")
+	}
+}
+
+func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.T) {
+	sink := &recording{}
+	run, clock := begin(t, sink)
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	started := clock.read()
+
+	clock.advance(3 * time.Second)
+	web.End(errors.New("the upload was refused"))
+
+	ended := sink.received()[2]
+	if ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR || ended.GetLevel() != progressv1.Level_LEVEL_ERROR {
+		t.Fatalf("ended = status %s level %s, want an error", ended.GetEnded().GetStatus(), ended.GetLevel())
+	}
+	if ended.GetMessage() != "the upload was refused" {
+		t.Fatalf("ended message = %q, want the error", ended.GetMessage())
+	}
+	if !bytes.Equal(ended.GetSpanId(), sink.received()[1].GetSpanId()) || ended.GetSubject() != "web" {
+		t.Fatalf("ended span %x subject %q, want the unit's", ended.GetSpanId(), ended.GetSubject())
+	}
+	took := ended.GetTime().AsTime().Sub(time.Unix(0, ended.GetEnded().GetStartTimeUnixNano()))
+	if !started.Equal(time.Unix(0, ended.GetEnded().GetStartTimeUnixNano())) || took != 3*time.Second {
+		t.Fatalf("ended start %d took %s, want %s and 3s", ended.GetEnded().GetStartTimeUnixNano(), took, started)
+	}
+}
+
+func TestAScopeThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+
+	web.End(nil)
+	web.End(errors.New("too late"))
+
+	got := sink.received()
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want started, started, ended", len(got))
+	}
+	if got[2].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK || got[2].GetLevel() != progressv1.Level_LEVEL_INFO || got[2].GetMessage() != "" {
+		t.Fatalf("ended = status %s level %s message %q, want OK, INFO and no message",
+			got[2].GetEnded().GetStatus(), got[2].GetLevel(), got[2].GetMessage())
+	}
+}
+
+func TestAScopeEndedByAnInterruptIsAWarningNotAnError(t *testing.T) {
+	sink := &recording{}
+	ctx, cancel := context.WithCancel(context.Background())
+	run, _ := beginIn(t, ctx, sink)
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+
+	cancel()
+	web.End(context.Canceled)
+
+	ended := sink.received()[2]
+	if ended.GetLevel() != progressv1.Level_LEVEL_WARN || ended.GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Fatalf("ended = level %s status %s, want WARN and an error status", ended.GetLevel(), ended.GetEnded().GetStatus())
+	}
+}
+
+func TestHoldEmitsWaitingThenResumedAroundTheInteraction(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+
+	resume := build.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/vars#token"})
+	build.Say("the page was answered")
+	resume("the page was answered")
+
+	got := sink.received()[1:]
+	if len(got) != 3 || got[0].GetWaiting().GetUrl() != "https://ocel.dev/vars#token" || got[1].GetWaiting() != nil ||
+		got[2].GetResumed().GetReason() != "the page was answered" {
+		t.Fatalf("events = %v, want waiting, the message, then resumed", bodies(got))
+	}
+	if got[0].GetPhase() != progressv1.Phase_PHASE_BUILD || got[2].GetPhase() != progressv1.Phase_PHASE_BUILD {
+		t.Fatalf("hold phases = %s and %s, want the scope's", got[0].GetPhase(), got[2].GetPhase())
+	}
+}
+
+func bodies(evs []*streamv1.RunEvent) []string {
+	var out []string
+	for _, ev := range evs {
+		name := "message"
+		if body := ev.ProtoReflect().WhichOneof(ev.ProtoReflect().Descriptor().Oneofs().ByName("body")); body != nil {
+			name = string(body.Name())
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsScopesPhaseLeavingTheCallersPlanUntouched(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	plan := &planv1.ChangePlan{Headline: "from the provider"}
+
+	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Deploy to production", plan, "2 resources change")
+
+	ev := sink.received()[1]
+	if ev.GetPlan() != drawn || drawn.GetHeadline() != "Deploy to production" || len(drawn.GetNotes()) != 1 ||
+		ev.GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Fatalf("plan event = %q notes %q phase %s, want the drawn plan in the plan phase", drawn.GetHeadline(), drawn.GetNotes(), ev.GetPhase())
+	}
+	if plan.GetHeadline() != "from the provider" {
+		t.Fatalf("the caller's plan headline became %q", plan.GetHeadline())
+	}
+}
+
+func TestIdentityReachesTheSinksInItsScopesPhase(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+
+	run.Phase(progressv1.Phase_PHASE_CHECK).Identity(&streamv1.IdentityEvent{Project: "shop"})
+
+	if ev := sink.received()[1]; ev.GetIdentity().GetProject() != "shop" || ev.GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("identity = %q in %s, want shop in the check phase", ev.GetIdentity().GetProject(), ev.GetPhase())
+	}
+}
+
+func TestEndingAPhaseEndsItsOpenUnitsFirstWithTheSameError(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	deploy.Unit("web", "Deploying web").Unit("web", "Uploading web")
+	deploy.Unit("api", "Deploying api").End(nil)
+
+	deploy.End(errors.New("the stack is locked"))
+
+	opened, got := sink.received()[:5], sink.received()[5:]
+	want := [][]byte{opened[2].GetSpanId(), opened[1].GetSpanId(), opened[0].GetSpanId()}
+	if len(got) != len(want) {
+		t.Fatalf("got %v after the api unit ended, want three ended events", bodies(got))
+	}
+	for i, ev := range got {
+		if !bytes.Equal(ev.GetSpanId(), want[i]) || ev.GetEnded() == nil || ev.GetMessage() != "the stack is locked" {
+			t.Fatalf("ended %d = span %x message %q, want span %x with the phase's error", i, ev.GetSpanId(), ev.GetMessage(), want[i])
+		}
+	}
+}
