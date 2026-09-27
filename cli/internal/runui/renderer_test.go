@@ -53,25 +53,25 @@ func appStage(n byte) []byte {
 	return []byte{n, 0, 0, 0, 0, 0, 0, 0}
 }
 
-func drivenStream(t *testing.T, present Presentation) (*Stream, *safeBuffer) {
+func drivenStream(t *testing.T, present Presentation) (*HumanSink, *safeBuffer) {
 	t.Helper()
 	var out safeBuffer
-	s := newStream(&out, present)
+	s := newHumanSink(&out, present)
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
 }
 
-func drivenLiveStream(t *testing.T) (*Stream, *safeBuffer) {
+func drivenLiveStream(t *testing.T) (*HumanSink, *safeBuffer) {
 	t.Helper()
 	return drivenStream(t, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 }
 
-func drivenLiveStreamOfHeight(t *testing.T, height int) (*Stream, *safeBuffer) {
+func drivenLiveStreamOfHeight(t *testing.T, height int) (*HumanSink, *safeBuffer) {
 	t.Helper()
 	return drivenStream(t, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: height})
 }
 
-func liveRegion(t *testing.T, s *Stream, out *safeBuffer) []string {
+func liveRegion(t *testing.T, s *HumanSink, out *safeBuffer) []string {
 	t.Helper()
 	s.r.Pause()
 	out.Reset()
@@ -98,9 +98,9 @@ type scope struct {
 	phase      progressv1.Phase
 }
 
-func startAll(s *Stream, scopes ...scope) {
+func startAll(s *HumanSink, scopes ...scope) {
 	for _, sc := range scopes {
-		s.Emit(startedEvent(sc.id, sc.parent, sc.phase, sc.title))
+		s.Receive(startedEvent(sc.id, sc.parent, sc.phase, sc.title))
 	}
 }
 
@@ -124,10 +124,10 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 
 	const notice = "Serving previews on the global preview domain *.preview.ocel.app"
-	s.Emit(diagnosticEvent(notice))
+	s.Receive(diagnosticEvent(notice))
 
 	if !strings.Contains(out.String(), notice) {
 		t.Errorf("stdout = %q, want the notice committed as stream content", out.String())
@@ -152,7 +152,7 @@ func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 
 	spinner := s.Spin("Checking credentials")
 	rows := liveRegion(t, s, out)
@@ -175,7 +175,7 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 
 	var elsewhere safeBuffer
 	spinner := StartSpinner(Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40}, &elsewhere, "Checking credentials")
@@ -202,7 +202,7 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 		scope{id: unit, title: "app-a"},
 		scope{id: phase, parent: unit, title: "Uploading"},
 	)
-	s.Emit(progressEvent(phase, "uploading assets", 1, u32(10)))
+	s.Receive(progressEvent(phase, "uploading assets", 1, u32(10)))
 
 	resume := r.Suspend()
 	if r.liveLines != 0 {
@@ -210,7 +210,7 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	}
 
 	out.Reset()
-	s.Emit(progressEvent(phase, "uploading assets", 2, u32(10)))
+	s.Receive(progressEvent(phase, "uploading assets", 2, u32(10)))
 	if out.Len() != 0 {
 		t.Errorf("wrote %q while suspended, want the terminal left to the prompt", out.String())
 	}
@@ -231,8 +231,8 @@ func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 			scope{id: appA, title: "app-a"},
 			scope{id: appB, title: "app-b"},
 		)
-		s.Emit(progressEvent(appA, "uploading assets", 1, u32(10)))
-		s.Emit(progressEvent(appB, "uploading assets", 9, u32(10)))
+		s.Receive(progressEvent(appA, "uploading assets", 1, u32(10)))
+		s.Receive(progressEvent(appB, "uploading assets", 9, u32(10)))
 
 		got := out.String()
 		if !strings.Contains(got, "app-a") || !strings.Contains(got, "app-b") {
@@ -252,16 +252,16 @@ func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 			scope{id: appA, title: "app-a"},
 			scope{id: appB, title: "app-b"},
 		)
-		s.Emit(progressEvent(appA, "uploading", 1, u32(2)))
-		s.Emit(progressEvent(appB, "uploading", 1, u32(2)))
-		s.Emit(endedEvent(appA, false, time.Second))
+		s.Receive(progressEvent(appA, "uploading", 1, u32(2)))
+		s.Receive(progressEvent(appB, "uploading", 1, u32(2)))
+		s.Receive(endedEvent(appA, false, time.Second))
 
 		rows := liveRegion(t, s, out)
 		if len(rows) != 1 || !strings.Contains(rows[0], "app-b") {
 			t.Fatalf("live region = %q, want app-b still spinning with the finished app-a gone from the window", rows)
 		}
 
-		s.Emit(endedEvent(appB, false, time.Second))
+		s.Receive(endedEvent(appB, false, time.Second))
 		if rows := liveRegion(t, s, out); len(rows) != 0 {
 			t.Errorf("live region = %q, want nothing left in flight to show", rows)
 		}
@@ -298,7 +298,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Parallel()
 
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
+	s := NewHumanSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
 	unit, phase := appStage(1), appStage(2)
@@ -306,9 +306,9 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 		scope{id: unit, title: "Environment"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "uploading", 1, u32(2)))
-	s.Emit(endedEvent(phase, false, time.Second))
-	s.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+	s.Receive(progressEvent(phase, "uploading", 1, u32(2)))
+	s.Receive(endedEvent(phase, false, time.Second))
+	s.Receive(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
 		Success: true, Headline: "Deployed", Apps: []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.workers.dev"}}},
 	}}})
 
@@ -319,7 +319,7 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 
 func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
+	s := NewHumanSink(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 
 	appA, appB := appStage(1), appStage(2)
 	startAll(s,
@@ -333,19 +333,19 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := uint32(0); i < 50; i++ {
-			s.Emit(progressEvent(appA, "uploading", i, u32(50)))
+			s.Receive(progressEvent(appA, "uploading", i, u32(50)))
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for i := uint32(0); i < 50; i++ {
-			s.Emit(progressEvent(appB, "uploading", i, u32(50)))
+			s.Receive(progressEvent(appB, "uploading", i, u32(50)))
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			s.Emit(outputEvent(appA, fmt.Sprintf("subprocess output line %d", i)))
+			s.Receive(outputEvent(appA, fmt.Sprintf("subprocess output line %d", i)))
 		}
 	}()
 
@@ -389,10 +389,10 @@ func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 		scope{id: quick, parent: unit, title: "Uploading"},
 		scope{id: slow, parent: unit, title: "Provisioning"},
 	)
-	s.Emit(progressEvent(quick, "uploading assets", 0, nil))
-	s.Emit(progressEvent(slow, "provisioning", 0, nil))
+	s.Receive(progressEvent(quick, "uploading assets", 0, nil))
+	s.Receive(progressEvent(slow, "provisioning", 0, nil))
 
-	s.Emit(endedEvent(quick, false, 90*time.Second))
+	s.Receive(endedEvent(quick, false, 90*time.Second))
 	got := out.String()
 	if !strings.Contains(got, okMark+" web › Uploading  1m30s") {
 		t.Errorf("output = %q, want the phase committed with its span's own duration", got)
@@ -401,7 +401,7 @@ func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 		t.Errorf("output = %q, want the unfinished phase left uncommitted", got)
 	}
 
-	s.Emit(endedEvent(slow, true, time.Second))
+	s.Receive(endedEvent(slow, true, time.Second))
 	if got := out.String(); !strings.Contains(got, failMark+" web › Provisioning failed") {
 		t.Errorf("output = %q, want the failed phase committed as failed", got)
 	}
@@ -416,13 +416,13 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: uploading, parent: unit, title: "Uploading"},
 	)
-	s.Emit(progressEvent(uploading, "Uploading function artifacts", 1, u32(1)))
+	s.Receive(progressEvent(uploading, "Uploading function artifacts", 1, u32(1)))
 
 	if got := strings.Count(out.String(), okMark); got != 0 {
 		t.Fatalf("committed %d finished lines at 1/1, want none — only the stage's span ends it", got)
 	}
 
-	s.Emit(endedEvent(uploading, false, 12*time.Second))
+	s.Receive(endedEvent(uploading, false, 12*time.Second))
 	if got := out.String(); !strings.Contains(got, okMark+" web  12s") {
 		t.Errorf("scrollback = %q, want the finished phase committed as the unit's block", got)
 	}
@@ -441,15 +441,15 @@ func TestChildStageStaysUnderItsParentUntilTheParentEnds(t *testing.T) {
 		scope{id: provisioning, title: "Provisioning"},
 		scope{id: app, parent: provisioning, title: "next-test"},
 	)
-	s.Emit(progressEvent(provisioning, "Reconciling the edge stack", 0, nil))
-	s.Emit(progressEvent(app, "creating resources", 0, nil))
+	s.Receive(progressEvent(provisioning, "Reconciling the edge stack", 0, nil))
+	s.Receive(progressEvent(app, "creating resources", 0, nil))
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 || !strings.Contains(rows[0], "Provisioning") || !strings.Contains(rows[0], "next-test") {
 		t.Fatalf("live region = %q, want next-test named as the detail of the unit's row", rows)
 	}
 
-	s.Emit(endedEvent(app, false, 44*time.Second))
+	s.Receive(endedEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
 		t.Fatal("want the finished child kept in the live region under its still-running parent")
 	}
@@ -457,7 +457,7 @@ func TestChildStageStaysUnderItsParentUntilTheParentEnds(t *testing.T) {
 		t.Fatalf("live region = %q, want the unit still running on its own row once the child finished", rows)
 	}
 
-	s.Emit(endedEvent(provisioning, false, 50*time.Second))
+	s.Receive(endedEvent(provisioning, false, 50*time.Second))
 	if active := r.plan.activeOrder; len(active) != 1 || active[0] != stageKey(provisioning) {
 		t.Fatalf("activeOrder = %v, want the subtree folded into the unit's own done row", active)
 	}
@@ -489,13 +489,13 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 				scope{id: unit, title: "web"},
 				scope{id: phase, parent: unit, title: "Provisioning"},
 			)
-			s.Emit(progressEvent(phase, "creating bucket assets", 0, nil))
-			s.Emit(outputEvent(phase, "@ updating....."))
+			s.Receive(progressEvent(phase, "creating bucket assets", 0, nil))
+			s.Receive(outputEvent(phase, "@ updating....."))
 			if strings.Contains(out.String(), "@ updating.....") {
 				t.Fatalf("output = %q, want the line kept in its block until the phase completes", out.String())
 			}
 
-			s.Emit(endedEvent(phase, tc.failed, time.Second))
+			s.Receive(endedEvent(phase, tc.failed, time.Second))
 			got := out.String()
 			if strings.Contains(got, "  @ updating.....") != tc.want {
 				t.Errorf("output = %q, want the raw engine line shown = %v", got, tc.want)
@@ -511,7 +511,7 @@ func TestAMessageInNoScopeIsALineOfItsOwnAndNoLiveRow(t *testing.T) {
 	t.Parallel()
 	s, out := drivenLiveStream(t)
 
-	s.Emit(progressEvent(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil))
+	s.Receive(progressEvent(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil))
 
 	if got := len(s.r.plan.nodes); got != 0 {
 		t.Fatalf("got %d nodes, want none: there is no row for a message that belongs to no scope", got)
@@ -530,7 +530,7 @@ func TestAFrameTickAdvancesTheSpinnerWhileWorkIsInFlight(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 
 	before := liveRegion(t, s, out)
 	if len(before) != 1 {
@@ -548,7 +548,7 @@ func TestAFrameTickAdvancesTheSpinnerWhileWorkIsInFlight(t *testing.T) {
 
 func TestALiveStreamRunsItsOwnTicker(t *testing.T) {
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40})
+	s := NewHumanSink(&out, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40})
 	t.Cleanup(func() { _ = s.Close() })
 
 	unit, phase := appStage(1), appStage(2)
@@ -556,7 +556,7 @@ func TestALiveStreamRunsItsOwnTicker(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
 		if strings.Contains(out.String(), spinnerFrame(1)) {
@@ -581,16 +581,16 @@ func TestAStartedPhaseRowCountsLiveUntilItEnds(t *testing.T) {
 	s, out := drivenLiveStream(t)
 
 	unit, uploading := appStage(1), appStage(2)
-	s.Emit(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
-	s.Emit(startedEvent(uploading, unit, progressv1.Phase_PHASE_DEPLOY, "Uploading"))
-	s.Emit(counterEvent(uploading, "Uploading function artifacts", 1, u32(2)))
+	s.Receive(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	s.Receive(startedEvent(uploading, unit, progressv1.Phase_PHASE_DEPLOY, "Uploading"))
+	s.Receive(counterEvent(uploading, "Uploading function artifacts", 1, u32(2)))
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 || !strings.Contains(rows[0], "web") || !strings.Contains(rows[0], "1/2") {
 		t.Fatalf("live region = %q, want web's row counting 1/2", rows)
 	}
 
-	s.Emit(endedEvent(uploading, false, 12*time.Second))
+	s.Receive(endedEvent(uploading, false, 12*time.Second))
 	if got := out.String(); !strings.Contains(got, okMark+" web  12s") {
 		t.Errorf("scrollback = %q, want the ended phase committed as the unit's block", got)
 	}
@@ -604,9 +604,9 @@ func TestAScopedMessageIsTheLiveRowsDetail(t *testing.T) {
 	s, out := drivenLiveStream(t)
 
 	unit, provisioning := appStage(1), appStage(2)
-	s.Emit(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
-	s.Emit(startedEvent(provisioning, unit, progressv1.Phase_PHASE_PROVISION, ""))
-	s.Emit(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: provisioning, Message: "creating bucket assets"})
+	s.Receive(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	s.Receive(startedEvent(provisioning, unit, progressv1.Phase_PHASE_PROVISION, ""))
+	s.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: provisioning, Message: "creating bucket assets"})
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 || !strings.Contains(rows[0], "creating bucket assets") {

@@ -80,9 +80,9 @@ func waitForFrame(t *testing.T, terminal *syncBuffer) {
 	t.Fatal("the spinner drew nothing, so this run proves nothing about pausing it")
 }
 
-func TestTheSpinnerAStreamHandsOutStopsTheLiveView(t *testing.T) {
+func TestTheSpinnerTheHumanSinkHandsOutStopsTheLiveView(t *testing.T) {
 	var terminal syncBuffer
-	s := NewStream(&terminal, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
+	s := NewHumanSink(&terminal, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	t.Cleanup(func() { _ = s.Close() })
 
 	spinner := s.Spin("Checking your setup")

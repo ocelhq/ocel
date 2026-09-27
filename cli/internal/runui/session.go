@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -32,7 +33,8 @@ var (
 )
 
 type Session struct {
-	stream  *Stream
+	bus     *events.Bus
+	human   *HumanSink
 	run     *runtrace.Run
 	command string
 	present Presentation
@@ -70,11 +72,17 @@ func Interrupt() {
 
 func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 	s := &Session{
-		stream:  NewStream(stdout, present),
+		bus:     events.NewBus(time.Now),
 		run:     run,
 		command: run.Command(),
 		present: present,
 		start:   time.Now(),
+	}
+	if present.Format == FormatJSON {
+		s.bus.Attach(NewJSONSink(stdout))
+	} else {
+		s.human = NewHumanSink(stdout, present)
+		s.bus.Attach(s.human)
 	}
 	s.build = &lineWriter{emit: s.buildLine}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
@@ -101,7 +109,7 @@ func (s *Session) ProcessWriter(provider string, stream progressv1.Stream) io.Wr
 
 func (s *Session) processLine(provider string, stream progressv1.Stream, line string) {
 	s.logf("[debug] %s: %s", provider, line)
-	s.stream.Emit(&streamv1.RunEvent{
+	s.emit(&streamv1.RunEvent{
 		Level:   progressv1.Level_LEVEL_DEBUG,
 		Subject: provider,
 		Message: line,
@@ -178,9 +186,25 @@ func (w *lineWriter) flush() {
 	}
 }
 
-func (s *Session) Suspend() func() { return s.stream.Suspend() }
+func (s *Session) Suspend() func() {
+	if s.human == nil {
+		return func() {}
+	}
+	return s.human.Suspend()
+}
 
-func (s *Session) Spin(message string) *Spinner { return s.stream.Spin(message) }
+func (s *Session) Spin(message string) *Spinner {
+	if s.human == nil {
+		return &Spinner{}
+	}
+	return s.human.Spin(message)
+}
+
+func (s *Session) emit(ev *streamv1.RunEvent) *streamv1.RunEvent {
+	ev = normalize(ev)
+	s.bus.Send(ev)
+	return ev
+}
 
 func (s *Session) Diagnostic(message string) {
 	s.say(message, progressv1.Level_LEVEL_INFO)
@@ -192,19 +216,19 @@ func (s *Session) Warning(message string) {
 
 func (s *Session) say(message string, level progressv1.Level) {
 	s.logf("[diagnostic] %s", message)
-	s.stream.Emit(&streamv1.RunEvent{Level: level, Message: message})
+	s.emit(&streamv1.RunEvent{Level: level, Message: message})
 }
 
 func (s *Session) Identity(ev *streamv1.IdentityEvent) {
 	s.logf("[identity] %s", identityLogLine(ev))
-	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: ev}})
+	s.emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: ev}})
 }
 
 func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.Clone(plan).(*planv1.ChangePlan)
 	drawn.Headline, drawn.Notes = headline, notes
 	s.logf("[plan] %s", headline)
-	s.shown = s.stream.Emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Body: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
+	s.shown = s.emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Body: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
 	return s.shown
 }
 
@@ -255,7 +279,7 @@ func (s *Session) Waiting(missing *streamv1.MissingVariables, url string) {
 	s.waiting = true
 	s.build.flush()
 	s.buildStart = time.Time{}
-	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{
+	s.emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{
 		Waiting: &streamv1.WaitingEvent{Missing: missing, Url: url},
 	}})
 }
@@ -263,10 +287,12 @@ func (s *Session) Waiting(missing *streamv1.MissingVariables, url string) {
 func (s *Session) Resume() {
 	s.waiting = false
 	s.buildAttempt++
-	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
+	s.emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
 		Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"},
 	}})
-	s.stream.Restart(buildStageID)
+	if s.human != nil {
+		s.human.Restart(buildStageID)
+	}
 	s.Building()
 }
 
@@ -275,7 +301,7 @@ func (s *Session) Event(ev *progressv1.OperationEvent) {
 }
 
 func (s *Session) record(ev *streamv1.RunEvent) {
-	run := s.stream.Emit(ev)
+	run := s.emit(ev)
 	s.logEvent(run)
 	switch {
 	case run.GetStarted() != nil:
@@ -428,7 +454,7 @@ func (s *Session) result(ev *streamv1.RunResultEvent) {
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
 	ev.Apps = s.apps
-	s.stream.Emit(&streamv1.RunEvent{Level: resultLevel(ev), Body: &streamv1.RunEvent_Result{Result: ev}})
+	s.emit(&streamv1.RunEvent{Level: resultLevel(ev), Body: &streamv1.RunEvent_Result{Result: ev}})
 }
 
 func resultLevel(ev *streamv1.RunResultEvent) progressv1.Level {
@@ -457,7 +483,7 @@ func (s *Session) interrupt() {
 func (s *Session) shutdown() error {
 	liveSessions.Delete(s)
 	s.flushLines()
-	_ = s.stream.Close()
+	_ = s.bus.Close()
 	if s.log != nil {
 		return s.log.Close()
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/events"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -89,9 +90,12 @@ func TestDNSStack(t *testing.T) {
 func dnsOutput(t *testing.T, present Presentation, headline string, records []*progressv1.DnsRecord, notes []string) string {
 	t.Helper()
 	var out safeBuffer
-	s := newStream(&out, present)
+	var s events.Sink = NewJSONSink(&out)
+	if present.Format == FormatHuman {
+		s = newHumanSink(&out, present)
+	}
 	t.Cleanup(func() { _ = s.Close() })
-	s.Emit(lift(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_DnsManualRecords{
+	s.Receive(lift(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_DnsManualRecords{
 		DnsManualRecords: &progressv1.DnsManualRecordsEvent{Headline: headline, Records: records, Notes: notes},
 	}}))
 	return out.String()

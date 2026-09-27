@@ -47,7 +47,7 @@ func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Co
 	return ctx, r, nil
 }
 
-func (b *Bus) send(ev *streamv1.RunEvent) {
+func (b *Bus) Send(ev *streamv1.RunEvent) {
 	if ev.GetTime() == nil {
 		ev.Time = timestamppb.New(b.now())
 	}

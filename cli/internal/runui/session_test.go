@@ -133,7 +133,7 @@ func TestAnInterruptTakesTheLiveFrameBackAndFlushesWhatWasInFlight(t *testing.T)
 
 	s.interrupt()
 
-	if got := s.stream.r.liveLines; got != 0 {
+	if got := s.human.r.liveLines; got != 0 {
 		t.Errorf("liveLines = %d, want the live frame taken back so no frame is committed to the scrollback", got)
 	}
 	got := out.String()
@@ -170,7 +170,7 @@ func TestInterruptReachesEveryRunUIStillOwningATerminal(t *testing.T) {
 
 	Interrupt()
 
-	if got := s.stream.r.liveLines; got != 0 {
+	if got := s.human.r.liveLines; got != 0 {
 		t.Errorf("liveLines = %d, want the exit path to reach the live run-UI it never got to close", got)
 	}
 	if !strings.Contains(out.String(), "Cancelled") {
@@ -418,7 +418,7 @@ func TestSession(t *testing.T) {
 		build := []byte{1, 0, 0, 0, 0, 0, 0, 0}
 		startScopes(s, []scope{{id: build, title: "Building"}}...)
 
-		if title := s.stream.r.plan.nodes[stageKey(build)].title; title != "Building" {
+		if title := s.human.r.plan.nodes[stageKey(build)].title; title != "Building" {
 			t.Errorf("stage title = %q, want %q", title, "Building")
 		}
 	})
@@ -430,7 +430,7 @@ func TestSession(t *testing.T) {
 		stage := []byte{2, 0, 0, 0, 0, 0, 0, 0}
 		startScopes(s, []scope{{id: stage, phase: progressv1.Phase_PHASE_PROVISION}}...)
 
-		if title := s.stream.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
+		if title := s.human.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
 			t.Errorf("stage title = %q, want the phase label the declaration names", title)
 		}
 	})
@@ -934,7 +934,7 @@ func TestFormatAxis(t *testing.T) {
 		run := startTestRun(t, dir, "ocel deploy")
 		s := New(&safeBuffer{}, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
-		if s.stream.r != nil {
+		if s.human != nil {
 			t.Error("json format entered the live-region view, which only makes sense for human output on a terminal")
 		}
 	})
@@ -1009,14 +1009,14 @@ func TestAnEndedScopeWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) 
 			var out safeBuffer
 			s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 			t.Cleanup(func() { _ = s.Close() })
-			s.stream.r.useClock(func() time.Time { return now })
+			s.human.r.useClock(func() time.Time { return now })
 
 			startScopes(s, scope{id: stage, title: "Provisioning"})
 			s.Event(&progressv1.OperationEvent{TimeUnixNano: tc.end, SpanId: stage, Body: &progressv1.OperationEvent_Ended{
 				Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK, StartTimeUnixNano: start.UnixNano()},
 			}})
 
-			got := s.stream.r.plan.nodes[stageKey(stage)].doneDur
+			got := s.human.r.plan.nodes[stageKey(stage)].doneDur
 			if got < 2*time.Minute || got > 2*time.Minute+time.Second {
 				t.Errorf("committed duration = %v, want the 2m the stage actually ran, not a collapsed end", got)
 			}

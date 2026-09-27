@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -17,9 +18,9 @@ import (
 func recorded(t *testing.T, events ...*streamv1.RunEvent) []*streamv1.RunEvent {
 	t.Helper()
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
+	s := NewJSONSink(&out)
 	for _, ev := range events {
-		s.Emit(ev)
+		s.Receive(ev)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
@@ -139,29 +140,12 @@ func planNames(ev *streamv1.RunEvent) string {
 	return strings.Join(names, " ")
 }
 
-func TestNDJSONIsOneEnvelopePerLineAndNeverBuffers(t *testing.T) {
-	t.Parallel()
-
-	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-	t.Cleanup(func() { _ = s.Close() })
-
-	s.Emit(startedEvent(appStage(1), nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
-
-	if lines := strings.Count(out.String(), "\n"); lines != 1 {
-		t.Errorf("after one envelope the stream has %d lines, want 1 — the machine surface is the off-TTY liveness surface", lines)
-	}
-	if strings.Contains(out.String(), "\n ") || strings.Contains(strings.TrimRight(out.String(), "\n"), "\n") {
-		t.Errorf("stream = %q, want exactly one line per envelope", out.String())
-	}
-}
-
 func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *testing.T) {
 	t.Parallel()
 
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-	s.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
+	s := NewJSONSink(&out)
+	s.Receive(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -219,5 +203,24 @@ func TestATimelessEventIsStampedWhenItLands(t *testing.T) {
 	kept := recorded(t, &streamv1.RunEvent{Time: stamped, Message: "already stamped"})
 	if !kept[0].GetTime().AsTime().Equal(stamped.AsTime()) {
 		t.Errorf("time = %v, want the producer's stamp %v kept", kept[0].GetTime().AsTime(), stamped.AsTime())
+	}
+}
+
+func TestTheJSONSinkWritesEachEventAsOneLineTheMomentItLands(t *testing.T) {
+	t.Parallel()
+
+	var out safeBuffer
+	var sink events.Sink = NewJSONSink(&out)
+	t.Cleanup(func() { _ = sink.Close() })
+
+	sink.Receive(startedEvent(appStage(1), nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	if got := out.String(); strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, "\n") {
+		t.Fatalf("after one event the sink wrote %q, want exactly one whole line", got)
+	}
+
+	sink.Receive(progressEvent(appStage(1), "uploading", 1, u32(2)))
+	lines := parseNDJSON(t, out.String())
+	if len(lines) != 2 || lines[1].GetMessage() != "uploading" {
+		t.Errorf("after two events the sink wrote %q, want the second as its own line", out.String())
 	}
 }

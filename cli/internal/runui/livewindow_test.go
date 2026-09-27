@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func spineOf(t *testing.T, s *Stream, n int) {
+func spineOf(t *testing.T, s *HumanSink, n int) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
 		unit, phase := appStage(byte(2*i)), appStage(byte(2*i+1))
@@ -16,7 +16,7 @@ func spineOf(t *testing.T, s *Stream, n int) {
 			scope{id: unit, title: fmt.Sprintf("app-%02d", i)},
 			scope{id: phase, parent: unit, title: "Building"},
 		)
-		s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+		s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 	}
 }
 
@@ -40,7 +40,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 				scope{id: unit, title: "web"},
 				scope{id: phase, parent: unit, title: "Building"},
 			)
-			s.Emit(progressEvent(phase, "compiling", 1, u32(2)))
+			s.Receive(progressEvent(phase, "compiling", 1, u32(2)))
 
 			if got := strings.Contains(out.String(), startMark+" web › Building\n"); got != tc.want {
 				t.Errorf("committed the phase-start line = %v, want %v — the window is the liveness surface when there is one", got, tc.want)
@@ -58,7 +58,7 @@ func TestAUnitIsOneRowShowingWhatItIsDoingNow(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 {
@@ -86,7 +86,7 @@ func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, strings.Repeat("compiling every module in the project ", 4), 0, nil))
+	s.Receive(progressEvent(phase, strings.Repeat("compiling every module in the project ", 4), 0, nil))
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 {
@@ -109,7 +109,7 @@ func TestTheRendererNeverInventsCountsAProducerDidNotDeclare(t *testing.T) {
 		scope{id: unit, title: "web"},
 		scope{id: phase, parent: unit, title: "Building"},
 	)
-	s.Emit(progressEvent(phase, "compiling", 0, nil))
+	s.Receive(progressEvent(phase, "compiling", 0, nil))
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 {
@@ -151,8 +151,8 @@ func TestUnitsBeyondTheTerminalHeightFallIntoTheOverflowLineAndComeBack(t *testi
 	}
 
 	for i := 1; i <= 18; i++ {
-		s.Emit(endedEvent(appStage(byte(2*i+1)), false, time.Second))
-		s.Emit(endedEvent(appStage(byte(2*i)), false, time.Second))
+		s.Receive(endedEvent(appStage(byte(2*i+1)), false, time.Second))
+		s.Receive(endedEvent(appStage(byte(2*i)), false, time.Second))
 	}
 
 	if got := strings.Join(liveRegion(t, s, out), "\n"); !strings.Contains(got, "app-21") {
@@ -189,7 +189,7 @@ func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
 		scope{id: third, parent: unit, title: "Provisioning"},
 	)
 	for _, id := range [][]byte{third, first, second} {
-		s.Emit(progressEvent(id, "working", 0, nil))
+		s.Receive(progressEvent(id, "working", 0, nil))
 	}
 
 	rows := liveRegion(t, s, out)
@@ -223,8 +223,8 @@ func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 2)
 
-	s.Emit(endedEvent(appStage(3), false, time.Second))
-	s.Emit(endedEvent(appStage(2), false, time.Second))
+	s.Receive(endedEvent(appStage(3), false, time.Second))
+	s.Receive(endedEvent(appStage(2), false, time.Second))
 
 	rows := liveRegion(t, s, out)
 	if got := strings.Join(rows, "\n"); strings.Contains(got, "app-01") {
@@ -235,7 +235,7 @@ func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 	}
 
 	out.Reset()
-	s.Emit(progressEvent(appStage(5), "compiling", 8, u32(9)))
+	s.Receive(progressEvent(appStage(5), "compiling", 8, u32(9)))
 	if strings.Contains(out.String(), "app-01") {
 		t.Errorf("frame = %q, want the finished unit left in scrollback, never redrawn", out.String())
 	}
@@ -246,8 +246,8 @@ func TestTheOverflowLineCountsOnlyWhatIsStillOnTheSpine(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 9)
 	spineOf(t, s, 8)
 
-	s.Emit(endedEvent(appStage(3), false, time.Second))
-	s.Emit(endedEvent(appStage(2), false, time.Second))
+	s.Receive(endedEvent(appStage(3), false, time.Second))
+	s.Receive(endedEvent(appStage(2), false, time.Second))
 
 	rows := liveRegion(t, s, out)
 	if got := rows[len(rows)-1]; !strings.Contains(got, "+2 more: 2 running") {
@@ -260,7 +260,7 @@ func TestAFailedUnitStaysPinnedWhileItsSiblingsRun(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 3)
 
-	s.Emit(endedEvent(appStage(3), true, time.Second))
+	s.Receive(endedEvent(appStage(3), true, time.Second))
 
 	rows := liveRegion(t, s, out)
 	if !strings.Contains(rows[0], failMark) || !strings.Contains(rows[0], "app-01") {
@@ -271,7 +271,7 @@ func TestAFailedUnitStaysPinnedWhileItsSiblingsRun(t *testing.T) {
 	}
 
 	out.Reset()
-	s.Emit(progressEvent(appStage(5), "compiling", 7, u32(9)))
+	s.Receive(progressEvent(appStage(5), "compiling", 7, u32(9)))
 	if rows := liveRegion(t, s, out); !strings.Contains(rows[0], "app-01") {
 		t.Errorf("live region = %q, want the failure still pinned while a sibling makes progress", rows)
 	}

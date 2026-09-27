@@ -62,9 +62,9 @@ func golden(t *testing.T, name, ext, got string) {
 func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
+	s := NewHumanSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
 	for _, ev := range events {
-		s.Emit(ev)
+		s.Receive(ev)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
@@ -75,9 +75,9 @@ func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 func projectLive(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
 	var out safeBuffer
-	s := newStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
+	s := newHumanSink(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 	for _, ev := range events {
-		s.Emit(ev)
+		s.Receive(ev)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
@@ -172,9 +172,9 @@ func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *tes
 			_, events := fixtureStream(t, name)
 
 			var out safeBuffer
-			s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
+			s := NewJSONSink(&out)
 			for i, ev := range events {
-				s.Emit(ev)
+				s.Receive(ev)
 
 				written := out.String()
 				if !strings.HasSuffix(written, "\n") {

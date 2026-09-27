@@ -41,12 +41,12 @@ func (s *Scope) Debug(message string) { s.say(progressv1.Level_LEVEL_DEBUG, mess
 func (s *Scope) Error(message string) { s.say(progressv1.Level_LEVEL_ERROR, message) }
 
 func (s *Scope) say(level progressv1.Level, message string) {
-	s.run.bus.send(s.scoped(&streamv1.RunEvent{Level: level, Message: message}))
+	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Level: level, Message: message}))
 }
 
 func (s *Scope) Output(level progressv1.Level, stream progressv1.Stream) io.Writer {
 	w := &lineWriter{emit: func(line string) {
-		s.run.bus.send(s.scoped(&streamv1.RunEvent{
+		s.run.bus.Send(s.scoped(&streamv1.RunEvent{
 			Level:   level,
 			Message: line,
 			Body:    &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: stream}},
@@ -60,12 +60,12 @@ func (s *Scope) Output(level progressv1.Level, stream progressv1.Stream) io.Writ
 
 func (s *Scope) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)) {
 	s.run.hold(1)
-	s.run.bus.send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
+	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
 	var once sync.Once
 	return func(reason string) {
 		once.Do(func() {
 			s.run.hold(-1)
-			s.run.bus.send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
+			s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
 				Resumed: &streamv1.ResumedEvent{Reason: reason},
 			}}))
 		})
@@ -75,12 +75,12 @@ func (s *Scope) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)
 func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)
 	drawn.Headline, drawn.Notes = headline, notes
-	s.run.bus.send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: drawn}}))
+	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: drawn}}))
 	return drawn
 }
 
 func (s *Scope) Identity(identity *streamv1.IdentityEvent) {
-	s.run.bus.send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: identity}}))
+	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: identity}}))
 }
 
 func (s *Scope) Forward(op *progressv1.OperationEvent) {
@@ -88,7 +88,7 @@ func (s *Scope) Forward(op *progressv1.OperationEvent) {
 	if apps := ev.GetOutcome().GetApps(); len(apps) > 0 {
 		s.run.record(apps)
 	}
-	s.run.bus.send(ev)
+	s.run.bus.Send(ev)
 }
 
 func lift(op *progressv1.OperationEvent) *streamv1.RunEvent {
@@ -137,7 +137,7 @@ func (s *Scope) End(err error) {
 			ev.Level, ev.Message = s.run.failureLevel(), err.Error()
 		}
 		s.run.close(s)
-		s.run.bus.send(s.scoped(ev))
+		s.run.bus.Send(s.scoped(ev))
 	})
 }
 

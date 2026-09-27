@@ -168,12 +168,12 @@ func TestTruncateToWidthHandlesRowsWithNothingToShow(t *testing.T) {
 func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 	drawnRow := func(colorEnabled bool) string {
 		var out safeBuffer
-		s := newStream(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40, Height: defaultHeight})
+		s := newHumanSink(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40, Height: defaultHeight})
 		s.r.useClock(func() time.Time { return time.Unix(0, 0) })
 
 		app := appStage(1)
 		startAll(s, scope{id: app, title: "a-long-application-name"})
-		s.Emit(progressEvent(app, "uploading a great many static assets", 1, nil))
+		s.Receive(progressEvent(app, "uploading a great many static assets", 1, nil))
 		_ = s.Close()
 
 		for _, line := range strings.Split(out.String(), "\n") {

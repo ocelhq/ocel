@@ -48,7 +48,7 @@ func (r *Run) End(errp *error) {
 		if r.trace != nil {
 			result.LogPath = r.trace.LogPath()
 		}
-		r.bus.send(&streamv1.RunEvent{Level: resultLevel(result), Body: &streamv1.RunEvent_Result{Result: result}})
+		r.bus.Send(&streamv1.RunEvent{Level: resultLevel(result), Body: &streamv1.RunEvent_Result{Result: result}})
 		if r.trace != nil {
 			_ = r.trace.Close()
 		}
@@ -116,7 +116,7 @@ func (r *Run) beginLocked(phase progressv1.Phase, parent *Scope, subject, messag
 		parentID = parent.spanID
 	}
 	r.open = append(r.open, s)
-	r.bus.send(&streamv1.RunEvent{
+	r.bus.Send(&streamv1.RunEvent{
 		Time:    timestamppb.New(s.start),
 		Phase:   phase,
 		Subject: subject,
