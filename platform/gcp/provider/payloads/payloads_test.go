@@ -38,3 +38,19 @@ func TestTheContainerRuntimeIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRun
 		t.Error("ContainerRuntime(arm64) handed something back, and an arm64 image would then be wrapped for a platform Cloud Run does not run")
 	}
 }
+
+func TestTheEnvSourceSyncIsAStaticLinuxBinaryForTheOneArchitectureCloudRunRuns(t *testing.T) {
+	binary, err := elf.NewFile(bytes.NewReader(EnvSourceSync()))
+	if err != nil {
+		t.Fatalf("EnvSourceSync() is no ELF binary: %v", err)
+	}
+	if binary.Machine != elf.EM_X86_64 {
+		t.Errorf("EnvSourceSync() is built for %s, and Cloud Run runs x86_64 alone", binary.Machine)
+	}
+	if section := binary.Section(".interp"); section != nil {
+		t.Error("the env source sync asks for a dynamic loader, and the image it runs in has none")
+	}
+	if bytes.Equal(EnvSourceSync(), containerRuntime) {
+		t.Error("EnvSourceSync() is the container runtime")
+	}
+}
