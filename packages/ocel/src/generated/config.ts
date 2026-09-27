@@ -49,6 +49,8 @@ export interface OcelConfig {
   domains?: ProjectDomainConfig;
   /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
   edge?: EdgeDescriptor;
+  /** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
+  envSource?: EnvSourceConfig;
   /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
@@ -249,6 +251,95 @@ export type EdgeDescriptor =
     };
 
 export type EdgeOptions = Record<string, never>;
+
+/** Where each tier's values are read from. A tier left off reads its default: ocel's own store in your account for production and preview, the project's .env file for dev. */
+export interface EnvSourceConfig {
+  /** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
+  dev?: DevEnvSourceDescriptor;
+  /** Where every preview's class-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's own. */
+  preview?: EnvSourceDescriptor;
+  /** Where production's values are read from. Left off, ocel's own store in your account ("builtin"). */
+  production?: EnvSourceDescriptor;
+}
+
+/** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
+export type DevEnvSourceDescriptor =
+  | "dotenv"
+  | {
+      /** Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to. */
+      infisical: InfisicalOptions;
+      exec?: never;
+    }
+  | {
+      /** A command run on your machine, whose output is the values. */
+      exec: ExecOptions;
+      infisical?: never;
+    };
+
+/** Infisical, read as you: from INFISICAL_TOKEN, or else the infisical CLI you are logged in to. */
+export interface InfisicalOptions {
+  /** The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you. */
+  auth?: InfisicalAuth;
+  /** The slug of the Infisical environment this tier reads, such as prod. */
+  environment: string;
+  /** The base URL of a self-hosted Infisical. Left off, https://app.infisical.com. */
+  host?: string;
+  /** The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /. */
+  path?: string;
+  /** The id of the Infisical project the values live in. */
+  project: string;
+  /** Whether a deploy may write into Infisical. "missing" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, "never". Refused for dev, which only reads. */
+  write?: "missing" | "never";
+}
+
+/** The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you. */
+export type InfisicalAuth =
+  | {
+      /** Universal Auth: a client id and client secret, each an ocel variable. */
+      universal: UniversalAuth;
+      identity?: never;
+    }
+  | {
+      /** This target's own cloud identity signs in, so no secret is stored. */
+      identity: IdentityAuth;
+      universal?: never;
+    };
+
+/** Universal Auth: a client id and client secret, each an ocel variable. */
+export interface UniversalAuth {
+  /** The ocel variable containing the Universal Auth client id. */
+  clientId: VariableRef;
+  /** The ocel variable containing the Universal Auth client secret. */
+  clientSecret: VariableRef;
+}
+
+/** This target's own cloud identity signs in, so no secret is stored. */
+export interface IdentityAuth {
+  /** The id of the Infisical machine identity to sign in as. */
+  identityId: string;
+}
+
+/** A command run on your machine, whose output is the values. */
+export interface ExecOptions {
+  /** The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read. */
+  command: string[];
+  /** What the command prints: a JSON object of names to values, or KEY=VALUE lines. */
+  format: "json" | "dotenv";
+}
+
+/** Where every preview's class-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's own. */
+export type EnvSourceDescriptor =
+  | "builtin"
+  | {
+      /** Infisical, read as the machine identity auth names and synced every minute. */
+      infisical: InfisicalOptions;
+      exec?: never;
+    }
+  | {
+      /** A command run on the machine that deploys, whose output is the tier's values. It runs at each deploy and on no schedule. */
+      exec: ExecOptions;
+      infisical?: never;
+    };
 
 /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */
 export type ProviderDescriptor =
