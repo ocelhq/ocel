@@ -71,6 +71,19 @@ func TestCommandFlags(t *testing.T) {
 	}
 }
 
+func TestNoEnvCommandAddressesDevValues(t *testing.T) {
+	cmd := NewCommand(clitest.NewDeps())
+	for _, name := range []string{"ls", "set", "get", "rm"} {
+		sub, _, err := cmd.Find([]string{name})
+		if err != nil {
+			t.Fatalf("find %s: %v", name, err)
+		}
+		if flag := sub.Flags().Lookup("dev"); flag != nil {
+			t.Errorf("%s --dev = %#v, want no such flag: dev values live in the dev tier's env source and .env.local", name, flag)
+		}
+	}
+}
+
 func TestCommandArguments(t *testing.T) {
 	cmd := NewCommand(clitest.NewDeps())
 	for _, test := range []struct {
