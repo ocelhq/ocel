@@ -321,7 +321,7 @@ func (s *deployFakeProviderServer) SetEnvSourceValue(_ context.Context, req *env
 	switch {
 	case exists && !registration.Descriptor.CanUpdate():
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-			"%s already has %s, and write \"missing\" never overwrites a value there", registration.Descriptor.ID(), at.GetKey()))
+			"%s already has %s, and write \"missing\" never overwrites a value there: change it there, or set write to \"values\" to let ocel update it", registration.Descriptor.ID(), at.GetKey()))
 	case exists:
 		registration.Updated = append(registration.Updated, written)
 	default:

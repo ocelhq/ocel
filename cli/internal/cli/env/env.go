@@ -184,9 +184,22 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
+		envSource := envwire.EnvSourceClient{Runner: runner, Config: cfg, Preview: opts.preview}
+		var owner envgate.EnvSource
+		if opts.environment == "" {
+			if owner, err = envSource.Describe(ctx); err != nil {
+				return err
+			}
+		}
 		values := envValues(runner, cfg.Slug, opts)
 		for _, pair := range pairs {
 			at := envAddress(pair.key, opts)
+			if owner.CanSet(at) {
+				if err := setInEnvSource(ctx, envSource, owner.ID, at, pair.value, definitions, stdout); err != nil {
+					return err
+				}
+				continue
+			}
 			seen, err := values.Version(ctx, at)
 			if err != nil {
 				return err
@@ -202,6 +215,27 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		}
 		return nil
 	})
+}
+
+func setInEnvSource(ctx context.Context, envSource envwire.EnvSourceClient, id string, at envgate.Address, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
+	description := ""
+	if i := slices.IndexFunc(definitions, func(definition *resourcesv1.VariableDefinition) bool { return definition.GetKey() == at.Cell.Key }); i >= 0 {
+		description = definitions[i].GetDescription()
+	}
+	awaiting, err := envSource.Set(ctx, at.Cell, value, description)
+	if err != nil {
+		return err
+	}
+	where := at.Cell.Key
+	if at.Cell.Folder != "" {
+		where += " in " + at.Cell.Folder
+	}
+	if awaiting {
+		fmt.Fprintf(stdout, "Sent %s to %s, where it waits for approval; ocel copies it once it is approved.\n", where, id)
+		return nil
+	}
+	fmt.Fprintf(stdout, "Set %s in %s, and copied it back.\n", where, id)
+	return nil
 }
 
 func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, runner *providerclient.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {

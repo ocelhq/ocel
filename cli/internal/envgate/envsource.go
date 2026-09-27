@@ -25,6 +25,10 @@ func (s EnvSource) OwnsValues() bool {
 	return s.ID != "" && s.ID != string(envsource.Builtin)
 }
 
+func (s EnvSource) CanSet(at Address) bool {
+	return at.Environment == "" && s.OwnsValues() && (s.CanCreate || s.CanUpdate) && !s.isCredential(at.Cell.Key)
+}
+
 func (s EnvSource) credentialDefinitions(site string) []*resourcesv1.VariableDefinition {
 	out := make([]*resourcesv1.VariableDefinition, 0, len(s.Credentials))
 	for _, key := range s.Credentials {
