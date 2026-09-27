@@ -14,18 +14,18 @@ var boxDrawing = &unicode.RangeTable{R16: []unicode.Range16{{Lo: 0x2500, Hi: 0x2
 func sanitize(raw string) (string, bool) {
 	drafts := strings.Split(raw, "\r")
 	for i := len(drafts) - 1; i >= 0; i-- {
-		if text := visible(drafts[i]); strings.ContainsFunc(text, says) {
+		if text := stripInvisible(drafts[i]); strings.ContainsFunc(text, isText) {
 			return strings.TrimSpace(text), true
 		}
 	}
 	return "", false
 }
 
-func says(r rune) bool {
+func isText(r rune) bool {
 	return !unicode.IsSpace(r) && !unicode.In(r, boxDrawing)
 }
 
-func visible(draft string) string {
+func stripInvisible(draft string) string {
 	var b strings.Builder
 	for _, r := range ansi.Strip(draft) {
 		switch {

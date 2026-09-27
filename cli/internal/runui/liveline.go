@@ -92,7 +92,7 @@ func (l *liveLine) open(span string, ev *streamv1.RunEvent, at time.Time) {
 		tally = &phaseTally{since: at}
 		l.tallies[l.phase] = tally
 	}
-	if bareScope(ev) {
+	if isBareScope(ev) {
 		return
 	}
 	l.units[span] = &liveUnit{opened: ev}
@@ -171,6 +171,6 @@ func (l *liveLine) render(width int) string {
 	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + took
 }
 
-func bareScope(ev *streamv1.RunEvent) bool {
+func isBareScope(ev *streamv1.RunEvent) bool {
 	return len(ev.GetStarted().GetParentSpanId()) == 0 && ev.GetSubject() == "" && ev.GetMessage() == ""
 }
