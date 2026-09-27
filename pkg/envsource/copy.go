@@ -1,7 +1,6 @@
 package envsource
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -37,7 +36,7 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 		return slices.Contains(folders, at.Folder) && !slices.Contains(keep, at)
 	}
 
-	for _, at := range slices.SortedFunc(maps.Keys(read), compareCells) {
+	for _, at := range slices.SortedFunc(maps.Keys(read), envvars.Cell.Compare) {
 		if !copied(at) {
 			continue
 		}
@@ -92,10 +91,6 @@ func (r *CopyResult) refuse(at envvars.Cell, err error) {
 		r.Refused = map[envvars.Cell]string{}
 	}
 	r.Refused[at] = err.Error()
-}
-
-func compareCells(a, b envvars.Cell) int {
-	return cmp.Or(cmp.Compare(a.Folder, b.Folder), cmp.Compare(a.Key, b.Key))
 }
 
 func isNewerVersion(read, stored string) bool {

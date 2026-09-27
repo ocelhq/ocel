@@ -55,7 +55,7 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	found, err := store.GetDereferenced(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: name}}, true)
 	switch {
 	case errors.Is(err, envvars.ErrNotFound), errors.Is(err, envvars.ErrDangling):
-		return "", &CredentialError{Variable: name, Reason: fmt.Sprintf("has no value in %s: set it with `ocel env set %s=<VALUE>%s`", scope.Class, name, previewFlag(scope))}
+		return "", &CredentialError{Variable: name, Reason: fmt.Sprintf("has no value in %s: set it with `%s`", scope.Class, SetCommand(scope.Class, name))}
 	case err != nil:
 		return "", fmt.Errorf("read %s: %w", name, err)
 	}
@@ -75,11 +75,12 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	return found.Plaintext, nil
 }
 
-func previewFlag(scope envvars.Scope) string {
-	if scope.Class == edge.ClassPreview {
-		return " --preview"
+func SetCommand(class edge.Class, name string) string {
+	command := "ocel env set " + name + "=<VALUE>"
+	if class == edge.ClassPreview {
+		command += " --preview"
 	}
-	return ""
+	return command
 }
 
 type session struct {

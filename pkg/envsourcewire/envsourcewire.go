@@ -1,7 +1,6 @@
 package envsourcewire
 
 import (
-	"cmp"
 	"maps"
 	"slices"
 
@@ -24,7 +23,7 @@ func Encode(descriptor envsource.Descriptor, read map[envvars.Cell]envsource.Val
 		}}}
 	case descriptor.Kind == envsource.Exec && descriptor.Exec != nil:
 		sent := &envvarsv1.ExecEnvSource{Command: descriptor.Exec.Command}
-		for _, at := range slices.SortedFunc(maps.Keys(read), compareCells) {
+		for _, at := range slices.SortedFunc(maps.Keys(read), envvars.Cell.Compare) {
 			sent.Values = append(sent.Values, &envvarsv1.EnvSourceValue{
 				Cell:    &envvarsv1.Cell{Folder: at.Folder, Key: at.Key},
 				Value:   string(read[at].Plaintext),
@@ -90,8 +89,4 @@ func decodeAuth(method *envvarsv1.InfisicalAuth) envsource.InfisicalAuth {
 		return envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: method.GetIdentity().GetIdentityId()}
 	}
 	return envsource.InfisicalAuth{}
-}
-
-func compareCells(a, b envvars.Cell) int {
-	return cmp.Or(cmp.Compare(a.Folder, b.Folder), cmp.Compare(a.Key, b.Key))
 }

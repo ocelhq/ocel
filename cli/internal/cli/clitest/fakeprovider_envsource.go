@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const FakeEnvSourceEnvVar = "OCEL_TEST_FAKE_ENV_SOURCE"
@@ -205,12 +206,9 @@ func refuseFakeCredentialUnset(store FakeStore, tier environmentv1.Tier, slug st
 		if store[FakeCoordinateID(tier, &envvarsv1.Coordinate{Slug: slug, Key: name})].LiveVersion() > 0 {
 			continue
 		}
-		preview := ""
-		if tier == environmentv1.Tier_TIER_PREVIEW {
-			preview = " --preview"
-		}
+		class := edge.Class(fakeClass(tier))
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s logs in with %s, which has no value in %s: set it with `ocel env set %s=<VALUE>%s`", descriptor.ID(), name, fakeClass(tier), name, preview))
+			"%s logs in with %s, which has no value in %s: set it with `%s`", descriptor.ID(), name, class, envsource.SetCommand(class, name)))
 	}
 	return nil
 }

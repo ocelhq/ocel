@@ -1,6 +1,7 @@
 package envvars
 
 import (
+	"cmp"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/records"
@@ -23,6 +24,10 @@ type Scope struct {
 type Cell struct {
 	Folder string
 	Key    string
+}
+
+func (c Cell) Compare(other Cell) int {
+	return cmp.Or(cmp.Compare(c.Folder, other.Folder), cmp.Compare(c.Key, other.Key))
 }
 
 type Coordinate struct {
