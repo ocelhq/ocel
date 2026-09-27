@@ -70,9 +70,14 @@ func run(listen, config string, reporting bool) error {
 		Vendor:     vendor,
 		Addr:       listen,
 		ConfigPath: config,
-		EnvVars: envvarsserver.Backend{
-			Records: ports.Records{Clients: bindings},
-			Cipher:  ports.Cipher{Clients: bindings},
-		},
+		EnvVars:    envVars(bindings),
 	})
+}
+
+func envVars(bindings *ports.Clients) envvarsserver.Backend {
+	return envvarsserver.Backend{
+		Records:       ports.Records{Clients: bindings},
+		Cipher:        ports.Cipher{Clients: bindings},
+		ProveIdentity: ports.ProveIdentity,
+	}
 }
