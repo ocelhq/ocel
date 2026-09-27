@@ -31,17 +31,19 @@ const (
 )
 
 var partitionSegments = map[string]int{
-	records.RootValues:       3,
-	records.RootValueRefs:    3,
-	records.RootStacks:       3,
-	records.RootEnvironments: 3,
-	records.RootConformance:  3,
-	records.RootLedger:       2,
-	records.RootEdgeStacks:   2,
-	records.RootSchema:       1,
-	records.RootProjects:     2,
-	records.RootBootstrap:    2,
-	records.RootWildcard:     2,
+	records.RootValues:          3,
+	records.RootValueRefs:       3,
+	records.RootEnvSources:      2,
+	records.RootEnvSourceStatus: 2,
+	records.RootStacks:          3,
+	records.RootEnvironments:    3,
+	records.RootConformance:     3,
+	records.RootLedger:          2,
+	records.RootEdgeStacks:      2,
+	records.RootSchema:          1,
+	records.RootProjects:        2,
+	records.RootBootstrap:       2,
+	records.RootWildcard:        2,
 }
 
 type DynamoAPI interface {
@@ -69,7 +71,14 @@ func (t Table) Table(context.Context, edge.Class) (string, error) { return strin
 func (t Table) ValuesTable(context.Context, edge.Class) (string, error) { return string(t), nil }
 
 func isValueRecord(name records.Name) bool {
-	return len(name) > 0 && (name[0] == records.RootValues || name[0] == records.RootValueRefs)
+	if len(name) == 0 {
+		return false
+	}
+	switch name[0] {
+	case records.RootValues, records.RootValueRefs, records.RootEnvSources, records.RootEnvSourceStatus:
+		return true
+	}
+	return false
 }
 
 func (r Records) table(ctx context.Context, name records.Name) (string, error) {
