@@ -28,6 +28,8 @@ type stackRefs struct {
 	stateTable          string
 	stateTableARN       string
 	stateTableStreamARN string
+	varsTable           string
+	varsTableARN        string
 	revalidateQueueARN  string
 	imageOptimizerARN   string
 }
@@ -194,6 +196,8 @@ const (
 	paramStateTableStreamARN = "StateTableStreamArn"
 	paramRevalidateQueueARN  = "RevalidateQueueArn"
 	paramImageOptimizerARN   = "ImageOptimizerArn"
+	paramVarsTableName       = "VarsTableName"
+	paramVarsTableARN        = "VarsTableArn"
 )
 
 type crossStackParam struct {

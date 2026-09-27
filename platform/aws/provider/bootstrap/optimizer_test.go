@@ -99,6 +99,7 @@ func bootstrapPayloads() map[string]payloads.Payload {
 		tagPublisherKeyPrefix:   payloads.TagPublisher(),
 		tagInvalidatorKeyPrefix: payloads.TagInvalidator(),
 		revalidatorKeyPrefix:    payloads.Revalidator(),
+		envSourceSyncKeyPrefix:  payloads.EnvSourceSync(),
 	}
 	byKey := map[string]payloads.Payload{}
 	for prefix, p := range byPrefix {

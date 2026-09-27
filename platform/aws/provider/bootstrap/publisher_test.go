@@ -14,10 +14,11 @@ import (
 
 func fixturePayloads() stackPayloads {
 	return stackPayloads{
-		optimizer:   fixtureOptimizerCode(),
-		publisher:   fixturePublisherCode(),
-		revalidator: fixtureRevalidatorCode(),
-		invalidator: fixtureInvalidatorCode(),
+		optimizer:     fixtureOptimizerCode(),
+		publisher:     fixturePublisherCode(),
+		revalidator:   fixtureRevalidatorCode(),
+		invalidator:   fixtureInvalidatorCode(),
+		envSourceSync: fixtureEnvSourceSyncCode(),
 	}
 }
 

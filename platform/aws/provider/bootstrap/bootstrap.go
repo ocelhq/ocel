@@ -277,7 +277,9 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 		case outputAssetBucketARN:
 			refs.assetBucketARN = value
 		case outputVarsTable:
-			d.VarsTable = value
+			d.VarsTable, refs.varsTable = value, value
+		case outputVarsTableARN:
+			refs.varsTableARN = value
 		case outputVarsKeyARN:
 			d.VarsKeyARN = value
 		case outputImageOptimizerURL:
@@ -305,10 +307,11 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 }
 
 type stackPayloads struct {
-	optimizer   payloads.Placement
-	publisher   payloads.Placement
-	invalidator payloads.Placement
-	revalidator payloads.Placement
+	optimizer     payloads.Placement
+	publisher     payloads.Placement
+	invalidator   payloads.Placement
+	revalidator   payloads.Placement
+	envSourceSync payloads.Placement
 }
 
 type spec struct {

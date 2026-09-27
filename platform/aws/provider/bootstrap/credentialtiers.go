@@ -79,6 +79,8 @@ type ScopedARNs struct {
 	bootstrapFunction   string
 	bootstrapLogGroup   string
 	bootstrapQueue      string
+	scheduleGroup       string
+	schedule            string
 	edgeUser            string
 	appBoundary         string
 	varsAlias           string
@@ -104,6 +106,8 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
 		bootstrapLogGroup:  "arn:aws:logs:*:*:log-group:/aws/lambda/" + core + "*",
 		bootstrapQueue:     "arn:aws:sqs:*:*:" + string(n) + "-*",
+		scheduleGroup:      "arn:aws:scheduler:*:*:schedule-group/" + core + "*",
+		schedule:           "arn:aws:scheduler:*:*:schedule/" + core + "*/*",
 		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
 		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(ClassProduction) + "*",
 		varsAlias:          "arn:aws:kms:*:*:alias/" + string(n) + "-vars-*",
@@ -787,22 +791,51 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Condition: passedToLambda(false),
 		},
 		{
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{r.bootstrapRole},
+			Condition: passedTo(schedulerServicePrincipal, false),
+		},
+		{
+			Actions: []string{
+				"scheduler:CreateScheduleGroup",
+				"scheduler:DeleteScheduleGroup",
+				"scheduler:GetScheduleGroup",
+				"scheduler:ListTagsForResource",
+				"scheduler:TagResource",
+				"scheduler:UntagResource",
+			},
+			Resources: []string{r.scheduleGroup},
+		},
+		{
+			Actions: []string{
+				"scheduler:CreateSchedule",
+				"scheduler:DeleteSchedule",
+				"scheduler:GetSchedule",
+				"scheduler:UpdateSchedule",
+			},
+			Resources: []string{r.schedule},
+		},
+		{
 			Actions: []string{
 				"lambda:AddPermission",
 				"lambda:CreateFunction",
 				"lambda:CreateFunctionUrlConfig",
 				"lambda:DeleteFunction",
+				"lambda:DeleteFunctionEventInvokeConfig",
 				"lambda:DeleteFunctionUrlConfig",
 				"lambda:GetFunction",
 				"lambda:GetFunctionConfiguration",
+				"lambda:GetFunctionEventInvokeConfig",
 				"lambda:GetFunctionUrlConfig",
 				"lambda:GetPolicy",
 				"lambda:ListTags",
+				"lambda:PutFunctionEventInvokeConfig",
 				"lambda:RemovePermission",
 				"lambda:TagResource",
 				"lambda:UntagResource",
 				"lambda:UpdateFunctionCode",
 				"lambda:UpdateFunctionConfiguration",
+				"lambda:UpdateFunctionEventInvokeConfig",
 				"lambda:UpdateFunctionUrlConfig",
 			},
 			Resources: []string{r.bootstrapFunction},
