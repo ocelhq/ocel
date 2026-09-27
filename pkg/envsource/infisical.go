@@ -33,10 +33,6 @@ func NewInfisical(options InfisicalOptions, credential Credential, client *http.
 
 func (s *infisical) ID() string { return s.options.ID() }
 
-func (s *infisical) secretPath(folder string) string {
-	return path.Join(s.options.Path, "/"+strings.TrimPrefix(folder, "/"))
-}
-
 type infisicalSecret struct {
 	ID          string `json:"id"`
 	Key         string `json:"secretKey"`
@@ -49,7 +45,7 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 	s.cacheOrgID(ctx)
 	out := map[envvars.Cell]Value{}
 	for _, folder := range folders {
-		at := s.secretPath(folder)
+		at := s.options.secretPath(folder)
 		query := url.Values{
 			"projectId":              {s.options.Project},
 			"environment":            {s.options.Environment},
@@ -120,7 +116,7 @@ func (s *infisical) Create(ctx context.Context, at envvars.Cell, value []byte, d
 	if s.options.Write != WriteMissing {
 		return ErrReadOnly
 	}
-	secretPath := s.secretPath(at.Folder)
+	secretPath := s.options.secretPath(at.Folder)
 	body := map[string]string{
 		"projectId":     s.options.Project,
 		"environment":   s.options.Environment,
@@ -184,7 +180,7 @@ func (s *infisical) URL(at envvars.Cell) string {
 	if org == "" {
 		return ""
 	}
-	query := url.Values{"secretPath": {s.secretPath(at.Folder)}}
+	query := url.Values{"secretPath": {s.options.secretPath(at.Folder)}}
 	if at.Key != "" {
 		query.Set("search", at.Key)
 	}
