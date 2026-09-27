@@ -1,6 +1,7 @@
 package clitest
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -168,8 +169,18 @@ func RunFakeProvider() int {
 
 	fake := &deployFakeProviderServer{mode: os.Getenv(FakeProviderModeEnvVar)}
 
+	fmt.Println(channel.FormatReadinessLine(version.Version, channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
+
+	srv := &http.Server{Handler: fakeProviderRoutes(fake)}
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return 1
+	}
+	return 0
+}
+
+func fakeProviderRoutes(fake *deployFakeProviderServer) *http.ServeMux {
 	mux := http.NewServeMux()
-	path, handler := contractv1connect.NewProviderServiceHandler(fake)
+	path, handler := contractv1connect.NewProviderServiceHandler(fake, connect.WithInterceptors(endedScopes{}))
 	mux.Handle(path, handler)
 
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
@@ -177,14 +188,7 @@ func RunFakeProvider() int {
 
 	path, handler = costv1connect.NewCostServiceHandler(fake)
 	mux.Handle(path, handler)
-
-	fmt.Println(channel.FormatReadinessLine(version.Version, channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
-
-	srv := &http.Server{Handler: mux}
-	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return 1
-	}
-	return 0
+	return mux
 }
 
 type deployFakeProviderServer struct {
@@ -218,6 +222,70 @@ func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) 
 		SpanId: fakePhaseID,
 		Body:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
 	})
+}
+
+type endedScopes struct{}
+
+func (endedScopes) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc { return next }
+
+func (endedScopes) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return next
+}
+
+func (endedScopes) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		scoped := &scopedConn{StreamingHandlerConn: conn}
+		err := next(ctx, scoped)
+		if endErr := scoped.endOpen(err == nil); err == nil {
+			return endErr
+		}
+		return err
+	}
+}
+
+type scopedConn struct {
+	connect.StreamingHandlerConn
+	open []*progressv1.OperationEvent
+}
+
+func (c *scopedConn) Send(msg any) error {
+	if ev, ok := msg.(*progressv1.OperationEvent); ok {
+		switch {
+		case ev.GetStarted() != nil:
+			c.open = append(c.open, &progressv1.OperationEvent{TimeUnixNano: time.Now().UnixNano(), Phase: ev.GetPhase(), SpanId: ev.GetSpanId()})
+		case ev.GetEnded() != nil:
+			c.open = slices.DeleteFunc(c.open, func(open *progressv1.OperationEvent) bool { return bytes.Equal(open.GetSpanId(), ev.GetSpanId()) })
+		case ev.GetResult() != nil:
+			if err := c.endOpen(ev.GetResult().GetSuccess()); err != nil {
+				return err
+			}
+		}
+	}
+	return c.StreamingHandlerConn.Send(msg)
+}
+
+func (c *scopedConn) endOpen(succeeded bool) error {
+	level, status := progressv1.Level_LEVEL_INFO, progressv1.SpanStatus_SPAN_STATUS_OK
+	if !succeeded {
+		level, status = progressv1.Level_LEVEL_ERROR, progressv1.SpanStatus_SPAN_STATUS_ERROR
+	}
+	for len(c.open) > 0 {
+		started := c.open[len(c.open)-1]
+		c.open = c.open[:len(c.open)-1]
+		if err := c.StreamingHandlerConn.Send(&progressv1.OperationEvent{
+			TimeUnixNano: time.Now().UnixNano(),
+			Level:        level,
+			Phase:        started.GetPhase(),
+			SpanId:       started.GetSpanId(),
+			Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
+				Status:            status,
+				StartTimeUnixNano: started.GetTimeUnixNano(),
+			}},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func fakeProgress(message string) *progressv1.OperationEvent {
