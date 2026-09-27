@@ -248,15 +248,24 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	ended := ev.GetEnded()
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	message := fmt.Sprintf("%s in %s%s%s", pastTense(unit.opened.GetMessage()), took, tally.finished(), unit.resources.summary())
+	partial := !failed && ev.GetLevel() >= progressv1.Level_LEVEL_WARN
+	result := pastTense(unit.opened.GetMessage())
+	if partial && ev.GetMessage() != "" {
+		result = ev.GetMessage()
+	}
+	message := fmt.Sprintf("%s in %s%s%s", result, took, tally.finished(), unit.resources.summary())
 	if failed {
 		message = fmt.Sprintf("%s failed after %s%s%s", unit.opened.GetMessage(), took, tally.finished(), unit.resources.summary())
 		if reason := ev.GetMessage(); reason != "" {
 			message += ": " + reason
 		}
 	}
-	header := unit.header(ev.GetLevel(), ended.GetStatus(), message, s.present)
-	if s.present.GitHubActions && !failed && len(unit.body) > 0 {
+	status := ended.GetStatus()
+	if partial {
+		status = progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED
+	}
+	header := unit.header(ev.GetLevel(), status, message, s.present)
+	if s.present.GitHubActions && !failed && !partial && len(unit.body) > 0 {
 		header.text, header.command = "::group::"+workflowData.Replace(header.text), true
 		s.print(header)
 		s.print(unit.body...)

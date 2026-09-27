@@ -139,15 +139,22 @@ func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 	if err != nil && !errors.Is(err, run.said) {
 		newProgress(s.sender, stage).Error(err.Error())
 	}
+	if err == nil && run.partial != "" {
+		s.trace.EndPartial(stage, start, time.Now(), run.partial)
+		return nil
+	}
 	s.trace.End(stage, start, time.Now(), err)
 	return err
 }
 
 type unitRun struct {
-	scope *stageScope
-	stage Stage
-	said  error
+	scope   *stageScope
+	stage   Stage
+	said    error
+	partial string
 }
+
+func (u *unitRun) recordPartial(result string) { u.partial = result }
 
 func (u *unitRun) phase(do func(edge.Progress) error) error {
 	working := PhaseStage(u.stage)
@@ -189,7 +196,14 @@ func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...
 		status, level = progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR
 		attrs = append(attrs, edge.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
 	}
+	t.ended(stage, start, end, status, level, "", attrs)
+}
 
+func (t *eventTrace) EndPartial(stage Stage, start, end time.Time, result string) {
+	t.ended(stage, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, result, nil)
+}
+
+func (t *eventTrace) ended(stage Stage, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, message string, attrs []edge.Attr) {
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
 	for i, a := range attrs {
 		pbAttrs[i] = &progressv1.SpanAttribute{Key: attributeKeys[a.Key], Value: a.Value}
@@ -200,6 +214,7 @@ func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...
 		Level:        level,
 		Phase:        stage.Phase,
 		Subject:      stage.Subject,
+		Message:      message,
 		SpanId:       stage.ID[:],
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,

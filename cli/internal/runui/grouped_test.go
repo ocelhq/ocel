@@ -187,6 +187,23 @@ func TestASuccessfulUnitsHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWas
 	}
 }
 
+func TestAUnitThatDidOnlyPartOfItsWorkEndsAtAWarningWithoutACheckmarkAndSaysWhatItDid(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	provision := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	provision.Forward(providerStarted(1, "relay", "Attaching production hostnames shop.example and www.shop.example", start))
+	ended := providerEnded(1, "relay", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(3*time.Second))
+	ended.Level, ended.Message = progressv1.Level_LEVEL_WARN, "Attached production hostname www.shop.example but not shop.example"
+	provision.Forward(ended)
+
+	want := "WARN  [deploy] relay: Attached production hostname www.shop.example but not shop.example in 3s\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestOnceAUnitHasFailedALaterSuccessfulUnitShowsOnlyItsHeader(t *testing.T) {
 	t.Parallel()
 

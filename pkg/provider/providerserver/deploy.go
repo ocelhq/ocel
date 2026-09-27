@@ -114,16 +114,25 @@ func environmentPhrase(class edge.Class, env string) string {
 }
 
 func namedList(one, many string, names []string) string {
+	switch len(names) {
+	case 0:
+		return "no " + many
+	case 1:
+		return one + " " + names[0]
+	default:
+		return many + " " + joinNames(names)
+	}
+}
+
+func joinNames(names []string) string {
 	const shown = 3
 	switch n := len(names); {
-	case n == 0:
-		return "no " + many
-	case n == 1:
-		return one + " " + names[0]
+	case n <= 1:
+		return strings.Join(names, "")
 	case n <= shown+1:
-		return many + " " + strings.Join(names[:n-1], ", ") + " and " + names[n-1]
+		return strings.Join(names[:n-1], ", ") + " and " + names[n-1]
 	default:
-		return fmt.Sprintf("%s %s and %d more", many, strings.Join(names[:shown], ", "), n-shown)
+		return fmt.Sprintf("%s and %d more", strings.Join(names[:shown], ", "), n-shown)
 	}
 }
 
@@ -437,31 +446,50 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 		return nil
 	}
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
-		return u.phase(func(progress edge.Progress) error {
+		var attached, missed []string
+		err := u.phase(func(progress edge.Progress) error {
 			attaching := &hostnames{edgeSession: r.edgeSession}
+			skip := func(host, note string) {
+				progress.Warn(note)
+				r.pending = append(r.pending, note)
+				missed = append(missed, host)
+			}
 			for _, host := range r.configured {
 				serving := r.state.Host(host.Hostname).Serving()
 				if serving == r.front.Kind() {
+					attached = append(attached, host.Hostname)
 					continue
 				}
 				if serving != "" {
-					r.pending = append(r.pending, fmt.Sprintf(
+					skip(host.Hostname, fmt.Sprintf(
 						"%s is still served by the %s edge, not the %s edge this deploy promoted to: `ocel domain add` moves it, in the order that keeps it answering",
 						host.Hostname, serving, r.front.Kind()))
 					continue
 				}
 				_, err := attaching.attachHostname(ctx, host, progress)
 				if waits, ok := provider.ResumableMessage(err); ok {
-					r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
+					skip(host.Hostname, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
 					continue
 				}
 				if err != nil {
 					return err
 				}
+				attached = append(attached, host.Hostname)
 			}
 			return nil
 		})
+		if err == nil && len(missed) > 0 {
+			u.recordPartial(describeAttached(attached, missed))
+		}
+		return err
 	})
+}
+
+func describeAttached(attached, missed []string) string {
+	if len(attached) == 0 {
+		return "Did not attach " + namedList("production hostname", "production hostnames", missed)
+	}
+	return "Attached " + namedList("production hostname", "production hostnames", attached) + " but not " + joinNames(missed)
 }
 
 func (r *deployRun) configuredHosts() ([]ConfiguredHost, error) {
