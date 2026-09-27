@@ -694,6 +694,75 @@ func appears(seen *transcript, read <-chan struct{}, fragment string) bool {
 	}
 }
 
+var writingActions = map[string]bool{
+	"ACTION_CREATE": true, "ACTION_UPDATE": true, "ACTION_REPLACE": true, "ACTION_DELETE": true, "ACTION_DISABLE_THEN_DELETE": true,
+}
+
+type plannedEvent struct {
+	Phase string `json:"phase"`
+	Plan  *struct {
+		Groups []struct {
+			Name    string `json:"name"`
+			Action  string `json:"action"`
+			Changes []struct {
+				Name   string `json:"name"`
+				Action string `json:"action"`
+			} `json:"changes"`
+		} `json:"groups"`
+	} `json:"plan"`
+}
+
+func plannedWrites(t *testing.T, stream string) []string {
+	t.Helper()
+	planned := false
+	var writes []string
+	for line := range strings.Lines(stream) {
+		var ev plannedEvent
+		if json.Unmarshal([]byte(line), &ev) != nil {
+			continue
+		}
+		planned = planned || ev.Phase == "PHASE_PLAN"
+		if ev.Plan == nil {
+			continue
+		}
+		for _, group := range ev.Plan.Groups {
+			acting := false
+			for _, change := range group.Changes {
+				if change.Action != "ACTION_KEEP" {
+					acting = true
+				}
+				if writingActions[change.Action] {
+					writes = append(writes, group.Name+"/"+change.Name+" "+change.Action)
+				}
+			}
+			if !acting && writingActions[group.Action] {
+				writes = append(writes, group.Name+" "+group.Action)
+			}
+		}
+	}
+	if !planned {
+		t.Fatalf("the run streamed no plan phase, so nothing here reads what it would write:\n%s", stream)
+	}
+	return writes
+}
+
+func TestAPlanStreamWritesOnlyWhereAGroupOrOneOfItsChangesWrites(t *testing.T) {
+	kept := strings.Join([]string{
+		`INFO  [plan] a line a human reads`,
+		`{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","started":{}}`,
+		`{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","plan":{"subject":"production","groups":[{"kind":"stack","name":"aws/ocel-bootstrap","action":"ACTION_KEEP"},{"kind":"stack","name":"aws/ocel-bootstrap-isr","action":"ACTION_KEEP","changes":[{"name":"OcelRouterFunction","action":"ACTION_KEEP"},{"name":"OcelOriginSecret","action":"ACTION_ADOPT"}]},{"kind":"edge","name":"cloudfront/edge","action":"ACTION_ADOPT"}]}}`,
+	}, "\n")
+	if writes := plannedWrites(t, kept); len(writes) > 0 {
+		t.Errorf("a plan that keeps and adopts reads as writing %v", writes)
+	}
+
+	mixed := `{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","phase":"PHASE_PLAN","subject":"","message":"","plan":{"subject":"production","groups":[{"kind":"stack","name":"aws/ocel-bootstrap-isr","action":"ACTION_KEEP"},{"kind":"stack","name":"aws/ocel-bootstrap","action":"ACTION_UPDATE","changes":[{"name":"OcelRouterFunction","action":"ACTION_UPDATE"},{"name":"OcelOriginSecret","action":"ACTION_KEEP"}]},{"kind":"edge","name":"cloudflare/edge","action":"ACTION_CREATE"}]}}`
+	want := []string{"aws/ocel-bootstrap/OcelRouterFunction ACTION_UPDATE", "cloudflare/edge ACTION_CREATE"}
+	if writes := plannedWrites(t, mixed); !slices.Equal(writes, want) {
+		t.Errorf("a plan that updates one change and creates one group reads as writing %v, want %v", writes, want)
+	}
+}
+
 var escapes = regexp.MustCompile("\x1b\\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)|\x1b[()][0-9A-B]|\x1b[=>]")
 
 func plain(rendered string) string {
@@ -985,13 +1054,13 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("`ocel doctor` printed a certificates section over a box serving no hostname at all, so it read a renewal off something other than a certificate this box serves:\n%s", report)
 	}
 
-	replanned := run.must(t, "bootstrap", "production", "--dry")
-	if !strings.Contains(replanned, "No infrastructure changes") {
-		t.Errorf("a re-plan over a bootstrapped machine found work to do:\n%s", replanned)
+	replanned := run.must(t, "bootstrap", "production", "--dry", "--log-format", "json")
+	if writes := plannedWrites(t, replanned); len(writes) > 0 {
+		t.Errorf("a re-plan over a bootstrapped machine would write %v:\n%s", writes, replanned)
 	}
-	reapplied := run.must(t, "bootstrap", "production", "--yes")
-	if !strings.Contains(reapplied, "No infrastructure changes") {
-		t.Errorf("a re-apply over a bootstrapped machine found work the re-plan said was not there:\n%s", reapplied)
+	reapplied := run.must(t, "bootstrap", "production", "--yes", "--log-format", "json")
+	if writes := plannedWrites(t, reapplied); len(writes) > 0 {
+		t.Errorf("a re-apply over a bootstrapped machine planned writes %v the re-plan said were not there:\n%s", writes, reapplied)
 	}
 	again := stampOn(t, run.vm)
 	if again.Seal != stamped.Seal {
@@ -1244,7 +1313,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if said := run.deploying(t, "env", "set", lifecycleSensitive+"="+run.value, "--preview"); !strings.Contains(said, "Set "+lifecycleSensitive) {
 		t.Fatalf("`ocel env set %s --preview` said nothing about setting it:\n%s", lifecycleSensitive, said)
 	}
-	if up := run.deploying(t, "preview", "up", "--name", lifecyclePreview, "--yes"); !strings.Contains(up, "Preview "+lifecyclePreview+" is up") {
+	if up := run.deploying(t, "preview", "up", "--name", lifecyclePreview, "--yes"); !strings.Contains(up, "Deployed "+lifecycleSlug+" to preview "+lifecyclePreview) {
 		t.Fatalf("`ocel preview up --name %s` finished without a preview:\n%s", lifecyclePreview, up)
 	}
 	previewHost := lifecyclePreview + "." + lifecyclePreviewBase

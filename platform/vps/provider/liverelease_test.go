@@ -301,7 +301,7 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 	if vm.running(t, one.physical) {
 		t.Error("the retired container was not stopped at the ceiling")
 	}
-	if warned.at("502") < 0 || warned.at(one.address) < 0 {
+	if warned.at("502") < 0 || warned.at("Retired container "+one.physical+" still had") < 0 {
 		t.Errorf("an expired drain warned %v, want the count still in flight and what its clients get", warned.lines)
 	}
 	if warned.at("websocket") < 0 {
