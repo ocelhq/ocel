@@ -167,7 +167,7 @@ func (s *Sync) keyOf(ctx context.Context, registration Registration) (string, er
 
 func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, error, error) {
 	attemptedAt := s.now()
-	results, urls, failure := s.readAndCopy(ctx, key, group, source)
+	results, urls, failure := s.readAndCopy(ctx, key, group, source, attemptedAt)
 	if failure != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		failure = fmt.Errorf("ran out of its share of the sync's time, and waits for the next sync so the env sources after it get theirs: %w", failure)
 	}
@@ -195,7 +195,7 @@ func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, 
 	return results, failure, err
 }
 
-func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, map[string]string, error) {
+func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration, source Source, readAt time.Time) ([]CopyResult, map[string]string, error) {
 	if source == nil {
 		opened, err := s.open(ctx, key, group[0])
 		if err != nil {
@@ -214,7 +214,7 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 	}
 	results := make([]CopyResult, 0, len(group))
 	for _, registration := range group {
-		result, err := CopyValues(ctx, s.Store, s.scope(registration), source.ID(), read, registration.Folders, registration.Credentials())
+		result, err := CopyValues(ctx, s.Store, s.scope(registration), source.ID(), readAt, read, registration.Folders, registration.Credentials())
 		if err != nil {
 			return nil, nil, err
 		}

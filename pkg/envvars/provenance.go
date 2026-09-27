@@ -1,14 +1,26 @@
 package envvars
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Provenance struct {
-	EnvSource string `json:"envSource,omitempty"`
-	Version   string `json:"envSourceVersion,omitempty"`
+	EnvSource string    `json:"envSource,omitempty"`
+	Version   string    `json:"envSourceVersion,omitempty"`
+	ReadAt    time.Time `json:"envSourceReadAt,omitzero"`
+}
+
+func (p Provenance) isOlderThan(stored Provenance) bool {
+	return p.EnvSource != "" && p.EnvSource == stored.EnvSource && p.ReadAt.Before(stored.ReadAt)
 }
 
 func (s Store) SetFromEnvSource(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected int64) (Metadata, error) {
 	return s.write(ctx, scope, at, plaintext, from, &expected)
+}
+
+func (s Store) DeleteFromEnvSource(ctx context.Context, scope Scope, at Coordinate, from Provenance, expected int64) (bool, error) {
+	return s.remove(ctx, scope, at, from, &expected)
 }
 
 type Dereferenced struct {

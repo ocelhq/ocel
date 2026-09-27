@@ -102,6 +102,9 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 	if current.Target != nil {
 		return Metadata{}, fmt.Errorf("%s is a reference to %s, which is where that value is edited: %w", at, current.Target, ErrIsReference)
 	}
+	if from.isOlderThan(current.Provenance) {
+		return Metadata{}, ErrStaleVersion
+	}
 
 	sealed, err := s.Cipher.Seal(ctx, coordinateOf(scope, at), []byte(plaintext))
 	if err != nil {
@@ -373,11 +376,15 @@ func (s Store) gather(ctx context.Context, scope Scope, stored map[string]stored
 }
 
 func (s Store) Delete(ctx context.Context, scope Scope, at Coordinate, expected *int64) (bool, error) {
+	return s.remove(ctx, scope, at, Provenance{}, expected)
+}
+
+func (s Store) remove(ctx context.Context, scope Scope, at Coordinate, from Provenance, expected *int64) (bool, error) {
 	recorded, current, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return false, err
 	}
-	if expected != nil && *expected != current.live() {
+	if expected != nil && *expected != current.live() || from.isOlderThan(current.Provenance) {
 		return false, ErrStaleVersion
 	}
 	if current.live() == 0 {
@@ -389,7 +396,7 @@ func (s Store) Delete(ctx context.Context, scope Scope, at Coordinate, expected 
 		}
 	}
 
-	tombstone := storedValue{Version: current.Version, UpdatedAt: s.now(), Deleted: true}
+	tombstone := storedValue{Version: current.Version, UpdatedAt: s.now(), Deleted: true, Provenance: from}
 	encoded, err := json.Marshal(tombstone)
 	if err != nil {
 		return false, fmt.Errorf("encode %s: %w", at, err)
