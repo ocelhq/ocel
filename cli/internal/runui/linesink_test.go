@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -72,57 +74,109 @@ func (r *lineRig) closed(t *testing.T) string {
 	return r.out.String()
 }
 
+type terminal struct {
+	t      *testing.T
+	width  int
+	lines  [][]rune
+	line   int
+	offset int
+}
+
+func newTerminal(t *testing.T, width int) *terminal {
+	return &terminal{t: t, width: width, lines: [][]rune{nil}}
+}
+
 func screenOf(t *testing.T, written string) string {
 	t.Helper()
-	rows := [][]rune{nil}
-	row, col := 0, 0
+	term := newTerminal(t, math.MaxInt32)
+	term.write(written)
+	return term.screen()
+}
+
+func (term *terminal) row() int { return term.offset / term.width }
+
+func (term *terminal) rowsOf(cells []rune) int {
+	return max(1, (len(cells)+term.width-1)/term.width)
+}
+
+func (term *terminal) resize(width int) { term.width = width }
+
+func (term *terminal) write(written string) {
+	term.t.Helper()
 	for rest := written; rest != ""; {
 		if strings.HasPrefix(rest, "\x1b[") {
 			end := strings.IndexFunc(rest[2:], func(r rune) bool { return r >= '@' && r <= '~' })
 			if end < 0 {
-				t.Fatalf("unterminated escape in %q", rest)
+				term.t.Fatalf("unterminated escape in %q", rest)
 			}
 			params, final := rest[2:2+end], rest[2+end]
 			rest = rest[3+end:]
-			switch final {
-			case 'K':
-				rows[row] = rows[row][:min(col, len(rows[row]))]
-			case 'J':
-				rows[row] = rows[row][:min(col, len(rows[row]))]
-				rows = rows[:row+1]
-			case 'A':
-				n, err := strconv.Atoi(params)
-				if err != nil {
-					t.Fatalf("cursor up %q: %v", params, err)
-				}
-				row = max(row-n, 0)
-			case 'm', 'h', 'l':
-			default:
-				t.Fatalf("unexpected escape %q", final)
-			}
+			term.escape(params, final)
 			continue
 		}
 		r := []rune(rest)[0]
 		rest = rest[len(string(r)):]
+		cells := term.lines[term.line]
 		switch r {
 		case '\r':
-			col = 0
+			term.offset = term.row() * term.width
 		case '\n':
-			row, col = row+1, 0
-			if row == len(rows) {
-				rows = append(rows, nil)
+			if next := (term.row() + 1) * term.width; next < len(cells) {
+				term.offset = next
+				continue
+			}
+			term.line, term.offset = term.line+1, 0
+			if term.line == len(term.lines) {
+				term.lines = append(term.lines, nil)
 			}
 		default:
-			for len(rows[row]) <= col {
-				rows[row] = append(rows[row], ' ')
+			for len(cells) <= term.offset {
+				cells = append(cells, ' ')
 			}
-			rows[row][col] = r
-			col++
+			cells[term.offset] = r
+			term.lines[term.line] = cells
+			term.offset++
 		}
 	}
-	lines := make([]string, len(rows))
-	for i, r := range rows {
-		lines[i] = string(r)
+}
+
+func (term *terminal) escape(params string, final byte) {
+	term.t.Helper()
+	cells := term.lines[term.line]
+	switch final {
+	case 'K':
+		end := (term.row() + 1) * term.width
+		if len(cells) <= end {
+			term.lines[term.line] = cells[:min(term.offset, len(cells))]
+			return
+		}
+		for i := term.offset; i < end; i++ {
+			cells[i] = ' '
+		}
+	case 'J':
+		term.lines[term.line] = cells[:min(term.offset, len(cells))]
+		term.lines = term.lines[:term.line+1]
+	case 'A':
+		n, err := strconv.Atoi(params)
+		if err != nil {
+			term.t.Fatalf("cursor up %q: %v", params, err)
+		}
+		column, row := term.offset%term.width, term.row()-n
+		for row < 0 && term.line > 0 {
+			term.line--
+			row += term.rowsOf(term.lines[term.line])
+		}
+		term.offset = max(row, 0)*term.width + column
+	case 'm', 'h', 'l':
+	default:
+		term.t.Fatalf("unexpected escape %q", final)
+	}
+}
+
+func (term *terminal) screen() string {
+	lines := make([]string, len(term.lines))
+	for i, cells := range term.lines {
+		lines[i] = string(cells)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -316,5 +370,37 @@ func TestTheRunsResultErasesTheLiveLineAndNoTickDrawsItAgain(t *testing.T) {
 	}
 	if got := rig.closed(t); got != ended {
 		t.Fatalf("after the result the sink wrote %q, want nothing more", strings.TrimPrefix(got, ended))
+	}
+}
+
+func TestAResizeClearsEveryRowTheLiveLineAndItsCursorWrappedInto(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ from, to int }{{80, 40}, {81, 40}, {81, 27}, {121, 40}, {60, 20}, {41, 40}} {
+		t.Run(fmt.Sprintf("%d to %d columns", tc.from, tc.to), func(t *testing.T) {
+			t.Parallel()
+
+			var transcript bytes.Buffer
+			present := Presentation{Width: tc.from}
+			grouped := newGroupedSink(&transcript, present, nil)
+			rig := newLineRig(t, present, grouped)
+			build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
+			build.Say("Resolved 3 apps")
+			build.Unit("web", "Building web")
+			before := rig.out.String()
+			rig.resize(tc.to)
+			written := rig.closed(t)
+
+			term := newTerminal(t, tc.from)
+			term.write(before)
+			term.resize(tc.to)
+			term.write(strings.TrimPrefix(written, before))
+			if err := grouped.Close(); err != nil {
+				t.Fatalf("Close() = %v", err)
+			}
+			if got, want := term.screen(), transcript.String(); got != want {
+				t.Fatalf("screen after the resize and close\n%q\nwant the transcript alone\n%q", got, want)
+			}
+		})
 	}
 }

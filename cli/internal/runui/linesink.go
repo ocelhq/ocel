@@ -141,13 +141,13 @@ func (s *LineSink) resize(width int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.width = width
-	drawn := displayWidth(s.drawn)
-	if drawn <= width {
+	rowsAbove := displayWidth(s.drawn) / width
+	if rowsAbove == 0 {
 		s.draw()
 		return
 	}
 	s.drawn = s.live.render(width)
-	fmt.Fprintf(s.w, "%s\x1b[%dA\r\x1b[J%s%s", syncStart, (drawn+width-1)/width-1, s.painted(s.drawn), syncEnd)
+	fmt.Fprintf(s.w, "%s\x1b[%dA\r\x1b[J%s%s", syncStart, rowsAbove, s.painted(s.drawn), syncEnd)
 }
 
 func (s *LineSink) painted(line string) string {
