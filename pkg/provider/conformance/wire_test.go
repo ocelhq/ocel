@@ -18,12 +18,42 @@ func planned() *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Plan{Plan: &planv1.ChangePlan{}}})
 }
 
+var scope = []byte("provisn1")
+
 func logged() *progressv1.OperationEvent {
-	return stamped(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: "working"}}})
+	return stamped(&progressv1.OperationEvent{
+		SpanId:  scope,
+		Message: "working",
+		Event:   &progressv1.OperationEvent_Output{Output: &progressv1.Output{}},
+	})
 }
 
 func progressed() *progressv1.OperationEvent {
-	return stamped(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{Message: "working"}}})
+	return stamped(&progressv1.OperationEvent{SpanId: scope, Message: "working"})
+}
+
+func counted() *progressv1.OperationEvent {
+	total := uint32(3)
+	return stamped(&progressv1.OperationEvent{
+		SpanId:  scope,
+		Message: "uploading",
+		Event:   &progressv1.OperationEvent_Counter{Counter: &progressv1.Counter{Current: 1, Total: &total}},
+	})
+}
+
+func started(id string) *progressv1.OperationEvent {
+	return stamped(&progressv1.OperationEvent{
+		SpanId:  []byte(id),
+		Message: id,
+		Event:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
+	})
+}
+
+func ended(id string) *progressv1.OperationEvent {
+	return stamped(&progressv1.OperationEvent{
+		SpanId: []byte(id),
+		Event:  &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{}},
+	})
 }
 
 func observed(events ...*progressv1.OperationEvent) streamed {
@@ -82,5 +112,42 @@ func TestARunThatSendsAnEventWithNoTimeOrLevelFails(t *testing.T) {
 		if len(found) != 1 || !strings.Contains(found[0], "time and a level") {
 			t.Errorf("the tier found %v against a run that sent an event with %s, want it failed for an unstamped event", found, name)
 		}
+	}
+}
+
+func TestARunWhoseOnlyProgressIsACounterPasses(t *testing.T) {
+	t.Parallel()
+
+	if found := faults(observed(planned()), observed(planned(), counted())); len(found) != 0 {
+		t.Fatalf("the tier found %v against a run that counted its work", found)
+	}
+}
+
+func TestAWarningIsNotProgress(t *testing.T) {
+	t.Parallel()
+
+	warned := progressed()
+	warned.Level = progressv1.Level_LEVEL_WARN
+	found := faults(observed(planned()), observed(planned(), warned))
+	if len(found) != 1 || !strings.Contains(found[0], "no progress") {
+		t.Fatalf("the tier found %v against a run that only warned, want it failed for reporting no progress", found)
+	}
+}
+
+func TestARunThatStartsAScopeItNeverEndsFails(t *testing.T) {
+	t.Parallel()
+
+	found := faults(observed(planned()), observed(planned(), started("unit0001"), progressed(), started("phase001"), ended("phase001")))
+	if len(found) != 1 || !strings.Contains(found[0], "never ended") {
+		t.Fatalf("the tier found %v against a run that left a scope open, want it failed for a scope it never ended", found)
+	}
+}
+
+func TestARunThatEndsEveryScopeItStartsPasses(t *testing.T) {
+	t.Parallel()
+
+	applied := observed(planned(), started("unit0001"), started("phase001"), progressed(), ended("phase001"), ended("unit0001"))
+	if found := faults(observed(planned()), applied); len(found) != 0 {
+		t.Fatalf("the tier found %v against a run that ended every scope it started", found)
 	}
 }

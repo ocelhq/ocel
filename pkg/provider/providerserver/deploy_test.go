@@ -156,8 +156,8 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 		t.Fatalf("Deploy() returned functions %v, want the one it provisioned, with its url", result.GetFunctions())
 	}
 
-	if events[0].GetStagePlan() == nil {
-		t.Fatalf("the first event is %T, want the stage plan: the CLI draws the tree before any work reports into it", events[0].GetEvent())
+	if events[0].GetStarted() == nil {
+		t.Fatalf("the first event is %T, want a started scope: the CLI draws the tree before any work reports into it", events[0].GetEvent())
 	}
 
 	specs := p.FakeStacks().Provisioned()
@@ -623,7 +623,7 @@ func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 		t.Fatalf("Deploy() waiving %s = %q, want the deploy to succeed degraded", edge.NeedStreaming, result.GetError())
 	}
 	if !slices.ContainsFunc(events, func(event *progressv1.OperationEvent) bool {
-		return event.GetDegraded().GetNeed() == string(edge.NeedStreaming)
+		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.HasPrefix(event.GetMessage(), string(edge.NeedStreaming)+": ")
 	}) {
 		t.Errorf("the deploy said nothing about %s, want the waived need reported out loud", edge.NeedStreaming)
 	}
@@ -642,7 +642,9 @@ func TestADeployWarnsInTheCheckPhaseNamingTheAppItDegrades(t *testing.T) {
 	}
 
 	_, events := deploy(t, client, req)
-	i := slices.IndexFunc(events, func(event *progressv1.OperationEvent) bool { return event.GetDegraded() != nil })
+	i := slices.IndexFunc(events, func(event *progressv1.OperationEvent) bool {
+		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.HasPrefix(event.GetMessage(), string(edge.NeedStreaming)+": ")
+	})
 	if i < 0 {
 		t.Fatalf("the deploy said nothing about %s, want the waived need reported", edge.NeedStreaming)
 	}
@@ -951,7 +953,7 @@ func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsIsUp(t *testing.T
 	var said []string
 	bound, provisioned := -1, -1
 	for _, event := range events {
-		message := event.GetProgress().GetMessage()
+		message := saidLine(event)
 		switch {
 		case strings.HasPrefix(message, "Binding shop.example") && bound < 0:
 			bound = len(said)

@@ -111,7 +111,7 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 	}
 }
 
-func TestDeployRendersADegradedNeedAsATypedJSONRecord(t *testing.T) {
+func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 	root, _, deps := clitest.SetUpEdgeFixture(t, "  allowDegraded: [\"edge-middleware\", \"ppr-resume\"],\n")
 	useJSONLogFormat(t, &deps)
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail+";ppr-resume=web: the shell comes from the origin. It affects routes /")
@@ -121,20 +121,20 @@ func TestDeployRendersADegradedNeedAsATypedJSONRecord(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	var degraded []*progressv1.DegradedEvent
+	var degraded []string
 	for _, ev := range envelopes(t, stdout.String()) {
-		if d := ev.GetOperation().GetDegraded(); d != nil {
-			degraded = append(degraded, d)
+		if ev.GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetPhase() == progressv1.Phase_PHASE_CHECK {
+			degraded = append(degraded, ev.GetMessage())
 		}
 	}
 	if len(degraded) != 2 {
-		t.Fatalf("got %d degraded envelopes, want one per waived need: %s", len(degraded), stdout.String())
+		t.Fatalf("got %d check-phase warnings, want one per waived need: %s", len(degraded), stdout.String())
 	}
-	if degraded[0].GetNeed() != "edge-middleware" || degraded[1].GetNeed() != "ppr-resume" {
-		t.Errorf("degraded envelopes = %v, want edge-middleware then ppr-resume", degraded)
+	if !strings.HasPrefix(degraded[0], "edge-middleware: ") || !strings.HasPrefix(degraded[1], "ppr-resume: ") {
+		t.Errorf("check-phase warnings = %q, want edge-middleware then ppr-resume", degraded)
 	}
-	if !strings.Contains(degraded[0].GetDetail(), "next start") {
-		t.Errorf("degraded detail = %q, want the degrade spelled out", degraded[0].GetDetail())
+	if !strings.Contains(degraded[0], "next start") {
+		t.Errorf("degraded warning = %q, want the degrade spelled out", degraded[0])
 	}
 }
 
@@ -163,8 +163,8 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, ev := range envelopes(t, stdout.String()) {
-			if d := ev.GetOperation().GetDegraded(); d != nil {
-				t.Errorf("degraded envelope %v on the stream, want none for an app that declares no needs", d)
+			if ev.GetLevel() == progressv1.Level_LEVEL_WARN && ev.GetPhase() == progressv1.Phase_PHASE_CHECK {
+				t.Errorf("check-phase warning %q on the stream, want none for an app that declares no needs", ev.GetMessage())
 			}
 		}
 	})

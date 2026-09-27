@@ -87,8 +87,8 @@ func taken(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, op
 		fingerprint = described.GetTargetFingerprint()
 		return providerclient.Stream(ctx, runner, "RemoveConnector", &contractv1.RemoveConnectorRequest{},
 			contractv1connect.ProviderServiceClient.RemoveConnector, func(ev *progressv1.OperationEvent) {
-				if said := ev.GetProgress().GetMessage(); said != "" {
-					fmt.Fprintf(stdout, "  %s\n", said)
+				if line := said(ev); line != "" {
+					fmt.Fprintf(stdout, "  %s\n", line)
 				}
 			})
 	})

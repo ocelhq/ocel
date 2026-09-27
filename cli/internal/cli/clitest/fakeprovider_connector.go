@@ -81,9 +81,7 @@ func (s *deployFakeProviderServer) InstallConnector(_ context.Context, req *cont
 	if err := declareFakeStages(stream); err != nil {
 		return err
 	}
-	if err := stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{Message: "wrote the connector", StageId: fakePhaseID},
-	}}); err != nil {
+	if err := stream.Send(fakeProgress("wrote the connector")); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{

@@ -49,7 +49,7 @@ func TestEventStreamPropagatesSendError(t *testing.T) {
 
 	const total = 5
 	for range total {
-		sender.send(logEvent(testStage.ID, "line"))
+		sender.send(outputEvent(progressv1.Level_LEVEL_INFO, "line"))
 	}
 
 	if err := sender.close(); !errors.Is(err, wantErr) {
@@ -72,7 +72,7 @@ func TestEventStreamAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sender.send(logEvent(testStage.ID, "line"))
+			sender.send(outputEvent(progressv1.Level_LEVEL_INFO, "line"))
 		}()
 	}
 	wg.Wait()
@@ -97,7 +97,7 @@ func TestEventStreamSendRacingCloseNeverPanics(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sender.send(logEvent(testStage.ID, "racing close"))
+			sender.send(outputEvent(progressv1.Level_LEVEL_INFO, "racing close"))
 		}()
 	}
 
@@ -111,7 +111,7 @@ func TestEventStreamSendRacingCloseNeverPanics(t *testing.T) {
 	<-closeDone
 
 	for range concurrent {
-		sender.send(logEvent(testStage.ID, "after close"))
+		sender.send(outputEvent(progressv1.Level_LEVEL_INFO, "after close"))
 	}
 }
 
@@ -131,7 +131,7 @@ func TestEventStreamSendUnblocksOnContextCancellation(t *testing.T) {
 		fillers.Add(1)
 		go func() {
 			defer fillers.Done()
-			sender.send(logEvent(testStage.ID, "line"))
+			sender.send(outputEvent(progressv1.Level_LEVEL_INFO, "line"))
 		}()
 	}
 	fillers.Wait()
@@ -141,7 +141,7 @@ func TestEventStreamSendUnblocksOnContextCancellation(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		sender.send(logEvent(testStage.ID, "blocked"))
+		sender.send(outputEvent(progressv1.Level_LEVEL_INFO, "blocked"))
 	}()
 
 	select {
@@ -206,11 +206,24 @@ func TestAFailedResultIsAnErrorEventAndASuccessfulOneIsInfo(t *testing.T) {
 	}
 }
 
-func TestADegradedNeedIsAWarnEvent(t *testing.T) {
+func TestADegradedNeedIsAWarnNamingTheAppTheNeedAndTheDegrade(t *testing.T) {
 	t.Parallel()
 
-	if got := degradedEvent("web", edge.NeedEdgeMiddleware, "the edge cannot run code").GetLevel(); got != progressv1.Level_LEVEL_WARN {
-		t.Errorf("a degraded need is %v, want WARN", got)
+	event := degradedEvent("web", edge.NeedEdgeMiddleware, "the edge cannot run code")
+	if event.GetLevel() != progressv1.Level_LEVEL_WARN || event.GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("a degraded need is %v in %v, want WARN in the check phase", event.GetLevel(), event.GetPhase())
+	}
+	if event.GetSubject() != "web" {
+		t.Errorf("subject = %q, want the app", event.GetSubject())
+	}
+	if want := "edge-middleware: the edge cannot run code"; event.GetMessage() != want {
+		t.Errorf("message = %q, want %q", event.GetMessage(), want)
+	}
+	if event.GetEvent() != nil {
+		t.Errorf("body = %T, want a message-only event", event.GetEvent())
+	}
+	if err := protovalidate.Validate(event); err != nil {
+		t.Errorf("a degraded need fails the wire's own rules: %v", err)
 	}
 }
 
@@ -247,7 +260,7 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 
 var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
 
-func TestStageProgressTagsEverythingWithItsStage(t *testing.T) {
+func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -263,22 +276,30 @@ func TestStageProgressTagsEverythingWithItsStage(t *testing.T) {
 		t.Fatalf("close() error = %v", err)
 	}
 	events := stream.recorded()
-	if len(events) != 3 {
-		t.Fatalf("got %d events, want 3", len(events))
+	if len(events) != 4 {
+		t.Fatalf("got %d events, want a message, an output line, and a detail scope's start and end", len(events))
 	}
 
-	said := events[0].GetProgress()
-	if StageID(said.GetStageId()) != stage.ID {
-		t.Errorf("Say() StageId = %x, want %x", said.GetStageId(), stage.ID)
+	said, wrote, opened, closed := events[0], events[1], events[2], events[3]
+	if said.GetEvent() != nil || said.GetMessage() != "provisioning the infra stack" || StageID(said.GetSpanId()) != stage.ID {
+		t.Errorf("Say() = %T %q in %x, want a message-only line in the stage %x", said.GetEvent(), said.GetMessage(), said.GetSpanId(), stage.ID)
 	}
-	if events[1].GetLog().GetMessage() != "engine said something" {
-		t.Errorf("Detail() log = %q", events[1].GetLog().GetMessage())
+	if wrote.GetOutput() == nil || wrote.GetMessage() != "engine said something" || StageID(wrote.GetSpanId()) != stage.ID {
+		t.Errorf("Detail() = %T %q in %x, want an output line in the stage %x", wrote.GetEvent(), wrote.GetMessage(), wrote.GetSpanId(), stage.ID)
 	}
-	if StageID(events[1].GetLog().GetStageId()) != stage.ID {
-		t.Errorf("Detail() StageId = %x, want %x", events[1].GetLog().GetStageId(), stage.ID)
+	if opened.GetStarted() == nil || opened.GetMessage() != "infra" || StageID(opened.GetStarted().GetParentSpanId()) != stage.ID {
+		t.Errorf("Span() opens %T %q under %x, want the detail scope \"infra\" under the stage %x", opened.GetEvent(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), stage.ID)
 	}
-	if span := events[2].GetSpan(); StageID(span.GetParentSpanId()) != stage.ID {
-		t.Errorf("Span() ParentSpanId = %x, want the reporter's stage %x", span.GetParentSpanId(), stage.ID)
+	if closed.GetEnded() == nil || string(closed.GetSpanId()) != string(opened.GetSpanId()) {
+		t.Errorf("Span() closes %T %x, want the scope it opened, %x", closed.GetEvent(), closed.GetSpanId(), opened.GetSpanId())
+	}
+	if opened.GetTimeUnixNano() != time.Unix(1000, 0).UnixNano() || closed.GetTimeUnixNano() != time.Unix(1005, 0).UnixNano() {
+		t.Errorf("the detail scope runs %d to %d, want its own start and end", opened.GetTimeUnixNano(), closed.GetTimeUnixNano())
+	}
+	for i, event := range events {
+		if err := protovalidate.Validate(event); err != nil {
+			t.Errorf("event %d fails the wire's own rules: %v", i, err)
+		}
 	}
 }
 
@@ -293,34 +314,31 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 	before := time.Now().UnixNano()
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
-	progress.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
 	after := time.Now().UnixNano()
+	progress.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
 	events := stream.recorded()
-	if len(events) != 3 {
-		t.Fatalf("got %d events, want 3", len(events))
+	if len(events) != 4 {
+		t.Fatalf("got %d events, want 4", len(events))
 	}
-	for i, event := range events {
+	for i, event := range events[:2] {
 		if at := event.GetTimeUnixNano(); at < before || at > after {
 			t.Errorf("event %d is stamped %d, want the time it was sent, between %d and %d", i, at, before, after)
 		}
+		if string(event.GetSpanId()) != string(stage.ID[:]) {
+			t.Errorf("event %d span id = %x, want the stage's id %x", i, event.GetSpanId(), stage.ID)
+		}
+	}
+	for i, event := range events {
 		if event.GetLevel() != progressv1.Level_LEVEL_INFO {
 			t.Errorf("event %d level = %v, want INFO", i, event.GetLevel())
 		}
 		if event.GetPhase() != progressv1.Phase_PHASE_PROVISION {
 			t.Errorf("event %d phase = %v, want the stage's provision phase", i, event.GetPhase())
 		}
-	}
-	for i, event := range events[:2] {
-		if string(event.GetSpanId()) != string(stage.ID[:]) {
-			t.Errorf("event %d span id = %x, want the stage's id %x", i, event.GetSpanId(), stage.ID)
-		}
-	}
-	if span := events[2]; len(span.GetSpanId()) == 0 || string(span.GetSpanId()) != string(span.GetSpan().GetSpanId()) {
-		t.Errorf("a span's envelope names span %x, want the span it closes, %x", span.GetSpanId(), span.GetSpan().GetSpanId())
 	}
 }
 
@@ -358,7 +376,7 @@ func TestAStagesWarningIsAMessageOnlyWarnScopedToTheStage(t *testing.T) {
 	}
 }
 
-func TestAStagesDebugLineIsADebugLogScopedToTheStage(t *testing.T) {
+func TestAStagesDebugLineIsADebugOutputLineScopedToTheStage(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -378,11 +396,8 @@ func TestAStagesDebugLineIsADebugLogScopedToTheStage(t *testing.T) {
 	if line.GetLevel() != progressv1.Level_LEVEL_DEBUG {
 		t.Errorf("level = %v, want DEBUG", line.GetLevel())
 	}
-	if got := line.GetLog(); got.GetMessage() != "+  aws:s3:Bucket assets creating (0s)" || StageID(got.GetStageId()) != testStage.ID {
-		t.Errorf("log = %q in %x, want the line in the stage %x", got.GetMessage(), got.GetStageId(), testStage.ID)
-	}
-	if line.GetMessage() != line.GetLog().GetMessage() {
-		t.Errorf("envelope message = %q, want the line", line.GetMessage())
+	if line.GetOutput() == nil || line.GetMessage() != "+  aws:s3:Bucket assets creating (0s)" {
+		t.Errorf("Debug() = %T %q, want the line as output", line.GetEvent(), line.GetMessage())
 	}
 	if line.GetPhase() != testStage.Phase || StageID(line.GetSpanId()) != testStage.ID {
 		t.Errorf("scope = %v %x, want the stage's %v %x", line.GetPhase(), line.GetSpanId(), testStage.Phase, testStage.ID)
@@ -421,27 +436,13 @@ func TestStageProgressStripsControlCharacters(t *testing.T) {
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
-	if got := stream.recorded()[0].GetProgress().GetMessage(); got != "clearing the screen[2J now" {
+	if got := stream.recorded()[0].GetMessage(); got != "clearing the screen[2J now" {
 		t.Errorf("Say() message = %q, want the control characters gone", got)
 	}
 }
 
 func TestEventConstructors(t *testing.T) {
 	t.Parallel()
-
-	stage := testStage
-
-	if got := stageProgressEvent(stage.ID, "deleting").GetProgress(); StageID(got.GetStageId()) != stage.ID {
-		t.Errorf("stageProgressEvent() StageId = %x, want %x", got.GetStageId(), stage.ID)
-	}
-	if got := stageProgressEvent(stage.ID, "deleting").GetProgress().GetMessage(); got != "deleting" {
-		t.Errorf("stageProgressEvent() message = %q", got)
-	}
-
-	degraded := degradedEvent("web", edge.NeedEdgeMiddleware, "the edge cannot run code").GetDegraded()
-	if degraded.GetNeed() != string(edge.NeedEdgeMiddleware) {
-		t.Errorf("degradedEvent() Need = %q", degraded.GetNeed())
-	}
 
 	manual := dnsManualRecordsEvent("add these", []edge.Record{{Name: "app.example.com", Type: edge.RecordTypeCNAME, Value: "front"}}, "note").GetDnsManualRecords()
 	if len(manual.GetRecords()) != 1 || manual.GetRecords()[0].GetName() != "app.example.com" {

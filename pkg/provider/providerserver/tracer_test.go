@@ -8,13 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestEventTraceDeclareStagesSendsAStagePlanEvent(t *testing.T) {
+func TestDeclaringStagesStartsEachOneTitledUnderItsParent(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -23,34 +25,39 @@ func TestEventTraceDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
 	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISION)
-	tracer.DeclareStages(unit)
-	tracer.DeclareStages(phase)
+	tracer.Start(time.Now(), unit, phase)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
 	events := stream.recorded()
 	if len(events) != 2 {
-		t.Fatalf("got %d events, want 2", len(events))
+		t.Fatalf("got %d events, want one started event per stage", len(events))
 	}
 
-	first := events[0].GetStagePlan()
-	if len(first.GetStages()) != 1 || first.GetStages()[0].GetTitle() != "Environment" {
-		t.Fatalf("first StagePlanEvent stages = %+v", first.GetStages())
+	opened, nested := events[0], events[1]
+	if opened.GetStarted() == nil || nested.GetStarted() == nil {
+		t.Fatalf("bodies = %T, %T, want both started", opened.GetEvent(), nested.GetEvent())
 	}
-	if len(first.GetStages()[0].GetParentId()) != 0 {
-		t.Errorf("unit ParentId = %x, want empty (a unit is a root)", first.GetStages()[0].GetParentId())
+	if opened.GetMessage() != "Environment" || StageID(opened.GetSpanId()) != unit.ID {
+		t.Errorf("the unit starts as %q %x, want \"Environment\" %x", opened.GetMessage(), opened.GetSpanId(), unit.ID)
 	}
-	if got := first.GetStages()[0].GetPhase(); got != progressv1.Phase_PHASE_UNSPECIFIED {
-		t.Errorf("unit Phase = %v, want PHASE_UNSPECIFIED", got)
+	if len(opened.GetStarted().GetParentSpanId()) != 0 {
+		t.Errorf("unit parent = %x, want none (a unit is a root)", opened.GetStarted().GetParentSpanId())
 	}
-
-	second := events[1].GetStagePlan()
-	if string(second.GetStages()[0].GetParentId()) != string(first.GetStages()[0].GetId()) {
-		t.Error("phase stage's ParentId does not match the declared unit's Id")
+	if got := opened.GetPhase(); got != progressv1.Phase_PHASE_UNSPECIFIED {
+		t.Errorf("unit phase = %v, want PHASE_UNSPECIFIED", got)
 	}
-	if got := second.GetStages()[0].GetPhase(); got != progressv1.Phase_PHASE_PROVISION {
-		t.Errorf("phase stage Phase = %v, want PHASE_PROVISION", got)
+	if StageID(nested.GetStarted().GetParentSpanId()) != unit.ID {
+		t.Errorf("phase parent = %x, want the unit %x", nested.GetStarted().GetParentSpanId(), unit.ID)
+	}
+	if nested.GetMessage() != "Provisioning" || nested.GetPhase() != progressv1.Phase_PHASE_PROVISION {
+		t.Errorf("the phase starts as %q in %v, want \"Provisioning\" in the provision phase", nested.GetMessage(), nested.GetPhase())
+	}
+	for i, event := range events {
+		if err := protovalidate.Validate(event); err != nil {
+			t.Errorf("started event %d fails the wire's own rules: %v", i, err)
+		}
 	}
 }
 
@@ -62,7 +69,7 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	tracer := newEventTrace(sender)
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
-	tracer.DeclareStages(
+	tracer.Start(time.Now(),
 		unit,
 		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILD),
 		PhaseStage(unit.Name, progressv1.Phase_PHASE_DEPLOY),
@@ -74,7 +81,7 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
-	stages := stream.recorded()[0].GetStagePlan().GetStages()
+	events := stream.recorded()
 	for i, want := range []string{
 		"9f2ecbbdfa2db89d",
 		"4b5ac07b8124802c",
@@ -83,11 +90,11 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 		"92988f8d30813314",
 		"7da3bb7483e4884a",
 	} {
-		if got := hex.EncodeToString(stages[i].GetId()); got != want {
+		if got := hex.EncodeToString(events[i].GetSpanId()); got != want {
 			t.Errorf("stage %d id = %s, want the naming digest %s", i, got, want)
 		}
-		if len(stages[i].GetId()) != naming.StageIDLen {
-			t.Errorf("stage %d id is %d bytes, want %d", i, len(stages[i].GetId()), naming.StageIDLen)
+		if len(events[i].GetSpanId()) != naming.StageIDLen {
+			t.Errorf("stage %d id is %d bytes, want %d", i, len(events[i].GetSpanId()), naming.StageIDLen)
 		}
 	}
 }
@@ -108,7 +115,7 @@ func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	}
 }
 
-func TestEventTraceSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
+func TestAnEndedScopeNamesItsStageEndsAtItsEndAndCarriesItsStartAndAttributes(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -119,36 +126,40 @@ func TestEventTraceSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	child := NewStage(root, "web")
 	start := time.Unix(1000, 0)
 	end := time.Unix(1005, 0)
-	tracer.Span(child, progressv1.Phase_PHASE_PROVISION, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
+	tracer.End(child, progressv1.Phase_PHASE_PROVISION, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
-	span := stream.recorded()[0].GetSpan()
-	if string(span.GetSpanId()) != string(child.ID[:]) {
-		t.Error("SpanEvent.SpanId does not match the stage's id")
+	event := stream.recorded()[0]
+	ended := event.GetEnded()
+	if ended == nil {
+		t.Fatalf("body = %T, want ended", event.GetEvent())
 	}
-	if string(span.GetParentSpanId()) != string(root.ID[:]) {
-		t.Error("SpanEvent.ParentSpanId does not match the parent stage's id")
+	if StageID(event.GetSpanId()) != child.ID {
+		t.Errorf("span id = %x, want the stage's id %x", event.GetSpanId(), child.ID)
 	}
-	if span.GetName() != "web" {
-		t.Errorf("SpanEvent.Name = %q, want %q", span.GetName(), "web")
+	if event.GetPhase() != progressv1.Phase_PHASE_PROVISION {
+		t.Errorf("phase = %v, want the provision phase", event.GetPhase())
 	}
-	if span.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
-		t.Errorf("SpanEvent.Status = %v, want OK", span.GetStatus())
+	if ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+		t.Errorf("status = %v, want OK", ended.GetStatus())
 	}
-	if span.GetStartTimeUnixNano() != start.UnixNano() || span.GetEndTimeUnixNano() != end.UnixNano() {
-		t.Errorf("SpanEvent times = %d/%d, want %d/%d", span.GetStartTimeUnixNano(), span.GetEndTimeUnixNano(), start.UnixNano(), end.UnixNano())
+	if ended.GetStartTimeUnixNano() != start.UnixNano() || event.GetTimeUnixNano() != end.UnixNano() {
+		t.Errorf("times = %d/%d, want the scope's start %d and its end %d on the envelope", ended.GetStartTimeUnixNano(), event.GetTimeUnixNano(), start.UnixNano(), end.UnixNano())
 	}
-	if got := attributeValue(span.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_APP); got != "web" {
+	if got := attributeValue(ended.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_APP); got != "web" {
 		t.Errorf("APP attribute = %q, want the string key a provider sets mapped onto the wire enum", got)
 	}
-	if got := attributeValue(span.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT); got != "3" {
+	if got := attributeValue(ended.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT); got != "3" {
 		t.Errorf("RESOURCE_COUNT attribute = %q", got)
+	}
+	if err := protovalidate.Validate(event); err != nil {
+		t.Errorf("the ended event fails the wire's own rules: %v", err)
 	}
 }
 
-func TestEventTraceSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
+func TestAFailedScopeEndsWithAnErrorKindNeverRawText(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -157,21 +168,22 @@ func TestEventTraceSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 
 	secret := "postgres://user:hunter2@10.0.0.1:5432/db AKIAABCDEF1234567890"
 	stage := UnitStage(naming.UnitEnvironment, "Environment")
-	tracer.Span(stage, progressv1.Phase_PHASE_PROVISION, time.Now(), time.Now(), errors.New(secret))
+	tracer.End(stage, progressv1.Phase_PHASE_PROVISION, time.Now(), time.Now(), errors.New(secret))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
-	span := stream.recorded()[0].GetSpan()
-	if span.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-		t.Fatalf("SpanEvent.Status = %v, want ERROR", span.GetStatus())
+	event := stream.recorded()[0]
+	ended := event.GetEnded()
+	if ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Fatalf("status = %v, want ERROR", ended.GetStatus())
 	}
-	got := attributeValue(span.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND)
+	got := attributeValue(ended.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND)
 	if got == "" {
-		t.Fatal("no ATTRIBUTE_KEY_ERROR_KIND attribute on a failed span")
+		t.Fatal("no ATTRIBUTE_KEY_ERROR_KIND attribute on a failed scope")
 	}
-	if strings.Contains(got, "hunter2") {
-		t.Fatal("ERROR_KIND attribute contained the raw error text")
+	if strings.Contains(got, "hunter2") || strings.Contains(event.GetMessage(), "hunter2") {
+		t.Fatal("the ended event carries the raw error text")
 	}
 	if got != provider.ErrorKindFailed {
 		t.Errorf("ERROR_KIND = %q, want a bounded classification", got)

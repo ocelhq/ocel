@@ -83,8 +83,8 @@ func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.Oper
 			asked.records = append(asked.records, dns.GetRecords()...)
 			asked.notes = append(asked.notes, dns.GetNotes()...)
 		}
-		if log := event.GetLog(); log != nil {
-			said = append(said, log.GetMessage())
+		if event.GetOutput() != nil {
+			said = append(said, event.GetMessage())
 		}
 		if done := event.GetResult(); done != nil {
 			result = done

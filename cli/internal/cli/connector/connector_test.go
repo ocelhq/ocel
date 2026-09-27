@@ -174,6 +174,24 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	}
 }
 
+func TestAddRelaysWhatTheProviderSaysWhileItInstalls(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+
+	var stdout, stderr bytes.Buffer
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout, &stderr); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "  wrote the connector\n") {
+		t.Errorf("stdout = %q, want the line the provider said while installing", stdout.String())
+	}
+}
+
 func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t)

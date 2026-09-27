@@ -178,19 +178,16 @@ var fakeStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisionin
 
 const fakeOversizedEventBytes = 1 << 16
 
+func fakeSaid(message string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: fakeStageID, Message: message}
+}
+
 func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if s.mode == "oversized-event" {
-		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
-				StageId: fakeStageID,
-				Message: strings.Repeat("x", fakeOversizedEventBytes),
-			}},
-		})
+		return stream.Send(fakeSaid(strings.Repeat("x", fakeOversizedEventBytes)))
 	}
 
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{StageId: fakeStageID, Message: "step 1"}},
-	}); err != nil {
+	if err := stream.Send(fakeSaid("step 1")); err != nil {
 		return err
 	}
 
@@ -231,9 +228,7 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.Boot
 		return err
 	}
 
-	if err := stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{StageId: fakeStageID, Message: "bootstrapping"}},
-	}); err != nil {
+	if err := stream.Send(fakeSaid("bootstrapping")); err != nil {
 		return err
 	}
 	if s.mode == "fail" {

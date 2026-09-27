@@ -157,7 +157,7 @@ func newProgress(sender *eventStream, stage Stage) edge.Progress {
 }
 
 func (r *stageProgress) Say(message string) {
-	r.sender.send(r.stage.scoped(stageProgressEvent(r.stage.ID, sanitizeMessage(message))))
+	r.sender.send(r.stage.scoped(&progressv1.OperationEvent{Message: sanitizeMessage(message)}))
 }
 
 func (r *stageProgress) Warn(message string) {
@@ -168,27 +168,17 @@ func (r *stageProgress) Warn(message string) {
 }
 
 func (r *stageProgress) Detail(message string) {
-	r.sender.send(r.stage.scoped(logEvent(r.stage.ID, sanitizeMessage(message))))
+	r.sender.send(r.stage.scoped(outputEvent(progressv1.Level_LEVEL_INFO, sanitizeMessage(message))))
 }
 
 func (r *stageProgress) Debug(line string) {
-	event := logEvent(r.stage.ID, sanitizeMessage(line))
-	event.Level = progressv1.Level_LEVEL_DEBUG
-	r.sender.send(r.stage.scoped(event))
+	r.sender.send(r.stage.scoped(outputEvent(progressv1.Level_LEVEL_DEBUG, sanitizeMessage(line))))
 }
 
 func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...edge.Attr) {
-	r.trace.Span(NewStage(r.stage, name), r.stage.Phase, start, end, err, attrs...)
-}
-
-func stageProgressEvent(id StageID, message string) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{
-		Message: message,
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
-			Message: message,
-			StageId: id[:],
-		}},
-	}
+	detail := NewStage(r.stage, name)
+	r.trace.Start(start, detail)
+	r.trace.End(detail, detail.Phase, start, end, err, attrs...)
 }
 
 func degradedEvent(app string, need edge.Need, detail string) *progressv1.OperationEvent {
@@ -196,10 +186,7 @@ func degradedEvent(app string, need edge.Need, detail string) *progressv1.Operat
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
 		Subject: app,
-		Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{
-			Need:   string(need),
-			Detail: detail,
-		}},
+		Message: string(need) + ": " + detail,
 	}
 }
 
@@ -231,10 +218,11 @@ func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...stri
 	}
 }
 
-func logEvent(id StageID, message string) *progressv1.OperationEvent {
+func outputEvent(level progressv1.Level, line string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Message: message,
-		Event:   &progressv1.OperationEvent_Log{Log: &progressv1.LogEvent{Message: message, StageId: id[:]}},
+		Level:   level,
+		Message: line,
+		Event:   &progressv1.OperationEvent_Output{Output: &progressv1.Output{}},
 	}
 }
 

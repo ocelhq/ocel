@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -166,4 +167,27 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			t.Errorf("stdout = %q, want nothing said about a bootstrap that is what it should be", out.String())
 		}
 	})
+}
+
+func TestAHealingBootstrapRelaysWhatItSaysWritesAndWarnsButNotItsDebugOutput(t *testing.T) {
+	span := []byte("provisn1")
+	output := func(level progressv1.Level, line string) *progressv1.OperationEvent {
+		return &progressv1.OperationEvent{Level: level, SpanId: span, Message: line, Event: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}}
+	}
+	var out bytes.Buffer
+	rep := runui.Plain(runui.Presentation{}, &out)
+	for _, ev := range []*progressv1.OperationEvent{
+		{Level: progressv1.Level_LEVEL_INFO, SpanId: span, Message: "Environment", Event: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}},
+		{Level: progressv1.Level_LEVEL_INFO, SpanId: span, Message: "provisioning the isr stack"},
+		output(progressv1.Level_LEVEL_INFO, "created the queue"),
+		output(progressv1.Level_LEVEL_DEBUG, "+  aws:sqs:Queue isr creating (0s)"),
+		{Level: progressv1.Level_LEVEL_WARN, SpanId: span, Message: "the old queue outlived its release"},
+	} {
+		reportEvent(rep, ev)
+	}
+
+	want := "  provisioning the isr stack\n  created the queue\n⚠ the old queue outlived its release\n"
+	if out.String() != want {
+		t.Errorf("relayed %q, want %q", out.String(), want)
+	}
 }

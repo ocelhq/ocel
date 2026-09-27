@@ -80,8 +80,8 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			ConfigJson: config,
 			Compute:    opts.compute,
 		}, contractv1connect.ProviderServiceClient.InstallConnector, func(ev *progressv1.OperationEvent) {
-			if said := ev.GetProgress().GetMessage(); said != "" {
-				fmt.Fprintf(stdout, "  %s\n", said)
+			if line := said(ev); line != "" {
+				fmt.Fprintf(stdout, "  %s\n", line)
 			}
 			if result := ev.GetResult(); result.GetSuccess() {
 				at = result.GetConnector()

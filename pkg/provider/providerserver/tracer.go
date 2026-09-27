@@ -51,7 +51,9 @@ func (s Stage) scoped(ev *progressv1.OperationEvent) *progressv1.OperationEvent 
 func (s Stage) phaseStages() []Stage {
 	out := make([]Stage, 0, len(s.Phases))
 	for _, phase := range s.Phases {
-		out = append(out, PhaseStage(s.Name, phase))
+		stage := PhaseStage(s.Name, phase)
+		stage.Subject = s.Subject
+		out = append(out, stage)
 	}
 	return out
 }
@@ -125,7 +127,7 @@ func PhaseStage(unitName string, phase progressv1.Phase) Stage {
 }
 
 func NewStage(parent Stage, title string) Stage {
-	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title), Subject: parent.Subject}
+	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title), Phase: parent.Phase, Subject: parent.Subject}
 }
 
 var attributeKeys = map[string]progressv1.AttributeKey{
@@ -165,7 +167,7 @@ func (s *stageScope) declare(stages ...Stage) {
 		}
 	}
 	s.mu.Unlock()
-	s.trace.DeclareStages(fresh...)
+	s.trace.Start(time.Now(), fresh...)
 }
 
 func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
@@ -173,7 +175,7 @@ func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 	start := time.Now()
 	run := &unitRun{scope: s, stage: stage}
 	err := do(run)
-	s.trace.Span(stage, run.last, start, time.Now(), err)
+	s.trace.End(stage, run.last, start, time.Now(), err)
 	return err
 }
 
@@ -190,7 +192,7 @@ func (u *unitRun) phase(phase progressv1.Phase, do func(edge.Progress) error) er
 	u.last = phase
 	start := time.Now()
 	err := do(newProgress(u.scope.sender, working))
-	u.scope.trace.Span(working, phase, start, time.Now(), err)
+	u.scope.trace.End(working, phase, start, time.Now(), err)
 	return err
 }
 
@@ -202,25 +204,19 @@ func newEventTrace(sender *eventStream) *eventTrace {
 	return &eventTrace{sender: sender}
 }
 
-func (t *eventTrace) DeclareStages(stages ...Stage) {
-	if len(stages) == 0 {
-		return
+func (t *eventTrace) Start(at time.Time, stages ...Stage) {
+	for _, s := range stages {
+		t.sender.send(s.scoped(&progressv1.OperationEvent{
+			TimeUnixNano: at.UnixNano(),
+			Message:      s.Title,
+			Event: &progressv1.OperationEvent_Started{Started: &progressv1.Started{
+				ParentSpanId: nonZeroStageID(s.ParentID),
+			}},
+		}))
 	}
-	pb := make([]*progressv1.Stage, len(stages))
-	for i, s := range stages {
-		pb[i] = &progressv1.Stage{
-			Id:       s.ID[:],
-			ParentId: nonZeroStageID(s.ParentID),
-			Title:    s.Title,
-			Phase:    s.Phase,
-		}
-	}
-	t.sender.send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{Stages: pb}},
-	})
 }
 
-func (t *eventTrace) Span(stage Stage, phase progressv1.Phase, start, end time.Time, err error, attrs ...edge.Attr) {
+func (t *eventTrace) End(stage Stage, phase progressv1.Phase, start, end time.Time, err error, attrs ...edge.Attr) {
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
@@ -233,16 +229,13 @@ func (t *eventTrace) Span(stage Stage, phase progressv1.Phase, start, end time.T
 	}
 
 	t.sender.send(&progressv1.OperationEvent{
-		Phase:   phase,
-		Subject: stage.Subject,
-		SpanId:  stage.ID[:],
-		Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-			SpanId:            stage.ID[:],
-			ParentSpanId:      nonZeroStageID(stage.ParentID),
-			Name:              stage.Title,
-			StartTimeUnixNano: start.UnixNano(),
-			EndTimeUnixNano:   end.UnixNano(),
+		TimeUnixNano: end.UnixNano(),
+		Phase:        phase,
+		Subject:      stage.Subject,
+		SpanId:       stage.ID[:],
+		Event: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
+			StartTimeUnixNano: start.UnixNano(),
 			Attributes:        pbAttrs,
 		}},
 	})

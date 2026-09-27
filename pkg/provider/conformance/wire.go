@@ -173,6 +173,9 @@ func faults(drawn, applied streamed) []string {
 	if unstamped := drawn.unstamped + applied.unstamped; unstamped > 0 {
 		found = append(found, fmt.Sprintf("%d events on a bootstrap stream lack a time and a level, and every event a provider streams carries both", unstamped))
 	}
+	if open := len(drawn.open) + len(applied.open); open > 0 {
+		found = append(found, fmt.Sprintf("%d scopes on a bootstrap stream were started and never ended, and every scope a run opens ends", open))
+	}
 	return found
 }
 
@@ -181,6 +184,7 @@ type streamed struct {
 	progress  bool
 	logged    bool
 	unstamped int
+	open      map[string]bool
 }
 
 func (s streamed) worked() bool { return s.progress || s.logged }
@@ -189,14 +193,22 @@ func (s *streamed) observe(event *progressv1.OperationEvent) {
 	if event.GetTimeUnixNano() == 0 || event.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
 		s.unstamped++
 	}
-	if shown := event.GetPlan(); shown != nil {
-		s.plan = shown
-	}
-	if event.GetProgress() != nil {
+	switch {
+	case event.GetPlan() != nil:
+		s.plan = event.GetPlan()
+	case event.GetStarted() != nil:
+		if s.open == nil {
+			s.open = map[string]bool{}
+		}
+		s.open[string(event.GetSpanId())] = true
+	case event.GetEnded() != nil:
+		delete(s.open, string(event.GetSpanId()))
+	case event.GetCounter() != nil:
 		s.progress = true
-	}
-	if event.GetLog() != nil {
+	case event.GetOutput() != nil:
 		s.logged = true
+	case event.GetEvent() == nil && event.GetLevel() == progressv1.Level_LEVEL_INFO && len(event.GetSpanId()) > 0:
+		s.progress = true
 	}
 }
 

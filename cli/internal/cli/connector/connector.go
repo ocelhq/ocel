@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 var (
@@ -183,4 +184,11 @@ func listed(values []string) string {
 	written := slices.Clone(values)
 	slices.Sort(written)
 	return strings.Join(written, ", ")
+}
+
+func said(ev *progressv1.OperationEvent) string {
+	if ev.GetEvent() != nil || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
+		return ""
+	}
+	return ev.GetMessage()
 }

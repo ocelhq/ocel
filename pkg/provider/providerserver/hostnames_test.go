@@ -128,7 +128,7 @@ func TestAddHostnameSaysWhatTheEdgeAsksOfYouAsItBinds(t *testing.T) {
 	}
 	var said []string
 	for stream.Receive() {
-		said = append(said, stream.Msg().GetProgress().GetMessage())
+		said = append(said, stream.Msg().GetMessage())
 	}
 	if err := stream.Err(); err != nil {
 		t.Fatal(err)

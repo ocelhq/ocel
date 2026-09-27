@@ -298,8 +298,12 @@ func refusedPlanOn(
 
 func entered(t *testing.T, events []*progressv1.OperationEvent, app string) bool {
 	t.Helper()
+	titles := map[string]string{}
 	for _, event := range events {
-		if event.GetSpan().GetName() == app {
+		if event.GetStarted() != nil {
+			titles[string(event.GetSpanId())] = event.GetMessage()
+		}
+		if event.GetEnded() != nil && titles[string(event.GetSpanId())] == app {
 			return true
 		}
 	}

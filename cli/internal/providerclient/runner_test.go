@@ -285,8 +285,8 @@ func TestDeploy(t *testing.T) {
 		if len(events) != 2 {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
-		if events[0].GetProgress() == nil {
-			t.Errorf("events[0] is %T, want a ProgressEvent", events[0].GetEvent())
+		if events[0].GetEvent() != nil || events[0].GetMessage() != "step 1" {
+			t.Errorf("events[0] is %T %q, want the message-only line \"step 1\"", events[0].GetEvent(), events[0].GetMessage())
 		}
 		result := events[1].GetResult()
 		if result == nil || !result.GetSuccess() {

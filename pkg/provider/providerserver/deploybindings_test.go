@@ -256,7 +256,7 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 		}
 		var messages []string
 		for _, event := range events {
-			messages = append(messages, event.GetProgress().GetMessage())
+			messages = append(messages, saidLine(event))
 		}
 		return messages
 	}

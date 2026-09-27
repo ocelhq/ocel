@@ -18,45 +18,62 @@ import (
 func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
 	t.Helper()
 
-	declared := map[string]*progressv1.Stage{}
+	titles := map[string]string{}
 	var order []string
-	var units []string
-	spans := map[string]int{}
+	ended := map[string]int{}
 	for _, event := range events {
-		for _, stage := range event.GetStagePlan().GetStages() {
-			key := string(stage.GetId())
-			if _, seen := declared[key]; seen {
+		key := string(event.GetSpanId())
+		if event.GetStarted() != nil {
+			if _, seen := titles[key]; seen {
+				t.Errorf("scope %q is started twice", event.GetMessage())
 				continue
 			}
-			declared[key] = stage
+			titles[key] = event.GetMessage()
 			order = append(order, key)
-			if len(stage.GetParentId()) == 0 {
-				units = append(units, key)
-			}
 		}
-		if span := event.GetSpan(); span != nil {
-			spans[string(span.GetSpanId())]++
+		if event.GetEnded() != nil {
+			if _, started := titles[key]; !started {
+				t.Errorf("an ended event names span %x, which no started event opened", event.GetSpanId())
+			}
+			ended[key]++
 		}
 	}
-	if len(declared) == 0 {
-		t.Fatal("the run declared no stages at all")
+	if len(order) == 0 {
+		t.Fatal("the run started no scope at all")
 	}
 
-	t.Run("every declared stage is closed by a span", func(t *testing.T) {
-		for _, key := range order {
-			if spans[key] == 0 {
-				t.Errorf("stage %q was declared and no span has its id: a span whose span_id equals the stage id is the only end-of-stage signal, so this stage never ends", declared[key].GetTitle())
-			}
+	for _, key := range order {
+		if ended[key] != 1 {
+			t.Errorf("scope %q is ended %d times, want every scope a run opens ended exactly once", titles[key], ended[key])
 		}
-	})
+	}
+}
 
-	t.Run("a unit is closed exactly once", func(t *testing.T) {
-		for _, key := range units {
-			if spans[key] > 1 {
-				t.Errorf("unit %q is closed by %d spans, want one span covering the unit's whole extent", declared[key].GetTitle(), spans[key])
-			}
+func saidLine(event *progressv1.OperationEvent) string {
+	if event.GetEvent() != nil || event.GetLevel() != progressv1.Level_LEVEL_INFO {
+		return ""
+	}
+	return event.GetMessage()
+}
+
+type startedScope struct {
+	id, parent, title string
+	phase             progressv1.Phase
+}
+
+func startedScopes(events []*progressv1.OperationEvent) []startedScope {
+	var out []startedScope
+	for _, event := range events {
+		if started := event.GetStarted(); started != nil {
+			out = append(out, startedScope{
+				id:     string(event.GetSpanId()),
+				parent: string(started.GetParentSpanId()),
+				title:  event.GetMessage(),
+				phase:  event.GetPhase(),
+			})
 		}
-	})
+	}
+	return out
 }
 
 func recorded(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) []*progressv1.OperationEvent {
@@ -68,7 +85,7 @@ func recorded(stream *connect.ServerStreamForClient[progressv1.OperationEvent]) 
 	return events
 }
 
-func TestDeployClosesEveryDeclaredStageAndEachUnitOnce(t *testing.T) {
+func TestEveryScopeADeployOpensIsEndedExactlyOnce(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -79,7 +96,7 @@ func TestDeployClosesEveryDeclaredStageAndEachUnitOnce(t *testing.T) {
 	assertStagesClose(t, events)
 }
 
-func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
+func TestDeployStartsEveryUnitAndItsPhasesBeforeAnyScopeEnds(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -91,32 +108,32 @@ func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
 	var roster []string
 	phases := map[string][]string{}
 	units := map[string]string{}
-	first := true
+	ending := false
 	for _, event := range events {
-		plan := event.GetStagePlan()
-		if plan == nil {
+		if event.GetEnded() != nil {
+			ending = true
+		}
+		started := event.GetStarted()
+		if started == nil {
 			continue
 		}
-		for _, stage := range plan.GetStages() {
-			parent := string(stage.GetParentId())
-			if parent == "" {
-				if !first {
-					t.Errorf("unit %q is declared after the roster, want every unit on the spine named up front", stage.GetTitle())
-				}
-				units[string(stage.GetId())] = stage.GetTitle()
-				roster = append(roster, stage.GetTitle())
-				continue
+		parent := string(started.GetParentSpanId())
+		if parent == "" {
+			if ending {
+				t.Errorf("unit %q starts after a scope ended, want every unit on the spine named up front", event.GetMessage())
 			}
-			unit, declared := units[parent]
-			if !declared {
-				t.Fatalf("phase %q is declared under a unit the roster never named", stage.GetTitle())
-			}
-			if !first {
-				t.Errorf("phase %q is declared after the roster, want every phase named with the unit that runs it", stage.GetTitle())
-			}
-			phases[unit] = append(phases[unit], stage.GetTitle())
+			units[string(event.GetSpanId())] = event.GetMessage()
+			roster = append(roster, event.GetMessage())
+			continue
 		}
-		first = false
+		unit, isUnit := units[parent]
+		if !isUnit {
+			continue
+		}
+		if ending {
+			t.Errorf("phase %q starts after a scope ended, want every phase named with the unit that runs it", event.GetMessage())
+		}
+		phases[unit] = append(phases[unit], event.GetMessage())
 	}
 
 	want := []string{"Environment", "Shared infrastructure", "web", "Edge", "Hostnames", "Promotion"}
@@ -124,22 +141,20 @@ func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
 		t.Errorf("roster = %v, want %v", roster, want)
 	}
 	if got := strings.Join(phases["Environment"], ","); got != "Provisioning" {
-		t.Errorf("Environment declares the phases %q, want it named before the first one closes", got)
+		t.Errorf("Environment starts the phases %q, want it named before the first one closes", got)
 	}
 }
 
 func phasesUnder(events []*progressv1.OperationEvent, unit string) []progressv1.Phase {
 	units := map[string]string{}
 	var phases []progressv1.Phase
-	for _, event := range events {
-		for _, stage := range event.GetStagePlan().GetStages() {
-			if len(stage.GetParentId()) == 0 {
-				units[string(stage.GetId())] = stage.GetTitle()
-				continue
-			}
-			if units[string(stage.GetParentId())] == unit {
-				phases = append(phases, stage.GetPhase())
-			}
+	for _, scope := range startedScopes(events) {
+		if scope.parent == "" {
+			units[scope.id] = scope.title
+			continue
+		}
+		if units[scope.parent] == unit {
+			phases = append(phases, scope.phase)
 		}
 	}
 	return phases
@@ -172,11 +187,9 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 	}
 
 	app := map[string]bool{}
-	for _, event := range events {
-		for _, stage := range event.GetStagePlan().GetStages() {
-			if stage.GetTitle() == "web" || app[string(stage.GetParentId())] {
-				app[string(stage.GetId())] = true
-			}
+	for _, scope := range startedScopes(events) {
+		if scope.title == "web" || app[scope.parent] {
+			app[scope.id] = true
 		}
 	}
 	var scoped int
@@ -185,6 +198,12 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 			continue
 		}
 		scoped++
+		if event.GetStarted() != nil && len(event.GetStarted().GetParentSpanId()) == 0 {
+			if event.GetSubject() != "web" {
+				t.Errorf("the web unit starts naming %q, want \"web\"", event.GetSubject())
+			}
+			continue
+		}
 		if event.GetSubject() != "web" || event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
 			t.Errorf("an event of the web unit is scoped %q in %v, want \"web\" in the deploy phase", event.GetSubject(), event.GetPhase())
 		}
@@ -204,11 +223,9 @@ func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
 	}
 
 	unit := map[string]bool{}
-	for _, event := range events {
-		for _, stage := range event.GetStagePlan().GetStages() {
-			if stage.GetTitle() == "Edge" || unit[string(stage.GetParentId())] {
-				unit[string(stage.GetId())] = true
-			}
+	for _, scope := range startedScopes(events) {
+		if scope.title == "Edge" || unit[scope.parent] {
+			unit[scope.id] = true
 		}
 	}
 	var scoped int
@@ -244,7 +261,7 @@ func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
 	}
 }
 
-func TestBootstrapClosesEveryDeclaredStage(t *testing.T) {
+func TestBootstrapEndsEveryScopeItStarts(t *testing.T) {
 	t.Run("when the work succeeds", func(t *testing.T) {
 		t.Parallel()
 		client, _ := contractServed(t, "1.0.0")
@@ -275,19 +292,17 @@ func TestBootstrapClosesEveryDeclaredStage(t *testing.T) {
 		}
 		assertStagesClose(t, events)
 
-		declared := map[string]bool{}
-		for _, event := range events {
-			for _, stage := range event.GetStagePlan().GetStages() {
-				declared[string(stage.GetId())] = true
-			}
+		titles := map[string]string{}
+		for _, scope := range startedScopes(events) {
+			titles[scope.id] = scope.title
 		}
 		for _, event := range events {
-			span := event.GetSpan()
-			if span == nil || !declared[string(span.GetSpanId())] {
+			ended := event.GetEnded()
+			if ended == nil {
 				continue
 			}
-			if span.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
-				t.Errorf("the span closing %q reports %v, want ERROR: the work under it failed", span.GetName(), span.GetStatus())
+			if ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+				t.Errorf("the scope %q ends %v, want ERROR: the work under it failed", titles[string(event.GetSpanId())], ended.GetStatus())
 			}
 		}
 	})

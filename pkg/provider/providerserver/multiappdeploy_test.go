@@ -48,10 +48,14 @@ func appBarrier(t *testing.T, width int) func(provider.StackSpec) error {
 }
 
 func spanStatuses(events []*progressv1.OperationEvent) map[string]progressv1.SpanStatus {
+	titles := map[string]string{}
 	statuses := map[string]progressv1.SpanStatus{}
 	for _, event := range events {
-		if span := event.GetSpan(); span != nil {
-			statuses[span.GetName()] = span.GetStatus()
+		if event.GetStarted() != nil {
+			titles[string(event.GetSpanId())] = event.GetMessage()
+		}
+		if ended := event.GetEnded(); ended != nil {
+			statuses[titles[string(event.GetSpanId())]] = ended.GetStatus()
 		}
 	}
 	return statuses

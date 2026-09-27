@@ -147,13 +147,13 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	titles := map[string]string{}
 	parents := map[string]string{}
 	var spoke string
+	for _, scope := range startedScopes(events) {
+		titles[scope.id] = scope.title
+		parents[scope.id] = scope.parent
+	}
 	for _, event := range events {
-		for _, stage := range event.GetStagePlan().GetStages() {
-			titles[string(stage.GetId())] = stage.GetTitle()
-			parents[string(stage.GetId())] = string(stage.GetParentId())
-		}
-		if progress := event.GetProgress(); progress.GetMessage() == marker {
-			spoke = string(progress.GetStageId())
+		if saidLine(event) == marker {
+			spoke = string(event.GetSpanId())
 		}
 	}
 	if spoke == "" {

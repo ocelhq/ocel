@@ -204,18 +204,29 @@ var (
 )
 
 func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: fakeUnitID, Title: "Environment"},
-			{Id: fakePhaseID, ParentId: fakeUnitID, Phase: progressv1.Phase_PHASE_PROVISION},
-		}},
-	}})
+	if err := stream.Send(&progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_INFO,
+		SpanId:  fakeUnitID,
+		Message: "Environment",
+		Event:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
+	}); err != nil {
+		return err
+	}
+	return stream.Send(&progressv1.OperationEvent{
+		Level:  progressv1.Level_LEVEL_INFO,
+		Phase:  progressv1.Phase_PHASE_PROVISION,
+		SpanId: fakePhaseID,
+		Event:  &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
+	})
 }
 
 func fakeProgress(message string) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: fakePhaseID, Message: message},
-	}}
+	return &progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_INFO,
+		Phase:   progressv1.Phase_PHASE_PROVISION,
+		SpanId:  fakePhaseID,
+		Message: message,
+	}
 }
 
 func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string, tier environmentv1.Tier) {
@@ -1009,7 +1020,9 @@ func fakeDegradedEvents() []*progressv1.OperationEvent {
 			continue
 		}
 		events = append(events, &progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{Need: need, Detail: detail}},
+			Level:   progressv1.Level_LEVEL_WARN,
+			Phase:   progressv1.Phase_PHASE_CHECK,
+			Message: need + ": " + detail,
 		})
 	}
 	return events
