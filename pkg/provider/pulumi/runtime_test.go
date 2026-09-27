@@ -57,7 +57,7 @@ func TestTheRuntimeDownloadSaysWhichVersionAndWhereItGoes(t *testing.T) {
 	if _, err := install(ctx, progress); err == nil {
 		t.Fatal("install() under a cancelled context = nil, want the download to stop")
 	}
-	want := "Downloading the Pulumi runtime " + PinnedVersion + " into " + filepath.Join(home, ".ocel", "pulumi", PinnedVersion) + ", once for this machine"
+	want := "Downloading the Pulumi runtime " + PinnedVersion + " into " + filepath.Join(home, cacheDirName, "pulumi", PinnedVersion) + ", once for this machine"
 	if len(progress.said) != 1 || progress.said[0] != want {
 		t.Errorf("install() said %q, want %q", progress.said, want)
 	}

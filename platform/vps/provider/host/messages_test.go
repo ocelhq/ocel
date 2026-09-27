@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func heardAll(t *testing.T, progress *fake.Progress, want ...string) {
@@ -115,7 +116,7 @@ func TestAConnectorInstallSaysWhatItWroteAndWhereTheConsoleReachesIt(t *testing.
 	heardAll(t, progress,
 		"INFO Installed file /usr/local/lib/ocel/connector",
 		"INFO Installed systemd unit ocel-connector.service",
-		"INFO Routed https://box.example.com/.ocel/connector to the connector",
+		"INFO Routed https://box.example.com"+switchboard.ConnectorPath+" to the connector",
 	)
 }
 
@@ -131,7 +132,7 @@ func TestAConnectorRemovalSaysWhatItUnroutedAndRemoved(t *testing.T) {
 		t.Fatalf("Remove() = %v", err)
 	}
 	heardAll(t, progress,
-		"INFO Stopped routing /.ocel/connector to the connector",
+		"INFO Stopped routing "+switchboard.ConnectorPath+" to the connector",
 		"INFO Removed the connector's systemd unit ocel-connector.service, its binary /usr/local/lib/ocel/connector and directory /etc/ocel/connector",
 	)
 }
