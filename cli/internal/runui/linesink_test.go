@@ -404,3 +404,31 @@ func TestAResizeClearsEveryRowTheLiveLineAndItsCursorWrappedInto(t *testing.T) {
 		})
 	}
 }
+
+func TestATickAfterAShrinkNotYetSignalledStillClearsTheRowsTheLineWrappedInto(t *testing.T) {
+	t.Parallel()
+
+	var transcript bytes.Buffer
+	present := Presentation{Width: 80}
+	grouped := newGroupedSink(&transcript, present, nil)
+	rig := newLineRig(t, present, grouped)
+	build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Say("Resolved 3 apps")
+	build.Unit("web", "Building web")
+	before := rig.out.String()
+	rig.width.Store(40)
+	rig.clock.pass(100 * time.Millisecond)
+	rig.tick()
+	written := rig.closed(t)
+
+	term := newTerminal(t, 80)
+	term.write(before)
+	term.resize(40)
+	term.write(strings.TrimPrefix(written, before))
+	if err := grouped.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if got, want := term.screen(), transcript.String(); got != want {
+		t.Fatalf("screen after the tick and close\n%q\nwant the transcript alone\n%q", got, want)
+	}
+}

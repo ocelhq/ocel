@@ -35,6 +35,7 @@ type LineSink struct {
 	closed  bool
 	ticking bool
 	pace    func(running bool)
+	measure func() int
 
 	stop    func()
 	looping chan struct{}
@@ -87,6 +88,7 @@ func newLineSink(w io.Writer, present Presentation, sources lineSources) *LineSi
 		width:   present.Width,
 		ticking: true,
 		pace:    sources.pace,
+		measure: sources.width,
 		stop: sync.OnceFunc(func() {
 			if sources.release != nil {
 				sources.release()
@@ -109,12 +111,11 @@ func (s *LineSink) loop(sources lineSources, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-sources.ticks:
-			s.mu.Lock()
-			s.draw()
-			s.mu.Unlock()
 		case <-sources.resized:
-			s.resize(sources.width())
 		}
+		s.mu.Lock()
+		s.draw()
+		s.mu.Unlock()
 	}
 }
 
@@ -134,45 +135,41 @@ func (s *LineSink) Receive(ev *streamv1.RunEvent) {
 	s.draw()
 }
 
-func (s *LineSink) resize(width int) {
-	if width <= 0 {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.width = width
-	rowsAbove := displayWidth(s.drawn) / width
-	if rowsAbove == 0 {
-		s.draw()
-		return
-	}
-	s.drawn = s.live.render(width)
-	fmt.Fprintf(s.w, "%s\x1b[%dA\r\x1b[J%s%s", syncStart, rowsAbove, s.painted(s.drawn), syncEnd)
-}
-
-func (s *LineSink) painted(line string) string {
+func (s *LineSink) paintGlyph(line string) string {
 	_, size := utf8.DecodeRuneInString(line)
 	return colorFor(s.present, color.FgCyan).Sprint(line[:size]) + line[size:]
 }
 
 func (s *LineSink) draw() {
+	rowsAbove := 0
+	if width := s.measure(); width > 0 && width != s.width {
+		rowsAbove = displayWidth(s.drawn) / width
+		s.width = width
+	}
 	line := ""
 	if !s.held {
 		line = s.live.render(s.width)
 	}
 	s.tickWhile(line != "")
-	if s.commits.Len() == 0 && line == s.drawn {
+	flushed := s.commits.Len() > 0
+	if rowsAbove == 0 && !flushed && line == s.drawn {
 		return
 	}
 	var frame bytes.Buffer
 	frame.WriteString(syncStart)
-	if s.commits.Len() > 0 || line == "" {
+	switch {
+	case rowsAbove > 0:
+		fmt.Fprintf(&frame, "\x1b[%dA\r\x1b[J", rowsAbove)
+	case flushed || line == "":
 		frame.WriteString(eraseLine)
-		frame.Write(s.commits.Bytes())
-		s.commits.Reset()
 	}
+	frame.Write(s.commits.Bytes())
+	s.commits.Reset()
 	if line != "" {
-		frame.WriteString(eraseLine + s.painted(line))
+		if flushed || rowsAbove == 0 {
+			frame.WriteString(eraseLine)
+		}
+		frame.WriteString(s.paintGlyph(line))
 	}
 	frame.WriteString(syncEnd)
 	_, _ = s.w.Write(frame.Bytes())
