@@ -27,7 +27,7 @@ func ownedElsewhere(t *testing.T, key, value string) {
 func envRef(t *testing.T, root, key string, opts envOptions, ref envRefOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvRef(context.Background(), clitest.NewDeps(), root, key, opts, ref, &stdout, &stderr); err != nil {
+	if err := runEnvRef(context.Background(), streamedDeps(&stderr), root, key, opts, ref, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvRef(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -36,7 +36,7 @@ func envRef(t *testing.T, root, key string, opts envOptions, ref envRefOptions) 
 func envGet(t *testing.T, root, key string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvGet(context.Background(), clitest.NewDeps(), root, key, opts, &stdout, &stderr); err != nil {
+	if err := runEnvGet(context.Background(), streamedDeps(&stderr), root, key, opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvGet(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -68,12 +68,12 @@ func TestRunEnvRef(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvRef(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", envOptions{}, envRefOptions{key: "STRIPE_API_KEY"}, &stdout, &stderr)
+		err := runEnvRef(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", envOptions{}, envRefOptions{key: "STRIPE_API_KEY"}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvRef at a reference err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "reference") {
-			t.Errorf("refusal = %q, want it to say a reference may only point at a value", err)
+		if !strings.Contains(stderr.String(), "reference") {
+			t.Errorf("stream = %q, want it to say a reference may only point at a value", stderr.String())
 		}
 	})
 
@@ -81,17 +81,17 @@ func TestRunEnvRef(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRef(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
+		if err := runEnvRef(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRef at a cell not set yet err = %v; stderr=%s", err, stderr.String())
 		}
 
 		var out, errs bytes.Buffer
-		err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &out, &errs)
+		err := runEnvGet(context.Background(), streamedDeps(&errs), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &out, &errs)
 		if err == nil {
 			t.Fatal("runEnvGet through a reference to nothing err = nil, want a failure")
 		}
-		if !strings.Contains(err.Error(), "platform/STRIPE_API_KEY") {
-			t.Errorf("failure = %q, want it to name the cell that contains nothing", err)
+		if !strings.Contains(errs.String(), "platform/STRIPE_API_KEY") {
+			t.Errorf("stream = %q, want it to name the cell that contains nothing", errs.String())
 		}
 
 		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
@@ -118,7 +118,7 @@ func TestRunEnvRefs(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRefs(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRefs(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRefs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -132,7 +132,7 @@ func TestRunEnvRefs(t *testing.T) {
 		}
 
 		var none bytes.Buffer
-		if err := runEnvRefs(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", envOptions{}, &none, &stderr); err != nil {
+		if err := runEnvRefs(context.Background(), streamedDeps(&stderr), root, "POSTHOG_ID", envOptions{}, &none, &stderr); err != nil {
 			t.Fatalf("runEnvRefs err = %v", err)
 		}
 		if !strings.Contains(none.String(), "Nothing references") {
@@ -162,12 +162,12 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "an edit in the wrong place", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "an edit in the wrong place", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet through a reference err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "platform/STRIPE_API_KEY") {
-			t.Errorf("refusal = %q, want it to name where the value is edited", err)
+		if !strings.Contains(stderr.String(), "platform/STRIPE_API_KEY") {
+			t.Errorf("stream = %q, want it to name where the value is edited", stderr.String())
 		}
 		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_secret" {
 			t.Errorf("value after the refused edit = %q, want it untouched", got)
@@ -180,7 +180,7 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Removed") {
@@ -206,7 +206,7 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()

@@ -35,13 +35,13 @@ func TestRunEnvSetTakesAVariableABindingReads(t *testing.T) {
 	t.Run("refuses it in a folder, since the binding reads the root value", func(t *testing.T) {
 		root := setUpInlineBindingFixture(t)
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "MAIN_DATABASE_URL", "postgres://u:p@db/main", envOptions{folder: "/web"}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "MAIN_DATABASE_URL", "postgres://u:p@db/main", envOptions{folder: "/web"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet --folder err = nil, want a folder value for a binding's variable refused")
 		}
 		for _, want := range []string{"MAIN_DATABASE_URL", "bindings.postgres.main", "--folder"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want %q named", err, want)
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("stream = %q, want %q named", stderr.String(), want)
 			}
 		}
 	})

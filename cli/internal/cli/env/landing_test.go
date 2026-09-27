@@ -32,7 +32,7 @@ func TestSettingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *te
 func envRm(t *testing.T, root, key string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvRm(context.Background(), clitest.NewDeps(), root, key, opts, &stdout, &stderr); err != nil {
+	if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, key, opts, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvRm(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()

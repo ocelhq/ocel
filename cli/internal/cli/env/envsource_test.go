@@ -69,14 +69,15 @@ func TestEnvSetTakesTheCredentialsATiersEnvSourceLogsInWith(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	err := runEnvSet(context.Background(), clitest.NewDeps(), root, "INFISICAL_CLIENT_SECRET", "secret", envOptions{folder: "/web"}, nil, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "infisical:p-1/prod") {
+	err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "INFISICAL_CLIENT_SECRET", "secret", envOptions{folder: "/web"}, nil, &stdout, &stderr)
+	if err == nil || !strings.Contains(stderr.String(), "infisical:p-1/prod") {
 		t.Fatalf("runEnvSet --folder err = %v, want a credential in a folder refused, naming the env source", err)
 	}
 
 	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-	err = runEnvSet(context.Background(), clitest.NewDeps(), root, "INFISICAL_CLIENT_SECRET", "secret", envOptions{preview: true}, nil, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "declares") {
+	stderr.Reset()
+	err = runEnvSet(context.Background(), streamedDeps(&stderr), root, "INFISICAL_CLIENT_SECRET", "secret", envOptions{preview: true}, nil, &stdout, &stderr)
+	if err == nil || !strings.Contains(stderr.String(), "declares") {
 		t.Fatalf("runEnvSet --preview err = %v, want preview's exec source to have no credential to take", err)
 	}
 }
@@ -86,7 +87,7 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 		root := setUpEnvSourceFixture(t, clitest.FakeEnvSource{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSync(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvSync(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSync err = %v; stderr=%s", err, stderr.String())
 		}
 		out := stdout.String()
@@ -106,7 +107,7 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 		registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSync(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvSync(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSync err = %v; stderr=%s", err, stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "infisical:p-1/prod") || !strings.Contains(out, "2 written") {
@@ -114,7 +115,7 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 		}
 
 		var ls bytes.Buffer
-		if err := runEnvLs(context.Background(), clitest.NewDeps(), root, envOptions{}, &ls, &ls); err != nil {
+		if err := runEnvLs(context.Background(), streamedDeps(&ls), root, envOptions{}, &ls, &ls); err != nil {
 			t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
 		}
 		sources := map[string]string{}
@@ -139,8 +140,8 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 		registerFakeEnvSource(t, environmentv1.Tier_TIER_PREVIEW, envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"sh"}}})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSync(context.Background(), clitest.NewDeps(), root, envOptions{preview: true}, &stdout, &stderr)
-		if err == nil || !strings.Contains(err.Error(), "deploy") {
+		err := runEnvSync(context.Background(), streamedDeps(&stderr), root, envOptions{preview: true}, &stdout, &stderr)
+		if err == nil || !strings.Contains(stderr.String(), "deploy") {
 			t.Fatalf("runEnvSync --preview err = %v, want exec's re-read left to a deploy", err)
 		}
 	})
@@ -155,7 +156,7 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 	})
 
 	var before bytes.Buffer
-	if err := runEnvSource(context.Background(), clitest.NewDeps(), root, envOptions{}, &before, &before); err != nil {
+	if err := runEnvSource(context.Background(), streamedDeps(&before), root, envOptions{}, &before, &before); err != nil {
 		t.Fatalf("runEnvSource err = %v; out=%s", err, before.String())
 	}
 	if out := before.String(); !strings.Contains(out, "production reads from builtin") || !strings.Contains(out, "infisical:p-1/prod") {
@@ -168,12 +169,12 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 	setCredentials(t, root)
 	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)
 	var synced bytes.Buffer
-	if err := runEnvSync(context.Background(), clitest.NewDeps(), root, envOptions{}, &synced, &synced); err != nil {
+	if err := runEnvSync(context.Background(), streamedDeps(&synced), root, envOptions{}, &synced, &synced); err != nil {
 		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := runEnvSource(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+	if err := runEnvSource(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvSource err = %v; stderr=%s", err, stderr.String())
 	}
 	out := stdout.String()
@@ -198,7 +199,7 @@ func TestEnvSourceSaysWhatOcelMayWriteIntoIt(t *testing.T) {
 		options.Write = write
 		registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options})
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSource(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvSource(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSource err = %v; stderr=%s", err, stderr.String())
 		}
 		if writes := strings.Contains(stdout.String(), "writes"); writes != (want != "") || !strings.Contains(stdout.String(), want) {
@@ -212,13 +213,13 @@ func TestEnvSetOnAValueTheEnvSourceOwnsSaysWhereToChangeIt(t *testing.T) {
 	setCredentials(t, root)
 	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)
 	var synced bytes.Buffer
-	if err := runEnvSync(context.Background(), clitest.NewDeps(), root, envOptions{}, &synced, &synced); err != nil {
+	if err := runEnvSync(context.Background(), streamedDeps(&synced), root, envOptions{}, &synced, &synced); err != nil {
 		t.Fatalf("runEnvSync err = %v; out=%s", err, synced.String())
 	}
 
 	var stdout, stderr bytes.Buffer
-	err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "by-hand", envOptions{}, nil, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "infisical:p-1/prod") {
+	err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "by-hand", envOptions{}, nil, &stdout, &stderr)
+	if err == nil || !strings.Contains(stderr.String(), "infisical:p-1/prod") {
 		t.Fatalf("runEnvSet err = %v, want the env source that owns the value named", err)
 	}
 	envSet(t, root, "INFISICAL_CLIENT_SECRET", "rotated", envOptions{})
@@ -250,7 +251,7 @@ func TestEnvSetUpdatesAValueTheEnvSourceOwnsWhenItsWritePolicyIsValues(t *testin
 		t.Fatalf("updated = %+v, want STRIPE_API_KEY written through to the env source", updated)
 	}
 	var got, chatter bytes.Buffer
-	if err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &got, &chatter); err != nil {
+	if err := runEnvGet(context.Background(), streamedDeps(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &got, &chatter); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(got.String(), "sk_rotated") {
@@ -267,8 +268,8 @@ func TestEnvSetCreatesAValueTheEnvSourceLacksWhenItsWritePolicyIsMissing(t *test
 	}
 
 	var stdout, stderr bytes.Buffer
-	err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_rotated", envOptions{}, nil, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), `"values"`) {
+	err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_rotated", envOptions{}, nil, &stdout, &stderr)
+	if err == nil || !strings.Contains(stderr.String(), `"values"`) {
 		t.Fatalf("runEnvSet over a value the env source holds = %v, want it refused naming write \"values\"", err)
 	}
 }

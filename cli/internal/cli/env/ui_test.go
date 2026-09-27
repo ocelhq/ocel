@@ -25,12 +25,11 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error) {
+func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error) {
 	t.Helper()
-	ctx := context.Background()
-	err := withEnvProvider(ctx, clitest.NewDeps(), root, opts, io.Discard, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		return drive(ctx, cfg.Slug, runner, envwire.Values{
-			Provider: runner.Provider(nil),
+	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, opts, "ocel env", io.Discard, func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		return drive(ctx, cfg.Slug, prov, envwire.Values{
+			Provider: prov,
 			Slug:     cfg.Slug,
 			Tier:     envTier(opts),
 		})
@@ -40,9 +39,9 @@ func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx
 	}
 }
 
-func storeValue(t *testing.T, ctx context.Context, runner *providerclient.Runner, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
+func storeValue(t *testing.T, ctx context.Context, prov *providerclient.Provider, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
 	t.Helper()
-	vars, err := runner.Vars()
+	vars, err := prov.Vars()
 	if err != nil {
 		t.Fatalf("reach the provider's variable store: %v", err)
 	}
@@ -75,15 +74,15 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 	return envgate.Stored{}
 }
 
-func TestRunnerValues(t *testing.T) {
+func TestProviderValues(t *testing.T) {
 	t.Run("List includes a named environment's value as an override", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		preview := envOptions{preview: true}
 
-		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
-			storeValue(t, ctx, runner, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
-			storeValue(t, ctx, runner, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
+		withProviderValues(t, root, preview, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
+			storeValue(t, ctx, prov, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
+			storeValue(t, ctx, prov, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
 			rows, err := values.List(ctx)
 			if err != nil {
@@ -108,8 +107,8 @@ func TestRunnerValues(t *testing.T) {
 	t.Run("a refused reveal hands back the provider's own typed error", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
-			vars, err := runner.Vars()
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
+			vars, err := prov.Vars()
 			if err != nil {
 				t.Fatalf("reach the provider's variable store: %v", err)
 			}
@@ -142,8 +141,8 @@ func TestRunnerValues(t *testing.T) {
 	t.Run("Set against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
-			storeValue(t, ctx, runner, envTier(envOptions{}), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
+			storeValue(t, ctx, prov, envTier(envOptions{}), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
 			unset := int64(0)
@@ -168,10 +167,10 @@ func TestRunnerValues(t *testing.T) {
 	t.Run("Delete against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
+		withProviderValues(t, root, envOptions{}, func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error {
 			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
-			storeValue(t, ctx, runner, envTier(envOptions{}), coordinate, "https://first.example")
-			storeValue(t, ctx, runner, envTier(envOptions{}), coordinate, "https://someone-elses.example")
+			storeValue(t, ctx, prov, envTier(envOptions{}), coordinate, "https://first.example")
+			storeValue(t, ctx, prov, envTier(envOptions{}), coordinate, "https://someone-elses.example")
 			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
 			rendered := int64(1)
@@ -211,13 +210,12 @@ func syncedEnvSourceFixture(t *testing.T, descriptor envsource.Descriptor) strin
 
 func withVarsUI(t *testing.T, root string, drive func(s *varsui.Session)) {
 	t.Helper()
-	ctx := context.Background()
-	err := withEnvProvider(ctx, clitest.NewDeps(), root, envOptions{}, io.Discard, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		gate, err := discoverVariables(ctx, cfg, runner, envOptions{}, io.Discard)
+	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		gate, err := discoverVariables(ctx, cfg, prov, envOptions{}, io.Discard)
 		if err != nil {
 			return err
 		}
-		s, err := envwire.ServeVarsUI(ctx, cfg, runner.Provider(nil), false, gate, nil)
+		s, err := envwire.ServeVarsUI(ctx, cfg, prov, false, gate, nil)
 		if err != nil {
 			return err
 		}

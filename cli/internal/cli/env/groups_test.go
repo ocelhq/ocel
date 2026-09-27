@@ -167,7 +167,7 @@ func TestEnvLsGathersGroups(t *testing.T) {
 	seedProductionValue(t, "GITHUB_CLIENT_SECRET", "", "secret")
 
 	var stdout, stderr bytes.Buffer
-	if err := runEnvLs(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+	if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

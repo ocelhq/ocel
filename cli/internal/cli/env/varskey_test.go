@@ -18,15 +18,15 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "vars-key"; !strings.Contains(err.Error(), want) {
-			t.Errorf("runEnvSet err = %v, want it to name %s", err, want)
+		if want := "vars-key"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name %s", stderr.String(), want)
 		}
-		if want := "ocel bootstrap production --features"; !strings.Contains(err.Error(), want) {
-			t.Errorf("runEnvSet err = %v, want it to name `%s`", err, want)
+		if want := "ocel bootstrap production --features"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name `%s`", stderr.String(), want)
 		}
 	})
 
@@ -35,7 +35,7 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvLs(context.Background(), clitest.NewDeps(), root, envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvLs(context.Background(), streamedDeps(&stderr), root, envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvLs err = %v, want a read to go through a bootstrap with no key; stderr=%s", err, stderr.String())
 		}
 	})
@@ -45,7 +45,7 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), clitest.NewDeps(), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want the write to land; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {
@@ -58,12 +58,12 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
+		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runEnvSet err = nil, want it refused for want of a key; stdout=%s stderr=%s", stdout.String(), stderr.String())
 		}
-		if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {
-			t.Errorf("runEnvSet err = %v, want it to name `%s` alone", err, want)
+		if want := "ocel bootstrap production --features vars-key"; !strings.Contains(stderr.String(), want) {
+			t.Errorf("stream = %q, want it to name `%s` alone", stderr.String(), want)
 		}
 		if strings.Contains(err.Error(), "image-optimization") {
 			t.Errorf("runEnvSet err = %v, want a write to ask for the key it seals under, not for what a deploy would need", err)
@@ -75,7 +75,7 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRm(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
+		if err := runEnvRm(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRm err = %v, want a removal to go through a bootstrap with no key; stderr=%s", err, stderr.String())
 		}
 	})
@@ -86,7 +86,7 @@ func TestWritingWithoutTheVarsKey(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		ref := envRefOptions{project: "platform"}
-		if err := runEnvRef(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{}, ref, &stdout, &stderr); err != nil {
+		if err := runEnvRef(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", envOptions{}, ref, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRef err = %v, want a reference to go through a bootstrap with no key; stderr=%s", err, stderr.String())
 		}
 	})
@@ -127,7 +127,7 @@ func TestAProviderWithoutTheVarsKeyFeature(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvSet(context.Background(), clitest.NewDeps(), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
+		if err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "LOG_LEVEL", "debug", envOptions{}, nil, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvSet err = %v, want a provider that has no such feature never asked for it; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Set LOG_LEVEL") {

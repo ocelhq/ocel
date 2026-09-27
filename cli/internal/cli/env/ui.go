@@ -36,13 +36,13 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
+	return withEnvProviderSealing(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		gate, err := discoverVariables(ctx, cfg, prov, opts, stderr)
 		if err != nil {
 			return err
 		}
 
-		varsSession, err := serveAndOpenVarsUI(deps, ctx, cfg, runner, opts.preview, gate, stdin, stdout)
+		varsSession, err := serveAndOpenVarsUI(deps, ctx, cfg, prov, opts.preview, gate, stdin, stdout)
 		if err != nil {
 			return err
 		}
@@ -60,13 +60,13 @@ func serveAndOpenVarsUI(
 	deps cmddeps.Deps,
 	ctx context.Context,
 	cfg *projectconfig.Config,
-	runner *providerclient.Runner,
+	prov *providerclient.Provider,
 	preview bool,
 	gate *envgate.Gate,
 	stdin io.Reader,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner.Provider(nil), preview, gate, nil)
+	varsSession, err := deps.ServeVarsUI(ctx, cfg, prov, preview, gate, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -81,17 +81,17 @@ func serveAndOpenVarsUI(
 	return varsSession, nil
 }
 
-func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
-	gate := envGate(cfg, runner, opts)
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
+	gate := envGate(cfg, prov, opts)
 	if _, err := deploycollector.PrepareAndCollect(ctx, cfg, gate, io.Discard, stderr); err != nil {
 		return nil, err
 	}
 	return gate, nil
 }
 
-func envGate(cfg *projectconfig.Config, runner *providerclient.Runner, opts envOptions) *envgate.Gate {
+func envGate(cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions) *envgate.Gate {
 	return envgate.New(envwire.Values{
-		Provider: runner.Provider(nil),
+		Provider: prov,
 		Slug:     cfg.Slug,
 		Tier:     envTier(opts),
 	}, envwire.Scope(cfg, opts.preview, ""))
