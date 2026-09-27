@@ -244,6 +244,11 @@ func TestASyncServiceRunOrReachedOtherwiseIsMendedInPlace(t *testing.T) {
 		"a bigger instance bills more":                     func(s *run.GoogleCloudRunV2Service) { s.Template.Containers[0].Resources.Limits["cpu"] = "1" },
 		"anyone on the internet may reach it":              func(s *run.GoogleCloudRunV2Service) { s.Ingress = "INGRESS_TRAFFIC_ALL" },
 		"anyone may call it":                               func(s *run.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true },
+		"a sync outlives its minute into the next":         func(s *run.GoogleCloudRunV2Service) { s.Template.Timeout = "300s" },
+		"one instance takes many syncs at once":            func(s *run.GoogleCloudRunV2Service) { s.Template.MaxInstanceRequestConcurrency = 80 },
+		"the second generation bills a larger floor": func(s *run.GoogleCloudRunV2Service) {
+			s.Template.ExecutionEnvironment = "EXECUTION_ENVIRONMENT_GEN2"
+		},
 		"it runs as an account that may write another class": func(s *run.GoogleCloudRunV2Service) {
 			s.Template.ServiceAccount = "ocel-preview@acme-prod.iam.gserviceaccount.com"
 		},
@@ -311,6 +316,20 @@ func TestASyncServiceCloudRunReadsBackInAnotherNotationForTheSameCPUAndMemoryIsC
 	} {
 		if sameLimits(limits, map[string]string{"cpu": "0.08", "memory": "128Mi"}) {
 			t.Errorf("sameLimits(%v) reads as the 0.08 vCPU and 128Mi this bootstrap deploys", limits)
+		}
+	}
+}
+
+func TestASyncServiceCloudRunReadsBackWithTheSameTimeoutInAnotherNotationIsCurrent(t *testing.T) {
+	t.Parallel()
+	for _, timeout := range []string{"60s", "60.000s", "1m0s"} {
+		if !sameTimeout(timeout, "60s") {
+			t.Errorf("sameTimeout(%q) reads as another timeout than the 60s this bootstrap deploys", timeout)
+		}
+	}
+	for _, timeout := range []string{"61s", "", "a minute"} {
+		if sameTimeout(timeout, "60s") {
+			t.Errorf("sameTimeout(%q) reads as the 60s this bootstrap deploys", timeout)
 		}
 	}
 }

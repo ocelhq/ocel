@@ -47,7 +47,7 @@ const (
 	syncScheduleUpdateMask = "description,schedule,timeZone,httpTarget,retryConfig"
 
 	reasonUnwritable      = "it exists, and it may not write this project's records or seal under the class key, so the env source sync running as it would write nothing"
-	reasonServiceChanged  = "it runs another env source sync than the one this provider embeds, runs it as another account, or is billed, scaled or reached otherwise than this bootstrap deploys it"
+	reasonServiceChanged  = "it runs another env source sync than the one this provider embeds, runs it as another account, or is billed, scaled, cut off or reached otherwise than this bootstrap deploys it"
 	reasonCallersChanged  = "it exists, and the account Cloud Scheduler calls it as may not call it, or anyone may"
 	reasonScheduleChanged = "it calls the env source sync on another schedule, at another URL or as another account than this bootstrap names"
 	reasonScheduleStopped = "it is paused, disabled by Cloud Scheduler or left by a failed update, so it never calls the env source sync"
@@ -160,9 +160,21 @@ func sameService(current, desired *run.GoogleCloudRunV2Service) bool {
 		sameLimits(container.Resources.Limits, want.Resources.Limits) &&
 		scaling.MinInstanceCount == wanted.Scaling.MinInstanceCount &&
 		scaling.MaxInstanceCount == wanted.Scaling.MaxInstanceCount &&
+		template.MaxInstanceRequestConcurrency == wanted.MaxInstanceRequestConcurrency &&
+		template.ExecutionEnvironment == wanted.ExecutionEnvironment &&
+		sameTimeout(template.Timeout, wanted.Timeout) &&
 		slices.EqualFunc(container.Env, want.Env, func(a, b *run.GoogleCloudRunV2EnvVar) bool {
 			return a.Name == b.Name && a.Value == b.Value
 		})
+}
+
+func sameTimeout(current, desired string) bool {
+	got, err := time.ParseDuration(current)
+	if err != nil {
+		return false
+	}
+	want, err := time.ParseDuration(desired)
+	return err == nil && got == want
 }
 
 func (b bootstrap) readService(ctx context.Context, name string) (*run.GoogleCloudRunV2Service, error) {
