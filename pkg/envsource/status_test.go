@@ -16,10 +16,11 @@ import (
 type watchedRecords struct {
 	records.Store
 
-	mu         sync.Mutex
-	listed     []records.Name
-	staleUnder records.Name
-	failUnder  records.Name
+	mu               sync.Mutex
+	listed           []records.Name
+	staleUnder       records.Name
+	failUnder        records.Name
+	failRemovesUnder records.Name
 }
 
 func (w *watchedRecords) List(ctx context.Context, under records.Name) ([]records.Record, error) {
@@ -41,6 +42,22 @@ func (w *watchedRecords) Write(ctx context.Context, record records.Record) (reco
 		return "", records.ErrStale
 	}
 	return w.Store.Write(ctx, record)
+}
+
+func (w *watchedRecords) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
+	w.mu.Lock()
+	failing := w.failRemovesUnder
+	w.mu.Unlock()
+	if _, under := name.Under(failing); failing != nil && under {
+		return errors.New("the table is unreachable")
+	}
+	return w.Store.Remove(ctx, name, expected)
+}
+
+func (w *watchedRecords) removeAgain() {
+	w.mu.Lock()
+	w.failRemovesUnder = nil
+	w.mu.Unlock()
 }
 
 func (w *watchedRecords) lists() []records.Name {
@@ -167,6 +184,50 @@ func TestADedupeKeyWhoseCredentialCannotBeReadIsAnError(t *testing.T) {
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
 	if key, err := envsource.DedupeKey(context.Background(), store, scope, descriptor); err == nil {
 		t.Fatalf("DedupeKey() over an unreadable store = %q, want the failure rather than a key naming the credential unset", key)
+	}
+}
+
+func TestASyncUnderWayWhenItsProjectIsForgottenLeavesNoStatusBehind(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+	ctx := context.Background()
+	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sync.CopyProject(ctx, registration); err != nil {
+		t.Fatal(err)
+	}
+	if left := statusesIn(t, store); len(left) != 0 {
+		t.Fatalf("status records left by a sync that read the registration before its project was forgotten: %v", left)
+	}
+}
+
+func TestForgettingAProjectAgainAfterItFailedPartWayLeavesNoStatusBehind(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+	ctx := context.Background()
+	if _, err := sync.CopyProject(ctx, registration); err != nil {
+		t.Fatal(err)
+	}
+	watched := &watchedRecords{Store: store.Records, failRemovesUnder: records.Name{records.RootEnvSourceStatus}}
+	store.Records = watched
+
+	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err == nil {
+		t.Fatal("ForgetProject() whose status could not be removed = nil, want the failure")
+	}
+	watched.removeAgain()
+	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+		t.Fatal(err)
+	}
+	if left := statusesIn(t, store); len(left) != 0 {
+		t.Fatalf("status records left after the removal that failed part way was run again: %v", left)
 	}
 }
 
