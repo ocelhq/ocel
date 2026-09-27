@@ -284,7 +284,7 @@ func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t 
 
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
-	progress.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
+	progress.Span("dns records", time.Unix(1000, 0), time.Unix(1005, 0), nil)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -301,8 +301,8 @@ func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t 
 	if wrote.GetOutput() == nil || wrote.GetMessage() != "engine said something" || StageID(wrote.GetSpanId()) != stage.ID {
 		t.Errorf("Detail() = %T %q in %x, want an output line in the stage %x", wrote.GetBody(), wrote.GetMessage(), wrote.GetSpanId(), stage.ID)
 	}
-	if opened.GetStarted() == nil || opened.GetMessage() != "infra" || StageID(opened.GetStarted().GetParentSpanId()) != stage.ID {
-		t.Errorf("Span() opens %T %q under %x, want the detail scope \"infra\" under the stage %x", opened.GetBody(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), stage.ID)
+	if opened.GetStarted() == nil || opened.GetMessage() != "dns records" || StageID(opened.GetStarted().GetParentSpanId()) != stage.ID {
+		t.Errorf("Span() opens %T %q under %x, want the detail scope \"dns records\" under the stage %x", opened.GetBody(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), stage.ID)
 	}
 	if closed.GetEnded() == nil || string(closed.GetSpanId()) != string(opened.GetSpanId()) {
 		t.Errorf("Span() closes %T %x, want the scope it opened, %x", closed.GetBody(), closed.GetSpanId(), opened.GetSpanId())
@@ -329,7 +329,7 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 	progress.Say("provisioning the infra stack")
 	progress.Detail("engine said something")
 	after := time.Now().UnixNano()
-	progress.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
+	progress.Span("dns records", time.Unix(1000, 0), time.Unix(1005, 0), nil)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
