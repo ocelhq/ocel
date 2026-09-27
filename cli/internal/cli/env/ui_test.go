@@ -75,7 +75,7 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 	return envgate.Stored{}
 }
 
-func TestProviderValues(t *testing.T) {
+func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testing.T) {
 	t.Run("List includes a named environment's value as an override", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
