@@ -89,7 +89,7 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 			if secret.Value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(secret.Value), Version: fmt.Sprintf("%s@%d", secret.ID, secret.Version)}
+			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(secret.Value), Version: infisicalVersion(secret)}
 		}
 	}
 	return out, nil
@@ -116,7 +116,7 @@ func (s *infisical) cacheOrgID(ctx context.Context) {
 }
 
 func (s *infisical) Create(ctx context.Context, at envvars.Cell, value []byte, description string) error {
-	if s.options.Write != WriteMissing {
+	if s.options.Write != WriteMissing && s.options.Write != WriteValues {
 		return ErrReadOnly
 	}
 	secretPath, err := s.options.secretPath(at.Folder)
@@ -157,6 +157,60 @@ func (s *infisical) createSecret(ctx context.Context, key string, body map[strin
 		return fmt.Errorf("%s in %s: %w", key, body["secretPath"], ErrAwaitingApproval)
 	}
 	return nil
+}
+
+func (s *infisical) Update(ctx context.Context, at envvars.Cell, value []byte, copiedVersion string) error {
+	if s.options.Write != WriteValues {
+		return ErrReadOnly
+	}
+	secretPath, err := s.options.secretPath(at.Folder)
+	if err != nil {
+		return err
+	}
+	query := url.Values{
+		"projectId":              {s.options.Project},
+		"environment":            {s.options.Environment},
+		"secretPath":             {secretPath},
+		"type":                   {"shared"},
+		"viewSecretValue":        {"false"},
+		"expandSecretReferences": {"false"},
+		"includeImports":         {"false"},
+	}
+	var current struct {
+		Secret infisicalSecret `json:"secret"`
+	}
+	err = s.client.call(ctx, http.MethodGet, "/api/v4/secrets/"+url.PathEscape(at.Key)+"?"+query.Encode(), nil, &current, true)
+	if isInfisicalStatus(err, http.StatusNotFound) {
+		return fmt.Errorf("%s is no longer in %s as ocel copied it: %w", at.Key, secretPath, ErrChangedSinceRead)
+	}
+	if err != nil {
+		return fmt.Errorf("read %s in %s: %w", at.Key, secretPath, err)
+	}
+	if infisicalVersion(current.Secret) != sourceVersionOf(copiedVersion) {
+		return fmt.Errorf("%s in %s: %w", at.Key, secretPath, ErrChangedSinceRead)
+	}
+	var updated struct {
+		Secret   json.RawMessage `json:"secret"`
+		Approval json.RawMessage `json:"approval"`
+	}
+	err = s.client.call(ctx, http.MethodPatch, "/api/v4/secrets/"+url.PathEscape(at.Key), map[string]string{
+		"projectId":   s.options.Project,
+		"environment": s.options.Environment,
+		"secretPath":  secretPath,
+		"secretValue": string(value),
+		"type":        "shared",
+	}, &updated, false)
+	if err != nil {
+		return fmt.Errorf("update %s in %s: %w", at.Key, secretPath, err)
+	}
+	if len(updated.Secret) == 0 && len(updated.Approval) > 0 {
+		return fmt.Errorf("%s in %s: %w", at.Key, secretPath, ErrAwaitingApproval)
+	}
+	return nil
+}
+
+func infisicalVersion(secret infisicalSecret) string {
+	return fmt.Sprintf("%s@%d", secret.ID, secret.Version)
 }
 
 func (s *infisical) ensureFolder(ctx context.Context, secretPath string) error {

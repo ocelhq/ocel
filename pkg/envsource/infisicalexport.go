@@ -70,4 +70,8 @@ func (infisicalExport) Create(context.Context, envvars.Cell, []byte, string) err
 	return ErrReadOnly
 }
 
+func (infisicalExport) Update(context.Context, envvars.Cell, []byte, string) error {
+	return ErrReadOnly
+}
+
 func (infisicalExport) URL(envvars.Cell) string { return "" }

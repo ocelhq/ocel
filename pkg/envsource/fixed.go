@@ -30,4 +30,6 @@ func (s fixed) Read(_ context.Context, folders []string) (map[envvars.Cell]Value
 
 func (fixed) Create(context.Context, envvars.Cell, []byte, string) error { return ErrReadOnly }
 
+func (fixed) Update(context.Context, envvars.Cell, []byte, string) error { return ErrReadOnly }
+
 func (fixed) URL(envvars.Cell) string { return "" }

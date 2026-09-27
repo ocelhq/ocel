@@ -22,6 +22,7 @@ type WritePolicy string
 const (
 	WriteNever   WritePolicy = "never"
 	WriteMissing WritePolicy = "missing"
+	WriteValues  WritePolicy = "values"
 )
 
 type AuthMethod string
