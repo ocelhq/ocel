@@ -518,6 +518,28 @@ func TestAKeyTheEnvSourceGainedSinceOcelLastReadItIsNeverOverwritten(t *testing.
 	}
 }
 
+func TestAnUpdateOfAKeyTheFolderNoLongerKeepsSaysWhereItMayLive(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	fake.secrets["/web"]["API_KEY"] = "copied"
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, values)); err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	delete(fake.secrets["/web"], "API_KEY")
+	fake.mu.Unlock()
+
+	_, err := setInEnvSource(vars, "API_KEY", "mine")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "imported") || !strings.Contains(err.Error(), "ocel env sync") {
+		t.Fatalf("SetEnvSourceValue() of a key the folder no longer keeps = %v, want FailedPrecondition naming an import and ocel env sync", err)
+	}
+	if _, kept := fake.secrets["/web"]["API_KEY"]; kept || len(fake.created) != 0 {
+		t.Fatalf("secrets = %v, created %v, want nothing written", fake.secrets["/web"], fake.created)
+	}
+}
+
 func TestAKeyADeployCreatedEmptyIsFilledInUnderWriteValues(t *testing.T) {
 	vars, _ := served(t)
 	fake, server := newInfisical(t)

@@ -28,4 +28,6 @@ var (
 	ErrAwaitingApproval = errors.New("envsource: the env source queued the write for approval")
 
 	ErrChangedSinceRead = errors.New("envsource: the value changed in the env source since ocel last read it")
+
+	ErrNotInFolder = errors.New("envsource: the env source keeps no such key in that folder itself")
 )
