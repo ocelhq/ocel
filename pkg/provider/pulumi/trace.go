@@ -7,6 +7,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -20,15 +21,21 @@ const (
 	maxSlowOps                      = 20
 	maxResourceIdentifierLen        = 256
 	engineBatchSpanName             = "pulumi resource operations"
+	maxDiagnosticLen                = 2048
+	diagnosticSeverityError         = "error"
+	redactedSecret                  = "[secret]"
 )
 
-type slowOp struct {
+type resourceOp struct {
 	Op     apitype.OpType
+	Action provider.ChangeAction
 	Type   string
 	Name   string
 	Start  time.Time
 	End    time.Time
 	Failed bool
+
+	Diagnostic string
 }
 
 type engineTrace struct {
@@ -36,7 +43,7 @@ type engineTrace struct {
 	Start          time.Time
 	End            time.Time
 	Failed         bool
-	SlowOps        []slowOp
+	Ops            []resourceOp
 	SlowOpsDropped int
 }
 
@@ -46,14 +53,23 @@ type inflightOp struct {
 }
 
 type traceCollector struct {
-	threshold time.Duration
-	inflight  map[string]inflightOp
-	trace     engineTrace
-	slowest   []slowOp
+	threshold   time.Duration
+	secrets     []string
+	inflight    map[string]inflightOp
+	trace       engineTrace
+	slowest     []resourceOp
+	failedAt    map[string]int
+	diagnostics map[string][]string
 }
 
-func newTraceCollector(threshold time.Duration) *traceCollector {
-	return &traceCollector{threshold: threshold, inflight: map[string]inflightOp{}}
+func newTraceCollector(threshold time.Duration, secrets []string) *traceCollector {
+	return &traceCollector{
+		threshold:   threshold,
+		secrets:     secrets,
+		inflight:    map[string]inflightOp{},
+		failedAt:    map[string]int{},
+		diagnostics: map[string][]string{},
+	}
 }
 
 func (b *traceCollector) consume(ev events.EngineEvent, now time.Time) {
@@ -71,7 +87,30 @@ func (b *traceCollector) consume(ev events.EngineEvent, now time.Time) {
 	case ev.ResOpFailedEvent != nil:
 		b.trace.Failed = true
 		b.finish(ev.ResOpFailedEvent.Metadata, now, true)
+	case ev.DiagnosticEvent != nil:
+		b.diagnose(ev.DiagnosticEvent)
 	}
+}
+
+func (b *traceCollector) diagnose(d *apitype.DiagnosticEvent) {
+	if d.Severity != diagnosticSeverityError || d.URN == "" || d.Ephemeral {
+		return
+	}
+	if text := b.plainDiagnostic(d.Message); text != "" {
+		b.diagnostics[d.URN] = append(b.diagnostics[d.URN], text)
+	}
+}
+
+func (b *traceCollector) plainDiagnostic(message string) string {
+	text := colors.Never.Colorize(message)
+	for _, secret := range b.secrets {
+		text = strings.ReplaceAll(text, secret, redactedSecret)
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > maxDiagnosticLen {
+		text = strings.ToValidUTF8(text[:maxDiagnosticLen], "") + "…"
+	}
+	return text
 }
 
 func (b *traceCollector) finish(m apitype.StepEventMetadata, now time.Time, failed bool) {
@@ -84,8 +123,10 @@ func (b *traceCollector) finish(m apitype.StepEventMetadata, now time.Time, fail
 		delete(b.inflight, m.URN)
 	}
 
-	s := slowOp{
+	action, changed := performedAction(m, failed)
+	s := resourceOp{
 		Op:     m.Op,
+		Action: action,
 		Type:   capIdentifier(m.Type),
 		Name:   resourceNameFromURN(m.URN),
 		Start:  start,
@@ -93,7 +134,10 @@ func (b *traceCollector) finish(m apitype.StepEventMetadata, now time.Time, fail
 		Failed: failed,
 	}
 	if failed {
-		b.trace.SlowOps = append(b.trace.SlowOps, s)
+		b.failedAt[m.URN] = len(b.trace.Ops)
+	}
+	if failed || changed {
+		b.trace.Ops = append(b.trace.Ops, s)
 		return
 	}
 	if b.threshold > 0 && now.Sub(start) >= b.threshold {
@@ -101,7 +145,33 @@ func (b *traceCollector) finish(m apitype.StepEventMetadata, now time.Time, fail
 	}
 }
 
-func (b *traceCollector) keepSlowest(s slowOp) {
+var performedActions = map[apitype.OpType]provider.ChangeAction{
+	apitype.OpCreate:            provider.ActionCreate,
+	apitype.OpImport:            provider.ActionCreate,
+	apitype.OpUpdate:            provider.ActionUpdate,
+	apitype.OpReplace:           provider.ActionReplace,
+	apitype.OpImportReplacement: provider.ActionReplace,
+	apitype.OpDelete:            provider.ActionDelete,
+}
+
+func performedAction(m apitype.StepEventMetadata, failed bool) (provider.ChangeAction, bool) {
+	if m.Type == stackResourceType {
+		return "", false
+	}
+	if failed && replacementSteps[m.Op] {
+		return provider.ActionReplace, true
+	}
+	action, changed := performedActions[m.Op]
+	return action, changed
+}
+
+var replacementSteps = map[apitype.OpType]bool{
+	apitype.OpCreateReplacement: true,
+	apitype.OpDeleteReplaced:    true,
+	apitype.OpDiscardReplaced:   true,
+}
+
+func (b *traceCollector) keepSlowest(s resourceOp) {
 	if len(b.slowest) < maxSlowOps {
 		b.slowest = append(b.slowest, s)
 		return
@@ -119,7 +189,10 @@ func (b *traceCollector) keepSlowest(s slowOp) {
 }
 
 func (b *traceCollector) result() engineTrace {
-	b.trace.SlowOps = append(b.trace.SlowOps, b.slowest...)
+	for urn, i := range b.failedAt {
+		b.trace.Ops[i].Diagnostic = strings.Join(b.diagnostics[urn], "; ")
+	}
+	b.trace.Ops = append(b.trace.Ops, b.slowest...)
 	return b.trace
 }
 
@@ -146,10 +219,10 @@ func resourceNameFromURN(raw string) string {
 	return capIdentifier(strings.Join(parts[3:], urnPartDelimiter))
 }
 
-func drainTrace(engineEvents <-chan events.EngineEvent, threshold time.Duration) <-chan engineTrace {
+func drainTrace(engineEvents <-chan events.EngineEvent, threshold time.Duration, secrets []string) <-chan engineTrace {
 	result := make(chan engineTrace, 1)
 	go func() {
-		b := newTraceCollector(threshold)
+		b := newTraceCollector(threshold, secrets)
 		for ev := range engineEvents {
 			b.consume(ev, time.Now())
 		}
@@ -177,10 +250,10 @@ func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 	}
 	progress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, provider.AttrResourceCount(trace.ResourceCount))
 
-	for _, s := range trace.SlowOps {
-		var slowOpErr error
+	for _, s := range trace.Ops {
+		var opErr error
 		if s.Failed {
-			slowOpErr = errResourceOperationFailed
+			opErr = errResourceOperationFailed
 		}
 		attrs := []edge.Attr{provider.AttrDurationMS(s.End.Sub(s.Start))}
 		if s.Type != "" {
@@ -189,11 +262,30 @@ func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 		if s.Name != "" {
 			attrs = append(attrs, provider.AttrResourceName(s.Name))
 		}
-		progress.Span(slowOpName(s.Op, s.Failed), s.Start, s.End, slowOpErr, attrs...)
+		if s.Action != "" {
+			attrs = append(attrs, provider.AttrResourceAction(s.Action))
+		}
+		progress.Span(resourceOpName(s.Op, s.Failed), s.Start, s.End, opErr, attrs...)
+		if s.Failed && s.Diagnostic != "" {
+			progress.Error(s.label() + ": " + s.Diagnostic)
+		}
 	}
 }
 
-func slowOpName(op apitype.OpType, failed bool) string {
+func (s resourceOp) label() string {
+	switch {
+	case s.Name != "" && s.Type != "":
+		return s.Name + " (" + s.Type + ")"
+	case s.Name != "":
+		return s.Name
+	case s.Type != "":
+		return s.Type
+	default:
+		return "a resource"
+	}
+}
+
+func resourceOpName(op apitype.OpType, failed bool) string {
 	if failed {
 		return "resource operation failed"
 	}

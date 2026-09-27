@@ -72,6 +72,8 @@ func (r *told) Say(string) {}
 
 func (r *told) Warn(string) {}
 
+func (r *told) Error(string) {}
+
 func (r *told) Debug(line string) { r.Detail(line) }
 
 func (r *told) Detail(message string) {

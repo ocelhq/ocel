@@ -244,21 +244,22 @@ func (SpanStatus) EnumDescriptor() ([]byte, []int) {
 type AttributeKey int32
 
 const (
-	AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED    AttributeKey = 0
-	AttributeKey_ATTRIBUTE_KEY_COMMAND        AttributeKey = 1
-	AttributeKey_ATTRIBUTE_KEY_STAGE          AttributeKey = 2
-	AttributeKey_ATTRIBUTE_KEY_APP            AttributeKey = 3
-	AttributeKey_ATTRIBUTE_KEY_PHASE          AttributeKey = 4
-	AttributeKey_ATTRIBUTE_KEY_PROVIDER       AttributeKey = 5
-	AttributeKey_ATTRIBUTE_KEY_EXIT_CODE      AttributeKey = 6
-	AttributeKey_ATTRIBUTE_KEY_ERROR_KIND     AttributeKey = 7
-	AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT AttributeKey = 8
-	AttributeKey_ATTRIBUTE_KEY_BYTES          AttributeKey = 9
-	AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT    AttributeKey = 10
-	AttributeKey_ATTRIBUTE_KEY_DURATION_MS    AttributeKey = 11
-	AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE  AttributeKey = 12
-	AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME  AttributeKey = 13
-	AttributeKey_ATTRIBUTE_KEY_CACHED         AttributeKey = 14
+	AttributeKey_ATTRIBUTE_KEY_UNSPECIFIED     AttributeKey = 0
+	AttributeKey_ATTRIBUTE_KEY_COMMAND         AttributeKey = 1
+	AttributeKey_ATTRIBUTE_KEY_STAGE           AttributeKey = 2
+	AttributeKey_ATTRIBUTE_KEY_APP             AttributeKey = 3
+	AttributeKey_ATTRIBUTE_KEY_PHASE           AttributeKey = 4
+	AttributeKey_ATTRIBUTE_KEY_PROVIDER        AttributeKey = 5
+	AttributeKey_ATTRIBUTE_KEY_EXIT_CODE       AttributeKey = 6
+	AttributeKey_ATTRIBUTE_KEY_ERROR_KIND      AttributeKey = 7
+	AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT  AttributeKey = 8
+	AttributeKey_ATTRIBUTE_KEY_BYTES           AttributeKey = 9
+	AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT     AttributeKey = 10
+	AttributeKey_ATTRIBUTE_KEY_DURATION_MS     AttributeKey = 11
+	AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE   AttributeKey = 12
+	AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME   AttributeKey = 13
+	AttributeKey_ATTRIBUTE_KEY_CACHED          AttributeKey = 14
+	AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION AttributeKey = 15
 )
 
 // Enum value maps for AttributeKey.
@@ -279,23 +280,25 @@ var (
 		12: "ATTRIBUTE_KEY_RESOURCE_TYPE",
 		13: "ATTRIBUTE_KEY_RESOURCE_NAME",
 		14: "ATTRIBUTE_KEY_CACHED",
+		15: "ATTRIBUTE_KEY_RESOURCE_ACTION",
 	}
 	AttributeKey_value = map[string]int32{
-		"ATTRIBUTE_KEY_UNSPECIFIED":    0,
-		"ATTRIBUTE_KEY_COMMAND":        1,
-		"ATTRIBUTE_KEY_STAGE":          2,
-		"ATTRIBUTE_KEY_APP":            3,
-		"ATTRIBUTE_KEY_PHASE":          4,
-		"ATTRIBUTE_KEY_PROVIDER":       5,
-		"ATTRIBUTE_KEY_EXIT_CODE":      6,
-		"ATTRIBUTE_KEY_ERROR_KIND":     7,
-		"ATTRIBUTE_KEY_RESOURCE_COUNT": 8,
-		"ATTRIBUTE_KEY_BYTES":          9,
-		"ATTRIBUTE_KEY_RETRY_COUNT":    10,
-		"ATTRIBUTE_KEY_DURATION_MS":    11,
-		"ATTRIBUTE_KEY_RESOURCE_TYPE":  12,
-		"ATTRIBUTE_KEY_RESOURCE_NAME":  13,
-		"ATTRIBUTE_KEY_CACHED":         14,
+		"ATTRIBUTE_KEY_UNSPECIFIED":     0,
+		"ATTRIBUTE_KEY_COMMAND":         1,
+		"ATTRIBUTE_KEY_STAGE":           2,
+		"ATTRIBUTE_KEY_APP":             3,
+		"ATTRIBUTE_KEY_PHASE":           4,
+		"ATTRIBUTE_KEY_PROVIDER":        5,
+		"ATTRIBUTE_KEY_EXIT_CODE":       6,
+		"ATTRIBUTE_KEY_ERROR_KIND":      7,
+		"ATTRIBUTE_KEY_RESOURCE_COUNT":  8,
+		"ATTRIBUTE_KEY_BYTES":           9,
+		"ATTRIBUTE_KEY_RETRY_COUNT":     10,
+		"ATTRIBUTE_KEY_DURATION_MS":     11,
+		"ATTRIBUTE_KEY_RESOURCE_TYPE":   12,
+		"ATTRIBUTE_KEY_RESOURCE_NAME":   13,
+		"ATTRIBUTE_KEY_CACHED":          14,
+		"ATTRIBUTE_KEY_RESOURCE_ACTION": 15,
 	}
 )
 
@@ -1428,7 +1431,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSPAN_STATUS_OK\x10\x01\x12\x15\n" +
-	"\x11SPAN_STATUS_ERROR\x10\x02*\xbd\x03\n" +
+	"\x11SPAN_STATUS_ERROR\x10\x02*\xe0\x03\n" +
 	"\fAttributeKey\x12\x1d\n" +
 	"\x19ATTRIBUTE_KEY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ATTRIBUTE_KEY_COMMAND\x10\x01\x12\x17\n" +
@@ -1445,7 +1448,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x19ATTRIBUTE_KEY_DURATION_MS\x10\v\x12\x1f\n" +
 	"\x1bATTRIBUTE_KEY_RESOURCE_TYPE\x10\f\x12\x1f\n" +
 	"\x1bATTRIBUTE_KEY_RESOURCE_NAME\x10\r\x12\x18\n" +
-	"\x14ATTRIBUTE_KEY_CACHED\x10\x0e*u\n" +
+	"\x14ATTRIBUTE_KEY_CACHED\x10\x0e\x12!\n" +
+	"\x1dATTRIBUTE_KEY_RESOURCE_ACTION\x10\x0f*u\n" +
 	"\n" +
 	"AppOutcome\x12\x1b\n" +
 	"\x17APP_OUTCOME_UNSPECIFIED\x10\x00\x12\x19\n" +

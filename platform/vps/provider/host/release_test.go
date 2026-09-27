@@ -49,6 +49,8 @@ func (w *watched) Say(message string) {
 
 func (w *watched) Warn(message string) { w.Say(message) }
 
+func (w *watched) Error(message string) { w.Say(message) }
+
 func (w *watched) Detail(message string) {
 	w.told = append(w.told, message)
 	w.lines = append(w.lines, message)

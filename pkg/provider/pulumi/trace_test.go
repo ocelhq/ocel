@@ -39,7 +39,7 @@ const testURN = "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::my-bucket"
 func TestTraceCollectorCountsResourceOperations(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(0)
+	b := newTraceCollector(0, nil)
 	base := time.Unix(1000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
@@ -61,7 +61,7 @@ func TestTraceCollectorCountsResourceOperations(t *testing.T) {
 func TestTraceCollectorRecordsAFailureAsASlowOp(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(0)
+	b := newTraceCollector(0, nil)
 	base := time.Unix(2000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(5*time.Second))
@@ -70,61 +70,61 @@ func TestTraceCollectorRecordsAFailureAsASlowOp(t *testing.T) {
 	if !got.Failed {
 		t.Fatal("Failed = false, want true")
 	}
-	if len(got.SlowOps) != 1 {
-		t.Fatalf("len(SlowOps) = %d, want 1", len(got.SlowOps))
+	if len(got.Ops) != 1 {
+		t.Fatalf("len(Ops) = %d, want 1", len(got.Ops))
 	}
-	s := got.SlowOps[0]
+	s := got.Ops[0]
 	if !s.Failed {
-		t.Error("SlowOps[0].Failed = false, want true")
+		t.Error("Ops[0].Failed = false, want true")
 	}
 	if !s.Start.Equal(base) || !s.End.Equal(base.Add(5*time.Second)) {
-		t.Errorf("SlowOps[0] Start/End = %v/%v, want %v/%v", s.Start, s.End, base, base.Add(5*time.Second))
+		t.Errorf("Ops[0] Start/End = %v/%v, want %v/%v", s.Start, s.End, base, base.Add(5*time.Second))
 	}
 }
 
 func TestTraceCollectorRecordsALatencyOutlier(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(2 * time.Second)
+	b := newTraceCollector(2*time.Second, nil)
 	base := time.Unix(3000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(10*time.Second))
 
 	got := b.result()
-	if len(got.SlowOps) != 1 {
-		t.Fatalf("len(SlowOps) = %d, want 1 (operation exceeded the outlier threshold)", len(got.SlowOps))
+	if len(got.Ops) != 1 {
+		t.Fatalf("len(Ops) = %d, want 1 (operation exceeded the outlier threshold)", len(got.Ops))
 	}
-	if got.SlowOps[0].Failed {
-		t.Error("SlowOps[0].Failed = true, want false: a slow success is an outlier, not a failure")
+	if got.Ops[0].Failed {
+		t.Error("Ops[0].Failed = true, want false: a slow success is an outlier, not a failure")
 	}
 }
 
-func TestTraceCollectorIgnoresFastOperationsUnderThreshold(t *testing.T) {
+func TestTraceCollectorIgnoresFastUnchangedOperationsUnderThreshold(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(2 * time.Second)
+	b := newTraceCollector(2*time.Second, nil)
 	base := time.Unix(4000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
-	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(500*time.Millisecond))
+	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpSame), base.Add(500*time.Millisecond))
 
-	if got := b.result(); len(got.SlowOps) != 0 {
-		t.Fatalf("len(SlowOps) = %d, want 0", got.ResourceCount)
+	if got := b.result(); len(got.Ops) != 0 {
+		t.Fatalf("len(Ops) = %d, want 0", got.ResourceCount)
 	}
 }
 
 func TestTraceCollectorNeverRetainsTheURN(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(0)
+	b := newTraceCollector(0, nil)
 	base := time.Unix(5000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
 
 	got := b.result()
-	if len(got.SlowOps) != 1 {
-		t.Fatalf("len(SlowOps) = %d, want 1", len(got.SlowOps))
+	if len(got.Ops) != 1 {
+		t.Fatalf("len(Ops) = %d, want 1", len(got.Ops))
 	}
-	s := got.SlowOps[0]
+	s := got.Ops[0]
 	if s.Op == "" || s.Type == "" || s.Name == "" {
 		t.Fatalf("slow op missing Op/Type/Name: %+v", s)
 	}
@@ -191,26 +191,26 @@ func TestCapIdentifierBoundsLength(t *testing.T) {
 	}
 }
 
-func TestTraceCollectorCapsSlowOpsKeepingTheSlowest(t *testing.T) {
+func TestTraceCollectorCapsSlowUnchangedOpsKeepingTheSlowest(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(time.Second)
+	b := newTraceCollector(time.Second, nil)
 	base := time.Unix(6000, 0)
 	for i := 0; i < maxSlowOps+5; i++ {
 		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
 		dur := time.Duration(i+1) * time.Second
 		b.consume(preEvent(urn, "aws:s3/bucket:Bucket"), base)
-		b.consume(outputsEvent(urn, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(dur))
+		b.consume(outputsEvent(urn, "aws:s3/bucket:Bucket", apitype.OpSame), base.Add(dur))
 	}
 
 	got := b.result()
-	if len(got.SlowOps) != maxSlowOps {
-		t.Fatalf("len(SlowOps) = %d, want %d", len(got.SlowOps), maxSlowOps)
+	if len(got.Ops) != maxSlowOps {
+		t.Fatalf("len(Ops) = %d, want %d", len(got.Ops), maxSlowOps)
 	}
 	if got.SlowOpsDropped != 5 {
 		t.Fatalf("SlowOpsDropped = %d, want 5", got.SlowOpsDropped)
 	}
-	for _, s := range got.SlowOps {
+	for _, s := range got.Ops {
 		if s.End.Sub(s.Start) < 6*time.Second {
 			t.Fatalf("kept a slow op shorter than the evicted ones: %v", s.End.Sub(s.Start))
 		}
@@ -220,7 +220,7 @@ func TestTraceCollectorCapsSlowOpsKeepingTheSlowest(t *testing.T) {
 func TestTraceCollectorNeverCapsFailures(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceCollector(time.Hour)
+	b := newTraceCollector(time.Hour, nil)
 	base := time.Unix(7000, 0)
 	for i := 0; i < maxSlowOps+5; i++ {
 		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
@@ -229,15 +229,15 @@ func TestTraceCollectorNeverCapsFailures(t *testing.T) {
 	}
 
 	got := b.result()
-	if len(got.SlowOps) != maxSlowOps+5 {
-		t.Fatalf("len(SlowOps) = %d, want %d: failures must never be dropped", len(got.SlowOps), maxSlowOps+5)
+	if len(got.Ops) != maxSlowOps+5 {
+		t.Fatalf("len(Ops) = %d, want %d: failures must never be dropped", len(got.Ops), maxSlowOps+5)
 	}
 	if got.SlowOpsDropped != 0 {
 		t.Fatalf("SlowOpsDropped = %d, want 0", got.SlowOpsDropped)
 	}
 }
 
-func TestSlowOpNameIsBoundedNeverDynamic(t *testing.T) {
+func TestAResourceOpsSpanNameIsBoundedNeverDynamic(t *testing.T) {
 	t.Parallel()
 
 	cases := []apitype.OpType{
@@ -246,16 +246,16 @@ func TestSlowOpNameIsBoundedNeverDynamic(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, op := range cases {
-		name := slowOpName(op, false)
+		name := resourceOpName(op, false)
 		if name == "" {
-			t.Errorf("slowOpName(%s, false) = empty", op)
+			t.Errorf("resourceOpName(%s, false) = empty", op)
 		}
 		seen[name] = true
 	}
-	if name := slowOpName(apitype.OpCreate, true); name != "resource operation failed" {
-		t.Errorf("slowOpName(create, true) = %q, want the fixed failure string", name)
+	if name := resourceOpName(apitype.OpCreate, true); name != "resource operation failed" {
+		t.Errorf("resourceOpName(create, true) = %q, want the fixed failure string", name)
 	}
 	if len(seen) > 7 {
-		t.Errorf("slowOpName produced %d distinct strings across %d ops; vocabulary should stay small and fixed", len(seen), len(cases))
+		t.Errorf("resourceOpName produced %d distinct strings across %d ops; vocabulary should stay small and fixed", len(seen), len(cases))
 	}
 }

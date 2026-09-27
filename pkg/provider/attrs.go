@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	AttrKeyApp           = "app"
-	AttrKeyResourceCount = "resource.count"
-	AttrKeyBytes         = "bytes"
-	AttrKeyDurationMS    = "duration.ms"
-	AttrKeyResourceType  = "resource.type"
-	AttrKeyResourceName  = "resource.name"
-	AttrKeyErrorKind     = "error.kind"
+	AttrKeyApp            = "app"
+	AttrKeyResourceCount  = "resource.count"
+	AttrKeyBytes          = "bytes"
+	AttrKeyDurationMS     = "duration.ms"
+	AttrKeyResourceType   = "resource.type"
+	AttrKeyResourceName   = "resource.name"
+	AttrKeyErrorKind      = "error.kind"
+	AttrKeyResourceAction = "resource.action"
 )
 
 func AttrApp(name string) edge.Attr {
@@ -41,6 +42,10 @@ func AttrResourceType(typ string) edge.Attr {
 
 func AttrResourceName(name string) edge.Attr {
 	return edge.Attr{Key: AttrKeyResourceName, Value: name}
+}
+
+func AttrResourceAction(action ChangeAction) edge.Attr {
+	return edge.Attr{Key: AttrKeyResourceAction, Value: string(action)}
 }
 
 const (

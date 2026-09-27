@@ -42,6 +42,8 @@ func (r *recordingProgress) Say(message string) {
 
 func (r *recordingProgress) Warn(message string) { r.Say(message) }
 
+func (r *recordingProgress) Error(message string) { r.Say(message) }
+
 func (r *recordingProgress) Detail(message string) { r.Say(message) }
 
 func (r *recordingProgress) Debug(line string) { r.Say(line) }

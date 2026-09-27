@@ -65,8 +65,9 @@ type phaseTally struct {
 }
 
 type unitBlock struct {
-	opened *streamv1.RunEvent
-	body   []blockLine
+	opened    *streamv1.RunEvent
+	body      []blockLine
+	resources resourceTally
 }
 
 func NewGroupedSink(w io.Writer, present Presentation) *GroupedSink {
@@ -200,6 +201,7 @@ func (s *GroupedSink) open(span string, ev *streamv1.RunEvent) {
 func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	unit := s.units[span]
 	if unit == nil {
+		s.endResource(span, ev)
 		return
 	}
 	s.forget(span)
@@ -207,9 +209,9 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	ended := ev.GetEnded()
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	message := fmt.Sprintf("%s in %s", unit.opened.GetMessage(), took)
+	message := fmt.Sprintf("%s in %s%s", unit.opened.GetMessage(), took, unit.resources.summary())
 	if failed {
-		message = fmt.Sprintf("%s failed after %s", unit.opened.GetMessage(), took)
+		message = fmt.Sprintf("%s failed after %s%s", unit.opened.GetMessage(), took, unit.resources.summary())
 		if reason := ev.GetMessage(); reason != "" {
 			message += ": " + reason
 		}
@@ -227,6 +229,16 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 		s.print(unit.body...)
 	}
 	s.failed = s.failed || failed
+}
+
+func (s *GroupedSink) endResource(span string, ev *streamv1.RunEvent) {
+	unit := s.units[s.owners[span]]
+	change, ok := resourceChangeOf(ev)
+	if unit == nil || !ok {
+		return
+	}
+	unit.resources.count(change)
+	unit.body = append(unit.body, blockLine{text: continuationIndent + change.render(s.present)})
 }
 
 func (s *GroupedSink) tally(opened *streamv1.RunEvent) *phaseTally {

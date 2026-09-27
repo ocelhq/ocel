@@ -435,7 +435,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress edge.Pro
 	}
 
 	engineEvents := make(chan events.EngineEvent, 256)
-	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold)
+	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, secretValues(setup.Config))
 	opts = append(opts, optup.EventStreams(engineEvents))
 
 	start := time.Now()
@@ -528,6 +528,16 @@ func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) e
 		return fmt.Errorf("configure %s: %w", stack.Name(), err)
 	}
 	return nil
+}
+
+func secretValues(values auto.ConfigMap) []string {
+	var secrets []string
+	for _, value := range values {
+		if value.Secret && value.Value != "" {
+			secrets = append(secrets, value.Value)
+		}
+	}
+	return secrets
 }
 
 func configValue(value auto.ConfigValue) config.Value {

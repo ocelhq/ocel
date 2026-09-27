@@ -1026,8 +1026,10 @@ func TestAPromotionPutsTheReleaseItServesAtTheHeadOfTheBoxsWindow(t *testing.T) 
 
 type reported struct{ lines []string }
 
-func (r *reported) Say(message string)    { r.lines = append(r.lines, message) }
-func (r *reported) Warn(message string)   { r.lines = append(r.lines, message) }
+func (r *reported) Say(message string)  { r.lines = append(r.lines, message) }
+func (r *reported) Warn(message string) { r.lines = append(r.lines, message) }
+
+func (r *reported) Error(message string)  { r.lines = append(r.lines, message) }
 func (r *reported) Detail(message string) { r.lines = append(r.lines, message) }
 func (r *reported) Debug(line string)     { r.lines = append(r.lines, line) }
 

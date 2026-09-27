@@ -167,6 +167,13 @@ func (r *stageProgress) Warn(message string) {
 	}))
 }
 
+func (r *stageProgress) Error(message string) {
+	r.sender.send(r.stage.scoped(&progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_ERROR,
+		Message: sanitizeMessage(message),
+	}))
+}
+
 func (r *stageProgress) Detail(message string) {
 	r.sender.send(r.stage.scoped(outputEvent(progressv1.Level_LEVEL_INFO, sanitizeMessage(message))))
 }

@@ -10,6 +10,8 @@ type Progress interface {
 
 	Warn(message string)
 
+	Error(message string)
+
 	Detail(message string)
 
 	Debug(line string)
@@ -29,6 +31,8 @@ func DiscardProgress() Progress { return discarded{} }
 func (discarded) Say(string) {}
 
 func (discarded) Warn(string) {}
+
+func (discarded) Error(string) {}
 
 func (discarded) Detail(string) {}
 

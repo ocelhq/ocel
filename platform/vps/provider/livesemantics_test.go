@@ -34,6 +34,8 @@ func (k *killer) Say(message string) {
 
 func (k *killer) Warn(string) {}
 
+func (k *killer) Error(string) {}
+
 func (k *killer) Detail(string) {}
 
 func (k *killer) Debug(string) {}
@@ -45,6 +47,8 @@ type sayings []string
 func (s *sayings) Say(message string) { *s = append(*s, message) }
 
 func (s *sayings) Warn(message string) { *s = append(*s, message) }
+
+func (s *sayings) Error(message string) { *s = append(*s, message) }
 
 func (s *sayings) Detail(string) {}
 

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type clock struct{ at time.Time }
@@ -481,5 +483,96 @@ func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
 		"::endgroup::\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func providerChild(span, parent byte, subject, message string, at time.Time) *progressv1.OperationEvent {
+	started := providerStarted(span, subject, message, at)
+	started.GetStarted().ParentSpanId = []byte{parent, 0, 0, 0, 0, 0, 0, 1}
+	return started
+}
+
+func forwardResource(scope *events.Scope, span, parent byte, subject string, action provider.ChangeAction, typ, name string, status progressv1.SpanStatus, at time.Time) {
+	scope.Forward(providerChild(span, parent, subject, "resource operation", at))
+	ended := providerEnded(span, subject, status, at, at.Add(time.Second))
+	ended.GetEnded().Attributes = []*progressv1.SpanAttribute{
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "1000"},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: typ},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: name},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION, Value: string(action)},
+	}
+	scope.Forward(ended)
+}
+
+func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
+	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
+	ok := progressv1.SpanStatus_SPAN_STATUS_OK
+	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", ok, start)
+	forwardResource(deploy, 4, 2, "web", provider.ActionUpdate, "aws:iam/role:Role", "api", ok, start)
+	forwardResource(deploy, 5, 2, "web", provider.ActionCreate, "aws:sqs/queue:Queue", "jobs", ok, start)
+	forwardResource(deploy, 6, 2, "web", provider.ActionDelete, "aws:sqs/queue:Queue", "old", ok, start)
+	forwardResource(deploy, 7, 2, "web", provider.ActionReplace, "aws:lambda/function:Function", "handler", ok, start)
+	slow := providerChild(8, 2, "web", "resource operation", start)
+	deploy.Forward(slow)
+	deploy.Forward(providerEnded(8, "web", ok, start, start.Add(40*time.Second)))
+	deploy.Forward(providerEnded(2, "web", ok, start, start.Add(41*time.Second)))
+	deploy.Forward(providerEnded(1, "web", ok, start, start.Add(42*time.Second)))
+
+	want := "INFO  [deploy] ✓ web: Deploying web in 42s (2 created, 1 updated, 1 replaced, 1 deleted)\n" +
+		"      + assets (aws:s3/bucket:Bucket) created\n" +
+		"      ~ api (aws:iam/role:Role) updated\n" +
+		"      + jobs (aws:sqs/queue:Queue) created\n" +
+		"      – old (aws:sqs/queue:Queue) deleted\n" +
+		"      ± handler (aws:lambda/function:Function) replaced\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func failedDeploy(t *testing.T, present Presentation) string {
+	t.Helper()
+	run, out, c := groupedRun(t, present)
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	deploy.Forward(providerStarted(1, "", "Environment", start))
+	deploy.Forward(providerChild(2, 1, "", "Provisioning", start))
+	engine := providerOutput(2, "", "+  aws:s3:Bucket logs creating (0s) error: BucketAlreadyExists")
+	engine.Level = progressv1.Level_LEVEL_DEBUG
+	engine.GetOutput().Stream = progressv1.Stream_STREAM_UNSPECIFIED
+	deploy.Forward(engine)
+	forwardResource(deploy, 3, 2, "", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 4, 2, "", provider.ActionCreate, "aws:s3/bucket:Bucket", "logs", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
+	deploy.Forward(providerEvent(2, "", &progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_ERROR,
+		Message: "logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists",
+	}))
+	deploy.Forward(providerEnded(2, "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
+	deploy.Forward(providerEnded(1, "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(10*time.Second)))
+	return out.String()
+}
+
+func TestAFailedResourcesDiagnosticIsUnderItsFailedBlockWhileTheEngineOutputStaysHidden(t *testing.T) {
+	t.Parallel()
+
+	want := "ERROR [deploy] ✗ Environment failed after 10s (1 created, 1 failed)\n" +
+		"      + assets (aws:s3/bucket:Bucket) created\n" +
+		"      ✗ logs (aws:s3/bucket:Bucket) failed to create\n" +
+		"      ERROR logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists\n"
+	if got := failedDeploy(t, Presentation{}); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestVerboseShowsTheEngineOutputInTheFailedBlockToo(t *testing.T) {
+	t.Parallel()
+
+	if got := failedDeploy(t, Presentation{Verbose: true}); !strings.Contains(got, "\n    +  aws:s3:Bucket logs creating (0s) error: BucketAlreadyExists\n") {
+		t.Fatalf("verbose output has no engine line:\n%s", got)
 	}
 }

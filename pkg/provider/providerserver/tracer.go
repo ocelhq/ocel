@@ -125,13 +125,14 @@ func NewStage(parent Stage, title string) Stage {
 }
 
 var attributeKeys = map[string]progressv1.AttributeKey{
-	provider.AttrKeyApp:           progressv1.AttributeKey_ATTRIBUTE_KEY_APP,
-	provider.AttrKeyResourceCount: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT,
-	provider.AttrKeyBytes:         progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES,
-	provider.AttrKeyDurationMS:    progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS,
-	provider.AttrKeyResourceType:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE,
-	provider.AttrKeyResourceName:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME,
-	provider.AttrKeyErrorKind:     progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
+	provider.AttrKeyApp:            progressv1.AttributeKey_ATTRIBUTE_KEY_APP,
+	provider.AttrKeyResourceCount:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT,
+	provider.AttrKeyBytes:          progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES,
+	provider.AttrKeyDurationMS:     progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS,
+	provider.AttrKeyResourceType:   progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE,
+	provider.AttrKeyResourceName:   progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME,
+	provider.AttrKeyErrorKind:      progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
+	provider.AttrKeyResourceAction: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION,
 }
 
 func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }

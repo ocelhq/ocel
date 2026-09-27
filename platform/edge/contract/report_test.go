@@ -15,6 +15,8 @@ func (h *heard) Say(message string) { h.said = append(h.said, message) }
 
 func (h *heard) Warn(message string) { h.warned = append(h.warned, message) }
 
+func (*heard) Error(string) {}
+
 func (*heard) Detail(string) {}
 
 func (*heard) Debug(string) {}

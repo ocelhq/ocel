@@ -180,6 +180,8 @@ func attributeKey(k progressv1.AttributeKey) (attribute.Key, bool) {
 		return AttrResourceName, true
 	case progressv1.AttributeKey_ATTRIBUTE_KEY_CACHED:
 		return AttrCached, true
+	case progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION:
+		return AttrResourceAction, true
 	default:
 		return "", false
 	}

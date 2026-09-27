@@ -159,6 +159,26 @@ func TestAnEndedScopeNamesItsStageEndsAtItsEndAndCarriesItsStartAndAttributes(t 
 	}
 }
 
+func TestAResourcesActionReachesTheWireAsItsOwnAttribute(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newEventTrace(sender)
+
+	child := NewStage(UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION), "create resource")
+	tracer.End(child, time.Unix(1000, 0), time.Unix(1001, 0), nil,
+		provider.AttrResourceType("aws:s3/bucket:Bucket"), provider.AttrResourceName("assets"), provider.AttrResourceAction(provider.ActionCreate))
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	attrs := stream.recorded()[0].GetEnded().GetAttributes()
+	if got := attributeValue(attrs, progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION); got != string(provider.ActionCreate) {
+		t.Errorf("RESOURCE_ACTION attribute = %q, want %q", got, provider.ActionCreate)
+	}
+}
+
 func TestAFailedScopeEndsWithAnErrorKindNeverRawText(t *testing.T) {
 	t.Parallel()
 

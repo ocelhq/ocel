@@ -141,6 +141,8 @@ func (quietProgress) Say(string) {}
 
 func (quietProgress) Warn(string) {}
 
+func (quietProgress) Error(string) {}
+
 func (quietProgress) Detail(string) {}
 
 func (quietProgress) Debug(string) {}

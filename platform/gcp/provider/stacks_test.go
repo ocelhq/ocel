@@ -83,6 +83,8 @@ func (h *heard) Say(message string) { h.said = append(h.said, message) }
 
 func (h *heard) Warn(message string) { h.said = append(h.said, message) }
 
+func (h *heard) Error(message string) { h.said = append(h.said, message) }
+
 func (h *heard) Detail(string) {}
 
 func (h *heard) Debug(string) {}

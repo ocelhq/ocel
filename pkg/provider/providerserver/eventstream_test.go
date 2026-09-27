@@ -390,6 +390,40 @@ func TestAStagesWarningIsAMessageOnlyWarnScopedToTheStage(t *testing.T) {
 	}
 }
 
+func TestAStagesErrorIsAMessageOnlyErrorScopedToTheStage(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	progress := newProgress(sender, testStage)
+
+	progress.Error("logs (aws:s3/bucket:Bucket): BucketAlreadyExists\x1b[2J")
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	failed := events[0]
+	if failed.GetLevel() != progressv1.Level_LEVEL_ERROR {
+		t.Errorf("level = %v, want ERROR", failed.GetLevel())
+	}
+	if failed.GetMessage() != "logs (aws:s3/bucket:Bucket): BucketAlreadyExists[2J" {
+		t.Errorf("message = %q, want the error with its control characters gone", failed.GetMessage())
+	}
+	if failed.GetBody() != nil {
+		t.Errorf("body = %v, want a message-only event", failed.GetBody())
+	}
+	if failed.GetPhase() != testStage.Phase || StageID(failed.GetSpanId()) != testStage.ID {
+		t.Errorf("scope = %v %x, want the stage's %v %x", failed.GetPhase(), failed.GetSpanId(), testStage.Phase, testStage.ID)
+	}
+	if err := protovalidate.Validate(failed); err != nil {
+		t.Errorf("the error fails the wire's own rules: %v", err)
+	}
+}
+
 func TestAStagesDebugLineIsADebugOutputLineScopedToTheStage(t *testing.T) {
 	t.Parallel()
 

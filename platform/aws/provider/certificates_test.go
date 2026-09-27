@@ -20,8 +20,10 @@ const issuedARN = "arn:aws:acm:us-east-1:111122223333:certificate/issued"
 
 type silentProgress struct{}
 
-func (silentProgress) Say(string)    {}
-func (silentProgress) Warn(string)   {}
+func (silentProgress) Say(string)  {}
+func (silentProgress) Warn(string) {}
+
+func (silentProgress) Error(string)  {}
 func (silentProgress) Detail(string) {}
 func (silentProgress) Debug(string)  {}
 

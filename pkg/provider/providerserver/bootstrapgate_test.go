@@ -34,6 +34,8 @@ func (r *recorder) Say(message string) {
 
 func (r *recorder) Warn(message string) { r.Say(message) }
 
+func (r *recorder) Error(message string) { r.Say(message) }
+
 func (r *recorder) Detail(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
