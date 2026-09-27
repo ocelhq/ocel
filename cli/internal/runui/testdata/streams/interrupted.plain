@@ -1,4 +1,6 @@
-WARN  [build] acme: Building app web did not finish
-      Bundling web
+INFO  [build] ✓ acme: Collected the resources acme declares in 0s
+WARN  [build] web: Building app web did not finish
+
+    Bundling web
 
 ✗ Deploy cancelled in 4s

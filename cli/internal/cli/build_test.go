@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
 
@@ -32,7 +33,7 @@ export default {
 
 		var built *projectconfig.Config
 		deps := newDeps()
-		deps.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ io.Writer) error {
+		deps.BuildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]map[string]string, _ appbuilder.Output) error {
 			built = cfg
 			clitest.WritePrebuiltFunction(t, cfg.Dir, "api", "index")
 			return nil
@@ -68,7 +69,7 @@ export default { slug: "test-app" };
 `)
 
 		deps := newDeps()
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
 			return errors.New("boom: app build failed")
 		}
 

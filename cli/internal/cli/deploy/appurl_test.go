@@ -2,12 +2,12 @@ package deploy
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/appbuild"
@@ -43,7 +43,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	clitest.StubRecordedDeploymentIDs(&deps)
 
 	var built map[string]map[string]string
-	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, env map[string]map[string]string, _ io.Writer) error {
+	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, env map[string]map[string]string, _ appbuilder.Output) error {
 		built = env
 		return nil
 	}
@@ -51,7 +51,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	s, _ := newBuildScope(t)
 	cfg := prebuiltConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
-	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, "serverless", nil, urls)
+	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, s, "serverless", nil, urls)
 	if err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
@@ -93,13 +93,13 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	cfg := prebuiltConfig(root)
 
 	s, _ := newBuildScope(t)
-	if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, "serverless", nil,
+	if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, s, "serverless", nil,
 		map[string]string{"api": "https://api.acme.com"}); err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
 
 	s, _ = newBuildScope(t)
-	_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil,
+	_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, s, "serverless", nil,
 		map[string]string{"api": "https://pr-1.preview.acme.com"})
 	if err == nil {
 		t.Fatal("collectAndBuildManifest = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")

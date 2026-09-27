@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
@@ -63,7 +64,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	defer run.Close()
 
 	urls := appurl.Production(cfg)
-	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(cfg, urls), stderr); err != nil {
+	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(cfg, urls), appbuilder.Output{Shared: stderr}); err != nil {
 		return err
 	}
 	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls)); err != nil {

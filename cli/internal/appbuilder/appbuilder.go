@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/appbundler"
@@ -128,17 +129,36 @@ func AppFolder(apps []projectconfig.App) string {
 	return folder
 }
 
-type Exec func(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error
+type Output struct {
+	Shared io.Writer
+	Unit   func(app string) (log io.Writer, ended func(error))
+}
+
+func (o Output) shared() io.Writer {
+	if o.Shared == nil {
+		return io.Discard
+	}
+	return o.Shared
+}
+
+func (o Output) App(name string) (io.Writer, func(error)) {
+	if o.Unit == nil {
+		return o.shared(), func(error) {}
+	}
+	return o.Unit(name)
+}
+
+type Exec func(ctx context.Context, scriptPath string, env []string, request []byte, out Output) error
 
 type Builder struct {
 	Exec Exec
 }
 
-func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
-	return Builder{}.Build(ctx, cfg, envByApp, stderr)
+func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out Output) error {
+	return Builder{}.Build(ctx, cfg, envByApp, out)
 }
 
-func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
+func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out Output) error {
 	for _, env := range envByApp {
 		if err := checkVariableNames(env); err != nil {
 			return err
@@ -176,7 +196,10 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	}
 	for _, a := range packable(cfg.Apps) {
 		if compiledFromSource(a.Framework.Name) {
-			if err := compile(ctx, cfg, a, outputDir, stderr); err != nil {
+			log, ended := out.App(a.Name)
+			err := compile(ctx, cfg, a, outputDir, log)
+			ended(err)
+			if err != nil {
 				return err
 			}
 			continue
@@ -226,10 +249,10 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		detectedID = id
 		rootEnv = withDeploymentID(rootEnv, id)
 	}
-	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), rootEnv), payload, stderr); err != nil {
+	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), rootEnv), payload, out); err != nil {
 		return err
 	}
-	if err := bundlePlanned(ctx, outputDir, stderr); err != nil {
+	if err := bundlePlanned(ctx, outputDir, out.shared()); err != nil {
 		return err
 	}
 	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
@@ -526,34 +549,70 @@ func failureSummary(output string) string {
 	return strings.Join(lines, "\n")
 }
 
-func runNode(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error {
+type appRouting struct {
+	out Output
+
+	mu      sync.Mutex
+	current *appLog
+}
+
+type appLog struct {
+	w io.Writer
+}
+
+func (r *appRouting) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.current == nil {
+		return r.out.shared().Write(p)
+	}
+	return r.current.w.Write(p)
+}
+
+func (r *appRouting) begin(app string) func(error) {
+	w, ended := r.out.App(app)
+	log := &appLog{w: w}
+	r.mu.Lock()
+	r.current = log
+	r.mu.Unlock()
+	return func(err error) {
+		r.mu.Lock()
+		if r.current == log {
+			r.current = nil
+		}
+		r.mu.Unlock()
+		ended(err)
+	}
+}
+
+func runNode(ctx context.Context, scriptPath string, env []string, request []byte, out Output) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
+	routing := &appRouting{out: out}
 	var captured bytes.Buffer
-	out := io.Writer(&captured)
-	if stderr != nil {
-		out = io.MultiWriter(stderr, &captured)
-	}
-	safeErr, safeOut := nodeprotocol.SyncPair(out, out)
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
-	cmd.Stderr = safeErr
 
-	stdout, err := cmd.StdoutPipe()
+	said, speaks, err := os.Pipe()
 	if err != nil {
 		return fmt.Errorf("node-builder failed: %w", err)
 	}
+	cmd.Stdout, cmd.Stderr = speaks, speaks
 
-	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: safeOut}
+	proc := &nodeprotocol.Processor{Run: runtrace.FromContext(ctx), Forward: io.MultiWriter(routing, &captured), AppBuild: routing.begin}
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("node-builder failed: %w", err)
+	startErr := cmd.Start()
+	_ = speaks.Close()
+	if startErr != nil {
+		_ = said.Close()
+		return fmt.Errorf("node-builder failed: %w", startErr)
 	}
-	proc.Scan(ctx, stdout)
+	proc.Scan(ctx, said)
+	_ = said.Close()
 	runErr := cmd.Wait()
 
 	if runErr != nil {

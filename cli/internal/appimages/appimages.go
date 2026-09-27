@@ -3,23 +3,25 @@ package appimages
 import (
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func Build(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, progress io.Writer) (map[string]string, error) {
+func Build(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, out appbuilder.Output) (map[string]string, error) {
 	var refs map[string]string
 	for _, app := range Apps(cfg) {
 		built, err := Describe(cfg, app)
 		if err != nil {
 			return nil, err
 		}
-		image, err := imagebuild.Builder{Progress: progress, Arch: archs[app.Name]}.Build(ctx, built)
+		log, ended := out.App(app.Name)
+		image, err := imagebuild.Builder{Progress: log, Arch: archs[app.Name]}.Build(ctx, built)
+		ended(err)
 		if err != nil {
 			return nil, err
 		}

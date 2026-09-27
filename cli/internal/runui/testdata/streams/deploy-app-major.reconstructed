@@ -2,7 +2,9 @@ stages:
   [check]
     Checking your credentials and the production bootstrap for acme
   [build]
-    Building 2 apps (web and api)
+    Collecting the resources acme declares
+    Building app api
+    Building the image of app web
   Checking the bootstrap, domains and bindings for acme
     Checking the bootstrap, domains and bindings for acme
   Reconciling the routes for acme in production

@@ -4,14 +4,20 @@
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building 2 apps (web and api)","started":{"parentSpanId":"AwAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Packages: +812","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"go: downloading ocel.dev v0.4.1","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"▲ Next.js 15.4.2","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:09Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":" ✓ Compiled successfully","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:20Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"   Generating static pages (28/28)","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:21Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Route (app)                     Size     First Load JS","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Collecting the resources acme declares","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"go: downloading ocel.dev v0.4.1","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"Building app api","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"Packages: +812","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"▲ Next.js 15.4.2","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:09Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":" ✓ Compiled successfully","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:12Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"   Generating static pages (28/28)","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:13Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","message":"Route (app)                     Size     First Load JS","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:14Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503202000000000"}}
+{"time":"2026-09-27T10:00:14Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"Building the image of app web","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:15Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"#8 [builder 6/6] RUN npm run build","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:24Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"#11 exporting to image","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503214000000000"}}
 {"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
 {"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Checking the bootstrap, domains and bindings for acme","started":{}}
 {"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Checking the bootstrap, domains and bindings for acme","started":{"parentSpanId":"CAAAAAAAAAA="}}

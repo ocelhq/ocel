@@ -24,9 +24,13 @@ Change plan, fronted by the cloudfront edge:
   Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
 
 INFO  [build] acme: Resumed — the page was answered
-INFO  [build] ✓ acme: Built 2 apps (web and api) in 6s
+INFO  [build] ✓ acme: Collected the resources acme declares in 5s
+INFO  [build] ✓ web: Built app web in 0s
 
     Bundling web
+
+INFO  [build] ✓ api: Built app api in 1s
+
     Bundling api
 
 WARN  [check] web: edge-middleware runs degraded: middleware runs in the origin

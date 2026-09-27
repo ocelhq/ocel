@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -169,7 +170,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
 			return errors.New("boom: app build failed")
 		}
 		root, _ := clitest.SetUpDeployFixture(t)
@@ -546,8 +547,8 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "INFO  [build] ✓ test-app: Built 2 apps (web and admin) in ") {
-			t.Errorf("stdout = %q, want the build unit to say how many apps it built and which", out)
+		if !strings.Contains(out, "INFO  [build] ✓ test-app: Collected the resources test-app declares in ") {
+			t.Errorf("stdout = %q, want the build phase to say whose resources it collected", out)
 		}
 		if got := strings.Count(out, "APP "); got != 2 {
 			t.Fatalf("stdout echoed %d apps, want exactly 2:\n%s", got, out)

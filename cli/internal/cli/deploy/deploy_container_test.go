@@ -3,12 +3,12 @@ package deploy
 import (
 	"bytes"
 	"context"
-	"io"
 	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/events"
@@ -24,7 +24,7 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.StubBuild(&deps, nil)
 	clitest.StubAppImages(&deps, "api")
 	built := false
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, appbuilder.Output) (map[string]string, error) {
 		built = true
 		return map[string]string{"api": clitest.FixtureImage("api")}, nil
 	}
@@ -259,7 +259,7 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 		required = archs
 		return nil
 	}
-	deps.BuildAppImages = func(_ context.Context, _ *projectconfig.Config, archs map[string]string, _ io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(_ context.Context, _ *projectconfig.Config, archs map[string]string, _ appbuilder.Output) (map[string]string, error) {
 		built = archs
 		return map[string]string{"api": clitest.FixtureImage("api")}, nil
 	}

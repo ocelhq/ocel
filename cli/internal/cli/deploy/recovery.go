@@ -43,34 +43,30 @@ type gateRecovery struct {
 
 func (r gateRecovery) buildManifest(ctx context.Context, phase *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	scope := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
-	manifest, inline, err := r.build(ctx, scope, prebuilt)
+	manifest, inline, err := r.build(ctx, phase, scope, prebuilt)
 	scope.End(err)
 	return manifest, inline, err
 }
 
 func buildTitle(cfg *projectconfig.Config, prebuilt bool) string {
+	if !prebuilt || len(cfg.Apps) == 0 {
+		return "Collecting the resources " + cfg.Slug + " declares"
+	}
 	names := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
 		names = append(names, app.Name)
 	}
-	var apps string
 	switch {
-	case len(names) == 0:
-		return "Collecting the resources " + cfg.Slug + " declares"
 	case len(names) == 1:
-		apps = "app " + names[0]
+		return "Reading the prebuilt output of app " + names[0]
 	case len(names) <= 4:
-		apps = fmt.Sprintf("%d apps (%s and %s)", len(names), strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
+		return fmt.Sprintf("Reading the prebuilt output of %d apps (%s and %s)", len(names), strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
 	default:
-		apps = fmt.Sprintf("%d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
+		return fmt.Sprintf("Reading the prebuilt output of %d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
 	}
-	if prebuilt {
-		return "Reading the prebuilt output of " + apps
-	}
-	return "Building " + apps
 }
 
-func (r gateRecovery) build(ctx context.Context, scope *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r gateRecovery) build(ctx context.Context, phase, scope *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	gate, err := r.gate(ctx)
 	var refusal *envgate.Refusal
 	if errors.As(err, &refusal) && r.enabled {
@@ -82,7 +78,7 @@ func (r gateRecovery) build(ctx context.Context, scope *events.Scope, prebuilt b
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest, inline, err := r.attempt(ctx, scope, gate, prebuilt, 0)
+	manifest, inline, err := r.attempt(ctx, phase, scope, gate, prebuilt, 0)
 
 	if !errors.As(err, &refusal) {
 		return manifest, inline, err
@@ -97,7 +93,7 @@ func (r gateRecovery) build(ctx context.Context, scope *events.Scope, prebuilt b
 	if gate, err = r.gate(ctx); err != nil {
 		return nil, nil, err
 	}
-	return r.attempt(ctx, scope, gate, prebuilt, 1)
+	return r.attempt(ctx, phase, scope, gate, prebuilt, 1)
 }
 
 func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
@@ -141,13 +137,13 @@ func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope
 	}
 }
 
-func (r gateRecovery) attempt(ctx context.Context, scope *events.Scope, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r gateRecovery) attempt(ctx context.Context, phase, scope *events.Scope, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	attemptCtx := ctx
 	var span trace.Span
 	if run := runtrace.FromContext(ctx); run != nil {
 		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(retry))
 	}
-	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.dry, scope, r.compute, r.containerArchs, r.urls)
+	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.dry, phase, scope, r.compute, r.containerArchs, r.urls)
 	endAttemptSpan(span, err)
 	return manifest, inline, err
 }

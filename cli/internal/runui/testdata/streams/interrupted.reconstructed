@@ -1,5 +1,6 @@
 stages:
   [build]
+    Collecting the resources acme declares
     Building app web
 plan:
 waits:

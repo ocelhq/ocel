@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -22,7 +23,7 @@ const Prefix = "@@OCEL_V1@@"
 const maxLineBytes = 4 * 1024 * 1024
 
 var validStages = map[string]bool{
-	"build":     true,
+	buildStage:  true,
 	"discovery": true,
 }
 
@@ -81,14 +82,22 @@ type openSpan struct {
 }
 
 type Processor struct {
-	Run     *runtrace.Run
-	Forward io.Writer
+	Run      *runtrace.Run
+	Forward  io.Writer
+	AppBuild func(app string) (ended func(error))
 
 	mu           sync.Mutex
 	spans        map[string]openSpan
 	spanCtxByApp map[string]context.Context
+	builds       map[string]func(error)
 	err          string
 }
+
+const buildStage = "build"
+
+var errBuilderExited = errors.New("the node builder exited before this app's build ended")
+
+var errBuildFailed = errors.New("the node builder reported this app's build failed")
 
 func (p *Processor) Scan(ctx context.Context, r io.Reader) {
 	scanner := bufio.NewScanner(r)
@@ -169,8 +178,10 @@ func (p *Processor) apply(ctx context.Context, rec record) {
 			p.Run.Log(p.logContext(ctx, rec.App), level(rec.Level), rec.App, rec.Message)
 		}
 	case typeSpanStart:
+		p.startBuild(rec)
 		p.startSpan(ctx, rec)
 	case typeSpanEnd:
+		p.endBuild(rec)
 		p.endSpan(rec)
 	case typeError:
 		p.mu.Lock()
@@ -206,6 +217,39 @@ func (p *Processor) logContext(ctx context.Context, app string) context.Context 
 		return ctx
 	}
 	return spanCtx
+}
+
+func (p *Processor) startBuild(rec record) {
+	if p.AppBuild == nil || rec.Stage != buildStage || rec.App == "" || rec.ID == "" {
+		return
+	}
+	ended := p.AppBuild(rec.App)
+	p.mu.Lock()
+	if p.builds == nil {
+		p.builds = make(map[string]func(error))
+	}
+	p.builds[rec.ID] = ended
+	p.mu.Unlock()
+}
+
+func (p *Processor) endBuild(rec record) {
+	p.mu.Lock()
+	ended, found := p.builds[rec.ID]
+	delete(p.builds, rec.ID)
+	failure := p.err
+	p.mu.Unlock()
+	if !found {
+		return
+	}
+	switch {
+	case rec.OK == nil || *rec.OK:
+		ended(nil)
+	case failure != "":
+		first, _, _ := strings.Cut(failure, "\n")
+		ended(errors.New(first))
+	default:
+		ended(errBuildFailed)
+	}
 }
 
 func (p *Processor) startSpan(ctx context.Context, rec record) {
@@ -254,12 +298,17 @@ func (p *Processor) endSpan(rec record) {
 func (p *Processor) Abort() {
 	p.mu.Lock()
 	spans := p.spans
+	builds := p.builds
 	p.spans = nil
 	p.spanCtxByApp = nil
+	p.builds = nil
 	p.mu.Unlock()
 	for _, s := range spans {
 		s.span.SetStatus(codes.Error, "")
 		s.span.End()
+	}
+	for _, ended := range builds {
+		ended(errBuilderExited)
 	}
 }
 

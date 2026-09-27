@@ -1,10 +1,12 @@
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building app web","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Collecting the resources acme declares","started":{"parentSpanId":"AQAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Reading ocel.aws.config.ts","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
 {"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","resumed":{"reason":"the page was answered"}}
-{"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"▲ Next.js 15.4.2","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:04Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":" ✓ Compiled successfully","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"Building app web","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":"▲ Next.js 15.4.2","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:04Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","message":" ✓ Compiled successfully","output":{"stream":"STREAM_STDOUT"}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503203000000000"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:12Z","level":"LEVEL_INFO","result":{"success":true,"headline":"Deployed acme to production","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}

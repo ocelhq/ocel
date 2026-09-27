@@ -3,7 +3,6 @@ package appbuilder
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +30,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 
 		var gotReq builderRequest
 		var gotEnv []string
-		builder := Builder{Exec: func(_ context.Context, _ string, env []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, env []string, request []byte, _ Output) error {
 			gotEnv = env
 			if err := json.Unmarshal(request, &gotReq); err != nil {
 				return err
@@ -41,7 +40,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 		}}
 
 		envByApp := map[string]map[string]string{"web": {"POSTHOG_ID": "ph-123"}}
-		if err := builder.Build(context.Background(), cfg, envByApp, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, envByApp, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -74,7 +73,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 		writeBuilder(t, root)
 		cfg := &projectconfig.Config{Dir: root}
 		var gotEnv []string
-		builder := Builder{Exec: func(_ context.Context, _ string, env []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, env []string, request []byte, _ Output) error {
 			gotEnv = env
 			var req builderRequest
 			if err := json.Unmarshal(request, &req); err != nil {
@@ -94,7 +93,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		recorded, err := DeploymentID(root, "detected")
@@ -112,7 +111,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 		root := t.TempDir()
 		writeBuilder(t, root)
 		cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}}
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ Output) error {
 			var req builderRequest
 			if err := json.Unmarshal(request, &req); err != nil {
 				return err
@@ -121,14 +120,14 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		first, err := DeploymentID(root, "web")
 		if err != nil {
 			t.Fatalf("DeploymentID: %v", err)
 		}
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		second, err := DeploymentID(root, "web")
@@ -145,7 +144,7 @@ func TestBuildStampsTheDeploymentID(t *testing.T) {
 
 		root := t.TempDir()
 		cfg := &projectconfig.Config{Dir: root}
-		err := Build(context.Background(), cfg, map[string]map[string]string{"": {deploymentIDEnv: "mine"}}, io.Discard)
+		err := Build(context.Background(), cfg, map[string]map[string]string{"": {deploymentIDEnv: "mine"}}, Output{})
 		if err == nil || !strings.Contains(err.Error(), deploymentIDEnv) {
 			t.Errorf("Build err = %v, want it to refuse a variable named %s", err, deploymentIDEnv)
 		}

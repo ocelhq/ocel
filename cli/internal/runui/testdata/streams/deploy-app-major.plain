@@ -2,14 +2,22 @@ ocel  dev  acme › production
 
 INFO  [check] Signed in to aws as deploy (123456789012, us-east-1) and cloudflare (a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4)
 INFO  [check] ✓ aws: Checked your credentials and the production bootstrap for acme in 1s
-INFO  [build] ✓ acme: Built 2 apps (web and api) in 24s
+INFO  [build] ✓ acme: Collected the resources acme declares in 1s
+
+    go: downloading ocel.dev v0.4.1
+
+INFO  [build] ✓ api: Built app api in 12s
 
     Packages: +812
-    go: downloading ocel.dev v0.4.1
     ▲ Next.js 15.4.2
      ✓ Compiled successfully
        Generating static pages (28/28)
     Route (app)                     Size     First Load JS
+
+INFO  [build] ✓ web: Built the image of app web in 11s
+
+    #8 [builder 6/6] RUN npm run build
+    #11 exporting to image
 
 INFO  [provision] ✓ production: Checked the bootstrap, domains and bindings for acme in 0s
 INFO  [provision] ✓ cloudflare: Reconciled the routes for acme in production in 2s

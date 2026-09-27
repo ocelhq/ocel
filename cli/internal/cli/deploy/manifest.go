@@ -37,11 +37,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt, dry bool, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
-	buildOut := scope.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
-
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt, dry bool, phase, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	captured := &boundedCapture{}
-	tee := io.MultiWriter(buildOut, captured)
+	tee := io.MultiWriter(scope.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), captured)
 	resources, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
 	if err != nil {
 		return nil, nil, captured.annotate(err)
@@ -81,6 +79,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 			return nil, nil, err
 		}
 		scope.Say("Using the prebuilt output in " + constants.ProjectStateDirName + "/output instead of building")
+		scope.End(nil)
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, nil, err
@@ -90,7 +89,8 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 				return nil, nil, err
 			}
 		}
-		if err := deps.BuildApp(ctx, cfg, buildEnv(specs), buildOut); err != nil {
+		scope.End(nil)
+		if err := deps.BuildApp(ctx, cfg, buildEnv(specs), appUnits(phase, "Building app ")); err != nil {
 			return nil, nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
@@ -98,7 +98,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 	}
 
-	images, err := deps.BuildAppImages(ctx, cfg, containerArchs, buildOut)
+	images, err := deps.BuildAppImages(ctx, cfg, containerArchs, appUnits(phase, "Building the image of app "))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -114,14 +114,14 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, nil, err
 	}
 	for _, warning := range edgeWarnings {
-		scope.Warn(warning)
+		phase.Warn(warning)
 	}
 
 	if len(functions) == 0 && len(images) == 0 {
 		if len(resources) == 0 {
 			return nil, nil, nil
 		}
-		scope.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
+		phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
 	}
 
 	attributionApps, err := toAttributionApps(cfg, functions, compute, configName)
@@ -145,6 +145,16 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		app.DeploymentId = id
 	}
 	return manifest, inline, nil
+}
+
+func appUnits(phase *events.Scope, title string) appbuilder.Output {
+	return appbuilder.Output{
+		Shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED),
+		Unit: func(app string) (io.Writer, func(error)) {
+			unit := phase.Unit(app, title+app)
+			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), unit.End
+		},
+	}
 }
 
 func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {

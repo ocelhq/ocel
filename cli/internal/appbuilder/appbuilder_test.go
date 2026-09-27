@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,7 +130,7 @@ func TestBuild(t *testing.T) {
 		var gotScript string
 		var gotReq builderRequest
 		var gotEnv []string
-		builder := Builder{Exec: func(_ context.Context, scriptPath string, env []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, scriptPath string, env []string, request []byte, _ Output) error {
 			gotScript = scriptPath
 			gotEnv = env
 			if err := json.Unmarshal(request, &gotReq); err != nil {
@@ -145,7 +144,7 @@ func TestBuild(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -201,7 +200,7 @@ func TestBuild(t *testing.T) {
 			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 		}
 
-		err := Build(context.Background(), cfg, nil, io.Discard)
+		err := Build(context.Background(), cfg, nil, Output{})
 		if err == nil {
 			t.Fatal("Build succeeded with no materialized builder, want error")
 		}
@@ -219,7 +218,7 @@ func TestBuild(t *testing.T) {
 			appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "node"}, Handler: "h", App: "stale"})
 
 		var gotReq builderRequest
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ Output) error {
 			if err := json.Unmarshal(request, &gotReq); err != nil {
 				return err
 			}
@@ -227,7 +226,7 @@ func TestBuild(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -259,11 +258,11 @@ func TestBuild(t *testing.T) {
 			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 		}
 
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ Output) error {
 			return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
 		}}
 
-		err := builder.Build(context.Background(), cfg, nil, io.Discard)
+		err := builder.Build(context.Background(), cfg, nil, Output{})
 		if err == nil {
 			t.Fatal("Build succeeded, want error")
 		}
@@ -279,14 +278,14 @@ func TestBuild(t *testing.T) {
 		writeBuilder(t, root)
 
 		var got []string
-		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ Output) error {
 			got = env
 			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return nil
 		}}
 
 		vars := map[string]map[string]string{"": {"POSTHOG_ID": "ph-123"}}
-		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, vars, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, vars, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		if value, _ := lookup(got, "POSTHOG_ID"); value != "ph-123" {
@@ -301,7 +300,7 @@ func TestBuild(t *testing.T) {
 		writeBuilder(t, root)
 
 		var got builderRequest
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ Output) error {
 			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return json.Unmarshal(request, &got)
 		}}
@@ -317,7 +316,7 @@ func TestBuild(t *testing.T) {
 			"storefront": {"POSTHOG_ID": "ph-store"},
 			"admin":      {"POSTHOG_ID": "ph-admin"},
 		}
-		if err := builder.Build(context.Background(), cfg, vars, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, vars, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -338,7 +337,7 @@ func TestBuild(t *testing.T) {
 		writeBuilder(t, root)
 
 		var got builderRequest
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ Output) error {
 			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return json.Unmarshal(request, &got)
 		}}
@@ -350,7 +349,7 @@ func TestBuild(t *testing.T) {
 				{Name: "admin", Path: "apps/admin", Folder: "/admin"},
 			},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -374,7 +373,7 @@ func TestBuild(t *testing.T) {
 				writeBuilder(t, root)
 
 				ran := false
-				builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+				builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ Output) error {
 					ran = true
 					return nil
 				}}
@@ -384,7 +383,7 @@ func TestBuild(t *testing.T) {
 					Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}},
 				}
 				vars := map[string]map[string]string{"web": {name: "hijacked"}}
-				err := builder.Build(context.Background(), cfg, vars, io.Discard)
+				err := builder.Build(context.Background(), cfg, vars, Output{})
 				if err == nil {
 					t.Fatalf("Build succeeded with a variable declared as %s, want a refusal", name)
 				}
@@ -404,7 +403,7 @@ func TestBuild(t *testing.T) {
 		t.Setenv(constants.AppFolderEnvName, "/stale")
 
 		var got []string
-		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ Output) error {
 			got = env
 			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return nil
@@ -414,7 +413,7 @@ func TestBuild(t *testing.T) {
 			Dir:  root,
 			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Folder: "/web"}},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -440,7 +439,7 @@ func TestBuild(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ Output) error {
 			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName), functionSummary{
 				Name:         "api",
 				Framework:    appbuild.Framework{Name: "node"},
@@ -456,7 +455,7 @@ func TestBuild(t *testing.T) {
 			Dir:  root,
 			Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -483,7 +482,7 @@ func TestBuild(t *testing.T) {
 		root := t.TempDir()
 		writeBuilder(t, root)
 
-		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ Output) error {
 			outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 			writeFuncConfig(t, outDir, "web", "index.func",
 				appbuild.FunctionConfig{Framework: appbuild.Framework{Name: "next"}, Handler: "server.js", App: "web"})
@@ -501,7 +500,7 @@ func TestBuild(t *testing.T) {
 			Dir:  root,
 			Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -562,7 +561,7 @@ func TestBuild(t *testing.T) {
 
 			root := t.TempDir()
 			writeBuilder(t, root)
-			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ Output) error {
 				outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 				if err := os.MkdirAll(outDir, 0o755); err != nil {
 					return err
@@ -575,7 +574,7 @@ func TestBuild(t *testing.T) {
 				Dir:  root,
 				Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}},
 			}
-			err := builder.Build(context.Background(), cfg, nil, io.Discard)
+			err := builder.Build(context.Background(), cfg, nil, Output{})
 			if err == nil {
 				t.Fatal("Build succeeded, want the unusable build plan to fail the build")
 			}
@@ -599,7 +598,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		var stderr bytes.Buffer
-		if err := Build(context.Background(), cfg, nil, &stderr); err != nil {
+		if err := Build(context.Background(), cfg, nil, Output{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -634,7 +633,7 @@ func TestBuild(t *testing.T) {
 		fixtureRoot := expressFixture(t)
 
 		var stderr bytes.Buffer
-		if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, nil, &stderr); err != nil {
+		if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, nil, Output{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -713,12 +712,12 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			writeBuilder(t, root)
 
 			var got builderRequest
-			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
+			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ Output) error {
 				writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 				return json.Unmarshal(request, &got)
 			}}
 
-			if err := builder.Build(context.Background(), tc.cfg(root), nil, io.Discard); err != nil {
+			if err := builder.Build(context.Background(), tc.cfg(root), nil, Output{}); err != nil {
 				t.Fatalf("Build: %v", err)
 			}
 
@@ -1158,7 +1157,7 @@ func runNodeScript(t *testing.T, source string) error {
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return runNode(context.Background(), path, os.Environ(), []byte("{}"), io.Discard)
+	return runNode(context.Background(), path, os.Environ(), []byte("{}"), Output{})
 }
 
 func TestRunNode(t *testing.T) {
@@ -1254,7 +1253,7 @@ process.exit(1);
 			t.Fatal(err)
 		}
 		var stderr bytes.Buffer
-		err := runNode(context.Background(), path, os.Environ(), []byte("{}"), &stderr)
+		err := runNode(context.Background(), path, os.Environ(), []byte("{}"), Output{Shared: &stderr})
 		if err == nil {
 			t.Fatal("runNode succeeded on a non-zero exit, want error")
 		}
@@ -1298,7 +1297,7 @@ emit({type:"span_end",id:"1",ok:true});
 		if writeErr := os.WriteFile(path, []byte(script), 0o644); writeErr != nil {
 			t.Fatal(writeErr)
 		}
-		if err := runNode(ctx, path, os.Environ(), []byte("{}"), io.Discard); err != nil {
+		if err := runNode(ctx, path, os.Environ(), []byte("{}"), Output{}); err != nil {
 			t.Fatalf("runNode: %v", err)
 		}
 		if err := run.Close(); err != nil {

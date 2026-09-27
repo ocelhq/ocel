@@ -1,4 +1,5 @@
-INFO  [build] ✓ acme: Built 2 apps (web and api) in 5s
+INFO  [build] ✓ acme: Collected the resources acme declares in 1s
+INFO  [build] ✓ api: Built app api in 4s
 
     go: downloading ocel.dev v0.4.1
 

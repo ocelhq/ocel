@@ -2,7 +2,6 @@ package appbuilder
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,11 +21,11 @@ func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
 	cfg := &projectconfig.Config{Dir: root}
 
 	ran := false
-	builder := Builder{Exec: func(context.Context, string, []string, []byte, io.Writer) error {
+	builder := Builder{Exec: func(context.Context, string, []string, []byte, Output) error {
 		ran = true
 		return nil
 	}}
-	if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+	if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if ran {
@@ -42,12 +41,12 @@ func TestAJavaScriptProjectStillReachesTheNodeBuilderWithNoAppsDeclared(t *testi
 	cfg := &projectconfig.Config{Dir: root}
 
 	ran := false
-	builder := Builder{Exec: func(context.Context, string, []string, []byte, io.Writer) error {
+	builder := Builder{Exec: func(context.Context, string, []string, []byte, Output) error {
 		ran = true
 		writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 		return nil
 	}}
-	if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
+	if err := builder.Build(context.Background(), cfg, nil, Output{}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if !ran {

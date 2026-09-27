@@ -180,7 +180,7 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 }
 
 func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {
-	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, appbuilder.Output) error {
 		return nil
 	}
 	deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
@@ -204,7 +204,7 @@ func StubAppImages(deps *cmddeps.Deps, apps ...string) {
 	deps.RequireImageBuilder = func(context.Context, *events.Scope, *projectconfig.Config, map[string]string) error {
 		return nil
 	}
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, appbuilder.Output) (map[string]string, error) {
 		return refs, nil
 	}
 }

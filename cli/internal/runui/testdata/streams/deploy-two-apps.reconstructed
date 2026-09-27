@@ -3,7 +3,9 @@ stages:
     Checking your credentials and the production bootstrap for acme
   [plan]
   [build]
-    Building 2 apps (web and api)
+    Collecting the resources acme declares
+    Building app web
+    Building app api
   Deploying the serverless app to production
     Deploying the serverless app to production
   Deploying the serverless app to production
