@@ -1,9 +1,11 @@
 package envgate
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -27,6 +29,8 @@ type MatrixCell struct {
 	Reference *Reference `json:"reference,omitempty"`
 
 	Problem string `json:"problem,omitempty"`
+
+	EnvSource string `json:"envSource,omitempty"`
 }
 
 type MatrixRow struct {
@@ -55,6 +59,13 @@ type Matrix struct {
 	Rows    []MatrixRow     `json:"rows"`
 	Groups  []MatrixGroup   `json:"groups,omitempty"`
 	Apps    []AppResolution `json:"apps"`
+
+	Undeclared []UndeclaredCell `json:"undeclared,omitempty"`
+}
+
+type UndeclaredCell struct {
+	Cell
+	EnvSource string `json:"envSource"`
 }
 
 var className = map[resourcesv1.VariableClass]string{
@@ -71,6 +82,12 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	base := g.baseCells()
 	resolved := g.resolvedCells()
 	references := maps.Clone(g.references)
+	copied := map[Cell]string{}
+	for _, stored := range g.cells {
+		if stored.EnvSource != "" && stored.EnvSource != string(envsource.Builtin) {
+			copied[stored.Cell] = stored.EnvSource
+		}
+	}
 	overrides := make(map[Cell][]Override, len(g.overrides))
 	for cell, forCell := range g.overrides {
 		for _, override := range forCell {
@@ -114,6 +131,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 				Overrides: overrides[cell],
 				Reference: references[cell],
 				Problem:   complaints[cell],
+				EnvSource: copied[cell],
 			})
 		}
 		m.Rows = append(m.Rows, row)
@@ -125,6 +143,14 @@ func (g *Gate) Matrix(environments []string) Matrix {
 			Description: group.GetDescription(),
 		})
 	}
+	for cell, envSource := range copied {
+		if !declares(definitions, cell) {
+			m.Undeclared = append(m.Undeclared, UndeclaredCell{Cell: cell, EnvSource: envSource})
+		}
+	}
+	slices.SortFunc(m.Undeclared, func(a, b UndeclaredCell) int {
+		return cmp.Or(cmp.Compare(a.Key, b.Key), cmp.Compare(a.Folder, b.Folder))
+	})
 	for _, app := range apps {
 		m.Apps = append(m.Apps, AppResolution{
 			Name:    app.Name,

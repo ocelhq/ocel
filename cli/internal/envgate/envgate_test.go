@@ -18,6 +18,7 @@ type fakeValues struct {
 	overrides []envgate.Stored
 	values    map[envgate.Address]string
 	revealed  []envgate.Address
+	copied    map[envgate.Cell]string
 }
 
 func newFakeValues() *fakeValues {
@@ -34,6 +35,14 @@ func (v *fakeValues) setAt(key, folder, value string, version int64) {
 	v.versions[envgate.Cell{Key: key, Folder: folder}] = version
 }
 
+func (v *fakeValues) copyFrom(envSource, key, folder, value string) {
+	v.set(key, folder, value)
+	if v.copied == nil {
+		v.copied = map[envgate.Cell]string{}
+	}
+	v.copied[envgate.Cell{Key: key, Folder: folder}] = envSource
+}
+
 func (v *fakeValues) override(key, folder, environment, value string) {
 	cell := envgate.Cell{Key: key, Folder: folder}
 	v.overrides = append(v.overrides, envgate.Stored{Address: envgate.Address{Cell: cell, Environment: environment}, Version: 1})
@@ -43,7 +52,7 @@ func (v *fakeValues) override(key, folder, environment, value string) {
 func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	out := make([]envgate.Stored, 0, len(v.cells)+len(v.overrides))
 	for c := range v.cells {
-		out = append(out, envgate.Stored{Address: envgate.Address{Cell: c}, Version: v.versions[c]})
+		out = append(out, envgate.Stored{Address: envgate.Address{Cell: c}, Version: v.versions[c], EnvSource: v.copied[c]})
 	}
 	return append(out, v.overrides...), nil
 }

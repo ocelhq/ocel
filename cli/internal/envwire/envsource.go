@@ -94,6 +94,46 @@ func EnvSourceOfStatus(status *envvarsv1.EnvSourceStatus) envgate.EnvSource {
 	return out
 }
 
+type EnvSourceClient struct {
+	Runner  *providerclient.Runner
+	Config  *projectconfig.Config
+	Preview bool
+}
+
+func (c EnvSourceClient) Describe(ctx context.Context) (envgate.EnvSource, error) {
+	vars, err := c.Runner.Vars()
+	if err != nil {
+		return envgate.EnvSource{}, err
+	}
+	resp, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: tierOf(c.Preview), Slug: c.Config.Slug})
+	if err != nil {
+		return envgate.EnvSource{}, err
+	}
+	return EnvSourceOfStatus(resp.GetStatus()), nil
+}
+
+func (c EnvSourceClient) Sync(ctx context.Context) error {
+	_, err := SyncEnvSource(ctx, c.Runner, c.Config, c.Preview)
+	return err
+}
+
+func (c EnvSourceClient) Create(ctx context.Context, at envgate.Cell, value, description string) (bool, error) {
+	vars, err := c.Runner.Vars()
+	if err != nil {
+		return false, err
+	}
+	resp, err := vars.CreateEnvSourceValue(ctx, &envvarsv1.CreateEnvSourceValueRequest{
+		Tier:        tierOf(c.Preview),
+		Coordinate:  &envvarsv1.Coordinate{Slug: c.Config.Slug, Folder: at.Folder, Key: at.Key},
+		Value:       value,
+		Description: description,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetAwaitingApproval(), nil
+}
+
 func tierOf(preview bool) environmentv1.Tier {
 	if preview {
 		return environmentv1.Tier_TIER_PREVIEW
