@@ -37,6 +37,8 @@ const (
 	FormatDotenv Format = "dotenv"
 )
 
+const FolderPlaceholder = "{folder}"
+
 type Descriptor struct {
 	Kind      Kind              `json:"kind"`
 	Infisical *InfisicalOptions `json:"infisical,omitempty"`
@@ -109,6 +111,10 @@ func (d Descriptor) ID() string {
 
 func (o InfisicalOptions) ID() string {
 	return string(Infisical) + ":" + o.Project + "/" + o.Environment
+}
+
+func (o InfisicalOptions) secretPath(folder string) string {
+	return path.Join(o.Path, "/"+strings.TrimPrefix(folder, "/"))
 }
 
 func (a InfisicalAuth) Variables() []string {
