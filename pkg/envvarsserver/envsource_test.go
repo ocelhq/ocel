@@ -327,6 +327,24 @@ func TestAWritableEnvSourceCreatesAMissingKeyThenCopiesIt(t *testing.T) {
 	}
 }
 
+func TestACredentialIsNeverCreatedInTheEnvSourceItLogsInTo(t *testing.T) {
+	vars, _ := served(t)
+	fake, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, true)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := vars.CreateEnvSourceValue(context.Background(), &envvarsv1.CreateEnvSourceValueRequest{Tier: production, Coordinate: cell("INFISICAL_CLIENT_SECRET"), Value: "v"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "ocel env set") {
+		t.Fatalf("CreateEnvSourceValue(INFISICAL_CLIENT_SECRET) = %v, want it refused pointing at ocel env set", err)
+	}
+	if len(fake.created) != 0 {
+		t.Fatalf("created = %v, want nothing sent to the env source", fake.created)
+	}
+}
+
 func TestAReadOnlyEnvSourceTakesNoWrite(t *testing.T) {
 	vars, _ := served(t)
 	_, server := newInfisical(t)
