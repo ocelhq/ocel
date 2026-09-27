@@ -52,6 +52,9 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	for _, warning := range warnings {
 		ui.Warning(warning)
 	}
+	for _, warning := range envgate.Undeclared(gate.Declared(), gate.Scope().EnvSource) {
+		ui.Warning(warning)
+	}
 	if err := gate.Check(); err != nil {
 		return nil, nil, err
 	}

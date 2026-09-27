@@ -51,6 +51,10 @@ func (r *Refusal) Missing() *streamv1.MissingVariables {
 	return &streamv1.MissingVariables{Cells: cells, Remedy: r.remedy(), Groups: groups}
 }
 
+func (r *Refusal) Description(key string) string {
+	return r.definition(key).GetDescription()
+}
+
 func (r *Refusal) definition(key string) *resourcesv1.VariableDefinition {
 	for _, definition := range r.Definitions {
 		if definition.GetKey() == key {
@@ -63,6 +67,9 @@ func (r *Refusal) definition(key string) *resourcesv1.VariableDefinition {
 func (r *Refusal) remedy() string {
 	if r.Scope.Browser {
 		return withPreview("ocel env ui", r.Scope)
+	}
+	if r.Scope.EnvSource.OwnsValues() {
+		return r.Scope.EnvSource.remedy(r.Problems, r.Scope)
 	}
 	key, folder := "<KEY>", "<FOLDER>"
 	inFolder := false

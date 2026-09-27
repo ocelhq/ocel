@@ -189,7 +189,6 @@ func RunFakeProvider() int {
 
 type deployFakeProviderServer struct {
 	contractv1connect.UnimplementedProviderServiceHandler
-	envvarsv1connect.UnimplementedEnvVarsServiceHandler
 	mode string
 
 	mu                sync.Mutex

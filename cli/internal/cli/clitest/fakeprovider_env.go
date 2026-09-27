@@ -41,9 +41,10 @@ func (c FakeCoordinate) proto() *envvarsv1.Coordinate {
 }
 
 type FakeCellData struct {
-	Value  string          `json:"value"`
-	Target *FakeCoordinate `json:"target,omitempty"`
-	Ts     int64           `json:"ts"`
+	Value     string          `json:"value"`
+	Target    *FakeCoordinate `json:"target,omitempty"`
+	Ts        int64           `json:"ts"`
+	EnvSource string          `json:"envSource,omitempty"`
 }
 
 type FakeStore map[string]*FakeCell
@@ -88,6 +89,7 @@ func (cell *FakeCell) metadata() *envvarsv1.ValueMetadata {
 		Version:    int64(len(cell.Versions)),
 		UpdatedAt:  latest.Ts,
 		Size:       int64(len(latest.Value)),
+		EnvSource:  latest.EnvSource,
 	}
 	if latest.Target != nil {
 		m.Target = latest.Target.proto()
@@ -189,6 +191,9 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envvarsv1.
 		return nil, err
 	}
 
+	if err := refuseFakeEnvSourceOwned(store, req.GetTier(), req.GetCoordinate(), false); err != nil {
+		return nil, err
+	}
 	cell := store[FakeCoordinateID(req.GetTier(), req.GetCoordinate())]
 	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
 		return nil, err
@@ -234,6 +239,9 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envvar
 	}
 
 	at, target := req.GetCoordinate(), req.GetTarget()
+	if err := refuseFakeEnvSourceOwned(store, req.GetTier(), at, false); err != nil {
+		return nil, err
+	}
 	deepens := func(reason string) error {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"%s: vars: reference to a reference", reason))
@@ -349,6 +357,9 @@ func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envvars
 	}
 	if cell.LiveVersion() == 0 {
 		return &envvarsv1.DeleteValueResponse{}, nil
+	}
+	if err := refuseFakeEnvSourceOwned(store, req.GetTier(), req.GetCoordinate(), true); err != nil {
+		return nil, err
 	}
 	cell.Deleted = true
 	if err := SaveFakeStore(store); err != nil {

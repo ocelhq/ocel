@@ -15,21 +15,46 @@ type BindingVariables struct {
 	Keys  []string
 }
 
-func Declarations(bound []BindingVariables) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition) {
-	scope := Scope{Bindings: bound}
-	return scope.bindingDefinitions(), scope.bindingGroups()
+func Declarations(scope Scope) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition) {
+	return scope.impliedDefinitions(), scope.impliedGroups()
 }
 
 func (g *Gate) Declared() []*resourcesv1.VariableDefinition {
-	return append(g.Definitions(), g.scope.bindingDefinitions()...)
+	return append(g.Definitions(), g.scope.impliedDefinitions()...)
 }
 
-func CheckBindingVariableWritable(bound []BindingVariables, key, folder string) error {
-	readers := Scope{Bindings: bound}.readers(key)
-	if len(readers) == 0 || folder == "" {
+func CheckImpliedWritable(scope Scope, key, folder string) error {
+	if folder == "" {
 		return nil
 	}
-	return fmt.Errorf("%s is read by %s, and a binding serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, sites(readers), folder)
+	if readers := scope.readers(key); len(readers) > 0 {
+		return fmt.Errorf("%s is read by %s, and a binding serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, sites(readers), folder)
+	}
+	if scope.EnvSource.isCredential(key) {
+		return fmt.Errorf("%s is what ocel logs in to %s with, and ocel reads it at the project root alone, so a value in %s would reach nothing: set it without --folder", key, scope.EnvSource.ID, folder)
+	}
+	return nil
+}
+
+func (s Scope) impliedDefinitions() []*resourcesv1.VariableDefinition {
+	out := s.bindingDefinitions()
+	for _, definition := range s.EnvSource.credentialDefinitions(s.envSourceSite()) {
+		if !slices.ContainsFunc(out, func(existing *resourcesv1.VariableDefinition) bool { return existing.GetKey() == definition.GetKey() }) {
+			out = append(out, definition)
+		}
+	}
+	return out
+}
+
+func (s Scope) envSourceSite() string {
+	if s.Preview {
+		return "envSource.preview"
+	}
+	return "envSource.production"
+}
+
+func (s Scope) impliedGroups() []*resourcesv1.GroupDefinition {
+	return append(s.bindingGroups(), s.EnvSource.credentialGroups()...)
 }
 
 func (s Scope) bindingDefinitions() []*resourcesv1.VariableDefinition {
@@ -91,16 +116,22 @@ func sites(readers []string) string {
 
 func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error {
 	for _, definition := range definitions {
+		declaredBy := definition.GetSource()
+		if declaredBy == "" {
+			declaredBy = "the app's code"
+		}
+		if scope.EnvSource.isCredential(definition.GetKey()) {
+			return fmt.Errorf(
+				"%s is declared by %s and is what ocel logs in to %s with: that credential reaches ocel alone, and declaring it too would hand the app the credential as a plain variable. "+
+					"Rename one of them",
+				definition.GetKey(), declaredBy, scope.EnvSource.ID)
+		}
 		readers := scope.readers(definition.GetKey())
 		if len(readers) == 0 {
 			readers = Scope{Bindings: scope.OtherTiers}.readers(definition.GetKey())
 		}
 		if len(readers) == 0 {
 			continue
-		}
-		declaredBy := definition.GetSource()
-		if declaredBy == "" {
-			declaredBy = "the app's code"
 		}
 		return fmt.Errorf(
 			"%s is declared by %s and read by %s: a binding's variable reaches the binding alone, and declaring it too would hand the app the credential as a plain variable. "+

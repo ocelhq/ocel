@@ -81,7 +81,14 @@ func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.
 	if preview {
 		tier, other = other, tier
 	}
-	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Bindings: BindingVariables(cfg, tier), OtherTiers: BindingVariables(cfg, other)}
+	return envgate.Scope{
+		Apps:        Apps(cfg),
+		Preview:     preview,
+		Environment: environment,
+		Bindings:    BindingVariables(cfg, tier),
+		OtherTiers:  BindingVariables(cfg, other),
+		EnvSource:   configuredEnvSource(cfg, preview),
+	}
 }
 
 func BindingVariables(cfg *projectconfig.Config, tier environmentv1.Tier) []envgate.BindingVariables {
