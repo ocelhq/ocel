@@ -2802,12 +2802,12 @@ var File_provider_envvars_v1_envvars_proto protoreflect.FileDescriptor
 
 const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
-	"!provider/envvars/v1/envvars.proto\x12\x13provider.envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xee\x03\n" +
+	"!provider/envvars/v1/envvars.proto\x12\x13provider.envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xb4\x04\n" +
 	"\n" +
 	"Coordinate\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xca\x01\n" +
-	"\x06folder\x18\x02 \x01(\tB\xb1\x01\xbaH\xad\x01\xba\x01\x90\x01\n" +
-	"\x1eenvvars.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12+\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x90\x02\n" +
+	"\x06folder\x18\x02 \x01(\tB\xf7\x01\xbaH\xf3\x01\xba\x01\x90\x01\n" +
+	"\x1eenvvars.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
 	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\xae\x01\n" +
 	"\venvironment\x18\x04 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
 	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\x85\x02\n" +
@@ -2965,9 +2965,9 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\x0eEnvSourceValue\x125\n" +
 	"\x04cell\x18\x01 \x01(\v2\x19.provider.envvars.v1.CellB\x06\xbaH\x03\xc8\x01\x01R\x04cell\x12\x19\n" +
 	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\tR\aversion\"i\n" +
-	"\x04Cell\x124\n" +
-	"\x06folder\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12+\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\"\xaf\x01\n" +
+	"\x04Cell\x12z\n" +
+	"\x06folder\x18\x01 \x01(\tBb\xbaH_r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
 	"\x03key\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\"\xb2\x02\n" +
 	"\x0fEnvSourceStatus\x12\x1d\n" +
 	"\n" +
@@ -2986,7 +2986,7 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\x03url\x18\x02 \x01(\tR\x03url\"T\n" +
 	"\vRefusedCell\x12-\n" +
 	"\x04cell\x18\x01 \x01(\v2\x19.provider.envvars.v1.CellR\x04cell\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xdd\x03\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xa4\x04\n" +
 	"\x14SyncEnvSourceRequest\x12\xb2\x01\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x80\x01\xbaH}\xba\x01z\n" +
 	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
@@ -2995,8 +2995,8 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"env_source\x18\x03 \x01(\v2\x1e.provider.envvars.v1.EnvSourceH\x00R\tenvSource\x12J\n" +
 	"\n" +
 	"registered\x18\x05 \x01(\v2(.provider.envvars.v1.RegisteredEnvSourceH\x00R\n" +
-	"registered\x12=\n" +
-	"\afolders\x18\x04 \x03(\tB#\xbaH \x92\x01\x1d\x18\x01\"\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\afoldersB\r\n" +
+	"registered\x12\x83\x01\n" +
+	"\afolders\x18\x04 \x03(\tBi\xbaHf\x92\x01c\x18\x01\"_r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\afoldersB\r\n" +
 	"\x04from\x12\x05\xbaH\x02\b\x01\"\x15\n" +
 	"\x13RegisteredEnvSource\"\xfa\x01\n" +
 	"\x15SyncEnvSourceResponse\x12<\n" +

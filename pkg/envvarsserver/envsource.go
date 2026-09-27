@@ -179,6 +179,11 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 			at.GetKey(), scope.Class, current.ID()))
 	}
 	cell := envvars.Cell{Folder: at.GetFolder(), Key: at.GetKey()}
+	if !slices.Contains(registration.Folders, cell.Folder) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"%s is not a folder %s reads from %s in %s: ocel creates a value only in the root or in the folder of one of %s's apps",
+			cell.Folder, scope.Project, registration.Descriptor.ID(), scope.Class, scope.Project))
+	}
 	if slices.Contains(registration.Credentials(), cell) {
 		preview := ""
 		if scope.Class == edge.ClassPreview {

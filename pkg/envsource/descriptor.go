@@ -1,6 +1,7 @@
 package envsource
 
 import (
+	"fmt"
 	"path"
 	"strings"
 )
@@ -113,8 +114,13 @@ func (o InfisicalOptions) ID() string {
 	return string(Infisical) + ":" + o.Project + "/" + o.Environment
 }
 
-func (o InfisicalOptions) secretPath(folder string) string {
-	return path.Join(o.Path, "/"+strings.TrimPrefix(folder, "/"))
+func (o InfisicalOptions) secretPath(folder string) (string, error) {
+	for segment := range strings.SplitSeq(folder, "/") {
+		if segment == "." || segment == ".." {
+			return "", fmt.Errorf("folder %q climbs out of %s, and ocel reads and writes only beneath the path it was given", folder, o.Path)
+		}
+	}
+	return path.Join(o.Path, "/"+strings.TrimPrefix(folder, "/")), nil
 }
 
 func (d Descriptor) CredentialVariables() []string {

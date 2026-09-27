@@ -431,6 +431,24 @@ func TestInfisicalCreatesAMissingKeyAndNeverOverwritesOne(t *testing.T) {
 	}
 }
 
+func TestInfisicalNeverWritesOutsideItsPath(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/acme")
+	fake.put("/other")
+	source := signedIn(server, "/acme", envsource.WriteMissing)
+	for _, folder := range []string{"/..", "/../other", "/web/../../other", "/.", "/web/.."} {
+		if err := source.Create(context.Background(), cell(folder, "PLANTED"), []byte("v"), ""); err == nil {
+			t.Errorf("Create() in folder %q = nil, want a refusal", folder)
+		}
+	}
+	for path, secrets := range map[string][]fakeSecret{"/": fake.stored("/"), "/other": fake.stored("/other"), "/acme": fake.stored("/acme")} {
+		if len(secrets) != 0 {
+			t.Errorf("%s holds %+v, want nothing written above or beside the path", path, secrets)
+		}
+	}
+}
+
 func TestInfisicalRefusesToWriteUnlessToldItMay(t *testing.T) {
 	t.Parallel()
 	_, server := newFakeInfisical(t)

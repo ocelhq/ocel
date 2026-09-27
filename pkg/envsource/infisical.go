@@ -45,7 +45,10 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 	s.cacheOrgID(ctx)
 	out := map[envvars.Cell]Value{}
 	for _, folder := range folders {
-		at := s.options.secretPath(folder)
+		at, err := s.options.secretPath(folder)
+		if err != nil {
+			return nil, err
+		}
 		query := url.Values{
 			"projectId":              {s.options.Project},
 			"environment":            {s.options.Environment},
@@ -61,7 +64,7 @@ func (s *infisical) Read(ctx context.Context, folders []string) (map[envvars.Cel
 				Secrets []infisicalSecret `json:"secrets"`
 			} `json:"imports"`
 		}
-		err := s.client.call(ctx, http.MethodGet, "/api/v4/secrets?"+query.Encode(), nil, &listed, true)
+		err = s.client.call(ctx, http.MethodGet, "/api/v4/secrets?"+query.Encode(), nil, &listed, true)
 		if folder != "" && isInfisicalStatus(err, http.StatusNotFound) {
 			continue
 		}
@@ -116,7 +119,10 @@ func (s *infisical) Create(ctx context.Context, at envvars.Cell, value []byte, d
 	if s.options.Write != WriteMissing {
 		return ErrReadOnly
 	}
-	secretPath := s.options.secretPath(at.Folder)
+	secretPath, err := s.options.secretPath(at.Folder)
+	if err != nil {
+		return err
+	}
 	body := map[string]string{
 		"projectId":     s.options.Project,
 		"environment":   s.options.Environment,
@@ -125,7 +131,7 @@ func (s *infisical) Create(ctx context.Context, at envvars.Cell, value []byte, d
 		"secretComment": description,
 		"type":          "shared",
 	}
-	err := s.createSecret(ctx, at.Key, body)
+	err = s.createSecret(ctx, at.Key, body)
 	if isInfisicalStatus(err, http.StatusNotFound) {
 		if err := s.ensureFolder(ctx, secretPath); err != nil {
 			return err
@@ -177,10 +183,11 @@ func (s *infisical) URL(at envvars.Cell) string {
 	s.mu.Lock()
 	org := s.orgID
 	s.mu.Unlock()
-	if org == "" {
+	secretPath, err := s.options.secretPath(at.Folder)
+	if org == "" || err != nil {
 		return ""
 	}
-	query := url.Values{"secretPath": {s.options.secretPath(at.Folder)}}
+	query := url.Values{"secretPath": {secretPath}}
 	if at.Key != "" {
 		query.Set("search", at.Key)
 	}

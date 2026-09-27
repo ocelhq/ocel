@@ -21,11 +21,15 @@ func (s infisicalExport) ID() string { return s.options.ID() }
 func (s infisicalExport) Read(ctx context.Context, folders []string) (map[envvars.Cell]Value, error) {
 	out := map[envvars.Cell]Value{}
 	for _, folder := range folders {
+		at, err := s.options.secretPath(folder)
+		if err != nil {
+			return nil, err
+		}
 		printed, err := runCommand(ctx, s.dir, []string{
 			s.cli, "export",
 			"--format=json",
 			"--env=" + s.options.Environment,
-			"--path=" + s.options.secretPath(folder),
+			"--path=" + at,
 			"--projectId=" + s.options.Project,
 			"--domain=" + s.options.Host,
 			"--silent",
@@ -38,7 +42,7 @@ func (s infisicalExport) Read(ctx context.Context, folders []string) (map[envvar
 			Value string `json:"value"`
 		}
 		if json.Unmarshal(printed, &exported) != nil {
-			return nil, fmt.Errorf("`infisical export` printed something other than a JSON list of secrets for %s", s.options.secretPath(folder))
+			return nil, fmt.Errorf("`infisical export` printed something other than a JSON list of secrets for %s", at)
 		}
 		for _, secret := range exported {
 			if secret.Value == "" {
