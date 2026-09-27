@@ -73,11 +73,16 @@ func writeStatus(ctx context.Context, store records.Store, class edge.Class, ded
 		if err != nil {
 			return err
 		}
+		created := recorded.Revision == ""
 		recorded.Bytes = encoded
 		_, err = store.Write(ctx, recorded)
-		if !errors.Is(err, records.ErrStale) {
+		if errors.Is(err, records.ErrStale) {
+			continue
+		}
+		if err != nil || !created {
 			return err
 		}
+		return forgetUnshared(ctx, store, class, dedupeKey)
 	}
 	return fmt.Errorf("the %s env source status was rewritten under each of %d attempts to record this sync, so this sync's outcome is lost", class, statusAttempts)
 }
@@ -87,10 +92,10 @@ func ForgetProject(ctx context.Context, store envvars.Store, class edge.Class, p
 	if err != nil || !registered {
 		return err
 	}
-	if err := records.Forget(ctx, store.Records, registrationName(class, project)); err != nil {
+	if err := release(ctx, store.Records, class, registration.DedupeKey, project); err != nil {
 		return err
 	}
-	return release(ctx, store.Records, class, registration.DedupeKey, project)
+	return records.Forget(ctx, store.Records, registrationName(class, project))
 }
 
 func moveSharer(ctx context.Context, store records.Store, class edge.Class, project, from, to string) error {
@@ -117,6 +122,10 @@ func release(ctx context.Context, store records.Store, class edge.Class, dedupeK
 	if err := records.Forget(ctx, store, append(sharersName(class, dedupeKey), project)); err != nil {
 		return err
 	}
+	return forgetUnshared(ctx, store, class, dedupeKey)
+}
+
+func forgetUnshared(ctx context.Context, store records.Store, class edge.Class, dedupeKey string) error {
 	sharers, err := store.List(ctx, sharersName(class, dedupeKey))
 	if err != nil || len(sharers) > 0 {
 		return err
