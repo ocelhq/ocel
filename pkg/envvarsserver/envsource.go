@@ -62,17 +62,8 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	if !slices.Contains(folders, "") {
 		folders = append(slices.Clone(folders), "")
 	}
-	registration := envsource.Registration{Project: scope.Project, Descriptor: descriptor, Folders: folders}
-	previous, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	registration, err := envsource.Register(ctx, store, scope.Class, envsource.Registration{Project: scope.Project, Descriptor: descriptor, Folders: folders})
 	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	if registered && envsource.DedupeKey(ctx, store, scope, previous.Descriptor) != envsource.DedupeKey(ctx, store, scope, descriptor) {
-		if err := envsource.ForgetProject(ctx, store, scope.Class, scope.Project); err != nil {
-			return nil, provider.RefusalError(err)
-		}
-	}
-	if err := envsource.Register(ctx, store.Records, scope.Class, registration); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 

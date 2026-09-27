@@ -147,7 +147,7 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	ctx := context.Background()
 	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
-	if err := envsource.Register(ctx, store.Records, edge.ClassProduction, registration); err != nil {
+	if _, err := envsource.Register(ctx, store, edge.ClassProduction, registration); err != nil {
 		t.Fatal(err)
 	}
 	sync := &envsource.Sync{Store: store, Class: edge.ClassProduction}

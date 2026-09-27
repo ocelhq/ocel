@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/provider/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -27,13 +26,14 @@ func infisicalRegistration(project, host string, auth envsource.InfisicalAuth, f
 
 func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T) {
 	t.Parallel()
-	records := fake.NewRecords()
+	store, _ := storeFixture()
+	records := store.Records
 	ctx := context.Background()
 	for _, registration := range []envsource.Registration{
 		infisicalRegistration("shop", "https://infisical.example.com", universal, "/web", "", "/web"),
 		infisicalRegistration("admin", "https://infisical.example.com", cloudIdentity, ""),
 	} {
-		if err := envsource.Register(ctx, records, edge.ClassProduction, registration); err != nil {
+		if _, err := envsource.Register(ctx, store, edge.ClassProduction, registration); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -57,10 +57,10 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 		t.Fatalf("Registrations() = %+v, %v, want admin then shop", all, err)
 	}
 
-	if err := envsource.Unregister(ctx, records, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	if _, registered, err := envsource.Registered(ctx, records, edge.ClassProduction, "shop"); err != nil || registered {
-		t.Fatalf("Registered() after Unregister = %v, %v, want nothing", registered, err)
+		t.Fatalf("Registered() after ForgetProject = %v, %v, want nothing", registered, err)
 	}
 }

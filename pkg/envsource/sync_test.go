@@ -46,7 +46,7 @@ func syncFixture(t *testing.T) (*envsource.Sync, envvars.Store, *fakeInfisical, 
 
 func register(t *testing.T, store envvars.Store, registration envsource.Registration) {
 	t.Helper()
-	if err := envsource.Register(context.Background(), store.Records, edge.ClassProduction, registration); err != nil {
+	if _, err := envsource.Register(context.Background(), store, edge.ClassProduction, registration); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -379,11 +379,11 @@ func TestOpenGivesTheSourceAWriteGoesThrough(t *testing.T) {
 	}
 }
 
-func TestUnregisteringStopsTheSync(t *testing.T) {
+func TestForgettingAProjectStopsItsSync(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
-	if err := envsource.Unregister(context.Background(), store.Records, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(context.Background(), store, edge.ClassProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	if err := sync.CopyScheduled(context.Background()); err != nil {
