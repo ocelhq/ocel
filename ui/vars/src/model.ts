@@ -128,7 +128,7 @@ export interface Variant {
   problem?: string;
   envSource?: string;
   owner?: Owner;
-  creatable: boolean;
+  writesToEnvSource: boolean;
   awaitingApproval?: true;
 }
 
@@ -235,7 +235,7 @@ export function variantOf(
     ...(environment === "" && cell.problem && { problem: cell.problem }),
     ...(environment === "" && cell.envSource && { envSource: cell.envSource }),
     ...(owner && { owner }),
-    creatable: owner?.canCreate === true && !set,
+    writesToEnvSource: owner !== undefined && (set ? owner.canUpdate : owner.canCreate),
   };
 }
 
@@ -247,7 +247,7 @@ export function provenanceOf(variant: Variant): string {
 }
 
 export function locked(variant: Variant): boolean {
-  return variant.owner !== undefined && !variant.creatable;
+  return variant.owner !== undefined && !variant.writesToEnvSource;
 }
 
 function materialised(cell: MatrixCell): boolean {
@@ -292,8 +292,8 @@ export function catalogueOf(
     if (variants.has(key)) return;
     variants.set(
       key,
-      variant.creatable && awaitingApproval.has(key)
-        ? { ...variant, creatable: false, awaitingApproval: true }
+      variant.writesToEnvSource && awaitingApproval.has(key)
+        ? { ...variant, writesToEnvSource: false, awaitingApproval: true }
         : variant,
     );
   };

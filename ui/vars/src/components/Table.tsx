@@ -915,9 +915,11 @@ function Value({ line }: { line: KeyLine }) {
     ? "the console cannot read this value"
     : variant.owner && locked(variant)
       ? `read from ${variant.owner.id} · change it there`
-      : variant.set
-        ? `set · v${variant.version}`
-        : "not set";
+      : variant.owner && variant.set
+        ? `read from ${variant.owner.id} · saving updates it there`
+        : variant.set
+          ? `set · v${variant.version}`
+          : "not set";
   const marks = [
     dirty && (
       <Chip tone="accent" data-slot="unsaved" key="unsaved">
@@ -985,7 +987,7 @@ function Value({ line }: { line: KeyLine }) {
                 ? "inherits the root value"
                 : line.inherits === "base"
                   ? "inherits the base value"
-                  : variant.creatable
+                  : variant.writesToEnvSource
                     ? `not set · saving creates it in ${variant.owner?.id}`
                     : "not set"
               : revealed

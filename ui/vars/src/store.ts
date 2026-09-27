@@ -476,15 +476,17 @@ export async function save(): Promise<void> {
   saving.value = true;
   outcome.value = null;
   const created: Address[] = [];
+  const updated: Address[] = [];
   const awaiting: Address[] = [];
   const envSource = state.value?.envSource?.id;
   try {
     const results = await Promise.all(
       savable.map((draft) =>
         attempt(draft.at, async () => {
-          if (variants.value.get(addressKey(draft.at))?.creatable) {
+          const variant = variants.value.get(addressKey(draft.at));
+          if (variant?.writesToEnvSource) {
             const answer = await port().setInEnvSource(draft.at, draft.value);
-            (answer.awaitingApproval ? awaiting : created).push(draft.at);
+            (answer.awaitingApproval ? awaiting : variant.set ? updated : created).push(draft.at);
             return;
           }
           await port().set(draft.at, draft.value, draft.version);
@@ -516,7 +518,7 @@ export async function save(): Promise<void> {
         .filter((key) => switched.has(key)),
     );
     const cleared = removed.filter((result) => result.ok).length;
-    const sent = new Set([...created, ...awaiting].map(addressKey));
+    const sent = new Set([...created, ...updated, ...awaiting].map(addressKey));
     const stored = results.filter((result) => !sent.has(addressKey(result.at)));
     outcome.value = {
       text: [
@@ -524,6 +526,7 @@ export async function save(): Promise<void> {
           ? saveSummary(reduceSave(new Map(), new Map(), new Map(), stored))
           : "",
         created.length > 0 ? `Created ${names(created.map((at) => at.key))} in ${envSource}.` : "",
+        updated.length > 0 ? `Updated ${names(updated.map((at) => at.key))} in ${envSource}.` : "",
         awaiting.length > 0
           ? `${names(awaiting.map((at) => at.key))} ${awaiting.length === 1 ? "waits" : "wait"} for approval in ${envSource} before ocel can read ${awaiting.length === 1 ? "it" : "them"}.`
           : "",
