@@ -2,10 +2,10 @@ import { createServer, type Server } from "node:http";
 import type { ConnectRouter } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { afterEach, describe, expect, it } from "vitest";
-import { createEnvSourceValue, describeEnvSource, list } from "./envvars";
+import { describeEnvSource, list, setEnvSourceValue } from "./envvars";
 import {
-  type CreateEnvSourceValueRequest,
   EnvVarsService,
+  type SetEnvSourceValueRequest,
 } from "./gen/provider/envvars/v1/envvars_pb";
 import type { Connector } from "./transport";
 
@@ -53,7 +53,8 @@ describe("an env source through the connector", () => {
         describeEnvSource: () => ({
           status: {
             envSource: "infisical:p-1/prod",
-            writable: true,
+            canCreate: true,
+            canUpdate: true,
             links: [{ folder: "", url: "https://infisical.example/root" }],
             credentials: ["INFISICAL_CLIENT_ID"],
           },
@@ -64,7 +65,8 @@ describe("an env source through the connector", () => {
       done: true,
       result: {
         id: "infisical:p-1/prod",
-        writable: true,
+        canCreate: true,
+        canUpdate: true,
         urls: { "": "https://infisical.example/root" },
         credentials: ["INFISICAL_CLIENT_ID"],
       },
@@ -78,23 +80,24 @@ describe("an env source through the connector", () => {
     const answer = await describeEnvSource(connector, "preview", "shop");
     expect(answer.done && answer.result).toEqual({
       id: "builtin",
-      writable: false,
+      canCreate: false,
+      canUpdate: false,
       urls: {},
       credentials: [],
     });
   });
 
-  it("creates a missing value with its description and says when it waits for approval", async () => {
-    const seen: CreateEnvSourceValueRequest[] = [];
+  it("sets a value in the env source with its description and says when it waits for approval", async () => {
+    const seen: SetEnvSourceValueRequest[] = [];
     const connector = await serving((router) =>
       router.service(EnvVarsService, {
-        createEnvSourceValue: (request) => {
+        setEnvSourceValue: (request) => {
           seen.push(request);
           return { awaitingApproval: true };
         },
       }),
     );
-    const answer = await createEnvSourceValue(
+    const answer = await setEnvSourceValue(
       connector,
       "production",
       "shop",

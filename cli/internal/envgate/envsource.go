@@ -14,7 +14,8 @@ const EnvSourceGroup = "env source"
 
 type EnvSource struct {
 	ID          string
-	Writable    bool
+	CanCreate   bool
+	CanUpdate   bool
 	URLs        map[string]string
 	Present     []Cell
 	Credentials []string

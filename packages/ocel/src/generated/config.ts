@@ -290,8 +290,8 @@ export interface InfisicalOptions {
   path?: string;
   /** The id of the Infisical project the values live in. */
   project: string;
-  /** Whether a deploy may write into Infisical. "missing" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, "never". Refused for dev, which only reads. */
-  write?: "missing" | "never";
+  /** What ocel may write into Infisical. "missing" creates a key a declaration names and Infisical lacks, and never overwrites one. "values" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, "never". Refused for dev, which only reads. */
+  write?: "never" | "missing" | "values";
 }
 
 /** How ocel logs in to Infisical, keyed by the login method. */

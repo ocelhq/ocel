@@ -100,8 +100,12 @@ func cleanPath(p string) string {
 
 func (d Descriptor) IsScheduled() bool { return d.Kind == Infisical }
 
-func (d Descriptor) CanWrite() bool {
-	return d.Kind == Infisical && d.Infisical != nil && d.Infisical.Write == WriteMissing
+func (d Descriptor) CanCreate() bool {
+	return d.Kind == Infisical && d.Infisical != nil && (d.Infisical.Write == WriteMissing || d.Infisical.Write == WriteValues)
+}
+
+func (d Descriptor) CanUpdate() bool {
+	return d.Kind == Infisical && d.Infisical != nil && d.Infisical.Write == WriteValues
 }
 
 func (d Descriptor) ID() string {

@@ -1298,7 +1298,7 @@ func (f *fakeEnvSource) Sync(context.Context) error {
 	return nil
 }
 
-func (f *fakeEnvSource) Create(_ context.Context, at envgate.Cell, value, description string) (bool, error) {
+func (f *fakeEnvSource) Set(_ context.Context, at envgate.Cell, value, description string) (bool, error) {
 	if f.refusal != nil {
 		return false, f.refusal
 	}
@@ -1311,7 +1311,7 @@ func (f *fakeEnvSource) Create(_ context.Context, at envgate.Cell, value, descri
 
 var infisical = envgate.EnvSource{
 	ID:          "infisical:p-1/prod",
-	Writable:    true,
+	CanCreate:   true,
 	URLs:        map[string]string{"": "https://infisical.example/root"},
 	Credentials: []string{"INFISICAL_CLIENT_ID"},
 }
@@ -1351,7 +1351,7 @@ func TestThePageNamesTheEnvSourceTheTierReadsFrom(t *testing.T) {
 		source := &fakeEnvSource{store: newFakeStore(), described: infisical}
 		got := state(t, envSourceSession(t, source, nil)).EnvSource
 
-		want := varsui.EnvSource{ID: infisical.ID, Writable: true, URLs: infisical.URLs, Credentials: infisical.Credentials}
+		want := varsui.EnvSource{ID: infisical.ID, CanCreate: true, URLs: infisical.URLs, Credentials: infisical.Credentials}
 		if got == nil || !reflect.DeepEqual(*got, want) {
 			t.Errorf("env source = %+v, want %+v", got, want)
 		}

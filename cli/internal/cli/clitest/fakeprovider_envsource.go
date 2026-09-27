@@ -44,6 +44,7 @@ type FakeRegistration struct {
 	LastSuccessAt int64                `json:"lastSuccessAt"`
 	LastError     string               `json:"lastError"`
 	Created       []FakeEnvSourceValue `json:"created"`
+	Updated       []FakeEnvSourceValue `json:"updated"`
 }
 
 type FakeRegistrations map[string]FakeRegistration
@@ -268,7 +269,8 @@ func (r FakeRegistration) status() *envvarsv1.EnvSourceStatus {
 	status := &envvarsv1.EnvSourceStatus{
 		EnvSource:     r.Descriptor.ID(),
 		Scheduled:     r.Descriptor.IsScheduled(),
-		Writable:      r.Descriptor.CanWrite(),
+		CanCreate:     r.Descriptor.CanCreate(),
+		CanUpdate:     r.Descriptor.CanUpdate(),
 		LastAttemptAt: r.LastAttemptAt,
 		LastSuccessAt: r.LastSuccessAt,
 		LastError:     r.LastError,
@@ -292,7 +294,7 @@ func (s *deployFakeProviderServer) DescribeEnvSource(_ context.Context, req *env
 	return &envvarsv1.DescribeEnvSourceResponse{Status: registration.status()}, nil
 }
 
-func (s *deployFakeProviderServer) CreateEnvSourceValue(_ context.Context, req *envvarsv1.CreateEnvSourceValueRequest) (*envvarsv1.CreateEnvSourceValueResponse, error) {
+func (s *deployFakeProviderServer) SetEnvSourceValue(_ context.Context, req *envvarsv1.SetEnvSourceValueRequest) (*envvarsv1.SetEnvSourceValueResponse, error) {
 	at := req.GetCoordinate()
 	if at.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
@@ -304,32 +306,38 @@ func (s *deployFakeProviderServer) CreateEnvSourceValue(_ context.Context, req *
 	}
 	key := FakeRegistrationKey(req.GetTier(), at.GetSlug())
 	registration, registered := registrations[key]
-	if !registered || !registration.Descriptor.CanWrite() {
+	if !registered || !registration.Descriptor.CanCreate() {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s reads from an env source ocel may not write into: set write to \"missing\" on the tier's env source", at.GetKey()))
+			"%s reads from an env source ocel may not write into: set write to \"values\" or \"missing\" on the tier's env source", at.GetKey()))
 	}
 	store, err := LoadFakeStore()
 	if err != nil {
 		return nil, err
 	}
-	if store[FakeCoordinateID(req.GetTier(), at)].LiveVersion() > 0 || slices.ContainsFunc(registration.Created, func(created FakeEnvSourceValue) bool {
+	written := FakeEnvSourceValue{Folder: at.GetFolder(), Key: at.GetKey(), Value: req.GetValue()}
+	exists := store[FakeCoordinateID(req.GetTier(), at)].LiveVersion() > 0 || slices.ContainsFunc(registration.Created, func(created FakeEnvSourceValue) bool {
 		return created.Folder == at.GetFolder() && created.Key == at.GetKey()
-	}) {
+	})
+	switch {
+	case exists && !registration.Descriptor.CanUpdate():
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf(
-			"%s already has %s, and ocel never overwrites a value there", registration.Descriptor.ID(), at.GetKey()))
+			"%s already has %s, and write \"missing\" never overwrites a value there", registration.Descriptor.ID(), at.GetKey()))
+	case exists:
+		registration.Updated = append(registration.Updated, written)
+	default:
+		registration.Created = append(registration.Created, written)
 	}
-	registration.Created = append(registration.Created, FakeEnvSourceValue{Folder: at.GetFolder(), Key: at.GetKey(), Value: req.GetValue()})
 	registrations[key] = registration
 	if err := SaveFakeRegistrations(registrations); err != nil {
 		return nil, err
 	}
 	if req.GetValue() == "" {
-		return &envvarsv1.CreateEnvSourceValueResponse{}, nil
+		return &envvarsv1.SetEnvSourceValueResponse{Created: !exists}, nil
 	}
 	if err := store.Write(req.GetTier(), at, FakeCellData{Value: req.GetValue(), EnvSource: registration.Descriptor.ID()}); err != nil {
 		return nil, err
 	}
-	return &envvarsv1.CreateEnvSourceValueResponse{Metadata: store.metadata(req.GetTier(), at)}, nil
+	return &envvarsv1.SetEnvSourceValueResponse{Metadata: store.metadata(req.GetTier(), at), Created: !exists}, nil
 }
 
 func refuseFakeEnvSourceOwned(store FakeStore, tier environmentv1.Tier, at *envvarsv1.Coordinate, removing bool) error {

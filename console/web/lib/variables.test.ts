@@ -142,7 +142,8 @@ describe("an env source", () => {
   ]);
   const infisical = {
     id: "infisical:p-1/prod",
-    writable: false,
+    canCreate: false,
+    canUpdate: false,
     urls: { "": "https://infisical.example/root" },
     credentials: ["INFISICAL_CLIENT_ID"],
   };

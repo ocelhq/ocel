@@ -68,14 +68,16 @@ export interface Ability {
 
 export interface EnvSource {
   id: string;
-  writable: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
   urls?: Record<string, string>;
   credentials?: string[];
 }
 
 export interface Owner {
   id: string;
-  writable: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
   url?: string;
 }
 
@@ -191,7 +193,12 @@ export function ownerOf(envSource: EnvSource | undefined, at: Address): Owner | 
   }
   if (at.folder === "" && (envSource.credentials ?? []).includes(at.key)) return undefined;
   const url = envSource.urls?.[at.folder];
-  return { id: envSource.id, writable: envSource.writable, ...(url && { url }) };
+  return {
+    id: envSource.id,
+    canCreate: envSource.canCreate,
+    canUpdate: envSource.canUpdate,
+    ...(url && { url }),
+  };
 }
 
 export function variantOf(
@@ -228,7 +235,7 @@ export function variantOf(
     ...(environment === "" && cell.problem && { problem: cell.problem }),
     ...(environment === "" && cell.envSource && { envSource: cell.envSource }),
     ...(owner && { owner }),
-    creatable: owner?.writable === true && !set,
+    creatable: owner?.canCreate === true && !set,
   };
 }
 

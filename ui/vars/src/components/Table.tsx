@@ -1057,7 +1057,7 @@ function Actions({ line }: { line: KeyLine }) {
       : `Remove the ${env} override`;
   const overrides = can.write ? overrideOptions(current, known, variant.at) : [];
   const folders =
-    can.write && variant.at.folder === "" && !(variant.owner && !variant.owner.writable)
+    can.write && variant.at.folder === "" && !(variant.owner && !variant.owner.canCreate)
       ? setForOptions(known, row)
       : [];
   const showValue = can.reveal && revealable(variant);

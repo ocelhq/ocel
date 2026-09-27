@@ -257,7 +257,7 @@ type InfisicalOptions struct {
 	Path        string         `json:"path,omitempty" doc:"The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /."`
 	Host        string         `json:"host,omitempty" doc:"The base URL of a self-hosted Infisical. Left off, https://app.infisical.com."`
 	Auth        *InfisicalAuth `json:"auth,omitempty" doc:"The machine identity production or preview reads as, keyed by its login method. Required there, and refused for dev, which reads as you."`
-	Write       string         `json:"write,omitempty" enum:"missing,never" doc:"Whether a deploy may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\". Refused for dev, which only reads."`
+	Write       string         `json:"write,omitempty" enum:"never,missing,values" doc:"What ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites one. \"values\" also updates a value Infisical holds, from ocel env set or the variables page, unless it changed in Infisical since ocel last read it. Nothing ocel does ever deletes a key there. Left off, \"never\". Refused for dev, which only reads."`
 }
 
 func (InfisicalOptions) Doc() string {

@@ -34,7 +34,7 @@ service EnvVarsService {
 
     rpc DescribeEnvSource(DescribeEnvSourceRequest) returns (DescribeEnvSourceResponse);
 
-    rpc CreateEnvSourceValue(CreateEnvSourceValueRequest) returns (CreateEnvSourceValueResponse);
+    rpc SetEnvSourceValue(SetEnvSourceValueRequest) returns (SetEnvSourceValueResponse);
 }
 
 message Coordinate {
@@ -298,7 +298,14 @@ message InfisicalEnvSource {
 
   InfisicalAuth auth = 5 [(buf.validate.field).required = true];
 
-  bool write_missing = 6;
+  WritePolicy write = 6 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+}
+
+enum WritePolicy {
+  WRITE_POLICY_UNSPECIFIED = 0;
+  WRITE_POLICY_NEVER = 1;
+  WRITE_POLICY_MISSING = 2;
+  WRITE_POLICY_VALUES = 3;
 }
 
 message InfisicalAuth {
@@ -344,7 +351,9 @@ message EnvSourceStatus {
 
   bool scheduled = 2;
 
-  bool writable = 3;
+  bool can_create = 3;
+
+  bool can_update = 9;
 
   int64 last_attempt_at = 4;
 
@@ -429,7 +438,7 @@ message DescribeEnvSourceResponse {
   EnvSourceStatus status = 1;
 }
 
-message CreateEnvSourceValueRequest {
+message SetEnvSourceValueRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
     id: "envvars.envsource.tier"
     message: "an env source is kept per deployed tier: name the preview or the production tier"
@@ -443,8 +452,10 @@ message CreateEnvSourceValueRequest {
   string description = 4 [(buf.validate.field).string.max_len = 120];
 }
 
-message CreateEnvSourceValueResponse {
+message SetEnvSourceValueResponse {
   bool awaiting_approval = 1;
 
   optional ValueMetadata metadata = 2;
+
+  bool created = 3;
 }

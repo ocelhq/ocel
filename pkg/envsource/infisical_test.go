@@ -250,7 +250,11 @@ func (f *fakeInfisical) get(w http.ResponseWriter, r *http.Request, name string)
 	}
 	for _, secret := range f.secrets[query.Get("secretPath")] {
 		if secret.key == name {
-			_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": secret.id, "secretKey": secret.key, "version": secret.version}})
+			value := ""
+			if query.Get("viewSecretValue") == "true" {
+				value = secret.value
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"secret": map[string]any{"id": secret.id, "secretKey": secret.key, "secretValue": value, "version": secret.version}})
 			return
 		}
 	}
@@ -536,6 +540,25 @@ func TestInfisicalRefusesToUpdateAValueChangedSinceOcelCopiedIt(t *testing.T) {
 	for _, secret := range fake.stored("/acme") {
 		if secret.value != "theirs" {
 			t.Errorf("%s = %q, want the edit made in Infisical kept", secret.key, secret.value)
+		}
+	}
+}
+
+func TestInfisicalFillsInAKeyItHoldsEmptyThatOcelNeverCopied(t *testing.T) {
+	t.Parallel()
+	fake, server := newFakeInfisical(t)
+	fake.put("/", fakeSecret{id: "s1", key: "EMPTY", value: "", version: 1}, fakeSecret{id: "s2", key: "FILLED", value: "theirs", version: 1})
+	source := signedIn(server, "/", envsource.WriteValues)
+
+	if err := source.Update(context.Background(), cell("", "EMPTY"), []byte("mine"), ""); err != nil {
+		t.Fatalf("Update() of a key held empty = %v, want it filled in", err)
+	}
+	if err := source.Update(context.Background(), cell("", "FILLED"), []byte("mine"), ""); !errors.Is(err, envsource.ErrChangedSinceRead) {
+		t.Fatalf("Update() of a key ocel never copied that holds a value = %v, want ErrChangedSinceRead", err)
+	}
+	for _, secret := range fake.stored("/") {
+		if want := map[string]string{"EMPTY": "mine", "FILLED": "theirs"}[secret.key]; secret.value != want {
+			t.Errorf("%s = %q, want %q", secret.key, secret.value, want)
 		}
 	}
 }

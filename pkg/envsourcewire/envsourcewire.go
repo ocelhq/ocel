@@ -14,12 +14,12 @@ func Encode(descriptor envsource.Descriptor, read map[envvars.Cell]envsource.Val
 	case descriptor.Kind == envsource.Infisical && descriptor.Infisical != nil:
 		options := descriptor.Infisical
 		return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{
-			Project:      options.Project,
-			Environment:  options.Environment,
-			Path:         options.Path,
-			Host:         options.Host,
-			Auth:         encodeAuth(options.Auth),
-			WriteMissing: options.Write == envsource.WriteMissing,
+			Project:     options.Project,
+			Environment: options.Environment,
+			Path:        options.Path,
+			Host:        options.Host,
+			Auth:        encodeAuth(options.Auth),
+			Write:       writePolicies[options.Normalize().Write],
 		}}}
 	case descriptor.Kind == envsource.Exec && descriptor.Exec != nil:
 		sent := &envvarsv1.ExecEnvSource{Command: descriptor.Exec.Command}
@@ -32,6 +32,12 @@ func Encode(descriptor envsource.Descriptor, read map[envvars.Cell]envsource.Val
 		return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Exec{Exec: sent}}
 	}
 	return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Builtin{Builtin: &envvarsv1.BuiltinEnvSource{}}}
+}
+
+var writePolicies = map[envsource.WritePolicy]envvarsv1.WritePolicy{
+	envsource.WriteNever:   envvarsv1.WritePolicy_WRITE_POLICY_NEVER,
+	envsource.WriteMissing: envvarsv1.WritePolicy_WRITE_POLICY_MISSING,
+	envsource.WriteValues:  envvarsv1.WritePolicy_WRITE_POLICY_VALUES,
 }
 
 func encodeAuth(auth envsource.InfisicalAuth) *envvarsv1.InfisicalAuth {
@@ -52,8 +58,10 @@ func Decode(wire *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]e
 	case wire.GetInfisical() != nil:
 		sent := wire.GetInfisical()
 		write := envsource.WriteNever
-		if sent.GetWriteMissing() {
-			write = envsource.WriteMissing
+		for policy, encoded := range writePolicies {
+			if encoded == sent.GetWrite() {
+				write = policy
+			}
 		}
 		options := envsource.InfisicalOptions{
 			Project:     sent.GetProject(),

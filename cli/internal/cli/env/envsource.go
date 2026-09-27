@@ -123,7 +123,10 @@ func renderEnvSource(stdout io.Writer, tier string, status *envvarsv1.EnvSourceS
 	if lastError := status.GetLastError(); lastError != "" {
 		fmt.Fprintf(stdout, "  last error  %s\n", lastError)
 	}
-	if status.GetWritable() {
+	switch {
+	case status.GetCanUpdate():
+		fmt.Fprintln(stdout, "  writes      ocel env set and the variables page create or update a value there, never delete one")
+	case status.GetCanCreate():
 		fmt.Fprintln(stdout, "  writes      a key a declaration names and the env source lacks is created there, never overwritten")
 	}
 	for _, link := range status.GetLinks() {

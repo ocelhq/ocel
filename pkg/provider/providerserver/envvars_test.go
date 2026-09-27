@@ -156,8 +156,8 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			_, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
 			return err
 		},
-		"CreateEnvSourceValue": func() error {
-			_, err := vars.CreateEnvSourceValue(ctx, &envvarsv1.CreateEnvSourceValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("KEY")})
+		"SetEnvSourceValue": func() error {
+			_, err := vars.SetEnvSourceValue(ctx, &envvarsv1.SetEnvSourceValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("KEY")})
 			return err
 		},
 	}
@@ -201,6 +201,7 @@ func TestAnEnvSourceLogsInWithTheCloudIdentityTheProviderProves(t *testing.T) {
 			Project:     "p-1",
 			Environment: "prod",
 			Host:        infisical.URL,
+			Write:       envvarsv1.WritePolicy_WRITE_POLICY_NEVER,
 			Auth:        &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Identity{Identity: &envvarsv1.InfisicalIdentityAuth{IdentityId: "identity-1"}}},
 		}}}},
 	})

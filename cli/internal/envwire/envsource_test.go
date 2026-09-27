@@ -38,7 +38,8 @@ func TestASyncedEnvSourceIsWhatTheProviderSaysItRead(t *testing.T) {
 	synced := EnvSourceOf(&envvarsv1.SyncEnvSourceResponse{
 		Status: &envvarsv1.EnvSourceStatus{
 			EnvSource:   "infisical:p-1/prod",
-			Writable:    true,
+			CanCreate:   true,
+			CanUpdate:   true,
 			Links:       []*envvarsv1.FolderLink{{Folder: "", Url: "https://infisical.example/root"}},
 			Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"},
 		},
@@ -47,7 +48,8 @@ func TestASyncedEnvSourceIsWhatTheProviderSaysItRead(t *testing.T) {
 
 	want := envgate.EnvSource{
 		ID:          "infisical:p-1/prod",
-		Writable:    true,
+		CanCreate:   true,
+		CanUpdate:   true,
 		URLs:        map[string]string{"": "https://infisical.example/root"},
 		Present:     []envgate.Cell{{Key: "STRIPE_KEY"}, {Folder: "/web", Key: "API_URL"}},
 		Credentials: []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"},

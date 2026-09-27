@@ -256,6 +256,21 @@ export const identityAuth = infisical({
   auth: { identity: { identityId: "b7d0" } },
 });
 
+export const writingValues = infisical({
+  project: "p-1",
+  environment: "prod",
+  auth: { identity: { identityId: "b7d0" } },
+  write: "values",
+});
+
+export const writingAnUnknownPolicy = infisical({
+  project: "p-1",
+  environment: "prod",
+  auth: { identity: { identityId: "b7d0" } },
+  // @ts-expect-error ocel writes never, missing keys, or values, and never deletes
+  write: "delete",
+});
+
 export const identityAuthNamingACloud = infisical({
   project: "p-1",
   environment: "prod",

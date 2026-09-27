@@ -156,7 +156,7 @@ function record(current: State, awaitingApproval = false): Sent[] {
     set: async (at, value, version) => {
       sent.push({ verb: "set", at, value, version });
     },
-    create: async (at, value) => {
+    setInEnvSource: async (at, value) => {
       sent.push({ verb: "create", at, value });
       return { awaitingApproval };
     },
@@ -431,7 +431,7 @@ describe("ability", () => {
   });
 });
 
-const infisical: EnvSource = { id: "infisical:p-1/prod", writable: true };
+const infisical: EnvSource = { id: "infisical:p-1/prod", canCreate: true, canUpdate: false };
 
 const readingFrom = (envSource: EnvSource): State => ({
   slug: "acme",
