@@ -1,6 +1,7 @@
 package projectconfig
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -16,6 +17,16 @@ func TestResolveLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
 		if !reflect.DeepEqual(cfg.EnvSource, envsource.DefaultTiers()) {
 			t.Errorf("envSource from %s = %+v, want every tier on its default", config, cfg.EnvSource)
 		}
+	}
+}
+
+func TestAProjectWithNoConfigFileLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
+	cfg, err := ResolveOptional(context.Background(), t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("ResolveOptional: %v", err)
+	}
+	if !reflect.DeepEqual(cfg.EnvSource, envsource.DefaultTiers()) {
+		t.Errorf("envSource with no config file = %+v, want every tier on its default", cfg.EnvSource)
 	}
 }
 
