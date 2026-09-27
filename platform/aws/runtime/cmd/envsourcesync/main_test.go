@@ -15,16 +15,16 @@ func env(values map[string]string) func(string) string {
 
 func complete() map[string]string {
 	return map[string]string{
-		varsTableEnvVar: "ocel-bootstrap-VarsTable-1",
-		varsKeyEnvVar:   "arn:aws:kms:us-east-1:111122223333:key/vars",
-		classEnvVar:     "production",
+		"OCEL_VARS_TABLE":  "ocel-bootstrap-VarsTable-1",
+		"OCEL_VARS_KEY":    "arn:aws:kms:us-east-1:111122223333:key/vars",
+		"OCEL_INFRA_CLASS": "production",
 	}
 }
 
 func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-1")
 
-	for _, missing := range []string{varsTableEnvVar, varsKeyEnvVar, classEnvVar} {
+	for _, missing := range []string{"OCEL_VARS_TABLE", "OCEL_VARS_KEY", "OCEL_INFRA_CLASS"} {
 		t.Run("refuses to start without "+missing, func(t *testing.T) {
 			values := complete()
 			delete(values, missing)
@@ -37,7 +37,7 @@ func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *test
 
 	t.Run("refuses a class no bootstrap makes", func(t *testing.T) {
 		values := complete()
-		values[classEnvVar] = "staging"
+		values["OCEL_INFRA_CLASS"] = "staging"
 		_, err := newSync(context.Background(), env(values))
 		if err == nil || !strings.Contains(err.Error(), "production or preview") {
 			t.Fatalf("newSync = %v, want the classes it takes named", err)
@@ -46,7 +46,7 @@ func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *test
 
 	t.Run("syncs the class it was made for and proves its identity as its own role", func(t *testing.T) {
 		values := complete()
-		values[classEnvVar] = "preview"
+		values["OCEL_INFRA_CLASS"] = "preview"
 		sync, err := newSync(context.Background(), env(values))
 		if err != nil {
 			t.Fatalf("newSync = %v", err)

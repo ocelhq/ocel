@@ -20,10 +20,6 @@ import (
 )
 
 const (
-	varsTableEnvVar = "OCEL_VARS_TABLE"
-	varsKeyEnvVar   = "OCEL_VARS_KEY"
-	classEnvVar     = "OCEL_INFRA_CLASS"
-
 	requestTimeout = 30 * time.Second
 )
 
@@ -49,19 +45,19 @@ func main() {
 }
 
 func newSync(ctx context.Context, getenv func(string) string) (*envsource.Sync, error) {
-	table := getenv(varsTableEnvVar)
+	table := getenv(awsports.VarsTableEnvVar)
 	if table == "" {
-		return nil, fmt.Errorf("%s is not set, so there is no table to read registrations from or write values into", varsTableEnvVar)
+		return nil, fmt.Errorf("%s is not set, so there is no table to read registrations from or write values into", awsports.VarsTableEnvVar)
 	}
-	key := getenv(varsKeyEnvVar)
+	key := getenv(awsports.VarsKeyEnvVar)
 	if key == "" {
-		return nil, fmt.Errorf("%s is not set, so no value this sync writes could be encrypted", varsKeyEnvVar)
+		return nil, fmt.Errorf("%s is not set, so no value this sync writes could be encrypted", awsports.VarsKeyEnvVar)
 	}
-	class := edge.Class(getenv(classEnvVar))
+	class := edge.Class(getenv(awsports.ClassEnvVar))
 	switch class {
 	case edge.ClassProduction, edge.ClassPreview:
 	default:
-		return nil, fmt.Errorf("%s is %q, want %s or %s", classEnvVar, class, edge.ClassProduction, edge.ClassPreview)
+		return nil, fmt.Errorf("%s is %q, want %s or %s", awsports.ClassEnvVar, class, edge.ClassProduction, edge.ClassPreview)
 	}
 	cfg, err := sdkconfig.Workload(ctx)
 	if err != nil {
