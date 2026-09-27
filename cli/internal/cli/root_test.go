@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -263,5 +264,36 @@ func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing
 		if got := cmddeps.ChooseRunOutput(cmd); got != &stdout {
 			t.Errorf("ocel %s draws its run on stderr, want stdout", strings.Join(path, " "))
 		}
+	}
+}
+
+func TestACommandWhoseDataAndRunShareOneTerminalDrawsTheGroupedViewSoNoLineOfDataLandsOnTheLiveRow(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+
+	executeRootOn(t, tty, tty, "deployments", "ls")
+
+	got := screen()
+	if strings.Contains(got, liveFrame) {
+		t.Errorf("the terminal shows %q, want no live line while the command's data shares its terminal", got)
+	}
+	if !strings.Contains(ansi.Strip(got), "\nID  ") {
+		t.Errorf("the terminal shows %q, want the promotions table header on a row of its own", got)
+	}
+}
+
+func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *testing.T) {
+	inDeployFixture(t)
+	tty, screen := aTerminal(t, "xterm-256color", 80)
+
+	executeRootOn(t, &bytes.Buffer{}, tty, "deployments", "ls")
+
+	got := screen()
+	_, afterResult, ok := strings.Cut(got, "✓ Done")
+	if !ok {
+		t.Fatalf("the terminal shows %q, want the run's result", got)
+	}
+	if strings.Contains(afterResult, "[check]") {
+		t.Errorf("after the result the terminal shows %q, want the live line gone with the run", afterResult)
 	}
 }

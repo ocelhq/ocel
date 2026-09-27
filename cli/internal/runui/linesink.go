@@ -28,12 +28,14 @@ type LineSink struct {
 	commits *bytes.Buffer
 	live    *liveLine
 
-	mu     sync.Mutex
-	width  int
-	drawn  string
-	held   bool
-	closed bool
-	pace   func(running bool)
+	mu      sync.Mutex
+	now     func() time.Time
+	width   int
+	drawn   string
+	held    bool
+	closed  bool
+	ticking bool
+	pace    func(running bool)
 
 	stop    func()
 	looping chan struct{}
@@ -82,7 +84,9 @@ func newLineSink(w io.Writer, present Presentation, sources lineSources) *LineSi
 		grouped: newGroupedSink(commits, present, nil),
 		commits: commits,
 		live:    newLiveLine(sources.now),
+		now:     sources.now,
 		width:   present.Width,
+		ticking: true,
 		pace:    sources.pace,
 		stop: sync.OnceFunc(func() {
 			if sources.release != nil {
@@ -121,12 +125,12 @@ func (s *LineSink) Receive(ev *streamv1.RunEvent) {
 	s.grouped.Receive(ev)
 	s.live.observe(ev)
 	switch {
+	case ev.GetResult() != nil:
+		s.live = newLiveLine(s.now)
 	case ev.GetWaiting() != nil:
 		s.held = true
-		s.pace(false)
 	case ev.GetResumed() != nil && !s.closed:
 		s.held = false
-		s.pace(true)
 	}
 	s.draw()
 }
@@ -157,6 +161,7 @@ func (s *LineSink) draw() {
 	if !s.held {
 		line = s.live.render(s.width)
 	}
+	s.tickWhile(line != "")
 	if s.commits.Len() == 0 && line == s.drawn {
 		return
 	}
@@ -173,6 +178,13 @@ func (s *LineSink) draw() {
 	frame.WriteString(syncEnd)
 	_, _ = s.w.Write(frame.Bytes())
 	s.drawn = line
+}
+
+func (s *LineSink) tickWhile(drawn bool) {
+	if drawn != s.ticking {
+		s.ticking = drawn
+		s.pace(drawn)
+	}
 }
 
 func (s *LineSink) Close() error {

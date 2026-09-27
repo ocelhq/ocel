@@ -295,3 +295,26 @@ func TestALineSinkOnTheRealClockLeavesOnlyTheTranscriptOnceClosed(t *testing.T) 
 		t.Fatalf("screen after close\n%q\nwant the grouped transcript\n%q", got, want)
 	}
 }
+
+func TestTheRunsResultErasesTheLiveLineAndNoTickDrawsItAgain(t *testing.T) {
+	t.Parallel()
+
+	var transcript bytes.Buffer
+	present := Presentation{Width: 32}
+	rig := newLineRig(t, present, newGroupedSink(&transcript, present, nil))
+	build := rig.run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Unit("web", "Building web").End(nil)
+	build.End(nil)
+	var err error
+	rig.run.End(&err)
+	ended := rig.out.String()
+	rig.clock.pass(100 * time.Millisecond)
+	rig.tick()
+
+	if got, want := screenOf(t, ended), transcript.String(); got != want {
+		t.Fatalf("screen once the run ended\n%q\nwant the grouped transcript alone\n%q", got, want)
+	}
+	if got := rig.closed(t); got != ended {
+		t.Fatalf("after the result the sink wrote %q, want nothing more", strings.TrimPrefix(got, ended))
+	}
+}

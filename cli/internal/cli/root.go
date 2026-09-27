@@ -77,7 +77,7 @@ func Execute() error {
 func init() {
 	runui.Version = version.Version
 	s := newDeps()
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) { s.AttachTerminalSink(cmddeps.ChooseRunOutput(cmd)) }
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) { s.AttachCommandSink(cmd) }
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")

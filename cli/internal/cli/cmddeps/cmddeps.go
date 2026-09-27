@@ -55,6 +55,13 @@ func (d Deps) AttachTerminalSink(w io.Writer) {
 	d.Events.Attach(runui.NewTerminalSink(d.Presentation(w), w))
 }
 
+func (d Deps) AttachCommandSink(cmd *cobra.Command) {
+	w := ChooseRunOutput(cmd)
+	present := d.Presentation(w)
+	present.SharedTerminal = isStdoutReserved(cmd) && runui.IsTerminal(cmd.OutOrStdout())
+	d.Events.Attach(runui.NewTerminalSink(present, w))
+}
+
 const stdoutAnnotation = "ocel.stdout"
 
 func ReserveStdout(cmd *cobra.Command) *cobra.Command {
@@ -66,12 +73,19 @@ func ReserveStdout(cmd *cobra.Command) *cobra.Command {
 }
 
 func ChooseRunOutput(cmd *cobra.Command) io.Writer {
-	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations[stdoutAnnotation] == "data" {
-			return cmd.ErrOrStderr()
-		}
+	if isStdoutReserved(cmd) {
+		return cmd.ErrOrStderr()
 	}
 	return cmd.OutOrStdout()
+}
+
+func isStdoutReserved(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Annotations[stdoutAnnotation] == "data" {
+			return true
+		}
+	}
+	return false
 }
 
 const YesUsage = "Consent in advance to any confirmation this command would ask for"

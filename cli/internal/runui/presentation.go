@@ -32,6 +32,8 @@ type Presentation struct {
 	Dumb          bool
 	Width         int
 	GitHubActions bool
+
+	SharedTerminal bool
 }
 
 const minLiveWidth = 40
@@ -56,7 +58,7 @@ func Resolve(o Origin) Presentation {
 }
 
 func (p Presentation) Live() bool {
-	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && p.Width >= minLiveWidth
+	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && !p.SharedTerminal && p.Width >= minLiveWidth
 }
 
 func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
