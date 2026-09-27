@@ -425,7 +425,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress edge.Pro
 		return nil, err
 	}
 
-	lines := detailWriter(progress)
+	lines := engineLines(progress)
 	opts := []optup.Option{optup.Parallel(setup.Parallel)}
 	if lines != nil {
 		opts = append(opts, optup.ProgressStreams(lines))
@@ -470,7 +470,7 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress edg
 	if progress != nil {
 		progress.Say("Destroying resources (this can take several minutes)")
 	}
-	lines := detailWriter(progress)
+	lines := engineLines(progress)
 	opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel)}
 	if lines != nil {
 		opts = append(opts, optdestroy.ProgressStreams(lines))

@@ -40,11 +40,11 @@ func (r *recordingProgress) Say(message string) {
 	r.said = append(r.said, message)
 }
 
-func (r *recordingProgress) Detail(message string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.said = append(r.said, message)
-}
+func (r *recordingProgress) Warn(message string) { r.Say(message) }
+
+func (r *recordingProgress) Detail(message string) { r.Say(message) }
+
+func (r *recordingProgress) Debug(line string) { r.Say(line) }
 
 func (r *recordingProgress) Span(name string, _, _ time.Time, err error, _ ...edge.Attr) {
 	r.mu.Lock()

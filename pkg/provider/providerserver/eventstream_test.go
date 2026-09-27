@@ -324,6 +324,71 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 	}
 }
 
+func TestAStagesWarningIsAMessageOnlyWarnScopedToTheStage(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	progress := newProgress(sender, testStage)
+
+	progress.Warn("the old binding outlived its release\x1b[2J")
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	warned := events[0]
+	if warned.GetLevel() != progressv1.Level_LEVEL_WARN {
+		t.Errorf("level = %v, want WARN", warned.GetLevel())
+	}
+	if warned.GetMessage() != "the old binding outlived its release[2J" {
+		t.Errorf("message = %q, want the warning with its control characters gone", warned.GetMessage())
+	}
+	if warned.GetEvent() != nil {
+		t.Errorf("body = %v, want a message-only event", warned.GetEvent())
+	}
+	if warned.GetPhase() != testStage.Phase || StageID(warned.GetSpanId()) != testStage.ID {
+		t.Errorf("scope = %v %x, want the stage's %v %x", warned.GetPhase(), warned.GetSpanId(), testStage.Phase, testStage.ID)
+	}
+	if err := protovalidate.Validate(warned); err != nil {
+		t.Errorf("the warning fails the wire's own rules: %v", err)
+	}
+}
+
+func TestAStagesDebugLineIsADebugLogScopedToTheStage(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	progress := newProgress(sender, testStage)
+
+	progress.Debug("+  aws:s3:Bucket assets creating (0s)")
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	line := events[0]
+	if line.GetLevel() != progressv1.Level_LEVEL_DEBUG {
+		t.Errorf("level = %v, want DEBUG", line.GetLevel())
+	}
+	if got := line.GetLog(); got.GetMessage() != "+  aws:s3:Bucket assets creating (0s)" || StageID(got.GetStageId()) != testStage.ID {
+		t.Errorf("log = %q in %x, want the line in the stage %x", got.GetMessage(), got.GetStageId(), testStage.ID)
+	}
+	if line.GetMessage() != line.GetLog().GetMessage() {
+		t.Errorf("envelope message = %q, want the line", line.GetMessage())
+	}
+	if line.GetPhase() != testStage.Phase || StageID(line.GetSpanId()) != testStage.ID {
+		t.Errorf("scope = %v %x, want the stage's %v %x", line.GetPhase(), line.GetSpanId(), testStage.Phase, testStage.ID)
+	}
+}
+
 func TestProgressMessagesTravelOnTheEnvelope(t *testing.T) {
 	t.Parallel()
 

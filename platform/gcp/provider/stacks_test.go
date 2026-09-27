@@ -81,7 +81,11 @@ type heard struct {
 
 func (h *heard) Say(message string) { h.said = append(h.said, message) }
 
+func (h *heard) Warn(message string) { h.said = append(h.said, message) }
+
 func (h *heard) Detail(string) {}
+
+func (h *heard) Debug(string) {}
 
 func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
 	server := &runServer{}

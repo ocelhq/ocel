@@ -32,7 +32,11 @@ func (k *killer) Say(message string) {
 	}
 }
 
+func (k *killer) Warn(string) {}
+
 func (k *killer) Detail(string) {}
+
+func (k *killer) Debug(string) {}
 
 func (k *killer) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
@@ -40,7 +44,11 @@ type sayings []string
 
 func (s *sayings) Say(message string) { *s = append(*s, message) }
 
+func (s *sayings) Warn(message string) { *s = append(*s, message) }
+
 func (s *sayings) Detail(string) {}
+
+func (s *sayings) Debug(string) {}
 
 func (s *sayings) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 

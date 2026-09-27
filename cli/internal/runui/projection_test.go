@@ -337,6 +337,47 @@ func TestARunWhoseEveryPhaseCompletedSaysNothingAboutBeingInterrupted(t *testing
 	}
 }
 
+func TestADebugLineIsHiddenFromTheHumanUnlessVerboseEvenInAFailedBlock(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		verbose bool
+		want    []string
+	}{
+		{"quiet", false, []string{"", failMark + " web failed  1s", "  the stack refused the change"}},
+		{"verbose", true, []string{"", failMark + " web failed  1s", "  +  aws:s3:Bucket assets creating (0s)", "  the stack refused the change"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			unit, phase := appStage(1), appStage(2)
+			p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth, Verbose: tc.verbose})
+			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
+				Stages: []*progressv1.Stage{
+					{Id: unit, Title: "web"},
+					{Id: phase, ParentId: unit, Title: "Provisioning", Phase: progressv1.Phase_PHASE_DEPLOY},
+				},
+			}}}))
+			debug := operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+				Log: &progressv1.LogEvent{StageId: phase, Message: "+  aws:s3:Bucket assets creating (0s)"},
+			}})
+			debug.Level = progressv1.Level_LEVEL_DEBUG
+			p.project(debug)
+			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+				Log: &progressv1.LogEvent{StageId: phase, Message: "the stack refused the change"},
+			}}))
+
+			got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
+				SpanId: phase, StartTimeUnixNano: 1, EndTimeUnixNano: int64(time.Second) + 1,
+				Status: progressv1.SpanStatus_SPAN_STATUS_ERROR,
+			}}}))
+			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Errorf("failed block =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(tc.want, "\n"))
+			}
+		})
+	}
+}
+
 func TestADegradationKeepsItsMarkAndItsOneLine(t *testing.T) {
 	t.Parallel()
 

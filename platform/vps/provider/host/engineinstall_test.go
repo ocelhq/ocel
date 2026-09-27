@@ -70,6 +70,10 @@ type told struct {
 
 func (r *told) Say(string) {}
 
+func (r *told) Warn(string) {}
+
+func (r *told) Debug(line string) { r.Detail(line) }
+
 func (r *told) Detail(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

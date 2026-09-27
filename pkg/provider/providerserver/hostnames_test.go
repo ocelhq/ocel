@@ -368,10 +368,12 @@ func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T
 	if err != nil {
 		t.Fatalf("RemoveHostname() error = %v", err)
 	}
-	var said []string
+	var warned []string
 	var result *progressv1.ResultEvent
 	for remove.Receive() {
-		said = append(said, remove.Msg().GetProgress().GetMessage())
+		if remove.Msg().GetLevel() == progressv1.Level_LEVEL_WARN {
+			warned = append(warned, remove.Msg().GetMessage())
+		}
 		if done := remove.Msg().GetResult(); done != nil {
 			result = done
 		}
@@ -382,8 +384,8 @@ func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T
 	if !result.GetSuccess() {
 		t.Fatalf("RemoveHostname() = %q, want the hostname given back: the edge released it and only warned about what the next deploy repairs", result.GetError())
 	}
-	if !slices.ContainsFunc(said, func(line string) bool { return strings.Contains(line, "next deploy") }) {
-		t.Errorf("RemoveHostname() said %v, want the edge's warning passed on", said)
+	if !slices.ContainsFunc(warned, func(line string) bool { return strings.Contains(line, "next deploy") }) {
+		t.Errorf("RemoveHostname() warned %v, want the edge's warning passed on as a warning", warned)
 	}
 	if state := readStack(t, vendor, edge.ClassProduction, "shop"); len(state.Hosts) != 0 {
 		t.Errorf("the hostname state still records %v", state.Hostnames())

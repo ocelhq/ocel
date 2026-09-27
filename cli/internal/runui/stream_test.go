@@ -195,6 +195,15 @@ func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *t
 	}
 }
 
+func TestADebugLineReachesNDJSONAtItsLevel(t *testing.T) {
+	t.Parallel()
+
+	got := recorded(t, &streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Message: "+  aws:s3:Bucket assets creating (0s)"})
+	if len(got) != 1 || got[0].GetLevel() != progressv1.Level_LEVEL_DEBUG || got[0].GetMessage() != "+  aws:s3:Bucket assets creating (0s)" {
+		t.Errorf("ndjson = %v, want the debug line at DEBUG", got)
+	}
+}
+
 func TestATimelessEventIsStampedWhenItLands(t *testing.T) {
 	t.Parallel()
 

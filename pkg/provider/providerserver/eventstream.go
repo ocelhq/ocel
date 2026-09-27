@@ -160,8 +160,21 @@ func (r *stageProgress) Say(message string) {
 	r.sender.send(r.stage.scoped(stageProgressEvent(r.stage.ID, sanitizeMessage(message))))
 }
 
+func (r *stageProgress) Warn(message string) {
+	r.sender.send(r.stage.scoped(&progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_WARN,
+		Message: sanitizeMessage(message),
+	}))
+}
+
 func (r *stageProgress) Detail(message string) {
 	r.sender.send(r.stage.scoped(logEvent(r.stage.ID, sanitizeMessage(message))))
+}
+
+func (r *stageProgress) Debug(line string) {
+	event := logEvent(r.stage.ID, sanitizeMessage(line))
+	event.Level = progressv1.Level_LEVEL_DEBUG
+	r.sender.send(r.stage.scoped(event))
 }
 
 func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...edge.Attr) {

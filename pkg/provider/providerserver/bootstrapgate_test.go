@@ -32,11 +32,15 @@ func (r *recorder) Say(message string) {
 	r.said = append(r.said, message)
 }
 
+func (r *recorder) Warn(message string) { r.Say(message) }
+
 func (r *recorder) Detail(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.details = append(r.details, message)
 }
+
+func (r *recorder) Debug(line string) { r.Detail(line) }
 
 func (r *recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 

@@ -72,6 +72,9 @@ func newProjector(present Presentation) *projector {
 }
 
 func (p *projector) project(ev *streamv1.RunEvent) []string {
+	if ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !p.present.Verbose {
+		return nil
+	}
 	if ev.GetEvent() == nil {
 		return p.message(ev)
 	}

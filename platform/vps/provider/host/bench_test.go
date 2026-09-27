@@ -78,7 +78,11 @@ func saying(said *[]string) edge.Progress { return recorder{said: said} }
 
 func (r recorder) Say(message string) { *r.said = append(*r.said, message) }
 
+func (r recorder) Warn(message string) { r.Say(message) }
+
 func (recorder) Detail(string) {}
+
+func (recorder) Debug(string) {}
 
 func (recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 

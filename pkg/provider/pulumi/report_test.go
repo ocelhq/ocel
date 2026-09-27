@@ -22,13 +22,19 @@ type recordedSpan struct {
 
 type fakeProgress struct {
 	said    []string
+	warned  []string
 	details []string
+	debugs  []string
 	spans   []recordedSpan
 }
 
 func (r *fakeProgress) Say(message string) { r.said = append(r.said, message) }
 
+func (r *fakeProgress) Warn(message string) { r.warned = append(r.warned, message) }
+
 func (r *fakeProgress) Detail(message string) { r.details = append(r.details, message) }
+
+func (r *fakeProgress) Debug(line string) { r.debugs = append(r.debugs, line) }
 
 func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...edge.Attr) {
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
@@ -171,19 +177,22 @@ func TestAnEventStreamThatIsNeverClosedLeavesTheRunToFinish(t *testing.T) {
 	}
 }
 
-func TestTheEngineLogIsForwardedALineAtATime(t *testing.T) {
+func TestTheEngineLogIsForwardedToDebugALineAtATime(t *testing.T) {
 	t.Parallel()
 
 	progress := &fakeProgress{}
-	lines := detailWriter(progress)
+	lines := engineLines(progress)
 	if _, err := lines.Write([]byte("creating bucket\r\nupdating role\npart")); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"creating bucket", "updating role"}; !reflect.DeepEqual(progress.details, want) {
-		t.Fatalf("forwarded %q, want %q", progress.details, want)
+	if want := []string{"creating bucket", "updating role"}; !reflect.DeepEqual(progress.debugs, want) {
+		t.Fatalf("forwarded %q to debug, want %q", progress.debugs, want)
 	}
 	lines.Flush()
-	if len(progress.details) != 3 || progress.details[2] != "part" {
-		t.Errorf("forwarded %q, want the trailing partial line flushed", progress.details)
+	if len(progress.debugs) != 3 || progress.debugs[2] != "part" {
+		t.Errorf("forwarded %q to debug, want the trailing partial line flushed", progress.debugs)
+	}
+	if len(progress.details) != 0 {
+		t.Errorf("the engine's own output reached Detail: %q", progress.details)
 	}
 }

@@ -47,10 +47,14 @@ func (w *watched) Say(message string) {
 	w.lines = append(w.lines, message)
 }
 
+func (w *watched) Warn(message string) { w.Say(message) }
+
 func (w *watched) Detail(message string) {
 	w.told = append(w.told, message)
 	w.lines = append(w.lines, message)
 }
+
+func (w *watched) Debug(line string) { w.Detail(line) }
 
 func (w *watched) at(fragment string) int {
 	return slices.IndexFunc(w.lines, func(line string) bool { return strings.Contains(line, fragment) })

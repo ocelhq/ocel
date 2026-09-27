@@ -20,7 +20,9 @@ import (
 type said struct{ lines []string }
 
 func (s *said) Say(message string)    { s.lines = append(s.lines, message) }
+func (s *said) Warn(message string)   { s.lines = append(s.lines, message) }
 func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
+func (s *said) Debug(line string)     { s.lines = append(s.lines, line) }
 
 func (s *said) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 

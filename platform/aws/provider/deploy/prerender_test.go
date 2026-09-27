@@ -139,7 +139,11 @@ type quietProgress struct{}
 
 func (quietProgress) Say(string) {}
 
+func (quietProgress) Warn(string) {}
+
 func (quietProgress) Detail(string) {}
+
+func (quietProgress) Debug(string) {}
 
 func (quietProgress) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 

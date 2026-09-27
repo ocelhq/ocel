@@ -8,7 +8,11 @@ import (
 type Progress interface {
 	Say(message string)
 
+	Warn(message string)
+
 	Detail(message string)
+
+	Debug(line string)
 
 	Span(name string, start, end time.Time, err error, attrs ...Attr)
 }
@@ -24,7 +28,11 @@ func DiscardProgress() Progress { return discarded{} }
 
 func (discarded) Say(string) {}
 
+func (discarded) Warn(string) {}
+
 func (discarded) Detail(string) {}
+
+func (discarded) Debug(string) {}
 
 func (discarded) Span(string, time.Time, time.Time, error, ...Attr) {}
 
@@ -44,7 +52,7 @@ func Warned(err error) error {
 func Heeded(err error, progress Progress) error {
 	var warned Warning
 	if errors.As(err, &warned) {
-		progress.Say(warned.Error())
+		progress.Warn(warned.Error())
 		return nil
 	}
 	return err

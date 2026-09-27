@@ -480,7 +480,11 @@ type watcher struct{ said func(string) }
 
 func (w watcher) Say(message string) { w.said(message) }
 
+func (w watcher) Warn(message string) { w.said(message) }
+
 func (watcher) Detail(string) {}
+
+func (watcher) Debug(string) {}
 
 func (watcher) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 

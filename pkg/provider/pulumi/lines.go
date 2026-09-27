@@ -7,11 +7,11 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func detailWriter(progress edge.Progress) *lineLog {
+func engineLines(progress edge.Progress) *lineLog {
 	if progress == nil {
 		return nil
 	}
-	return &lineLog{log: progress.Detail}
+	return &lineLog{log: progress.Debug}
 }
 
 type lineLog struct {
