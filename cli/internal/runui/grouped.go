@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -53,6 +54,9 @@ type GroupedSink struct {
 	beatAt       time.Time
 	silenceBroke bool
 	held         bool
+	wrote        bool
+	tier         environmentv1.Tier
+	promotion    string
 
 	stopBeats func()
 	stopTicks func()
@@ -146,6 +150,12 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	case ev.GetResumed() != nil:
 		s.held = false
 		s.silenceBroke = true
+	case ev.GetIdentity() != nil:
+		s.tier = ev.GetIdentity().GetTier()
+	case ev.GetOutcome() != nil:
+		s.promotion = ev.GetOutcome().GetPromotionId()
+	case ev.GetResult() != nil:
+		s.conclude(ev)
 	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:
 	case ev.GetOutput() != nil:
 		s.within(span, blockLine{text: ev.GetMessage(), raw: true}, blockLine{text: ev.GetMessage(), raw: true})
@@ -253,6 +263,7 @@ func (s *GroupedSink) tally(opened *streamv1.RunEvent) *phaseTally {
 func (s *GroupedSink) print(lines ...blockLine) {
 	for _, l := range lines {
 		s.silenceBroke = true
+		s.wrote = true
 		if l.raw != s.verbatim {
 			fmt.Fprintln(s.w)
 		}
@@ -290,15 +301,19 @@ func (s *GroupedSink) Close() error {
 	<-s.beating
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.unfinished()
+	if s.verbatim {
+		fmt.Fprintln(s.w)
+		s.verbatim = false
+	}
+	return nil
+}
+
+func (s *GroupedSink) unfinished() {
 	for _, span := range slices.Clone(s.started) {
 		unit := s.units[span]
 		s.forget(span)
 		s.print(unit.header(progressv1.Level_LEVEL_WARN, progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED, unit.opened.GetMessage()+" did not finish", s.present))
 		s.print(unit.body...)
 	}
-	if s.verbatim {
-		fmt.Fprintln(s.w)
-		s.verbatim = false
-	}
-	return nil
 }

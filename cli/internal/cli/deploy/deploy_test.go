@@ -659,3 +659,22 @@ export default {
 
 	clitest.WaitForNoStaleSocket(t, sockPath)
 }
+
+func TestADeploysResultNamesTheProjectAndProduction(t *testing.T) {
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	useJSONLogFormat(t, &deps)
+	root, _ := clitest.SetUpDeployFixture(t)
+
+	var stream, stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stream=%s stderr=%s", err, stream.String(), stderr.String())
+	}
+
+	evs := envelopes(t, stream.String())
+	if headline := evs[len(evs)-1].GetResult().GetHeadline(); headline != "Deployed test-app to production" {
+		t.Fatalf("result headline = %q, want it to name the project and production", headline)
+	}
+}

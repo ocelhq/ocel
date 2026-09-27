@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -574,5 +575,225 @@ func TestVerboseShowsTheEngineOutputInTheFailedBlockToo(t *testing.T) {
 
 	if got := failedDeploy(t, Presentation{Verbose: true}); !strings.Contains(got, "\n    +  aws:s3:Bucket logs creating (0s) error: BucketAlreadyExists\n") {
 		t.Fatalf("verbose output has no engine line:\n%s", got)
+	}
+}
+
+func productionRun(t *testing.T) (*events.Run, *bytes.Buffer, *clock) {
+	t.Helper()
+	run, out, c := groupedRun(t, Presentation{})
+	run.Phase(progressv1.Phase_PHASE_CHECK).Identity(&streamv1.IdentityEvent{Project: "acme", Tier: environmentv1.Tier_TIER_PRODUCTION})
+	return run, out, c
+}
+
+func forwardOutcome(run *events.Run, outcome *progressv1.ResultEvent) {
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
+}
+
+func ended(run *events.Run, err error) {
+	run.End(&err)
+}
+
+func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := productionRun(t)
+	forwardOutcome(run, &progressv1.ResultEvent{Success: true, PromotionId: "p-7f3a", Apps: []*progressv1.AppResult{
+		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://acme.example.com"}},
+		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://api.acme.example.com"}},
+	}})
+	run.Deployed("Deployed acme to production", nil, nil)
+	c.pass(3*time.Minute + 29*time.Second)
+	ended(run, nil)
+
+	want := "✓ Deployed acme to production in 3m29s\n" +
+		"  production now serves promotion p-7f3a\n" +
+		"  web  https://acme.example.com\n" +
+		"  api  https://api.acme.example.com\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServesWhatItDidAndNamesTheFailedApp(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := productionRun(t)
+	run.Phase(progressv1.Phase_PHASE_BUILD).Say("built 2 apps")
+	forwardOutcome(run, &progressv1.ResultEvent{Error: "api: the stack update failed", Apps: []*progressv1.AppResult{
+		{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://acme.example.com"}},
+		{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED, Error: "the stack update failed"},
+	}})
+	c.pass(4*time.Minute + 2*time.Second)
+	ended(run, errors.New("api: the stack update failed"))
+
+	want := "INFO  [build] built 2 apps\n" +
+		"\n" +
+		"✗ Failed in 4m02s — api: the stack update failed\n" +
+		"  web deployed but was not promoted: promotion needs every app, and api failed\n" +
+		"  production still serves what it served before this run\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAUnitStillOpenWhenTheResultArrivesPrintsAsUnfinishedAboveTheSummary(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newGroupedSink(&out, Presentation{}, nil)
+	c := &clock{at: time.Unix(1_700_000_000, 0)}
+	_, run := onABus(t, context.Background(), c.now, sink)
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	deploy.Forward(providerStarted(1, "api", "deploying api", c.now()))
+	deploy.Forward(providerOutput(1, "api", "updating function api"))
+	c.pass(12 * time.Second)
+	ended(run, errors.New("the provider exited"))
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	want := "WARN  [deploy] api: deploying api did not finish\n" +
+		"\n" +
+		"    updating function api\n" +
+		"\n" +
+		"✗ Failed in 12s — the provider exited\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newGroupedSink(&out, Presentation{}, nil)
+	sink.Receive(resultEvent(&streamv1.RunResultEvent{
+		Success:    true,
+		Headline:   "Preview pr-12 is up",
+		DurationMs: 41_000,
+		Apps:       []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://pr-12.acme.example.com"}}},
+		UrlNotes:   []string{"web: the custom domain shop.acme.com is not attached to previews"},
+		FlipBound:  &progressv1.FlipBound{TypicalMs: 5000, Published: true},
+		LogPath:    "/var/ocel-runs/0af3.ndjson",
+	}))
+
+	want := "✓ Preview pr-12 is up in 41s\n" +
+		"  web  https://pr-12.acme.example.com\n" +
+		"  web: the custom domain shop.acme.com is not attached to previews\n" +
+		"  propagates within ~5 s\n" +
+		"  Log: /var/ocel-runs/0af3.ndjson\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestACancelledRunsSummarySaysSoAndWhatToRerunAfterAVerbatimBlockWithOneBlankLine(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var out bytes.Buffer
+	c := &clock{at: time.Unix(1_700_000_000, 0)}
+	_, run := onABus(t, ctx, c.now, newGroupedSink(&out, Presentation{}, nil))
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	web := deploy.Unit("web", "deploying web")
+	output(t, web, "creating function web")
+	web.End(nil)
+	c.pass(12 * time.Second)
+	cancel()
+	ended(run, context.Canceled)
+
+	want := "INFO  [deploy] ✓ web: deploying web in 0s\n" +
+		"\n" +
+		"    creating function web\n" +
+		"\n" +
+		"✗ Cancelled in 12s — Resources may be partially created.\n" +
+		"  Re-run `ocel deploy` to reconcile.\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestARunRefusedForMissingVariablesListsThemAndWhereToFillThemIn(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newGroupedSink(&out, Presentation{}, nil)
+	sink.Receive(resultEvent(&streamv1.RunResultEvent{DurationMs: 3000, Missing: missingStripeKey()}))
+
+	want := "✗ 1 variable is not ready — nothing has been built.\n" +
+		"\n" +
+		"  ✗ STRIPE_API_KEY  root  no value\n" +
+		"\n" +
+		"  Fill them in: ocel env ui\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func failedWith(t *testing.T, apps ...*progressv1.AppResult) string {
+	t.Helper()
+	run, out, _ := productionRun(t)
+	forwardOutcome(run, &progressv1.ResultEvent{Error: "deploy failed", Apps: apps})
+	ended(run, errors.New("deploy failed"))
+	return out.String()
+}
+
+func TestAFailedSingleAppDeploySaysNothingWasPromoted(t *testing.T) {
+	t.Parallel()
+
+	got := failedWith(t, &progressv1.AppResult{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED})
+
+	want := "✗ Failed in 0s — deploy failed\n" +
+		"  nothing was promoted: web failed\n" +
+		"  production still serves what it served before this run\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestADeployThatFailedBeforeReachingSomeAppsNamesThemAsNotRun(t *testing.T) {
+	t.Parallel()
+
+	got := failedWith(t,
+		&progressv1.AppResult{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED},
+		&progressv1.AppResult{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_NOT_RUN},
+		&progressv1.AppResult{App: "cron", Outcome: progressv1.AppOutcome_APP_OUTCOME_NOT_RUN},
+	)
+
+	want := "✗ Failed in 0s — deploy failed\n" +
+		"  nothing was promoted: promotion needs every app, and web failed and api and cron did not run\n" +
+		"  production still serves what it served before this run\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAFailureAfterEveryAppDeployedClaimsNothingAboutWhatProductionServes(t *testing.T) {
+	t.Parallel()
+
+	got := failedWith(t,
+		&progressv1.AppResult{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
+		&progressv1.AppResult{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
+	)
+
+	if want := "✗ Failed in 0s — deploy failed\n"; got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAppsThatDeployedBesideAFailedOneAreNamedAsNotPromoted(t *testing.T) {
+	t.Parallel()
+
+	got := failedWith(t,
+		&progressv1.AppResult{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
+		&progressv1.AppResult{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
+		&progressv1.AppResult{App: "cron", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED},
+	)
+
+	want := "✗ Failed in 0s — deploy failed\n" +
+		"  web and api deployed but were not promoted: promotion needs every app, and cron failed\n" +
+		"  production still serves what it served before this run\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }

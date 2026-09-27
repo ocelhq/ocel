@@ -186,6 +186,6 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.bindings); err != nil {
 		return err
 	}
-	run.Deployed("Deployed", out.urlNotes, out.flip)
+	run.Deployed(fmt.Sprintf("Deployed %s to production", cfg.Slug), out.urlNotes, out.flip)
 	return nil
 }
