@@ -1,6 +1,7 @@
 package pulumi
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,5 +44,21 @@ func TestRenameIntoPlaceYieldsToARuntimeAnotherProcessInstalledFirst(t *testing.
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, "bin", "pulumi")); string(got) != "theirs" {
 		t.Errorf("the root contains %q; the loser overwrote a runtime another process may be running", got)
+	}
+}
+
+func TestTheRuntimeDownloadSaysWhichVersionAndWhereItGoes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	progress := &fakeProgress{}
+
+	if _, err := install(ctx, progress); err == nil {
+		t.Fatal("install() under a cancelled context = nil, want the download to stop")
+	}
+	want := "Downloading the Pulumi runtime " + PinnedVersion + " into " + filepath.Join(home, ".ocel", "pulumi", PinnedVersion) + ", once for this machine"
+	if len(progress.said) != 1 || progress.said[0] != want {
+		t.Errorf("install() said %q, want %q", progress.said, want)
 	}
 }

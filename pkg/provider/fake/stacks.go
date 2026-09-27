@@ -99,7 +99,7 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 	r.provisioned = append(r.provisioned, spec)
 	r.stacks[stackKey(spec.Ref)] = result
 	if progress != nil {
-		progress.Say("provisioned " + spec.Ref.Name.String())
+		progress.Say("Provisioned stack " + spec.Ref.Name.String())
 	}
 	return result, nil
 }
@@ -121,7 +121,7 @@ func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress edge
 	}
 	delete(r.stacks, stackKey(ref))
 	if progress != nil {
-		progress.Say("destroyed " + ref.Name.String())
+		progress.Say("Destroyed stack " + ref.Name.String())
 	}
 	return nil
 }

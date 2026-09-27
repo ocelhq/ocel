@@ -425,8 +425,13 @@ func drainPush(body io.Reader, progress edge.Progress) error {
 	decoder := json.NewDecoder(body)
 	for {
 		var line struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
+			ID       string `json:"id"`
+			Status   string `json:"status"`
+			Error    string `json:"error"`
+			Progress struct {
+				Current int64 `json:"current"`
+				Total   int64 `json:"total"`
+			} `json:"progressDetail"`
 		}
 		if err := decoder.Decode(&line); err != nil {
 			if errors.Is(err, io.EOF) {
@@ -437,9 +442,13 @@ func drainPush(body io.Reader, progress edge.Progress) error {
 		if line.Error != "" {
 			return registryRefusal{said: line.Error, again: RetryablePush(line.Error)}
 		}
-		if progress != nil && line.Status != "" {
-			progress.Detail(line.Status)
+		if progress == nil || line.Status == "" || line.Progress.Current > 0 || line.Progress.Total > 0 {
+			continue
 		}
+		if line.ID != "" {
+			line.Status = line.ID + ": " + line.Status
+		}
+		progress.Detail(line.Status)
 	}
 }
 

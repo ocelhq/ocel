@@ -111,6 +111,28 @@ func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 	}
 }
 
+func TestEachPreviewSaysWhichStackItPlansAndWhetherItPlansItsTeardown(t *testing.T) {
+	t.Parallel()
+
+	stack := naming.InfraStack("prod").String()
+	automation := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run, Engine: &recordingEngine{}})
+	progress := &sayings{Progress: edge.DiscardProgress()}
+
+	if _, err := automation.Preview(context.Background(), spec(), progress); err != nil {
+		t.Fatalf("Preview() = %v", err)
+	}
+	if _, err := automation.PreviewDestroy(context.Background(), spec().Ref, progress); err != nil {
+		t.Fatalf("PreviewDestroy() = %v", err)
+	}
+	want := []string{
+		"Planning the changes to stack " + stack,
+		"Planning the teardown of stack " + stack,
+	}
+	if got := progress.said; !slices.Equal(got, want) {
+		t.Errorf("the previews said %q, want %q: a plan that names no stack reads the same for every stack a run plans", got, want)
+	}
+}
+
 func TestWorkspaceUsesTheBackendTheProviderNamed(t *testing.T) {
 	t.Parallel()
 

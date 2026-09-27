@@ -47,3 +47,10 @@ func (decoding) Decode(_ context.Context, _ provider.StackSpec, outputs auto.Out
 	}
 	return provider.StackResult{Bindings: []provider.Binding{{Name: "uploads", Properties: properties}}}, nil
 }
+
+type sayings struct {
+	edge.Progress
+	said []string
+}
+
+func (s *sayings) Say(message string) { s.said = append(s.said, message) }

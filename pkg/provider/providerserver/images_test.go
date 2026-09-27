@@ -471,7 +471,7 @@ func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	want := "Sending web's image to deploy@box.invalid"
+	want := "Sending web's image to deploy@box.invalid (1 of 1)"
 	for _, event := range events {
 		if saidLine(event) == want {
 			return

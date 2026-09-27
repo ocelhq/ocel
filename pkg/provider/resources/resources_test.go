@@ -196,16 +196,26 @@ func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	progress := &fake.Progress{}
 	if _, err := stacks.Provision(ctx, provider.StackSpec{
 		Ref:       ref,
 		Kind:      provider.StackInfra,
 		Resources: []provider.Resource{{Name: "uploads", Type: provider.BindingBucket}},
-	}, nil); err != nil {
+	}, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 
 	if len(own.removed) != 1 || own.removed[0].Name != "exports" {
 		t.Fatalf("the fan-out removed %v, want only the export bucket this spec stopped declaring", own.removed)
+	}
+	saysRemoving(t, progress, "bucket exports")
+}
+
+func saysRemoving(t *testing.T, progress *fake.Progress, what string) {
+	t.Helper()
+	want := "INFO Removing " + what + ": this release no longer declares it"
+	if lines := progress.Lines(); !slices.Contains(lines, want) {
+		t.Errorf("the fan-out said %q, want %q: a sentence is said rather than shown as tool output, and names what kind of thing goes", lines, want)
 	}
 }
 
@@ -437,12 +447,14 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 		t.Fatalf("legacy reads %q, want the function this release stopped declaring shown as going", rows["legacy"])
 	}
 
-	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+	progress := &fake.Progress{}
+	if _, err := stacks.Provision(ctx, spec, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "legacy" {
 		t.Fatalf("the fan-out took down %v, want the legacy function its plan showed going", own.removed)
 	}
+	saysRemoving(t, progress, "function legacy")
 }
 
 func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing.T) {
@@ -656,12 +668,14 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 		t.Errorf("web reads %q, want the container this release still declares kept", rows["web"])
 	}
 
-	if _, err := stacks.Provision(ctx, spec, nil); err != nil {
+	progress := &fake.Progress{}
+	if _, err := stacks.Provision(ctx, spec, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "legacy" {
 		t.Fatalf("the fan-out took down %v, want the legacy container its plan showed going", own.removed)
 	}
+	saysRemoving(t, progress, "container legacy")
 }
 
 func TestAProviderProvisioningNoContainersRefusesToOrphanTheOnesItRecorded(t *testing.T) {
@@ -1142,4 +1156,49 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 
 func containerSpec() provider.StackSpec {
 	return provider.StackSpec{Ref: appRef(), Kind: provider.StackApp, App: containerApp("web")}
+}
+
+func TestATeardownThatStoppedReconcilingWarnsWhatItLeftInPlace(t *testing.T) {
+	t.Parallel()
+
+	refused := errors.New("the helper is not on this box")
+	for name, tc := range map[string]struct {
+		breaking func(*retaining)
+		want     string
+	}{
+		"the window was never dropped": {
+			breaking: func(own *retaining) { own.forgetting = func() error { return refused } },
+			want:     "WARN Left web's release window in place: the helper is not on this box",
+		},
+		"the sweep never ran": {
+			breaking: func(own *retaining) { own.sweeping = func() error { return refused } },
+			want:     "WARN Left web's unreferenced images in place: the helper is not on this box",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			store := fake.NewRecords()
+			ref := appRef()
+			if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+				Kind:       provider.StackApp,
+				Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			own := &retaining{buckets: &buckets{}}
+			tc.breaking(own)
+			stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
+			progress := &fake.Progress{}
+
+			if err := stacks.Destroy(ctx, ref, progress); !errors.Is(err, refused) {
+				t.Fatalf("Destroy() = %v, want %v", err, refused)
+			}
+			if lines := progress.Lines(); !slices.Contains(lines, tc.want) {
+				t.Errorf("the teardown said %q, want %q: what a failed sweep leaves on the box is a degraded state, not tool output", lines, tc.want)
+			}
+		})
+	}
 }

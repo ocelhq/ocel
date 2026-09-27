@@ -178,7 +178,7 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 	b.applied[req.Class] = slices.Clone(req.Features)
 	b.stale = map[string]bool{}
 	if progress != nil {
-		progress.Say("bootstrapped " + string(req.Class))
+		progress.Say("Applied the " + string(req.Class) + " bootstrap")
 	}
 	return nil
 }
@@ -236,7 +236,7 @@ func (b *Bootstrap) Remove(_ context.Context, class edge.Class, progress edge.Pr
 	defer b.mu.Unlock()
 	delete(b.applied, class)
 	if progress != nil {
-		progress.Say("removed " + string(class))
+		progress.Say("Removed the " + string(class) + " bootstrap")
 	}
 	return nil
 }

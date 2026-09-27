@@ -962,7 +962,7 @@ func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsIsUp(t *testing.T
 		switch {
 		case strings.HasPrefix(message, "Binding shop.example") && bound < 0:
 			bound = len(said)
-		case strings.HasPrefix(message, "provisioned "):
+		case strings.HasPrefix(message, "Provisioned stack "):
 			provisioned = len(said)
 		}
 		if message != "" {

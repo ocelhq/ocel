@@ -63,17 +63,20 @@ func (p ImagePushes) Rows(ctx context.Context) ([]Change, error) {
 }
 
 func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) error {
+	var missing []ImagePush
 	for _, push := range p.Pushes {
 		present, err := p.inStore(ctx, push)
 		if err != nil {
 			return err
 		}
-		if present {
-			continue
+		if !present {
+			missing = append(missing, push)
 		}
+	}
+	for i, push := range missing {
 		where := p.Store.Destination()
 		if progress != nil {
-			progress.Say("Sending " + push.App + "'s image to " + where)
+			progress.Say(fmt.Sprintf("Sending %s's image to %s (%d of %d)", push.App, where, i+1, len(missing)))
 		}
 		if err := p.push(ctx, push, progress); err != nil {
 			return fmt.Errorf("send %s's image to %s: %w", push.App, where, err)
@@ -85,7 +88,7 @@ func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) er
 func (p ImagePushes) push(ctx context.Context, push ImagePush, progress edge.Progress) error {
 	if push.Wrap != nil {
 		if progress != nil {
-			progress.Detail("Wrapping the image in the ocel runtime")
+			progress.Say("Wrapping " + push.App + "'s image in the ocel runtime")
 		}
 		built, done, err := push.Wrap(ctx)
 		if err != nil {

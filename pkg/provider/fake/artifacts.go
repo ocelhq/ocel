@@ -69,7 +69,7 @@ func (a *Artifacts) RemovePrefix(_ context.Context, class edge.Class, prefix str
 		}
 	}
 	if progress != nil {
-		progress.Detail("removed " + prefix)
+		progress.Say("Removed the " + string(class) + " artifacts under " + prefix)
 	}
 	return nil
 }

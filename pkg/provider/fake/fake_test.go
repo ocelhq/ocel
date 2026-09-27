@@ -251,3 +251,42 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work running otherwise", taken)
 	}
 }
+
+func TestTheReferenceProviderSaysWhatItDidAndToWhichStackClassOrPrefix(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	progress := &fake.Progress{}
+	artifacts := fake.NewArtifacts()
+	stacks := fake.NewStacks(artifacts)
+	bootstrap := fake.NewBootstrap()
+	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: naming.InfraStack("prod")}
+
+	if _, err := stacks.Provision(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, progress); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if err := stacks.Destroy(ctx, ref, progress); err != nil {
+		t.Fatalf("Destroy() = %v", err)
+	}
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: edge.ClassProduction}, progress); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	if err := bootstrap.Remove(ctx, edge.ClassProduction, progress); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+	if err := artifacts.RemovePrefix(ctx, edge.ClassProduction, "releases/", progress); err != nil {
+		t.Fatalf("RemovePrefix() = %v", err)
+	}
+
+	stack := naming.InfraStack("prod").String()
+	want := []string{
+		"INFO Provisioned stack " + stack,
+		"INFO Destroyed stack " + stack,
+		"INFO Applied the production bootstrap",
+		"INFO Removed the production bootstrap",
+		"INFO Removed the production artifacts under releases/",
+	}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("the reference provider said %q, want %q", got, want)
+	}
+}

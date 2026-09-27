@@ -8,12 +8,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
 func registryServing(t *testing.T, handler http.HandlerFunc) (provider.ImageStore, provider.ImagePush) {
@@ -318,6 +320,35 @@ func TestAnAnonymousTargetHandsTheDaemonNoCredentialsAtAll(t *testing.T) {
 	}
 	if sent {
 		t.Errorf("Push() handed the daemon %q for a registry the deploy has no credentials for", header)
+	}
+}
+
+func TestThePushShowsTheDaemonsLinesAsDockerPushPrintsThemWithoutATerminal(t *testing.T) {
+	daemonServing(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/push") {
+			w.Write([]byte(`{"status":"The push refers to repository [ghcr.io/acme/web]"}
+{"status":"Preparing","progressDetail":{},"id":"5f70bf18a086"}
+{"status":"Pushing","progressDetail":{"current":512,"total":2048},"progress":"[=====>    ]","id":"5f70bf18a086"}
+{"status":"Pushed","progressDetail":{},"id":"5f70bf18a086"}
+{"status":"sha256-abc: digest: sha256:abc size: 528"}`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+	store, push := pushTo(provider.RegistryTarget{Server: "ghcr.io", Namespace: "acme"})
+	progress := &fake.Progress{}
+
+	if err := store.Push(context.Background(), push, progress); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	want := []string{
+		"OUTPUT The push refers to repository [ghcr.io/acme/web]",
+		"OUTPUT 5f70bf18a086: Preparing",
+		"OUTPUT 5f70bf18a086: Pushed",
+		"OUTPUT sha256-abc: digest: sha256:abc size: 528",
+	}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("the push showed %q, want %q: a bare status names no layer, and a line per pushed chunk floods the deploy's log", got, want)
 	}
 }
 

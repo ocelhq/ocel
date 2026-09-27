@@ -248,6 +248,13 @@ func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Op
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	if progress != nil {
+		planned := "the changes to"
+		if op == OperationDestroy {
+			planned = "the teardown of"
+		}
+		progress.Say("Planning " + planned + " stack " + setup.Stack)
+	}
 	changes, err := a.engine().Preview(ctx, setup, op, progress)
 	if err != nil {
 		return provider.Plan{}, masked(busy(err, setup), setup.Secrets)
@@ -379,9 +386,6 @@ func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation
 
 	engineEvents := make(chan events.EngineEvent, 256)
 	rows := drainRows(engineEvents)
-	if progress != nil {
-		progress.Say("Working out what would change")
-	}
 
 	if op == OperationDestroy {
 		_, err = stack.PreviewDestroy(ctx, optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel))
@@ -468,7 +472,7 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress edg
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		if progress != nil {
-			progress.Say("No stack " + setup.Stack + " to destroy")
+			progress.Say("Nothing to destroy: stack " + setup.Stack + " does not exist")
 		}
 		return nil
 	}
@@ -477,7 +481,7 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress edg
 	}
 
 	if progress != nil {
-		progress.Say("Destroying resources (this can take several minutes)")
+		progress.Say("Destroying every resource in stack " + setup.Stack + ", which can take several minutes")
 	}
 	lines := engineLines(progress)
 	opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel)}

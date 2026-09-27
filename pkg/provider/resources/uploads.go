@@ -58,10 +58,25 @@ func ship(ctx context.Context, store provider.ArtifactStore, upload provider.Upl
 	}
 	defer body.Close()
 	if progress != nil {
-		progress.Say("Uploading " + upload.Name)
+		message := "Uploading function " + upload.Name + "'s artifact"
+		if info, err := body.Stat(); err == nil {
+			message += " (" + sizeOf(info.Size()) + ")"
+		}
+		progress.Say(message)
 	}
 	if err := store.Put(ctx, upload.Ref, body); err != nil {
 		return fmt.Errorf("upload %s's artifact: %w", upload.Name, err)
 	}
 	return nil
+}
+
+func sizeOf(bytes int64) string {
+	switch {
+	case bytes < 1<<10:
+		return fmt.Sprintf("%d B", bytes)
+	case bytes < 1<<20:
+		return fmt.Sprintf("%.1f KiB", float64(bytes)/(1<<10))
+	default:
+		return fmt.Sprintf("%.1f MiB", float64(bytes)/(1<<20))
+	}
 }

@@ -252,7 +252,7 @@ func (f *hookStacks) forget(ctx context.Context, ref provider.StackRef, app stri
 	}
 	err := f.hooks.Retention.Forget(ctx, ref, app, progress)
 	if err != nil && progress != nil {
-		progress.Detail(fmt.Sprintf("Left %s's release window in place: %v", app, err))
+		progress.Warn(fmt.Sprintf("Left %s's release window in place: %v", app, err))
 	}
 	return err
 }
@@ -263,7 +263,7 @@ func (f *hookStacks) reconcile(ctx context.Context, ref provider.StackRef, app, 
 	}
 	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, progress)
 	if err != nil && progress != nil {
-		progress.Detail(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
+		progress.Warn(fmt.Sprintf("Left %s's unreferenced images in place: %v", app, err))
 	}
 	return err
 }
@@ -306,9 +306,7 @@ func (f *hookStacks) removeOrphans(ctx context.Context, spec provider.StackSpec,
 		}) {
 			continue
 		}
-		if progress != nil {
-			progress.Detail(fmt.Sprintf("Removing %s: this release no longer declares it", binding.Name))
-		}
+		reportUndeclared(progress, string(binding.Type), binding.Name)
 		if err := f.remove(ctx, spec.Ref, binding, progress); err != nil {
 			return err
 		}
@@ -326,7 +324,7 @@ func (f *hookStacks) removeOrphanFunctions(ctx context.Context, spec provider.St
 		if slices.Contains(declared, function.Name) {
 			continue
 		}
-		reportUndeclared(progress, function.Name)
+		reportUndeclared(progress, "function", function.Name)
 		orphans = append(orphans, function)
 	}
 	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, progress)
@@ -339,17 +337,17 @@ func (f *hookStacks) removeOrphanContainers(ctx context.Context, spec provider.S
 		if slices.Contains(declared, container.Name) {
 			continue
 		}
-		reportUndeclared(progress, container.Name)
+		reportUndeclared(progress, "container", container.Name)
 		orphans = append(orphans, container)
 	}
 	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, progress)
 }
 
-func reportUndeclared(progress edge.Progress, name string) {
+func reportUndeclared(progress edge.Progress, kind, name string) {
 	if progress == nil {
 		return
 	}
-	progress.Detail(fmt.Sprintf("Removing %s: this release no longer declares it", name))
+	progress.Say(fmt.Sprintf("Removing %s %s: this release no longer declares it", kind, name))
 }
 
 func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
