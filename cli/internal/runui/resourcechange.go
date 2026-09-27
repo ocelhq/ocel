@@ -42,14 +42,15 @@ func resourceChangeOf(ev *streamv1.RunEvent) (resourceChange, bool) {
 	}
 	action := provider.ActionProto(provider.ChangeAction(attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION]))
 	face := faceOf(action)
+	name, typ := attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME], attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE]
+	failed := ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	if _, changes := resourceChangesDone[face.tallyAs]; !changes {
-		return resourceChange{}, false
+		if !failed || name+typ == "" {
+			return resourceChange{}, false
+		}
+		face = actionFace{}
 	}
-	return resourceChange{
-		face:   face,
-		label:  resourceLabel(attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME], attrs[progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE]),
-		failed: ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR,
-	}, true
+	return resourceChange{face: face, label: resourceLabel(name, typ), failed: failed}, true
 }
 
 func resourceLabel(name, typ string) string {
@@ -66,6 +67,9 @@ func resourceLabel(name, typ string) string {
 }
 
 func (c resourceChange) render(present Presentation) string {
+	if c.failed && c.face.verb == "" {
+		return unitMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed"
+	}
 	if c.failed {
 		return unitMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed to " + c.face.verb
 	}

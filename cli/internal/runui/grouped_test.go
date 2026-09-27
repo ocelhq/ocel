@@ -567,6 +567,26 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	}
 }
 
+func TestAResourceThatFailedWithoutChangingIsListedAndCountedAsFailed(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
+	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
+	forwardResource(deploy, 3, 2, "web", "", "aws:ssm/parameter:Parameter", "config", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 4, 2, "web", "", "aws:iam/role:Role", "runner", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
+	deploy.Forward(providerEnded(2, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
+	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
+
+	want := "ERROR [deploy] ✗ web: Deploying web failed after 5s (1 failed)\n" +
+		"      ✗ runner (aws:iam/role:Role) failed\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func failedDeploy(t *testing.T, present Presentation) string {
 	t.Helper()
 	run, out, c := groupedRun(t, present)
