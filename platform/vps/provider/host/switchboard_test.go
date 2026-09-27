@@ -416,6 +416,31 @@ func TestASwitchboardRestoredIsTheOneBootstrapRunsWithTheBinaryTheBoxHas(t *test
 	}
 }
 
+func TestASwitchboardAPruneLeftStoppedWithItsNetworkGoneIsStoodAgainInPlaceOfTheStoppedOne(t *testing.T) {
+	t.Parallel()
+
+	b := machine(nil)
+	pruned := pruneAnswers("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0")
+	b.answer = func(command string) (session.Result, bool) {
+		if command == stateCommand(SwitchboardContainer) {
+			return session.Result{Stdout: "Status=exited ExitCode=0 OOMKilled=false Error= RestartCount=0\n"}, true
+		}
+		return pruned(command)
+	}
+	if err := b.fronted(coolifysTraefik()).CheckProxy(context.Background()); err != nil {
+		t.Fatalf("CheckProxy() = %v, want the switchboard stood again: Coolify prunes the ocel network of a stopped switchboard and leaves the container, which docker start can then never start", err)
+	}
+	at := b.at(quoted("run") + " " + quoted("--detach"))
+	if at < 0 {
+		t.Fatalf("no command started the switchboard again:\n%s", strings.Join(b.commands(), "\n---\n"))
+	}
+	command := b.commands()[at]
+	removed := strings.Index(command, "docker rm --force "+quoted(SwitchboardContainer))
+	if removed < 0 || removed > strings.Index(command, quoted("run")+" "+quoted("--detach")) {
+		t.Errorf("the switchboard was stood again as\n%s\nwant the stopped one removed first, and only while it is not running", command)
+	}
+}
+
 func TestASwitchboardRestoredOnYourProxysNetworkAsksAfterItBeforeRunning(t *testing.T) {
 	t.Parallel()
 

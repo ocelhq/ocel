@@ -214,10 +214,6 @@ func proxyStates() map[string]map[string]answer {
 			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
 			"missing=":       {stdout: "missing=" + switchboard.FrontDir + "\nsum=" + boxBoardSum + "\n"},
 		},
-		"the switchboard exited": {
-			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is not running"},
-			"docker inspect": {stdout: exitedState},
-		},
 		"the switchboard is restarting": {
 			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is restarting"},
 			"docker inspect": {stdout: restartingState},
@@ -269,7 +265,6 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 	}
 	for what, wanted := range map[string][]string{
 		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap", switchboard.FrontDir},
-		"the switchboard exited":                                                  {host.SwitchboardContainer, "exited"},
 		"the switchboard is restarting":                                           {host.SwitchboardContainer, "restarting"},
 		"the switchboard answers nothing over its control socket":                 {host.SwitchboardContainer, "control socket"},
 		"the front proxy is not there at all":                                     {caddy.Container, "bootstrap"},
@@ -393,16 +388,14 @@ func TestASwitchboardAPruneRemovedIsRestartedAndTheDeployGoesOn(t *testing.T) {
 			t.Errorf("the switchboard was restarted without %s (%s):\n%s", what, fragment, runCommand)
 		}
 	}
-	if strings.Contains(runCommand, "docker rm") {
-		t.Errorf("the switchboard was restarted by removing whatever owns its name:\n%s\nwant it started only while no container owns the name, or two deploys that both found it gone remove each other's", runCommand)
-	}
 	locked := strings.Index(runCommand, "flock -x 9\n")
-	guarded := strings.Index(runCommand, "if ! docker inspect --type container --format '{{.Id}}' 'ocel-switchboard'")
+	guarded := strings.Index(runCommand, `if [ "$(docker inspect --type container --format '{{.State.Running}}' 'ocel-switchboard' 2>/dev/null)" != true ]`)
+	removed := strings.Index(runCommand, "docker rm --force 'ocel-switchboard'")
 	run := strings.Index(runCommand, "'docker' 'run'")
 	unlocked := strings.Index(runCommand, "flock -u 9\n")
 	closed := strings.LastIndex(runCommand[:max(unlocked, 0)], "\nfi\n")
-	if locked < 0 || locked >= guarded || guarded >= run || run >= closed || closed >= unlocked {
-		t.Errorf("the switchboard was restarted outside the routing lock or outside the check that no container owns its name:\n%s\nwant the lock taken, then the name checked, then the container run inside that check, then the lock let go: two deploys that both found it gone otherwise both run one, and the second fails on the name the first took", runCommand)
+	if locked < 0 || locked >= guarded || guarded >= removed || removed >= run || run >= closed || closed >= unlocked {
+		t.Errorf("the switchboard was restarted outside the routing lock or outside the check that none is running:\n%s\nwant the lock taken, then the running one looked for, then a stopped one removed and a new one run inside that check, then the lock let go: two deploys that both found it down otherwise each remove the other's", runCommand)
 	}
 }
 
