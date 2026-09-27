@@ -598,6 +598,35 @@ func TestRunPreviewPrune(t *testing.T) {
 	})
 }
 
+func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheListingAloneOnStdout(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := runPreviewLs(context.Background(), deps, root, &stdout); err != nil {
+		t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	evs := envelopes(t, stderr.String())
+	opened := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetStarted() != nil })
+	if opened < 0 || evs[opened].GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("the listing's run never opened the check phase that starts the provider: %s", stderr.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+		t.Errorf("result = %v, want the listing's run to succeed", result)
+	}
+	if !strings.Contains(stdout.String(), "feature_login_ab12cd34") || strings.Contains(stderr.String(), "feature_login_ab12cd34") {
+		t.Errorf("stdout = %q, stream = %q: want the listing on stdout and not on the stream", stdout.String(), stderr.String())
+	}
+}
+
 func TestRunPreviewLs(t *testing.T) {
 	t.Run("it renders every environment", func(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
@@ -608,7 +637,7 @@ func TestRunPreviewLs(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		if err := runPreviewLs(context.Background(), deps, root, &stdout); err != nil {
 			t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -780,7 +809,7 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 		root, journal, deps := setUpPreview(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runPreviewLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
+		if err := runPreviewLs(context.Background(), deps, root, &stdout); err != nil {
 			t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 

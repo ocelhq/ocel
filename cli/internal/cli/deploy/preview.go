@@ -126,7 +126,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			}
 			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
-			return runPreviewLs(ctx, deps, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runPreviewLs(ctx, deps, cwd, cmd.OutOrStdout())
 		},
 	}
 
@@ -428,26 +428,44 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	return nil
 }
 
-func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
+func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
+	previews, err := listPreviews(ctx, deps, cfg)
+	if err != nil {
+		return err
+	}
+	renderEnvironments(stdout, previews)
+	return nil
+}
 
-	return providerclient.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-		resp, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
-			Slug: cfg.Slug,
-		})
-		if err != nil {
-			return err
-		}
-		renderEnvironments(stdout, resp.GetEnvironments())
-		return nil
+func listPreviews(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (previews []*contractv1.PreviewEnvironment, err error) {
+	if _, err := cfg.RequireProvider(); err != nil {
+		return nil, err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, "ocel preview ls", cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	check.End(err)
+	if err != nil {
+		return nil, err
+	}
+	defer prov.Close()
+
+	var listed *contractv1.ListEnvironmentsResponse
+	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		listed, err = client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: cfg.Slug})
+		return err
 	})
+	return listed.GetEnvironments(), err
 }
 
 func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewPruneOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {

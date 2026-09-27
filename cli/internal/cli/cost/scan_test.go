@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
@@ -34,9 +36,9 @@ func scanFixture(t *testing.T) (string, cmddeps.Deps) {
 
 func scan(t *testing.T, deps cmddeps.Deps, root string, opts Options) string {
 	t.Helper()
-	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), deps, root, opts, &stdout, &stderr); err != nil {
-		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	var stdout bytes.Buffer
+	if err := Run(context.Background(), deps, root, opts, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s", err, stdout.String())
 	}
 	return stdout.String()
 }
@@ -153,11 +155,11 @@ func TestScan(t *testing.T) {
 	t.Run("it refuses an environment or profile it does not know", func(t *testing.T) {
 		root, deps := scanFixture(t)
 
-		var stdout, stderr bytes.Buffer
-		if err := Run(context.Background(), deps, root, Options{Env: "staging"}, &stdout, &stderr); err == nil || !strings.Contains(err.Error(), "staging") {
+		var stdout bytes.Buffer
+		if err := Run(context.Background(), deps, root, Options{Env: "staging"}, &stdout); err == nil || !strings.Contains(err.Error(), "staging") {
 			t.Errorf("Run(env=staging) err = %v, want a refusal naming what was typed", err)
 		}
-		if err := Run(context.Background(), deps, root, Options{Profile: "extreme"}, &stdout, &stderr); err == nil || !strings.Contains(err.Error(), "extreme") {
+		if err := Run(context.Background(), deps, root, Options{Profile: "extreme"}, &stdout); err == nil || !strings.Contains(err.Error(), "extreme") {
 			t.Errorf("Run(profile=extreme) err = %v, want a refusal naming what was typed", err)
 		}
 	})
@@ -198,4 +200,42 @@ func lineNaming(out, name string) string {
 		}
 	}
 	return ""
+}
+
+func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneOnStdout(t *testing.T) {
+	root, deps := scanFixture(t)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, Options{}, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var phases []progressv1.Phase
+	var result *streamv1.RunResultEvent
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("stream line %q is not a protojson RunEvent: %v", line, err)
+		}
+		if ev.GetStarted() != nil && len(ev.GetStarted().GetParentSpanId()) == 0 {
+			phases = append(phases, ev.GetPhase())
+		}
+		if ev.GetResult() != nil {
+			result = ev.GetResult()
+		}
+	}
+	if len(phases) == 0 || phases[0] != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("phases = %v, want the run to open with the check phase that starts the provider", phases)
+	}
+	if !result.GetSuccess() {
+		t.Errorf("result = %v, want the scan's run to succeed", result)
+	}
+	var scanned scanJSON
+	if err := json.Unmarshal(stdout.Bytes(), &scanned); err != nil {
+		t.Errorf("stdout = %q, want the estimate as one JSON document: %v", stdout.String(), err)
+	}
 }

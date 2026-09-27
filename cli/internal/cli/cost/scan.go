@@ -27,7 +27,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -70,7 +72,7 @@ type Options struct {
 	Usage   string
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdout, stderr io.Writer) error {
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdout io.Writer) (err error) {
 	env, err := environmentOf(opts.Env)
 	if err != nil {
 		return err
@@ -88,49 +90,75 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 		return err
 	}
 
-	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		manifest, assumptions, err := scanManifest(ctx, deps, cfg, env, stderr)
-		if err != nil {
-			return err
-		}
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-		set, err := client.Shape(ctx, &contractv1.ShapeRequest{
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, "ocel cost scan", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+
+	pricing := run.Phase(progressv1.Phase_PHASE_PLAN).Unit(cfg.Slug, "Pricing what a deploy would provision")
+	set, estimates, assumptions, err := price(ctx, deps, prov, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
+	pricing.End(err)
+	if err != nil {
+		return err
+	}
+	if deps.Presentation(stdout).Format == runui.FormatJSON {
+		return writeJSON(stdout, set, estimates[profile], assumptions)
+	}
+	return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
+}
+
+func price(ctx context.Context, deps cmddeps.Deps, prov *providerclient.Provider, cfg *projectconfig.Config, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
+	manifest, assumptions, err := scanManifest(ctx, deps, cfg, env, out)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var set *costv1.ResourceSet
+	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),
 		})
-		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return predates(runner.Name())
-			}
-			return err
-		}
-		costs, err := runner.Cost()
-		if err != nil {
-			return err
-		}
-		estimates := make(map[costv1.Profile]*costv1.Estimate, len(profiles()))
-		for _, profile := range profiles() {
-			estimate, err := costs.Price(ctx, &costv1.PriceRequest{
-				Resources: set,
-				Usage:     &costv1.Usage{Profile: profile, Resources: overrides},
-			})
-			if err != nil {
-				if connect.CodeOf(err) == connect.CodeUnimplemented {
-					return predates(runner.Name())
-				}
-				return err
-			}
-			estimates[profile] = estimate
-		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeJSON(stdout, set, estimates[profile], assumptions)
-		}
-		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
+		return err
 	})
+	if connect.CodeOf(err) == connect.CodeUnimplemented {
+		return nil, nil, nil, predates(prov.Name())
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	costs, err := prov.Cost()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	estimates := make(map[costv1.Profile]*costv1.Estimate, len(profiles()))
+	for _, profile := range profiles() {
+		estimate, err := costs.Price(ctx, &costv1.PriceRequest{
+			Resources: set,
+			Usage:     &costv1.Usage{Profile: profile, Resources: overrides},
+		})
+		if connect.CodeOf(err) == connect.CodeUnimplemented {
+			return nil, nil, nil, predates(prov.Name())
+		}
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		estimates[profile] = estimate
+	}
+	return set, estimates, assumptions, nil
 }
 
 func predates(pkg string) error {

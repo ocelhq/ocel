@@ -47,7 +47,7 @@ func newScanCommand(deps cmddeps.Deps) *cobra.Command {
 			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return Run(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return Run(ctx, deps, cwd, opts, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&opts.Env, "env", envProduction, "Environment to price: production or preview")
