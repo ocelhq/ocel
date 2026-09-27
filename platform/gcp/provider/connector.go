@@ -1,26 +1,19 @@
 package gcp
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
 
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
-	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -221,7 +214,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	if err != nil {
 		return "", err
 	}
-	built, err := connectorImage(base, binary)
+	built, err := binaryImage(base, binary, connectorImagePath)
 	if err != nil {
 		return "", err
 	}
@@ -229,71 +222,16 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	if err != nil {
 		return "", fmt.Errorf("read the digest of the connector image: %w", err)
 	}
-
-	at, err := p.EnsureImageRegistry(ctx, edge.ClassProduction, nil)
-	if err != nil {
-		return "", err
-	}
-	store := images.RegistryStore(at)
 	names, err := p.Names(ctx)
 	if err != nil {
 		return "", err
 	}
 	ref := names.RepositoryPath(p.options.Region, edge.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
-	push := provider.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
-
-	present, err := store.Has(ctx, push)
-	if err != nil {
-		return "", err
-	}
-	if present {
-		return ref, nil
-	}
-	if progress != nil {
-		progress.Say("Pushing the connector image to " + ref)
-	}
-	if err := store.Push(ctx, push, progress); err != nil {
+	if err := p.pushImage(ctx, edge.ClassProduction, connectorImageName, ref, built, progress); err != nil {
 		return "", err
 	}
 	return ref, nil
-}
-
-func connectorImage(base v1.Image, binary []byte) (v1.Image, error) {
-	var packed bytes.Buffer
-	archive := tar.NewWriter(&packed)
-	if err := archive.WriteHeader(&tar.Header{
-		Typeflag: tar.TypeReg,
-		Name:     connectorImagePath[1:],
-		Mode:     0o755,
-		Size:     int64(len(binary)),
-	}); err != nil {
-		return nil, fmt.Errorf("open the connector image layer: %w", err)
-	}
-	if _, err := archive.Write(binary); err != nil {
-		return nil, fmt.Errorf("write the connector into its image layer: %w", err)
-	}
-	if err := archive.Close(); err != nil {
-		return nil, fmt.Errorf("close the connector image layer: %w", err)
-	}
-	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(packed.Bytes())), nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	appended, err := mutate.Append(base, mutate.Addendum{Layer: layer})
-	if err != nil {
-		return nil, err
-	}
-	file, err := appended.ConfigFile()
-	if err != nil {
-		return nil, err
-	}
-	config := file.Config
-	config.Entrypoint = []string{connectorImagePath}
-	config.Cmd = nil
-	return mutate.Config(appended, config)
 }
 
 func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, progress edge.Progress) error {
