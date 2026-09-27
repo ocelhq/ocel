@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -76,13 +74,9 @@ func (b *Bus) detach(s Sink) {
 }
 
 func (b *Bus) Send(ev *streamv1.RunEvent) *streamv1.RunEvent {
-	if ev.GetTime() == nil {
-		ev.Time = timestamppb.New(b.now())
-	}
-	if ev.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
-		ev.Level = progressv1.Level_LEVEL_INFO
-	}
+	b.stamp(ev)
 	shown := withoutSecrets(ev)
+	collapse(shown.ProtoReflect())
 	orderPlan(shown.GetPlan())
 	b.mu.Lock()
 	defer b.mu.Unlock()

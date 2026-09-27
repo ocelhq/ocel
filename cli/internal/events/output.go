@@ -58,12 +58,20 @@ func (w *lineWriter) flush() {
 	}
 }
 
-func collapseRewrites(line string) string {
-	drafts := strings.Split(line, "\r")
-	for d := len(drafts) - 1; d >= 0; d-- {
-		if drafts[d] != "" {
-			return drafts[d]
+func collapseRewrites(text string) string {
+	if !strings.ContainsRune(text, '\r') {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		drafts := strings.Split(line, "\r")
+		lines[i] = ""
+		for d := len(drafts) - 1; d >= 0; d-- {
+			if drafts[d] != "" {
+				lines[i] = drafts[d]
+				break
+			}
 		}
 	}
-	return ""
+	return strings.Join(lines, "\n")
 }

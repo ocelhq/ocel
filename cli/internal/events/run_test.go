@@ -220,6 +220,44 @@ func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *tes
 	}
 }
 
+func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThingItSaid(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+
+	for _, message := range []string{"uploading 10%\ruploading 60%\ruploaded", "carriage returned\r", "first of two\r\nsecond of two"} {
+		deploy.Forward(&progressv1.OperationEvent{Message: message, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}})
+	}
+	deploy.Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Error: "retrying 1\rgave up"}}})
+
+	got := sink.received()[1:]
+	want := []string{"uploaded", "carriage returned", "first of two\nsecond of two"}
+	for i, message := range want {
+		if got[i].GetMessage() != message {
+			t.Errorf("line %d reached the sink as %q, want %q, the last thing it said", i, got[i].GetMessage(), message)
+		}
+	}
+	if outcome := got[3].GetOutcome().GetError(); outcome != "gave up" {
+		t.Errorf("the outcome's error reached the sink as %q, want the rewrite collapsed wherever it sits", outcome)
+	}
+}
+
+func TestAForwardedScopeThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
+	sink := &recording{}
+	run, c := begin(t, sink)
+	started := c.read().Add(-time.Minute)
+
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{
+		TimeUnixNano: started.Add(-time.Minute).UnixNano(),
+		SpanId:       []byte("unit-web"),
+		Body:         &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{StartTimeUnixNano: started.UnixNano()}},
+	})
+
+	if at := sink.received()[1].GetTime().AsTime(); !at.Equal(c.read()) {
+		t.Errorf("the scope ended at %s, want the time it reached the bus, %s, not before it started", at, c.read())
+	}
+}
+
 func TestTheAppsAProvidersOutcomeReportsAreOnTheRunsResult(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
