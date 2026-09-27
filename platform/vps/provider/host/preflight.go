@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
@@ -426,25 +427,50 @@ func withOwner(owners []portOwner, name string, container bool, port string) []p
 	return append(owners, portOwner{name: name, container: container, ports: []string{port}})
 }
 
-func (h *Host) servingFree(ctx context.Context, read Reading) error {
-	if h.proxyOption.Caddy != nil {
-		return h.proxyOption.caddyfile(frontBox{h}).RefuseUnreachable(ctx)
+func (h *Host) publisherOf(read Reading, elevation string) func(context.Context, string) ([]string, error) {
+	if !read.observed(KindEngine, dockerEngine) {
+		return func(context.Context, string) ([]string, error) { return nil, nil }
 	}
-	if h.proxyOption.adopted() {
+	return func(ctx context.Context, port string) ([]string, error) {
+		said, err := h.ran(ctx, "ask which container publishes port "+port, words(publishing(port))+" 2>/dev/null || true", nil, elevation)
+		return publishers(said), err
+	}
+}
+
+func (h *Host) refuseTraefikUnreachable(ctx context.Context, read Reading) error {
+	fronting := h.proxyOption.Traefik
+	if fronting.Network != "" {
 		return nil
 	}
 	elevation, err := h.elevate(ctx)
 	if err != nil {
 		return err
 	}
-	published := func(context.Context, string) ([]string, error) { return nil, nil }
-	if read.observed(KindEngine, dockerEngine) {
-		published = func(ctx context.Context, port string) ([]string, error) {
-			said, err := h.ran(ctx, "ask which container publishes port "+port, words(publishing(port))+" 2>/dev/null || true", nil, elevation)
-			return publishers(said), err
-		}
+	containers, err := h.publisherOf(read, elevation)(ctx, proxy.HTTPSPort)
+	if err != nil || len(containers) == 0 {
+		return err
 	}
-	ports, err := readServingPorts(ctx, published, func(ctx context.Context) ([]listeners.Listener, error) {
+	named := strings.Join(containers, " and ")
+	return refusal.Refuse(refusal.CodeNotReady,
+		"container %s publishes :%s from a docker network, where %s:%d is its own loopback and not this box's, so it cannot reach ocel's switchboard\n"+
+			"Set `proxy.traefik.network` to the docker network %s is on, or run %s with network_mode: host",
+		named, proxy.HTTPSPort, loopbackAddr, fronting.Port, named, named)
+}
+
+func (h *Host) servingFree(ctx context.Context, read Reading) error {
+	switch {
+	case h.proxyOption.Caddy != nil:
+		return h.proxyOption.caddyfile(frontBox{h}).RefuseUnreachable(ctx)
+	case h.proxyOption.Traefik != nil:
+		return h.refuseTraefikUnreachable(ctx, read)
+	case h.proxyOption.adopted():
+		return nil
+	}
+	elevation, err := h.elevate(ctx)
+	if err != nil {
+		return err
+	}
+	ports, err := readServingPorts(ctx, h.publisherOf(read, elevation), func(ctx context.Context) ([]listeners.Listener, error) {
 		return h.portOwners(ctx, elevation)
 	})
 	if err != nil {

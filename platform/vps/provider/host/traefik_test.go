@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/traefik"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -94,6 +96,75 @@ func TestYourTraefikIsAskedWhetherItRoutesAHostnameWhateverCertificateItHasForIt
 	want := words([]string{SwitchboardBinary, "probe", "--any-certificate", "web.localhost"})
 	if box.at(want) < 0 {
 		t.Errorf("Routed() ran %q, want %s: Traefik routes a hostname before it holds its certificate, and issuing waits on DNS", box.commands(), want)
+	}
+}
+
+func TestTheLastDestroyBehindYourTraefikTakesOcelYmlOutOfItsDirectoryBeforeTheSwitchboard(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	bootstrap := NewBootstrap(box.fronted(coolifysTraefik()), testVendor, "shop")
+	plan, err := bootstrap.PlanRemove(context.Background(), tier)
+	if err != nil {
+		t.Fatalf("PlanRemove() = %v", err)
+	}
+	if !slices.ContainsFunc(plan.Groups[0].Changes, func(change provider.Change) bool {
+		return change.Name == coolifyFile && change.Action == provider.ActionDelete
+	}) {
+		t.Errorf("the removal plan %+v leaves %s behind in your Traefik's directory", plan.Groups[0].Changes, coolifyFile)
+	}
+	if err := bootstrap.Remove(context.Background(), tier, nil); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+	taken := box.commands()
+	unplaced := slices.IndexFunc(taken, func(command string) bool {
+		return strings.Contains(command, words(switchboardCommand("unplace", coolifyFile)))
+	})
+	removed := slices.Index(taken, "docker rm --force "+quoted(SwitchboardContainer))
+	if unplaced < 0 || removed < 0 || unplaced > removed {
+		t.Errorf("the destroy ran\n%s\nwant %s unplaced through the switchboard before the switchboard is removed: Traefik would route ocel's hostnames to a service that is gone", strings.Join(taken, "\n"), coolifyFile)
+	}
+}
+
+func TestABootstrapBehindATraefikInABridgedContainerWithNoNetworkNamedIsRefusedNamingNetwork(t *testing.T) {
+	t.Parallel()
+
+	rig := withDocker()
+	portsOwnedOn(rig, map[string]string{"443": "traefik\n"})
+	refusedBeforeWriting(t, rig, traefikOnTheHost(),
+		"container traefik publishes :443 from a docker network, where 127.0.0.1:9000 is its own loopback and not this box's, so it cannot reach ocel's switchboard\n"+
+			"Set `proxy.traefik.network` to the docker network traefik is on, or run traefik with network_mode: host")
+}
+
+func TestABootstrapBehindATraefikOnTheHostsOwnNetworkGoesAhead(t *testing.T) {
+	t.Parallel()
+
+	for name, front := range map[string]Front{"a Traefik on the host": traefikOnTheHost(), "Coolify's Traefik on its network": coolifysTraefik()} {
+		rig := withDocker()
+		published := "\n"
+		if front.Traefik.Network != "" {
+			published = "coolify-proxy\n"
+		}
+		portsOwnedOn(rig, map[string]string{"443": published}, socketOwner{443, "traefik"})
+		if _, err := NewBootstrap(rig.fronted(front), testVendor, "shop").Plan(context.Background(),
+			provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil {
+			t.Errorf("%s: Plan() = %v, want the bootstrap let through", name, err)
+		}
+	}
+}
+
+func TestTheSwitchboardIsWrittenBesideYourTraefikOnlyOntoADirectoryTheBoxHas(t *testing.T) {
+	t.Parallel()
+
+	written := switchboardOf(t, coolifysTraefik()).writing(containerRising)
+	asked := strings.Index(written, "-d "+quoted("/data/coolify/proxy/dynamic")+" ]")
+	ran := strings.Index(written, quoted("run")+" "+quoted("--detach"))
+	if asked < 0 || ran < 0 || asked > ran {
+		t.Fatalf("the switchboard write asks after Coolify's dynamic directory at %d and runs at %d, want it found before a run that would have docker create it empty and root-owned:\n%s", asked, ran, written)
+	}
+	if !strings.Contains(written, "proxy.traefik.directory") {
+		t.Errorf("the switchboard write refuses a missing directory without naming the option that set it:\n%s", written)
 	}
 }
 
