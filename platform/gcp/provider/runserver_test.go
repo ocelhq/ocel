@@ -71,10 +71,12 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 	s.created = append(s.created, desired)
 	name := r.URL.Query().Get("serviceId")
 	s.service = &run.GoogleCloudRunV2Service{
-		Name:     strings.TrimPrefix(r.URL.Path, "/v2/") + "/" + name,
-		Template: desired.Template,
-		Traffic:  allocated(desired.Traffic),
-		Uri:      "https://" + name + ".run.app",
+		Name:               strings.TrimPrefix(r.URL.Path, "/v2/") + "/" + name,
+		Template:           desired.Template,
+		Traffic:            allocated(desired.Traffic),
+		Ingress:            desired.Ingress,
+		InvokerIamDisabled: desired.InvokerIamDisabled,
+		Uri:                "https://" + name + ".run.app",
 	}
 	s.revised()
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/create", Done: true})
@@ -92,9 +94,20 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.patched = append(s.patched, desired)
+	if mask := r.URL.Query().Get("updateMask"); mask != "" {
+		if slices.Contains(strings.Split(mask, ","), "traffic") {
+			s.service.Traffic = allocated(desired.Traffic)
+		}
+		s.writes++
+		s.service.Etag = "etag-" + strconv.Itoa(s.writes)
+		writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true})
+		return
+	}
 	replaced := !sameTemplate(s.service.Template, desired.Template)
 	s.service.Template = desired.Template
 	s.service.Traffic = allocated(desired.Traffic)
+	s.service.Ingress = desired.Ingress
+	s.service.InvokerIamDisabled = desired.InvokerIamDisabled
 	s.writes++
 	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 	if replaced {
