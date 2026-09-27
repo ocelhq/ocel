@@ -394,3 +394,48 @@ func TestRunHandsTheEngineEverySecretValueItKnowsSoDiagnosticsCanMaskThem(t *tes
 		t.Error("the engine masks a plain value, want only secrets masked")
 	}
 }
+
+func TestAnEngineErrorNeverCarriesASecretTheRunKnowsYetStillUnwrapsToTheEngines(t *testing.T) {
+	t.Parallel()
+
+	failed := errors.New("update failed\nstdout: creating db with password config-s3cret\nstderr: PULUMI_CONFIG_PASSPHRASE=a-passphrase rejected")
+	engine := &recordingEngine{err: failed}
+	automation := pulumi.New(pulumi.Config{
+		Backend: backend(),
+		Program: program{}.Run,
+		Configure: configuring{program{config: auto.ConfigMap{
+			"app:dbPassword": {Value: "config-s3cret", Secret: true},
+		}}}.Configure,
+		Engine: engine,
+	})
+
+	_, previewErr := automation.Preview(context.Background(), spec(), nil)
+	_, runErr := automation.Run(context.Background(), spec(), nil)
+	destroyErr := automation.Destroy(context.Background(), spec().Ref, nil)
+	_, outputsErr := automation.Outputs(context.Background(), spec().Ref, nil)
+	for op, err := range map[string]error{"Preview": previewErr, "Run": runErr, "Destroy": destroyErr, "Outputs": outputsErr} {
+		if !errors.Is(err, failed) {
+			t.Errorf("%s() = %v, want it to unwrap to the engine's error", op, err)
+		}
+		for _, secret := range []string{"config-s3cret", "a-passphrase"} {
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("%s() reads %q, want %q masked", op, err, secret)
+			}
+		}
+		if !strings.Contains(err.Error(), "stdout: creating db with password [secret]") {
+			t.Errorf("%s() reads %q, want the engine's output kept with the secret masked", op, err)
+		}
+	}
+}
+
+func TestALockedStackStillReadsAsBusyWhenTheEngineErrorCarriesASecret(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{err: errors.New("update failed: the stack is currently locked by 1 lock(s)\nstderr: a-passphrase")}
+	_, err := pulumi.New(pulumi.Config{Backend: backend(), Program: program{}.Run, Engine: engine}).
+		Run(context.Background(), spec(), nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
+		t.Fatalf("Run() over a locked stack = %v, want a busy refusal", err)
+	}
+}

@@ -102,10 +102,7 @@ func (b *traceCollector) diagnose(d *apitype.DiagnosticEvent) {
 }
 
 func (b *traceCollector) plainDiagnostic(message string) string {
-	text := colors.Never.Colorize(message)
-	for _, secret := range b.secrets {
-		text = strings.ReplaceAll(text, secret, redactedSecret)
-	}
+	text := maskSecrets(colors.Never.Colorize(message), b.secrets)
 	text = strings.Join(strings.Fields(text), " ")
 	if len(text) > maxDiagnosticLen {
 		text = strings.ToValidUTF8(text[:maxDiagnosticLen], "") + "…"

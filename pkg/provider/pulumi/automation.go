@@ -250,7 +250,7 @@ func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Op
 	}
 	changes, err := a.engine().Preview(ctx, setup, op, progress)
 	if err != nil {
-		return provider.Plan{}, busy(err, setup)
+		return provider.Plan{}, masked(busy(err, setup), setup.Secrets)
 	}
 	if len(changes) == 0 {
 		return provider.Plan{}, nil
@@ -321,7 +321,7 @@ func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress 
 	}
 	outputs, err := a.engine().Up(ctx, setup, progress)
 	if err != nil {
-		return provider.StackResult{}, busy(err, setup)
+		return provider.StackResult{}, masked(busy(err, setup), setup.Secrets)
 	}
 	if a.config.Decode == nil {
 		return provider.StackResult{}, nil
@@ -335,7 +335,7 @@ func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progres
 		return err
 	}
 	if err := a.engine().Destroy(ctx, setup, progress); err != nil {
-		return busy(err, setup)
+		return masked(busy(err, setup), setup.Secrets)
 	}
 	return nil
 }
@@ -345,7 +345,11 @@ func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progres
 	if err != nil {
 		return nil, err
 	}
-	return a.engine().Outputs(ctx, setup)
+	outputs, err := a.engine().Outputs(ctx, setup)
+	if err != nil {
+		return nil, masked(err, setup.Secrets)
+	}
+	return outputs, nil
 }
 
 const lockedMessage = "the stack is currently locked"
@@ -544,6 +548,26 @@ func (a *Automation) secrets(spec provider.StackSpec, config auto.ConfigMap) []s
 		secrets = append(secrets, a.config.Secrets(spec)...)
 	}
 	return slices.DeleteFunc(secrets, func(secret string) bool { return secret == "" })
+}
+
+type maskedError struct {
+	err     error
+	secrets []string
+}
+
+func masked(err error, secrets []string) error {
+	return &maskedError{err: err, secrets: secrets}
+}
+
+func (e *maskedError) Error() string { return maskSecrets(e.err.Error(), e.secrets) }
+
+func (e *maskedError) Unwrap() error { return e.err }
+
+func maskSecrets(text string, secrets []string) string {
+	for _, secret := range secrets {
+		text = strings.ReplaceAll(text, secret, redactedSecret)
+	}
+	return text
 }
 
 func secretValues(values auto.ConfigMap) []string {
