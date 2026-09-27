@@ -26,8 +26,7 @@ const (
 	answerBodyCap  = 1 << 12
 )
 
-func loopback(verb string, argv []string, errs io.Writer) (string, string, bool) {
-	flags := flag.NewFlagSet(verb, flag.ContinueOnError)
+func loopback(flags *flag.FlagSet, argv []string, errs io.Writer) (string, string, bool) {
 	flags.SetOutput(errs)
 	at := flags.String("at", servingAt, "")
 	if err := flags.Parse(argv); err != nil || flags.NArg() != 1 || flags.Arg(0) == "" {
@@ -54,7 +53,7 @@ func handshake(at, hostname string) (*tls.Conn, error) {
 }
 
 func leaf(argv []string, out, errs io.Writer) int {
-	at, hostname, ok := loopback("leaf", argv, errs)
+	at, hostname, ok := loopback(flag.NewFlagSet("leaf", flag.ContinueOnError), argv, errs)
 	if !ok {
 		return usage(errs)
 	}
@@ -87,7 +86,9 @@ func leaf(argv []string, out, errs io.Writer) int {
 }
 
 func probe(argv []string, out, errs io.Writer) int {
-	at, hostname, ok := loopback("probe", argv, errs)
+	flags := flag.NewFlagSet("probe", flag.ContinueOnError)
+	anyCertificate := flags.Bool("any-certificate", false, "")
+	at, hostname, ok := loopback(flags, argv, errs)
 	if !ok {
 		return usage(errs)
 	}
@@ -96,7 +97,7 @@ func probe(argv []string, out, errs io.Writer) int {
 		fmt.Fprintf(errs, "%s answered nothing over tls at %s: %v\n", hostname, at, oneLine(err))
 		return exitNotServingYet
 	}
-	if err := serves(spoken.ConnectionState().PeerCertificates, hostname, time.Now()); err != nil {
+	if err := serves(spoken.ConnectionState().PeerCertificates, hostname, time.Now()); err != nil && !*anyCertificate {
 		_ = spoken.Close()
 		fmt.Fprintf(errs, "%s at %s: %v\n", hostname, at, err)
 		return exitNotServingYet

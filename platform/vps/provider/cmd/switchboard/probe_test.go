@@ -205,6 +205,17 @@ func TestTheProbeRefusesACertificateThatDoesNotServeTheName(t *testing.T) {
 	}
 }
 
+func TestTheProbeForAnyCertificateAsksOnlyWhetherTheRouteReachesTheSwitchboard(t *testing.T) {
+	at := answering(t, current(t, "TRAEFIK DEFAULT CERT"), switchboardAnswers)
+
+	if code, out, errs := ran(t, "probe", "--any-certificate", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "switchboard" {
+		t.Errorf("probe --any-certificate over a proxy's default certificate = %d, %q, %q, want the router read: a proxy routes a hostname before its certificate is issued, and issuing waits on DNS", code, out, errs)
+	}
+	if code, _, _ := ran(t, "probe", "--at", at, "web.localhost"); code != exitNotServingYet {
+		t.Errorf("probe over a proxy's default certificate = %d, want %d: without the flag the probe still proves the hostname is served", code, exitNotServingYet)
+	}
+}
+
 func TestTheProbeReadsTheRouterOffTheHostnameAndNotOffWhereARedirectLands(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/elsewhere" {

@@ -124,7 +124,11 @@ type Answer struct {
 }
 
 func (h *Host) ServedRouter(ctx context.Context, hostname string) (Answer, error) {
-	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "probe", hostname}), nil, "")
+	return h.probed(ctx, hostname)
+}
+
+func (h *Host) probed(ctx context.Context, hostname string, flags ...string) (Answer, error) {
+	result, err := h.stream(ctx, words(slices.Concat([]string{SwitchboardBinary, "probe"}, flags, []string{hostname})), nil, "")
 	if err != nil {
 		return Answer{}, err
 	}
@@ -187,6 +191,21 @@ func (b frontBox) Probe(ctx context.Context, hostname string) (router.Kind, stri
 	said, err := b.h.ServedRouter(ctx, hostname)
 	return said.Router, said.Failure, err
 }
+
+func (b frontBox) Spec(ctx context.Context) (proxy.Spec, error) {
+	state, err := b.h.routingTable(ctx)
+	if err != nil {
+		return proxy.Spec{}, err
+	}
+	return proxySpec(state), nil
+}
+
+func (b frontBox) Routed(ctx context.Context, hostname string) (string, string, error) {
+	said, err := b.h.probed(ctx, hostname, "--any-certificate")
+	return string(said.Router), said.Failure, err
+}
+
+func (b frontBox) Pause(ctx context.Context, wait time.Duration) error { return b.h.pause(ctx, wait) }
 
 func (b frontBox) Beside(ctx context.Context, path string) ([]switchboard.Neighbour, error) {
 	elevation, err := b.h.reachDocker(ctx)
