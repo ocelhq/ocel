@@ -42,7 +42,11 @@ func (r Records) collection(name records.Name) (*firestore.CollectionRef, edge.C
 	if err != nil {
 		return nil, class, err
 	}
-	return client.Collection(recordCollection + string(class)), class, nil
+	return ClassRecords(client, class), class, nil
+}
+
+func ClassRecords(client *firestore.Client, class edge.Class) *firestore.CollectionRef {
+	return client.Collection(recordCollection + string(class))
 }
 
 func (r Records) absent(ctx context.Context, collection *firestore.CollectionRef, class edge.Class) error {
