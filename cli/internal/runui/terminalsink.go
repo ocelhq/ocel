@@ -10,7 +10,7 @@ func NewTerminalSink(present Presentation, w io.Writer) events.Sink {
 	switch {
 	case present.Format == FormatJSON:
 		return NewJSONSink(w)
-	case present.Live():
+	case present.Live() && enableVirtualTerminal(w) == nil:
 		return NewLineSink(w, present)
 	default:
 		return NewGroupedSink(w, present)
