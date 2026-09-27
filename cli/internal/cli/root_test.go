@@ -2,16 +2,15 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func TestTheRootFlagsFeedTheOneResolver(t *testing.T) {
@@ -35,60 +34,81 @@ func newTestDeps() cmddeps.Deps {
 	return deps
 }
 
-func shownRun(t *testing.T, format runui.Format) []string {
+func executeRoot(t *testing.T, args ...string) (stdout, stderr string) {
 	t.Helper()
 	origFormat := logFormatFlag
-	t.Cleanup(func() { logFormatFlag = origFormat })
-	logFormatFlag = string(format)
-
-	var out bytes.Buffer
-	deps := cmddeps.Deps{Events: events.NewBus(time.Now), Presentation: presentation}
-	deps.AttachTerminalSink(&out)
-
-	_, run, err := deps.Events.Begin(context.Background(), "ocel deploy", "")
-	if err != nil {
-		t.Fatal(err)
+	var out, errOut bytes.Buffer
+	rootCmd.SetArgs(args)
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&errOut)
+	t.Cleanup(func() {
+		logFormatFlag = origFormat
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	})
+	if err := Execute(); err != nil {
+		t.Fatalf("ocel %s: %v; stdout=%s stderr=%s", strings.Join(args, " "), err, out.String(), errOut.String())
 	}
-	run.Phase(progressv1.Phase_PHASE_CHECK).Warn("the edge plan is unknown")
-	run.End(&err)
-	if err := deps.Events.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return strings.Split(strings.TrimSpace(out.String()), "\n")
+	return out.String(), errOut.String()
+}
+
+func inDeployFixture(t *testing.T) {
+	t.Helper()
+	root, _ := clitest.SetUpDeployFixture(t)
+	t.Chdir(root)
 }
 
 func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
-	lines := shownRun(t, runui.FormatJSON)
+	inDeployFixture(t)
 
-	var said bool
-	for _, line := range lines {
+	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "prune")
+
+	var ended bool
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		var ev map[string]any
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			t.Fatalf("line %q is not JSON, want every line from the one JSON sink: %v", line, err)
 		}
-		said = said || ev["message"] == "the edge plan is unknown"
+		_, ended = ev["result"]
 	}
-	if !said {
-		t.Errorf("lines = %q, want the run's message as a JSON event", lines)
+	if !ended {
+		t.Errorf("stdout = %q, want the run's events ending in its result", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want nothing beside the one JSON stream", stderr)
 	}
 }
 
 func TestTheHumanLogFormatAttachesOnlyTheHumanSink(t *testing.T) {
-	lines := shownRun(t, runui.FormatHuman)
+	inDeployFixture(t)
 
-	var said bool
-	for _, line := range lines {
+	stdout, _ := executeRoot(t, "deployments", "prune")
+
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
 		if json.Valid([]byte(line)) {
 			t.Fatalf("line %q is JSON, want only the human view", line)
 		}
-		said = said || strings.Contains(line, "the edge plan is unknown")
 	}
-	if !said {
-		t.Errorf("lines = %q, want the run's message in the human view", lines)
+	if !strings.Contains(stdout, "Pruned") {
+		t.Errorf("stdout = %q, want the run's headline in the human view", stdout)
 	}
 }
 
 func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
+	inDeployFixture(t)
+
+	stdout, stderr := executeRoot(t, "--log-format", "json", "deployments", "ls")
+
+	if !strings.Contains(stdout, "promo-2") || strings.Contains(stdout, "{") {
+		t.Errorf("stdout = %q, want the promotions table alone", stdout)
+	}
+	if evs := runEvents(t, stderr); len(evs) == 0 || !evs[len(evs)-1].GetResult().GetSuccess() {
+		t.Errorf("stderr = %q, want the run's events ending in its result", stderr)
+	}
+}
+
+func TestEveryCommandWhoseStdoutIsItsDataIsMarkedToDrawItsRunOnStderr(t *testing.T) {
 	for _, path := range [][]string{
 		{"bindings", "ls"}, {"bindings", "set"}, {"bindings", "rm"}, {"bindings", "generate"},
 		{"env", "ls"}, {"env", "get"}, {"env", "set"}, {"env", "ui"},
@@ -114,8 +134,8 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 	}
 }
 
-func TestACommandThatReportsThroughItsRunDrawsItOnStdout(t *testing.T) {
-	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}, {"connector", "add"}, {"connector", "rm"}} {
+func TestEveryCommandThatReportsThroughItsRunIsMarkedToDrawItOnStdout(t *testing.T) {
+	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}, {"connector", "add"}, {"connector", "rm"}, {"deployments", "prune"}} {
 		cmd, _, err := rootCmd.Find(path)
 		if err != nil {
 			t.Fatalf("find %q: %v", path, err)
