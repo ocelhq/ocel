@@ -84,6 +84,19 @@ func TestTheSwitchboardBesideATraefikOnTheHostHearsHTTPSOnItsBoxNetworkAddressPu
 	}
 }
 
+func TestYourTraefikIsAskedWhetherItRoutesAHostnameWhateverCertificateItHasForItYet(t *testing.T) {
+	t.Parallel()
+
+	box := machine(nil)
+	if _, _, err := (frontBox{box.host()}).Routed(context.Background(), "web.localhost"); err != nil {
+		t.Fatalf("Routed() = %v", err)
+	}
+	want := words([]string{SwitchboardBinary, "probe", "--any-certificate", "web.localhost"})
+	if box.at(want) < 0 {
+		t.Errorf("Routed() ran %q, want %s: Traefik routes a hostname before it holds its certificate, and issuing waits on DNS", box.commands(), want)
+	}
+}
+
 func TestASwitchboardADeployStandsAgainBesideYourTraefikHearsHTTPSWhereBootstrapHadIt(t *testing.T) {
 	t.Parallel()
 

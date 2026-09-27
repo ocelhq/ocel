@@ -69,12 +69,12 @@ func (t Traefik) render(spec proxy.Spec) ([]byte, error) {
 		Services:    map[string]upstream{service: {LoadBalancer: loadBalancer{Servers: []server{{URL: t.upstream()}}}}},
 	}}
 	for _, hostname := range spec.Hostnames {
-		name, rule := RouterName(hostname), "Host(`"+hostname+"`)"
+		name, rule := routerName(hostname), "Host(`"+hostname+"`)"
 		config.HTTP.Routers[name] = router{
 			Rule:        rule,
 			EntryPoints: []string{t.HTTPS},
 			Service:     service,
-			Priority:    Priority,
+			Priority:    priority,
 			TLS:         t.certified(hostname, spec.PreviewBase),
 		}
 		config.HTTP.Routers[name+httpSuffix] = router{
@@ -82,7 +82,7 @@ func (t Traefik) render(spec proxy.Spec) ([]byte, error) {
 			EntryPoints: []string{t.HTTP},
 			Middlewares: []string{redirect},
 			Service:     noop,
-			Priority:    Priority,
+			Priority:    priority,
 		}
 	}
 	var written bytes.Buffer

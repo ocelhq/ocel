@@ -110,7 +110,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       idle <host:port>... |")
 	fmt.Fprintln(errs, "       upstreams |")
 	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
-	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname> |")
+	fmt.Fprintln(errs, "       probe [--any-certificate] [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       inodes <path>... |")
 	fmt.Fprintln(errs, "       answers <socket> <path> |")
 	fmt.Fprintln(errs, "       place <path> < <file> |")

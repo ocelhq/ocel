@@ -7,13 +7,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
 	FileName = "ocel.yml"
-	Priority = 1000000
+	priority = 1000000
 )
 
 const (
@@ -23,9 +25,17 @@ const (
 	httpSuffix = "-http"
 )
 
+const (
+	reloadInterval = time.Second
+	reloadPauses   = 30
+)
+
 type Box interface {
 	Ran(ctx context.Context, what string, argv []string) (string, error)
 	Beside(ctx context.Context, path string) ([]switchboard.Neighbour, error)
+	Spec(ctx context.Context) (proxy.Spec, error)
+	Routed(ctx context.Context, hostname string) (answered, failure string, err error)
+	Pause(ctx context.Context, wait time.Duration) error
 }
 
 type Traefik struct {
@@ -39,7 +49,7 @@ type Traefik struct {
 	Port            int
 }
 
-func RouterName(hostname string) string {
+func routerName(hostname string) string {
 	sum := sha256.Sum256([]byte(hostname))
 	return "ocel-" + strings.ReplaceAll(hostname, ".", "-") + "-" + hex.EncodeToString(sum[:])[:8]
 }

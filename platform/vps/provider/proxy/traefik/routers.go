@@ -86,10 +86,15 @@ func (t Traefik) routers(ctx context.Context) ([]yours, error) {
 	return found, nil
 }
 
+var undefinedFunction = regexp.MustCompile(`function "[^"]+" not defined`)
+
 func decoded(name string, content []byte) (map[string]any, error) {
 	text := string(content)
 	if strings.Contains(text, templateOpen) {
 		parsed, err := template.New(name).Parse(text)
+		if err != nil && undefinedFunction.MatchString(err.Error()) {
+			return map[string]any{}, nil
+		}
 		if err != nil {
 			return nil, err
 		}

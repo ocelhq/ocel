@@ -8,6 +8,10 @@ func containerLabels() []string {
 	return []string{"sh", "-c", "docker ps --quiet | xargs -r docker inspect --type container --format '" + labelled + "'"}
 }
 
+func coolifyProxyImage() []string {
+	return []string{"sh", "-c", "docker inspect --type container --format '{{.Config.Image}}' " + coolifyProxy + " 2>/dev/null || true"}
+}
+
 func serviceLabels() []string {
 	return []string{"sh", "-c",
 		`if [ "$(docker info --format '{{.Swarm.ControlAvailable}}' 2>/dev/null)" = true ]; then ` +
