@@ -207,7 +207,7 @@ func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) 
 	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: fakeUnitID, Title: "Environment"},
-			{Id: fakePhaseID, ParentId: fakeUnitID, Phase: progressv1.Phase_PHASE_PROVISIONING},
+			{Id: fakePhaseID, ParentId: fakeUnitID, Phase: progressv1.Phase_PHASE_PROVISION},
 		}},
 	}})
 }

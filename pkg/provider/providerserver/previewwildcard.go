@@ -70,7 +70,7 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISION, func(sender *eventStream, progress edge.Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -380,7 +380,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err

@@ -79,7 +79,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		if req.GetDry() {
 			return okResult(), nil
 		}
-		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING,
+		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISION,
 			func(_ *eventStream, progress edge.Progress) error {
 				return gate.Apply(ctx, plan, class, intent, progress)
 			})
@@ -277,7 +277,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		return err
 	}
 
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
 		shown, err := PlanFromProto(req.GetConsented())
 		if err != nil {
 			return err

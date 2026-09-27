@@ -42,7 +42,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISION, func(sender *eventStream, progress edge.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -178,7 +178,7 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving
 }
 
 func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err

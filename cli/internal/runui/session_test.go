@@ -56,7 +56,7 @@ func declareProvisioning() *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: naming.UnitID(naming.UnitEnvironment), Title: "Environment"},
-			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Phase: progressv1.Phase_PHASE_PROVISIONING},
+			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Phase: progressv1.Phase_PHASE_PROVISION},
 		}},
 	}}
 }
@@ -412,7 +412,7 @@ func TestSession(t *testing.T) {
 		stage := []byte{2, 0, 0, 0, 0, 0, 0, 0}
 		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 			StagePlan: &progressv1.StagePlanEvent{
-				Stages: []*progressv1.Stage{{Id: stage, Phase: progressv1.Phase_PHASE_PROVISIONING}},
+				Stages: []*progressv1.Stage{{Id: stage, Phase: progressv1.Phase_PHASE_PROVISION}},
 			},
 		}})
 
@@ -1024,8 +1024,8 @@ func TestEveryEnvironmentBlockNamesThePhaseThatFilledIt(t *testing.T) {
 	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
 		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
 			{Id: naming.UnitID(naming.UnitEnvironment), Title: "Environment"},
-			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Provisioning", Phase: progressv1.Phase_PHASE_PROVISIONING},
-			{Id: uploadStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Uploading", Phase: progressv1.Phase_PHASE_UPLOADING},
+			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Provisioning", Phase: progressv1.Phase_PHASE_PROVISION},
+			{Id: uploadStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Uploading", Phase: progressv1.Phase_PHASE_DEPLOY},
 		}},
 	}})
 	s.Event(progress("provisioning the account"))

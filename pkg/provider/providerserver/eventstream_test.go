@@ -205,14 +205,14 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	}
 }
 
-var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
+var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
 
 func TestStageProgressTagsEverythingWithItsStage(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
+	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
 	progress := newProgress(sender, stage)
 
 	progress.Say("provisioning the infra stack")

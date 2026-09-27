@@ -11,6 +11,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
@@ -123,6 +124,55 @@ func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
 	}
 	if got := strings.Join(phases["Environment"], ","); got != "Provisioning" {
 		t.Errorf("Environment declares the phases %q, want it named before the first one closes", got)
+	}
+}
+
+func phasesUnder(events []*progressv1.OperationEvent, unit string) []progressv1.Phase {
+	units := map[string]string{}
+	var phases []progressv1.Phase
+	for _, event := range events {
+		for _, stage := range event.GetStagePlan().GetStages() {
+			if len(stage.GetParentId()) == 0 {
+				units[string(stage.GetId())] = stage.GetTitle()
+				continue
+			}
+			if units[string(stage.GetParentId())] == unit {
+				phases = append(phases, stage.GetPhase())
+			}
+		}
+	}
+	return phases
+}
+
+func TestADeploysPromotionRunsInThePromotePhase(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	got := phasesUnder(events, "Promotion")
+	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_PROMOTE {
+		t.Errorf("the Promotion unit runs in %v, want the promote phase", got)
+	}
+}
+
+func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, edge.ClassPreview, "shop")
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	got := phasesUnder(recorded(stream), "Environment")
+	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_DESTROY {
+		t.Errorf("the removal runs in %v, want the destroy phase", got)
 	}
 }
 

@@ -8,6 +8,13 @@ import "common/bindings/v1/bindings.proto";
 import "common/plan/v1/plan.proto";
 
 message OperationEvent {
+  int64 time_unix_nano = 9;
+  Level level = 10;
+  Phase phase = 11;
+  string subject = 12;
+  string message = 13;
+  bytes span_id = 14 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
   oneof event {
     option (buf.validate.oneof).required = true;
 
@@ -22,13 +29,23 @@ message OperationEvent {
   }
 }
 
+enum Level {
+  LEVEL_UNSPECIFIED = 0;
+  LEVEL_DEBUG = 1;
+  LEVEL_INFO = 2;
+  LEVEL_WARN = 3;
+  LEVEL_ERROR = 4;
+}
+
 enum Phase {
   PHASE_UNSPECIFIED = 0;
-  PHASE_UPLOADING = 1;
-  PHASE_PROVISIONING = 2;
-  PHASE_FINALIZING = 3;
-  PHASE_DELETING = 4;
-  PHASE_BUILDING = 5;
+  PHASE_CHECK = 1;
+  PHASE_BUILD = 2;
+  PHASE_PLAN = 3;
+  PHASE_PROVISION = 4;
+  PHASE_DEPLOY = 5;
+  PHASE_PROMOTE = 6;
+  PHASE_DESTROY = 7;
 }
 
 // A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a

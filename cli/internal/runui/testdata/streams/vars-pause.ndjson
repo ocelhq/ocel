@@ -1,9 +1,9 @@
-{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILD"}]}}}
 {"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
 {"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts"}}}
 {"waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
 {"resumed":{"reason":"the page was answered"}}
-{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILDING"}]}}}
+{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILD"}]}}}
 {"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
 {"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2\n ✓ Compiled successfully"}}}
 {"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"AQAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"5000000000","status":"SPAN_STATUS_OK","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}}

@@ -30,12 +30,12 @@ var (
 
 	environmentRoster = []*progressv1.Stage{
 		{Id: environmentUnitID, Title: "Environment"},
-		{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+		{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
 		{
 			Id:       naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning),
 			ParentId: environmentUnitID,
 			Title:    "Provisioning",
-			Phase:    progressv1.Phase_PHASE_PROVISIONING,
+			Phase:    progressv1.Phase_PHASE_PROVISION,
 		},
 	}
 )

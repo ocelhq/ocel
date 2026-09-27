@@ -24,34 +24,95 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Level int32
+
+const (
+	Level_LEVEL_UNSPECIFIED Level = 0
+	Level_LEVEL_DEBUG       Level = 1
+	Level_LEVEL_INFO        Level = 2
+	Level_LEVEL_WARN        Level = 3
+	Level_LEVEL_ERROR       Level = 4
+)
+
+// Enum value maps for Level.
+var (
+	Level_name = map[int32]string{
+		0: "LEVEL_UNSPECIFIED",
+		1: "LEVEL_DEBUG",
+		2: "LEVEL_INFO",
+		3: "LEVEL_WARN",
+		4: "LEVEL_ERROR",
+	}
+	Level_value = map[string]int32{
+		"LEVEL_UNSPECIFIED": 0,
+		"LEVEL_DEBUG":       1,
+		"LEVEL_INFO":        2,
+		"LEVEL_WARN":        3,
+		"LEVEL_ERROR":       4,
+	}
+)
+
+func (x Level) Enum() *Level {
+	p := new(Level)
+	*p = x
+	return p
+}
+
+func (x Level) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Level) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_progress_v1_progress_proto_enumTypes[0].Descriptor()
+}
+
+func (Level) Type() protoreflect.EnumType {
+	return &file_common_progress_v1_progress_proto_enumTypes[0]
+}
+
+func (x Level) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Level.Descriptor instead.
+func (Level) EnumDescriptor() ([]byte, []int) {
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{0}
+}
+
 type Phase int32
 
 const (
-	Phase_PHASE_UNSPECIFIED  Phase = 0
-	Phase_PHASE_UPLOADING    Phase = 1
-	Phase_PHASE_PROVISIONING Phase = 2
-	Phase_PHASE_FINALIZING   Phase = 3
-	Phase_PHASE_DELETING     Phase = 4
-	Phase_PHASE_BUILDING     Phase = 5
+	Phase_PHASE_UNSPECIFIED Phase = 0
+	Phase_PHASE_CHECK       Phase = 1
+	Phase_PHASE_BUILD       Phase = 2
+	Phase_PHASE_PLAN        Phase = 3
+	Phase_PHASE_PROVISION   Phase = 4
+	Phase_PHASE_DEPLOY      Phase = 5
+	Phase_PHASE_PROMOTE     Phase = 6
+	Phase_PHASE_DESTROY     Phase = 7
 )
 
 // Enum value maps for Phase.
 var (
 	Phase_name = map[int32]string{
 		0: "PHASE_UNSPECIFIED",
-		1: "PHASE_UPLOADING",
-		2: "PHASE_PROVISIONING",
-		3: "PHASE_FINALIZING",
-		4: "PHASE_DELETING",
-		5: "PHASE_BUILDING",
+		1: "PHASE_CHECK",
+		2: "PHASE_BUILD",
+		3: "PHASE_PLAN",
+		4: "PHASE_PROVISION",
+		5: "PHASE_DEPLOY",
+		6: "PHASE_PROMOTE",
+		7: "PHASE_DESTROY",
 	}
 	Phase_value = map[string]int32{
-		"PHASE_UNSPECIFIED":  0,
-		"PHASE_UPLOADING":    1,
-		"PHASE_PROVISIONING": 2,
-		"PHASE_FINALIZING":   3,
-		"PHASE_DELETING":     4,
-		"PHASE_BUILDING":     5,
+		"PHASE_UNSPECIFIED": 0,
+		"PHASE_CHECK":       1,
+		"PHASE_BUILD":       2,
+		"PHASE_PLAN":        3,
+		"PHASE_PROVISION":   4,
+		"PHASE_DEPLOY":      5,
+		"PHASE_PROMOTE":     6,
+		"PHASE_DESTROY":     7,
 	}
 )
 
@@ -66,11 +127,11 @@ func (x Phase) String() string {
 }
 
 func (Phase) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_progress_v1_progress_proto_enumTypes[0].Descriptor()
+	return file_common_progress_v1_progress_proto_enumTypes[1].Descriptor()
 }
 
 func (Phase) Type() protoreflect.EnumType {
-	return &file_common_progress_v1_progress_proto_enumTypes[0]
+	return &file_common_progress_v1_progress_proto_enumTypes[1]
 }
 
 func (x Phase) Number() protoreflect.EnumNumber {
@@ -79,7 +140,7 @@ func (x Phase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Phase.Descriptor instead.
 func (Phase) EnumDescriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{0}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{1}
 }
 
 type SpanStatus int32
@@ -115,11 +176,11 @@ func (x SpanStatus) String() string {
 }
 
 func (SpanStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_progress_v1_progress_proto_enumTypes[1].Descriptor()
+	return file_common_progress_v1_progress_proto_enumTypes[2].Descriptor()
 }
 
 func (SpanStatus) Type() protoreflect.EnumType {
-	return &file_common_progress_v1_progress_proto_enumTypes[1]
+	return &file_common_progress_v1_progress_proto_enumTypes[2]
 }
 
 func (x SpanStatus) Number() protoreflect.EnumNumber {
@@ -128,7 +189,7 @@ func (x SpanStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SpanStatus.Descriptor instead.
 func (SpanStatus) EnumDescriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{1}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{2}
 }
 
 type AttributeKey int32
@@ -200,11 +261,11 @@ func (x AttributeKey) String() string {
 }
 
 func (AttributeKey) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_progress_v1_progress_proto_enumTypes[2].Descriptor()
+	return file_common_progress_v1_progress_proto_enumTypes[3].Descriptor()
 }
 
 func (AttributeKey) Type() protoreflect.EnumType {
-	return &file_common_progress_v1_progress_proto_enumTypes[2]
+	return &file_common_progress_v1_progress_proto_enumTypes[3]
 }
 
 func (x AttributeKey) Number() protoreflect.EnumNumber {
@@ -213,7 +274,7 @@ func (x AttributeKey) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AttributeKey.Descriptor instead.
 func (AttributeKey) EnumDescriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{2}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{3}
 }
 
 // What became of one app in a multi-app apply. Promotion is the failure gate: unless
@@ -255,11 +316,11 @@ func (x AppOutcome) String() string {
 }
 
 func (AppOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_progress_v1_progress_proto_enumTypes[3].Descriptor()
+	return file_common_progress_v1_progress_proto_enumTypes[4].Descriptor()
 }
 
 func (AppOutcome) Type() protoreflect.EnumType {
-	return &file_common_progress_v1_progress_proto_enumTypes[3]
+	return &file_common_progress_v1_progress_proto_enumTypes[4]
 }
 
 func (x AppOutcome) Number() protoreflect.EnumNumber {
@@ -268,11 +329,17 @@ func (x AppOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AppOutcome.Descriptor instead.
 func (AppOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{3}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{4}
 }
 
 type OperationEvent struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	TimeUnixNano int64                  `protobuf:"varint,9,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
+	Level        Level                  `protobuf:"varint,10,opt,name=level,proto3,enum=common.progress.v1.Level" json:"level,omitempty"`
+	Phase        Phase                  `protobuf:"varint,11,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
+	Subject      string                 `protobuf:"bytes,12,opt,name=subject,proto3" json:"subject,omitempty"`
+	Message      string                 `protobuf:"bytes,13,opt,name=message,proto3" json:"message,omitempty"`
+	SpanId       []byte                 `protobuf:"bytes,14,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
 	// Types that are valid to be assigned to Event:
 	//
 	//	*OperationEvent_Progress
@@ -316,6 +383,48 @@ func (x *OperationEvent) ProtoReflect() protoreflect.Message {
 // Deprecated: Use OperationEvent.ProtoReflect.Descriptor instead.
 func (*OperationEvent) Descriptor() ([]byte, []int) {
 	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *OperationEvent) GetTimeUnixNano() int64 {
+	if x != nil {
+		return x.TimeUnixNano
+	}
+	return 0
+}
+
+func (x *OperationEvent) GetLevel() Level {
+	if x != nil {
+		return x.Level
+	}
+	return Level_LEVEL_UNSPECIFIED
+}
+
+func (x *OperationEvent) GetPhase() Phase {
+	if x != nil {
+		return x.Phase
+	}
+	return Phase_PHASE_UNSPECIFIED
+}
+
+func (x *OperationEvent) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *OperationEvent) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *OperationEvent) GetSpanId() []byte {
+	if x != nil {
+		return x.SpanId
+	}
+	return nil
 }
 
 func (x *OperationEvent) GetEvent() isOperationEvent_Event {
@@ -1371,8 +1480,16 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\x96\x04\n" +
-	"\x0eOperationEvent\x12?\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\xf7\x05\n" +
+	"\x0eOperationEvent\x12$\n" +
+	"\x0etime_unix_nano\x18\t \x01(\x03R\ftimeUnixNano\x12/\n" +
+	"\x05level\x18\n" +
+	" \x01(\x0e2\x19.common.progress.v1.LevelR\x05level\x12/\n" +
+	"\x05phase\x18\v \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\x12\x18\n" +
+	"\asubject\x18\f \x01(\tR\asubject\x12\x18\n" +
+	"\amessage\x18\r \x01(\tR\amessage\x12#\n" +
+	"\aspan_id\x18\x0e \x01(\fB\n" +
+	"\xbaH\a\xd8\x01\x01z\x02h\bR\x06spanId\x12?\n" +
 	"\bprogress\x18\x01 \x01(\v2!.common.progress.v1.ProgressEventH\x00R\bprogress\x120\n" +
 	"\x03log\x18\x02 \x01(\v2\x1c.common.progress.v1.LogEventH\x00R\x03log\x129\n" +
 	"\x06result\x18\x03 \x01(\v2\x1f.common.progress.v1.ResultEventH\x00R\x06result\x12C\n" +
@@ -1457,14 +1574,25 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tFlipBound\x12\x1d\n" +
 	"\n" +
 	"typical_ms\x18\x01 \x01(\x03R\ttypicalMs\x12\x1c\n" +
-	"\tpublished\x18\x02 \x01(\bR\tpublished*\x89\x01\n" +
+	"\tpublished\x18\x02 \x01(\bR\tpublished*`\n" +
+	"\x05Level\x12\x15\n" +
+	"\x11LEVEL_UNSPECIFIED\x10\x00\x12\x0f\n" +
+	"\vLEVEL_DEBUG\x10\x01\x12\x0e\n" +
+	"\n" +
+	"LEVEL_INFO\x10\x02\x12\x0e\n" +
+	"\n" +
+	"LEVEL_WARN\x10\x03\x12\x0f\n" +
+	"\vLEVEL_ERROR\x10\x04*\x9d\x01\n" +
 	"\x05Phase\x12\x15\n" +
-	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x13\n" +
-	"\x0fPHASE_UPLOADING\x10\x01\x12\x16\n" +
-	"\x12PHASE_PROVISIONING\x10\x02\x12\x14\n" +
-	"\x10PHASE_FINALIZING\x10\x03\x12\x12\n" +
-	"\x0ePHASE_DELETING\x10\x04\x12\x12\n" +
-	"\x0ePHASE_BUILDING\x10\x05*T\n" +
+	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x0f\n" +
+	"\vPHASE_CHECK\x10\x01\x12\x0f\n" +
+	"\vPHASE_BUILD\x10\x02\x12\x0e\n" +
+	"\n" +
+	"PHASE_PLAN\x10\x03\x12\x13\n" +
+	"\x0fPHASE_PROVISION\x10\x04\x12\x10\n" +
+	"\fPHASE_DEPLOY\x10\x05\x12\x11\n" +
+	"\rPHASE_PROMOTE\x10\x06\x12\x11\n" +
+	"\rPHASE_DESTROY\x10\a*T\n" +
 	"\n" +
 	"SpanStatus\x12\x1b\n" +
 	"\x17SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
@@ -1506,57 +1634,60 @@ func file_common_progress_v1_progress_proto_rawDescGZIP() []byte {
 	return file_common_progress_v1_progress_proto_rawDescData
 }
 
-var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_common_progress_v1_progress_proto_goTypes = []any{
-	(Phase)(0),                    // 0: common.progress.v1.Phase
-	(SpanStatus)(0),               // 1: common.progress.v1.SpanStatus
-	(AttributeKey)(0),             // 2: common.progress.v1.AttributeKey
-	(AppOutcome)(0),               // 3: common.progress.v1.AppOutcome
-	(*OperationEvent)(nil),        // 4: common.progress.v1.OperationEvent
-	(*Stage)(nil),                 // 5: common.progress.v1.Stage
-	(*StagePlanEvent)(nil),        // 6: common.progress.v1.StagePlanEvent
-	(*SpanAttribute)(nil),         // 7: common.progress.v1.SpanAttribute
-	(*SpanEvent)(nil),             // 8: common.progress.v1.SpanEvent
-	(*ProgressEvent)(nil),         // 9: common.progress.v1.ProgressEvent
-	(*LogEvent)(nil),              // 10: common.progress.v1.LogEvent
-	(*DnsRecord)(nil),             // 11: common.progress.v1.DnsRecord
-	(*DnsManualRecordsEvent)(nil), // 12: common.progress.v1.DnsManualRecordsEvent
-	(*DegradedEvent)(nil),         // 13: common.progress.v1.DegradedEvent
-	(*AppResult)(nil),             // 14: common.progress.v1.AppResult
-	(*ResultEvent)(nil),           // 15: common.progress.v1.ResultEvent
-	(*ConnectorInstalled)(nil),    // 16: common.progress.v1.ConnectorInstalled
-	(*FunctionOutput)(nil),        // 17: common.progress.v1.FunctionOutput
-	(*FlipBound)(nil),             // 18: common.progress.v1.FlipBound
-	(*v1.ChangePlan)(nil),         // 19: common.plan.v1.ChangePlan
-	(*v11.Binding)(nil),           // 20: common.bindings.v1.Binding
+	(Level)(0),                    // 0: common.progress.v1.Level
+	(Phase)(0),                    // 1: common.progress.v1.Phase
+	(SpanStatus)(0),               // 2: common.progress.v1.SpanStatus
+	(AttributeKey)(0),             // 3: common.progress.v1.AttributeKey
+	(AppOutcome)(0),               // 4: common.progress.v1.AppOutcome
+	(*OperationEvent)(nil),        // 5: common.progress.v1.OperationEvent
+	(*Stage)(nil),                 // 6: common.progress.v1.Stage
+	(*StagePlanEvent)(nil),        // 7: common.progress.v1.StagePlanEvent
+	(*SpanAttribute)(nil),         // 8: common.progress.v1.SpanAttribute
+	(*SpanEvent)(nil),             // 9: common.progress.v1.SpanEvent
+	(*ProgressEvent)(nil),         // 10: common.progress.v1.ProgressEvent
+	(*LogEvent)(nil),              // 11: common.progress.v1.LogEvent
+	(*DnsRecord)(nil),             // 12: common.progress.v1.DnsRecord
+	(*DnsManualRecordsEvent)(nil), // 13: common.progress.v1.DnsManualRecordsEvent
+	(*DegradedEvent)(nil),         // 14: common.progress.v1.DegradedEvent
+	(*AppResult)(nil),             // 15: common.progress.v1.AppResult
+	(*ResultEvent)(nil),           // 16: common.progress.v1.ResultEvent
+	(*ConnectorInstalled)(nil),    // 17: common.progress.v1.ConnectorInstalled
+	(*FunctionOutput)(nil),        // 18: common.progress.v1.FunctionOutput
+	(*FlipBound)(nil),             // 19: common.progress.v1.FlipBound
+	(*v1.ChangePlan)(nil),         // 20: common.plan.v1.ChangePlan
+	(*v11.Binding)(nil),           // 21: common.bindings.v1.Binding
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
-	9,  // 0: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
-	10, // 1: common.progress.v1.OperationEvent.log:type_name -> common.progress.v1.LogEvent
-	15, // 2: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
-	6,  // 3: common.progress.v1.OperationEvent.stage_plan:type_name -> common.progress.v1.StagePlanEvent
-	8,  // 4: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
-	13, // 5: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
-	12, // 6: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
-	19, // 7: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
-	0,  // 8: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
-	5,  // 9: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
-	2,  // 10: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
-	1,  // 11: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
-	7,  // 12: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
-	11, // 13: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
-	3,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
-	20, // 15: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
-	17, // 16: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
-	18, // 17: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	14, // 18: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
-	16, // 19: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	0,  // 0: common.progress.v1.OperationEvent.level:type_name -> common.progress.v1.Level
+	1,  // 1: common.progress.v1.OperationEvent.phase:type_name -> common.progress.v1.Phase
+	10, // 2: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
+	11, // 3: common.progress.v1.OperationEvent.log:type_name -> common.progress.v1.LogEvent
+	16, // 4: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
+	7,  // 5: common.progress.v1.OperationEvent.stage_plan:type_name -> common.progress.v1.StagePlanEvent
+	9,  // 6: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
+	14, // 7: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
+	13, // 8: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
+	20, // 9: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	1,  // 10: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
+	6,  // 11: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
+	3,  // 12: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
+	2,  // 13: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
+	8,  // 14: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
+	12, // 15: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
+	4,  // 16: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
+	21, // 17: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
+	18, // 18: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
+	19, // 19: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	15, // 20: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
+	17, // 21: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }
@@ -1580,7 +1711,7 @@ func file_common_progress_v1_progress_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_progress_v1_progress_proto_rawDesc), len(file_common_progress_v1_progress_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,

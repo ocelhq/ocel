@@ -22,7 +22,7 @@ func TestEventTraceDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 	tracer := newEventTrace(sender)
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
-	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING)
+	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISION)
 	tracer.DeclareStages(unit)
 	tracer.DeclareStages(phase)
 
@@ -49,8 +49,8 @@ func TestEventTraceDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 	if string(second.GetStages()[0].GetParentId()) != string(first.GetStages()[0].GetId()) {
 		t.Error("phase stage's ParentId does not match the declared unit's Id")
 	}
-	if got := second.GetStages()[0].GetPhase(); got != progressv1.Phase_PHASE_PROVISIONING {
-		t.Errorf("phase stage Phase = %v, want PHASE_PROVISIONING", got)
+	if got := second.GetStages()[0].GetPhase(); got != progressv1.Phase_PHASE_PROVISION {
+		t.Errorf("phase stage Phase = %v, want PHASE_PROVISION", got)
 	}
 }
 
@@ -64,15 +64,25 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
 	tracer.DeclareStages(
 		unit,
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILDING),
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILD),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_DEPLOY),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISION),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROMOTE),
+		PhaseStage(unit.Name, progressv1.Phase_PHASE_DESTROY),
 	)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
 	}
 	stages := stream.recorded()[0].GetStagePlan().GetStages()
-	for i, want := range []string{"9f2ecbbdfa2db89d", "4b5ac07b8124802c", "ed0ca2aae3a67905"} {
+	for i, want := range []string{
+		"9f2ecbbdfa2db89d",
+		"4b5ac07b8124802c",
+		"8b528c00a0fb6065",
+		"ed0ca2aae3a67905",
+		"92988f8d30813314",
+		"7da3bb7483e4884a",
+	} {
 		if got := hex.EncodeToString(stages[i].GetId()); got != want {
 			t.Errorf("stage %d id = %s, want the naming digest %s", i, got, want)
 		}
@@ -86,7 +96,7 @@ func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	t.Parallel()
 
 	unit := UnitStage(naming.UnitPromotion, "Promotion")
-	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_FINALIZING)
+	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROMOTE)
 	first := NewStage(phase, "detail")
 	second := NewStage(phase, "detail")
 

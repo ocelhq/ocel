@@ -52,7 +52,7 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		sender.refusing(connect.CodeUnimplemented)
 		var at provider.ConnectorAddress
-		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventStream, progress edge.Progress) error {
+		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISION, func(_ *eventStream, progress edge.Progress) error {
 			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
@@ -73,7 +73,7 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	if err != nil {
 		return err
 	}
-	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DELETING, func(sender *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DESTROY, func(sender *eventStream, progress edge.Progress) error {
 		sender.refusing(connect.CodeUnimplemented)
 		return connector.Remove(ctx, progress)
 	})

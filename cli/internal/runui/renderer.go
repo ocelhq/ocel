@@ -406,15 +406,15 @@ func (r *Renderer) colorFor(attrs ...color.Attribute) *color.Color {
 
 func phaseLabel(p progressv1.Phase) string {
 	switch p {
-	case progressv1.Phase_PHASE_BUILDING:
+	case progressv1.Phase_PHASE_BUILD:
 		return "Building"
-	case progressv1.Phase_PHASE_UPLOADING:
+	case progressv1.Phase_PHASE_DEPLOY:
 		return "Uploading"
-	case progressv1.Phase_PHASE_PROVISIONING:
+	case progressv1.Phase_PHASE_PROVISION:
 		return "Provisioning"
-	case progressv1.Phase_PHASE_FINALIZING:
+	case progressv1.Phase_PHASE_PROMOTE:
 		return "Finalizing"
-	case progressv1.Phase_PHASE_DELETING:
+	case progressv1.Phase_PHASE_DESTROY:
 		return "Deleting"
 	default:
 		return "Working"

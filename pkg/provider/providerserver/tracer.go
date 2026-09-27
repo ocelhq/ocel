@@ -49,19 +49,19 @@ func (s Stage) phaseStages() []Stage {
 }
 
 var phaseNames = map[progressv1.Phase]string{
-	progressv1.Phase_PHASE_BUILDING:     naming.PhaseBuilding,
-	progressv1.Phase_PHASE_UPLOADING:    naming.PhaseUploading,
-	progressv1.Phase_PHASE_PROVISIONING: naming.PhaseProvisioning,
-	progressv1.Phase_PHASE_FINALIZING:   naming.PhaseFinalizing,
-	progressv1.Phase_PHASE_DELETING:     naming.PhaseDeleting,
+	progressv1.Phase_PHASE_BUILD:     naming.PhaseBuilding,
+	progressv1.Phase_PHASE_DEPLOY:    naming.PhaseUploading,
+	progressv1.Phase_PHASE_PROVISION: naming.PhaseProvisioning,
+	progressv1.Phase_PHASE_PROMOTE:   naming.PhaseFinalizing,
+	progressv1.Phase_PHASE_DESTROY:   naming.PhaseDeleting,
 }
 
 var phaseTitles = map[progressv1.Phase]string{
-	progressv1.Phase_PHASE_BUILDING:     "Building",
-	progressv1.Phase_PHASE_UPLOADING:    "Uploading",
-	progressv1.Phase_PHASE_PROVISIONING: "Provisioning",
-	progressv1.Phase_PHASE_FINALIZING:   "Finalizing",
-	progressv1.Phase_PHASE_DELETING:     "Deleting",
+	progressv1.Phase_PHASE_BUILD:     "Building",
+	progressv1.Phase_PHASE_DEPLOY:    "Uploading",
+	progressv1.Phase_PHASE_PROVISION: "Provisioning",
+	progressv1.Phase_PHASE_PROMOTE:   "Finalizing",
+	progressv1.Phase_PHASE_DESTROY:   "Deleting",
 }
 
 const maxStageTitleLen = 200

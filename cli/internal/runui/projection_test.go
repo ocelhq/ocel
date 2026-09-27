@@ -141,7 +141,7 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 	start := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
 		Stages: []*progressv1.Stage{
 			{Id: unit, Title: "web"},
-			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
 		},
 	}}}))
 	if len(start) != 0 {
@@ -178,7 +178,7 @@ func TestABlockDropsBlankLinesAtTheEdgesOfWhatItIsGivenAndKeepsTheOnesInside(t *
 	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
 		Stages: []*progressv1.Stage{
 			{Id: unit, Title: "web"},
-			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
 		},
 	}}}))
 	for _, message := range []string{"", "\n", "  \n\n", "\n\nPackages: +812\n\ncompiled\n\n"} {
@@ -299,7 +299,7 @@ func TestAnOpenBlockFlushesWithTheOutcomeTheRunActuallyHad(t *testing.T) {
 			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
 				Stages: []*progressv1.Stage{
 					{Id: unit, Title: "web"},
-					{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+					{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
 				},
 			}}}))
 			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
@@ -322,7 +322,7 @@ func TestARunWhoseEveryPhaseCompletedSaysNothingAboutBeingInterrupted(t *testing
 	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
 		Stages: []*progressv1.Stage{
 			{Id: unit, Title: "web"},
-			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILDING},
+			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
 		},
 	}}}))
 	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
