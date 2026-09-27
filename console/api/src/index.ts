@@ -8,11 +8,5 @@ export {
   getDeployment,
   listDeployments,
 } from "./routes/projects/[id]/deployments/route";
-export {
-  deleteProjectEnvValue,
-  getProjectEnvValue,
-  putProjectEnvValue,
-} from "./routes/projects/[id]/env/[key]/route";
-export { listProjectEnv } from "./routes/projects/[id]/env/route";
 export { deleteProject, getProjectById, updateProject } from "./routes/projects/[id]/route";
 export { createProject, listProjects } from "./routes/projects/route";

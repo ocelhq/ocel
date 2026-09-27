@@ -1,6 +1,6 @@
 import { auth } from "@console/auth/next";
 import { db } from "@console/db";
-import { project, projectEnvValue } from "@console/db/schema";
+import { deployment, project } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "../../../../test/auth-harness";
@@ -168,18 +168,26 @@ describe("deleteProject", () => {
 
     try {
       const created = await createProjectFor(session, "delete-with-children");
-      const valueId = crypto.randomUUID();
-      await db.insert(projectEnvValue).values({
-        id: valueId,
+      const deploymentId = crypto.randomUUID();
+      await db.insert(deployment).values({
+        id: deploymentId,
         projectId: created.id,
-        key: "LOG_LEVEL",
-        value: "debug",
+        runId: "run-1",
+        kind: "deploy",
+        environmentClass: "production",
+        providerName: "aws",
+        target: "aws/123456789012/us-east-1/main",
+        outcome: "succeeded",
+        trigger: { kind: "cli", actor: "victor" },
+        deployedAt: new Date(),
+        trace: [],
+        topology: { apps: [], resources: [], usages: [] },
       });
 
       const response = await deleteProject(deleteRequest(session.headers), created.id);
 
       expect(response.status).toBe(204);
-      const [row] = await db.select().from(projectEnvValue).where(eq(projectEnvValue.id, valueId));
+      const [row] = await db.select().from(deployment).where(eq(deployment.id, deploymentId));
       expect(row).toBeUndefined();
     } finally {
       await session.cleanup();
