@@ -20,7 +20,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(newScanCommand(deps))
-	return cmd
+	return cmddeps.ReserveStdout(cmd)
 }
 
 func newScanCommand(deps cmddeps.Deps) *cobra.Command {

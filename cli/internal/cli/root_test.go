@@ -87,3 +87,41 @@ func TestTheHumanLogFormatAttachesOnlyTheHumanSink(t *testing.T) {
 		t.Errorf("lines = %q, want the run's message in the human view", lines)
 	}
 }
+
+func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
+	for _, path := range [][]string{
+		{"bindings", "ls"}, {"bindings", "set"}, {"bindings", "rm"}, {"bindings", "generate"},
+		{"env", "ls"}, {"env", "get"}, {"env", "set"}, {"env", "ui"},
+		{"cost", "scan"},
+		{"domain", "ls"}, {"domain", "status"},
+		{"preview", "ls"},
+	} {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("find %q: %v", path, err)
+		}
+		var stdout, stderr bytes.Buffer
+		cmd.SetOut(&stdout)
+		cmd.SetErr(&stderr)
+		t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
+		if got := cmddeps.ChooseRunOutput(cmd); got != &stderr {
+			t.Errorf("ocel %s draws its run on stdout, want stderr so stdout holds only its data", strings.Join(path, " "))
+		}
+	}
+}
+
+func TestACommandThatReportsThroughItsRunDrawsItOnStdout(t *testing.T) {
+	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}} {
+		cmd, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("find %q: %v", path, err)
+		}
+		var stdout, stderr bytes.Buffer
+		cmd.SetOut(&stdout)
+		cmd.SetErr(&stderr)
+		t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
+		if got := cmddeps.ChooseRunOutput(cmd); got != &stdout {
+			t.Errorf("ocel %s draws its run on stderr, want stdout", strings.Join(path, " "))
+		}
+	}
+}

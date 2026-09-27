@@ -33,7 +33,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		newEnvSourceCommand(deps),
 		newSyncCommand(deps),
 	)
-	return cmd
+	return cmddeps.ReserveStdout(cmd)
 }
 
 func newLsCommand(deps cmddeps.Deps) *cobra.Command {

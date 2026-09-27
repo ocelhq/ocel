@@ -14,10 +14,6 @@ import (
 
 type Check func(scope *events.Scope, prov *providerclient.Provider) error
 
-func (s *Session) Check(runner *providerclient.Runner, do Check) error {
-	return check(s.events, runner, do)
-}
-
 func PlainCheck(present Presentation, w io.Writer, runner *providerclient.Runner, do Check) error {
 	bus := events.NewBus(time.Now)
 	bus.Attach(&plainSink{plainReporter: plainReporter{present: present, w: w}})

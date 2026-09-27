@@ -132,7 +132,7 @@ func init() {
 		bindingsCmd.AddCommand(c)
 	}
 	bindingsSetCmd.Flags().StringVar(&bindingsOpts.owner, "owner", defaultBindingOwner, "Publish under this publisher's name")
-	rootCmd.AddCommand(bindingsCmd)
+	rootCmd.AddCommand(cmddeps.ReserveStdout(bindingsCmd))
 }
 
 func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) error) error {

@@ -157,7 +157,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 	prune.Flags().IntVar(&pruneOpts.keep, "keep", defaultPreviewPruneKeepN, "How many recent deployments to keep (the live one always stays)")
 	cmddeps.Yes(prune, &pruneOpts.yes)
 
-	cmd.AddCommand(up, rm, ls, prune)
+	cmd.AddCommand(up, rm, cmddeps.ReserveStdout(ls), prune)
 	return cmd
 }
 
