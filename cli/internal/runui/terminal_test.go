@@ -4,7 +4,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -162,34 +161,5 @@ func TestTruncateToWidthHandlesRowsWithNothingToShow(t *testing.T) {
 				t.Errorf("truncateToWidth(%q, 40) = %q, want no visible text", tc.row, got)
 			}
 		})
-	}
-}
-
-func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
-	drawnRow := func(colorEnabled bool) string {
-		var out safeBuffer
-		s := newHumanSink(&out, Presentation{Format: FormatHuman, TTY: true, Color: colorEnabled, Width: 40, Height: defaultHeight})
-		s.r.useClock(func() time.Time { return time.Unix(0, 0) })
-
-		app := appStage(1)
-		startAll(s, scope{id: app, title: "a-long-application-name"})
-		s.Receive(progressEvent(app, "uploading a great many static assets", 1, nil))
-		_ = s.Close()
-
-		for _, line := range strings.Split(out.String(), "\n") {
-			if strings.Contains(line, "a-long-application-name") {
-				return line
-			}
-		}
-		t.Fatalf("output = %q, want a live row for the app", out.String())
-		return ""
-	}
-
-	colored, plain := drawnRow(true), drawnRow(false)
-	if got := ansi.StringWidth(colored); got > 39 {
-		t.Errorf("live row display width = %d, want at most 39 so it cannot wrap in a 40-column terminal", got)
-	}
-	if got := stripSGR(colored); got != plain {
-		t.Errorf("coloured live row shows %q, want the same text as the uncoloured row %q", got, plain)
 	}
 }

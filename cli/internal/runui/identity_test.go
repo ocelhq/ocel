@@ -8,7 +8,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
-func TestIdentityBlock(t *testing.T) {
+func TestTheIdentityNamesTheProjectItsTierAndEachAccountAgainstItsVendor(t *testing.T) {
 	t.Parallel()
 
 	awsAndCloudflare := &streamv1.IdentityEvent{
@@ -31,17 +31,17 @@ func TestIdentityBlock(t *testing.T) {
 		{
 			name: "an origin and an edge, each account against its vendor",
 			ev:   awsAndCloudflare,
-			want: "\nocel  dev  acme › production\n" +
+			want: "ocel  dev  acme › production\n" +
 				"\n" +
 				"aws         123456789012  deploy  us-east-1\n" +
-				"cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\n",
+				"cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
 		},
 		{
 			name: "a host with no region reads as principal at host, and no edge line",
 			ev:   vps,
-			want: "\nocel  dev  acme › preview\n" +
+			want: "ocel  dev  acme › preview\n" +
 				"\n" +
-				"vps  deploy@srv1.example.com\n",
+				"vps  deploy@srv1.example.com",
 		},
 		{
 			name: "an unnamed project leaves the tier alone on its line",
@@ -49,9 +49,9 @@ func TestIdentityBlock(t *testing.T) {
 				Tier:   environmentv1.Tier_TIER_PRODUCTION,
 				Origin: &streamv1.Party{Vendor: "aws", Account: "123456789012", Location: "us-east-1"},
 			},
-			want: "\nocel  dev  production\n" +
+			want: "ocel  dev  production\n" +
 				"\n" +
-				"aws  123456789012  us-east-1\n",
+				"aws  123456789012  us-east-1",
 		},
 		{
 			name: "an empty identity says nothing at all",
@@ -62,9 +62,9 @@ func TestIdentityBlock(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := strings.Join(IdentityBlock(Presentation{}, tc.ev), "\n")
+			got := strings.Join(identityLines(Presentation{}, tc.ev), "\n")
 			if got != tc.want {
-				t.Errorf("IdentityBlock() =\n%s\nwant\n%s", got, tc.want)
+				t.Errorf("identityLines() =\n%s\nwant\n%s", got, tc.want)
 			}
 		})
 	}
@@ -72,7 +72,7 @@ func TestIdentityBlock(t *testing.T) {
 	t.Run("colour paints the pill, the version and the vendors, and nothing else", func(t *testing.T) {
 		t.Parallel()
 
-		lines := IdentityBlock(Presentation{Color: true}, awsAndCloudflare)
+		lines := identityLines(Presentation{Color: true}, awsAndCloudflare)
 		painted := strings.Join(lines, "\n")
 		if !strings.Contains(painted, "\x1b[") {
 			t.Fatalf("coloured block contains no escapes:\n%q", painted)
@@ -82,7 +82,7 @@ func TestIdentityBlock(t *testing.T) {
 				t.Errorf("coloured block lost %q:\n%q", want, painted)
 			}
 		}
-		if len(lines) != len(IdentityBlock(Presentation{}, awsAndCloudflare)) {
+		if len(lines) != len(identityLines(Presentation{}, awsAndCloudflare)) {
 			t.Error("colour changed how many lines the block has")
 		}
 	})
@@ -90,7 +90,7 @@ func TestIdentityBlock(t *testing.T) {
 	t.Run("no colour is the same text without a single escape", func(t *testing.T) {
 		t.Parallel()
 
-		plain := strings.Join(IdentityBlock(Presentation{}, awsAndCloudflare), "\n")
+		plain := strings.Join(identityLines(Presentation{}, awsAndCloudflare), "\n")
 		if strings.Contains(plain, "\x1b") {
 			t.Errorf("uncoloured block contains escapes:\n%q", plain)
 		}

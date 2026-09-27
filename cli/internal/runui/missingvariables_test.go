@@ -1,11 +1,18 @@
 package runui
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
+
+func drawn(ev *streamv1.RunEvent, present Presentation) string {
+	var out bytes.Buffer
+	newGroupedSink(&out, present, nil).Receive(ev)
+	return out.String()
+}
 
 func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	t.Parallel()
@@ -17,8 +24,8 @@ func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 		}},
 	}}}
 
-	painted := strings.Join(newProjector(Presentation{Format: FormatHuman, Color: true, Width: defaultWidth}).project(ev), "\n")
-	plain := strings.Join(newProjector(Presentation{Format: FormatHuman, Width: defaultWidth}).project(ev), "\n")
+	painted := drawn(ev, Presentation{Color: true, Width: defaultWidth})
+	plain := drawn(ev, Presentation{Width: defaultWidth})
 
 	for _, want := range []string{"\x1b[31m✗\x1b[0m DATABASE_URL", "\x1b[31m✗\x1b[0m PORT", "\x1b[2m/web\x1b[22m"} {
 		if !strings.Contains(painted, want) {
@@ -53,7 +60,7 @@ func TestTheDeployTUIHeadsAGroupOnce(t *testing.T) {
 		},
 	}}}
 
-	got := strings.Join(newProjector(Presentation{Format: FormatHuman, Width: defaultWidth}).project(ev), "\n")
+	got := drawn(ev, Presentation{Width: defaultWidth})
 	want := strings.Join([]string{
 		"  github — set together (Sign in with GitHub)",
 		"    ✗ GITHUB_CLIENT_ID      root  no value",

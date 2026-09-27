@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -367,7 +368,7 @@ func TestNoHeartbeatPrintsWhileTheRunWaitsOnSomeone(t *testing.T) {
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
-	run.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/vars"})
+	run.Hold(&streamv1.WaitingEvent{})
 	ticks <- c.now().Add(5 * time.Minute)
 
 	want := "WARN  [build] web: Building web did not finish\n"
@@ -381,7 +382,7 @@ func TestTheSilenceRestartsWhenTheRunResumes(t *testing.T) {
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
-	resume := run.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/vars"})
+	resume := run.Hold(&streamv1.WaitingEvent{})
 	start := c.now()
 	c.pass(2 * time.Minute)
 	resume("every variable is set")
@@ -578,6 +579,8 @@ func TestVerboseShowsTheEngineOutputInTheFailedBlockToo(t *testing.T) {
 	}
 }
 
+const productionHead = "ocel  dev  acme › production\n\n"
+
 func productionRun(t *testing.T) (*events.Run, *bytes.Buffer, *clock) {
 	t.Helper()
 	run, out, c := groupedRun(t, Presentation{})
@@ -605,7 +608,8 @@ func TestASuccessfulDeployNamesWhatProductionServesNowAndWhereEachAppIs(t *testi
 	c.pass(3*time.Minute + 29*time.Second)
 	ended(run, nil)
 
-	want := "✓ Deployed acme to production in 3m29s\n" +
+	want := productionHead +
+		"✓ Deployed acme to production in 3m29s\n" +
 		"  production now serves promotion p-7f3a\n" +
 		"  web  https://acme.example.com\n" +
 		"  api  https://api.acme.example.com\n"
@@ -626,7 +630,8 @@ func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServes
 	c.pass(4*time.Minute + 2*time.Second)
 	ended(run, errors.New("api: the stack update failed"))
 
-	want := "INFO  [build] built 2 apps\n" +
+	want := productionHead +
+		"INFO  [build] built 2 apps\n" +
 		"\n" +
 		"✗ Failed in 4m02s — api: the stack update failed\n" +
 		"  web deployed but was not promoted: promotion needs every app, and api failed\n" +
@@ -735,7 +740,7 @@ func failedWith(t *testing.T, apps ...*progressv1.AppResult) string {
 	run, out, _ := productionRun(t)
 	forwardOutcome(run, &progressv1.ResultEvent{Error: "deploy failed", Apps: apps})
 	ended(run, errors.New("deploy failed"))
-	return out.String()
+	return strings.TrimPrefix(out.String(), productionHead)
 }
 
 func TestAFailedSingleAppDeploySaysNothingWasPromoted(t *testing.T) {
@@ -794,6 +799,137 @@ func TestAppsThatDeployedBesideAFailedOneAreNamedAsNotPromoted(t *testing.T) {
 		"  web and api deployed but were not promoted: promotion needs every app, and cron failed\n" +
 		"  production still serves what it served before this run\n"
 	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheIdentityHeadsTheTranscriptSetApartByABlankLine(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.Identity(&streamv1.IdentityEvent{
+		Project: "acme",
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Origin:  &streamv1.Party{Vendor: "aws", Account: "123456789012", Principal: "deploy", Location: "us-east-1"},
+	})
+	check.Say("the credentials for 123456789012 are valid")
+
+	want := "ocel  dev  acme › production\n" +
+		"\n" +
+		"aws  123456789012  deploy  us-east-1\n" +
+		"\n" +
+		"INFO  [check] the credentials for 123456789012 are valid\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAPlanIsAGateSetApartByBlankLinesTheMomentItLands(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.Say("the bootstrap for production is out of date")
+	run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Proposed changes to the production bootstrap", &planv1.ChangePlan{
+		Groups: []*planv1.ChangeGroup{{
+			Kind:    "stack",
+			Name:    "ocel-production-queues",
+			Feature: "queues",
+			Action:  planv1.Change_ACTION_CREATE,
+			Changes: []*planv1.Change{{Kind: "AWS::SQS::Queue", Name: "OcelQueue", Action: planv1.Change_ACTION_CREATE}},
+		}},
+	})
+	run.Phase(progressv1.Phase_PHASE_PROVISION).Say("updating the bootstrap")
+
+	want := "INFO  [check] the bootstrap for production is out of date\n" +
+		"\n" +
+		"Proposed changes to the production bootstrap:\n" +
+		"\n" +
+		"+ ocel-production-queues  [queues]\n" +
+		"    + OcelQueue  AWS::SQS::Queue\n" +
+		"\n" +
+		"1 to create.\n" +
+		"\n" +
+		"INFO  [provision] updating the bootstrap\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestRecordsToAddAtTheDNSProviderAreAGateHeadedByTheirLevelAndPhase(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{Width: defaultWidth})
+	provision := run.Phase(progressv1.Phase_PHASE_PROVISION)
+	provision.Forward(&progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_PROVISION,
+		Subject: "cloudflare",
+		Body: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
+			Headline: "Prove you own prev.ocel.site",
+			Records:  []*progressv1.DnsRecord{{Type: "TXT", Name: "_cf.prev.ocel.site", Value: "ca3-token"}},
+			Notes:    []string{"Leave it in place."},
+		}},
+	})
+	provision.Say("the edge is ready")
+
+	want := "WARN  [provision] cloudflare: Prove you own prev.ocel.site — add this record at your DNS provider\n" +
+		"\n" +
+		"  TYPE  NAME                VALUE\n" +
+		"  TXT   _cf.prev.ocel.site  ca3-token\n" +
+		"\n" +
+		"  Leave it in place.\n" +
+		"\n" +
+		"INFO  [provision] the edge is ready\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsUnit(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Say("building 1 app")
+	unit := build.Unit("acme", "Building project")
+	resume := unit.Hold(&streamv1.WaitingEvent{Url: "http://127.0.0.1:5555/#t=abc", Missing: missingStripeKey()})
+	resume("the page was answered")
+	unit.End(nil)
+
+	want := "INFO  [build] building 1 app\n" +
+		"\n" +
+		"✗ 1 variable is not ready — nothing has been built.\n" +
+		"\n" +
+		"  ✗ STRIPE_API_KEY  root  no value\n" +
+		"\n" +
+		"  Fill them in at:\n" +
+		"\n" +
+		"    http://127.0.0.1:5555/#t=abc\n" +
+		"\n" +
+		"  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.\n" +
+		"\n" +
+		"INFO  [build] acme: Resumed — the page was answered\n" +
+		"INFO  [build] ✓ acme: Building project in 0s\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAPromptsHoldDrawsNothingAroundTheQuestion(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{})
+	plan := run.Phase(progressv1.Phase_PHASE_PLAN)
+	plan.Say("2 changes to the production bootstrap")
+	resume := plan.Hold(&streamv1.WaitingEvent{})
+	resume("answered")
+	plan.Say("applying 2 changes")
+
+	want := "INFO  [plan] 2 changes to the production bootstrap\n" +
+		"INFO  [plan] applying 2 changes\n"
+	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }

@@ -1,9 +1,4 @@
-→ Environment › Building
+WARN  [build] acme: Building project did not finish
+      Bundling web
 
-⚠ Environment interrupted
-  Bundling web
-
-⚠ Cancelled in 4s
-  Resources may be partially created.
-  Re-run `ocel deploy` to reconcile.
-
+✗ Cancelled in 4s

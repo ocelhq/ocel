@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/fatih/color"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -20,30 +19,26 @@ const (
 	slowNote       = " (slow)"
 )
 
-func (p *projector) plan(m protoreflect.Message) []string {
-	return p.planLines(m.Interface().(*planv1.ChangePlan))
-}
-
-func (p *projector) planLines(plan *planv1.ChangePlan) []string {
-	out := []string{"", planHeadline(plan) + ":"}
+func planLines(present Presentation, plan *planv1.ChangePlan) []string {
+	out := []string{planHeadline(plan) + ":"}
 	shown, counts := readPlan(plan)
 	for i, group := range shown {
 		if i == 0 || len(shown[i-1].GetChanges()) > 0 || len(group.GetChanges()) > 0 {
 			out = append(out, "")
 		}
-		out = append(out, p.groupLine(group))
-		out = append(out, p.changeLines(group.GetChanges())...)
+		out = append(out, groupLine(present, group))
+		out = append(out, changeLines(present, group.GetChanges())...)
 	}
 	if notes := plan.GetNotes(); len(notes) > 0 {
 		out = append(out, "")
 		for _, note := range notes {
-			out = append(out, p.noteLine(note))
+			out = append(out, noteLine(present, note))
 		}
 	}
 	if tally := counts.tally(); tally != "" {
 		out = append(out, "", tally)
 	}
-	return append(out, "")
+	return out
 }
 
 func planHeadline(plan *planv1.ChangePlan) string {
@@ -147,9 +142,9 @@ func (c *planCounts) count(action planv1.Change_Action) {
 	}
 }
 
-func (p *projector) groupLine(group *planv1.ChangeGroup) string {
+func groupLine(present Presentation, group *planv1.ChangeGroup) string {
 	var b strings.Builder
-	b.WriteString(p.paint(group.GetAction()) + " ")
+	b.WriteString(sigil(present, group.GetAction()) + " ")
 	if words := faceOf(group.GetAction()).words; words != "" {
 		b.WriteString(words + " ")
 	}
@@ -157,15 +152,15 @@ func (p *projector) groupLine(group *planv1.ChangeGroup) string {
 	if kind := group.GetKind(); kind != "" && !named {
 		b.WriteString(kind + " ")
 	}
-	b.WriteString(p.style(color.Bold).Sprint(group.GetName()))
+	b.WriteString(colorFor(present, color.Bold).Sprint(group.GetName()))
 	if tag := groupTag(group); named && tag != "" {
-		b.WriteString(planGutter + p.faint("["+tag+"]"))
+		b.WriteString(planGutter + faint(present, "["+tag+"]"))
 	}
-	b.WriteString(p.trail(planGutter, group.GetReason(), group.GetSlow()))
+	b.WriteString(trail(present, planGutter, group.GetReason(), group.GetSlow()))
 	return b.String()
 }
 
-func (p *projector) changeLines(changes []*planv1.Change) []string {
+func changeLines(present Presentation, changes []*planv1.Change) []string {
 	width := 0
 	for _, change := range changes {
 		width = max(width, utf8.RuneCountInString(changeLabel(change)))
@@ -174,10 +169,10 @@ func (p *projector) changeLines(changes []*planv1.Change) []string {
 	for _, change := range changes {
 		label := changeLabel(change)
 		if kind := change.GetKind(); kind != "" {
-			label += strings.Repeat(" ", width-utf8.RuneCountInString(label)) + planGutter + p.faint(kind)
+			label += strings.Repeat(" ", width-utf8.RuneCountInString(label)) + planGutter + faint(present, kind)
 		}
 		lines = append(lines, fmt.Sprintf("    %s %s%s",
-			p.paint(change.GetAction()), label, p.trail(planTypeGutter, change.GetReason(), change.GetSlow())))
+			sigil(present, change.GetAction()), label, trail(present, planTypeGutter, change.GetReason(), change.GetSlow())))
 	}
 	return lines
 }
@@ -207,18 +202,18 @@ func groupTag(group *planv1.ChangeGroup) string {
 	return baselineTag
 }
 
-func (p *projector) trail(lead, reason string, slow bool) string {
+func trail(present Presentation, lead, reason string, slow bool) string {
 	var b strings.Builder
 	if reason != "" {
-		b.WriteString(p.faint(lead + "— " + reason))
+		b.WriteString(faint(present, lead+"— "+reason))
 	}
 	if slow {
-		b.WriteString(p.faint(slowNote))
+		b.WriteString(faint(present, slowNote))
 	}
 	return b.String()
 }
 
-func (p *projector) noteLine(line string) string {
+func noteLine(present Presentation, line string) string {
 	glyph, rest, found := strings.Cut(line, " ")
 	if !found {
 		return line
@@ -227,7 +222,7 @@ func (p *projector) noteLine(line string) string {
 	if !ok {
 		return line
 	}
-	return p.style(attrs...).Sprint(glyph) + " " + rest
+	return colorFor(present, attrs...).Sprint(glyph) + " " + rest
 }
 
 var sigilAttrs = map[string][]color.Attribute{
@@ -237,26 +232,16 @@ var sigilAttrs = map[string][]color.Attribute{
 	"–": {color.FgRed},
 }
 
-func (p *projector) paint(action planv1.Change_Action) string {
+func sigil(present Presentation, action planv1.Change_Action) string {
 	glyph := faceOf(action).sigil
 	attrs, ok := sigilAttrs[glyph]
 	if !ok {
 		return glyph
 	}
-	return p.style(attrs...).Sprint(glyph)
+	return colorFor(present, attrs...).Sprint(glyph)
 }
 
-func (p *projector) faint(s string) string { return p.style(color.Faint).Sprint(s) }
-
-func (p *projector) style(attrs ...color.Attribute) *color.Color {
-	c := color.New(attrs...)
-	if p.present.Color {
-		c.EnableColor()
-	} else {
-		c.DisableColor()
-	}
-	return c
-}
+func faint(present Presentation, s string) string { return colorFor(present, color.Faint).Sprint(s) }
 
 type actionFace struct {
 	sigil   string

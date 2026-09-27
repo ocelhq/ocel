@@ -1,11 +1,18 @@
 stages:
+  [check]
+    Checking credentials
+  [plan]
+    Planning changes
   Environment
     Provisioning
+      OcelRouterFunction
 plan:
   stack/aws/ocel-bootstrap ACTION_UPDATE AWS::Lambda::Function/OcelRouterFunction
   stack/aws/ocel-bootstrap ACTION_KEEP AWS::SecretsManager::Secret/OcelOriginSecret
   edge/cloudflare/edge ACTION_CREATE Cloudflare::R2Bucket/ocel-edge-cache
   edge/cloudflare/edge ACTION_CREATE Cloudflare::Worker/ocel-deployments-store
 waits:
+  waiting on 0 unset, remedy ""
+  resumed answered
 results:
-  success=true interrupted=false headline="Bootstrapped" detail="" duration_ms=11000
+  success=true interrupted=false headline="Bootstrapped production" detail="" duration_ms=11000

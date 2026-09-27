@@ -29,7 +29,7 @@ type Spinner struct {
 }
 
 func StartSpinner(present Presentation, out io.Writer, msg string) *Spinner {
-	if !present.TTY || TerminalIsOwned() {
+	if !present.TTY {
 		return &Spinner{}
 	}
 	s := &Spinner{out: out, msg: msg, colored: present.Color}

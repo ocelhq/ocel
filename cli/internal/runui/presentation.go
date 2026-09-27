@@ -20,7 +20,6 @@ type Origin struct {
 	NoColor       bool
 	TTY           bool
 	Width         int
-	Height        int
 	GitHubActions bool
 }
 
@@ -30,7 +29,6 @@ type Presentation struct {
 	Color         bool
 	TTY           bool
 	Width         int
-	Height        int
 	GitHubActions bool
 }
 
@@ -41,7 +39,6 @@ func Resolve(o Origin) Presentation {
 		Color:         o.TTY && !o.NoColor,
 		TTY:           o.TTY,
 		Width:         o.Width,
-		Height:        o.Height,
 		GitHubActions: o.GitHubActions,
 	}
 	if o.LogFormat == FormatJSON {
@@ -49,9 +46,6 @@ func Resolve(o Origin) Presentation {
 	}
 	if p.Width <= 0 {
 		p.Width = defaultWidth
-	}
-	if p.Height <= 0 {
-		p.Height = defaultHeight
 	}
 	return p
 }
@@ -67,7 +61,6 @@ func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
 		NoColor:       color.NoColor || os.Getenv("NO_COLOR") != "",
 		TTY:           IsTerminal(w),
 		Width:         termWidth(w),
-		Height:        termHeight(w),
 		GitHubActions: os.Getenv("GITHUB_ACTIONS") == "true",
 	})
 }

@@ -1,3 +1,11 @@
+INFO  [check] ✓ aws: Checking credentials in 1s
+
+ocel  dev  acme › production
+
+aws         123456789012  deploy  us-east-1
+cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+
+INFO  [plan] ✓ production: Planning changes in 1s
 
 Proposed changes to the production bootstrap, fronted by the cloudflare edge:
 
@@ -12,10 +20,8 @@ This cannot be undone.
 
 2 to create, 1 to update, 2 unchanged.
 
-→ Environment › Provisioning
+INFO  [provision] ✓ Environment in 6s (1 updated)
+      updating OcelRouterFunction
+      ~ OcelRouterFunction (aws:lambda/function:Function) updated
 
-✓ Environment  8s
-  updating OcelRouterFunction
-
-✓ Bootstrapped in 11s
-
+✓ Bootstrapped production in 11s

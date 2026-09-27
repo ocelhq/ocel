@@ -1,33 +1,37 @@
-→ web › Building
-→ api › Building
+INFO  [check] ✓ aws: Checking credentials in 1s
 
-✓ api  8s
+ocel  dev  acme › production
 
-✓ web  24s
-  Generating static pages (28/28)
-→ Edge › Provisioning
+aws  123456789012  deploy  us-east-1
 
-✓ Edge  2s
-  Reconciling the cloudflare edge
-→ Shared infrastructure › Provisioning
+INFO  [build] ✓ acme: Building project in 24s
 
-✓ Shared infrastructure  6s
-  creating bucket assets
-→ api › Provisioning
-→ web › Provisioning
+    Packages: +812
+    go: downloading ocel.dev v0.4.1
+    ▲ Next.js 15.4.2
+     ✓ Compiled successfully
 
-✓ api › Provisioning  8s
-  updating function api
+      Generating static pages (28/28)
 
-✓ web › Provisioning  21s
-  waiting for steady state
-  2 of 2 tasks healthy
-→ Promotion › Finalizing
+    Route (app)                     Size     First Load JS
 
-✓ Promotion  2s
-  promoting r7 to production
+INFO  [provision] ✓ Edge in 2s
+      Reconciling the cloudflare edge
 
-✓ Deployed in 54s
+    routes pruned: 3
 
-  https://acme.example.com
+INFO  [provision] ✓ Shared infrastructure in 4s (1 created)
+      + assets (aws:s3/bucket:Bucket) created
+INFO  [deploy] ✓ api in 8s (1 updated)
+      updating function api
+      ~ api (aws:lambda/function:Function) updated
+INFO  [deploy] ✓ web in 21s
+      waiting for steady state
+      2 of 2 tasks healthy
+INFO  [promote] ✓ Promotion in 2s
+      promoting p-7f3a to production
 
+✓ Deployed acme to production in 54s
+  production now serves promotion p-7f3a
+  web  https://acme.example.com
+  api  https://api.acme.example.com

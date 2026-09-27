@@ -842,7 +842,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "Also adding: cloudflare-edge — this project's edge needs it\nAlso adding: isr — cloudflare-edge needs it\n"
+		want := "INFO  [plan] Also adding: cloudflare-edge — this project's edge needs it\nINFO  [plan] Also adding: isr — cloudflare-edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}

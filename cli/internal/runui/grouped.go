@@ -2,6 +2,7 @@ package runui
 
 import (
 	"cmp"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"maps"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -55,12 +58,20 @@ type GroupedSink struct {
 	silenceBroke bool
 	held         bool
 	wrote        bool
+	blank        bool
+	gated        bool
 	tier         environmentv1.Tier
 	promotion    string
 
 	stopBeats func()
 	stopTicks func()
 	beating   chan struct{}
+}
+
+type blockLine struct {
+	text string
+	raw  bool
+	from line
 }
 
 type phaseTally struct {
@@ -147,11 +158,18 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 		s.end(span, ev)
 	case ev.GetWaiting() != nil:
 		s.held = true
+		s.wait(ev.GetWaiting())
 	case ev.GetResumed() != nil:
 		s.held = false
 		s.silenceBroke = true
+		s.resume(ev)
 	case ev.GetIdentity() != nil:
 		s.tier = ev.GetIdentity().GetTier()
+		s.gate(identityLines(s.present, ev.GetIdentity()))
+	case ev.GetPlan() != nil:
+		s.gate(planLines(s.present, ev.GetPlan()))
+	case ev.GetDnsManualRecords() != nil:
+		s.dnsRecords(ev)
 	case ev.GetOutcome() != nil:
 		s.promotion = ev.GetOutcome().GetPromotionId()
 	case ev.GetResult() != nil:
@@ -260,13 +278,70 @@ func (s *GroupedSink) tally(opened *streamv1.RunEvent) *phaseTally {
 	return tally
 }
 
+func (s *GroupedSink) dnsRecords(ev *streamv1.RunEvent) {
+	records := ev.GetDnsManualRecords()
+	if len(records.GetRecords()) == 0 {
+		return
+	}
+	head := lineOf(ev)
+	head.message = dnsHeadline(records.GetHeadline(), records.GetRecords())
+	s.gap()
+	s.print(blockLine{text: head.render(s.present), from: head})
+	s.gate(dnsTable(records, s.present.Width))
+}
+
+func (s *GroupedSink) wait(waiting *streamv1.WaitingEvent) {
+	if waiting.GetMissing() == nil && waiting.GetUrl() == "" {
+		return
+	}
+	s.gated = true
+	lines := envgate.Lines(waiting.GetMissing(), missingPaint(s.present))
+	s.gate(append(lines,
+		"",
+		blockIndent+"Fill them in at:",
+		"",
+		blockIndent+blockIndent+waiting.GetUrl(),
+		"",
+		blockIndent+"Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.",
+	))
+}
+
+func (s *GroupedSink) resume(ev *streamv1.RunEvent) {
+	if !s.gated {
+		return
+	}
+	s.gated = false
+	resumed := lineOf(ev)
+	resumed.message = "Resumed — " + ev.GetResumed().GetReason()
+	s.print(blockLine{text: resumed.render(s.present), from: resumed})
+}
+
+func (s *GroupedSink) gate(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	s.gap()
+	for _, text := range lines {
+		s.print(blockLine{text: text})
+	}
+	s.gap()
+}
+
+func (s *GroupedSink) gap() {
+	if s.wrote && !s.blank {
+		fmt.Fprintln(s.w)
+		s.blank = true
+	}
+}
+
 func (s *GroupedSink) print(lines ...blockLine) {
 	for _, l := range lines {
 		s.silenceBroke = true
-		s.wrote = true
 		if l.raw != s.verbatim {
-			fmt.Fprintln(s.w)
+			s.gap()
 		}
+		s.wrote = true
+		s.blank = l.text == "" && !l.raw
 		s.verbatim = l.raw
 		if l.raw {
 			fmt.Fprintln(s.w, verbatimIndent+l.text)
@@ -303,7 +378,7 @@ func (s *GroupedSink) Close() error {
 	defer s.mu.Unlock()
 	s.unfinished()
 	if s.verbatim {
-		fmt.Fprintln(s.w)
+		s.gap()
 		s.verbatim = false
 	}
 	return nil
@@ -316,4 +391,48 @@ func (s *GroupedSink) unfinished() {
 		s.print(unit.header(progressv1.Level_LEVEL_WARN, progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED, unit.opened.GetMessage()+" did not finish", s.present))
 		s.print(unit.body...)
 	}
+}
+
+func stageKey(id []byte) string {
+	if len(id) == 0 {
+		return ""
+	}
+	return hex.EncodeToString(id)
+}
+
+func endedDuration(ev *streamv1.RunEvent, ended *progressv1.Ended) time.Duration {
+	if ev.GetTime() == nil {
+		return 0
+	}
+	return elapsed(ended.GetStartTimeUnixNano(), ev.GetTime().AsTime().UnixNano())
+}
+
+func elapsed(start, end int64) time.Duration {
+	if start <= 0 || end <= start {
+		return 0
+	}
+	return time.Duration(end - start)
+}
+
+func progressLogLine(message string, current uint32, total *uint32) string {
+	if total != nil {
+		return fmt.Sprintf("%s (%d/%d)", message, current, *total)
+	}
+	return message
+}
+
+func formatDuration(d time.Duration) string {
+	if d <= 0 {
+		return "0s"
+	}
+	if d < 500*time.Millisecond {
+		return "<1s"
+	}
+	rounded := d.Round(time.Second)
+	if rounded < time.Minute {
+		return fmt.Sprintf("%ds", int(rounded/time.Second))
+	}
+	m := int(rounded / time.Minute)
+	sec := int((rounded % time.Minute) / time.Second)
+	return fmt.Sprintf("%dm%02ds", m, sec)
 }

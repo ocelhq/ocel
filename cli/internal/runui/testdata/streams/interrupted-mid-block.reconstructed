@@ -1,9 +1,7 @@
 stages:
-  Environment
-  web
+  [build]
+    Building project
   api
-    Building
-    Building
     Uploading
 plan:
 waits:

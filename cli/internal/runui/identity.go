@@ -15,11 +15,12 @@ var Version = "dev"
 const (
 	identityGap  = "  "
 	identityName = "ocel"
+	pathSep      = " › "
 	accentColor  = 6
 	pillText     = 0
 )
 
-func IdentityBlock(present Presentation, ev *streamv1.IdentityEvent) []string {
+func identityLines(present Presentation, ev *streamv1.IdentityEvent) []string {
 	pill, faint := identityStyles(present)
 
 	head := identityHeadline(ev)
@@ -32,11 +33,11 @@ func IdentityBlock(present Presentation, ev *streamv1.IdentityEvent) []string {
 		return nil
 	}
 
-	lines := []string{"", pill.Render(identityName) + identityGap + faint.Render(Version) + head}
+	lines := []string{pill.Render(identityName) + identityGap + faint.Render(Version) + head}
 	if len(rows) > 0 {
 		lines = append(append(lines, ""), rows...)
 	}
-	return append(lines, "")
+	return lines
 }
 
 func identityStyles(present Presentation) (pill, faint lipgloss.Style) {

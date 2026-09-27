@@ -1,8 +1,3 @@
-→ Environment › Building
-
-⚠ Environment paused
-  Building project
-
 ✗ 1 variable is not ready — nothing has been built.
 
   ✗ STRIPE_API_KEY  root  no value
@@ -13,14 +8,12 @@
 
   Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
 
-✓ Resumed — the page was answered
+INFO  [build] acme: Resumed — the page was answered
+INFO  [build] ✓ acme: Building project in 4s
 
-→ Environment › Building
+    Reading ocel.aws.config.ts
+    ▲ Next.js 15.4.2
+     ✓ Compiled successfully
 
-✓ Environment  4s
-  Building project
-
-✓ Deployed in 12s
-
-  https://acme.example.com
-
+✓ Deployed acme to production in 12s
+  web  https://acme.example.com

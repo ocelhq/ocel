@@ -93,7 +93,7 @@ func dnsOutput(t *testing.T, present Presentation, headline string, records []*p
 	var out safeBuffer
 	var s events.Sink = NewJSONSink(&out)
 	if present.Format == FormatHuman {
-		s = newHumanSink(&out, present)
+		s = newGroupedSink(&out, present, nil)
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	s.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_DnsManualRecords{

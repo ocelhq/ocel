@@ -1,13 +1,12 @@
 package runui
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -15,7 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func fixtureNames(t *testing.T) []string {
@@ -61,8 +59,8 @@ func golden(t *testing.T, name, ext, got string) {
 
 func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 	t.Helper()
-	var out safeBuffer
-	s := NewHumanSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth})
+	var out bytes.Buffer
+	s := newGroupedSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth}, nil)
 	for _, ev := range events {
 		s.Receive(ev)
 	}
@@ -70,52 +68,6 @@ func projectPlain(t *testing.T, events []*streamv1.RunEvent) string {
 		t.Fatalf("Close() = %v", err)
 	}
 	return out.String()
-}
-
-func projectLive(t *testing.T, events []*streamv1.RunEvent) string {
-	t.Helper()
-	var out safeBuffer
-	s := newHumanSink(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
-	for _, ev := range events {
-		s.Receive(ev)
-	}
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close() = %v", err)
-	}
-	return out.String()
-}
-
-var eraseSequence = regexp.MustCompile(`^\x1b\[(\d+)A\x1b\[J`)
-
-func scrollback(raw string) string {
-	var lines []string
-	var cur strings.Builder
-	for i := 0; i < len(raw); {
-		if m := eraseSequence.FindStringSubmatch(raw[i:]); m != nil {
-			n, _ := strconv.Atoi(m[1])
-			if n > len(lines) {
-				n = len(lines)
-			}
-			lines = lines[:len(lines)-n]
-			i += len(m[0])
-			continue
-		}
-		if raw[i] == '\n' {
-			lines = append(lines, cur.String())
-			cur.Reset()
-			i++
-			continue
-		}
-		cur.WriteByte(raw[i])
-		i++
-	}
-	if cur.Len() > 0 {
-		lines = append(lines, cur.String())
-	}
-	if len(lines) == 0 {
-		return ""
-	}
-	return strings.Join(lines, "\n") + "\n"
 }
 
 func TestPlainOutputIsReconstructibleFromTheSerializedStream(t *testing.T) {
@@ -125,41 +77,6 @@ func TestPlainOutputIsReconstructibleFromTheSerializedStream(t *testing.T) {
 			t.Parallel()
 			_, events := fixtureStream(t, name)
 			golden(t, name, ".plain", projectPlain(t, events))
-		})
-	}
-}
-
-func withoutStartLines(text string) string {
-	var kept []string
-	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-		if strings.HasPrefix(line, startMark+" ") {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	if len(kept) == 0 {
-		return ""
-	}
-	return strings.Join(kept, "\n") + "\n"
-}
-
-func TestTheLiveScrollbackIsPlainWithoutThePhaseStartLines(t *testing.T) {
-	t.Parallel()
-	for _, name := range fixtureNames(t) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			_, events := fixtureStream(t, name)
-			plain := projectPlain(t, events)
-			live := projectLive(t, events)
-
-			if live == plain {
-				t.Errorf("the live projection wrote no live window at all — it should differ from plain before the window is stripped")
-			}
-			if want := withoutStartLines(plain); want == plain {
-				t.Fatalf("fixture %s commits no phase-start line in plain output — it cannot test this projection", name)
-			} else if got := scrollback(live); got != want {
-				t.Errorf("what the live run leaves in the scrollback is not plain minus its phase-start lines.\n--- live ---\n%s\n--- want ---\n%s", got, want)
-			}
 		})
 	}
 }
@@ -250,7 +167,7 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 	return r
 }
 
-func TestTheStageTreePlanWaitsAndResultsComeBackFromNDJSONAlone(t *testing.T) {
+func TestTheScopeTreePlanWaitsAndResultsComeBackFromNDJSONAlone(t *testing.T) {
 	t.Parallel()
 	for _, name := range fixtureNames(t) {
 		t.Run(name, func(t *testing.T) {
@@ -278,262 +195,9 @@ func TestTheStageTreePlanWaitsAndResultsComeBackFromNDJSONAlone(t *testing.T) {
 	}
 }
 
-func TestEveryPhaseOnTheStreamCommitsAStartLineOffTheTerminal(t *testing.T) {
-	t.Parallel()
-	for _, name := range fixtureNames(t) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			_, events := fixtureStream(t, name)
-			plain := projectPlain(t, events)
-			live := scrollback(projectLive(t, events))
-
-			units := map[string]string{}
-			var wantStarts []string
-			for _, ev := range events {
-				if ev.GetStarted() == nil {
-					continue
-				}
-				id, parent := hex.EncodeToString(ev.GetSpanId()), hex.EncodeToString(ev.GetStarted().GetParentSpanId())
-				if parent == "" {
-					units[id] = ev.GetMessage()
-					continue
-				}
-				if unit, ok := units[parent]; ok {
-					wantStarts = append(wantStarts, startMark+" "+unit+" › "+scopeTitle(ev))
-				}
-			}
-			if len(wantStarts) == 0 {
-				t.Fatalf("fixture %s declares no phase — it cannot test this projection", name)
-			}
-			for _, want := range wantStarts {
-				if !strings.Contains(plain, want+"\n") {
-					t.Errorf("plain output has no phase-start line %q:\n%s", want, plain)
-				}
-				if strings.Contains(live, want+"\n") {
-					t.Errorf("the live run committed the phase-start line %q, which its window already shows:\n%s", want, live)
-				}
-			}
-		})
-	}
-}
-
 func scopeTitle(ev *streamv1.RunEvent) string {
 	if ev.GetMessage() != "" {
 		return ev.GetMessage()
 	}
-	return phaseLabel(ev.GetPhase())
-}
-
-type blockText struct {
-	text string
-	raw  bool
-}
-
-type phaseBlock struct {
-	id      string
-	unit    string
-	title   string
-	path    string
-	pending []blockText
-	lines   []string
-	closed  bool
-	mark    string
-}
-
-func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
-	open := map[string]*phaseBlock{}
-	units := map[string]string{}
-	phases := map[string]map[string]bool{}
-	blockOf := map[string]string{}
-	claim := func(stageID []byte, text string, raw bool) {
-		b := open[blockOf[hex.EncodeToString(stageID)]]
-		if b == nil {
-			return
-		}
-		for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-			b.pending = append(b.pending, blockText{text: line, raw: raw})
-		}
-	}
-	close := func(id, mark string) {
-		b := open[id]
-		if b == nil {
-			return
-		}
-		b.closed, b.mark = true, mark
-		b.path = units[b.unit]
-		if len(phases[b.unit]) > 1 {
-			b.path += " › " + b.title
-		}
-		for _, line := range b.pending {
-			if line.raw && mark != failMark {
-				continue
-			}
-			b.lines = append(b.lines, line.text)
-		}
-		delete(open, id)
-		flushed = append(flushed, b)
-	}
-	var order []string
-	closeAll := func(mark string) {
-		for _, id := range order {
-			close(id, mark)
-		}
-	}
-
-	for _, ev := range events {
-		id := hex.EncodeToString(ev.GetSpanId())
-		switch {
-		case ev.GetStarted() != nil:
-			parent := hex.EncodeToString(ev.GetStarted().GetParentSpanId())
-			switch {
-			case parent == "":
-				units[id] = ev.GetMessage()
-			case units[parent] != "":
-				open[id] = &phaseBlock{id: id, unit: parent, title: scopeTitle(ev)}
-				if phases[parent] == nil {
-					phases[parent] = map[string]bool{}
-				}
-				phases[parent][id] = true
-				blockOf[id] = id
-				order = append(order, id)
-			default:
-				blockOf[id] = blockOf[parent]
-			}
-		case ev.GetBody() == nil && ev.GetLevel() == progressv1.Level_LEVEL_INFO && ev.GetMessage() != "":
-			claim(ev.GetSpanId(), ev.GetMessage(), false)
-		case ev.GetCounter() != nil:
-			if line := progressLogLine(ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total); line != "" {
-				claim(ev.GetSpanId(), line, false)
-			}
-		case ev.GetOutput() != nil:
-			claim(ev.GetSpanId(), ev.GetMessage(), true)
-		case ev.GetEnded() != nil:
-			mark := okMark
-			if ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {
-				mark = failMark
-			}
-			close(id, mark)
-		case ev.GetWaiting() != nil:
-			closeAll(warnMark)
-		case ev.GetResult() != nil:
-			mark := warnMark
-			if !ev.GetResult().GetSuccess() && !ev.GetResult().GetInterrupted() {
-				mark = failMark
-			}
-			closeAll(mark)
-		}
-	}
-	return flushed
-}
-
-func bodyAfter(lines []string, at int, n int) []string {
-	body := lines[min(at+1, len(lines)):min(at+1+n, len(lines))]
-	out := make([]string, 0, len(body))
-	for _, line := range body {
-		out = append(out, strings.TrimPrefix(line, blockIndent))
-	}
-	return out
-}
-
-func findFrom(lines []string, prefix string, at int) int {
-	for i := at; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], prefix) {
-			return i
-		}
-	}
-	return -1
-}
-
-func closeLine(b *phaseBlock) string {
-	switch b.mark {
-	case okMark:
-		return okMark + " " + b.path + "  "
-	case failMark:
-		return failMark + " " + b.path + " "
-	default:
-		return warnMark + " " + b.path + " "
-	}
-}
-
-func TestCommittedOutputIsWholeBlocksInPhaseCompletionOrder(t *testing.T) {
-	t.Parallel()
-	for _, name := range fixtureNames(t) {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			_, events := fixtureStream(t, name)
-			flushed := blocksOnTheStream(events)
-			if len(flushed) == 0 {
-				t.Fatalf("fixture %s flushes no block — it cannot test this projection", name)
-			}
-
-			for _, projection := range []struct{ name, text string }{
-				{"plain", projectPlain(t, events)},
-				{"live", scrollback(projectLive(t, events))},
-			} {
-				lines := strings.Split(strings.TrimSuffix(projection.text, "\n"), "\n")
-				at := 0
-				for _, b := range flushed {
-					want := closeLine(b)
-					found := findFrom(lines, want, at)
-					if found < 0 {
-						t.Fatalf("%s output has no %q at or after line %d, so the blocks do not land in phase-completion order:\n%s",
-							projection.name, want, at, projection.text)
-					}
-					body := bodyAfter(lines, found, len(b.lines))
-					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
-						t.Errorf("%s block %q is not the whole of what the stream gave it, contiguous.\n--- got ---\n%s\n--- want ---\n%s",
-							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
-					}
-					at = found + 1
-				}
-			}
-		})
-	}
-}
-
-func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *testing.T) {
-	t.Parallel()
-	for _, name := range fixtureNames(t) {
-		_, events := fixtureStream(t, name)
-		interrupted := false
-		for _, ev := range events {
-			interrupted = interrupted || ev.GetResult().GetInterrupted()
-		}
-		if !interrupted {
-			continue
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			var inFlight []*phaseBlock
-			for _, b := range blocksOnTheStream(events) {
-				if b.mark == warnMark {
-					inFlight = append(inFlight, b)
-				}
-			}
-			if len(inFlight) == 0 {
-				t.Fatalf("fixture %s is interrupted with no block in flight — it cannot test this projection", name)
-			}
-
-			for _, projection := range []struct{ name, text string }{
-				{"plain", projectPlain(t, events)},
-				{"live", scrollback(projectLive(t, events))},
-			} {
-				lines := strings.Split(strings.TrimSuffix(projection.text, "\n"), "\n")
-				for _, b := range inFlight {
-					marker := warnMark + " " + b.path + " interrupted"
-					found := findFrom(lines, marker, 0)
-					if found < 0 {
-						t.Errorf("%s output does not flush the in-flight block %q with an interrupted marker:\n%s",
-							projection.name, b.path, projection.text)
-						continue
-					}
-					body := bodyAfter(lines, found, len(b.lines))
-					if strings.Join(body, "\n") != strings.Join(b.lines, "\n") {
-						t.Errorf("%s interrupts block %q without flushing what the stream gave it.\n--- got ---\n%s\n--- want ---\n%s",
-							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
-					}
-				}
-			}
-		})
-	}
+	return "[" + phaseNames[ev.GetPhase()] + "]"
 }

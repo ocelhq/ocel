@@ -1,9 +1,11 @@
+INFO  [check] ✓ aws: Checking credentials in 1s
 
 ocel  dev  acme › production
 
 aws         123456789012  deploy  us-east-1
 cloudfront  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
 
+WARN  [check] web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts
 
 Change plan, fronted by the cloudfront edge:
 
@@ -13,13 +15,6 @@ Change plan, fronted by the cloudfront edge:
     ~ api     function
 
 1 to create, 1 to update, 1 to delete.
-
-⚠ web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts
-→ Environment › Building
-
-✓ Environment  6s
-  Bundling web (1/2)
-  Bundling api (2/2)
 
 ✗ 1 variable is not ready — nothing has been built.
 
@@ -31,18 +26,17 @@ Change plan, fronted by the cloudfront edge:
 
   Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
 
-✓ Resumed — the page was answered
+INFO  [build] acme: Resumed — the page was answered
+INFO  [build] ✓ acme: Building project in 6s
+      Bundling web (1/2)
+      Bundling api (2/2)
+WARN  [check] web: edge-middleware: middleware runs in the origin
+ERROR [deploy] ✗ api failed after 3s (1 failed): updating function api: InsufficientCapacity
+      updating function api
+      ✗ api (aws:lambda/function:Function) failed to update
+      ERROR api (aws:lambda/function:Function): InsufficientCapacity
+INFO  [deploy] ✓ web in 12s (1 created)
 
-→ web › Provisioning
-→ api › Provisioning
-⚠ edge-middleware: web: middleware runs in the origin
-
-✓ web  12s
-  creating bucket assets
-
-✗ api failed  3s
-  updating function api
-
-✗ Failed
-  updating function api: InsufficientCapacity
-
+✗ Failed in 21s — api: updating function api: InsufficientCapacity
+  web deployed but was not promoted: promotion needs every app, and api failed
+  production still serves what it served before this run

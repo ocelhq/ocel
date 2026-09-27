@@ -4,15 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 )
 
 func projectPlan(t *testing.T, plan *planv1.ChangePlan) string {
 	t.Helper()
-	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	lines := p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: plan}})
-	return strings.Join(lines, "\n")
+	return "\n" + strings.Join(planLines(Presentation{Width: defaultWidth}, plan), "\n") + "\n"
 }
 
 func mixedPlan() *planv1.ChangePlan {
@@ -102,8 +99,7 @@ func TestAnActionThisCLIDoesNotKnowReadsAsASentence(t *testing.T) {
 func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	p := newProjector(Presentation{Format: FormatHuman, Color: true, Width: defaultWidth})
-	got := strings.Join(p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
+	got := strings.Join(planLines(Presentation{Color: true, Width: defaultWidth}, &planv1.ChangePlan{
 		Headline: "Proposed changes to the production bootstrap",
 		Groups: []*planv1.ChangeGroup{
 			{
@@ -121,7 +117,7 @@ func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 				Reason:  "web, api were deployed against it",
 			},
 		},
-	}}}), "\n")
+	}), "\n")
 
 	for _, want := range []string{
 		"\x1b[32m+\x1b[0m \x1b[1mocel-production-queues\x1b[22m  \x1b[2m[queues]\x1b[22m",

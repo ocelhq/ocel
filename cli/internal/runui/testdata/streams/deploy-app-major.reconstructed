@@ -1,19 +1,22 @@
 stages:
-  Environment
+  [check]
+    Checking credentials
+  [build]
+    Building project
+  Edge
+    Provisioning
   Shared infrastructure
+    Provisioning
+      assets
   web
   api
-  Edge
-  Promotion
-    Building
-    Building
-    Provisioning
-    Provisioning
-    Provisioning
-    Provisioning
+    Uploading
+    Uploading
       aws:ecs/Service acme-prod-web
+      api
+  Promotion
     Finalizing
 plan:
 waits:
 results:
-  success=true interrupted=false headline="Deployed" detail="" duration_ms=54000
+  success=true interrupted=false headline="Deployed acme to production" detail="" duration_ms=54000

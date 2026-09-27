@@ -2,6 +2,8 @@ package runui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -13,6 +15,11 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+)
+
+const (
+	blockIndent  = "  "
+	appURLGutter = "  "
 )
 
 type summary struct {
@@ -57,11 +64,7 @@ func (s summary) succeeded(took string) []string {
 func (s summary) failed(took string) []string {
 	result := s.result
 	if missing := result.GetMissing(); missing != nil {
-		paint := envgate.Paint{
-			Fail:  func(text string) string { return colorFor(s.present, color.FgRed).Sprint(text) },
-			Faint: func(text string) string { return colorFor(s.present, color.Faint).Sprint(text) },
-		}
-		out := append(envgate.Lines(missing, paint), "", envgate.RemedyLine(missing.GetRemedy()))
+		out := append(envgate.Lines(missing, missingPaint(s.present)), "", envgate.RemedyLine(missing.GetRemedy()))
 		return append(out, detailLines(result.GetDetail())...)
 	}
 	detail := strings.Split(strings.TrimRight(result.GetDetail(), "\n"), "\n")
@@ -116,6 +119,13 @@ func (s summary) unpromoted() []string {
 	}
 }
 
+func missingPaint(present Presentation) envgate.Paint {
+	return envgate.Paint{
+		Fail:  func(text string) string { return colorFor(present, color.FgRed).Sprint(text) },
+		Faint: func(text string) string { return faint(present, text) },
+	}
+}
+
 func joinNames(names []string) string {
 	if len(names) < 2 {
 		return strings.Join(names, "")
@@ -157,10 +167,35 @@ func (s summary) appURLs() []string {
 
 func (s *GroupedSink) conclude(ev *streamv1.RunEvent) {
 	s.unfinished()
-	if s.wrote && !s.verbatim {
-		fmt.Fprintln(s.w)
-	}
+	s.gap()
 	for _, text := range (summary{result: ev.GetResult(), tier: s.tier, promotion: s.promotion, present: s.present}).lines() {
 		s.print(blockLine{text: text})
 	}
+}
+
+func headlineOr(ev *streamv1.RunResultEvent, fallback string) string {
+	if h := ev.GetHeadline(); h != "" {
+		return h
+	}
+	return fallback
+}
+
+func detailLines(detail string) []string {
+	if detail == "" {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(strings.TrimRight(detail, "\n"), "\n") {
+		out = append(out, blockIndent+line)
+	}
+	return out
+}
+
+func relLog(logPath string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, logPath); err == nil && !strings.HasPrefix(rel, "..") {
+			return rel
+		}
+	}
+	return logPath
 }

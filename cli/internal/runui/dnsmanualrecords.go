@@ -45,6 +45,22 @@ func anyProxied(records []*progressv1.DnsRecord) bool {
 	return false
 }
 
+func dnsTable(ev *progressv1.DnsManualRecordsEvent, width int) []string {
+	records := ev.GetRecords()
+	head, rows := dnsRows(records, width)
+	out := dnsStack(records)
+	if head != "" {
+		out = append([]string{head}, rows...)
+	}
+	for i, note := range dnsNotes(records, ev.GetNotes()) {
+		if i == 0 {
+			out = append(out, "")
+		}
+		out = append(out, dnsIndent+note)
+	}
+	return out
+}
+
 func dnsHeadline(headline string, records []*progressv1.DnsRecord) string {
 	if len(records) == 1 {
 		return fmt.Sprintf("%s — add this record at your DNS provider", headline)

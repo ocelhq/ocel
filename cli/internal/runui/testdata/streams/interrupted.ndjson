@@ -1,4 +1,4 @@
-{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
-{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","message":"Bundling web"}
-{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"4000"}}
+{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
+{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building project","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Bundling web"}
+{"time":"2026-09-27T10:00:04Z","level":"LEVEL_INFO","result":{"interrupted":true,"headline":"Cancelled","durationMs":"4000"}}

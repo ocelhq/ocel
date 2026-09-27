@@ -90,12 +90,13 @@ func TestTheJSONSinkWritesEachEventAsOneLineTheMomentItLands(t *testing.T) {
 	var sink events.Sink = NewJSONSink(&out)
 	t.Cleanup(func() { _ = sink.Close() })
 
-	sink.Receive(startedEvent(appStage(1), nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	span := []byte{1, 0, 0, 0, 0, 0, 0, 0}
+	sink.Receive(&streamv1.RunEvent{SpanId: span, Message: "web", Body: &streamv1.RunEvent_Started{Started: &progressv1.Started{}}})
 	if got := out.String(); strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, "\n") {
 		t.Fatalf("after one event the sink wrote %q, want exactly one whole line", got)
 	}
 
-	sink.Receive(progressEvent(appStage(1), "uploading", 1, u32(2)))
+	sink.Receive(&streamv1.RunEvent{SpanId: span, Message: "uploading"})
 	lines := parseNDJSON(t, out.String())
 	if len(lines) != 2 || lines[1].GetMessage() != "uploading" {
 		t.Errorf("after two events the sink wrote %q, want the second as its own line", out.String())

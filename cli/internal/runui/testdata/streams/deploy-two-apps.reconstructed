@@ -1,10 +1,15 @@
 stages:
-  Environment
-    Building
+  [check]
+    Checking credentials
+  [plan]
+  [build]
+    Building project
   web
-    Provisioning
   api
-    Provisioning
+    Uploading
+    Uploading
+      api
+      assets
 plan:
   infrastructure/shared ACTION_CREATE bucket/assets
   infrastructure/shared ACTION_DELETE bucket/logs
@@ -13,4 +18,4 @@ waits:
   waiting on 1 unset, remedy "ocel env ui"
   resumed the page was answered
 results:
-  success=false interrupted=false headline="" detail="updating function api: InsufficientCapacity" duration_ms=21000
+  success=false interrupted=false headline="" detail="api: updating function api: InsufficientCapacity" duration_ms=21000

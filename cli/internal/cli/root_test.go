@@ -80,7 +80,7 @@ func TestLogFormatJSONAttachesOnlyTheJSONSink(t *testing.T) {
 	}
 }
 
-func TestTheHumanLogFormatAttachesOnlyTheHumanSink(t *testing.T) {
+func TestTheHumanLogFormatAttachesOnlyTheGroupedSink(t *testing.T) {
 	inDeployFixture(t)
 
 	stdout, _ := executeRoot(t, "deployments", "prune")

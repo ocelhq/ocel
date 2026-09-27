@@ -10,5 +10,5 @@ func NewTerminalSink(present Presentation, w io.Writer) events.Sink {
 	if present.Format == FormatJSON {
 		return NewJSONSink(w)
 	}
-	return NewHumanSink(w, present)
+	return NewGroupedSink(w, present)
 }
