@@ -277,6 +277,36 @@ func TestARecordIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
 	}
 }
 
+func TestARecordsDirectoryThatIsASymlinkIsRefusedAndNothingLandsWhereItPoints(t *testing.T) {
+	t.Parallel()
+
+	root := helperDir(t)
+	elsewhere := t.TempDir()
+	dir := recordsDir(t, root)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{{"list", "conformance/production"}, {"read", "conformance/production/a"}} {
+		if rendered, code := helper(t, root, "", args...); code == 0 {
+			t.Errorf("%s through a records directory that points at %s exited 0 with %q, want it refused", args[0], elsewhere, rendered)
+		}
+	}
+	if _, code := helper(t, root, encoded("one")+"\n", "write", "conformance/production/a", ""); code == 0 {
+		t.Error("a write through a records directory that is a symlink exited 0, want it refused")
+	}
+	left, err := os.ReadDir(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Errorf("%s holds %d entries after the helper ran through a symlink to it, want nothing: whoever can swap the records directory would choose where root writes", elsewhere, len(left))
+	}
+}
+
 func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 	t.Parallel()
 

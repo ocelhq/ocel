@@ -22,6 +22,7 @@ case $class in
 esac
 
 dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$class/records"
+[ ! -L "$dir" ] || abort "$dir is a symlink to $(readlink "$dir"), not the directory ocel bootstrap made"
 [ -d "$dir" ] || abort "$dir is missing; run ocel bootstrap"
 
 ours() {
