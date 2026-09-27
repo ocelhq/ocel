@@ -64,6 +64,8 @@ func (s *Scope) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)
 
 func (s *Scope) Run() *Run { return s.run }
 
+func (s *Scope) Phase() progressv1.Phase { return s.phase }
+
 func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)
 	drawn.Headline, drawn.Notes = headline, notes

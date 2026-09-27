@@ -121,7 +121,7 @@ func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T)
 	}
 }
 
-func TestALineTheProviderWritesToStderrReachesTheScopeAtDebugNamingTheProvider(t *testing.T) {
+func TestALineTheProviderWritesToStderrReachesTheRunAtDebugNamingTheProviderInThePhaseItStartedIn(t *testing.T) {
 	t.Parallel()
 
 	ctx, scope, seen := deployScope(t)
@@ -132,8 +132,10 @@ func TestALineTheProviderWritesToStderrReachesTheScopeAtDebugNamingTheProvider(t
 		if ev.GetMessage() != fakeChattyLine {
 			continue
 		}
-		if ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetSubject() != "fake" || ev.GetOutput().GetStream() != progressv1.Stream_STREAM_STDERR {
-			t.Errorf("the stderr line arrived as %s from %q on %s, want DEBUG output from \"fake\" on stderr", ev.GetLevel(), ev.GetSubject(), ev.GetOutput().GetStream())
+		if ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetSubject() != "fake" || ev.GetOutput().GetStream() != progressv1.Stream_STREAM_STDERR ||
+			ev.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+			t.Errorf("the stderr line arrived as %s from %q on %s in %s, want DEBUG output from \"fake\" on stderr in the deploy phase it started in",
+				ev.GetLevel(), ev.GetSubject(), ev.GetOutput().GetStream(), ev.GetPhase())
 		}
 		return
 	}

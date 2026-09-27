@@ -293,7 +293,7 @@ func TestProviderProcessOutputShowsOnlyWhenVerboseAndNeverEntersABlock(t *testin
 			const marker = "raw subprocess output"
 			startProvisioning(s)
 			s.Receive(progress("a line the phase owns"))
-			s.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Subject: "aws", Message: marker, Body: &streamv1.RunEvent_Output{
+			s.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Phase: progressv1.Phase_PHASE_CHECK, Subject: "aws", Message: marker, Body: &streamv1.RunEvent_Output{
 				Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
 			}})
 			s.Receive(closeProvisioning())

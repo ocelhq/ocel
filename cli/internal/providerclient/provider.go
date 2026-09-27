@@ -145,6 +145,7 @@ type processLines struct {
 func (w processLines) Write(line []byte) (int, error) {
 	w.scope.Forward(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_DEBUG,
+		Phase:   w.scope.Phase(),
 		Subject: w.subject,
 		Message: strings.TrimSuffix(string(line), "\n"),
 		Body:    &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: w.stream}},
