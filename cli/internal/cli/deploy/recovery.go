@@ -68,6 +68,8 @@ func appList(cfg *projectconfig.Config) string {
 		names = append(names, app.Name)
 	}
 	switch {
+	case len(names) == 0:
+		return "the apps of " + cfg.Slug
 	case len(names) == 1:
 		return "app " + names[0]
 	case len(names) <= 4:

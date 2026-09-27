@@ -74,6 +74,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	}
 	specs := appSpecs(cfg, variables)
 	clients := clientApps(specs)
+	steps := newBuildSteps(phase)
 	if prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, nil, err
@@ -90,28 +91,44 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 			}
 		}
 		scope.End(nil)
-		if err := deps.BuildApp(ctx, cfg, buildEnv(specs), appUnits(phase, "Building app ")); err != nil {
-			return nil, nil, err
-		}
-		if err := clientenv.Record(cfg.Dir, clients); err != nil {
+		if err := steps.run(cfg.Slug, "Building "+appList(cfg), func() error {
+			if err := deps.BuildApp(ctx, cfg, buildEnv(specs), steps.output("Building app ")); err != nil {
+				return err
+			}
+			return clientenv.Record(cfg.Dir, clients)
+		}); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	images, err := deps.BuildAppImages(ctx, cfg, containerArchs, appUnits(phase, "Building the image of app "))
-	if err != nil {
+	var images map[string]string
+	if err := steps.run(cfg.Slug, "Building the container images of "+cfg.Slug, func() (err error) {
+		images, err = deps.BuildAppImages(ctx, cfg, containerArchs, steps.output("Building the image of app "))
+		return err
+	}); err != nil {
 		return nil, nil, err
 	}
 
+	var manifest *contractv1.Manifest
+	if err := steps.run(cfg.Slug, "Assembling the deploy manifest of "+cfg.Slug, func() (err error) {
+		manifest, err = assembleManifest(ctx, deps, cfg, gate, phase, resources, variables, images, compute, configName)
+		return err
+	}); err != nil || manifest == nil {
+		return nil, nil, err
+	}
+	return manifest, inline, nil
+}
+
+func assembleManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, phase *events.Scope, resources []declare.Resource, variables map[string][]manifestbuilder.Variable, images map[string]string, compute, configName string) (*contractv1.Manifest, error) {
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	functions = servedByFunctions(functions, cfg)
 
 	edgeWarnings, err := envgate.LintEdge(gate.Definitions(), envwire.Apps(cfg), edgeApps(cfg))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for _, warning := range edgeWarnings {
 		phase.Warn(warning)
@@ -119,42 +136,97 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 
 	if len(functions) == 0 && len(images) == 0 {
 		if len(resources) == 0 {
-			return nil, nil, nil
+			return nil, nil
 		}
 		phase.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
 	}
 
 	attributionApps, err := toAttributionApps(cfg, functions, compute, configName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	usages, err := attribution.Compute(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(resources))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(gate.Scope().Tier())), functions, variablesByApp(variables, functions))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for _, app := range manifest.GetApps() {
 		id, err := deps.DeploymentID(cfg.Dir, app.GetName())
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		app.DeploymentId = id
 	}
-	return manifest, inline, nil
+	return manifest, nil
 }
 
-func appUnits(phase *events.Scope, title string) appbuilder.Output {
+type buildSteps struct {
+	phase  *events.Scope
+	shared io.Writer
+
+	mu     sync.Mutex
+	loose  bytes.Buffer
+	failed bool
+}
+
+func newBuildSteps(phase *events.Scope) *buildSteps {
+	return &buildSteps{phase: phase, shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)}
+}
+
+func (b *buildSteps) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.loose.Write(p)
+}
+
+func (b *buildSteps) takeLoose() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	taken := bytes.Clone(b.loose.Bytes())
+	b.loose.Reset()
+	return taken
+}
+
+func (b *buildSteps) output(title string) appbuilder.Output {
 	return appbuilder.Output{
-		Shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED),
+		Shared: b,
 		Unit: func(app string) (io.Writer, func(error)) {
-			unit := phase.Unit(app, title+app)
-			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), unit.End
+			_, _ = b.shared.Write(b.takeLoose())
+			unit := b.phase.Unit(app, title+app)
+			return unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), func(err error) {
+				if err != nil {
+					b.mu.Lock()
+					b.failed = true
+					b.mu.Unlock()
+				}
+				unit.End(err)
+			}
 		},
 	}
+}
+
+func (b *buildSteps) run(subject, title string, step func() error) error {
+	reserved := b.phase.ReserveUnit(subject, title)
+	b.mu.Lock()
+	b.failed = false
+	b.mu.Unlock()
+	err := step()
+	b.mu.Lock()
+	reported := b.failed
+	b.mu.Unlock()
+	loose := b.takeLoose()
+	if err == nil || reported {
+		_, _ = b.shared.Write(loose)
+		return err
+	}
+	unit := reserved.Open()
+	_, _ = unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED).Write(loose)
+	unit.End(err)
+	return err
 }
 
 func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {

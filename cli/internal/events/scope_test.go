@@ -75,6 +75,36 @@ func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.
 	}
 }
 
+func TestAReservedUnitAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(t *testing.T) {
+	sink := &recording{}
+	run, clock := begin(t, sink)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	reserved := build.ReserveUnit("shop", "Building 2 apps (web and api)")
+	reservedAt := clock.read()
+	before := len(sink.received())
+
+	clock.advance(4 * time.Second)
+	if got := len(sink.received()); got != before {
+		t.Fatalf("reserving a unit sent %d events, want none", got-before)
+	}
+	unit := reserved.Open()
+	unit.End(errors.New("node not found on PATH"))
+
+	got := sink.received()[before:]
+	if len(got) != 2 {
+		t.Fatalf("opening and ending the unit sent %d events, want 2", len(got))
+	}
+	if got[0].GetMessage() != "Building 2 apps (web and api)" || got[0].GetSubject() != "shop" {
+		t.Fatalf("the unit opened as %s: %q, want shop: %q", got[0].GetSubject(), got[0].GetMessage(), "Building 2 apps (web and api)")
+	}
+	if !got[0].GetTime().AsTime().Equal(reservedAt) || got[1].GetEnded().GetStartTimeUnixNano() != reservedAt.UnixNano() {
+		t.Errorf("the unit started at %s, want %s: when it was reserved", got[0].GetTime().AsTime(), reservedAt)
+	}
+	if took := got[1].GetTime().AsTime().Sub(reservedAt); took != 4*time.Second {
+		t.Errorf("the unit took %s, want 4s", took)
+	}
+}
+
 func TestAScopeThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)

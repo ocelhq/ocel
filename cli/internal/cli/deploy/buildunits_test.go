@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -181,5 +182,75 @@ func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 	}
 	if web, api := strings.Index(out, "✓ web: Built"), strings.Index(out, "✓ api: Built"); web < 0 || api < web {
 		t.Errorf("stdout = %q, want web's block before api's, in the order they finished", out)
+	}
+}
+
+func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuilderSaid(t *testing.T) {
+	deps, root := twoAppFixture(t)
+	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, _ map[string]map[string]string, out appbuilder.Output) error {
+		_, _ = io.WriteString(out.Shared, "Error: Cannot find module 'esbuild'\n")
+		return errors.New("node-builder failed (exit status 1): Error: Cannot find module 'esbuild'")
+	}
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runDeploy succeeded, want the builder's failure")
+	}
+
+	scopes, phaseOutput := buildScopes(t, stdout.String())
+	last := scopes[len(scopes)-1]
+	if last.subject != clitest.FixtureSlug || last.message != "Building 2 apps (web and api)" || last.status != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Fatalf("the last build unit = %s: %q ended %s, want %s: \"Building 2 apps (web and api)\" ended in error", last.subject, last.message, last.status, clitest.FixtureSlug)
+	}
+	if strings.Join(last.output, "\n") != "Error: Cannot find module 'esbuild'" {
+		t.Errorf("the failed unit's output = %q, want what the builder said", last.output)
+	}
+	if len(phaseOutput) != 0 {
+		t.Errorf("build phase output = %q, want none: the builder's words belong to the unit that failed", phaseOutput)
+	}
+}
+
+func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
+	deps, root := twoAppFixture(t)
+	deps.BuildApp = buildingEach("web")
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runDeploy succeeded, want web's build failure")
+	}
+
+	scopes, phaseOutput := buildScopes(t, stdout.String())
+	var got []string
+	for _, scope := range scopes {
+		got = append(got, scope.subject+" "+scope.status.String())
+	}
+	want := []string{clitest.FixtureSlug + " SPAN_STATUS_OK", "web SPAN_STATUS_ERROR"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("build units = %q, want %q: web's unit already reports the failure", got, want)
+	}
+	if strings.Join(phaseOutput, "\n") != "the builder started" {
+		t.Errorf("build phase output = %q, want what the builder said before web's build", phaseOutput)
+	}
+}
+
+func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing.T) {
+	deps, root := twoAppFixture(t)
+	deps.BuildApp = buildingEach("")
+	deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
+		return nil, errors.New("read the build plan: unexpected end of JSON input")
+	}
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runDeploy succeeded, want the manifest's failure")
+	}
+
+	scopes, _ := buildScopes(t, stdout.String())
+	last := scopes[len(scopes)-1]
+	if last.subject != clitest.FixtureSlug || last.message != "Assembling the deploy manifest of "+clitest.FixtureSlug || last.status != progressv1.SpanStatus_SPAN_STATUS_ERROR {
+		t.Errorf("the last build unit = %s: %q ended %s, want the manifest's unit ended in error", last.subject, last.message, last.status)
 	}
 }

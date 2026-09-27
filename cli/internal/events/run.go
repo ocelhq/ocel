@@ -148,13 +148,21 @@ func (r *Run) Phase(phase progressv1.Phase) *Scope {
 }
 
 func (r *Run) begin(parent *Scope, subject, message string) *Scope {
+	return r.beginAt(parent, subject, message, r.bus.now())
+}
+
+func (r *Run) beginAt(parent *Scope, subject, message string, start time.Time) *Scope {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.beginLocked(parent.phase, parent, subject, message)
+	return r.beginLockedAt(parent.phase, parent, subject, message, start)
 }
 
 func (r *Run) beginLocked(phase progressv1.Phase, parent *Scope, subject, message string) *Scope {
-	s := &Scope{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: r.bus.now()}
+	return r.beginLockedAt(phase, parent, subject, message, r.bus.now())
+}
+
+func (r *Run) beginLockedAt(phase progressv1.Phase, parent *Scope, subject, message string, start time.Time) *Scope {
+	s := &Scope{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: start}
 	r.enterLocked(phase)
 	var parentID []byte
 	if parent != nil {

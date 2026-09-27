@@ -32,6 +32,20 @@ func (s *Scope) Unit(subject, message string) *Scope {
 	return s.run.begin(s, subject, message)
 }
 
+type ReservedUnit struct {
+	parent           *Scope
+	subject, message string
+	start            time.Time
+}
+
+func (s *Scope) ReserveUnit(subject, message string) ReservedUnit {
+	return ReservedUnit{parent: s, subject: subject, message: message, start: s.run.bus.now()}
+}
+
+func (u ReservedUnit) Open() *Scope {
+	return u.parent.run.beginAt(u.parent, u.subject, u.message, u.start)
+}
+
 func (s *Scope) Say(message string) { s.say(progressv1.Level_LEVEL_INFO, message) }
 
 func (s *Scope) Warn(message string) { s.say(progressv1.Level_LEVEL_WARN, message) }
