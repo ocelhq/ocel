@@ -8,14 +8,14 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var keyPattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
 var reservedPrefixes = []string{"OCEL_"}
 
-var resourcePattern = regexp.MustCompile(`^` + naming.ResourceEnvPrefix + `[A-Z0-9]+_[A-Za-z0-9_-]+$`)
+var resourcePattern = regexp.MustCompile(`^` + constants.ResourceEnvPrefix + `[A-Z0-9]+_[A-Za-z0-9_-]+$`)
 
 type File struct {
 	Values     map[string]string
