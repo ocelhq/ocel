@@ -84,14 +84,26 @@ func runCommand(ctx context.Context, dir string, argv []string) ([]byte, error) 
 	cmd.Stdout = &boundedBuffer{buffer: &stdout, remainingBytes: commandOutputBytes}
 	cmd.Stderr = &boundedBuffer{buffer: &stderr, remainingBytes: commandStderrBytes}
 	if err := cmd.Run(); err != nil {
-		said := strings.TrimSpace(stderr.String())
-		if said != "" {
-			said = ": " + said
-		}
-		return nil, fmt.Errorf("the env source's command %s failed (%w)%s", argv[0], err, said)
+		return nil, &commandFailure{command: argv[0], cause: err, stderr: strings.TrimSpace(stderr.String())}
 	}
 	return stdout.Bytes(), nil
 }
+
+type commandFailure struct {
+	command string
+	cause   error
+	stderr  string
+}
+
+func (f *commandFailure) Error() string {
+	said := f.stderr
+	if said != "" {
+		said = ": " + said
+	}
+	return fmt.Sprintf("the env source's command %s failed (%v)%s", f.command, f.cause, said)
+}
+
+func (f *commandFailure) Unwrap() error { return f.cause }
 
 type boundedBuffer struct {
 	buffer         *bytes.Buffer
