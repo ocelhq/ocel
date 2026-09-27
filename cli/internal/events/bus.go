@@ -42,6 +42,7 @@ func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Co
 		if ctx, r.trace, err = runtrace.Start(ctx, projectDir, command); err != nil {
 			return ctx, nil, err
 		}
+		r.trace.LogThrough(func(ev *streamv1.RunEvent) { b.send(ev) })
 		b.Attach(r.trace)
 	}
 	r.ctx = ctx

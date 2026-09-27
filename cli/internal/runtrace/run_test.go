@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func TestStartNamesArtifactsByTraceID(t *testing.T) {
@@ -23,7 +22,7 @@ func TestStartNamesArtifactsByTraceID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start() = %v", err)
 	}
-	r.Log(ctx, progressv1.Level_LEVEL_INFO, "web", "building project")
+	r.Log(ctx, "web", "building project")
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -120,7 +119,7 @@ func TestAttributesOutsideTheAllowlistNeverReachEitherArtifact(t *testing.T) {
 		attribute.String("ocel.stage", "provisioning"),
 	)
 	span.SetAttributes(attribute.String("env.DATABASE_URL", varValue))
-	r.Log(spanCtx, progressv1.Level_LEVEL_INFO, "web", "provisioning resources")
+	r.Log(spanCtx, "web", "provisioning resources")
 
 	const statusSecret = "AKIAFAKESECRETACCESSKEY12345"
 	span.SetStatus(codes.Error, "connection failed: aws_secret_access_key="+statusSecret)

@@ -244,3 +244,38 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 		}
 	}
 }
+
+func TestANodeBuilderLogReachesEverySinkAsDebugDetailOfItsAppAndTheRunsLogOnce(t *testing.T) {
+	sink := &recording{}
+	bus := events.NewBus(time.Now)
+	bus.Attach(sink)
+	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace := runtrace.FromContext(ctx)
+	logPath := trace.LogPath()
+
+	trace.Log(ctx, "web", "installing dependencies")
+	run.End(&err)
+
+	var heard []*streamv1.RunEvent
+	for _, ev := range sink.received() {
+		if ev.GetMessage() == "installing dependencies" {
+			heard = append(heard, ev)
+		}
+	}
+	if len(heard) != 1 {
+		t.Fatalf("the sink heard the log %d times, want once", len(heard))
+	}
+	if ev := heard[0]; ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "web" {
+		t.Errorf("the log reads %s [%s] %q, want DEBUG [PHASE_BUILD] \"web\"", ev.GetLevel(), ev.GetPhase(), ev.GetSubject())
+	}
+	logged, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if n := strings.Count(string(logged), "installing dependencies"); n != 1 {
+		t.Errorf("the run's log holds the line %d times, want once:\n%s", n, logged)
+	}
+}

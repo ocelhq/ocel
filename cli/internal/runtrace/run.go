@@ -33,6 +33,7 @@ type Run struct {
 	logPath string
 	logMu   sync.Mutex
 	logFile *os.File
+	send    func(*streamv1.RunEvent)
 
 	scopesMu sync.Mutex
 	scopes   map[trace.SpanID]startedScope
@@ -80,6 +81,7 @@ func Start(ctx context.Context, projectDir, command string) (context.Context, *R
 		tp:      tp,
 		tracer:  tp.Tracer("github.com/ocelhq/ocel/cli"),
 	}
+	r.send = r.record
 
 	ctx, root := r.tracer.Start(ctx, command, trace.WithAttributes(AttrCommand.String(command)))
 	r.rootSpan = root
@@ -118,10 +120,14 @@ func (r *Run) StartSpan(ctx context.Context, stage string, attrs ...attribute.Ke
 	return r.tracer.Start(ctx, stage, opts...)
 }
 
-func (r *Run) Log(ctx context.Context, level progressv1.Level, app, message string) {
+func (r *Run) LogThrough(send func(*streamv1.RunEvent)) {
+	r.send = send
+}
+
+func (r *Run) Log(ctx context.Context, app, message string) {
 	ev := &streamv1.RunEvent{
 		Time:    timestamppb.Now(),
-		Level:   level,
+		Level:   progressv1.Level_LEVEL_DEBUG,
 		Phase:   progressv1.Phase_PHASE_BUILD,
 		Subject: app,
 		Message: message,
@@ -130,7 +136,7 @@ func (r *Run) Log(ctx context.Context, level progressv1.Level, app, message stri
 		id := sc.SpanID()
 		ev.SpanId = id[:]
 	}
-	r.record(ev)
+	r.send(ev)
 }
 
 func (r *Run) Close() error {

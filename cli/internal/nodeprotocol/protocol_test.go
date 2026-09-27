@@ -369,7 +369,7 @@ func TestProcessorWorksWithNoRun(t *testing.T) {
 	}
 }
 
-func TestANodeBuildLogRecordIsARunEventInTheBuildPhaseNamingItsApp(t *testing.T) {
+func TestANodeBuildLogRecordIsADebugRunEventInTheBuildPhaseNamingItsApp(t *testing.T) {
 	ctx, run := newRun(t)
 	var out strings.Builder
 	p := &Processor{Run: run, Forward: &out}
@@ -388,8 +388,8 @@ func TestANodeBuildLogRecordIsARunEventInTheBuildPhaseNamingItsApp(t *testing.T)
 		t.Fatalf("the log holds %d events, want the one record", len(logged))
 	}
 	ev := logged[0]
-	if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "api" || ev.GetLevel() != progressv1.Level_LEVEL_WARN || ev.GetMessage() != "installing dependencies" {
-		t.Errorf("logged %s [%s] %s: %q, want WARN [PHASE_BUILD] api: \"installing dependencies\"", ev.GetLevel(), ev.GetPhase(), ev.GetSubject(), ev.GetMessage())
+	if ev.GetPhase() != progressv1.Phase_PHASE_BUILD || ev.GetSubject() != "api" || ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetMessage() != "installing dependencies" {
+		t.Errorf("logged %s [%s] %s: %q, want DEBUG [PHASE_BUILD] api: \"installing dependencies\"", ev.GetLevel(), ev.GetPhase(), ev.GetSubject(), ev.GetMessage())
 	}
 	if ev.GetTime() == nil {
 		t.Error("the logged event has no time")
