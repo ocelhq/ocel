@@ -168,7 +168,7 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 	}
 	proc.Scan(ctx, pipe)
 	runErr := cmd.Wait()
-	_ = proc.Abort()
+	_ = proc.Abort(ctx)
 
 	if runErr != nil {
 		if msg := proc.Failure(); msg != "" {

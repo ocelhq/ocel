@@ -99,6 +99,8 @@ const buildStage = "build"
 
 var errBuilderExited = errors.New("the node builder exited before this app's build ended")
 
+var errBuildCancelled = errors.New("cancelled before this app's build ended")
+
 var errBuildFailed = errors.New("the node builder reported this app's build failed")
 
 func (p *Processor) Scan(ctx context.Context, r io.Reader) {
@@ -300,7 +302,7 @@ func (p *Processor) endSpan(rec record) {
 	s.span.End()
 }
 
-func (p *Processor) Abort() error {
+func (p *Processor) Abort(ctx context.Context) error {
 	p.mu.Lock()
 	spans := p.spans
 	builds := p.builds
@@ -316,7 +318,10 @@ func (p *Processor) Abort() error {
 	if len(builds) == 0 {
 		return nil
 	}
-	if cause == nil {
+	switch {
+	case ctx.Err() != nil:
+		cause = errBuildCancelled
+	case cause == nil:
 		cause = errBuilderExited
 	}
 	for _, ended := range builds {

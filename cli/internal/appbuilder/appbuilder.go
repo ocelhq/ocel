@@ -614,7 +614,7 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	proc.Scan(ctx, said)
 	_ = said.Close()
 	runErr := cmd.Wait()
-	unended := proc.Abort()
+	unended := proc.Abort(ctx)
 
 	if runErr != nil {
 		if msg := proc.Failure(); msg != "" {

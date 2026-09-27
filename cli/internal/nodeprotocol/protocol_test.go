@@ -143,7 +143,7 @@ func TestProcessorAbortEndsAnyOpenSpan(t *testing.T) {
 	p := &Processor{Run: run}
 
 	send(p, ctx, record{Type: typeSpanStart, ID: "1", App: "api", Stage: "build"})
-	p.Abort()
+	p.Abort(context.Background())
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -181,7 +181,7 @@ func TestABuildStillOpenWhenTheBuildersOutputCannotBeReadEndsWithTheReadError(t 
 		lines: Prefix + `{"type":"span_start","id":"1","stage":"build","app":"web"}` + "\n",
 		err:   unread,
 	})
-	if err := p.Abort(); !errors.Is(err, unread) {
+	if err := p.Abort(context.Background()); !errors.Is(err, unread) {
 		t.Errorf("Abort() = %v, want the read error", err)
 	}
 	if !errors.Is(ended, unread) {
@@ -189,11 +189,24 @@ func TestABuildStillOpenWhenTheBuildersOutputCannotBeReadEndsWithTheReadError(t 
 	}
 }
 
+func TestABuildStillOpenWhenTheRunIsCancelledEndsSayingItWasCancelled(t *testing.T) {
+	var ended error
+	p := &Processor{AppBuild: func(string) func(error) { return func(err error) { ended = err } }}
+	send(p, context.Background(), record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	p.Abort(ctx)
+	if ended == nil || ended.Error() != "cancelled before this app's build ended" {
+		t.Errorf("web's build ended with %v, want it to say it was cancelled", ended)
+	}
+}
+
 func TestAbortReportsNothingWhenNoBuildIsOpen(t *testing.T) {
 	p := &Processor{AppBuild: func(string) func(error) { return func(error) {} }}
 	send(p, context.Background(), record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
 	send(p, context.Background(), record{Type: typeSpanEnd, ID: "1", OK: new(true)})
-	if err := p.Abort(); err != nil {
+	if err := p.Abort(context.Background()); err != nil {
 		t.Errorf("Abort() = %v, want nil: every build ended", err)
 	}
 }
