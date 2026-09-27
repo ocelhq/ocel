@@ -100,6 +100,17 @@ func (d Descriptor) CanWrite() bool {
 	return d.Kind == Infisical && d.Infisical != nil && d.Infisical.Write == WriteMissing
 }
 
+func (d Descriptor) ID() string {
+	if d.Kind == Infisical && d.Infisical != nil {
+		return d.Infisical.ID()
+	}
+	return string(d.Kind)
+}
+
+func (o InfisicalOptions) ID() string {
+	return string(Infisical) + ":" + o.Project + "/" + o.Environment
+}
+
 func (a InfisicalAuth) Variables() []string {
 	if a.Method != AuthUniversal {
 		return nil
