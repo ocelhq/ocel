@@ -20,19 +20,20 @@ type Origin struct {
 	NoColor       bool
 	TTY           bool
 	Width         int
+	WidthMeasured bool
 	Dumb          bool
 	GitHubActions bool
 }
 
 type Presentation struct {
-	Format        Format
-	Verbose       bool
-	Color         bool
-	TTY           bool
-	Dumb          bool
-	Width         int
-	GitHubActions bool
-
+	Format         Format
+	Verbose        bool
+	Color          bool
+	TTY            bool
+	Dumb           bool
+	Width          int
+	WidthMeasured  bool
+	GitHubActions  bool
 	SharedTerminal bool
 }
 
@@ -46,6 +47,7 @@ func Resolve(o Origin) Presentation {
 		TTY:           o.TTY,
 		Dumb:          o.Dumb,
 		Width:         o.Width,
+		WidthMeasured: o.WidthMeasured,
 		GitHubActions: o.GitHubActions,
 	}
 	if o.LogFormat == FormatJSON {
@@ -58,16 +60,18 @@ func Resolve(o Origin) Presentation {
 }
 
 func (p Presentation) Live() bool {
-	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && !p.SharedTerminal && p.Width >= minLiveWidth
+	return p.Format == FormatHuman && !p.Verbose && p.TTY && !p.Dumb && !p.SharedTerminal && p.WidthMeasured && p.Width >= minLiveWidth
 }
 
 func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
+	_, measured := liveWidth(w)
 	return Resolve(Origin{
 		LogFormat:     logFormat,
 		Verbose:       verbose,
 		NoColor:       color.NoColor || os.Getenv("NO_COLOR") != "",
 		TTY:           IsTerminal(w),
 		Width:         termWidth(w),
+		WidthMeasured: measured,
 		Dumb:          os.Getenv("TERM") == "dumb",
 		GitHubActions: os.Getenv("GITHUB_ACTIONS") == "true",
 	})

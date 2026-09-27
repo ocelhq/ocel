@@ -27,7 +27,8 @@ func TestTheLiveViewNeedsHumanFormatOnATerminal(t *testing.T) {
 		origin Origin
 		want   bool
 	}{
-		{"human on a terminal", Origin{LogFormat: "human", TTY: true}, true},
+		{"human on a terminal", Origin{LogFormat: "human", TTY: true, Width: 80, WidthMeasured: true}, true},
+		{"human on a terminal that reports no width", Origin{LogFormat: "human", TTY: true, Width: 80}, false},
 		{"human off a terminal", Origin{LogFormat: "human"}, false},
 		{"json on a terminal", Origin{LogFormat: "json", TTY: true}, false},
 		{"verbose on a terminal", Origin{LogFormat: "human", TTY: true, Verbose: true}, false},

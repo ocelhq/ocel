@@ -167,6 +167,18 @@ func TestATerminalNarrowerThanFortyColumnsGetsTheGroupedView(t *testing.T) {
 	}
 }
 
+func TestATerminalThatReportsNoWidthGetsTheGroupedViewWhateverColumnsSays(t *testing.T) {
+	inDeployFixture(t)
+	t.Setenv("COLUMNS", "120")
+	tty, screen := aTerminal(t, "xterm-256color", 0)
+
+	executeRootOn(t, tty, &bytes.Buffer{}, "deployments", "prune")
+
+	if got := screen(); strings.Contains(got, liveFrame) || !strings.Contains(got, "Pruned") {
+		t.Errorf("the terminal shows %q, want the grouped transcript with no live line", got)
+	}
+}
+
 func TestAPipedStdoutGetsTheGroupedViewEvenWithATerminalOnStderr(t *testing.T) {
 	inDeployFixture(t)
 	tty, screen := aTerminal(t, "xterm-256color", 80)
