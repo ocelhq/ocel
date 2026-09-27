@@ -222,3 +222,14 @@ func TestAUnitOutsideAnyPhaseIsShownWithoutABracket(t *testing.T) {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
 	}
 }
+
+func TestAPhaseWithNoUnitsYetShowsNoDoneOverTotal(t *testing.T) {
+	t.Parallel()
+
+	run, live, _ := liveRun(t)
+	run.Phase(progressv1.Phase_PHASE_BUILD)
+
+	if got, want := shownText(t, live, 80), "⠋ [build]"; got != want {
+		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
+	}
+}

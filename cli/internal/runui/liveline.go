@@ -148,7 +148,9 @@ func (l *liveLine) render(width int) string {
 	if name := phaseNames[l.phase]; name != "" {
 		head += " [" + name + "]"
 	}
-	head += fmt.Sprintf(" %d/%d", tally.done, tally.units)
+	if tally.units > 0 {
+		head += fmt.Sprintf(" %d/%d", tally.done, tally.units)
+	}
 	if unit := l.units[l.shown]; unit != nil {
 		head += " · " + cmp.Or(unit.opened.GetSubject(), unit.opened.GetMessage())
 		if said := unit.said(); said != "" {
