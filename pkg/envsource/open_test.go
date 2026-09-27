@@ -152,6 +152,51 @@ printf '[{"key":"WEB","value":"w","_id":"s1","secretPath":"/acme/web"},{"key":"E
 	}
 }
 
+func installInfisicalWithoutFolder(t *testing.T, missing string) {
+	t.Helper()
+	bin := t.TempDir()
+	script := `#!/bin/sh
+for arg in "$@"; do
+  if [ "$arg" = "--path=` + missing + `" ]; then
+    printf 'Request: GET https://infisical.example.com/api/v4/secrets\nResponse Code: 404 Not Found\nMessage: Folder with path %s not found\n' "` + missing + `" >&2
+    exit 1
+  fi
+done
+printf '[{"key":"ROOT","value":"r"}]'
+`
+	if err := os.WriteFile(filepath.Join(bin, "infisical"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestADevInfisicalEnvSourceExportedThroughTheCLIReadsAMissingAppFolderAsEmpty(t *testing.T) {
+	installInfisicalWithoutFolder(t, "/acme/web")
+	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme"}}
+
+	source, err := envsource.Open(descriptor, t.TempDir(), noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := source.Read(context.Background(), []string{"", "/web"})
+	if err != nil || len(read) != 1 || string(read[cell("", "ROOT")].Plaintext) != "r" {
+		t.Fatalf("Read() = %v, %v, want the root's value and nothing for the missing app folder", read, err)
+	}
+}
+
+func TestADevInfisicalEnvSourceExportedThroughTheCLIFailsOnAMissingRoot(t *testing.T) {
+	installInfisicalWithoutFolder(t, "/acme")
+	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev", Path: "/acme"}}
+
+	source, err := envsource.Open(descriptor, t.TempDir(), noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read, err := source.Read(context.Background(), []string{"", "/web"}); err == nil {
+		t.Fatalf("Read() = %v, want a missing root to fail the read", read)
+	}
+}
+
 func TestADevInfisicalEnvSourceWithNoWayInSaysHowToGetOne(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	descriptor := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "dev"}}
