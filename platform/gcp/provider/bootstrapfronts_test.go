@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -231,5 +232,28 @@ func TestAFrontThatReportsNothingIsInstalledAndOwnsNoHostname(t *testing.T) {
 	}
 	if err := b.frontsFree(context.Background(), edge.ClassProduction, []string{albFeature}); err != nil {
 		t.Errorf("frontsFree = %v, want nothing owned by a front that names no bound hostname", err)
+	}
+}
+
+func TestInstallingAndDroppingAFrontSaysWhichFeatureAndEdgeForWhichClass(t *testing.T) {
+	t.Parallel()
+
+	b, _ := fronting(t)
+	progress := &fake.Progress{}
+	raising := provider.BootstrapRequest{Class: edge.ClassProduction, Features: []string{albFeature}}
+	if err := b.raiseFronts(context.Background(), raising, progress); err != nil {
+		t.Fatalf("raiseFronts = %v", err)
+	}
+	dropping := provider.BootstrapRequest{Class: edge.ClassPreview, Remove: []string{albFeature}}
+	if err := b.dropFronts(context.Background(), surveyed(albFeature), dropping, progress); err != nil {
+		t.Fatalf("dropFronts = %v", err)
+	}
+
+	want := []string{
+		"INFO Installing feature alb-edge for production: " + b.Catalogue()[0].Summary,
+		"INFO Taking down the alb edge's front for preview: this bootstrap no longer requests feature alb-edge",
+	}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("the bootstrap said %q, want %q", got, want)
 	}
 }

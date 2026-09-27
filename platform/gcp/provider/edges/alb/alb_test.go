@@ -640,6 +640,31 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 	}
 }
 
+func TestTheReleaseThatTakesAHostnameLiveSaysWhichServiceItRoutesTo(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, _, stack := reconciled(t)
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
+		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	progress := &fake.Progress{}
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}, "", progress); err != nil {
+		t.Fatalf("Promote = %v", err)
+	}
+
+	want := "INFO Routing shop.example.com to web's Cloud Run service ocel-shop-prod-web"
+	if got := progress.Lines(); !slices.Contains(got, want) {
+		t.Errorf("the release said %q, want %q among it", got, want)
+	}
+}
+
 func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 	t.Parallel()
 

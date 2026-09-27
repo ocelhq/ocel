@@ -35,6 +35,7 @@ const (
 	reasonShared   = "the %s bootstrap is still installed and shares it"
 	reasonSharedDB = "the %s bootstrap is still installed and shares it, so only the records this class keeps in it are deleted"
 	reasonDestroy  = "scheduled, destroyed after 24h"
+	reasonAbsent   = "nothing is provisioned here"
 
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
@@ -293,17 +294,17 @@ func (b bootstrap) provision(ctx context.Context, read survey, target item, prog
 		if err := b.mend(ctx, read, target); err != nil {
 			return err
 		}
-		say(progress, "mended "+target.ID()+": "+mends)
+		reporting(progress).Say("Mended " + target.phrase() + ": " + mends)
 		return nil
 	}
 	if read.has(target) {
-		say(progress, target.ID()+": "+reasonCurrent)
+		reporting(progress).Debug("The " + target.phrase() + " is " + reasonCurrent)
 		return nil
 	}
 	if err := b.make(ctx, read, target); err != nil {
 		return err
 	}
-	say(progress, "created "+target.ID())
+	reporting(progress).Say("Created " + target.phrase())
 	return nil
 }
 
@@ -880,7 +881,7 @@ func removing(read survey, target item) removal {
 		taking.item.Slow = true
 	}
 	if taking.action != provider.ActionKeep && !read.has(taking.item) {
-		taking.action, taking.reason = provider.ActionKeep, "nothing is provisioned here"
+		taking.action, taking.reason = provider.ActionKeep, reasonAbsent
 	}
 	return taking
 }
@@ -915,16 +916,28 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 				return err
 			}
 		}
-		if taking.action == provider.ActionKeep {
-			say(progress, "kept "+taking.item.ID()+": "+taking.reason)
-			continue
+		if taking.action != provider.ActionKeep {
+			if err := b.take(ctx, read, taking.item); err != nil {
+				return err
+			}
 		}
-		if err := b.take(ctx, read, taking.item); err != nil {
-			return err
-		}
-		say(progress, "removed "+taking.item.ID())
+		taking.report(progress)
 	}
 	return nil
+}
+
+func (r removal) report(progress edge.Progress) {
+	progress = reporting(progress)
+	switch {
+	case r.action == provider.ActionKeep && r.reason == reasonAbsent:
+		progress.Debug("Nothing to remove: " + r.item.phrase() + " does not exist")
+	case r.action == provider.ActionKeep:
+		progress.Say("Kept " + r.item.phrase() + ": " + r.reason)
+	case r.item.Kind == KindKey:
+		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Google carries out after 24 hours")
+	default:
+		progress.Say("Removed " + r.item.phrase())
+	}
 }
 
 func destroyIn(class edge.Class) string {
@@ -1099,10 +1112,4 @@ func (b bootstrap) takeBucket(ctx context.Context, name string) error {
 		return fmt.Errorf("delete the %s bucket: %w", name, err)
 	}
 	return nil
-}
-
-func say(progress edge.Progress, message string) {
-	if progress != nil {
-		progress.Say(message)
-	}
 }

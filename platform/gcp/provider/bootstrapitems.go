@@ -47,6 +47,18 @@ type item struct {
 
 func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
+var kindNouns = map[Kind]string{
+	KindDatabase:       "Firestore database",
+	KindBucket:         "bucket",
+	KindKeyRing:        "KMS key ring",
+	KindKey:            "KMS key",
+	KindSecret:         "secret",
+	KindRepository:     "Artifact Registry repository",
+	KindServiceAccount: "service account",
+}
+
+func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
+
 func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
 
 func stackItems(names Names, class edge.Class, emulated bool) []item {

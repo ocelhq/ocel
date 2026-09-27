@@ -124,9 +124,7 @@ func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix st
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
-	if progress != nil {
-		progress.Detail("removed " + prefix)
-	}
+	reporting(progress).Say("Removed the " + string(class) + " artifacts under " + prefix + " from bucket " + bucket.BucketName())
 	return nil
 }
 

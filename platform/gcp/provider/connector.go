@@ -251,11 +251,13 @@ func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, 
 				Description: connectorAccountNote,
 			},
 		}).Context(ctx).Do)
-	if err != nil && !taken(err) {
+	switch {
+	case err == nil:
+		reporting(progress).Say("Created service account " + names.ConnectorAccountEmail() + " for the connector to run as")
+	case taken(err):
+		reporting(progress).Debug("The connector runs as service account " + names.ConnectorAccountEmail() + ", which already exists")
+	default:
 		return fmt.Errorf("create the %s service account: %w", names.Connector(), err)
-	}
-	if progress != nil {
-		progress.Say("The connector runs as " + names.ConnectorAccountEmail())
 	}
 	if err := p.bindConnectorProject(ctx, true); err != nil {
 		return err
@@ -305,8 +307,8 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progr
 		if err != nil && len(wanted) > 0 {
 			return err
 		}
-		if changed && progress != nil && len(wanted) > 0 {
-			progress.Say("The connector is granted " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
+		if changed && len(wanted) > 0 {
+			reporting(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(class) + " KMS key")
 		}
 		errs = append(errs, err)
 	}
@@ -343,9 +345,7 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, progress edge.Progr
 		accountPath(clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
-	if progress != nil {
-		progress.Say("Took away " + clients.ConnectorAccountEmail())
-	}
+	reporting(progress).Say("Deleted service account " + clients.ConnectorAccountEmail() + ", which the connector ran as")
 	return nil
 }
 
@@ -364,9 +364,7 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress edge.Progre
 		packagePath).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the connector images at %s: %w", packagePath, err)
 	}
-	if progress != nil {
-		progress.Say("Took away the connector images")
-	}
+	reporting(progress).Say("Deleted the connector's images from repository " + clients.Repository(edge.ClassProduction))
 	return nil
 }
 

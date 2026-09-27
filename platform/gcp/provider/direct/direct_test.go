@@ -102,6 +102,23 @@ func TestARollbackPinsCloudRunBackToTheRevisionThePromotionRecorded(t *testing.T
 	}
 }
 
+func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
+	t.Parallel()
+
+	stack := fronting(t, &pinRecorder{})
+	staged(t, stack, "b1", "web-00001-abc")
+	progress := &fake.Progress{}
+
+	promotion := edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
+	if err := stack.Promote(context.Background(), promotion, "", progress); err != nil {
+		t.Fatalf("Promote(p1) = %v", err)
+	}
+	want := "INFO Pinning all of web's traffic to revision web-00001-abc of Cloud Run service " + webService
+	if got := progress.Lines(); !slices.Contains(got, want) {
+		t.Errorf("the promotion said %q, want %q among it", got, want)
+	}
+}
+
 func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *testing.T) {
 	t.Parallel()
 

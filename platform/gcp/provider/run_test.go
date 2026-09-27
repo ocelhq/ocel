@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -338,5 +340,31 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 	}
 	if patched := server.tries(); patched-before != releaseAttempts {
 		t.Errorf("the release patched %d times, want %d: a retry that never gives up keeps a deploy open", patched-before, releaseAttempts)
+	}
+}
+
+func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	progress := &fake.Progress{}
+	ctx := context.Background()
+
+	if _, err := p.deployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {
+		t.Fatalf("deployService() = %v", err)
+	}
+	if _, err := p.deployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {
+		t.Fatalf("deployService() again = %v", err)
+	}
+	if err := p.tearDown(ctx, "ocel-shop-prod-app", progress); err != nil {
+		t.Fatalf("tearDown() = %v", err)
+	}
+
+	want := []string{
+		"INFO Creating Cloud Run service ocel-shop-prod-app in europe-west1",
+		"INFO Releasing a new revision of Cloud Run service ocel-shop-prod-app in europe-west1",
+		"INFO Deleting Cloud Run service ocel-shop-prod-app in europe-west1",
+	}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("the run said %q, want %q", got, want)
 	}
 }

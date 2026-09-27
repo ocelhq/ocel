@@ -541,7 +541,8 @@ func TestLiveARemovalUnderWayReadsAsUnfinishedRatherThanDone(t *testing.T) {
 
 	read, taken := false, false
 	watch := watcher{said: func(message string) {
-		if read || !strings.HasPrefix(message, "removed ") {
+		removing := strings.HasPrefix(message, "Removed ") || strings.HasPrefix(message, "Scheduled ")
+		if read || !removing {
 			return
 		}
 		read = true

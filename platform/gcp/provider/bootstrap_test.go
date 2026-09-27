@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
 
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -178,5 +181,57 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 				t.Errorf("bucketPresenceOf() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.mends)
 			}
 		})
+	}
+}
+
+func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		removal removal
+		want    string
+	}{
+		{
+			removal: removal{item: item{Kind: KindBucket, Name: "ocel-acme-prod-production"}, action: provider.ActionDelete},
+			want:    "INFO Removed bucket ocel-acme-prod-production",
+		},
+		{
+			removal: removal{item: item{Kind: KindDatabase, Name: "ocel"}, action: provider.ActionDisableThenDelete},
+			want:    "INFO Removed Firestore database ocel",
+		},
+		{
+			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonDestroy},
+			want:    "INFO Scheduled every version of KMS key production for destruction, which Google carries out after 24 hours",
+		},
+		{
+			removal: removal{item: item{Kind: KindKeyRing, Name: "ocel"}, action: provider.ActionKeep, reason: reasonRingKept},
+			want:    "INFO Kept KMS key ring ocel: " + reasonRingKept,
+		},
+		{
+			removal: removal{item: item{Kind: KindSecret, Name: "ocel-production"}, action: provider.ActionKeep, reason: reasonAbsent},
+			want:    "DEBUG Nothing to remove: secret ocel-production does not exist",
+		},
+	} {
+		progress := &fake.Progress{}
+		tc.removal.report(progress)
+		if got := progress.Lines(); !slices.Equal(got, []string{tc.want}) {
+			t.Errorf("removing %s said %q, want %q", tc.removal.item.ID(), got, tc.want)
+		}
+	}
+}
+
+func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
+	t.Parallel()
+
+	target := item{Kind: KindRepository, Name: "ocel-acme-prod-production"}
+	read := survey{present: map[string]bool{target.ID(): true}}
+	progress := &fake.Progress{}
+
+	if err := (bootstrap{}).provision(context.Background(), read, target, progress); err != nil {
+		t.Fatalf("provision() = %v", err)
+	}
+	want := []string{"DEBUG The Artifact Registry repository ocel-acme-prod-production is already current"}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("provision() said %q, want %q", got, want)
 	}
 }

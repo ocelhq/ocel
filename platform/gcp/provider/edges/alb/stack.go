@@ -73,7 +73,7 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress
 	}
 	for _, hostname := range took {
 		if progress != nil {
-			progress.Detail("Routing " + hostname + " to " + hosts[hostname].Service)
+			progress.Say("Routing " + hostname + " to " + hosts[hostname].App + "'s Cloud Run service " + hosts[hostname].Service)
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
 			return errors.Join(err, s.raise(ctx, s.recorded.Hosts))

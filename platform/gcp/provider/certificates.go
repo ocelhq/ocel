@@ -288,6 +288,21 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	return bound, nil
 }
 
+func discarding(id string, current *certmanager.Certificate) string {
+	if current.Managed == nil || len(current.Managed.Domains) == 0 {
+		return "Discarding certificate " + id
+	}
+	covering := "Discarding the certificate covering " + strings.Join(current.Managed.Domains, ", ")
+	switch authorizations := len(current.Managed.DnsAuthorizations); authorizations {
+	case 0:
+		return covering
+	case 1:
+		return covering + " and its DNS authorization"
+	default:
+		return covering + fmt.Sprintf(" and its %d DNS authorizations", authorizations)
+	}
+}
+
 func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress edge.Progress) error {
 	if !cert.Issued() {
 		return nil
@@ -305,7 +320,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if err != nil {
 		return fmt.Errorf("read the certificate %s: %w", cert.ID, err)
 	}
-	say(progress, "discarding the certificate "+cert.ID)
+	reporting(progress).Say(discarding(cert.ID, current))
 	if err := p.awaitCertificates(ctx, certificates, "discard "+cert.ID,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.Certificates.Delete(cert.ID).Context(ctx).Do(call...)

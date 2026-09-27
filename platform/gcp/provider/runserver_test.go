@@ -52,6 +52,9 @@ func (s *runServer) serve(t *testing.T) http.HandlerFunc {
 			s.create(w, r)
 		case r.Method == http.MethodPatch:
 			s.patch(w, r)
+		case r.Method == http.MethodDelete:
+			s.service = nil
+			writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/delete", Done: true})
 		case r.Method == http.MethodGet && strings.Contains(path, "/operations/"):
 			writeBody(w, &run.GoogleLongrunningOperation{Name: strings.TrimPrefix(path, "/v2/"), Done: true})
 		case r.Method == http.MethodGet:

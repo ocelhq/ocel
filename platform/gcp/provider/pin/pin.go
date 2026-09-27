@@ -51,7 +51,7 @@ func Promote(
 		for _, service := range slices.Sorted(maps.Keys(record.Revisions)) {
 			revision := record.Revisions[service]
 			if progress != nil {
-				progress.Detail("Pinning " + service + " to " + revision)
+				progress.Say("Pinning all of " + record.App + "'s traffic to revision " + revision + " of Cloud Run service " + service)
 			}
 			if err := pins.Pin(ctx, service, revision); err != nil {
 				if undo := l.Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {

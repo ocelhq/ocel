@@ -25,7 +25,8 @@ func (p *Provider) pushImage(ctx context.Context, class edge.Class, app, ref str
 	if err != nil || present {
 		return err
 	}
-	say(progress, "Pushing the "+app+" image to "+ref)
+	progress = reporting(progress)
+	progress.Say("Pushing " + app + "'s image to " + ref)
 	return store.Push(ctx, push, progress)
 }
 

@@ -80,7 +80,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
-		say(progress, "installing the front of the "+string(front.Kind())+" edge for "+string(req.Class)+": "+feature.Summary)
+		reporting(progress).Say("Installing feature " + feature.Name + " for " + string(req.Class) + ": " + feature.Summary)
 		_, err := front.Bootstrap(ctx, req.Class)
 		return err
 	})
@@ -107,7 +107,8 @@ func (b bootstrap) dropFronts(
 		return err
 	}
 	return b.eachFront(dropping, func(feature provider.Feature, front edge.Edge) error {
-		say(progress, "taking the front of the "+string(front.Kind())+" edge down for "+string(req.Class)+": "+feature.Name+" was removed")
+		reporting(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Class) +
+			": this bootstrap no longer requests feature " + feature.Name)
 		return front.Teardown(ctx, req.Class)
 	})
 }

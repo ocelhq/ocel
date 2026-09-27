@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -74,45 +75,32 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 	}
 }
 
-type heard struct {
-	edge.Progress
-	said []string
-}
-
-func (h *heard) Say(message string) { h.said = append(h.said, message) }
-
-func (h *heard) Warn(message string) { h.said = append(h.said, message) }
-
-func (h *heard) Error(message string) { h.said = append(h.said, message) }
-
-func (h *heard) Detail(string) {}
-
-func (h *heard) Debug(string) {}
-
 func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	progress := &heard{}
+	progress := &fake.Progress{}
 
 	if _, err := p.ProvisionContainers(context.Background(), previewSpec(""), progress); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if !slices.ContainsFunc(progress.said, func(said string) bool { return strings.Contains(said, "is a preview and answers anyone") }) {
-		t.Errorf("the release said %q, want it to say the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", progress.said)
+	if !slices.ContainsFunc(progress.Lines(), func(said string) bool {
+		return strings.HasPrefix(said, "WARN ") && strings.Contains(said, "is a preview and answers anyone")
+	}) {
+		t.Errorf("the release said %q, want it to warn the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", progress.Lines())
 	}
 
-	production := &heard{}
+	production := &fake.Progress{}
 	spec := previewSpec("")
 	spec.Ref.Class = edge.ClassProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 	if _, err := p.ProvisionContainers(context.Background(), spec, production); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if slices.ContainsFunc(production.said, func(said string) bool { return strings.Contains(said, "is a preview") }) {
-		t.Errorf("a production release said %q, and production is meant to answer anyone", production.said)
+	if slices.ContainsFunc(production.Lines(), func(said string) bool { return strings.Contains(said, "is a preview") }) {
+		t.Errorf("a production release said %q, and production is meant to answer anyone", production.Lines())
 	}
 
-	shielded := &heard{}
+	shielded := &fake.Progress{}
 	front, err := p.Edges().Open(alb.Kind)
 	if err != nil {
 		t.Fatal(err)
@@ -122,8 +110,8 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	if _, err := p.ProvisionContainers(context.Background(), spec, shielded); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if slices.ContainsFunc(shielded.said, func(said string) bool { return strings.Contains(said, "is a preview") }) {
-		t.Errorf("a preview behind the load balancer said %q, and its service takes traffic from the load balancer alone", shielded.said)
+	if slices.ContainsFunc(shielded.Lines(), func(said string) bool { return strings.Contains(said, "is a preview") }) {
+		t.Errorf("a preview behind the load balancer said %q, and its service takes traffic from the load balancer alone", shielded.Lines())
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -216,6 +217,22 @@ func TestDiscardingACertificateTakesTheAuthorizationItWasProvedThroughWithIt(t *
 	}
 	if got := server.certified(); len(got) != 0 {
 		t.Errorf("the project still has %v after the discard", got)
+	}
+}
+
+func TestDiscardingACertificateSaysWhichHostnameItCovered(t *testing.T) {
+	t.Parallel()
+
+	server := newCertServer()
+	cert, _ := requested(t, server, "shop.example.com")
+	progress := &fake.Progress{}
+
+	if err := server.open(t).Certificates().Discard(context.Background(), cert, progress); err != nil {
+		t.Fatalf("DiscardCertificate(%s) = %v", cert.ID, err)
+	}
+	want := []string{"INFO Discarding the certificate covering shop.example.com and its DNS authorization"}
+	if got := progress.Lines(); !slices.Equal(got, want) {
+		t.Errorf("the discard said %q, want %q", got, want)
 	}
 }
 
