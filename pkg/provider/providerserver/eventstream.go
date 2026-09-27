@@ -135,8 +135,8 @@ func inUnit(
 	phase progressv1.Phase,
 	do func(*eventStream, edge.Progress) error,
 ) error {
-	return newStageScope(sender).unit(UnitStage(unit, title), func(u *unitRun) error {
-		return u.phase(phase, func(progress edge.Progress) error {
+	return newStageScope(sender).unit(UnitStage(unit, title, phase), func(u *unitRun) error {
+		return u.phase(func(progress edge.Progress) error {
 			return do(sender, progress)
 		})
 	})
@@ -178,7 +178,7 @@ func (r *stageProgress) Debug(line string) {
 func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...edge.Attr) {
 	detail := NewStage(r.stage, name)
 	r.trace.Start(start, detail)
-	r.trace.End(detail, detail.Phase, start, end, err, attrs...)
+	r.trace.End(detail, start, end, err, attrs...)
 }
 
 func degradedEvent(app string, need edge.Need, detail string) *progressv1.OperationEvent {

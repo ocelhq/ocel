@@ -23,7 +23,7 @@ func TestDeclaringStagesStartsEachOneTitledUnderItsParent(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	unit := UnitStage(naming.UnitEnvironment, "Environment")
+	unit := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
 	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISION)
 	tracer.Start(time.Now(), unit, phase)
 
@@ -45,8 +45,8 @@ func TestDeclaringStagesStartsEachOneTitledUnderItsParent(t *testing.T) {
 	if len(opened.GetStarted().GetParentSpanId()) != 0 {
 		t.Errorf("unit parent = %x, want none (a unit is a root)", opened.GetStarted().GetParentSpanId())
 	}
-	if got := opened.GetPhase(); got != progressv1.Phase_PHASE_UNSPECIFIED {
-		t.Errorf("unit phase = %v, want PHASE_UNSPECIFIED", got)
+	if got := opened.GetPhase(); got != progressv1.Phase_PHASE_PROVISION {
+		t.Errorf("unit phase = %v, want the provision phase it runs in", got)
 	}
 	if StageID(nested.GetStarted().GetParentSpanId()) != unit.ID {
 		t.Errorf("phase parent = %x, want the unit %x", nested.GetStarted().GetParentSpanId(), unit.ID)
@@ -68,7 +68,7 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	unit := UnitStage(naming.UnitEnvironment, "Environment")
+	unit := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
 	tracer.Start(time.Now(),
 		unit,
 		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILD),
@@ -102,7 +102,7 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	t.Parallel()
 
-	unit := UnitStage(naming.UnitPromotion, "Promotion")
+	unit := UnitStage(naming.UnitPromotion, "Promotion", progressv1.Phase_PHASE_PROMOTE)
 	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROMOTE)
 	first := NewStage(phase, "detail")
 	second := NewStage(phase, "detail")
@@ -122,11 +122,11 @@ func TestAnEndedScopeNamesItsStageEndsAtItsEndAndCarriesItsStartAndAttributes(t 
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	root := UnitStage(naming.UnitEnvironment, "Environment")
+	root := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
 	child := NewStage(root, "web")
 	start := time.Unix(1000, 0)
 	end := time.Unix(1005, 0)
-	tracer.End(child, progressv1.Phase_PHASE_PROVISION, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
+	tracer.End(child, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -167,8 +167,8 @@ func TestAFailedScopeEndsWithAnErrorKindNeverRawText(t *testing.T) {
 	tracer := newEventTrace(sender)
 
 	secret := "postgres://user:hunter2@10.0.0.1:5432/db AKIAABCDEF1234567890"
-	stage := UnitStage(naming.UnitEnvironment, "Environment")
-	tracer.End(stage, progressv1.Phase_PHASE_PROVISION, time.Now(), time.Now(), errors.New(secret))
+	stage := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
+	tracer.End(stage, time.Now(), time.Now(), errors.New(secret))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -193,13 +193,13 @@ func TestAFailedScopeEndsWithAnErrorKindNeverRawText(t *testing.T) {
 func TestStageTitlesAreSanitized(t *testing.T) {
 	t.Parallel()
 
-	if got := UnitStage(naming.UnitEnvironment, "\x1b[2J").Title; got != "[2J" {
+	if got := UnitStage(naming.UnitEnvironment, "\x1b[2J", progressv1.Phase_PHASE_PROVISION).Title; got != "[2J" {
 		t.Errorf("UnitStage() title = %q, want the control characters gone", got)
 	}
-	if got := UnitStage(naming.UnitEnvironment, "   ").Title; got != "stage" {
+	if got := UnitStage(naming.UnitEnvironment, "   ", progressv1.Phase_PHASE_PROVISION).Title; got != "stage" {
 		t.Errorf("UnitStage() title = %q, want a fallback title", got)
 	}
-	if got := UnitStage(naming.UnitEnvironment, strings.Repeat("a", maxStageTitleLen*2)).Title; len(got) > maxStageTitleLen {
+	if got := UnitStage(naming.UnitEnvironment, strings.Repeat("a", maxStageTitleLen*2), progressv1.Phase_PHASE_PROVISION).Title; len(got) > maxStageTitleLen {
 		t.Errorf("UnitStage() title is %d long, want it capped at %d", len(got), maxStageTitleLen)
 	}
 }

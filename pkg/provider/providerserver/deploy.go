@@ -216,7 +216,7 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if err := r.tracked.unit(r.stages.Environment, func(env *unitRun) error {
-		return env.phase(progressv1.Phase_PHASE_PROVISION, func(progress edge.Progress) error {
+		return env.phase(func(progress edge.Progress) error {
 			return r.prepare(ctx, progress)
 		})
 	}); err != nil {
@@ -340,7 +340,7 @@ func (r *deployRun) hostingMode() hostingMode {
 
 func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISION, func(progress edge.Progress) error {
+		return u.phase(func(progress edge.Progress) error {
 			if r.dry {
 				progress.Say(fmt.Sprintf("Reading the %s edge", r.front.Kind()))
 				r.dryRunPlan.edge = r.planEdgeGroup()
@@ -399,7 +399,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 		return nil
 	}
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISION, func(progress edge.Progress) error {
+		return u.phase(func(progress edge.Progress) error {
 			attaching := &hostnames{edgeSession: r.edgeSession}
 			for _, host := range r.configured {
 				serving := r.state.Host(host.Hostname).Serving()
@@ -694,7 +694,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 		return err
 	}
 	return r.tracked.unit(r.stages.Infra, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROVISION, func(progress edge.Progress) error {
+		return u.phase(func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, r.spec.Infra); err != nil {
 				return err
 			}
@@ -741,7 +741,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) error {
 	return r.tracked.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_DEPLOY, func(progress edge.Progress) error {
+		return u.phase(func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
 			}
@@ -1196,7 +1196,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		Flip:        &flip,
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
-		return u.phase(progressv1.Phase_PHASE_PROMOTE, func(progress edge.Progress) error {
+		return u.phase(func(progress edge.Progress) error {
 			progress.Say("Promoting the deployment")
 			if err := r.stack.Promote(ctx, promotion, r.spec.Pointer, progress); err != nil {
 				return err

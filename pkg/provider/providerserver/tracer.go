@@ -37,7 +37,6 @@ type Stage struct {
 	Name     string
 	Title    string
 	Phase    progressv1.Phase
-	Phases   []progressv1.Phase
 	Subject  string
 }
 
@@ -48,14 +47,10 @@ func (s Stage) scoped(ev *progressv1.OperationEvent) *progressv1.OperationEvent 
 	return ev
 }
 
-func (s Stage) phaseStages() []Stage {
-	out := make([]Stage, 0, len(s.Phases))
-	for _, phase := range s.Phases {
-		stage := PhaseStage(s.Name, phase)
-		stage.Subject = s.Subject
-		out = append(out, stage)
-	}
-	return out
+func (s Stage) phaseStage() Stage {
+	stage := PhaseStage(s.Name, s.Phase)
+	stage.Subject = s.Subject
+	return stage
 }
 
 var phaseNames = map[progressv1.Phase]string{
@@ -111,8 +106,8 @@ const (
 	connectorUnitTitle   = "Connector"
 )
 
-func UnitStage(name, title string, phases ...progressv1.Phase) Stage {
-	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title), Phases: phases}
+func UnitStage(name, title string, phase progressv1.Phase) Stage {
+	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title), Phase: phase}
 }
 
 func PhaseStage(unitName string, phase progressv1.Phase) Stage {
@@ -158,7 +153,11 @@ func (s *stageScope) declare(stages ...Stage) {
 	s.mu.Lock()
 	var fresh []Stage
 	for _, stage := range stages {
-		for _, declaring := range append([]Stage{stage}, stage.phaseStages()...) {
+		declaring := []Stage{stage}
+		if stage.ParentID == (StageID{}) {
+			declaring = append(declaring, stage.phaseStage())
+		}
+		for _, declaring := range declaring {
 			if s.declared[declaring.ID] {
 				continue
 			}
@@ -175,24 +174,21 @@ func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 	start := time.Now()
 	run := &unitRun{scope: s, stage: stage}
 	err := do(run)
-	s.trace.End(stage, run.last, start, time.Now(), err)
+	s.trace.End(stage, start, time.Now(), err)
 	return err
 }
 
 type unitRun struct {
 	scope *stageScope
 	stage Stage
-	last  progressv1.Phase
 }
 
-func (u *unitRun) phase(phase progressv1.Phase, do func(edge.Progress) error) error {
-	working := PhaseStage(u.stage.Name, phase)
-	working.Subject = u.stage.Subject
+func (u *unitRun) phase(do func(edge.Progress) error) error {
+	working := u.stage.phaseStage()
 	u.scope.declare(working)
-	u.last = phase
 	start := time.Now()
 	err := do(newProgress(u.scope.sender, working))
-	u.scope.trace.End(working, phase, start, time.Now(), err)
+	u.scope.trace.End(working, start, time.Now(), err)
 	return err
 }
 
@@ -216,7 +212,7 @@ func (t *eventTrace) Start(at time.Time, stages ...Stage) {
 	}
 }
 
-func (t *eventTrace) End(stage Stage, phase progressv1.Phase, start, end time.Time, err error, attrs ...edge.Attr) {
+func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...edge.Attr) {
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
@@ -230,7 +226,7 @@ func (t *eventTrace) End(stage Stage, phase progressv1.Phase, start, end time.Ti
 
 	t.sender.send(&progressv1.OperationEvent{
 		TimeUnixNano: end.UnixNano(),
-		Phase:        phase,
+		Phase:        stage.Phase,
 		Subject:      stage.Subject,
 		SpanId:       stage.ID[:],
 		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{

@@ -145,6 +145,29 @@ func TestDeployStartsEveryUnitAndItsPhasesBeforeAnyScopeEnds(t *testing.T) {
 	}
 }
 
+func TestEveryScopeADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	started := map[string]*progressv1.OperationEvent{}
+	for _, event := range events {
+		if event.GetStarted() != nil {
+			started[string(event.GetSpanId())] = event
+		}
+		opened, ok := started[string(event.GetSpanId())]
+		if event.GetEnded() == nil || !ok {
+			continue
+		}
+		if opened.GetPhase() != event.GetPhase() {
+			t.Errorf("scope %q starts in %v and ends in %v, want one phase for the whole scope", opened.GetMessage(), opened.GetPhase(), event.GetPhase())
+		}
+	}
+}
+
 func phasesUnder(events []*progressv1.OperationEvent, unit string) []progressv1.Phase {
 	units := map[string]string{}
 	var phases []progressv1.Phase
@@ -198,12 +221,6 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 			continue
 		}
 		scoped++
-		if event.GetStarted() != nil && len(event.GetStarted().GetParentSpanId()) == 0 {
-			if event.GetSubject() != "web" {
-				t.Errorf("the web unit starts naming %q, want \"web\"", event.GetSubject())
-			}
-			continue
-		}
 		if event.GetSubject() != "web" || event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
 			t.Errorf("an event of the web unit is scoped %q in %v, want \"web\" in the deploy phase", event.GetSubject(), event.GetPhase())
 		}
