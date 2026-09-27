@@ -53,10 +53,16 @@ func (r *Run) End(errp *error) {
 			r.bus.detach(r.trace)
 			_ = r.trace.Close()
 		}
+		r.bus.finish(r)
 		if code != 0 {
 			*errp = &exitsig.ExitError{Code: code}
 		}
 	})
+}
+
+func (r *Run) interrupt() {
+	err := context.Canceled
+	r.End(&err)
 }
 
 func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {

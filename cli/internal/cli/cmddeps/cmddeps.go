@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -40,6 +41,7 @@ type Deps struct {
 	StdinIsTerminal     func(r io.Reader) bool
 	ConfigPath          func() string
 	Presentation        func(w io.Writer) runui.Presentation
+	Events              *events.Bus
 	Interrupt           func(ctx context.Context, stderr io.Writer) (context.Context, context.CancelFunc)
 }
 
@@ -47,6 +49,10 @@ const NoBrowserEnvVar = "OCEL_NO_BROWSER"
 
 func (d Deps) BrowserReachable(stdin io.Reader) bool {
 	return os.Getenv(NoBrowserEnvVar) == "" && d.StdinIsTerminal(stdin)
+}
+
+func (d Deps) AttachTerminalSink(w io.Writer) {
+	d.Events.Attach(runui.NewTerminalSink(d.Presentation(w), w))
 }
 
 const YesUsage = "Consent in advance to any confirmation this command would ask for"

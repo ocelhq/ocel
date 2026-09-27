@@ -24,6 +24,7 @@ type Bus struct {
 
 	mu    sync.Mutex
 	sinks []Sink
+	runs  []*Run
 }
 
 func NewBus(now func() time.Time) *Bus {
@@ -46,7 +47,26 @@ func (b *Bus) Begin(ctx context.Context, command, projectDir string) (context.Co
 		b.Attach(r.trace)
 	}
 	r.ctx = ctx
+	b.mu.Lock()
+	b.runs = append(b.runs, r)
+	b.mu.Unlock()
 	return ctx, r, nil
+}
+
+func (b *Bus) Interrupt() {
+	b.mu.Lock()
+	runs := slices.Clone(b.runs)
+	b.mu.Unlock()
+	for _, r := range runs {
+		r.interrupt()
+	}
+	_ = b.Close()
+}
+
+func (b *Bus) finish(r *Run) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.runs = slices.DeleteFunc(b.runs, func(open *Run) bool { return open == r })
 }
 
 func (b *Bus) detach(s Sink) {

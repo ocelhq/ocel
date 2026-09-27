@@ -53,3 +53,33 @@ func TestAPromptsHoldDrawsNothingOfItsOwnAroundTheQuestion(t *testing.T) {
 		t.Errorf("out = %q, want a prompt's hold and resume silent: the question it holds the terminal for is the only thing drawn", out.String())
 	}
 }
+
+func TestAHumanSinkOwnsTheTerminalOnlyOnceARunDrawsOnIt(t *testing.T) {
+	owners := liveOwners.Load()
+	live := Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight}
+
+	var idle safeBuffer
+	unused := NewHumanSink(&idle, live)
+	if liveOwners.Load() != owners {
+		t.Errorf("owners = %d with an idle human sink, want %d: the terminal stays free for a command that never begins a run", liveOwners.Load(), owners)
+	}
+	if err := unused.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if idle.String() != "" {
+		t.Errorf("an idle human sink wrote %q, want nothing from a sink no run drew on", idle.String())
+	}
+
+	var out safeBuffer
+	used := NewHumanSink(&out, live)
+	used.Receive(startedEvent(appStage(1), nil, progressv1.Phase_PHASE_UNSPECIFIED, "app-a"))
+	if liveOwners.Load() != owners+1 {
+		t.Errorf("owners = %d after a run drew on the sink, want %d", liveOwners.Load(), owners+1)
+	}
+	if err := used.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if liveOwners.Load() != owners {
+		t.Errorf("owners = %d after the sink closed, want %d", liveOwners.Load(), owners)
+	}
+}

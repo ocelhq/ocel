@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
@@ -28,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -56,6 +58,8 @@ func verboseEnabled() bool {
 
 var logFormatFlag string
 
+var bus = events.NewBus(time.Now)
+
 var rootCmd = &cobra.Command{
 	Use:           "ocel <command>",
 	Short:         "Ocel CLI",
@@ -66,12 +70,14 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() error {
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+	return errors.Join(err, bus.Close())
 }
 
 func init() {
 	runui.Version = version.Version
 	s := newDeps()
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) { s.AttachTerminalSink(cmd.OutOrStdout()) }
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
@@ -127,6 +133,7 @@ func newDeps() cmddeps.Deps {
 		StdinIsTerminal:     prompt.Interactive,
 		ConfigPath:          explicitConfigPath,
 		Presentation:        presentation,
+		Events:              bus,
 		Interrupt:           installInterruptHandler,
 	}
 }

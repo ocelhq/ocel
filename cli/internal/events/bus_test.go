@@ -208,3 +208,39 @@ func TestNoSinkReceivesASecretABindingInTheOutcomeCarries(t *testing.T) {
 		t.Error("the provider's outcome lost its secrets: the deploy still reads them after the sinks")
 	}
 }
+
+func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *testing.T) {
+	first, second := &recording{}, &recording{}
+	bus := events.NewBus(newClock().read)
+	bus.Attach(first)
+	bus.Attach(second)
+	ctx, cancel := context.WithCancel(context.Background())
+	_, run, err := bus.Begin(ctx, "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	cancel()
+
+	bus.Interrupt()
+	run.End(&err)
+
+	for name, sink := range map[string]*recording{"first": first, "second": second} {
+		received := sink.received()
+		var results []*streamv1.RunResultEvent
+		for _, ev := range received {
+			if ev.GetResult() != nil {
+				results = append(results, ev.GetResult())
+			}
+		}
+		if len(results) != 1 || !results[0].GetInterrupted() || results[0].GetHeadline() != "Cancelled" {
+			t.Fatalf("%s sink got %d results (first interrupted: %t), want one interrupted result", name, len(results), len(results) > 0 && results[0].GetInterrupted())
+		}
+		if received[len(received)-1].GetResult() == nil {
+			t.Fatalf("%s sink's last event is a %T, want the result after every scope ended", name, received[len(received)-1].GetBody())
+		}
+		if !sink.closed {
+			t.Fatalf("%s sink was not closed, want the interrupt to flush it", name)
+		}
+	}
+}

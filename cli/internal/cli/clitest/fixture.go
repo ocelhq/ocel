@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -51,6 +52,7 @@ func NewDeps() cmddeps.Deps {
 		StdinIsTerminal:     func(io.Reader) bool { return false },
 		ConfigPath:          func() string { return os.Getenv("OCEL_CONFIG") },
 		Presentation:        func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
+		Events:              events.NewBus(time.Now),
 		Interrupt: func(ctx context.Context, _ io.Writer) (context.Context, context.CancelFunc) {
 			return context.WithCancel(ctx)
 		},

@@ -11,14 +11,15 @@ import (
 type HumanSink struct {
 	w io.Writer
 
-	mu   sync.Mutex
-	proj *projector
-	r    *Renderer
+	mu       sync.Mutex
+	proj     *projector
+	r        *Renderer
+	received bool
 }
 
 func NewHumanSink(w io.Writer, present Presentation) *HumanSink {
 	s := newHumanSink(w, present)
-	s.r.startTicking()
+	s.r.ticks = true
 	return s
 }
 
@@ -30,6 +31,7 @@ func (s *HumanSink) Receive(ev *streamv1.RunEvent) {
 	ev = normalize(ev)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.received = true
 	lines := s.proj.project(ev)
 	if ev.GetWaiting() != nil {
 		s.r.Pause()
@@ -43,7 +45,11 @@ func (s *HumanSink) Receive(ev *streamv1.RunEvent) {
 
 func (s *HumanSink) Close() error {
 	err := s.r.Close()
-	fmt.Fprintln(s.w)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.received {
+		fmt.Fprintln(s.w)
+	}
 	return err
 }
 

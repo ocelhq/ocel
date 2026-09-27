@@ -41,6 +41,9 @@ type Renderer struct {
 	spinMsg   string
 	spinFrame int
 
+	ticks     bool
+	claimOnce sync.Once
+	claimed   bool
 	tickStop  chan struct{}
 	tickDone  chan struct{}
 	closeOnce sync.Once
@@ -50,31 +53,27 @@ var liveOwners atomic.Int64
 
 func TerminalIsOwned() bool { return liveOwners.Load() > 0 }
 
-func NewRenderer(w io.Writer, present Presentation) *Renderer {
-	r := newRenderer(w, present)
-	r.startTicking()
-	return r
-}
-
 func newRenderer(w io.Writer, present Presentation) *Renderer {
-	r := &Renderer{
+	return &Renderer{
 		w:       w,
 		present: present,
 		plan:    newStagePlan(),
 	}
-	if r.present.Live() {
-		liveOwners.Add(1)
-	}
-	return r
 }
 
-func (r *Renderer) startTicking() {
-	if !r.present.Live() {
-		return
-	}
-	r.tickStop = make(chan struct{})
-	r.tickDone = make(chan struct{})
-	go r.tickLoop()
+func (r *Renderer) claim() {
+	r.claimOnce.Do(func() {
+		if !r.present.Live() {
+			return
+		}
+		r.claimed = true
+		liveOwners.Add(1)
+		if r.ticks {
+			r.tickStop = make(chan struct{})
+			r.tickDone = make(chan struct{})
+			go r.tickLoop()
+		}
+	})
 }
 
 func (r *Renderer) Live() bool { return r.present.Live() }
@@ -132,6 +131,7 @@ func (r *Renderer) paint(line string) string {
 }
 
 func (r *Renderer) Ingest(ev *streamv1.RunEvent) {
+	r.claim()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.ingestLocked(ev) {
@@ -225,6 +225,7 @@ func (r *Renderer) tick() {
 
 func (r *Renderer) Close() error {
 	r.closeOnce.Do(func() {
+		r.claimOnce.Do(func() {})
 		if r.tickStop != nil {
 			close(r.tickStop)
 			<-r.tickDone
@@ -232,7 +233,7 @@ func (r *Renderer) Close() error {
 		r.mu.Lock()
 		r.eraseLiveLocked()
 		r.mu.Unlock()
-		if r.present.Live() {
+		if r.claimed {
 			liveOwners.Add(-1)
 		}
 	})
@@ -272,6 +273,7 @@ func (r *Renderer) Resume() {
 }
 
 func (r *Renderer) Spin(msg string) func() {
+	r.claim()
 	r.mu.Lock()
 	if !r.present.Live() || r.waiting {
 		r.mu.Unlock()

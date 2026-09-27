@@ -20,11 +20,16 @@ const devStackStopsWithin = docker.StopsWithin
 const devShutdownWindow = appChildWaitDelay + devStackStopsWithin + shutdownSlack
 
 func installDevInterruptHandler(parent context.Context, stderr io.Writer) (context.Context, context.CancelFunc) {
-	return exitsig.Install(parent, stderr, devShutdownWindow, runui.Interrupt, forceKillEverything)
+	return exitsig.Install(parent, stderr, devShutdownWindow, interruptRuns, forceKillEverything)
 }
 
 func installInterruptHandler(parent context.Context, stderr io.Writer) (context.Context, context.CancelFunc) {
-	return exitsig.Install(parent, stderr, gracefulShutdownWindow, runui.Interrupt, forceKillEverything)
+	return exitsig.Install(parent, stderr, gracefulShutdownWindow, interruptRuns, forceKillEverything)
+}
+
+func interruptRuns() {
+	runui.Interrupt()
+	bus.Interrupt()
 }
 
 func forceKillEverything() {
