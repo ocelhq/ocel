@@ -145,9 +145,10 @@ func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *t
 	t.Parallel()
 
 	var out safeBuffer
-	s := NewJSONSink(&out)
-	s.Receive(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
-	if err := s.Close(); err != nil {
+	bus := events.NewBus(time.Now)
+	bus.Attach(NewJSONSink(&out))
+	bus.Send(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
+	if err := bus.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 

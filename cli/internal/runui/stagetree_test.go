@@ -1,9 +1,6 @@
 package runui
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func declareAll(p *stagePlan, scopes ...scope) {
 	for _, sc := range scopes {
@@ -48,39 +45,6 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 		if len(p.activeOrder) != 3 {
 			t.Fatalf("activeOrder = %v, want ending %q to take no re-rooted sibling down with it", p.activeOrder, p.nodes[key].title)
 		}
-	}
-}
-
-func TestRestartRevivesACommittedStage(t *testing.T) {
-	t.Parallel()
-
-	now := time.Unix(0, 0)
-	p := newStagePlan()
-	p.useClock(func() time.Time { return now })
-
-	key := stageKey(buildStageID)
-	p.progress(key, "Building project", 0, nil)
-	p.ensureActive(key)
-
-	n := p.nodes[key]
-	n.state = stageDone
-	n.doneDur = 90 * time.Second
-	p.removeActive(key)
-
-	now = now.Add(2 * time.Minute)
-	p.restart(key)
-
-	if n.state != stageActive {
-		t.Errorf("state = %v, want the restarted build stage active again", n.state)
-	}
-	if !p.isActive(key) {
-		t.Error("isActive() = false, want the restarted build stage back in the live region")
-	}
-	if !n.started.Equal(now) {
-		t.Errorf("started = %v, want the clock at restart %v", n.started, now)
-	}
-	if n.doneDur != 0 {
-		t.Errorf("doneDur = %v, want the discarded attempt's duration cleared", n.doneDur)
 	}
 }
 

@@ -143,29 +143,6 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 	}
 }
 
-func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
-	t.Parallel()
-	s, out := drivenLiveStreamOfHeight(t, 40)
-
-	unit, phase := appStage(1), appStage(2)
-	startAll(s,
-		scope{id: unit, title: "web"},
-		scope{id: phase, parent: unit, title: "Building"},
-	)
-	s.Receive(progressEvent(phase, "compiling", 6, u32(9)))
-
-	spinner := s.Spin("Checking credentials")
-	rows := liveRegion(t, s, out)
-	if len(rows) != 2 || !strings.Contains(rows[1], "Checking credentials") {
-		t.Fatalf("live region = %q, want the spinner drawn as the frame's own last row", rows)
-	}
-
-	spinner.Stop()
-	if rows := liveRegion(t, s, out); len(rows) != 1 {
-		t.Errorf("live region = %q, want the spinner row gone once it stops", rows)
-	}
-}
-
 func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 	t.Parallel()
 	s, out := drivenLiveStreamOfHeight(t, 40)
@@ -189,35 +166,6 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 	}
 	if rows := liveRegion(t, s, out); len(rows) != 1 {
 		t.Errorf("live region = %q, want the frame untouched by a spinner raised behind its back", rows)
-	}
-}
-
-func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
-	t.Parallel()
-	s, out := drivenLiveStream(t)
-	r := s.r
-
-	unit, phase := appStage(1), appStage(2)
-	startAll(s,
-		scope{id: unit, title: "app-a"},
-		scope{id: phase, parent: unit, title: "Uploading"},
-	)
-	s.Receive(progressEvent(phase, "uploading assets", 1, u32(10)))
-
-	resume := r.Suspend()
-	if r.liveLines != 0 {
-		t.Errorf("liveLines = %d, want the live region erased before anything else takes the terminal", r.liveLines)
-	}
-
-	out.Reset()
-	s.Receive(progressEvent(phase, "uploading assets", 2, u32(10)))
-	if out.Len() != 0 {
-		t.Errorf("wrote %q while suspended, want the terminal left to the prompt", out.String())
-	}
-
-	resume()
-	if !strings.Contains(out.String(), "app-a") {
-		t.Errorf("after resuming, out = %q, want the live region drawn again", out.String())
 	}
 }
 

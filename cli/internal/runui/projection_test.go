@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -20,12 +21,12 @@ func TestTheProviderResultIsNotProjectedAtTheHuman(t *testing.T) {
 	t.Parallel()
 
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	got := p.project(lift(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+	got := p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Outcome{Outcome: &progressv1.ResultEvent{
 		Success:     true,
 		PromotionId: "prm_1",
 		Apps:        []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.com"}}},
 		Functions:   []*progressv1.FunctionOutput{{LogicalName: "server", Url: "https://fn.example.com"}},
-	}}}))
+	}}})
 
 	if len(got) != 0 {
 		t.Errorf("the provider's result was projected as %q, want the run's own result to be the only one a human is shown", got)
@@ -380,9 +381,9 @@ func projectStarted(p *projector, scopes ...scope) []string {
 }
 
 func startedEvent(id, parent []byte, phase progressv1.Phase, title string) *streamv1.RunEvent {
-	return lift(&progressv1.OperationEvent{Phase: phase, SpanId: id, Message: title, Body: &progressv1.OperationEvent_Started{
+	return &streamv1.RunEvent{Phase: phase, SpanId: id, Message: title, Body: &streamv1.RunEvent_Started{
 		Started: &progressv1.Started{ParentSpanId: parent},
-	}})
+	}}
 }
 
 func endedEvent(id []byte, failed bool, d time.Duration) *streamv1.RunEvent {
@@ -390,9 +391,9 @@ func endedEvent(id []byte, failed bool, d time.Duration) *streamv1.RunEvent {
 	if failed {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
 	}
-	return lift(&progressv1.OperationEvent{TimeUnixNano: int64(d) + 1, SpanId: id, Body: &progressv1.OperationEvent_Ended{
+	return &streamv1.RunEvent{Time: timestamppb.New(time.Unix(0, int64(d)+1)), SpanId: id, Body: &streamv1.RunEvent_Ended{
 		Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: 1},
-	}})
+	}}
 }
 
 func TestAStartedAndEndedPhaseCommitsItsStartLineThenItsClosedBlock(t *testing.T) {
@@ -414,9 +415,9 @@ func TestAStartedAndEndedPhaseCommitsItsStartLineThenItsClosedBlock(t *testing.T
 }
 
 func outputEvent(id []byte, line string) *streamv1.RunEvent {
-	return lift(&progressv1.OperationEvent{SpanId: id, Message: line, Body: &progressv1.OperationEvent_Output{
+	return &streamv1.RunEvent{SpanId: id, Message: line, Body: &streamv1.RunEvent_Output{
 		Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
-	}})
+	}}
 }
 
 func TestOutputLinesAreThatBlocksRawLines(t *testing.T) {
@@ -469,9 +470,9 @@ func TestAScopedMessageIsAProgressLineOfItsBlock(t *testing.T) {
 }
 
 func counterEvent(id []byte, message string, current uint32, total *uint32) *streamv1.RunEvent {
-	return lift(&progressv1.OperationEvent{SpanId: id, Message: message, Body: &progressv1.OperationEvent_Counter{
+	return &streamv1.RunEvent{SpanId: id, Message: message, Body: &streamv1.RunEvent_Counter{
 		Counter: &progressv1.Counter{Current: current, Total: total},
-	}})
+	}}
 }
 
 func TestACounterRendersAsCurrentOfTotal(t *testing.T) {

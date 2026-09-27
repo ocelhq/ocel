@@ -28,7 +28,6 @@ func newHumanSink(w io.Writer, present Presentation) *HumanSink {
 }
 
 func (s *HumanSink) Receive(ev *streamv1.RunEvent) {
-	ev = normalize(ev)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.received = true
@@ -52,11 +51,3 @@ func (s *HumanSink) Close() error {
 	}
 	return err
 }
-
-func (s *HumanSink) Suspend() func() { return s.r.Suspend() }
-
-func (s *HumanSink) Spin(message string) *Spinner {
-	return &Spinner{stopFn: s.r.Spin(message), suspendFn: s.r.Suspend}
-}
-
-func (s *HumanSink) Restart(stageID []byte) { s.r.Restart(stageID) }

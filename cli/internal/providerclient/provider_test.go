@@ -157,7 +157,7 @@ func TestAnUnknownHostKeyOnAStreamIsAskedOnceUnderAHoldRecordedAndThatCallRetrie
 	t.Parallel()
 
 	ctx, scope, seen := deployScope(t)
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: true}
 	var out bytes.Buffer
 	p := startFake(t, ctx, "unknown-host-key", scope, trustAsking(asker, &out), fake.env()...)
@@ -191,7 +191,7 @@ func TestAnUnknownHostKeyOnAUnaryCallIsAskedOnceRecordedAndThatCallRetried(t *te
 	t.Parallel()
 
 	ctx, scope, _ := deployScope(t)
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: true}
 	p := startFake(t, ctx, "unknown-host-key", scope, trustAsking(asker, io.Discard), fake.env()...)
 
@@ -217,7 +217,7 @@ func TestAHostKeyRefusedAtThePromptLeavesTheCallsErrorStandingAndRetriesNothing(
 	t.Parallel()
 
 	ctx, scope, seen := deployScope(t)
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: false}
 	p := startFake(t, ctx, "unknown-host-key", scope, trustAsking(asker, io.Discard), fake.env()...)
 

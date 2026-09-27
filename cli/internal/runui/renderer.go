@@ -37,9 +37,6 @@ type Renderer struct {
 	plan      *stagePlan
 	liveLines int
 	waiting   bool
-	spinning  bool
-	spinMsg   string
-	spinFrame int
 
 	ticks     bool
 	claimOnce sync.Once
@@ -185,12 +182,6 @@ func (r *Renderer) endLocked(id string, status progressv1.SpanStatus, d time.Dur
 	r.plan.foldSubtree(id)
 }
 
-func (r *Renderer) Restart(stageID []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.plan.restart(stageKey(stageID))
-}
-
 func (r *Renderer) tickLoop() {
 	defer close(r.tickDone)
 	t := time.NewTicker(frameRate)
@@ -208,16 +199,13 @@ func (r *Renderer) tickLoop() {
 func (r *Renderer) tick() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.waiting || (!r.plan.animating() && !r.spinning) {
+	if r.waiting || !r.plan.animating() {
 		return
 	}
 	for _, id := range r.plan.activeOrder {
 		if n := r.plan.nodes[id]; n != nil {
 			n.frame++
 		}
-	}
-	if r.spinning {
-		r.spinFrame++
 	}
 	r.eraseLiveLocked()
 	r.drawLiveLocked()
@@ -240,24 +228,6 @@ func (r *Renderer) Close() error {
 	return nil
 }
 
-func (r *Renderer) Suspend() func() {
-	r.mu.Lock()
-	if !r.present.Live() || r.waiting {
-		r.mu.Unlock()
-		return func() {}
-	}
-	r.eraseLiveLocked()
-	r.waiting = true
-	r.mu.Unlock()
-
-	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.waiting = false
-		r.drawLiveLocked()
-	}
-}
-
 func (r *Renderer) Pause() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -270,33 +240,6 @@ func (r *Renderer) Resume() {
 	defer r.mu.Unlock()
 	r.waiting = false
 	r.drawLiveLocked()
-}
-
-func (r *Renderer) Spin(msg string) func() {
-	r.claim()
-	r.mu.Lock()
-	if !r.present.Live() || r.waiting {
-		r.mu.Unlock()
-		return func() {}
-	}
-	r.eraseLiveLocked()
-	r.spinning = true
-	r.spinMsg = msg
-	r.spinFrame = 0
-	r.drawLiveLocked()
-	r.mu.Unlock()
-
-	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if !r.spinning {
-			return
-		}
-		r.eraseLiveLocked()
-		r.spinning = false
-		r.spinMsg = ""
-		r.drawLiveLocked()
-	}
 }
 
 func (r *Renderer) eraseLiveLocked() {
@@ -331,26 +274,15 @@ func (r *Renderer) drawLiveLocked() {
 	if frame.more > 0 {
 		emit(r.colorFor(color.Faint).Sprint(blockIndent + overflowLine(frame)))
 	}
-	if r.spinning {
-		emit(r.spinRowLocked())
-	}
 	r.liveLines = lines
 }
 
 func (r *Renderer) windowHeightLocked() int {
 	budget := r.height() - scrollGuard
-	if r.spinning {
-		budget--
-	}
 	if budget < 1 {
 		return 1
 	}
 	return budget
-}
-
-func (r *Renderer) spinRowLocked() string {
-	glyph := r.colorFor(color.FgCyan).Sprint(spinnerFrame(r.spinFrame))
-	return fmt.Sprintf("%s %s", glyph, r.spinMsg)
 }
 
 func namesPhase(u liveUnit) bool {

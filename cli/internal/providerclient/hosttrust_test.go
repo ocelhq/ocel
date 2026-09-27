@@ -8,14 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -40,28 +38,37 @@ func trustAsking(asker Confirmer, out io.Writer) Trust {
 }
 
 type hostTrustFake struct {
+	mode       string
 	knownHosts string
 	drives     string
-	drive      func() error
 }
 
-func fakeHostTrustDrive(t *testing.T, ctx context.Context, mode string) hostTrustFake {
+func newHostTrustFake(t *testing.T, mode string) hostTrustFake {
 	t.Helper()
 
 	dir := t.TempDir()
-	fake := hostTrustFake{
+	return hostTrustFake{
+		mode:       mode,
 		knownHosts: filepath.Join(dir, "home", ".ssh", "known_hosts"),
 		drives:     filepath.Join(dir, "drives"),
 	}
-	fake.drive = func() error {
-		runner, _ := spawnFake(t, ctx, mode, Config{Env: fake.env()})
-		defer runner.Close()
-		if err := runner.Ready(ctx); err != nil {
-			return err
-		}
-		return streamed(ctx, runner, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
-	}
-	return fake
+}
+
+func (f hostTrustFake) call(t *testing.T, trust Trust) error {
+	t.Helper()
+
+	ctx, scope, _ := deployScope(t)
+	p := startFake(t, ctx, f.mode, scope, trust, f.env()...)
+	_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
+	return err
+}
+
+func callRefusing(t *testing.T, trust Trust, call func() error) error {
+	t.Helper()
+
+	ctx, scope, _ := deployScope(t)
+	p := startFake(t, ctx, "success", scope, trust)
+	return p.callTrusting(ctx, func(*Runner) error { return call() })
 }
 
 func (f hostTrustFake) env() []string {
@@ -106,37 +113,10 @@ func wantedLine() string {
 	return fmt.Sprintf("[%s]:%d %s %s\n", fakeHostAddress, fakeHostPort, fakeHostKeyType, fakeHostKey)
 }
 
-func TestUnknownHostKeyOnATTYRecordsTheKeyAndRedrivesOnce(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, answer: true}
-	var out bytes.Buffer
-
-	if err := driveTrusting(ctx, trustAsking(asker, &out), fake.drive); err != nil {
-		t.Fatalf("driveTrusting() error = %v, want the re-driven command to succeed", err)
-	}
-
-	if len(asker.asked) != 1 {
-		t.Errorf("asked %d times (%v), want exactly one prompt", len(asker.asked), asker.asked)
-	}
-	if got := fake.drivenTimes(t); got != 2 {
-		t.Errorf("provider driven %d times, want 2", got)
-	}
-	if got := fake.recorded(t); got != wantedLine() {
-		t.Errorf("known_hosts = %q, want %q", got, wantedLine())
-	}
-	if !strings.Contains(out.String(), fakeKey(fakeHostKey).Fingerprint) {
-		t.Errorf("output = %q, want it to show the fingerprint before asking", out.String())
-	}
-}
-
 func TestUnknownHostKeyKeepsTheRestOfKnownHostsIntact(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	if err := os.MkdirAll(filepath.Dir(fake.knownHosts), 0o700); err != nil {
 		t.Fatalf("prepare the known_hosts directory: %v", err)
 	}
@@ -146,8 +126,8 @@ func TestUnknownHostKeyKeepsTheRestOfKnownHostsIntact(t *testing.T) {
 	}
 
 	trust := trustAsking(&scriptedAsker{attended: true, answer: true}, io.Discard)
-	if err := driveTrusting(ctx, trust, fake.drive); err != nil {
-		t.Fatalf("driveTrusting() error = %v", err)
+	if err := fake.call(t, trust); err != nil {
+		t.Fatalf("call error = %v", err)
 	}
 
 	want := existing + "\n" + wantedLine()
@@ -156,38 +136,15 @@ func TestUnknownHostKeyKeepsTheRestOfKnownHostsIntact(t *testing.T) {
 	}
 }
 
-func TestUnknownHostKeyRefusedAtThePromptRecordsNothing(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	asker := &scriptedAsker{attended: true, answer: false}
-
-	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
-	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want the refusal returned")
-	}
-	if trust, ok := provider.HostTrustOf(err); !ok || trust.Reason != provider.UnknownHostKey {
-		t.Errorf("err = %v, want it to still include the unknown-host-key refusal", err)
-	}
-	if got := fake.recorded(t); got != "" {
-		t.Errorf("known_hosts = %q, want nothing recorded", got)
-	}
-	if got := fake.drivenTimes(t); got != 1 {
-		t.Errorf("provider driven %d times, want 1", got)
-	}
-}
-
 func TestUnknownHostKeyWithoutATTYNeverAsksAndIncludesTheRemedy(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: false, answer: true}
 
-	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
+	err := fake.call(t, trustAsking(asker, io.Discard))
 	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want a refusal with no TTY to decide on")
+		t.Fatal("call error = nil, want a refusal with no TTY to decide on")
 	}
 	if len(asker.asked) != 0 {
 		t.Errorf("asked %v, want no prompt without a TTY", asker.asked)
@@ -202,21 +159,20 @@ func TestUnknownHostKeyWithoutATTYNeverAsksAndIncludesTheRemedy(t *testing.T) {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
 	}
 	if got := fake.drivenTimes(t); got != 1 {
-		t.Errorf("provider driven %d times, want 1", got)
+		t.Errorf("the call ran %d times, want 1", got)
 	}
 }
 
 func TestATrustBuiltOverAPipeNeverPromptsIntoABuffer(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	var log bytes.Buffer
 	trust := Trust{Ask: prompt.New(&log, strings.NewReader("y\n")), Out: &log}
 
-	err := driveTrusting(ctx, trust, fake.drive)
+	err := fake.call(t, trust)
 	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want a refusal when neither end is a terminal")
+		t.Fatal("call error = nil, want a refusal when neither end is a terminal")
 	}
 	if log.Len() != 0 {
 		t.Errorf("wrote %q, want nothing offered into a stream that is not a terminal", log.String())
@@ -225,15 +181,14 @@ func TestATrustBuiltOverAPipeNeverPromptsIntoABuffer(t *testing.T) {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
 	}
 	if got := fake.drivenTimes(t); got != 1 {
-		t.Errorf("provider driven %d times, want 1", got)
+		t.Errorf("the call ran %d times, want 1", got)
 	}
 }
 
 func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 
 	ptmx, tty, err := pty.Open()
 	if err != nil {
@@ -251,8 +206,8 @@ func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
 	var log bytes.Buffer
 	trust := Trust{Ask: prompt.New(&log, tty), Out: &log}
 
-	if err := driveTrusting(ctx, trust, fake.drive); err == nil {
-		t.Fatal("driveTrusting() error = nil, want a refusal when the question would go to a redirected stream")
+	if err := fake.call(t, trust); err == nil {
+		t.Fatal("call error = nil, want a refusal when the question would go to a redirected stream")
 	}
 	if log.Len() != 0 {
 		t.Errorf("wrote %q, want no key offered where the human reading the terminal cannot see it", log.String())
@@ -261,52 +216,30 @@ func TestATrustWhoseQuestionLandsWhereNobodyCanReadItNeverAsks(t *testing.T) {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
 	}
 	if got := fake.drivenTimes(t); got != 1 {
-		t.Errorf("provider driven %d times, want 1", got)
+		t.Errorf("the call ran %d times, want 1", got)
 	}
 }
 
 func TestATrustWithNoConfirmerNeverAsks(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 
-	if err := driveTrusting(ctx, Trust{}, fake.drive); err == nil {
-		t.Fatal("driveTrusting() error = nil, want the refusal returned with nobody to ask")
+	if err := fake.call(t, Trust{}); err == nil {
+		t.Fatal("call error = nil, want the refusal returned with nobody to ask")
 	}
 	if got := fake.recorded(t); got != "" {
 		t.Errorf("known_hosts = %q, want nothing recorded", got)
 	}
 }
 
-func TestTheRunIsHeldForTheLengthOfThePrompt(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	var held []string
-	trust := trustAsking(&scriptedAsker{attended: true, answer: false}, io.Discard)
-	trust.Hold = func(*streamv1.WaitingEvent) func(string) {
-		held = append(held, "waiting")
-		return func(reason string) { held = append(held, "resumed "+reason) }
-	}
-
-	if err := driveTrusting(ctx, trust, fake.drive); err == nil {
-		t.Fatal("driveTrusting() error = nil, want the refusal returned")
-	}
-	if want := []string{"waiting", "resumed answered"}; !slices.Equal(held, want) {
-		t.Errorf("the run saw %v, want %v around the prompt", held, want)
-	}
-}
-
 func TestAPromptThatFailsStillIncludesTheRefusal(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, err: prompt.ErrStdinBusy}
 
-	err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
+	err := fake.call(t, trustAsking(asker, io.Discard))
 	if !errors.Is(err, prompt.ErrStdinBusy) {
 		t.Errorf("err = %v, want it to include the prompt's own failure", err)
 	}
@@ -315,20 +248,19 @@ func TestAPromptThatFailsStillIncludesTheRefusal(t *testing.T) {
 	}
 }
 
-func TestHostKeyMismatchNeverAsksAndNeverRedrives(t *testing.T) {
+func TestHostKeyMismatchNeverAsksAndNeverRetries(t *testing.T) {
 	t.Parallel()
 
 	for _, interactive := range []bool{true, false} {
 		t.Run(fmt.Sprintf("interactive=%t", interactive), func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
-			fake := fakeHostTrustDrive(t, ctx, "host-key-mismatch")
+			fake := newHostTrustFake(t, "host-key-mismatch")
 			asker := &scriptedAsker{attended: interactive, answer: true}
 
-			err := driveTrusting(ctx, trustAsking(asker, io.Discard), fake.drive)
+			err := fake.call(t, trustAsking(asker, io.Discard))
 			if err == nil {
-				t.Fatal("driveTrusting() error = nil, want a mismatch to be terminal")
+				t.Fatal("call error = nil, want a mismatch to be terminal")
 			}
 			if len(asker.asked) != 0 {
 				t.Errorf("asked %v, want no prompt for a mismatch", asker.asked)
@@ -340,45 +272,43 @@ func TestHostKeyMismatchNeverAsksAndNeverRedrives(t *testing.T) {
 				t.Errorf("known_hosts = %q, want nothing recorded", got)
 			}
 			if got := fake.drivenTimes(t); got != 1 {
-				t.Errorf("provider driven %d times, want 1", got)
+				t.Errorf("the call ran %d times, want 1", got)
 			}
 		})
 	}
 }
 
-func TestDriveThatNeverRefusesIsLeftAlone(t *testing.T) {
+func TestACallThatNeverRefusesIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	asker := &scriptedAsker{attended: true, answer: true}
 	trust := trustAsking(asker, io.Discard)
 
-	drives := 0
-	if err := driveTrusting(ctx, trust, func() error { drives++; return nil }); err != nil {
-		t.Fatalf("driveTrusting() error = %v", err)
+	calls := 0
+	if err := callRefusing(t, trust, func() error { calls++; return nil }); err != nil {
+		t.Fatalf("call error = %v", err)
 	}
 
 	plain := errors.New("the provider fell over")
-	err := driveTrusting(ctx, trust, func() error { drives++; return plain })
+	err := callRefusing(t, trust, func() error { calls++; return plain })
 	if !errors.Is(err, plain) {
-		t.Errorf("driveTrusting() error = %v, want the drive's own error untouched", err)
+		t.Errorf("call error = %v, want the call's own error untouched", err)
 	}
-	if drives != 2 {
-		t.Errorf("drove %d times, want 2", drives)
+	if calls != 2 {
+		t.Errorf("called %d times, want 2", calls)
 	}
 	if len(asker.asked) != 0 {
 		t.Errorf("asked %v, want no prompt when nothing refused on trust", asker.asked)
 	}
 }
 
-func TestARedriveThatRefusesAgainNeverAsksTwice(t *testing.T) {
+func TestARetriedCallThatRefusesAgainNeverAsksTwice(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
+	fake := newHostTrustFake(t, "unknown-host-key")
 	asker := &scriptedAsker{attended: true, answer: true}
 
-	drives := 0
+	calls := 0
 	refusal := provider.RefuseHostTrust(provider.HostTrust{
 		Reason:     provider.UnknownHostKey,
 		Host:       fakeHostName,
@@ -389,12 +319,12 @@ func TestARedriveThatRefusesAgainNeverAsksTwice(t *testing.T) {
 		Remedy:     "ssh-keyscan",
 	})
 
-	err := driveTrusting(ctx, trustAsking(asker, io.Discard), func() error { drives++; return refusal })
+	err := callRefusing(t, trustAsking(asker, io.Discard), func() error { calls++; return refusal })
 	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want the second refusal returned")
+		t.Fatal("call error = nil, want the second refusal returned")
 	}
-	if drives != 2 {
-		t.Errorf("drove %d times, want at most one retry", drives)
+	if calls != 2 {
+		t.Errorf("called %d times, want at most one retry", calls)
 	}
 	if len(asker.asked) != 1 {
 		t.Errorf("asked %d times, want exactly one prompt", len(asker.asked))
@@ -404,7 +334,6 @@ func TestARedriveThatRefusesAgainNeverAsksTwice(t *testing.T) {
 func TestAKeyThatDoesNotHashToItsFingerprintIsNeverOffered(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	store := filepath.Join(t.TempDir(), "known_hosts")
 	asker := &scriptedAsker{attended: true, answer: true}
 	refusal := provider.RefuseHostTrust(provider.HostTrust{
@@ -415,9 +344,9 @@ func TestAKeyThatDoesNotHashToItsFingerprintIsNeverOffered(t *testing.T) {
 		KnownHosts: []string{store},
 	})
 
-	err := driveTrusting(ctx, trustAsking(asker, io.Discard), func() error { return refusal })
+	err := callRefusing(t, trustAsking(asker, io.Discard), func() error { return refusal })
 	if err == nil {
-		t.Fatal("driveTrusting() error = nil, want a key that betrays its fingerprint refused")
+		t.Fatal("call error = nil, want a key that betrays its fingerprint refused")
 	}
 	if len(asker.asked) != 0 {
 		t.Errorf("asked %v, want no prompt for a key that does not hash to its fingerprint", asker.asked)
@@ -430,7 +359,6 @@ func TestAKeyThatDoesNotHashToItsFingerprintIsNeverOffered(t *testing.T) {
 func TestAProviderThatSpeaksInControlCharactersIsNeverOffered(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	for _, tc := range []struct {
 		name  string
 		trust provider.HostTrust
@@ -449,9 +377,9 @@ func TestAProviderThatSpeaksInControlCharactersIsNeverOffered(t *testing.T) {
 			var out bytes.Buffer
 
 			refusal := provider.RefuseHostTrust(tc.trust)
-			err := driveTrusting(ctx, trustAsking(asker, &out), func() error { return refusal })
+			err := callRefusing(t, trustAsking(asker, &out), func() error { return refusal })
 			if err == nil {
-				t.Fatal("driveTrusting() error = nil, want the offer refused")
+				t.Fatal("call error = nil, want the offer refused")
 			}
 			if _, ok := provider.HostTrustOf(err); !ok {
 				t.Errorf("err = %v, want the original refusal kept", err)

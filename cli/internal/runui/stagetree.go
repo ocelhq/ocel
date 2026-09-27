@@ -188,18 +188,6 @@ func (p *stagePlan) progress(id, message string, current uint32, total *uint32) 
 	return n, tracked
 }
 
-func (p *stagePlan) restart(id string) {
-	n, ok := p.nodes[id]
-	if !ok {
-		return
-	}
-	n.started = p.now()
-	n.state = stageActive
-	n.doneFailed = false
-	n.doneDur = 0
-	p.ensureActive(id)
-}
-
 func (p *stagePlan) ensureActive(id string) {
 	for _, existing := range p.activeOrder {
 		if existing == id {

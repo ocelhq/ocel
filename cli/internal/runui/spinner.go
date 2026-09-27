@@ -18,16 +18,14 @@ func spinnerFrame(n int) string {
 }
 
 type Spinner struct {
-	out       io.Writer
-	msg       string
-	colored   bool
-	mu        sync.Mutex
-	stop      chan struct{}
-	done      chan struct{}
-	stopFn    func()
-	suspendFn func() func()
-	stopped   bool
-	frame     int
+	out     io.Writer
+	msg     string
+	colored bool
+	mu      sync.Mutex
+	stop    chan struct{}
+	done    chan struct{}
+	stopped bool
+	frame   int
 }
 
 func StartSpinner(present Presentation, out io.Writer, msg string) *Spinner {
@@ -92,33 +90,5 @@ func (s *Spinner) Stop() {
 		return
 	}
 	s.stopped = true
-	if s.stopFn != nil {
-		s.stopFn()
-		return
-	}
 	s.eraseLocked()
-}
-
-func (s *Spinner) Suspend() func() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.stopped {
-		return func() {}
-	}
-	if s.suspendFn != nil {
-		return s.suspendFn()
-	}
-	if s.stop == nil {
-		return func() {}
-	}
-	s.eraseLocked()
-
-	return func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.stopped || s.stop != nil {
-			return
-		}
-		s.startLocked()
-	}
 }

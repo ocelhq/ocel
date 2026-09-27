@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/events"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -95,9 +96,9 @@ func dnsOutput(t *testing.T, present Presentation, headline string, records []*p
 		s = newHumanSink(&out, present)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	s.Receive(lift(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_DnsManualRecords{
+	s.Receive(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Body: &streamv1.RunEvent_DnsManualRecords{
 		DnsManualRecords: &progressv1.DnsManualRecordsEvent{Headline: headline, Records: records, Notes: notes},
-	}}))
+	}})
 	return out.String()
 }
 

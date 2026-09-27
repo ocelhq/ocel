@@ -33,14 +33,6 @@ func (t Trust) hold() func(reason string) {
 	return t.Hold(&streamv1.WaitingEvent{})
 }
 
-func driveTrusting(ctx context.Context, trust Trust, drive func() error) error {
-	err := drive()
-	if trusted, err := trust.acceptKey(ctx, err); !trusted {
-		return err
-	}
-	return drive()
-}
-
 func (t Trust) acceptKey(ctx context.Context, err error) (bool, error) {
 	refusal, ok := provider.HostTrustOf(err)
 	if !ok || refusal.Terminal() || refusal.Reason != provider.UnknownHostKey || !t.attended() {

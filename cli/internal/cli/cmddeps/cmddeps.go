@@ -90,17 +90,3 @@ func (d Deps) Gate(class consent.Class, command string, yes bool, stdout io.Writ
 		Out:         stdout,
 	}
 }
-
-func (d Deps) Spec(class consent.Class, command string, cfg *projectconfig.Config, yes bool, stdout io.Writer, stdin io.Reader) runui.Spec {
-	return runui.Spec{
-		Command:     command,
-		Consent:     class,
-		Yes:         yes,
-		Config:      cfg,
-		Present:     d.Presentation(stdout),
-		Trust:       d.HostTrust,
-		Interactive: d.StdinIsTerminal(stdin),
-		Stdout:      stdout,
-		Stdin:       stdin,
-	}
-}

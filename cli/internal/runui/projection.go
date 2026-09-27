@@ -3,6 +3,8 @@ package runui
 import (
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -668,6 +670,15 @@ func (p *projector) logPointer(label, logPath string) []string {
 		return nil
 	}
 	return []string{"", p.faint(fmt.Sprintf("%s%s: %s", blockIndent, label, relLog(logPath)))}
+}
+
+func relLog(logPath string) string {
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, logPath); err == nil && !strings.HasPrefix(rel, "..") {
+			return rel
+		}
+	}
+	return logPath
 }
 
 func progressLogLine(message string, current uint32, total *uint32) string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -14,35 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
-
-func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
-	return drive(ctx, cfg, stdout, stderr, trust, PinToLock, fn)
-}
-
-func DriveDry(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
-	return drive(ctx, cfg, stdout, stderr, trust, PinInMemory, fn)
-}
-
-func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, mode Pinning, fn func(*Runner) error) error {
-	config, err := prepareLaunch(ctx, cfg, mode)
-	if err != nil {
-		return err
-	}
-	config.Stdout, config.Stderr = stdout, stderr
-
-	return driveTrusting(ctx, trust, func() error {
-		runner, err := Spawn(ctx, config)
-		if err != nil {
-			return fmt.Errorf("spawn provider: %w", err)
-		}
-		defer runner.Close()
-
-		if err := runner.Ready(ctx); err != nil {
-			return err
-		}
-		return fn(runner)
-	})
-}
 
 func prepareLaunch(ctx context.Context, cfg *projectconfig.Config, pins Pinning) (Config, error) {
 	if err := node.Ensure(cfg.Dir); err != nil {

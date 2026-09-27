@@ -23,7 +23,7 @@ func NewJSONSink(w io.Writer) *JSONSink {
 }
 
 func (s *JSONSink) Receive(ev *streamv1.RunEvent) {
-	line, err := envelopeJSON(normalize(ev))
+	line, err := envelopeJSON(ev)
 	if err != nil {
 		return
 	}

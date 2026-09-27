@@ -10,10 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -38,7 +40,23 @@ func fixtureStream(t *testing.T, name string) (raw string, events []*streamv1.Ru
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	return string(b), parseNDJSON(t, string(b))
+	return string(b), throughTheBus(parseNDJSON(t, string(b)))
+}
+
+type collected struct{ events []*streamv1.RunEvent }
+
+func (c *collected) Receive(ev *streamv1.RunEvent) { c.events = append(c.events, ev) }
+
+func (c *collected) Close() error { return nil }
+
+func throughTheBus(recorded []*streamv1.RunEvent) []*streamv1.RunEvent {
+	bus := events.NewBus(time.Now)
+	delivered := &collected{}
+	bus.Attach(delivered)
+	for _, ev := range recorded {
+		bus.Send(ev)
+	}
+	return delivered.events
 }
 
 func golden(t *testing.T, name, ext, got string) {
@@ -189,7 +207,7 @@ func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *tes
 				if err := protojson.Unmarshal([]byte(lines[i]), got); err != nil {
 					t.Fatalf("line %d %q is not protojson: %v", i, lines[i], err)
 				}
-				want := normalize(ev)
+				want := proto.CloneOf(ev)
 				want.Time = got.GetTime()
 				if !proto.Equal(got, want) {
 					t.Fatalf("line %d is not the protojson of its envelope.\n--- got ---\n%s\n--- want ---\n%s", i, lines[i], protojson.Format(want))
@@ -380,8 +398,7 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 		}
 	}
 
-	for _, raw := range events {
-		ev := normalize(raw)
+	for _, ev := range events {
 		id := hex.EncodeToString(ev.GetSpanId())
 		switch {
 		case ev.GetStarted() != nil:

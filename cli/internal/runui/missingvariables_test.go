@@ -1,12 +1,9 @@
 package runui
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/envgate"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -68,27 +65,6 @@ func TestTheDeployTUIHeadsAGroupOnce(t *testing.T) {
 	}
 	if n := strings.Count(got, "set together"); n != 1 {
 		t.Errorf("waiting = %q, states %q %d times, want once for the group", got, "set together", n)
-	}
-}
-
-func TestARefusalIsTheFailureNotADetailUnderOne(t *testing.T) {
-	t.Parallel()
-	s, out, _ := newTestSession(t, "ocel deploy")
-	refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{
-		{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-	}}
-	s.Fail(errors.Join(refusal, errors.New("the variables UI closed before the matrix was complete.")))
-
-	got := out.String()
-	for _, want := range []string{
-		"✗ 1 variable is not ready — nothing has been built.\n\n  ✗ STRIPE_API_KEY  root  no value\n\n  Fill them in: ocel env set STRIPE_API_KEY=<VALUE>\n\n  the variables UI closed",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("stdout = %q, want it to contain %q", got, want)
-		}
-	}
-	if strings.Contains(got, "✗ Failed") {
-		t.Errorf("stdout = %q, want the refusal kept as the failure headline", got)
 	}
 }
 
