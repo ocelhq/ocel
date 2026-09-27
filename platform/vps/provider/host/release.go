@@ -404,6 +404,13 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
+		if added := slices.DeleteFunc(next.hostnames(), func(hostname string) bool {
+			return slices.Contains(table.hostnames(), hostname)
+		}); len(added) > 0 {
+			if err := h.front.Unrouted(ctx, added); err != nil {
+				return shaped, err
+			}
+		}
 		before, err := WriteRoutingTable(table)
 		if err != nil {
 			return shaped, err

@@ -17,6 +17,8 @@ func (Manual) File() string { return "" }
 
 func (Manual) Unrendered([]byte, proxy.Permission) string { return "" }
 
+func (Manual) Unrouted(context.Context, []string) error { return nil }
+
 func (Manual) Reload(context.Context) error { return nil }
 
 func (m Manual) Inspect(ctx context.Context) (proxy.Checks, error) {

@@ -16,6 +16,8 @@ func (Dotted) File() string { return "" }
 
 func (Dotted) Unrendered([]byte, proxy.Permission) string { return "" }
 
+func (Dotted) Unrouted(context.Context, []string) error { return nil }
+
 func (Dotted) Reload(context.Context) error { return nil }
 
 func (Dotted) Inspect(context.Context) (Checks, error) { return nil, nil }

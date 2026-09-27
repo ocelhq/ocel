@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -20,6 +21,8 @@ import (
 type yours struct {
 	file   string
 	handed *proxy.Spec
+	routes map[string]string
+	asked  *[][]string
 }
 
 func (y yours) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
@@ -34,6 +37,18 @@ func (y yours) Render(spec proxy.Spec) ([]byte, error) {
 func (y yours) File() string { return y.file }
 
 func (yours) Unrendered([]byte, proxy.Permission) string { return "" }
+
+func (y yours) Unrouted(_ context.Context, hostnames []string) error {
+	if y.asked != nil {
+		*y.asked = append(*y.asked, hostnames)
+	}
+	for _, hostname := range hostnames {
+		if router, routed := y.routes[hostname]; routed {
+			return refusal.Refuse(refusal.CodeBusy, "%s is already routed by your proxy's router %s", hostname, router)
+		}
+	}
+	return nil
+}
 
 func (yours) Reload(context.Context) error { return nil }
 
@@ -243,6 +258,46 @@ func TestAClaimOnABoxWhoseProxyKeepsItsFileElsewherePlacesItsRenderingUnderTheLo
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	if want := string(mustPlace(t, state)); adopted.placed != want {
 		t.Errorf("the switchboard placed %q, want the rendering of the table the claim wrote, %q", adopted.placed, want)
+	}
+}
+
+func TestAClaimOfAHostnameYourProxyAlreadyRoutesIsRefusedBeforeAnythingIsWritten(t *testing.T) {
+	t.Parallel()
+
+	adopted := adoptedBox(t, routed())
+	prior, placedBefore := adopted.recorded, adopted.placed
+	h := adopted.host()
+	h.front = yours{file: coolifyFile, routes: map[string]string{claimed: "dapp-lekbai-router-websecure-1"}}
+	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	if err == nil || !strings.Contains(err.Error(), "dapp-lekbai-router-websecure-1") {
+		t.Fatalf("ClaimHosts() = %v, want the claim refused naming the router that routes it", err)
+	}
+	if adopted.count(writesProxy) != 0 || adopted.count(places) != 0 {
+		t.Errorf("a refused claim ran %q, want nothing written: ocel's router would outrank the one you have", adopted.commands())
+	}
+	if adopted.recorded != prior || adopted.placed != placedBefore {
+		t.Errorf("a refused claim left the table %q and the placed file %q, want both untouched", adopted.recorded, adopted.placed)
+	}
+}
+
+func TestYourProxyIsAskedOnlyAboutTheHostnamesAWriteAdds(t *testing.T) {
+	t.Parallel()
+
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	adopted := adoptedBox(t, state)
+	var asked [][]string
+	h := adopted.host()
+	h.front = yours{file: coolifyFile, asked: &asked}
+	if err := h.ClaimHosts(context.Background(), state.Claims); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
+	}
+	if err := h.InstallPreviewEntry(context.Background(), previewBase); err != nil {
+		t.Fatalf("InstallPreviewEntry() = %v", err)
+	}
+	want := [][]string{{edge.ProbeHostname(edge.PreviewWildcard(previewBase))}}
+	if !slices.EqualFunc(asked, want, slices.Equal) {
+		t.Errorf("your proxy was asked about %q, want only %q: a hostname the box already serves was vetted when it was claimed", asked, want)
 	}
 }
 

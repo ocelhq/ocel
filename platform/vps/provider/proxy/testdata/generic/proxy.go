@@ -16,6 +16,8 @@ func (*Generic[T]) File() string { return "" }
 
 func (*Generic[T]) Unrendered([]byte, proxy.Permission) string { return "" }
 
+func (*Generic[T]) Unrouted(context.Context, []string) error { return nil }
+
 func (*Generic[T]) Reload(context.Context) error { return nil }
 
 func (*Generic[T]) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }

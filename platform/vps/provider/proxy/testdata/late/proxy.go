@@ -16,6 +16,8 @@ func (l *Late) File() string { return "" }
 
 func (l *Late) Unrendered([]byte, proxy.Permission) string { return "" }
 
+func (l *Late) Unrouted(context.Context, []string) error { return nil }
+
 func (l *Late) Reload(context.Context) error { return nil }
 
 func (l *Late) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
