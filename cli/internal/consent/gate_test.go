@@ -235,7 +235,7 @@ func TestADeclinedGuardSaysSoOnTheStreamOnceTheStreamIsResumed(t *testing.T) {
 	}
 	got := term.received()
 	last := got[len(got)-1]
-	if last.GetMessage() != "Aborted." || last.GetBody() != nil || got[len(got)-2].GetResumed() == nil {
+	if last.GetMessage() != "Not confirmed, so this run changes nothing" || last.GetBody() != nil || got[len(got)-2].GetResumed() == nil {
 		t.Errorf("stream = %q, want the refusal sent as a message event after the resume, not written past the stream", shape(got))
 	}
 }
@@ -284,7 +284,7 @@ func TestPlanConsentIsWithheldWhenTheNameIsNotTypedBack(t *testing.T) {
 	if err != nil || granted {
 		t.Errorf("ConsentByName() = %v, %v, want a mistyped name to withhold it", granted, err)
 	}
-	if got := term.received(); got[len(got)-1].GetMessage() != "Aborted." {
+	if got := term.received(); got[len(got)-1].GetMessage() != "Not confirmed, so this run changes nothing" {
 		t.Errorf("stream = %q, want a withheld consent to say the command stopped", shape(got))
 	}
 }

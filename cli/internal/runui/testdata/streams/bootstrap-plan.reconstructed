@@ -1,10 +1,10 @@
 stages:
   [check]
-    Checking credentials
+    Checking your credentials and the production bootstrap for acme
   [plan]
-    Planning changes
-  Environment
-    Provisioning
+    Planning the changes to the production bootstrap
+  Updating bootstrap stacks ocel-bootstrap and ocel-bootstrap-isr
+    Updating bootstrap stacks ocel-bootstrap and ocel-bootstrap-isr
 plan:
   stack/aws/ocel-bootstrap ACTION_UPDATE AWS::Lambda::Function/OcelRouterFunction
   stack/aws/ocel-bootstrap ACTION_KEEP AWS::SecretsManager::Secret/OcelOriginSecret
@@ -14,4 +14,4 @@ waits:
   waiting on 0 unset, remedy ""
   resumed answered
 results:
-  success=true interrupted=false headline="Bootstrapped production" detail="" duration_ms=11000
+  success=true interrupted=false headline="Bootstrapped the production environment" detail="" duration_ms=11000

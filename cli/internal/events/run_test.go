@@ -140,8 +140,8 @@ func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) 
 	run.End(&err)
 
 	ev := sink.received()[len(sink.received())-1]
-	if !ev.GetResult().GetInterrupted() || ev.GetResult().GetHeadline() != "Cancelled" || ev.GetLevel() != progressv1.Level_LEVEL_WARN {
-		t.Fatalf("result = interrupted %v headline %q level %s, want Cancelled at WARN",
+	if !ev.GetResult().GetInterrupted() || ev.GetResult().GetHeadline() != "Deploy cancelled" || ev.GetLevel() != progressv1.Level_LEVEL_WARN {
+		t.Fatalf("result = interrupted %v headline %q level %s, want Deploy cancelled at WARN",
 			ev.GetResult().GetInterrupted(), ev.GetResult().GetHeadline(), ev.GetLevel())
 	}
 	var exit *exitsig.ExitError
@@ -231,7 +231,7 @@ func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndFlipBound(t *tes
 	}
 }
 
-func TestARunThatFailsAfterReportingAHeadlineEndsWithTheFailureAlone(t *testing.T) {
+func TestARunThatFailsAfterReportingAHeadlineEndsWithTheFailureInstead(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	run.Finish("Nothing to deploy")
@@ -240,8 +240,8 @@ func TestARunThatFailsAfterReportingAHeadlineEndsWithTheFailureAlone(t *testing.
 	run.End(&err)
 
 	result := sink.received()[len(sink.received())-1].GetResult()
-	if result.GetSuccess() || result.GetHeadline() != "" || result.GetDetail() != "the service map could not be written" {
-		t.Fatalf("result = %s, want the failure with no success headline", protojson.Format(result))
+	if result.GetSuccess() || result.GetHeadline() != "Deploy failed" || result.GetDetail() != "the service map could not be written" {
+		t.Fatalf("result = %s, want the failure headed Deploy failed, not the success headline", protojson.Format(result))
 	}
 }
 
@@ -398,5 +398,56 @@ func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t
 	want := []string{"started LEVEL_INFO", "message LEVEL_DEBUG", "ended LEVEL_INFO", "result LEVEL_INFO"}
 	if strings.Join(got, ", ") != strings.Join(want, ", ") {
 		t.Errorf("the run's log = %q, want %q", got, want)
+	}
+}
+
+func TestAFailedOrCancelledRunsHeadlineNamesTheCommandItEnded(t *testing.T) {
+	for _, tc := range []struct {
+		command     string
+		interrupted bool
+		want        string
+	}{
+		{"ocel deploy", false, "Deploy failed"},
+		{"ocel preview up", false, "Preview up failed"},
+		{"ocel bootstrap production", false, "Bootstrap production failed"},
+		{"ocel deploy", true, "Deploy cancelled"},
+		{"ocel domain use", true, "Domain use cancelled"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			sink := &recording{}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			bus := events.NewBus(newClock().read)
+			bus.Attach(sink)
+			_, run, err := bus.Begin(ctx, tc.command, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			failure := errors.New("the upload was refused")
+			if tc.interrupted {
+				cancel()
+				failure = context.Canceled
+			}
+			run.End(&failure)
+
+			if got := sink.received()[len(sink.received())-1].GetResult().GetHeadline(); got != tc.want {
+				t.Errorf("`%s` ended with headline %q, want %q", tc.command, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestASuccessfulRunThatReportedNoHeadlineIsHeadedByTheCommandItFinished(t *testing.T) {
+	sink := &recording{}
+	bus := events.NewBus(newClock().read)
+	bus.Attach(sink)
+	_, run, err := bus.Begin(context.Background(), "ocel env ls", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.End(&err)
+
+	if got := sink.received()[len(sink.received())-1].GetResult().GetHeadline(); got != "Env ls finished" {
+		t.Errorf("the run ended with headline %q, want Env ls finished", got)
 	}
 }

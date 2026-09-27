@@ -1,11 +1,8 @@
-INFO  [check] ✓ aws: Checking credentials in 1s
-
 ocel  dev  acme › production
 
-aws         123456789012  deploy  us-east-1
-cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
-
-INFO  [plan] ✓ production: Planning changes in 1s
+INFO  [check] Signed in to aws as deploy (123456789012, us-east-1) and cloudflare (a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4)
+INFO  [check] ✓ aws: Checked your credentials and the production bootstrap for acme in 1s
+INFO  [plan] ✓ production: Planned the changes to the production bootstrap in 1s
 
 Proposed changes to the production bootstrap, fronted by the cloudflare edge:
 
@@ -20,17 +17,10 @@ This cannot be undone.
 
 2 to create, 1 to update, 2 unchanged.
 
-INFO  [provision] ✓ Environment in 6s
+INFO  [provision] ✓ production: Updated bootstrap stacks ocel-bootstrap and ocel-bootstrap-isr in 6s
       Ensuring the secret the origin's own front authenticates with (SSM SecureString)
+      Applying ocel-bootstrap, ocel-bootstrap-isr (CloudFormation)
+      Applied stack ocel-bootstrap
+      Ensuring the Pulumi passphrase (SSM SecureString)
 
-    reused the existing origin secret
-
-      Ensuring Pulumi state bucket and state table (CloudFormation)
-
-    applied ocel-bootstrap
-
-      Ensuring Pulumi passphrase (SSM SecureString)
-
-    reused the existing Pulumi passphrase
-
-✓ Bootstrapped production in 11s
+✓ Bootstrapped the production environment in 11s

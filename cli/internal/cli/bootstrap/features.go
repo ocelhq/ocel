@@ -245,9 +245,9 @@ func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
 	return ""
 }
 
-func sayImplied(scope *events.Scope, pulled []implication) {
+func sayImplied(scope *events.Scope, tier environmentv1.Tier, pulled []implication) {
 	for _, p := range pulled {
-		scope.Say(fmt.Sprintf("Also adding: %s — %s", p.name, p.reason))
+		scope.Say(fmt.Sprintf("Also adding feature %s to the %s bootstrap: %s", p.name, Name(tier), p.reason))
 	}
 }
 

@@ -72,7 +72,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 	}
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(name, "Enumerating what would be removed")
+	unit := planning.Unit(name, fmt.Sprintf("Enumerating what removing the %s bootstrap would delete", name))
 	var plan *planv1.ChangePlan
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
@@ -93,6 +93,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		"Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone.")
 	if opts.Dry {
 		planning.Say("Run without --dry to destroy.")
+		run.Finish(fmt.Sprintf("Planned the removal of the %s bootstrap", name))
 		return nil
 	}
 	granted, err := gate.ConsentByName(ctx, planning, consented, "environment name", plan.GetSubject())
@@ -101,7 +102,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		return err
 	}
 	if !granted {
-		run.Finish("Nothing removed")
+		run.Finish(fmt.Sprintf("Nothing removed: the %s bootstrap stays", name))
 		return nil
 	}
 

@@ -152,7 +152,7 @@ func TestWhenTheShownUnitEndsTheLineNamesAUnitStillRunning(t *testing.T) {
 	say(t, web, "Compiled successfully\n")
 	web.End(nil)
 
-	if got, want := shownText(t, live, 80), "⠋ [build] 1/2 · api"; got != want {
+	if got, want := shownText(t, live, 80), "⠋ [build] 1/2 · api  Building api"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
 	}
 }
@@ -163,7 +163,7 @@ func TestAUnitThatHasSaidNothingGivesTheLineToOneThatSpeaksAtOnce(t *testing.T) 
 	run, live, c := liveRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Unit("web", "Building web")
-	if got, want := shownText(t, live, 80), "⠋ [build] 0/1 · web"; got != want {
+	if got, want := shownText(t, live, 80), "⠋ [build] 0/1 · web  Building web"; got != want {
 		t.Fatalf("before anyone spoke the live line shows\n%q\nwant\n%q", got, want)
 	}
 	api := build.Unit("api", "Building api")
@@ -228,6 +228,17 @@ func TestAtAnyWidthTheLiveLineLeadsWithItsSpinnerOrShowsNothing(t *testing.T) {
 	}
 }
 
+func TestAUnitThatHasSaidNothingYetShowsWhatItDoesBesideItsSubject(t *testing.T) {
+	t.Parallel()
+
+	run, live, _ := liveRun(t)
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying the serverless app to production")
+
+	if got, want := shownText(t, live, 80), "⠋ [deploy] 0/1 · web  Deploying the serverless app to production"; got != want {
+		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
+	}
+}
+
 func TestAUnitWithoutASubjectIsNamedByWhatItDoes(t *testing.T) {
 	t.Parallel()
 
@@ -251,7 +262,7 @@ func TestAUnitOutsideAnyPhaseIsShownWithoutABracket(t *testing.T) {
 		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{}},
 	})
 
-	if got, want := shownText(t, live, 80), "⠋ 0/1 · aws"; got != want {
+	if got, want := shownText(t, live, 80), "⠋ 0/1 · aws  Checking credentials"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
 	}
 }

@@ -92,6 +92,6 @@ func (g Gate) ask(scope Scope, ask func(prompt.Prompter) (bool, error)) (bool, e
 	if err != nil || granted {
 		return granted, err
 	}
-	scope.Say("Aborted.")
+	scope.Say("Not confirmed, so this run changes nothing")
 	return false, nil
 }

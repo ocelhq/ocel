@@ -60,7 +60,7 @@ func TestRunPreviewUp(t *testing.T) {
 		for _, sub := range []string{
 			"DEPLOY tier=TIER_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL",
 			"identity=" + want.Key,
-			"Preview " + want.Key + " is up",
+			"Deployed " + clitest.FixtureSlug + " to preview " + want.Key,
 		} {
 			if !strings.Contains(out, sub) {
 				t.Errorf("stdout = %q, want it to contain %q", out, sub)
@@ -246,7 +246,7 @@ export default {
 			}
 		}
 
-		if strings.Contains(out, "Building project") {
+		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
 		if strings.Contains(out, "DEPLOY ") {
@@ -350,7 +350,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"This will create a NEW project.", "This backend already has: my-application, billing", "Aborted.", "Nothing deployed"} {
+		for _, want := range []string{"This will create a NEW project.", "This backend already has: my-application, billing", "Not confirmed, so this run changes nothing", "Nothing deployed to preview"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)
 			}
@@ -516,7 +516,7 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 		t.Errorf("teardown at event %d, resumed at %d: want nothing torn down until the question is answered: %s", destroyed, resumed, stream.String())
 	}
 	result := evs[len(evs)-1].GetResult()
-	if !result.GetSuccess() || result.GetHeadline() != "Preview staging torn down" {
+	if !result.GetSuccess() || result.GetHeadline() != "Tore down preview staging of "+clitest.FixtureSlug {
 		t.Errorf("result = %v, want the run to end reporting the preview torn down", result)
 	}
 }

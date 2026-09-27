@@ -271,8 +271,8 @@ func TestRunDestroy(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "Nothing to destroy") {
-			t.Errorf("stdout = %q, want it to say nothing was there to destroy", out)
+		if !strings.Contains(out, "✓ Nothing to destroy: test-app has nothing in production in ") {
+			t.Errorf("stdout = %q, want it to say nothing of test-app was in production to destroy", out)
 		}
 		for _, unwanted := range []string{"This will permanently destroy", "DESTROY PROJECT"} {
 			if strings.Contains(out, unwanted) {

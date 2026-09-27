@@ -89,16 +89,26 @@ func (t *resourceTally) count(c resourceChange) {
 
 func (t resourceTally) summary() string {
 	var parts []string
+	total := t.failed
 	for _, action := range resourceChangeOrder {
 		if n := t.done[action]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n, resourceChangesDone[action]))
+			total += n
 		}
 	}
 	if t.failed > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", t.failed))
 	}
-	if len(parts) == 0 {
-		return ""
+	noun := "resources"
+	if total == 1 {
+		noun = "resource"
 	}
-	return " (" + strings.Join(parts, ", ") + ")"
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		_, done, _ := strings.Cut(parts[0], " ")
+		return fmt.Sprintf(" — %d %s %s", total, noun, done)
+	}
+	return fmt.Sprintf(" — %d %s: %s", total, noun, strings.Join(parts, ", "))
 }

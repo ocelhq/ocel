@@ -1,6 +1,6 @@
 stages:
   [build]
-    Building project
+    Building app web
 plan:
 waits:
   waiting on 1 unset, remedy "ocel env ui"

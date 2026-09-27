@@ -19,40 +19,43 @@ import (
 )
 
 func Run(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
-	resp, err := announce(ctx, scope, prov, cfg, required, slug, domains, frameworks)
+	return announce(ctx, scope, prov, cfg, required, slug, domains, frameworks, func(resp *contractv1.PreflightResponse) error {
+		if !resp.GetInfrastructurePresent() {
+			return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
+		}
+		return checkTier(resp.GetInfraTier(), required)
+	})
+}
+
+func Announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier) error {
+	_, err := announce(ctx, scope, prov, cfg, required, cfg.Slug, nil, Frameworks(cfg), func(*contractv1.PreflightResponse) error { return nil })
+	return err
+}
+
+func announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
+	unit := scope.Unit(prov.Name(), checking(required, cfg.Slug))
+	resp, err := answer(ctx, scope, prov, cfg, required, &contractv1.PreflightRequest{
+		RequiredTier: required,
+		Slug:         slug,
+		Domains:      domains,
+		Frameworks:   frameworks,
+		Containers:   Containers(cfg),
+		Edge:         edgewire.Selection(cfg),
+	}, ready)
+	unit.End(err)
 	if err != nil {
-		return nil, err
-	}
-	if !resp.GetInfrastructurePresent() {
-		return nil, fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
-	}
-	if err := checkTier(resp.GetInfraTier(), required); err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func Announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier) error {
-	_, err := announce(ctx, scope, prov, cfg, required, cfg.Slug, nil, Frameworks(cfg))
-	return err
-}
-
-func announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
-	unit := scope.Unit(prov.Name(), "Checking credentials")
+func answer(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, req *contractv1.PreflightRequest, ready func(*contractv1.PreflightResponse) error) (*contractv1.PreflightResponse, error) {
 	var resp *contractv1.PreflightResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 		var err error
-		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{
-			RequiredTier: required,
-			Slug:         slug,
-			Domains:      domains,
-			Frameworks:   frameworks,
-			Containers:   Containers(cfg),
-			Edge:         edgewire.Selection(cfg),
-		})
+		resp, err = client.Preflight(ctx, req)
 		return err
 	})
-	unit.End(err)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +63,22 @@ func announce(ctx context.Context, scope *events.Scope, prov *providerclient.Pro
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
 		return nil, err
 	}
-	return resp, nil
+	return resp, ready(resp)
+}
+
+func checking(required environmentv1.Tier, slug string) string {
+	tiers := map[environmentv1.Tier]string{
+		environmentv1.Tier_TIER_PRODUCTION: "production",
+		environmentv1.Tier_TIER_PREVIEW:    "preview",
+	}
+	if tiers[required] == "" {
+		return "Checking your credentials"
+	}
+	title := "Checking your credentials and the " + tiers[required] + " bootstrap"
+	if slug != "" {
+		title += " for " + slug
+	}
+	return title
 }
 
 func Credentials(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {

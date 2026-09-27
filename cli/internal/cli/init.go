@@ -172,7 +172,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	}
 	err = writeProject(ctx, deps, initializing.Phase(progressv1.Phase_PHASE_BUILD), configPath, slug, provider, lang, detected)
 	if err == nil {
-		initializing.Finish("Initialized " + slug)
+		initializing.Finish("Initialized project " + slug)
 	}
 	initializing.End(&err)
 	return err
@@ -186,7 +186,7 @@ func writeProject(ctx context.Context, deps cmddeps.Deps, build *events.Scope, c
 	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
-	build.Say(fmt.Sprintf("Wrote %s (slug: %s)", name, slug))
+	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
 
 	if detected {
 		addSDK(ctx, deps, build, projectDir, lang)
@@ -355,7 +355,7 @@ func addSDK(ctx context.Context, deps cmddeps.Deps, build *events.Scope, dir str
 	argv := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
-	unit := build.Unit(sdkPackage, fmt.Sprintf("Adding it with `%s`", command))
+	unit := build.Unit(sdkPackage, fmt.Sprintf("Adding the SDK to this project with `%s`", command))
 	err := deps.RunPackageManager(ctx, dir, argv, unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	if err != nil {
 		unit.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))

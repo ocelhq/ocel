@@ -301,7 +301,7 @@ func TestTheLiveLineIsErasedWhenTheRunsResultIsDrawnNotWhenTheCommandExits(t *te
 	executeRootOn(t, &bytes.Buffer{}, tty, "deployments", "ls")
 
 	got := screen()
-	_, afterResult, ok := strings.Cut(got, "✓ Done")
+	_, afterResult, ok := strings.Cut(got, "✓ Deployments ls finished")
 	if !ok {
 		t.Fatalf("the terminal shows %q, want the run's result", got)
 	}

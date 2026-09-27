@@ -222,7 +222,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 	if facts.declined {
-		run.Finish("Nothing deployed")
+		run.Finish("Nothing deployed to preview " + env.GetIdentity())
 		return nil
 	}
 
@@ -257,7 +257,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 	if manifest == nil {
-		run.Finish("Nothing to deploy")
+		run.Finish(fmt.Sprintf("Nothing to deploy: %s declares no apps or resources", cfg.Slug))
 		return nil
 	}
 
@@ -276,7 +276,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	}
 
 	if opts.dry {
-		return showDeployPlan(ctx, run, prov, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()))
+		return showDeployPlan(ctx, run, prov, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()), cfg.Slug, "preview "+env.GetIdentity())
 	}
 
 	out, err := streamDeploy(ctx, prov, cfg.Slug, req, inline)
@@ -290,7 +290,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.bindings); err != nil {
 		return err
 	}
-	run.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.urlNotes, out.flip)
+	run.Deployed(fmt.Sprintf("Deployed %s to preview %s", cfg.Slug, env.GetIdentity()), out.urlNotes, out.flip)
 	return nil
 }
 
@@ -397,7 +397,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			return err
 		}
 		if !proceed {
-			run.Finish("Nothing torn down")
+			run.Finish(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
 			return nil
 		}
 	}
@@ -416,7 +416,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	if _, err := providerclient.Stream(ctx, prov, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
+	run.Finish(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
 	return nil
 }
 
@@ -503,7 +503,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
-	run.Finish(fmt.Sprintf("Pruned preview %q", env.GetIdentity()))
+	run.Finish(fmt.Sprintf("Pruned the promotions of preview %s down to the newest %d", env.GetIdentity(), opts.keep))
 	return nil
 }
 

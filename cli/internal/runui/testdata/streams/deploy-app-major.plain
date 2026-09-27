@@ -1,10 +1,8 @@
-INFO  [check] ✓ aws: Checking credentials in 1s
-
 ocel  dev  acme › production
 
-aws  123456789012  deploy  us-east-1
-
-INFO  [build] ✓ acme: Building project in 24s
+INFO  [check] Signed in to aws as deploy (123456789012, us-east-1) and cloudflare (a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4)
+INFO  [check] ✓ aws: Checked your credentials and the production bootstrap for acme in 1s
+INFO  [build] ✓ acme: Built 2 apps (web and api) in 24s
 
     Packages: +812
     go: downloading ocel.dev v0.4.1
@@ -13,22 +11,33 @@ INFO  [build] ✓ acme: Building project in 24s
        Generating static pages (28/28)
     Route (app)                     Size     First Load JS
 
-INFO  [provision] ✓ cloudflare: Edge in 2s
-      Reconciling the cloudflare edge
+INFO  [provision] ✓ production: Checked the bootstrap, domains and bindings for acme in 0s
+INFO  [provision] ✓ cloudflare: Reconciled the routes for acme in production in 2s
 
     routes pruned: 3
 
-INFO  [provision] ✓ Shared infrastructure in 4s (1 created)
-      Provisioning the environment's infrastructure
+INFO  [provision] ✓ production: Provisioned shared resource assets in 4s — 1 resource created
       + assets (aws:s3/bucket:Bucket) created
-INFO  [deploy] ✓ api: api in 8s (1 updated)
-      Provisioning api
+INFO  [deploy] ✓ api: Deployed the serverless app to production in 8s (1/2) — 1 resource updated
+      Uploading function api's artifact (1.2 MiB)
+      Warming 1 bundle, 8 at a time
+      Warmed 1/1 bundles in 1s
       ~ api (aws:lambda/function:Function) updated
-INFO  [deploy] ✓ web: web in 21s (1 updated)
-      Provisioning web
+INFO  [deploy] ✓ web: Deployed the container app to production in 21s (2/2) — 1 resource updated
+      Sending web's image to 123456789012.dkr.ecr.us-east-1.amazonaws.com/acme-web (1 of 1)
+
+    5f70bf18a086: Pushed
+
       ~ acme-prod-web (aws:ecs/service:Service) updated
-INFO  [promote] ✓ Promotion in 2s
-      Promoting the deployment
+
+WARN  [provision] cloudflare: Point acme.example.com at the cloudflare edge — add this record at your DNS provider
+
+  TYPE   NAME              VALUE
+  CNAME  acme.example.com  acme.cdn.cloudflare.net
+
+INFO  [provision] ✓ cloudflare: Attached production hostname acme.example.com in 0s
+      Binding acme.example.com to the cloudflare edge
+INFO  [promote] ✓ production: Switched traffic to promotion p-7f3a in 2s
 
 ✓ Deployed acme to production in 54s
   production now serves promotion p-7f3a

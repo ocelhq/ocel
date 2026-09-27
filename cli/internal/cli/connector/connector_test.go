@@ -202,8 +202,13 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
 	}
 	result := evs[len(evs)-1].GetResult()
-	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || !strings.Contains(result.GetHeadline(), "envvars.write") {
-		t.Errorf("result = %v, want a success that names the paired target and what the console may do", result)
+	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || strings.Contains(result.GetHeadline(), "envvars") {
+		t.Errorf("result = %v, want a success that names the paired target and leaves the grants to their own line", result)
+	}
+	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetBody() == nil && ev.GetMessage() == "The console may use this connector for envvars.read and envvars.write"
+	}) {
+		t.Errorf("stream = %s, want the grants said on a line of their own", stream.String())
 	}
 }
 

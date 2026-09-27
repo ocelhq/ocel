@@ -210,17 +210,21 @@ var (
 func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := stream.Send(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_INFO,
+		Phase:   progressv1.Phase_PHASE_PROVISION,
 		SpanId:  fakeUnitID,
-		Message: "Environment",
+		Subject: "production",
+		Message: "Applying the fake provider's changes",
 		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
 	}); err != nil {
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Level:  progressv1.Level_LEVEL_INFO,
-		Phase:  progressv1.Phase_PHASE_PROVISION,
-		SpanId: fakePhaseID,
-		Body:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
+		Level:   progressv1.Level_LEVEL_INFO,
+		Phase:   progressv1.Phase_PHASE_PROVISION,
+		SpanId:  fakePhaseID,
+		Subject: "production",
+		Message: "Applying the fake provider's changes",
+		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
 	})
 }
 

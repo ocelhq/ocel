@@ -80,7 +80,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, nil, err
 		}
-		scope.Say("using prebuilt output in " + constants.ProjectStateDirName + "/output")
+		scope.Say("Using the prebuilt output in " + constants.ProjectStateDirName + "/output instead of building")
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, nil, err
@@ -121,7 +121,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if len(resources) == 0 {
 			return nil, nil, nil
 		}
-		scope.Say("no functions to deploy; deploying infrastructure only")
+		scope.Say(fmt.Sprintf("No app has a function or image to deploy, so this deploys only the %s %s declares", countOf(len(resources), "resource"), cfg.Slug))
 	}
 
 	attributionApps, err := toAttributionApps(cfg, functions, compute, configName)
@@ -474,4 +474,11 @@ func toAttributionDeclarations(resources []declare.Resource) []attribution.Decla
 		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}
 	}
 	return decls
+}
+
+func countOf(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }

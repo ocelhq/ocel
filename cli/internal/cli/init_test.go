@@ -77,7 +77,7 @@ func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 			said = append(said, "ended: "+ev.GetEnded().GetStatus().String())
 		}
 	}
-	want := []string{"started: Adding it with `pnpm add " + sdkPackage + "`", "output: added 1 package in 2s", "ended: SPAN_STATUS_OK"}
+	want := []string{"started: Adding the SDK to this project with `pnpm add " + sdkPackage + "`", "output: added 1 package in 2s", "ended: SPAN_STATUS_OK"}
 	if !slices.Equal(said, want) {
 		t.Fatalf("the sdk unit said %q, want %q", said, want)
 	}
@@ -343,7 +343,7 @@ func TestRunInit(t *testing.T) {
 		if got := *argv; !slices.Equal(got, []string{"pnpm", "add", sdkPackage}) {
 			t.Errorf("ran %v, want the sdk added beside the config, not beside the working directory", got)
 		}
-		if !strings.Contains(stdout.String(), "Wrote "+projectconfig.DefaultFileName) {
+		if !strings.Contains(stdout.String(), "Wrote "+projectconfig.DefaultFileName+" for project ") {
 			t.Errorf("stdout = %q, want it to name the config written", stdout.String())
 		}
 	})

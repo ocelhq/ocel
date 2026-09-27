@@ -90,7 +90,7 @@ func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, 
 	if existing, err := consolelink.Read(projectDir, apiURL); err != nil {
 		return err
 	} else if existing != nil {
-		linking.Phase(progressv1.Phase_PHASE_CHECK).Say(fmt.Sprintf("Re-linking (currently %s)", existing.ProjectName))
+		linking.Phase(progressv1.Phase_PHASE_CHECK).Say(fmt.Sprintf("This directory is linked to %s now; linking it again", existing.ProjectName))
 	}
 
 	authClient := auth.New(apiURL)

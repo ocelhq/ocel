@@ -1,4 +1,4 @@
-WARN  [build] acme: Building project did not finish
+WARN  [build] acme: Building app web did not finish
       Bundling web
 
-✗ Cancelled in 4s
+✗ Deploy cancelled in 4s

@@ -71,25 +71,33 @@ func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
 	case err == nil:
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		result := &streamv1.RunResultEvent{Success: true}
+		result := &streamv1.RunResultEvent{Success: true, Headline: r.verdict("finished")}
 		if r.success != nil {
 			result = r.success
 		}
 		return result, 0
 	case r.ctx.Err() != nil:
-		result := &streamv1.RunResultEvent{Interrupted: true, Headline: "Cancelled"}
+		result := &streamv1.RunResultEvent{Interrupted: true, Headline: r.verdict("cancelled")}
 		if r.mayHaveChanged() {
 			result.Detail = fmt.Sprintf("Resources may be partially created.\nRe-run `%s` to reconcile.", r.command)
 		}
 		return result, exitsig.InterruptCode
 	}
-	result := &streamv1.RunResultEvent{Detail: err.Error()}
+	result := &streamv1.RunResultEvent{Headline: r.verdict("failed"), Detail: err.Error()}
 	var refusal *envgate.Refusal
 	if errors.As(err, &refusal) {
 		result.Missing = refusal.Missing()
 		result.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), refusal.Error()), "\n")
 	}
 	return result, 1
+}
+
+func (r *Run) verdict(outcome string) string {
+	name := strings.TrimPrefix(r.command, "ocel ")
+	if name == "" {
+		return strings.ToUpper(outcome[:1]) + outcome[1:]
+	}
+	return strings.ToUpper(name[:1]) + name[1:] + " " + outcome
 }
 
 func (r *Run) Finish(headline string) {

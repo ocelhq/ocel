@@ -12,7 +12,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestDeployChecksCredentialsAsACheckUnitNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
+func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsProviderThenSaysWhoItActsAs(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, nil)
@@ -27,7 +27,7 @@ func TestDeployChecksCredentialsAsACheckUnitNamedForItsProviderThenSaysWhoItActs
 
 	evs := envelopes(t, stdout.String())
 	started := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return ev.GetStarted() != nil && ev.GetMessage() == "Checking credentials"
+		return ev.GetStarted() != nil && ev.GetMessage() == "Checking your credentials and the production bootstrap for "+clitest.FixtureSlug
 	})
 	if started < 0 {
 		t.Fatalf("no unit started for the credential check: %s", stdout.String())
@@ -43,11 +43,40 @@ func TestDeployChecksCredentialsAsACheckUnitNamedForItsProviderThenSaysWhoItActs
 		t.Fatalf("the credential check never ended OK: %s", stdout.String())
 	}
 	identity := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetIdentity() != nil })
-	if identity < ended {
-		t.Errorf("identity at event %d, credential check ended at %d: want who the deploy acts as named once the check answers", identity, ended)
+	if identity < started || identity > ended {
+		t.Errorf("identity at event %d, credential check from %d to %d: want who the deploy acts as named while the check is still open", identity, started, ended)
 	}
 	if evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Errorf("identity in %s, want the check phase", evs[identity].GetPhase())
+	}
+}
+
+func TestAnUnbootstrappedProductionFailsTheCheckUnitWithTheCommandThatBootstrapsIt(t *testing.T) {
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	useJSONLogFormat(t, &deps)
+	root, _ := clitest.SetUpDeployFixture(t)
+	t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatalf("runDeploy succeeded against no bootstrap: %s", stdout.String())
+	}
+
+	evs := envelopes(t, stdout.String())
+	check := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetStarted() != nil && strings.HasPrefix(ev.GetMessage(), "Checking your credentials")
+	})
+	if check < 0 {
+		t.Fatalf("no credential check started: %s", stdout.String())
+	}
+	ended := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), evs[check].GetSpanId())
+	})
+	if ended < 0 || evs[ended].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_ERROR || !strings.Contains(evs[ended].GetMessage(), "ocel bootstrap production") {
+		t.Fatalf("the credential check did not fail naming `ocel bootstrap production`: %s", stdout.String())
 	}
 }
 

@@ -1,9 +1,9 @@
-INFO  [build] ✓ acme: Building project in 5s
+INFO  [build] ✓ acme: Built 2 apps (web and api) in 5s
 
     go: downloading ocel.dev v0.4.1
 
-WARN  [deploy] api: api did not finish
-      Provisioning api
+WARN  [deploy] api: Deploying the serverless app to production did not finish
+      Uploading function api's artifact (1.2 MiB)
 
-✗ Cancelled in 12s — Resources may be partially created.
+✗ Deploy cancelled in 12s — Resources may be partially created.
   Re-run `ocel deploy` to reconcile.

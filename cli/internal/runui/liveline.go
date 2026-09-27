@@ -158,7 +158,12 @@ func (l *liveLine) render(width int) string {
 	}
 	if unit := l.units[l.shown]; unit != nil {
 		head += " · " + cmp.Or(unit.opened.GetSubject(), unit.opened.GetMessage())
-		if said := unit.said(); said != "" {
+		said := unit.said()
+		if said == "" && unit.opened.GetSubject() != "" {
+			title, _, _ := strings.Cut(unit.opened.GetMessage(), "\n")
+			said, _ = sanitize(title)
+		}
+		if said != "" {
 			head += liveGutter + said
 		}
 	}

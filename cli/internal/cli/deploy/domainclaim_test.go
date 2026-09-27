@@ -127,7 +127,7 @@ export default {
 				t.Errorf("stdout = %q, want it to name %q", out, want)
 			}
 		}
-		if strings.Contains(out, "Building project") {
+		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
 		if strings.Contains(out, "DEPLOY ") {
@@ -160,7 +160,7 @@ export default {
 				t.Errorf("stdout = %q, want it to name %q", out, want)
 			}
 		}
-		if strings.Contains(out, "Building project") {
+		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the refusal before anything is built", out)
 		}
 		if strings.Contains(out, "DEPLOY ") {

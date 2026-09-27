@@ -387,7 +387,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
-		if !strings.Contains(out, "No infrastructure changes — applying refreshes bootstrap seals and records.") {
+		if !strings.Contains(out, "Nothing in the production bootstrap's infrastructure changes: applying only refreshes its seals and records") {
 			t.Errorf("stdout = %q, want it to say what applying an all-keep plan is still for", out)
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
@@ -405,7 +405,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "No infrastructure changes — applying refreshes bootstrap seals and records.") {
+		if !strings.Contains(stdout.String(), "Nothing in the production bootstrap's infrastructure changes: applying only refreshes its seals and records") {
 			t.Errorf("stdout = %q, want the confirm never to float over a void", stdout.String())
 		}
 		if got := clitest.ReadJournal(t, journal); len(got) != 1 {
@@ -569,7 +569,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		out := stdout.String()
 		for _, want := range []string{
 			"Removing isr from the production bootstrap tears down what it installed.",
-			"Aborted.",
+			"Not confirmed, so this run changes nothing",
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q; got:\n%s", want, out)
@@ -636,7 +636,7 @@ func TestTheBootstrapPlanIsAPlanPhaseEventBeforeTheConsentPrompt(t *testing.T) {
 	if resumed < waiting || evs[resumed].GetResumed().GetReason() != "answered" {
 		t.Fatalf("resumed at event %d, held at %d: want the run resumed once answered: %s", resumed, waiting, stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Bootstrapped" {
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Bootstrapped the production environment" {
 		t.Errorf("result = %v, want the run to end reporting the bootstrap", result)
 	}
 	if got := clitest.ReadJournal(t, journal); len(got) != 1 {
@@ -706,7 +706,7 @@ func TestUnderJSONWhatABootstrapSaysRidesItsRunAndStdoutIsOnlyTheStream(t *testi
 			name:  "features the edge pulls in",
 			edge:  "  edge: \"cloudflare\",\n",
 			opts:  Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true},
-			wants: []string{"Also adding: cloudflare-edge — this project's edge needs it", "Also adding: isr — cloudflare-edge needs it"},
+			wants: []string{"Also adding feature cloudflare-edge to the production bootstrap: this project's edge needs it", "Also adding feature isr to the production bootstrap: cloudflare-edge needs it"},
 		},
 		{
 			name: "content going backwards",
@@ -842,7 +842,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "INFO  [plan] Also adding: cloudflare-edge — this project's edge needs it\nINFO  [plan] Also adding: isr — cloudflare-edge needs it\n"
+		want := "INFO  [plan] Also adding feature cloudflare-edge to the production bootstrap: this project's edge needs it\nINFO  [plan] Also adding feature isr to the production bootstrap: cloudflare-edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
@@ -857,7 +857,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		want := "Also adding: cloudfront-edge — this project's edge needs it\n"
+		want := "Also adding feature cloudfront-edge to the production bootstrap: this project's edge needs it\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
@@ -872,7 +872,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 		if err := Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if strings.Contains(stdout.String(), "Also adding:") {
+		if strings.Contains(stdout.String(), "Also adding") {
 			t.Errorf("stdout = %q, want nothing said where the set named everything applied", stdout.String())
 		}
 	})

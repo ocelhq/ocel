@@ -155,7 +155,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 	if _, err := providerclient.Stream(ctx, prov, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions); err != nil {
 		return err
 	}
-	run.Finish("Pruned")
+	run.Finish(fmt.Sprintf("Pruned the production promotions of %s down to the newest %d", cfg.Slug, keepN))
 	return nil
 }
 

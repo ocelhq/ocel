@@ -1,39 +1,45 @@
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","started":{}}
-{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","message":"Checking credentials","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","identity":{"project":"acme","tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"}}}
+{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","message":"Checking your credentials and the production bootstrap for acme","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","identity":{"project":"acme","tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"},"edge":{"vendor":"cloudflare","account":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building project","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building 2 apps (web and api)","started":{"parentSpanId":"AwAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Packages: +812","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"go: downloading ocel.dev v0.4.1","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:03Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"▲ Next.js 15.4.2","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:09Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":" ✓ Compiled successfully","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:20Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"   Generating static pages (28/28)","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:21Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Route (app)                     Size     First Load JS","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
 {"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
-{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Edge","started":{}}
-{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Provisioning","started":{"parentSpanId":"CgAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Reconciling the cloudflare edge"}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Checking the bootstrap, domains and bindings for acme","started":{}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Checking the bootstrap, domains and bindings for acme","started":{"parentSpanId":"CAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503225000000000"}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503225000000000"}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Reconciling the routes for acme in production","started":{}}
+{"time":"2026-09-27T10:00:25Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Reconciling the routes for acme in production","started":{"parentSpanId":"CgAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:26Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"routes pruned: 3","output":{}}
 {"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503225000000000"}}
 {"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503225000000000"}}
-{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Shared infrastructure","started":{}}
-{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DQAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Provisioning","started":{"parentSpanId":"DAAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DQAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Provisioning the environment's infrastructure"}
-{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","phase":"PHASE_PROVISION","message":"pulumi resource operations","started":{"parentSpanId":"DQAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:30Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","phase":"PHASE_PROVISION","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000","attributes":[{"key":"ATTRIBUTE_KEY_RESOURCE_COUNT","value":"1"}]}}
-{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DwAAAAAAAAA=","phase":"PHASE_PROVISION","message":"create resource","started":{"parentSpanId":"DQAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:30Z","level":"LEVEL_INFO","spanId":"DwAAAAAAAAA=","phase":"PHASE_PROVISION","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000","attributes":[{"key":"ATTRIBUTE_KEY_DURATION_MS","value":"3000"},{"key":"ATTRIBUTE_KEY_RESOURCE_TYPE","value":"aws:s3/bucket:Bucket"},{"key":"ATTRIBUTE_KEY_RESOURCE_NAME","value":"assets"},{"key":"ATTRIBUTE_KEY_RESOURCE_ACTION","value":"create"}]}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"DQAAAAAAAAA=","phase":"PHASE_PROVISION","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000"}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","phase":"PHASE_PROVISION","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000"}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"web","started":{}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Uploading","started":{"parentSpanId":"FAAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FgAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"api","started":{}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading","started":{"parentSpanId":"FgAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Provisioning web"}
-{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Provisioning api"}
+{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Provisioning shared resource assets","started":{}}
+{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"Provisioning shared resource assets","started":{"parentSpanId":"DAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"pulumi resource operations","started":{"parentSpanId":"DQAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:30Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000","attributes":[{"key":"ATTRIBUTE_KEY_RESOURCE_COUNT","value":"1"}]}}
+{"time":"2026-09-27T10:00:27Z","level":"LEVEL_INFO","spanId":"DwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","message":"create resource","started":{"parentSpanId":"DQAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:30Z","level":"LEVEL_INFO","spanId":"DwAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000","attributes":[{"key":"ATTRIBUTE_KEY_DURATION_MS","value":"3000"},{"key":"ATTRIBUTE_KEY_RESOURCE_TYPE","value":"aws:s3/bucket:Bucket"},{"key":"ATTRIBUTE_KEY_RESOURCE_NAME","value":"assets"},{"key":"ATTRIBUTE_KEY_RESOURCE_ACTION","value":"create"}]}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"DQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000"}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503227000000000"}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Deploying the container app to production","started":{}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Deploying the container app to production","started":{"parentSpanId":"FAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FgAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{"parentSpanId":"FgAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Sending web's image to 123456789012.dkr.ecr.us-east-1.amazonaws.com/acme-web (1 of 1)"}
+{"time":"2026-09-27T10:00:33Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"5f70bf18a086: Pushed","output":{}}
+{"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading function api's artifact (1.2 MiB)"}
+{"time":"2026-09-27T10:00:32Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Warming 1 bundle, 8 at a time"}
+{"time":"2026-09-27T10:00:33Z","level":"LEVEL_DEBUG","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"fn--api--api of app api: warmed in 0.4s"}
+{"time":"2026-09-27T10:00:33Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Warmed 1/1 bundles in 1s"}
 {"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"GAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"pulumi resource operations","started":{"parentSpanId":"FwAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:38Z","level":"LEVEL_INFO","spanId":"GAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503231000000000","attributes":[{"key":"ATTRIBUTE_KEY_RESOURCE_COUNT","value":"1"}]}}
 {"time":"2026-09-27T10:00:31Z","level":"LEVEL_INFO","spanId":"GQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"update resource","started":{"parentSpanId":"FwAAAAAAAAA="}}
@@ -46,10 +52,15 @@
 {"time":"2026-09-27T10:00:51Z","level":"LEVEL_INFO","spanId":"GwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503232000000000","attributes":[{"key":"ATTRIBUTE_KEY_DURATION_MS","value":"19000"},{"key":"ATTRIBUTE_KEY_RESOURCE_TYPE","value":"aws:ecs/service:Service"},{"key":"ATTRIBUTE_KEY_RESOURCE_NAME","value":"acme-prod-web"},{"key":"ATTRIBUTE_KEY_RESOURCE_ACTION","value":"update"}]}}
 {"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503231000000000"}}
 {"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503231000000000"}}
-{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HgAAAAAAAAA=","phase":"PHASE_PROMOTE","message":"Promotion","started":{}}
-{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HwAAAAAAAAA=","phase":"PHASE_PROMOTE","message":"Finalizing","started":{"parentSpanId":"HgAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HwAAAAAAAAA=","phase":"PHASE_PROMOTE","message":"Promoting the deployment"}
-{"time":"2026-09-27T10:00:54Z","level":"LEVEL_INFO","spanId":"HwAAAAAAAAA=","phase":"PHASE_PROMOTE","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503252000000000"}}
-{"time":"2026-09-27T10:00:54Z","level":"LEVEL_INFO","spanId":"HgAAAAAAAAA=","phase":"PHASE_PROMOTE","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503252000000000"}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Attaching production hostname acme.example.com","started":{}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Attaching production hostname acme.example.com","started":{"parentSpanId":"HAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Binding acme.example.com to the cloudflare edge"}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_WARN","spanId":"HAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","message":"Point acme.example.com at the cloudflare edge","dnsManualRecords":{"headline":"Point acme.example.com at the cloudflare edge","records":[{"name":"acme.example.com","type":"CNAME","value":"acme.cdn.cloudflare.net"}]}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HQAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503252000000000"}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HAAAAAAAAAA=","phase":"PHASE_PROVISION","subject":"cloudflare","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503252000000000"}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HgAAAAAAAAA=","phase":"PHASE_PROMOTE","subject":"production","message":"Switching traffic to promotion p-7f3a","started":{}}
+{"time":"2026-09-27T10:00:52Z","level":"LEVEL_INFO","spanId":"HwAAAAAAAAA=","phase":"PHASE_PROMOTE","subject":"production","message":"Switching traffic to promotion p-7f3a","started":{"parentSpanId":"HgAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:54Z","level":"LEVEL_INFO","spanId":"HwAAAAAAAAA=","phase":"PHASE_PROMOTE","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503252000000000"}}
+{"time":"2026-09-27T10:00:54Z","level":"LEVEL_INFO","spanId":"HgAAAAAAAAA=","phase":"PHASE_PROMOTE","subject":"production","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503252000000000"}}
 {"time":"2026-09-27T10:00:54Z","level":"LEVEL_INFO","outcome":{"success":true,"promotionId":"p-7f3a","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]},{"app":"api","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://api.acme.example.com"]}]}}
 {"time":"2026-09-27T10:00:54Z","level":"LEVEL_INFO","result":{"success":true,"headline":"Deployed acme to production","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]},{"app":"api","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://api.acme.example.com"]}],"durationMs":"54000"}}

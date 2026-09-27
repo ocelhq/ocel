@@ -233,7 +233,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 				results = append(results, ev.GetResult())
 			}
 		}
-		if len(results) != 1 || !results[0].GetInterrupted() || results[0].GetHeadline() != "Cancelled" {
+		if len(results) != 1 || !results[0].GetInterrupted() || results[0].GetHeadline() != "Deploy cancelled" {
 			t.Fatalf("%s sink got %d results (first interrupted: %t), want one interrupted result", name, len(results), len(results) > 0 && results[0].GetInterrupted())
 		}
 		if received[len(received)-1].GetResult() == nil {

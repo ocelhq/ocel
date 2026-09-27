@@ -1,7 +1,7 @@
 stages:
   [build]
-    Building project
+    Building app web
 plan:
 waits:
 results:
-  success=false interrupted=true headline="Cancelled" detail="" duration_ms=4000
+  success=false interrupted=true headline="Deploy cancelled" detail="" duration_ms=4000

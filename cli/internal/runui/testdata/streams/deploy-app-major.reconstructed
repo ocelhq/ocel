@@ -1,24 +1,28 @@
 stages:
   [check]
-    Checking credentials
+    Checking your credentials and the production bootstrap for acme
   [build]
-    Building project
-  Edge
-    Provisioning
-  Shared infrastructure
-    Provisioning
+    Building 2 apps (web and api)
+  Checking the bootstrap, domains and bindings for acme
+    Checking the bootstrap, domains and bindings for acme
+  Reconciling the routes for acme in production
+    Reconciling the routes for acme in production
+  Provisioning shared resource assets
+    Provisioning shared resource assets
       pulumi resource operations
       create resource
-  web
-    Uploading
-  api
-    Uploading
+  Deploying the container app to production
+    Deploying the container app to production
+  Deploying the serverless app to production
+    Deploying the serverless app to production
       pulumi resource operations
       update resource
       pulumi resource operations
       update resource
-  Promotion
-    Finalizing
+  Attaching production hostname acme.example.com
+    Attaching production hostname acme.example.com
+  Switching traffic to promotion p-7f3a
+    Switching traffic to promotion p-7f3a
 plan:
 waits:
 results:

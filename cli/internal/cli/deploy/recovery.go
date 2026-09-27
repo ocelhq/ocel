@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -41,10 +42,32 @@ type gateRecovery struct {
 }
 
 func (r gateRecovery) buildManifest(ctx context.Context, phase *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
-	scope := phase.Unit(r.cfg.Slug, "Building project")
+	scope := phase.Unit(r.cfg.Slug, buildTitle(r.cfg, prebuilt))
 	manifest, inline, err := r.build(ctx, scope, prebuilt)
 	scope.End(err)
 	return manifest, inline, err
+}
+
+func buildTitle(cfg *projectconfig.Config, prebuilt bool) string {
+	names := make([]string, 0, len(cfg.Apps))
+	for _, app := range cfg.Apps {
+		names = append(names, app.Name)
+	}
+	var apps string
+	switch {
+	case len(names) == 0:
+		return "Collecting the resources " + cfg.Slug + " declares"
+	case len(names) == 1:
+		apps = "app " + names[0]
+	case len(names) <= 4:
+		apps = fmt.Sprintf("%d apps (%s and %s)", len(names), strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
+	default:
+		apps = fmt.Sprintf("%d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
+	}
+	if prebuilt {
+		return "Reading the prebuilt output of " + apps
+	}
+	return "Building " + apps
 }
 
 func (r gateRecovery) build(ctx context.Context, scope *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
@@ -109,11 +132,11 @@ func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope
 		})
 		switch {
 		case err != nil:
-			scope.Warn(fmt.Sprintf("%s has no %s, and creating it there failed: %v", source.ID, problem.GetKey(), err))
+			scope.Warn(fmt.Sprintf("Could not create %s empty in %s, which lacks it: %v", problem.GetKey(), source.ID, err))
 		case resp.GetAwaitingApproval():
-			scope.Warn(fmt.Sprintf("asked %s to create %s empty; the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
+			scope.Warn(fmt.Sprintf("Asked %s to create %s empty: the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
 		default:
-			scope.Warn(fmt.Sprintf("created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
+			scope.Warn(fmt.Sprintf("Created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
 		}
 	}
 }

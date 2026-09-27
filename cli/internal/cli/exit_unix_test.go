@@ -56,7 +56,7 @@ func TestCtrlCDuringALinkLeavesItsTranscriptWithNoLiveLineAndExitsInterrupted(t 
 			if !errors.As(exited, &exitErr) || exitErr.ExitCode() != 130 {
 				t.Errorf("ocel link exited with %v, want status 130", exited)
 			}
-			_, afterResult, ok := strings.Cut(ansi.Strip(screen), "Cancelled")
+			_, afterResult, ok := strings.Cut(ansi.Strip(screen), "Link cancelled")
 			if !ok {
 				t.Fatalf("the terminal shows %q, want the run ended as cancelled", screen)
 			}

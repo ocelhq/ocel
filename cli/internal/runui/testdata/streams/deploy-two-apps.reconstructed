@@ -1,13 +1,13 @@
 stages:
   [check]
-    Checking credentials
+    Checking your credentials and the production bootstrap for acme
   [plan]
   [build]
-    Building project
-  web
-    Uploading
-  api
-    Uploading
+    Building 2 apps (web and api)
+  Deploying the serverless app to production
+    Deploying the serverless app to production
+  Deploying the serverless app to production
+    Deploying the serverless app to production
       pulumi resource operations
       resource operation failed
       pulumi resource operations
@@ -20,4 +20,4 @@ waits:
   waiting on 1 unset, remedy "ocel env ui"
   resumed the page was answered
 results:
-  success=false interrupted=false headline="" detail="internal: provision api: update failed" duration_ms=21000
+  success=false interrupted=false headline="Deploy failed" detail="internal: provision api: update failed" duration_ms=21000

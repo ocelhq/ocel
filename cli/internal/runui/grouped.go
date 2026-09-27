@@ -83,6 +83,7 @@ type blockLine struct {
 type phaseTally struct {
 	since       time.Time
 	units, done int
+	overlapped  bool
 }
 
 type unitBlock struct {
@@ -173,6 +174,10 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	case ev.GetIdentity() != nil:
 		s.tier = ev.GetIdentity().GetTier()
 		s.gate(identityLines(s.present, ev.GetIdentity()))
+		if who := signedIn(ev.GetIdentity()); who != "" {
+			signed := line{level: ev.GetLevel(), phase: ev.GetPhase(), message: who}
+			s.print(blockLine{text: signed.render(s.present), from: signed})
+		}
 	case ev.GetPlan() != nil:
 		s.gate(planLines(s.present, ev.GetPlan()))
 	case ev.GetDnsManualRecords() != nil:
@@ -223,7 +228,9 @@ func (s *GroupedSink) open(span string, ev *streamv1.RunEvent) {
 		s.owners[span] = s.owners[parent]
 	default:
 		s.units[span] = &unitBlock{opened: ev}
-		s.tally(ev).units++
+		tally := s.tally(ev)
+		tally.overlapped = tally.overlapped || tally.units > tally.done
+		tally.units++
 		s.started = append(s.started, span)
 		s.owners[span] = span
 	}
@@ -236,13 +243,14 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 		return
 	}
 	s.forget(span)
-	s.tally(unit.opened).done++
+	tally := s.tally(unit.opened)
+	tally.done++
 	ended := ev.GetEnded()
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	message := fmt.Sprintf("%s in %s%s", unit.opened.GetMessage(), took, unit.resources.summary())
+	message := fmt.Sprintf("%s in %s%s%s", pastTense(unit.opened.GetMessage()), took, tally.finished(), unit.resources.summary())
 	if failed {
-		message = fmt.Sprintf("%s failed after %s%s", unit.opened.GetMessage(), took, unit.resources.summary())
+		message = fmt.Sprintf("%s failed after %s%s%s", unit.opened.GetMessage(), took, tally.finished(), unit.resources.summary())
 		if reason := ev.GetMessage(); reason != "" {
 			message += ": " + reason
 		}
@@ -283,6 +291,13 @@ func (s *GroupedSink) tally(opened *streamv1.RunEvent) *phaseTally {
 		s.tallies[opened.GetPhase()] = tally
 	}
 	return tally
+}
+
+func (t *phaseTally) finished() string {
+	if !t.overlapped {
+		return ""
+	}
+	return fmt.Sprintf(" (%d/%d)", t.done, t.units)
 }
 
 func (s *GroupedSink) dnsRecords(ev *streamv1.RunEvent) {

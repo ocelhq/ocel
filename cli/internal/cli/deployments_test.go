@@ -215,7 +215,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	}) {
 		t.Errorf("the stream never said what was reclaimed: %s", stream.String())
 	}
-	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Pruned" {
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() || result.GetHeadline() != "Pruned the production promotions of "+clitest.FixtureSlug+" down to the newest 10" {
 		t.Errorf("result = %v, want the run to end reporting the prune", result)
 	}
 }

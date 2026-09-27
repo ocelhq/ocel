@@ -111,7 +111,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 	if facts.declined {
-		run.Finish("Nothing deployed")
+		run.Finish("Nothing deployed to production")
 		return nil
 	}
 
@@ -145,7 +145,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 	if manifest == nil {
-		run.Finish("Nothing to deploy")
+		run.Finish(fmt.Sprintf("Nothing to deploy: %s declares no apps or resources", cfg.Slug))
 		return nil
 	}
 
@@ -169,7 +169,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 	}
 
 	if opts.dry {
-		return showDeployPlan(ctx, run, prov, req, "Proposed changes to production")
+		return showDeployPlan(ctx, run, prov, req, "Proposed changes to production", cfg.Slug, "production")
 	}
 
 	out, err := streamDeploy(ctx, prov, cfg.Slug, req, inline)

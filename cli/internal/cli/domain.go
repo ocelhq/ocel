@@ -334,7 +334,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 	defer prov.Close()
 
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(cfg.Slug, "Enumerating what releasing the domain would remove")
+	unit := planning.Unit(cfg.Slug, "Enumerating what releasing the global preview domain would remove")
 	var plan *planv1.ChangePlan
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
@@ -360,7 +360,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return err
 	}
 	if !granted {
-		run.Finish("Nothing released")
+		run.Finish(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
 		return nil
 	}
 
@@ -600,7 +600,7 @@ func awaitDomainStatus(ctx context.Context, check *events.Scope, slug string, re
 		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
 	}
 
-	unit := check.Unit(slug, "Waiting for every declared hostname to answer")
+	unit := check.Unit(slug, awaiting(declaredHosts(resp)))
 	resp, err = pollDomainStatus(ctx, read, resp)
 	unit.End(err)
 	return resp, err
@@ -646,6 +646,13 @@ func declaredHosts(resp *contractv1.GetHostnameStatusResponse) int {
 		}
 	}
 	return declared
+}
+
+func awaiting(declared int) string {
+	if declared == 1 {
+		return "Waiting for the one declared production hostname to answer"
+	}
+	return fmt.Sprintf("Waiting for the %d declared production hostnames to answer", declared)
 }
 
 func jittered(every time.Duration) time.Duration {

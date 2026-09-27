@@ -166,8 +166,12 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		env = &environmentv1.Environment{Tier: tier}
 	}
 
+	place := "production"
+	if preview {
+		place = "any preview"
+	}
 	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	unit := planning.Unit(cfg.Slug, "Enumerating what would be destroyed")
+	unit := planning.Unit(cfg.Slug, fmt.Sprintf("Enumerating what %s has in %s to destroy", cfg.Slug, place))
 	var plan *planv1.ChangePlan
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{
@@ -182,13 +186,14 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		return err
 	}
 	if len(plan.GetGroups()) == 0 {
-		run.Finish("Nothing to destroy")
+		run.Finish(fmt.Sprintf("Nothing to destroy: %s has nothing in %s", cfg.Slug, place))
 		return nil
 	}
 
 	consented := showDestroyPlan(planning, cfg.Slug, preview, plan)
 	if gate.Dry {
 		planning.Say("Run without --dry to destroy.")
+		run.Finish(fmt.Sprintf("Planned the destroy of what %s has in %s", cfg.Slug, place))
 		return nil
 	}
 	granted, err := gate.ConsentByName(ctx, planning, consented, "project name", plan.GetSubject())
@@ -197,7 +202,7 @@ func destroyProject(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.C
 		return err
 	}
 	if !granted {
-		run.Finish("Nothing destroyed")
+		run.Finish(fmt.Sprintf("Nothing destroyed: what %s has in %s stays", cfg.Slug, place))
 		return nil
 	}
 

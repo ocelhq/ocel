@@ -115,7 +115,7 @@ func TestRunRollback(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "Aborted.") {
+		if !strings.Contains(out, "Not confirmed, so this run changes nothing") {
 			t.Errorf("stdout = %q, want a declined confirmation to say so", out)
 		}
 		if strings.Contains(out, "Rolled back") {

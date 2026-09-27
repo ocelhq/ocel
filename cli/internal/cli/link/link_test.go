@@ -293,7 +293,7 @@ func TestRunLink(t *testing.T) {
 		if err := run(context.Background(), deps, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
 		}
-		if !strings.Contains(stdout.String(), "currently My App") {
+		if !strings.Contains(stdout.String(), "INFO  [check] This directory is linked to My App now; linking it again\n") {
 			t.Fatalf("stdout = %q, want it to report the previous link", stdout.String())
 		}
 		if record := readLink(t, dir, srv.URL); record == nil || record.ProjectID != "p2" {
@@ -385,7 +385,7 @@ func failedLink(t *testing.T, deps cmddeps.Deps, dir, projectRef string, opts op
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {
 		t.Fatalf("run err = %v, want the run to fail with exit code 1", err)
 	}
-	if !strings.Contains(out.String(), "✗ Failed") {
+	if !strings.Contains(out.String(), "✗ Link failed") {
 		t.Fatalf("output = %q, want the run's failure", out.String())
 	}
 	return out.String()

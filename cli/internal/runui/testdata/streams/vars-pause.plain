@@ -9,7 +9,7 @@
   Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.
 
 INFO  [build] acme: Resumed — the page was answered
-INFO  [build] ✓ acme: Building project in 4s
+INFO  [build] ✓ acme: Built app web in 4s
 
     Reading ocel.aws.config.ts
     ▲ Next.js 15.4.2

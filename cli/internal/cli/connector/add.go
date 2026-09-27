@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
@@ -99,6 +101,20 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		return unfinished(fmt.Errorf("tell the console where to dial this connector: %w", err))
 	}
 
-	run.Finish(fmt.Sprintf("Connector on %s, dialled at %s; the console may %s", paired.Target, at.GetUrl(), listed(opts.grants())))
+	granting := run.Phase(progressv1.Phase_PHASE_PROVISION)
+	granting.Say(grantsLine(opts.grants()))
+	granting.End(nil)
+	run.Finish(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.Target, at.GetUrl()))
 	return nil
+}
+
+func grantsLine(grants []string) string {
+	if len(grants) == 0 {
+		return "The console may use this connector for nothing yet"
+	}
+	written := slices.Sorted(slices.Values(grants))
+	if len(written) == 1 {
+		return "The console may use this connector for " + written[0]
+	}
+	return "The console may use this connector for " + strings.Join(written[:len(written)-1], ", ") + " and " + written[len(written)-1]
 }

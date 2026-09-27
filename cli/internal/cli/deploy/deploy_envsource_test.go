@@ -194,7 +194,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 		if len(created) != 1 || created[0].Key != "STRIPE_API_KEY" || created[0].Value != "" {
 			t.Fatalf("created = %+v, want STRIPE_API_KEY created empty", created)
 		}
-		if out := stdout.String(); !strings.Contains(out, "created STRIPE_API_KEY") {
+		if out := stdout.String(); !strings.Contains(out, "Created STRIPE_API_KEY empty in infisical:p-1/prod") {
 			t.Errorf("stdout = %q, want the creation reported", out)
 		}
 	})

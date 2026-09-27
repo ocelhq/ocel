@@ -1,10 +1,10 @@
 package runui
 
 import (
+	"cmp"
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -21,23 +21,33 @@ const (
 )
 
 func identityLines(present Presentation, ev *streamv1.IdentityEvent) []string {
-	pill, faint := identityStyles(present)
-
 	head := identityHeadline(ev)
-	width := vendorWidth(ev)
-	rows := nonEmpty(
-		identityRow(faint, width, ev.GetOrigin().GetVendor(), originValues(ev.GetOrigin())),
-		identityRow(faint, width, ev.GetEdge().GetVendor(), []string{ev.GetEdge().GetAccount()}),
-	)
-	if head == "" && len(rows) == 0 {
+	if head == "" {
 		return nil
 	}
+	pill, faint := identityStyles(present)
+	return []string{pill.Render(identityName) + identityGap + faint.Render(Version) + head}
+}
 
-	lines := []string{pill.Render(identityName) + identityGap + faint.Render(Version) + head}
-	if len(rows) > 0 {
-		lines = append(append(lines, ""), rows...)
+func signedIn(ev *streamv1.IdentityEvent) string {
+	var parties []string
+	for _, party := range []*streamv1.Party{ev.GetOrigin(), ev.GetEdge()} {
+		if party.GetVendor()+party.GetPrincipal()+party.GetAccount()+party.GetLocation() == "" {
+			continue
+		}
+		text := cmp.Or(party.GetVendor(), "your provider")
+		if principal := party.GetPrincipal(); principal != "" {
+			text += " as " + principal
+		}
+		if where := nonEmpty(party.GetAccount(), party.GetLocation()); len(where) > 0 {
+			text += " (" + strings.Join(where, ", ") + ")"
+		}
+		parties = append(parties, text)
 	}
-	return lines
+	if len(parties) == 0 {
+		return ""
+	}
+	return "Signed in to " + strings.Join(parties, " and ")
 }
 
 func identityStyles(present Presentation) (pill, faint lipgloss.Style) {
@@ -58,33 +68,6 @@ func identityHeadline(ev *streamv1.IdentityEvent) string {
 		return ""
 	}
 	return identityGap + strings.Join(named, pathSep)
-}
-
-func vendorWidth(ev *streamv1.IdentityEvent) int {
-	width := 0
-	for _, vendor := range []string{ev.GetOrigin().GetVendor(), ev.GetEdge().GetVendor()} {
-		if w := ansi.StringWidth(vendor); w > width {
-			width = w
-		}
-	}
-	return width
-}
-
-func identityRow(faint lipgloss.Style, width int, vendor string, values []string) string {
-	values = nonEmpty(values...)
-	if vendor == "" && len(values) == 0 {
-		return ""
-	}
-	pad := strings.Repeat(" ", width-ansi.StringWidth(vendor)) + identityGap
-	return faint.Render(vendor) + pad + strings.Join(values, identityGap)
-}
-
-func originValues(party *streamv1.Party) []string {
-	account, principal := party.GetAccount(), party.GetPrincipal()
-	if party.GetLocation() == "" && account != "" && principal != "" {
-		return []string{principal + "@" + account}
-	}
-	return []string{account, principal, party.GetLocation()}
 }
 
 func nonEmpty(values ...string) []string {

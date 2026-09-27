@@ -146,8 +146,11 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "no functions to deploy; deploying infrastructure only") {
-			t.Errorf("stdout = %q, want the infra-only warning", out)
+		if !strings.Contains(out, "No app has a function or image to deploy, so this deploys only the 1 resource test-app declares") {
+			t.Errorf("stdout = %q, want the infra-only note naming how many resources deploy", out)
+		}
+		if !strings.Contains(out, "INFO  [build] ✓ test-app: Collected the resources test-app declares in ") {
+			t.Errorf("stdout = %q, want the build unit to say it only collects what the project declares", out)
 		}
 		if !strings.Contains(out, "Deployed") {
 			t.Errorf("stdout = %q, want resources to still deploy to success", out)
@@ -401,7 +404,7 @@ export default {
 			}
 		}
 		banner := strings.Index(out, "test-app › production")
-		build := strings.Index(out, "Building project")
+		build := strings.Index(out, "[build]")
 		deploy := strings.Index(out, "DEPLOY ")
 		if banner < 0 || build < 0 || deploy < 0 {
 			t.Fatalf("expected banner, build, and deploy all present; banner=%d build=%d deploy=%d\n%s", banner, build, deploy, out)
@@ -433,7 +436,7 @@ export default {
 		if !strings.Contains(out, "Deployed") {
 			t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
 		}
-		for _, want := range []string{"\nocel  dev  test-app › production", "aws   123456789012  us-east-1", "edge  abcd1234"} {
+		for _, want := range []string{"ocel  dev  test-app › production", "INFO  [check] Signed in to aws (123456789012, us-east-1) and edge (abcd1234)"} {
 			if !strings.Contains(out, want+"\n") {
 				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
 			}
@@ -469,7 +472,7 @@ export default {
 		if !strings.Contains(out, "Cloudflare") {
 			t.Errorf("stdout = %q, want the Cloudflare credential problem surfaced", out)
 		}
-		if strings.Contains(out, "Building project") {
+		if strings.Contains(out, "[build]") {
 			t.Errorf("stdout = %q, want the build to be skipped on a credential failure", out)
 		}
 		if strings.Contains(out, "DEPLOY ") {
@@ -543,6 +546,9 @@ export default {
 		}
 
 		out := stdout.String()
+		if !strings.Contains(out, "INFO  [build] ✓ test-app: Built 2 apps (web and admin) in ") {
+			t.Errorf("stdout = %q, want the build unit to say how many apps it built and which", out)
+		}
 		if got := strings.Count(out, "APP "); got != 2 {
 			t.Fatalf("stdout echoed %d apps, want exactly 2:\n%s", got, out)
 		}

@@ -1,27 +1,27 @@
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","started":{}}
-{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","message":"Checking credentials","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
+{"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","message":"Checking your credentials and the production bootstrap for acme","started":{"parentSpanId":"AQAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","identity":{"project":"acme","tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"},"edge":{"vendor":"cloudfront","account":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_CHECK","subject":"aws","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_CHECK","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_WARN","phase":"PHASE_CHECK","subject":"web","message":"OCEL_API_URL is set in .env but is not declared in ocel.config.ts"}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_PLAN","started":{}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_PLAN","plan":{"subject":"production","edgeKind":"cloudfront","groups":[{"kind":"infrastructure","name":"shared","changes":[{"kind":"bucket","name":"assets","action":"ACTION_CREATE"},{"kind":"bucket","name":"logs","action":"ACTION_DELETE","reason":"no longer declared"},{"kind":"function","name":"api","action":"ACTION_UPDATE"}]}]}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_PLAN","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
-{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building project","started":{"parentSpanId":"BAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building 2 apps (web and api)","started":{"parentSpanId":"BAAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:01Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Bundling web","output":{"stream":"STREAM_STDOUT"}}
 {"time":"2026-09-27T10:00:02Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
 {"time":"2026-09-27T10:00:06Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","resumed":{"reason":"the page was answered"}}
 {"time":"2026-09-27T10:00:06Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Bundling api","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
 {"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"web","started":{}}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Uploading","started":{"parentSpanId":"FAAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FgAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"api","started":{}}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading","started":{"parentSpanId":"FgAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Provisioning web"}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Provisioning api"}
-{"time":"2026-09-27T10:00:07Z","level":"LEVEL_WARN","phase":"PHASE_CHECK","subject":"web","message":"edge-middleware: middleware runs in the origin"}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Deploying the serverless app to production","started":{}}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Deploying the serverless app to production","started":{"parentSpanId":"FAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FgAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{}}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{"parentSpanId":"FgAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","message":"Uploading web's 214 static assets"}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"FwAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading function api's artifact (1.2 MiB)"}
+{"time":"2026-09-27T10:00:07Z","level":"LEVEL_WARN","phase":"PHASE_CHECK","subject":"web","message":"edge-middleware runs degraded: middleware runs in the origin"}
 {"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"GAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"pulumi resource operations","started":{"parentSpanId":"FwAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:10Z","level":"LEVEL_ERROR","spanId":"GAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","ended":{"status":"SPAN_STATUS_ERROR","startTimeUnixNano":"1790503207000000000","attributes":[{"key":"ATTRIBUTE_KEY_RESOURCE_COUNT","value":"1"},{"key":"ATTRIBUTE_KEY_ERROR_KIND","value":"failed"}]}}
 {"time":"2026-09-27T10:00:07Z","level":"LEVEL_INFO","spanId":"GQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"resource operation failed","started":{"parentSpanId":"FwAAAAAAAAA="}}
@@ -37,4 +37,4 @@
 {"time":"2026-09-27T10:00:19Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503207000000000"}}
 {"time":"2026-09-27T10:00:19Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"web","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503207000000000"}}
 {"time":"2026-09-27T10:00:19Z","level":"LEVEL_ERROR","outcome":{"error":"internal: provision api: update failed","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]},{"app":"api","outcome":"APP_OUTCOME_FAILED","error":"provision api: update failed"}]}}
-{"time":"2026-09-27T10:00:21Z","level":"LEVEL_ERROR","result":{"detail":"internal: provision api: update failed","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]},{"app":"api","outcome":"APP_OUTCOME_FAILED","error":"provision api: update failed"}],"durationMs":"21000"}}
+{"time":"2026-09-27T10:00:21Z","level":"LEVEL_ERROR","result":{"headline":"Deploy failed","detail":"internal: provision api: update failed","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]},{"app":"api","outcome":"APP_OUTCOME_FAILED","error":"provision api: update failed"}],"durationMs":"21000"}}

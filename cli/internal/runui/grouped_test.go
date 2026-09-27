@@ -118,15 +118,70 @@ func TestTwoParallelUnitsNeverInterleaveAndTheFirstToEndPrintsFirst(t *testing.T
 	deploy.Forward(providerEnded(2, "api", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
 	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(9*time.Second)))
 
-	want := "INFO  [deploy] ✓ api: deployed 9 resources in 5s\n" +
+	want := "INFO  [deploy] ✓ api: deployed 9 resources in 5s (1/2)\n" +
 		"\n" +
 		"    api line 1\n" +
 		"    api line 2\n" +
 		"\n" +
-		"INFO  [deploy] ✓ web: deployed 12 resources in 9s\n" +
+		"INFO  [deploy] ✓ web: deployed 12 resources in 9s (2/2)\n" +
 		"\n" +
 		"    web line 1\n" +
 		"    web line 2\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAUnitEndingBesideOthersInItsPhaseSaysHowManyOfThemHaveFinished(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	deploy.Forward(providerStarted(1, "web", "Deploying the serverless app to production", start))
+	deploy.Forward(providerStarted(2, "api", "Deploying the container app to production", start))
+	deploy.Forward(providerEnded(2, "api", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
+	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
+
+	want := "INFO  [deploy] ✓ api: Deployed the container app to production in 5s (1/2)\n" +
+		"ERROR [deploy] ✗ web: Deploying the serverless app to production failed after 9s (2/2)\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestUnitsThatRanOneAfterAnotherCarryNoCount(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.Unit("console.ocel.dev", "loading your organizations").End(nil)
+	c.pass(time.Second)
+	check.Unit("acme-inc", "loading the projects in Acme Inc").End(nil)
+
+	want := "INFO  [check] ✓ console.ocel.dev: loading your organizations in 0s\n" +
+		"INFO  [check] ✓ acme-inc: loading the projects in Acme Inc in 0s\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestASuccessfulUnitsHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWasDoing(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	deploy.Forward(providerStarted(1, "web", "Deploying the serverless app to production", start))
+	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(48*time.Second)))
+	deploy.Forward(providerStarted(2, "relay", "Attaching production hostname shop.example", start))
+	deploy.Forward(providerEnded(2, "relay", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(3*time.Second)))
+	deploy.Forward(providerStarted(3, "api", "Sending api's image to the registry", start))
+	deploy.Forward(providerEnded(3, "api", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+
+	want := "INFO  [deploy] ✓ web: Deployed the serverless app to production in 48s\n" +
+		"ERROR [deploy] ✗ relay: Attaching production hostname shop.example failed after 3s\n" +
+		"INFO  [deploy] ✓ api: Sent api's image to the registry in 1s\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -146,11 +201,11 @@ func TestOnceAUnitHasFailedALaterSuccessfulUnitShowsOnlyItsHeader(t *testing.T) 
 	c.pass(2 * time.Second)
 	web.End(nil)
 
-	want := "ERROR [build] ✗ api: Building api failed after 3s: npm run build exited with status 1\n" +
+	want := "ERROR [build] ✗ api: Building api failed after 3s (1/2): npm run build exited with status 1\n" +
 		"\n" +
 		"    api: missing module\n" +
 		"\n" +
-		"INFO  [build] ✓ web: Building web in 5s\n"
+		"INFO  [build] ✓ web: Built web in 5s (2/2)\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -172,8 +227,8 @@ func TestASuccessfulUnitAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *
 	c.pass(time.Second)
 	web.End(nil)
 
-	want := "ERROR [build] ✗ api: Building api failed after 1s: npm run build exited with status 1\n" +
-		"INFO  [build] ✓ web: Building web in 2s\n" +
+	want := "ERROR [build] ✗ api: Building api failed after 1s (1/2): npm run build exited with status 1\n" +
+		"INFO  [build] ✓ web: Built web in 2s (2/2)\n" +
 		"      WARN  next.config.js sets images.unoptimized\n" +
 		"      ERROR a route failed to prerender and serves dynamically\n"
 	if got := out.String(); got != want {
@@ -224,7 +279,7 @@ func debugAndInfoInAUnit(t *testing.T, present Presentation) string {
 func TestAUnitsMessagesAreIndentedUnderItsHeaderAndDebugIsHiddenUnlessVerbose(t *testing.T) {
 	t.Parallel()
 
-	want := "INFO  [build] ✓ web: Building web in 2s\n" +
+	want := "INFO  [build] ✓ web: Built web in 2s\n" +
 		"      bundled 12 routes\n"
 	if got := debugAndInfoInAUnit(t, Presentation{}); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -235,7 +290,7 @@ func TestVerboseShowsDebugLinesInTheirUnit(t *testing.T) {
 	t.Parallel()
 
 	want := "DEBUG [build] resolved the node toolchain at /usr/bin/node\n" +
-		"INFO  [build] ✓ web: Building web in 2s\n" +
+		"INFO  [build] ✓ web: Built web in 2s\n" +
 		"      DEBUG reusing 3 cached layers\n" +
 		"      bundled 12 routes\n" +
 		"\n" +
@@ -361,7 +416,7 @@ func TestAPrintedLineRestartsTheSilence(t *testing.T) {
 	ticks <- start.Add(59 * time.Second)
 	ticks <- start.Add(60 * time.Second)
 
-	want := "INFO  [build] ✓ web: Building web in 30s\n" +
+	want := "INFO  [build] ✓ web: Built web in 30s (1/2)\n" +
 		"INFO  [build] Still building api — 1/2 done, 1m00s elapsed\n" +
 		"WARN  [build] api: Building api did not finish\n"
 	if got := closed(t, sink, out); got != want {
@@ -378,7 +433,7 @@ func TestSilenceWithNothingRunningPrintsNoHeartbeat(t *testing.T) {
 	web.End(nil)
 	ticks <- c.now().Add(5 * time.Minute)
 
-	want := "INFO  [build] ✓ web: Building web in 1s\n"
+	want := "INFO  [build] ✓ web: Built web in 1s\n"
 	if got := closed(t, sink, out); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -453,12 +508,12 @@ func TestInGitHubActionsAFailedBlockStaysExpandedAndALaterSuccessKeepsItsBodyFol
 	c.pass(2 * time.Second)
 	web.End(nil)
 
-	want := "ERROR [build] ✗ api: Building api failed after 3s: npm run build exited with status 1\n" +
-		"::error::[build] api: Building api failed after 3s: npm run build exited with status 1\n" +
+	want := "ERROR [build] ✗ api: Building api failed after 3s (1/2): npm run build exited with status 1\n" +
+		"::error::[build] api: Building api failed after 3s (1/2): npm run build exited with status 1\n" +
 		"\n" +
 		"    api: missing module\n" +
 		"\n" +
-		"::group::INFO  [build] ✓ web: Building web in 5s\n" +
+		"::group::INFO  [build] ✓ web: Built web in 5s (2/2)\n" +
 		"\n" +
 		"    web compiled\n" +
 		"\n" +
@@ -573,7 +628,7 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	deploy.Forward(providerEnded(2, "web", ok, start, start.Add(41*time.Second)))
 	deploy.Forward(providerEnded(1, "web", ok, start, start.Add(42*time.Second)))
 
-	want := "INFO  [deploy] ✓ web: Deploying web in 42s (2 created, 1 updated, 1 replaced, 1 deleted)\n" +
+	want := "INFO  [deploy] ✓ web: Deployed web in 42s — 5 resources: 2 created, 1 updated, 1 replaced, 1 deleted\n" +
 		"      + assets (aws:s3/bucket:Bucket) created\n" +
 		"      ~ api (aws:iam/role:Role) updated\n" +
 		"      + jobs (aws:sqs/queue:Queue) created\n" +
@@ -597,7 +652,7 @@ func TestAResourceThatFailedWithoutChangingIsListedAndCountedAsFailed(t *testing
 	deploy.Forward(providerEnded(2, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
 	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
 
-	want := "ERROR [deploy] ✗ web: Deploying web failed after 5s (1 failed)\n" +
+	want := "ERROR [deploy] ✗ web: Deploying web failed after 5s — 1 resource failed\n" +
 		"      ✗ runner (aws:iam/role:Role) failed\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -629,7 +684,7 @@ func failedDeploy(t *testing.T, present Presentation) string {
 func TestAFailedResourcesDiagnosticIsUnderItsFailedBlockWhileTheEngineOutputStaysHidden(t *testing.T) {
 	t.Parallel()
 
-	want := "ERROR [deploy] ✗ Environment failed after 10s (1 created, 1 failed)\n" +
+	want := "ERROR [deploy] ✗ Environment failed after 10s — 2 resources: 1 created, 1 failed\n" +
 		"      + assets (aws:s3/bucket:Bucket) created\n" +
 		"      ✗ logs (aws:s3/bucket:Bucket) failed to create\n" +
 		"      ERROR logs (aws:s3/bucket:Bucket): creating S3 Bucket (logs): BucketAlreadyExists\n"
@@ -700,7 +755,7 @@ func TestAFailedMultiAppDeploySaysWhatWasNotPromotedAndThatProductionStillServes
 	want := productionHead +
 		"INFO  [build] built 2 apps\n" +
 		"\n" +
-		"✗ Failed in 4m02s — api: the stack update failed\n" +
+		"✗ Deploy failed in 4m02s — api: the stack update failed\n" +
 		"  web deployed but was not promoted: promotion needs every app, and api failed\n" +
 		"  production still serves what it served before this run\n"
 	if got := out.String(); got != want {
@@ -728,7 +783,7 @@ func TestAUnitStillOpenWhenTheResultArrivesPrintsAsUnfinishedAboveTheSummary(t *
 		"\n" +
 		"    updating function api\n" +
 		"\n" +
-		"✗ Failed in 12s — the provider exited\n"
+		"✗ Deploy failed in 12s — the provider exited\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -778,7 +833,7 @@ func TestACancelledRunsSummarySaysSoAndWhatToRerunAfterAVerbatimBlockWithOneBlan
 		"\n" +
 		"    creating function web\n" +
 		"\n" +
-		"✗ Cancelled in 12s — Resources may be partially created.\n" +
+		"✗ Deploy cancelled in 12s — Resources may be partially created.\n" +
 		"  Re-run `ocel deploy` to reconcile.\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -815,7 +870,7 @@ func TestAFailedSingleAppDeploySaysNothingWasPromoted(t *testing.T) {
 
 	got := failedWith(t, &progressv1.AppResult{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED})
 
-	want := "✗ Failed in 0s — deploy failed\n" +
+	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  nothing was promoted: web failed\n" +
 		"  production still serves what it served before this run\n"
 	if got != want {
@@ -832,7 +887,7 @@ func TestADeployThatFailedBeforeReachingSomeAppsNamesThemAsNotRun(t *testing.T) 
 		&progressv1.AppResult{App: "cron", Outcome: progressv1.AppOutcome_APP_OUTCOME_NOT_RUN},
 	)
 
-	want := "✗ Failed in 0s — deploy failed\n" +
+	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  nothing was promoted: promotion needs every app, and web failed and api and cron did not run\n" +
 		"  production still serves what it served before this run\n"
 	if got != want {
@@ -848,7 +903,7 @@ func TestAFailureAfterEveryAppDeployedClaimsNothingAboutWhatProductionServes(t *
 		&progressv1.AppResult{App: "api", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED},
 	)
 
-	if want := "✗ Failed in 0s — deploy failed\n"; got != want {
+	if want := "✗ Deploy failed in 0s — deploy failed\n"; got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
@@ -862,7 +917,7 @@ func TestAppsThatDeployedBesideAFailedOneAreNamedAsNotPromoted(t *testing.T) {
 		&progressv1.AppResult{App: "cron", Outcome: progressv1.AppOutcome_APP_OUTCOME_FAILED},
 	)
 
-	want := "✗ Failed in 0s — deploy failed\n" +
+	want := "✗ Deploy failed in 0s — deploy failed\n" +
 		"  web and api deployed but were not promoted: promotion needs every app, and cron failed\n" +
 		"  production still serves what it served before this run\n"
 	if got != want {
@@ -870,7 +925,7 @@ func TestAppsThatDeployedBesideAFailedOneAreNamedAsNotPromoted(t *testing.T) {
 	}
 }
 
-func TestTheIdentityHeadsTheTranscriptSetApartByABlankLine(t *testing.T) {
+func TestTheIdentityBannerIsSetApartByABlankLineAndWhoTheRunSignedInAsFollowsIt(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
@@ -884,8 +939,7 @@ func TestTheIdentityHeadsTheTranscriptSetApartByABlankLine(t *testing.T) {
 
 	want := "ocel  dev  acme › production\n" +
 		"\n" +
-		"aws  123456789012  deploy  us-east-1\n" +
-		"\n" +
+		"INFO  [check] Signed in to aws as deploy (123456789012, us-east-1)\n" +
 		"INFO  [check] the credentials for 123456789012 are valid\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -978,7 +1032,7 @@ func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsUnit(
 		"  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.\n" +
 		"\n" +
 		"INFO  [build] acme: Resumed — the page was answered\n" +
-		"INFO  [build] ✓ acme: Building project in 0s\n"
+		"INFO  [build] ✓ acme: Built project in 0s\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1011,7 +1065,7 @@ func TestARunThatFailedBeforeAnyChangingPhaseSaysNothingChangedAndWhatProduction
 
 	want := "ERROR [build] ✗ web: Building web failed after 0s: npm run build exited with status 1\n" +
 		"\n" +
-		"✗ Failed in 0s — building web: npm run build exited with status 1\n" +
+		"✗ Deploy failed in 0s — building web: npm run build exited with status 1\n" +
 		"  nothing was changed; production still serves what it served before this run\n"
 	if got := strings.TrimPrefix(out.String(), productionHead); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)

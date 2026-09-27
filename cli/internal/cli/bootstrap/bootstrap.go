@@ -209,8 +209,8 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 	if !selected {
-		planning.Say("Aborted.")
-		run.Finish("Nothing bootstrapped")
+		planning.Say("No feature was picked")
+		run.Finish(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
 		return nil
 	}
 	if err := bothWays(requested, named); err != nil {
@@ -232,7 +232,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return req
 	}
 
-	unit := planning.Unit(Name(tier), "Planning changes")
+	unit := planning.Unit(Name(tier), fmt.Sprintf("Planning the changes to the %s bootstrap", Name(tier)))
 	plan, err := providerclient.Plan(ctx, prov, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap)
 	unit.End(err)
 	if err != nil {
@@ -244,7 +244,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	case rendered:
 		var notes []string
 		if !consent.Mutates(plan) {
-			notes = append(notes, "No infrastructure changes — applying refreshes bootstrap seals and records.")
+			notes = append(notes, unchanged(tier))
 		}
 		consented = planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
 	case len(going) > 0:
@@ -253,14 +253,14 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			planning.Warn(fmt.Sprintf("These projects were deployed against it and break when it goes: %s", strings.Join(dependents, ", ")))
 		}
 	default:
-		planning.Say("No infrastructure changes — applying refreshes bootstrap seals and records.")
+		planning.Say(unchanged(tier))
 	}
 	if !picked {
 		edgeID := plan.GetEdgeKind()
 		if edgeID == "" {
 			edgeID = string(cfg.EdgeID())
 		}
-		sayImplied(planning, impliedFeatures(catalogue, requested, edgeID))
+		sayImplied(planning, tier, impliedFeatures(catalogue, requested, edgeID))
 	}
 	status := planned.GetBootstrap()
 	if status.GetDowngrade() {
@@ -268,6 +268,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	}
 	if opts.Dry {
 		planning.Say("Run without --dry to apply.")
+		run.Finish(fmt.Sprintf("Planned the %s bootstrap", Name(tier)))
 		return nil
 	}
 
@@ -277,7 +278,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			return err
 		}
 		if !proceed {
-			run.Finish("Nothing bootstrapped")
+			run.Finish(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
 			return nil
 		}
 	}
@@ -291,7 +292,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 	if !granted {
-		run.Finish("Nothing bootstrapped")
+		run.Finish(fmt.Sprintf("Left the %s bootstrap as it is", Name(tier)))
 		return nil
 	}
 	planning.End(nil)
@@ -304,7 +305,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	if _, err := providerclient.Stream(ctx, prov, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap); err != nil {
 		return err
 	}
-	run.Finish("Bootstrapped")
+	run.Finish(fmt.Sprintf("Bootstrapped the %s environment", Name(tier)))
 	return nil
 }
 
@@ -353,4 +354,8 @@ func Name(tier environmentv1.Tier) string {
 		return "preview"
 	}
 	return "production"
+}
+
+func unchanged(tier environmentv1.Tier) string {
+	return fmt.Sprintf("Nothing in the %s bootstrap's infrastructure changes: applying only refreshes its seals and records", Name(tier))
 }

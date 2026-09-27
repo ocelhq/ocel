@@ -112,7 +112,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		return err
 	}
 	if !granted {
-		run.Finish("Nothing rolled back")
+		run.Finish(fmt.Sprintf("Nothing rolled back: production of %s stays on its live promotion", cfg.Slug))
 		return nil
 	}
 
@@ -138,7 +138,7 @@ func promotionHistory(ctx context.Context, check *events.Scope, prov *providercl
 	if err := bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 		return nil, err
 	}
-	unit := check.Unit(cfg.Slug, "Reading this project's promotion history")
+	unit := check.Unit(cfg.Slug, "Reading the promotion history of production")
 	var listed *contractv1.ListPromotionsResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		listed, err = client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
@@ -152,7 +152,7 @@ func promotionHistory(ctx context.Context, check *events.Scope, prov *providercl
 }
 
 func promote(ctx context.Context, phase *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, target *contractv1.Promotion) (*contractv1.Promotion, error) {
-	unit := phase.Unit(cfg.Slug, fmt.Sprintf("Promoting %s", target.GetPromotionId()))
+	unit := phase.Unit(cfg.Slug, fmt.Sprintf("Switching production traffic back to promotion %s", target.GetPromotionId()))
 	var resp *contractv1.RollbackResponse
 	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		resp, err = client.Rollback(ctx, &contractv1.RollbackRequest{
