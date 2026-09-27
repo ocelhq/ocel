@@ -32,6 +32,7 @@ var (
 		"arm64": load("container-runtime-arm64"),
 	}
 	uploadCompleter = load("upload-completer.zip")
+	envSourceSync   = load("envsourcesync.zip")
 	imageOptimizer  = load("image-optimizer.zip")
 	revalidator     = load("revalidator.zip")
 	tagPublisher    = load("tag-publisher.zip")
@@ -55,6 +56,8 @@ func ContainerRuntime(architecture string) (Payload, error) {
 }
 
 func UploadCompleter() Payload { return uploadCompleter }
+
+func EnvSourceSync() Payload { return envSourceSync }
 
 func ImageOptimizer() Payload { return imageOptimizer }
 
