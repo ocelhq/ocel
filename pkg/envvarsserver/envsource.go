@@ -1,7 +1,6 @@
 package envvarsserver
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -119,7 +118,7 @@ func syncResponse(ctx context.Context, store envvars.Store, scope envvars.Scope,
 	for _, at := range copied.Present {
 		resp.Present = append(resp.Present, cellProto(at))
 	}
-	for _, at := range slices.SortedFunc(maps.Keys(copied.Refused), compareCells) {
+	for _, at := range slices.SortedFunc(maps.Keys(copied.Refused), envvars.Cell.Compare) {
 		resp.Refused = append(resp.Refused, &envvarsv1.RefusedCell{Cell: cellProto(at), Reason: copied.Refused[at]})
 	}
 	return resp, nil
@@ -176,13 +175,9 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 			cell.Folder, scope.Project, registration.Descriptor.ID(), scope.Class, scope.Project))
 	}
 	if slices.Contains(registration.Credentials(), cell) {
-		preview := ""
-		if scope.Class == edge.ClassPreview {
-			preview = " --preview"
-		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"%s is what ocel logs in to %s with, so ocel stores it itself: set it with `ocel env set %s=<VALUE>%s`",
-			at.GetKey(), registration.Descriptor.ID(), at.GetKey(), preview))
+			"%s is what ocel logs in to %s with, so ocel stores it itself: set it with `%s`",
+			at.GetKey(), registration.Descriptor.ID(), envsource.SetCommand(scope.Class, at.GetKey())))
 	}
 	envSync, err := h.envSourceSync(store, scope.Class)
 	if err != nil {
@@ -305,10 +300,6 @@ func envSourceError(descriptor envsource.Descriptor, err error) error {
 
 func cellProto(at envvars.Cell) *envvarsv1.Cell {
 	return &envvarsv1.Cell{Folder: at.Folder, Key: at.Key}
-}
-
-func compareCells(a, b envvars.Cell) int {
-	return cmp.Or(cmp.Compare(a.Folder, b.Folder), cmp.Compare(a.Key, b.Key))
 }
 
 func unixSeconds(at time.Time) int64 {
