@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
@@ -200,8 +201,16 @@ func TestEveryBootstrapRemovalStepSaysWhatItTookOrKeptAndWhy(t *testing.T) {
 			want:    "INFO Removed Firestore database ocel",
 		},
 		{
-			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonDestroy},
-			want:    "INFO Scheduled every version of KMS key production for destruction, which Google carries out after 24 hours",
+			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonKeyScheduled},
+			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 30 days, its default",
+		},
+		{
+			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonKeyScheduled, destroyAfter: 24 * time.Hour},
+			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 24 hours, the key's own period",
+		},
+		{
+			removal: removal{item: item{Kind: KindKey, Name: "production"}, action: provider.ActionDelete, reason: reasonKeyScheduled, destroyAfter: 7 * 24 * time.Hour},
+			want:    "INFO Scheduled every version of KMS key production for destruction, which Cloud KMS carries out after 7 days, the key's own period",
 		},
 		{
 			removal: removal{item: item{Kind: KindKeyRing, Name: "ocel"}, action: provider.ActionKeep, reason: reasonRingKept},

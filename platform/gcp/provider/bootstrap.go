@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"slices"
+	"time"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
@@ -29,13 +30,13 @@ import (
 )
 
 const (
-	reasonCurrent  = "already current"
-	reasonEmulated = "emulator serves one implicit database"
-	reasonRingKept = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
-	reasonShared   = "the %s bootstrap is still installed and shares it"
-	reasonSharedDB = "the %s bootstrap is still installed and shares it, so only the records this class keeps in it are deleted"
-	reasonDestroy  = "scheduled, destroyed after 24h"
-	reasonAbsent   = "nothing is provisioned here"
+	reasonCurrent      = "already current"
+	reasonEmulated     = "emulator serves one implicit database"
+	reasonRingKept     = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
+	reasonShared       = "the %s bootstrap is still installed and shares it"
+	reasonSharedDB     = "the %s bootstrap is still installed and shares it, so only the records this class keeps in it are deleted"
+	reasonKeyScheduled = "Cloud KMS destroys each version once the key's scheduled-destruction period passes, 30 days unless the key sets another"
+	reasonAbsent       = "nothing is provisioned here"
 
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
@@ -801,9 +802,10 @@ func operationFailed(doing string, operation *firestoreadmin.GoogleLongrunningOp
 }
 
 type removal struct {
-	item   item
-	action provider.ChangeAction
-	reason string
+	item         item
+	action       provider.ChangeAction
+	reason       string
+	destroyAfter time.Duration
 }
 
 func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
@@ -876,7 +878,7 @@ func removing(read survey, target item) removal {
 	case target.Kind == KindDatabase:
 		taking.action = provider.ActionDisableThenDelete
 	case target.Kind == KindKey:
-		taking.reason, taking.item.Slow = reasonDestroy, true
+		taking.reason, taking.item.Slow = reasonKeyScheduled, true
 	case target.Name == read.Names.Bucket(read.Class):
 		taking.item.Slow = true
 	}
@@ -917,7 +919,8 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 			}
 		}
 		if taking.action != provider.ActionKeep {
-			if err := b.take(ctx, read, taking.item); err != nil {
+			var err error
+			if taking.destroyAfter, err = b.take(ctx, read, taking.item); err != nil {
 				return err
 			}
 		}
@@ -933,8 +936,10 @@ func (r removal) report(progress edge.Progress) {
 		progress.Debug("Nothing to remove: " + r.item.phrase() + " does not exist")
 	case r.action == provider.ActionKeep:
 		progress.Say("Kept " + r.item.phrase() + ": " + r.reason)
+	case r.item.Kind == KindKey && r.destroyAfter == 0:
+		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(defaultKeyDestroyAfter) + ", its default")
 	case r.item.Kind == KindKey:
-		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Google carries out after 24 hours")
+		progress.Say("Scheduled every version of " + r.item.phrase() + " for destruction, which Cloud KMS carries out after " + formatPeriod(r.destroyAfter) + ", the key's own period")
 	default:
 		progress.Say("Removed " + r.item.phrase())
 	}
@@ -947,26 +952,42 @@ func destroyIn(class edge.Class) string {
 	return "ocel destroy production"
 }
 
-func (b bootstrap) take(ctx context.Context, read survey, target item) error {
+func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyAfter time.Duration, err error) {
 	switch target.Kind {
 	case KindSecret:
-		return b.takeSecret(ctx, target.Name)
+		return 0, b.takeSecret(ctx, target.Name)
 	case KindKey:
 		return b.takeKey(ctx, target.Name)
 	case KindDatabase:
-		return b.takeDatabase(ctx, read)
+		return 0, b.takeDatabase(ctx, read)
 	case KindBucket:
-		return b.takeBucket(ctx, target.Name)
+		return 0, b.takeBucket(ctx, target.Name)
 	case KindRepository:
-		return b.takeRepository(ctx, target.Name)
+		return 0, b.takeRepository(ctx, target.Name)
 	case KindServiceAccount:
-		return b.takeAccount(ctx, read.Class, target.Name)
+		return 0, b.takeAccount(ctx, read.Class, target.Name)
 	case KindService:
-		return b.takeService(ctx, target.Name)
+		return 0, b.takeService(ctx, target.Name)
 	case KindSchedule:
-		return b.takeSchedule(ctx, target.Name)
+		return 0, b.takeSchedule(ctx, target.Name)
 	default:
-		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
+		return 0, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
+	}
+}
+
+const defaultKeyDestroyAfter = 30 * 24 * time.Hour
+
+func formatPeriod(d time.Duration) string {
+	const day = 24 * time.Hour
+	switch {
+	case d == day:
+		return "24 hours"
+	case d%day == 0:
+		return fmt.Sprintf("%d days", d/day)
+	case d%time.Hour == 0:
+		return fmt.Sprintf("%d hours", d/time.Hour)
+	default:
+		return d.String()
 	}
 }
 
@@ -981,17 +1002,17 @@ func (b bootstrap) takeSecret(ctx context.Context, name string) error {
 	return nil
 }
 
-func (b bootstrap) takeKey(ctx context.Context, name string) error {
+func (b bootstrap) takeKey(ctx context.Context, name string) (destroyAfter time.Duration, err error) {
 	client, err := b.clients.KMS()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	key, err := b.readKey(ctx, name)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if key == nil {
-		return nil
+		return 0, nil
 	}
 	versions := client.ListCryptoKeyVersions(ctx, &kmspb.ListCryptoKeyVersionsRequest{Parent: keyPath(b.clients, name)})
 	var listed []*kmspb.CryptoKeyVersion
@@ -1001,7 +1022,7 @@ func (b bootstrap) takeKey(ctx context.Context, name string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("list the versions the %s key has: %w", name, err)
+			return 0, fmt.Errorf("list the versions the %s key has: %w", name, err)
 		}
 		listed = append(listed, version)
 	}
@@ -1009,10 +1030,10 @@ func (b bootstrap) takeKey(ctx context.Context, name string) error {
 		if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
 			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
 		}); err != nil {
-			return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
+			return 0, fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
 		}
 	}
-	return nil
+	return key.GetDestroyScheduledDuration().AsDuration(), nil
 }
 
 func destroyable(versions []*kmspb.CryptoKeyVersion) []string {
