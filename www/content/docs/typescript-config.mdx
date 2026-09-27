@@ -62,6 +62,41 @@ export default defineConfig({
 
 `ocel.json` reaches the same variables with `${DEPLOY_HOST}`, unchecked and as a string.
 
+## Env sources
+
+`ocel/env-source` has a helper for each [env source](/docs/env-sources) that takes options,
+so a tier's env source is typed the same way a provider is. `builtin` and `dotenv` take
+none, and are written as strings:
+
+```ts title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { exec, infisical } from "ocel/env-source";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  envSource: {
+    production: infisical({
+      project: "4f1c2e0a-...",
+      environment: "prod",
+      auth: {
+        universal: {
+          clientId: { $env: "INFISICAL_CLIENT_ID" },
+          clientSecret: { $env: "INFISICAL_CLIENT_SECRET" },
+        },
+      },
+    }),
+    preview: "builtin",
+    dev: exec({ command: ["./scripts/dev-env.sh", "{folder}"], format: "dotenv" }),
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+For `dev`, leave `auth` and `write` off `infisical()`: `ocel dev` signs in to Infisical as
+you and only reads, so a config that names either for `dev` is refused.
+
 ## Transforms are the same either way
 
 A [transform](/docs/transforms) is a module path, not a value the config imports, so it
