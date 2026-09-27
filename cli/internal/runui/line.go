@@ -12,6 +12,7 @@ const (
 	okMark             = "✓"
 	failMark           = "✗"
 	continuationIndent = "      "
+	headerHangIndent   = "        "
 )
 
 type line struct {
@@ -20,6 +21,7 @@ type line struct {
 	subject string
 	message string
 	ends    progressv1.SpanStatus
+	heads   bool
 }
 
 type label struct {
@@ -61,7 +63,11 @@ func (l line) render(present Presentation) string {
 	if l.subject != "" {
 		b.WriteString(l.subject + ": ")
 	}
-	b.WriteString(strings.ReplaceAll(l.message, "\n", "\n"+continuationIndent))
+	indent := continuationIndent
+	if l.heads {
+		indent = headerHangIndent
+	}
+	b.WriteString(strings.ReplaceAll(l.message, "\n", "\n"+indent))
 	return b.String()
 }
 

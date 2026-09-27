@@ -181,6 +181,23 @@ func TestASuccessfulUnitAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *
 	}
 }
 
+func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	api := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("api", "Building api")
+	api.Warn("tsconfig.json has no strict mode")
+	c.pass(time.Second)
+	api.End(errors.New("npm run build exited with status 1\nsee the build log above"))
+
+	want := "ERROR [build] ✗ api: Building api failed after 1s: npm run build exited with status 1\n" +
+		"        see the build log above\n" +
+		"      WARN  tsconfig.json has no strict mode\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func output(t *testing.T, unit *events.Scope, text string) {
 	t.Helper()
 	if _, err := unit.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT).Write([]byte(text + "\n")); err != nil {
@@ -508,7 +525,7 @@ func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
 	c.pass(time.Second)
 	web.End(nil)
 
-	want := "::group::INFO  [build] ✓ web: built 100%25 of routes%0A      ::error::forged in 1s\n" +
+	want := "::group::INFO  [build] ✓ web: built 100%25 of routes%0A        ::error::forged in 1s\n" +
 		"\n" +
 		"    Compiled successfully\n" +
 		"\n" +

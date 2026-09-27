@@ -374,7 +374,7 @@ func (s *GroupedSink) forget(span string) {
 
 func (u *unitBlock) header(level progressv1.Level, ends progressv1.SpanStatus, message string, present Presentation) blockLine {
 	head := lineOf(u.opened)
-	head.level, head.ends, head.message = level, ends, message
+	head.level, head.ends, head.message, head.heads = level, ends, message, true
 	return blockLine{text: head.render(present), from: head}
 }
 
