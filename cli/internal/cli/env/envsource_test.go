@@ -157,6 +157,9 @@ func TestEnvSourceDescribesWhereATierReadsFrom(t *testing.T) {
 	if out := before.String(); !strings.Contains(out, "production reads from builtin") || !strings.Contains(out, "infisical:p-1/prod") {
 		t.Errorf("stdout = %q, want builtin named beside the env source the config names", out)
 	}
+	if out := before.String(); !strings.Contains(out, "dev reads from dotenv, then .env.local on top") {
+		t.Errorf("stdout = %q, want the dev tier's env source named with .env.local over it", out)
+	}
 
 	setCredentials(t, root)
 	registerFakeEnvSource(t, environmentv1.Tier_TIER_PRODUCTION, infisicalProduction)

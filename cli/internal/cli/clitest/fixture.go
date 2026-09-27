@@ -35,14 +35,9 @@ func DiscoveryDir(root string) string {
 	return filepath.Join(root, constants.DefaultDiscoveryDirName)
 }
 
-func fakeAccount(_ context.Context, _, _, _ string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-
 func NewDeps() cmddeps.Deps {
 	return cmddeps.Deps{
 		LoadCredentials:     credentials.Load,
-		FetchAccount:        fakeAccount,
 		BuildApp:            appbuilder.Build,
 		RequireImageBuilder: appimages.RequireBuilder,
 		BuildAppImages:      appimages.Build,
