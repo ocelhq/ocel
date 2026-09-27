@@ -59,12 +59,10 @@ func (s *Scope) Output(level progressv1.Level, stream progressv1.Stream) io.Writ
 }
 
 func (s *Scope) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)) {
-	s.run.hold(1)
 	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
 	var once sync.Once
 	return func(reason string) {
 		once.Do(func() {
-			s.run.hold(-1)
 			s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
 				Resumed: &streamv1.ResumedEvent{Reason: reason},
 			}}))
@@ -85,6 +83,7 @@ func (s *Scope) Identity(identity *streamv1.IdentityEvent) {
 
 func (s *Scope) Forward(op *progressv1.OperationEvent) {
 	ev := lift(op)
+	s.run.enter(ev.GetPhase())
 	if apps := ev.GetOutcome().GetApps(); len(apps) > 0 {
 		s.run.record(apps)
 	}

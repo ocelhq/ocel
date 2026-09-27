@@ -130,36 +130,63 @@ func TestAFailedRunForMissingVariablesCarriesThemOnItsResult(t *testing.T) {
 }
 
 func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) {
+	sink := &recording{}
+	ctx, cancel := context.WithCancel(context.Background())
+	run, _ := beginIn(t, ctx, sink)
+	run.Phase(progressv1.Phase_PHASE_BUILD)
+
+	cancel()
+	err := context.Canceled
+	run.End(&err)
+
+	ev := sink.received()[len(sink.received())-1]
+	if !ev.GetResult().GetInterrupted() || ev.GetResult().GetHeadline() != "Cancelled" || ev.GetLevel() != progressv1.Level_LEVEL_WARN {
+		t.Fatalf("result = interrupted %v headline %q level %s, want Cancelled at WARN",
+			ev.GetResult().GetInterrupted(), ev.GetResult().GetHeadline(), ev.GetLevel())
+	}
+	var exit *exitsig.ExitError
+	if !errors.As(err, &exit) || exit.Code != exitsig.InterruptCode {
+		t.Fatalf("err = %v, want the interrupt exit", err)
+	}
+}
+
+func TestAnInterruptedRunWarnsOfPartlyCreatedResourcesOnlyOnceAPhaseThatChangesThemStarted(t *testing.T) {
+	const partly = "Resources may be partially created.\nRe-run `ocel deploy` to reconcile."
 	for _, tc := range []struct {
-		name string
-		held bool
-		note string
+		name   string
+		work   func(run *events.Run)
+		detail string
 	}{
-		{name: "mid-deploy", note: "Resources may be partially created."},
-		{name: "while held", held: true, note: "Nothing has been provisioned."},
+		{name: "checking and building", work: func(run *events.Run) {
+			run.Phase(progressv1.Phase_PHASE_CHECK).End(nil)
+			run.Phase(progressv1.Phase_PHASE_BUILD).Hold(&streamv1.WaitingEvent{})
+		}},
+		{name: "planning", work: func(run *events.Run) {
+			run.Phase(progressv1.Phase_PHASE_PLAN).Unit("shop", "Planning changes")
+		}},
+		{name: "a phase the command opened to promote", detail: partly, work: func(run *events.Run) {
+			run.Phase(progressv1.Phase_PHASE_PROMOTE).Unit("shop", "Promoting d-1")
+		}},
+		{name: "a phase the provider reported destroying in", detail: partly, work: func(run *events.Run) {
+			run.Phase(progressv1.Phase_PHASE_CHECK).Forward(&progressv1.OperationEvent{
+				Phase:  progressv1.Phase_PHASE_DESTROY,
+				SpanId: []byte("unit-env"),
+				Body:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
+			})
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sink := &recording{}
 			ctx, cancel := context.WithCancel(context.Background())
 			run, _ := beginIn(t, ctx, sink)
-			if tc.held {
-				run.Phase(progressv1.Phase_PHASE_BUILD).Hold(&streamv1.WaitingEvent{})
-			}
+			tc.work(run)
 
 			cancel()
 			err := context.Canceled
 			run.End(&err)
 
-			ev := sink.received()[len(sink.received())-1]
-			want := tc.note + "\nRe-run `ocel deploy` to reconcile."
-			if !ev.GetResult().GetInterrupted() || ev.GetResult().GetHeadline() != "Cancelled" || ev.GetResult().GetDetail() != want ||
-				ev.GetLevel() != progressv1.Level_LEVEL_WARN {
-				t.Fatalf("result = interrupted %v headline %q detail %q level %s, want Cancelled at WARN with %q",
-					ev.GetResult().GetInterrupted(), ev.GetResult().GetHeadline(), ev.GetResult().GetDetail(), ev.GetLevel(), want)
-			}
-			var exit *exitsig.ExitError
-			if !errors.As(err, &exit) || exit.Code != exitsig.InterruptCode {
-				t.Fatalf("err = %v, want the interrupt exit", err)
+			if got := sink.received()[len(sink.received())-1].GetResult().GetDetail(); got != tc.detail {
+				t.Fatalf("detail = %q, want %q", got, tc.detail)
 			}
 		})
 	}

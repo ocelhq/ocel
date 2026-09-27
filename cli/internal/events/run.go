@@ -28,7 +28,7 @@ type Run struct {
 	mu      sync.Mutex
 	phases  map[progressv1.Phase]*Scope
 	open    []*Scope
-	holds   int
+	changed bool
 	apps    []*progressv1.AppResult
 	success *streamv1.RunResultEvent
 
@@ -77,15 +77,11 @@ func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
 		}
 		return result, 0
 	case r.ctx.Err() != nil:
-		note := "Resources may be partially created."
-		if r.held() {
-			note = "Nothing has been provisioned."
+		result := &streamv1.RunResultEvent{Interrupted: true, Headline: "Cancelled"}
+		if r.mayHaveChanged() {
+			result.Detail = fmt.Sprintf("Resources may be partially created.\nRe-run `%s` to reconcile.", r.command)
 		}
-		return &streamv1.RunResultEvent{
-			Interrupted: true,
-			Headline:    "Cancelled",
-			Detail:      fmt.Sprintf("%s\nRe-run `%s` to reconcile.", note, r.command),
-		}, exitsig.InterruptCode
+		return result, exitsig.InterruptCode
 	}
 	result := &streamv1.RunResultEvent{Detail: err.Error()}
 	var refusal *envgate.Refusal
@@ -135,6 +131,7 @@ func (r *Run) begin(parent *Scope, subject, message string) *Scope {
 
 func (r *Run) beginLocked(phase progressv1.Phase, parent *Scope, subject, message string) *Scope {
 	s := &Scope{run: r, parent: parent, phase: phase, subject: subject, spanID: newSpanID(), start: r.bus.now()}
+	r.enterLocked(phase)
 	var parentID []byte
 	if parent != nil {
 		parentID = parent.spanID
@@ -185,16 +182,27 @@ func (r *Run) failureLevel() progressv1.Level {
 	return progressv1.Level_LEVEL_ERROR
 }
 
-func (r *Run) held() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.holds > 0
+var changingPhases = map[progressv1.Phase]bool{
+	progressv1.Phase_PHASE_PROVISION: true,
+	progressv1.Phase_PHASE_DEPLOY:    true,
+	progressv1.Phase_PHASE_PROMOTE:   true,
+	progressv1.Phase_PHASE_DESTROY:   true,
 }
 
-func (r *Run) hold(delta int) {
+func (r *Run) enter(phase progressv1.Phase) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.holds += delta
+	r.enterLocked(phase)
+}
+
+func (r *Run) enterLocked(phase progressv1.Phase) {
+	r.changed = r.changed || changingPhases[phase]
+}
+
+func (r *Run) mayHaveChanged() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.changed
 }
 
 func (r *Run) record(apps []*progressv1.AppResult) {
