@@ -34,9 +34,10 @@ type infisicalClient struct {
 }
 
 type infisicalError struct {
-	Status  int
-	Kind    string
-	Message string
+	Status     int
+	Kind       string
+	Message    string
+	RetryAfter time.Duration
 }
 
 func (e *infisicalError) Error() string {
@@ -49,6 +50,14 @@ func (e *infisicalError) Error() string {
 func isInfisicalStatus(err error, status int) bool {
 	var refused *infisicalError
 	return errors.As(err, &refused) && refused.Status == status
+}
+
+func retryAfterOf(err error) time.Duration {
+	var refused *infisicalError
+	if errors.As(err, &refused) {
+		return refused.RetryAfter
+	}
+	return 0
 }
 
 func isInfisicalExists(err error) bool {
@@ -152,12 +161,13 @@ func (c *infisicalClient) send(ctx context.Context, method, target, token string
 		refused := infisicalErrorOf(resp.StatusCode, raw)
 		retryable := resp.StatusCode == http.StatusTooManyRequests ||
 			(idempotent && (resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout))
-		if !retryable || attempt >= infisicalAttempts {
-			return refused
-		}
 		wait := backoff(attempt)
 		if after, ok := retryAfter(resp.Header.Get("Retry-After")); ok {
+			refused.RetryAfter = after
 			wait = after
+		}
+		if !retryable || attempt >= infisicalAttempts || !waitFits(ctx, wait) {
+			return refused
 		}
 		if err := pause(ctx, wait); err != nil {
 			return err
@@ -192,7 +202,15 @@ func retryAfter(header string) (time.Duration, bool) {
 	if err != nil || seconds < 0 {
 		return 0, false
 	}
-	return min(time.Duration(seconds)*time.Second, infisicalWaitCeiling), true
+	return time.Duration(seconds) * time.Second, true
+}
+
+func waitFits(ctx context.Context, wait time.Duration) bool {
+	if wait > infisicalWaitCeiling {
+		return false
+	}
+	deadline, bounded := ctx.Deadline()
+	return !bounded || time.Until(deadline) > wait
 }
 
 func backoff(attempt int) time.Duration {

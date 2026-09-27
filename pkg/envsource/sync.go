@@ -3,6 +3,7 @@ package envsource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -16,6 +17,7 @@ const (
 	defaultSyncInterval = 60 * time.Second
 	syncBackoffCeiling  = 15 * time.Minute
 	maxBackoffDoublings = 16
+	statusWriteTimeout  = 5 * time.Second
 )
 
 type Sync struct {
@@ -60,7 +62,14 @@ func (s *Sync) CopyScheduledEveryInterval(ctx context.Context, report func(error
 	}
 }
 
+func (s *Sync) budget() time.Duration {
+	interval := s.interval()
+	return interval - interval/6
+}
+
 func (s *Sync) CopyScheduled(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, s.budget())
+	defer cancel()
 	registrations, err := Registrations(ctx, s.Store.Records, s.Class)
 	if err != nil {
 		return err
@@ -78,6 +87,8 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 		groups[key] = append(groups[key], registration)
 	}
 	var failed []error
+	due := make([]string, 0, len(keys))
+	attemptedAt := map[string]time.Time{}
 	for _, key := range keys {
 		status, _, err := readStatus(ctx, s.Store.Records, s.Class, key)
 		if err != nil {
@@ -87,7 +98,20 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 		if status.RetryAt.After(s.now()) {
 			continue
 		}
-		if _, _, err := s.copyGroup(ctx, key, groups[key], nil); err != nil {
+		due = append(due, key)
+		attemptedAt[key] = status.LastAttemptAt
+	}
+	slices.SortStableFunc(due, func(a, b string) int { return attemptedAt[a].Compare(attemptedAt[b]) })
+	deadline, _ := ctx.Deadline()
+	for i, key := range due {
+		left := time.Until(deadline)
+		if left <= 0 {
+			break
+		}
+		share, cancelShare := context.WithTimeout(ctx, left/time.Duration(len(due)-i))
+		_, _, err := s.copyGroup(share, key, groups[key], nil)
+		cancelShare()
+		if err != nil {
 			failed = append(failed, err)
 		}
 	}
@@ -117,7 +141,12 @@ func (s *Sync) Open(ctx context.Context, registration Registration) (Source, err
 func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, error, error) {
 	attemptedAt := s.now()
 	results, urls, failure := s.readAndCopy(ctx, key, group, source)
-	err := writeStatus(ctx, s.Store.Records, s.Class, key, func(status *Status) {
+	if failure != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		failure = fmt.Errorf("ran out of its share of the sync's time, and waits for the next sync so the env sources after it get theirs: %w", failure)
+	}
+	statusCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), statusWriteTimeout)
+	defer cancel()
+	err := writeStatus(statusCtx, s.Store.Records, s.Class, key, func(status *Status) {
 		status.LastAttemptAt = attemptedAt
 		if failure == nil {
 			status.EnvSource = results[0].EnvSource
@@ -131,7 +160,7 @@ func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, 
 		status.EnvSource = group[0].Descriptor.ID()
 		status.LastError = failure.Error()
 		status.ConsecutiveFailures++
-		status.RetryAt = attemptedAt.Add(s.backoff(status.ConsecutiveFailures))
+		status.RetryAt = attemptedAt.Add(max(s.backoff(status.ConsecutiveFailures), retryAfterOf(failure)))
 	})
 	if failure != nil {
 		s.forgetOpened(key)

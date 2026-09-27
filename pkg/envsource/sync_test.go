@@ -170,6 +170,84 @@ func TestAnEnvSourceWhoseRootIsGoneKeepsEveryValueItCopied(t *testing.T) {
 	}
 }
 
+func onceWithin(t *testing.T, sync *envsource.Sync, limit time.Duration) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- sync.CopyScheduled(context.Background()) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("CopyScheduled() = %v", err)
+		}
+	case <-time.After(limit):
+		t.Fatalf("CopyScheduled() ran past %s, the time a scheduled sync has before the platform stops it", limit)
+	}
+}
+
+func TestASlowEnvSourceYieldsTheRestOfTheSyncToTheOthers(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	sync.Interval = 600 * time.Millisecond
+	slow, slowServer := newFakeInfisical(t)
+	slow.hangList.Store(true)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	stuck := infisicalRegistration("admin", slowServer.URL, cloudIdentity, "")
+	register(t, store, stuck)
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
+
+	onceWithin(t, sync, 5*time.Second)
+	if k := reveal(t, store, scopeOf("shop"), classWide("", "K")); k.Plaintext != "v" {
+		t.Fatalf("K = %q, want the env source after the slow one copied within the same sync", k.Plaintext)
+	}
+	if status := statusOf(t, store, stuck); status.LastError == "" || status.LastAttemptAt.IsZero() {
+		t.Fatalf("status = %+v, want the slow env source's overrun recorded", status)
+	}
+}
+
+func TestTheEnvSourceTriedLongestAgoIsReadFirst(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, at := syncFixture(t)
+	fake.put("/api")
+	fake.put("/web")
+	admin := infisicalRegistration("admin", host, envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "identity-2"}, "/api")
+	register(t, store, admin)
+	register(t, store, infisicalRegistration("shop", host, cloudIdentity, "/web"))
+	ctx := context.Background()
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	at.advance(time.Minute)
+	if _, err := sync.CopyProject(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	at.advance(time.Minute)
+	before := len(fake.listedPaths())
+
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if listed := fake.listedPaths()[before:]; !slices.Equal(listed, []string{"/web", "/api"}) {
+		t.Fatalf("listed %v, want shop, tried longest ago, read before admin", listed)
+	}
+}
+
+func TestAThrottleLongerThanTheSyncIsWaitedOutInTheStatusNotInTheSync(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, at := syncFixture(t)
+	fake.set(func(f *fakeInfisical) {
+		f.throttle = 100
+		f.retryAfter = "3600"
+	})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+
+	onceWithin(t, sync, 5*time.Second)
+	status := statusOf(t, store, registration)
+	if !status.RetryAt.After(at.now().Add(59 * time.Minute)) {
+		t.Fatalf("status = %+v, want the retry put off for as long as Infisical asked", status)
+	}
+}
+
 func TestAnUnsetCredentialIsRecordedAndTheSourceNeverLoggedInTo(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
@@ -308,7 +386,7 @@ func TestForgettingAProjectKeepsTheStatusAnotherProjectShares(t *testing.T) {
 func TestCopyingEveryIntervalPollsUntilItsContextEnds(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
-	sync.Interval = time.Millisecond
+	sync.Interval = 100 * time.Millisecond
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
