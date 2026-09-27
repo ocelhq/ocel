@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -32,6 +33,7 @@ const (
 	reasonEmulated = "emulator serves one implicit database"
 	reasonRingKept = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
 	reasonShared   = "the %s bootstrap is still installed and shares it"
+	reasonSharedDB = "the %s bootstrap is still installed and shares it, so only the records this class keeps in it are deleted"
 	reasonDestroy  = "scheduled, destroyed after 24h"
 
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
@@ -864,6 +866,8 @@ func removing(read survey, target item) removal {
 	switch {
 	case target.Kind == KindKeyRing:
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
+	case target.Kind == KindDatabase && read.sibling:
+		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, siblingOf(read.Class))
 	case target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Class)
 	case target.Kind == KindDatabase && read.Emulated:
@@ -906,6 +910,11 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 		return err
 	}
 	for _, taking := range removals(read) {
+		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase {
+			if err := b.takeRecords(ctx, class); err != nil {
+				return err
+			}
+		}
 		if taking.action == provider.ActionKeep {
 			say(progress, "kept "+taking.item.ID()+": "+taking.reason)
 			continue
@@ -1032,6 +1041,30 @@ func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
 		return fmt.Errorf("delete the %q Firestore database: %w", b.clients.Database(), err)
 	}
 	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", b.clients.Database()), deleting)
+}
+
+func (b bootstrap) takeRecords(ctx context.Context, class edge.Class) error {
+	client, err := b.clients.Firestore()
+	if err != nil {
+		return err
+	}
+	documents := ports.ClassRecords(client, class).Select().Documents(ctx)
+	defer documents.Stop()
+	for {
+		kept, err := documents.Next()
+		if errors.Is(err, iterator.Done) || status.Code(err) == codes.NotFound {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("list the records the %s class keeps: %w", class, err)
+		}
+		if err := done(ctx, func() error {
+			_, err := kept.Ref.Delete(ctx)
+			return err
+		}); err != nil {
+			return fmt.Errorf("delete the %s record %s: %w", class, kept.Ref.ID, err)
+		}
+	}
 }
 
 func (b bootstrap) takeBucket(ctx context.Context, name string) error {

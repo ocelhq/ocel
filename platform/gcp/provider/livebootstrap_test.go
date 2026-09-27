@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -843,5 +844,40 @@ func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).WorkloadAccountEmail(class)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
 		t.Errorf("%s still exists after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
+	}
+}
+
+func TestLiveRemovingAClassBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSiblings(t *testing.T) {
+	p := live(t)
+	bootstrapped(t, p, edge.ClassProduction)
+	class := edge.ClassPreview
+
+	ctx := context.Background()
+	bootstrap := bootstrapOf(t, p)
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) = %v", class, err)
+	}
+	kept := map[edge.Class]records.Name{}
+	for _, each := range []edge.Class{edge.ClassProduction, class} {
+		kept[each] = records.Name{records.RootEnvSourceDigestKey, string(each)}
+		if _, err := p.Records().Write(ctx, records.Record{Name: kept[each], Bytes: []byte("sealed")}); err != nil {
+			t.Fatalf("Write(%s) = %v", kept[each], err)
+		}
+	}
+	t.Cleanup(func() {
+		if err := records.Forget(ctx, p.Records(), kept[edge.ClassProduction]); err != nil {
+			t.Errorf("Forget(%s) = %v", kept[edge.ClassProduction], err)
+		}
+	})
+
+	if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		t.Fatalf("Remove(%s) = %v", class, err)
+	}
+	if _, err := p.Records().Read(ctx, kept[class]); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Read(%s) after its class was removed = %v, want it gone: it was sealed under the key the removal destroyed, and the database outlives the class while %s stays",
+			kept[class], err, edge.ClassProduction)
+	}
+	if _, err := p.Records().Read(ctx, kept[edge.ClassProduction]); err != nil {
+		t.Errorf("Read(%s) after the other class was removed = %v, want it kept", kept[edge.ClassProduction], err)
 	}
 }
