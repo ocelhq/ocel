@@ -356,7 +356,8 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindUnit:
-		if taken.path != LiveService && taken.path != LiveSocketUnit && taken.path != BackupsTimer {
+		if !slices.Contains([]string{LiveService, LiveSocketUnit, BackupsTimer,
+			EnvSourceSyncService(edge.ClassProduction), EnvSourceSyncService(edge.ClassPreview)}, taken.path) {
 			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%s %s is not ocel's to remove", taken.kind, taken.path)
 		}

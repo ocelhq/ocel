@@ -96,7 +96,7 @@ func StorageItems(class edge.Class, keys []byte) []Item {
 }
 
 func Items(class edge.Class, keys []byte, arch string, front Front) []Item {
-	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), ProxyItems(arch, front), BackupItems())
+	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), EnvSourceSyncItems(class, arch), ProxyItems(arch, front), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {
