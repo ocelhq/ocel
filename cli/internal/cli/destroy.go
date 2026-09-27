@@ -163,7 +163,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 			Edge:      edgewire.Selection(cfg),
 			Consented: consented,
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
@@ -223,7 +223,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 			Edge:        edgewire.Selection(cfg),
 			Consented:   consented,
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))

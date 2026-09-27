@@ -360,28 +360,28 @@ var ErrVarsUnavailable = errors.New("provider: the variable store was reached be
 
 var ErrClientUnavailable = errors.New("provider: the provider was reached before a successful Ready")
 
-func Stream[Req any](
-	ctx context.Context,
-	r *Runner,
-	rpc string,
-	req *Req,
-	call func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error),
-	onEvent func(*progressv1.OperationEvent),
-) error {
-	client, err := r.Client()
-	if err != nil {
-		return err
-	}
-	stream, callErr := call(client, ctx, req)
-	return r.driveStream(rpc, stream, callErr, onEvent)
+type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
+
+func StreamRunner[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
+	_, err := stream(ctx, r, rpc, req, call, onEvent)
+	return err
 }
 
-func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) error {
+func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
+	client, err := r.Client()
+	if err != nil {
+		return nil, err
+	}
+	events, callErr := call(client, ctx, req)
+	return r.driveStream(rpc, events, callErr, onEvent)
+}
+
+func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
 	if callErr != nil {
 		if cancelled(callErr) {
-			return fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
+			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
 		}
-		return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, callErr))
+		return nil, r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, callErr))
 	}
 	defer stream.Close()
 
@@ -395,25 +395,25 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 		refused = refused || result.GetRefused()
 		if result != nil && !result.GetRefused() {
 			if result.GetSuccess() {
-				return nil
+				return result, nil
 			}
-			return &OperationFailedError{Message: result.GetError()}
+			return result, &OperationFailedError{Message: result.GetError()}
 		}
 	}
 
 	if err := stream.Err(); err != nil {
 		if cancelled(err) {
-			return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
+			return nil, fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
 		}
 		if connect.CodeOf(err) == connect.CodeInvalidArgument {
 			if refused {
-				return fmt.Errorf("provider: call %s: %w", rpc, err)
+				return nil, fmt.Errorf("provider: call %s: %w", rpc, err)
 			}
-			return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
+			return nil, r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
 		}
-		return r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
+		return nil, r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
 	}
-	return r.withExitStderr(fmt.Errorf("provider: provider closed the %s stream without a result", rpc))
+	return nil, r.withExitStderr(fmt.Errorf("provider: provider closed the %s stream without a result", rpc))
 }
 
 const (

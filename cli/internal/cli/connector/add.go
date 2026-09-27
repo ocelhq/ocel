@@ -74,7 +74,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		}
 
 		var at *progressv1.ConnectorInstalled
-		err = providerclient.Stream(ctx, runner, "InstallConnector", &contractv1.InstallConnectorRequest{
+		err = providerclient.StreamRunner(ctx, runner, "InstallConnector", &contractv1.InstallConnectorRequest{
 			Binary:     binary,
 			Version:    version.Version,
 			ConfigJson: config,

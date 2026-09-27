@@ -199,7 +199,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 			BaseDomain: base,
 			Edge:       edgewire.Selection(cfg),
 		}
-		if err := providerclient.Stream(ctx, runner, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "UsePreviewWildcard", req, contractv1connect.ProviderServiceClient.UsePreviewWildcard, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Previews are served on %s", wildcardOf(base)))
@@ -314,7 +314,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		}
 
 		req := &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Edge: edgewire.Selection(cfg)}
-		if err := providerclient.Stream(ctx, runner, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Released %s", wildcardOf(base)))
@@ -342,7 +342,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 			Host:       host,
 			Edge:       edgewire.Selection(cfg),
 		}
-		if err := providerclient.Stream(ctx, runner, "AddHostname", req, contractv1connect.ProviderServiceClient.AddHostname, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "AddHostname", req, contractv1connect.ProviderServiceClient.AddHostname, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Serving %s", strings.Join(addedHosts(configured, host), ", ")))
@@ -373,7 +373,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 			Host:       host,
 			Edge:       edgewire.Selection(cfg),
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveHostname", req, contractv1connect.ProviderServiceClient.RemoveHostname, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveHostname", req, contractv1connect.ProviderServiceClient.RemoveHostname, ui.Event); err != nil {
 			return err
 		}
 		if host != "" {

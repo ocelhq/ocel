@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -40,6 +41,8 @@ const fakeProviderKnownHostsEnvVar = "OCEL_TEST_FAKE_PROVIDER_KNOWN_HOSTS"
 const fakeProviderDrivesEnvVar = "OCEL_TEST_FAKE_PROVIDER_DRIVES"
 
 const fakeProviderVersionEnvVar = "OCEL_TEST_FAKE_PROVIDER_VERSION"
+
+const fakeChattyLine = "fake provider: warming the cache"
 
 func fakeProviderVersion() string {
 	if announced := os.Getenv(fakeProviderVersionEnvVar); announced != "" {
@@ -93,12 +96,20 @@ func runFakeProvider() int {
 		return 0
 	}
 
+	if mode == "chatty" {
+		fmt.Fprintln(os.Stderr, fakeChattyLine)
+	}
+
 	sockPath := os.Getenv(fakeProviderSockEnvVar)
 	if sockPath == "" {
 		fmt.Fprintln(os.Stderr, "fake provider: missing socket path")
 		return 1
 	}
 	_ = os.Remove(sockPath)
+	if err := os.MkdirAll(filepath.Dir(sockPath), 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: socket directory:", err)
+		return 1
+	}
 
 	bound, err := net.Listen("unix", sockPath)
 	if err != nil {
@@ -224,6 +235,16 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 	}
 }
 
+func (s *fakeProviderServer) Preflight(context.Context, *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
+	if err := recordDrive(); err != nil {
+		return nil, err
+	}
+	if err := refusalFor(s.mode); err != nil {
+		return nil, err
+	}
+	return &contractv1.PreflightResponse{}, nil
+}
+
 func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := recordDrive(); err != nil {
 		return err
@@ -255,7 +276,7 @@ func recordDrive() error {
 		return err
 	}
 	defer file.Close()
-	if _, err := file.WriteString("drive\n"); err != nil {
+	if _, err := fmt.Fprintf(file, "%d\n", os.Getpid()); err != nil {
 		return err
 	}
 	return file.Sync()

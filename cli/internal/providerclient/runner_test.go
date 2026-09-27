@@ -26,26 +26,40 @@ import (
 func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
 	t.Helper()
 
-	sockDir, err := os.MkdirTemp("", "ocel-provider-*")
-	if err != nil {
-		t.Fatalf("reserve the socket directory: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath := filepath.Join(sockDir, "provider.sock")
-	cfg.BinaryPath = os.Args[0]
-	cfg.Env = append([]string{
-		fakeProviderEnvVar + "=1",
-		fakeProviderModeEnvVar + "=" + mode,
-		fakeProviderSockEnvVar + "=" + sockPath,
-		fakeProviderVendorEnvVar + "=" + cfg.ProviderName,
-	}, cfg.Env...)
-
+	cfg = fakeConfig(t, mode, cfg)
 	r, err := Spawn(ctx, cfg)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
 	t.Cleanup(r.Close)
-	return r, sockPath
+	return r, fakeSocket(cfg)
+}
+
+func fakeConfig(t *testing.T, mode string, cfg Config) Config {
+	t.Helper()
+
+	sockDir, err := os.MkdirTemp("", "ocel-provider-*")
+	if err != nil {
+		t.Fatalf("reserve the socket directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	cfg.BinaryPath = os.Args[0]
+	cfg.Env = append([]string{
+		fakeProviderEnvVar + "=1",
+		fakeProviderModeEnvVar + "=" + mode,
+		fakeProviderSockEnvVar + "=" + filepath.Join(sockDir, "provider.sock"),
+		fakeProviderVendorEnvVar + "=" + cfg.ProviderName,
+	}, cfg.Env...)
+	return cfg
+}
+
+func fakeSocket(cfg Config) string {
+	for _, kv := range cfg.Env {
+		if path, ok := strings.CutPrefix(kv, fakeProviderSockEnvVar+"="); ok {
+			return path
+		}
+	}
+	return ""
 }
 
 func TestSpawn(t *testing.T) {
@@ -275,7 +289,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
+		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
@@ -311,7 +325,7 @@ func TestDeploy(t *testing.T) {
 		var gotFirstEvent atomic.Bool
 		deployErrCh := make(chan error, 1)
 		go func() {
-			deployErrCh <- Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
+			deployErrCh <- StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
@@ -352,7 +366,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
+		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if err == nil {
@@ -379,7 +393,7 @@ func TestDeploy(t *testing.T) {
 		var gotFirstEvent atomic.Bool
 		deployErrCh := make(chan error, 1)
 		go func() {
-			deployErrCh <- Stream(called, r, "Deploy", &contractv1.DeployRequest{
+			deployErrCh <- StreamRunner(called, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
@@ -422,7 +436,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 
 		var deployErr *OperationFailedError
 		if !errors.As(err, &deployErr) {
@@ -447,7 +461,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var reported []string
-		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) {
+		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) {
 			for _, app := range ev.GetResult().GetApps() {
 				reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())
 			}
@@ -480,7 +494,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var seen int
-		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
+		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { seen++ })
 
@@ -498,7 +512,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
 
-		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if !errors.Is(err, ErrClientUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrClientUnavailable", err)
 		}
@@ -532,7 +546,7 @@ func TestBootstrap(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := Stream(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		err := StreamRunner(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}
@@ -558,7 +572,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := Stream(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
+		err := StreamRunner(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
 
 		var failErr *OperationFailedError
 		if !errors.As(err, &failErr) {

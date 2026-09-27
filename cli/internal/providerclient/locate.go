@@ -10,14 +10,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
-type pinning int
+type Pinning int
 
 const (
-	pinToLock pinning = iota
-	pinInMemory
+	PinToLock Pinning = iota
+	PinInMemory
 )
 
-func locateProvider(ctx context.Context, projectDir, name string, mode pinning) (string, error) {
+func locateProvider(ctx context.Context, projectDir, name string, mode Pinning) (string, error) {
 	store, err := providers.New(version.Version)
 	if err != nil {
 		return "", err
@@ -30,7 +30,7 @@ func Connector(ctx context.Context, projectDir, name string, platform providers.
 	if err != nil {
 		return nil, err
 	}
-	path, err := locate(ctx, store, providers.KindConnector, projectDir, name, platform, pinToLock)
+	path, err := locate(ctx, store, providers.KindConnector, projectDir, name, platform, PinToLock)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func Connector(ctx context.Context, projectDir, name string, platform providers.
 	return read, nil
 }
 
-func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform, mode pinning) (string, error) {
+func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform, mode Pinning) (string, error) {
 	if !store.Fetches() {
 		return store.Binary(ctx, kind, name, platform, "")
 	}
@@ -67,12 +67,12 @@ func Pin(ctx context.Context, projectDir string) error {
 	return err
 }
 
-func pins(ctx context.Context, store *providers.Store, projectDir string, mode pinning) (lockfile.Lock, error) {
+func pins(ctx context.Context, store *providers.Store, projectDir string, mode Pinning) (lockfile.Lock, error) {
 	lock, found, err := lockfile.Read(projectDir)
 	if err != nil {
 		return lockfile.Lock{}, err
 	}
-	if mode == pinInMemory && (!found || lock.CLI != store.Version) {
+	if mode == PinInMemory && (!found || lock.CLI != store.Version) {
 		return lockFromRelease(ctx, store)
 	}
 	if !found {

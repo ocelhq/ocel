@@ -16,61 +16,60 @@ import (
 )
 
 func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
-	return drive(ctx, cfg, stdout, stderr, trust, pinToLock, fn)
+	return drive(ctx, cfg, stdout, stderr, trust, PinToLock, fn)
 }
 
 func DriveDry(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
-	return drive(ctx, cfg, stdout, stderr, trust, pinInMemory, fn)
+	return drive(ctx, cfg, stdout, stderr, trust, PinInMemory, fn)
 }
 
-func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, mode pinning, fn func(*Runner) error) error {
-	if err := node.Ensure(cfg.Dir); err != nil {
-		return err
-	}
-
-	desc, err := cfg.RequireProvider()
+func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, mode Pinning, fn func(*Runner) error) error {
+	config, err := prepareLaunch(ctx, cfg, mode)
 	if err != nil {
 		return err
 	}
-
-	binPath, err := locateProvider(ctx, cfg.Dir, desc.ID, mode)
-	if err != nil {
-		return err
-	}
+	config.Stdout, config.Stderr = stdout, stderr
 
 	return driveTrusting(ctx, trust, func() error {
-		return driveOnce(ctx, cfg, desc, binPath, stdout, stderr, fn)
+		runner, err := Spawn(ctx, config)
+		if err != nil {
+			return fmt.Errorf("spawn provider: %w", err)
+		}
+		defer runner.Close()
+
+		if err := runner.Ready(ctx); err != nil {
+			return err
+		}
+		return fn(runner)
 	})
 }
 
-func driveOnce(ctx context.Context, cfg *projectconfig.Config, desc *projectconfig.ProviderDescriptor, binPath string, stdout, stderr io.Writer, fn func(*Runner) error) error {
+func prepareLaunch(ctx context.Context, cfg *projectconfig.Config, pins Pinning) (Config, error) {
+	if err := node.Ensure(cfg.Dir); err != nil {
+		return Config{}, err
+	}
+	desc, err := cfg.RequireProvider()
+	if err != nil {
+		return Config{}, err
+	}
+	binPath, err := locateProvider(ctx, cfg.Dir, desc.ID, pins)
+	if err != nil {
+		return Config{}, err
+	}
 	env, err := workerBundleEnv(cfg.Dir)
 	if err != nil {
-		return err
+		return Config{}, err
 	}
-
 	providerConfig, err := providerConfig(cfg, desc)
 	if err != nil {
-		return err
+		return Config{}, err
 	}
-
-	runner, err := Spawn(ctx, Config{
+	return Config{
 		BinaryPath:     binPath,
-		Stdout:         stdout,
-		Stderr:         stderr,
 		Env:            env,
 		ProviderConfig: providerConfig,
 		ProviderName:   desc.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("spawn provider: %w", err)
-	}
-	defer runner.Close()
-
-	if err := runner.Ready(ctx); err != nil {
-		return err
-	}
-	return fn(runner)
+	}, nil
 }
 
 func providerConfig(cfg *projectconfig.Config, desc *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {

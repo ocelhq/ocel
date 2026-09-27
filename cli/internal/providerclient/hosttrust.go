@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -18,65 +19,71 @@ type Confirmer interface {
 }
 
 type Trust struct {
-	Ask     Confirmer
-	Out     io.Writer
-	Suspend func() func()
+	Ask  Confirmer
+	Out  io.Writer
+	Hold func(waiting *streamv1.WaitingEvent) (resume func(reason string))
 }
 
 func (t Trust) attended() bool { return t.Ask != nil && t.Out != nil && t.Ask.Attended() }
 
-func (t Trust) suspend() func() {
-	if t.Suspend == nil {
-		return func() {}
+func (t Trust) hold() func(reason string) {
+	if t.Hold == nil {
+		return func(string) {}
 	}
-	return t.Suspend()
+	return t.Hold(&streamv1.WaitingEvent{})
 }
 
 func driveTrusting(ctx context.Context, trust Trust, drive func() error) error {
 	err := drive()
-
-	refusal, ok := provider.HostTrustOf(err)
-	if !ok || refusal.Terminal() || refusal.Reason != provider.UnknownHostKey || !trust.attended() {
+	if trusted, err := trust.acceptKey(ctx, err); !trusted {
 		return err
+	}
+	return drive()
+}
+
+func (t Trust) acceptKey(ctx context.Context, err error) (bool, error) {
+	refusal, ok := provider.HostTrustOf(err)
+	if !ok || refusal.Terminal() || refusal.Reason != provider.UnknownHostKey || !t.attended() {
+		return false, err
 	}
 
 	offered, keyErr := refusal.Got.Fingerprinted()
 	if keyErr != nil {
-		return errors.Join(err, keyErr)
+		return false, errors.Join(err, keyErr)
 	}
 	entry := refusal.KnownHostsEntry()
 	if !provider.ValidKnownHostsEntry(entry) {
-		return errors.Join(err, fmt.Errorf("the provider named %q, which is not a name a known_hosts entry can be keyed on", entry))
+		return false, errors.Join(err, fmt.Errorf("the provider named %q, which is not a name a known_hosts entry can be keyed on", entry))
 	}
 	store, storeErr := knownHostsStore(refusal)
 	if storeErr != nil {
-		return errors.Join(err, storeErr)
+		return false, errors.Join(err, storeErr)
 	}
 
 	refusal.Got = offered
 	if len(refusal.KnownHosts) == 0 {
 		refusal.KnownHosts = []string{store}
 	}
-	accepted, askErr := ask(ctx, trust, refusal, entry, store)
+	accepted, askErr := t.ask(ctx, refusal, entry, store)
 	if askErr != nil {
-		return errors.Join(err, askErr)
+		return false, errors.Join(err, askErr)
 	}
 	if !accepted {
-		return err
+		return false, err
 	}
 
 	if recordErr := record(store, entry+" "+offered.Type+" "+offered.Key+"\n"); recordErr != nil {
-		return errors.Join(err, fmt.Errorf("record the host key in %s: %w", store, recordErr))
+		return false, errors.Join(err, fmt.Errorf("record the host key in %s: %w", store, recordErr))
 	}
-	return drive()
+	return true, nil
 }
 
-func ask(ctx context.Context, trust Trust, refusal provider.HostTrust, entry, store string) (bool, error) {
-	resume := trust.suspend()
-	defer resume()
+func (t Trust) ask(ctx context.Context, refusal provider.HostTrust, entry, store string) (bool, error) {
+	resume := t.hold()
+	defer resume("answered")
 
-	fmt.Fprintln(trust.Out, refusal.Offer())
-	return trust.Ask.Confirm(ctx, fmt.Sprintf("Trust that key and record %s in %s?", entry, store))
+	fmt.Fprintln(t.Out, refusal.Offer())
+	return t.Ask.Confirm(ctx, fmt.Sprintf("Trust that key and record %s in %s?", entry, store))
 }
 
 func knownHostsStore(trust provider.HostTrust) (string, error) {

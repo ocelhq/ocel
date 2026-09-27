@@ -233,7 +233,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		var plan *planv1.ChangePlan
 		spinner := ui.Spin("Planning changes")
-		err = providerclient.Stream(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
+		err = providerclient.StreamRunner(ctx, runner, "Bootstrap", request(true), contractv1connect.ProviderServiceClient.Bootstrap,
 			func(ev *progressv1.OperationEvent) {
 				if shown := ev.GetPlan(); shown != nil {
 					plan = shown
@@ -297,7 +297,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		req.AcceptReplacements = rendered
 		req.Force = req.Force || len(going) > 0
 
-		if err := providerclient.Stream(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "Bootstrap", req, contractv1connect.ProviderServiceClient.Bootstrap, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Bootstrapped")

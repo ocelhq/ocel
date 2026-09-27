@@ -116,7 +116,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 			KeepN: int32(keepN),
 			Edge:  edgewire.Selection(cfg),
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Pruned")

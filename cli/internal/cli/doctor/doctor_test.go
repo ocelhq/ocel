@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 var nodeLine = regexp.MustCompile(`(?m)^(  ✓ node is needed — .*) — node .* on PATH$`)
@@ -558,19 +559,19 @@ func TestDoctorStopsTheSpinnerWhileTheHostTrustAsks(t *testing.T) {
 	if trust.Ask != host.Ask || trust.Out != host.Out {
 		t.Errorf("the trust asks through %#v on %#v, want the terminal the process was started on", trust.Ask, trust.Out)
 	}
-	if trust.Suspend == nil {
+	if trust.Hold == nil {
 		t.Fatal("the trust has no way to stop the spinner while it asks, so the two share the terminal")
 	}
 
 	waitForFrame(t, &terminal)
 
-	resume := trust.Suspend()
+	resume := trust.Hold(&streamv1.WaitingEvent{})
 	terminal.Reset()
 	time.Sleep(500 * time.Millisecond)
 	if drawn := terminal.String(); drawn != "" {
 		t.Errorf("the spinner drew %q over the trust prompt", drawn)
 	}
 
-	resume()
+	resume("answered")
 	waitForFrame(t, &terminal)
 }

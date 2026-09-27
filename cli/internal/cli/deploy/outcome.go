@@ -44,7 +44,7 @@ func streamDeploy(ctx context.Context, runner *providerclient.Runner, ui *runui.
 	env := req.GetEnvironment()
 	at := inlinebinding.Coordinate{Slug: slug, Tier: env.GetTier(), Environment: env.GetIdentity()}
 	err = inlinebinding.Deploy(ctx, records, at, inline, func() error {
-		return providerclient.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui))
+		return providerclient.StreamRunner(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui))
 	})
 	return out, err
 }

@@ -389,7 +389,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			Slug:        cfg.Slug,
 			Edge:        edgewire.Selection(cfg),
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
@@ -440,7 +440,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Pruned preview %q", env.GetIdentity()))

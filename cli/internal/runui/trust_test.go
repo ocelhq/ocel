@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 type terminalAsker struct{}
@@ -30,7 +32,7 @@ func TestTheTrustIsTheProcessTerminalNotTheProvidersLogStream(t *testing.T) {
 	ui := New(io.Discard, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { ui.Close() })
 
-	trust := TrustFor(host, ui)
+	trust := TrustFor(host, sessionScope{ui})
 	if trust.Ask != host.Ask {
 		t.Errorf("the trust asks through %#v, want the terminal the process was started on", trust.Ask)
 	}
@@ -40,8 +42,28 @@ func TestTheTrustIsTheProcessTerminalNotTheProvidersLogStream(t *testing.T) {
 	if trust.Out == ui.BuildWriter() {
 		t.Error("the trust offers on the provider's log stream, where nobody would read it")
 	}
-	if trust.Suspend == nil {
-		t.Error("the trust has no way to pause the live view while it asks")
+}
+
+func TestAHostKeyPromptHoldsTheRunWhileItAsks(t *testing.T) {
+	_, run, err := runtrace.Start(context.Background(), t.TempDir(), "ocel bootstrap production")
+	if err != nil {
+		t.Fatalf("runtrace.Start() = %v", err)
+	}
+	t.Cleanup(func() { run.Close() })
+
+	var out bytes.Buffer
+	ui := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { ui.Close() })
+
+	trust := TrustFor(providerclient.Trust{Ask: terminalAsker{}, Out: io.Discard}, sessionScope{ui})
+	if trust.Hold == nil {
+		t.Fatal("the trust has no way to hold the run while it asks")
+	}
+	trust.Hold(&streamv1.WaitingEvent{})("answered")
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], `"waiting"`) || !strings.Contains(lines[1], `"resumed":{"reason":"answered"}`) {
+		t.Errorf("the run's stream = %q, want a waiting event and then the resume", lines)
 	}
 }
 
@@ -89,13 +111,13 @@ func TestTheSpinnerTheHumanSinkHandsOutStopsTheLiveView(t *testing.T) {
 	t.Cleanup(spinner.Stop)
 	waitForFrame(t, &terminal)
 
-	resume := TrustFor(providerclient.Trust{}, spinner).Suspend()
+	resume := TrustFor(providerclient.Trust{}, spinner).Hold(&streamv1.WaitingEvent{})
 	terminal.Reset()
 	time.Sleep(5 * frameRate)
 	if drawn := terminal.String(); drawn != "" {
 		t.Errorf("the spinner drew %q over the trust prompt", drawn)
 	}
 
-	resume()
+	resume("answered")
 	waitForFrame(t, &terminal)
 }

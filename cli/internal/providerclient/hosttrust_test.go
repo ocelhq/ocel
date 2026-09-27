@@ -8,12 +8,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/creack/pty"
 
 	"github.com/ocelhq/ocel/cli/internal/prompt"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -52,30 +54,39 @@ func fakeHostTrustDrive(t *testing.T, ctx context.Context, mode string) hostTrus
 		drives:     filepath.Join(dir, "drives"),
 	}
 	fake.drive = func() error {
-		runner, _ := spawnFake(t, ctx, mode, Config{Env: []string{
-			fakeProviderKnownHostsEnvVar + "=" + fake.knownHosts,
-			fakeProviderDrivesEnvVar + "=" + fake.drives,
-		}})
+		runner, _ := spawnFake(t, ctx, mode, Config{Env: fake.env()})
 		defer runner.Close()
 		if err := runner.Ready(ctx); err != nil {
 			return err
 		}
-		return Stream(ctx, runner, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
+		return StreamRunner(ctx, runner, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
 	}
 	return fake
 }
 
+func (f hostTrustFake) env() []string {
+	return []string{
+		fakeProviderKnownHostsEnvVar + "=" + f.knownHosts,
+		fakeProviderDrivesEnvVar + "=" + f.drives,
+	}
+}
+
 func (f hostTrustFake) drivenTimes(t *testing.T) int {
+	t.Helper()
+	return len(f.drivenBy(t))
+}
+
+func (f hostTrustFake) drivenBy(t *testing.T) []string {
 	t.Helper()
 
 	content, err := os.ReadFile(f.drives)
 	if errors.Is(err, os.ErrNotExist) {
-		return 0
+		return nil
 	}
 	if err != nil {
 		t.Fatalf("read the drive log: %v", err)
 	}
-	return len(strings.Fields(string(content)))
+	return strings.Fields(string(content))
 }
 
 func (f hostTrustFake) recorded(t *testing.T) string {
@@ -268,23 +279,23 @@ func TestATrustWithNoConfirmerNeverAsks(t *testing.T) {
 	}
 }
 
-func TestTheLiveViewIsSuspendedForTheLengthOfThePrompt(t *testing.T) {
+func TestTheRunIsHeldForTheLengthOfThePrompt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	fake := fakeHostTrustDrive(t, ctx, "unknown-host-key")
-	suspended, resumed := 0, 0
+	var held []string
 	trust := trustAsking(&scriptedAsker{attended: true, answer: false}, io.Discard)
-	trust.Suspend = func() func() {
-		suspended++
-		return func() { resumed++ }
+	trust.Hold = func(*streamv1.WaitingEvent) func(string) {
+		held = append(held, "waiting")
+		return func(reason string) { held = append(held, "resumed "+reason) }
 	}
 
 	if err := driveTrusting(ctx, trust, fake.drive); err == nil {
 		t.Fatal("driveTrusting() error = nil, want the refusal returned")
 	}
-	if suspended != 1 || resumed != 1 {
-		t.Errorf("suspended %d times and resumed %d, want one of each around the prompt", suspended, resumed)
+	if want := []string{"waiting", "resumed answered"}; !slices.Equal(held, want) {
+		t.Errorf("the run saw %v, want %v around the prompt", held, want)
 	}
 }
 

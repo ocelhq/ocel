@@ -83,7 +83,7 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 			Edge:      edgewire.Selection(cfg),
 			Consented: consented,
 		}
-		if err := providerclient.Stream(ctx, runner, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap, ui.Event); err != nil {
+		if err := providerclient.StreamRunner(ctx, runner, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Removed the %s bootstrap", name))

@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -60,7 +61,7 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 	}
 	stdout := ui.ProcessWriter(desc.ID, progressv1.Stream_STREAM_STDOUT)
 	stderr := ui.ProcessWriter(desc.ID, progressv1.Stream_STREAM_STDERR)
-	err = driveProvider(ctx, spec.Config, stdout, stderr, TrustFor(spec.Trust, ui), func(runner *providerclient.Runner) error {
+	err = driveProvider(ctx, spec.Config, stdout, stderr, TrustFor(spec.Trust, sessionScope{ui}), func(runner *providerclient.Runner) error {
 		return body(ctx, runner, ui)
 	})
 	if err != nil {
@@ -82,8 +83,10 @@ func (s Spec) gate() consent.Gate {
 	}
 }
 
-func TrustFor(trust providerclient.Trust, s interface{ Suspend() func() }) providerclient.Trust {
-	trust.Suspend = s.Suspend
+func TrustFor(trust providerclient.Trust, s interface {
+	Hold(*streamv1.WaitingEvent) func(reason string)
+}) providerclient.Trust {
+	trust.Hold = s.Hold
 	return trust
 }
 

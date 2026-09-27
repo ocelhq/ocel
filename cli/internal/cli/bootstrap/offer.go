@@ -164,7 +164,7 @@ func OfferPlan(ctx context.Context, runner *providerclient.Runner, plan Plan, ti
 	if !proceed {
 		return plan.Advise(tier, rep)
 	}
-	return providerclient.Stream(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,
+	return providerclient.StreamRunner(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,
 		func(ev *progressv1.OperationEvent) { reportEvent(rep, ev) })
 }
 

@@ -15,7 +15,7 @@ const dryFlagUsage = "Build, then print every change this would make to your acc
 
 func showDeployPlan(ctx context.Context, runner *providerclient.Runner, ui *runui.Session, req *contractv1.DeployRequest, headline string) error {
 	var plan *planv1.ChangePlan
-	err := providerclient.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy,
+	err := providerclient.StreamRunner(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy,
 		func(ev *progressv1.OperationEvent) {
 			if shown := ev.GetPlan(); shown != nil {
 				plan = shown
