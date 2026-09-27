@@ -428,7 +428,17 @@ func (s *Session) result(ev *streamv1.RunResultEvent) {
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
 	ev.Apps = s.apps
-	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: ev}})
+	s.stream.Emit(&streamv1.RunEvent{Level: resultLevel(ev), Body: &streamv1.RunEvent_Result{Result: ev}})
+}
+
+func resultLevel(ev *streamv1.RunResultEvent) progressv1.Level {
+	switch {
+	case ev.GetInterrupted():
+		return progressv1.Level_LEVEL_WARN
+	case !ev.GetSuccess():
+		return progressv1.Level_LEVEL_ERROR
+	}
+	return progressv1.Level_LEVEL_INFO
 }
 
 func (s *Session) Close() error {

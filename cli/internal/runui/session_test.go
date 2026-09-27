@@ -828,6 +828,38 @@ func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
 	}
 }
 
+func TestARunsResultIsLeveledByHowTheRunEnded(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		end   func(*Session)
+		level progressv1.Level
+	}{
+		{name: "a finished run", end: func(s *Session) { s.Finish("Done") }, level: progressv1.Level_LEVEL_INFO},
+		{name: "a failed run", end: func(s *Session) { s.Fail(errors.New("provision production: AccessDenied")) }, level: progressv1.Level_LEVEL_ERROR},
+		{name: "an interrupted run", end: func(s *Session) { s.Cancel() }, level: progressv1.Level_LEVEL_WARN},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			run := startTestRun(t, t.TempDir(), "ocel deploy")
+			var out safeBuffer
+			s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+			tc.end(s)
+			if err := s.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			got := parseNDJSON(t, out.String())
+			if len(got) != 1 || got[0].GetResult() == nil {
+				t.Fatalf("recorded %d envelopes, want the one result", len(got))
+			}
+			if level := got[0].GetLevel(); level != tc.level {
+				t.Errorf("the result is %v, want %v", level, tc.level)
+			}
+		})
+	}
+}
+
 func TestAWarningIsAWarnEventWithItsTextAsTheMessage(t *testing.T) {
 	t.Parallel()
 	run := startTestRun(t, t.TempDir(), "ocel deploy")

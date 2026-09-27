@@ -188,9 +188,9 @@ func (t *eventTrace) Start(at time.Time, stages ...Stage) {
 }
 
 func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...edge.Attr) {
-	status := progressv1.SpanStatus_SPAN_STATUS_OK
+	status, level := progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_INFO
 	if err != nil {
-		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
+		status, level = progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR
 		attrs = append(attrs, edge.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
 	}
 
@@ -201,6 +201,7 @@ func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...
 
 	t.sender.send(&progressv1.OperationEvent{
 		TimeUnixNano: end.UnixNano(),
+		Level:        level,
 		Phase:        stage.Phase,
 		Subject:      stage.Subject,
 		SpanId:       stage.ID[:],

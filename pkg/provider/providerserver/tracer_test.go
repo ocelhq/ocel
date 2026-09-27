@@ -190,6 +190,29 @@ func TestAFailedScopeEndsWithAnErrorKindNeverRawText(t *testing.T) {
 	}
 }
 
+func TestAFailedScopeEndsAtErrorLevelAndASucceededOneAtInfo(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newEventTrace(sender)
+
+	stage := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
+	tracer.End(stage, time.Now(), time.Now(), errors.New("the stack refused"))
+	tracer.End(stage, time.Now(), time.Now(), nil)
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	events := stream.recorded()
+	if got := events[0].GetLevel(); got != progressv1.Level_LEVEL_ERROR {
+		t.Errorf("a failed scope ends at %v, want LEVEL_ERROR", got)
+	}
+	if got := events[1].GetLevel(); got != progressv1.Level_LEVEL_INFO {
+		t.Errorf("a succeeded scope ends at %v, want LEVEL_INFO", got)
+	}
+}
+
 func TestStageTitlesAreSanitized(t *testing.T) {
 	t.Parallel()
 
