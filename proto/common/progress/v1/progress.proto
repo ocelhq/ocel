@@ -16,8 +16,6 @@ message OperationEvent {
   bytes span_id = 14 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
   oneof event {
-    option (buf.validate.oneof).required = true;
-
     ProgressEvent progress = 1;
     LogEvent log = 2;
     ResultEvent result = 3;

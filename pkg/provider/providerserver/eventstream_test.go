@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -208,8 +209,16 @@ func TestAFailedResultIsAnErrorEventAndASuccessfulOneIsInfo(t *testing.T) {
 func TestADegradedNeedIsAWarnEvent(t *testing.T) {
 	t.Parallel()
 
-	if got := degradedEvent(edge.NeedEdgeMiddleware, "the edge cannot run code").GetLevel(); got != progressv1.Level_LEVEL_WARN {
+	if got := degradedEvent("web", edge.NeedEdgeMiddleware, "the edge cannot run code").GetLevel(); got != progressv1.Level_LEVEL_WARN {
 		t.Errorf("a degraded need is %v, want WARN", got)
+	}
+}
+
+func TestACheckWarningIsAMessageOnlyEventTheWireAdmits(t *testing.T) {
+	t.Parallel()
+
+	if err := protovalidate.Validate(checkWarning("relay", "the plan is unknown")); err != nil {
+		t.Errorf("a message-only warning fails the wire's own rules: %v", err)
 	}
 }
 
@@ -364,7 +373,7 @@ func TestEventConstructors(t *testing.T) {
 		t.Errorf("stageProgressEvent() message = %q", got)
 	}
 
-	degraded := degradedEvent(edge.NeedEdgeMiddleware, "the edge cannot run code").GetDegraded()
+	degraded := degradedEvent("web", edge.NeedEdgeMiddleware, "the edge cannot run code").GetDegraded()
 	if degraded.GetNeed() != string(edge.NeedEdgeMiddleware) {
 		t.Errorf("degradedEvent() Need = %q", degraded.GetNeed())
 	}

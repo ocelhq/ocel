@@ -125,7 +125,8 @@ type Edge struct {
 	bindSays string
 	verify   func(context.Context) (edge.CredentialIdentity, error)
 
-	unreadable error
+	unreadable  error
+	entitlement *edge.CodeEntitlement
 }
 
 func (e *Edge) Bindings() []edge.DomainBinding {
@@ -248,7 +249,18 @@ const (
 func (e *Edge) Hooks() edge.Hooks {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return edge.Hooks{VerifyCredentials: e.verify}
+	hooks := edge.Hooks{VerifyCredentials: e.verify}
+	if e.entitlement != nil {
+		granted := *e.entitlement
+		hooks.CheckCodeEntitlement = func(context.Context) (edge.CodeEntitlement, error) { return granted, nil }
+	}
+	return hooks
+}
+
+func (e *Edge) Entitles(granted edge.CodeEntitlement) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.entitlement = &granted
 }
 
 func (e *Edge) Serves(needs []edge.Need) {

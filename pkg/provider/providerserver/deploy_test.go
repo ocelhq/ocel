@@ -629,6 +629,63 @@ func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 	}
 }
 
+func TestADeployWarnsInTheCheckPhaseNamingTheAppItDegrades(t *testing.T) {
+	builtProject(t)
+	declaresNeed(t, "web", edge.NeedStreaming)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{
+		Kind:          string(fake.KindRelay),
+		AllowDegraded: []string{string(edge.NeedStreaming)},
+	}
+
+	_, events := deploy(t, client, req)
+	i := slices.IndexFunc(events, func(event *progressv1.OperationEvent) bool { return event.GetDegraded() != nil })
+	if i < 0 {
+		t.Fatalf("the deploy said nothing about %s, want the waived need reported", edge.NeedStreaming)
+	}
+	degraded := events[i]
+	if degraded.GetLevel() != progressv1.Level_LEVEL_WARN || degraded.GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("the degraded need is %v in %v, want WARN in PHASE_CHECK", degraded.GetLevel(), degraded.GetPhase())
+	}
+	if degraded.GetSubject() != "web" {
+		t.Errorf("the degraded need's subject is %q, want the app %q", degraded.GetSubject(), "web")
+	}
+}
+
+func TestADeployWarnsInTheCheckPhaseNamingTheEdgeWhenItCannotTellWhetherThePlanRunsCode(t *testing.T) {
+	builtProject(t)
+	declaresNeed(t, "web", edge.NeedEdgeMiddleware)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Entitles(edge.CodeEntitlement{
+		Granted: edge.EntitlementUnknown,
+		Reason:  "the token cannot read billing",
+	})
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() with an unknown entitlement = %q, want it to proceed", result.GetError())
+	}
+	i := slices.IndexFunc(events, func(event *progressv1.OperationEvent) bool {
+		return strings.Contains(event.GetMessage(), "the token cannot read billing")
+	})
+	if i < 0 {
+		t.Fatal("the deploy never said why it could not confirm the plan runs code at the edge")
+	}
+	warning := events[i]
+	if warning.GetLevel() != progressv1.Level_LEVEL_WARN || warning.GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("the warning is %v in %v, want WARN in PHASE_CHECK", warning.GetLevel(), warning.GetPhase())
+	}
+	if warning.GetSubject() != string(fake.KindRelay) {
+		t.Errorf("the warning's subject is %q, want the edge %q", warning.GetSubject(), fake.KindRelay)
+	}
+}
+
 func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 	builtProject(t)
 	declaresNeed(t, "web", edge.NeedStreaming)

@@ -150,6 +150,7 @@ type CredentialIdentity struct {
 type CodeEntitlement struct {
 	Plan    string
 	Granted Entitlement
+	Reason  string
 }
 
 type Entitlement string

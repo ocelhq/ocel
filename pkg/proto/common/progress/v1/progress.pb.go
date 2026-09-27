@@ -1480,7 +1480,7 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\xf7\x05\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\xf0\x05\n" +
 	"\x0eOperationEvent\x12$\n" +
 	"\x0etime_unix_nano\x18\t \x01(\x03R\ftimeUnixNano\x12/\n" +
 	"\x05level\x18\n" +
@@ -1498,8 +1498,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04span\x18\x05 \x01(\v2\x1d.common.progress.v1.SpanEventH\x00R\x04span\x12?\n" +
 	"\bdegraded\x18\x06 \x01(\v2!.common.progress.v1.DegradedEventH\x00R\bdegraded\x12Y\n" +
 	"\x12dns_manual_records\x18\a \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x120\n" +
-	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04planB\x0e\n" +
-	"\x05event\x12\x05\xbaH\x02\b\x01\"\x90\x01\n" +
+	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04planB\a\n" +
+	"\x05event\"\x90\x01\n" +
 	"\x05Stage\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\fB\a\xbaH\x04z\x02h\bR\x02id\x12'\n" +
 	"\tparent_id\x18\x02 \x01(\fB\n" +

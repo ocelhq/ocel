@@ -1453,6 +1453,53 @@ func TestAProviderEventKeepsItsEnvelopeOnTheRunsStream(t *testing.T) {
 	}
 }
 
+func TestAProvidersMessageOnlyWarningIsAWarnLineOnTheTerminalAndInTheRunLog(t *testing.T) {
+	t.Parallel()
+	s, out, logPath := newTestSession(t, "ocel deploy")
+
+	s.Event(&progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_CHECK,
+		Subject: "relay",
+		Message: "this deploy could not confirm the account may run code at the relay edge",
+	})
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := out.String(), "⚠ this deploy could not confirm the account may run code at the relay edge\n"; !strings.HasPrefix(got, want) {
+		t.Errorf("terminal = %q, want it to open with %q", got, want)
+	}
+	logged, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logged), "could not confirm the account may run code at the relay edge") {
+		t.Errorf("run log = %q, want the warning in it", logged)
+	}
+}
+
+func TestAProvidersMessageOnlyEventIsAMessageOnlyRunEvent(t *testing.T) {
+	t.Parallel()
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Event(&progressv1.OperationEvent{Level: progressv1.Level_LEVEL_WARN, Subject: "relay", Message: "the plan is unknown"})
+
+	got := parseNDJSON(t, out.String())
+	if len(got) != 1 {
+		t.Fatalf("recorded %d envelopes, want 1", len(got))
+	}
+	if got[0].GetEvent() != nil {
+		t.Errorf("body = %v, want a message-only event", got[0].GetEvent())
+	}
+	if got[0].GetSubject() != "relay" || got[0].GetMessage() != "the plan is unknown" {
+		t.Errorf("subject, message = %q, %q, want the provider's", got[0].GetSubject(), got[0].GetMessage())
+	}
+}
+
 func TestAPlanTheRunShowsIsInThePlanPhase(t *testing.T) {
 	t.Parallel()
 	run := startTestRun(t, t.TempDir(), "ocel deploy")

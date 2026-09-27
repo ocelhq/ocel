@@ -103,7 +103,8 @@ type EdgeNeedCheck struct {
 	Edge          edge.Edge
 	Root          string
 	AllowDegraded []string
-	Degraded      func(edge.Need, string)
+	Degraded      func(app string, need edge.Need, detail string)
+	Warn          func(subject, message string)
 }
 
 func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (AppNeedVerdicts, error) {
@@ -113,7 +114,7 @@ func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (
 	records := AppNeedVerdicts{}
 	check := c.Edge.Hooks().CheckCodeEntitlement
 	entitles := check != nil
-	entitlement := onceChecked(ctx, check)
+	entitlement := c.onceChecked(ctx, check)
 
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()
@@ -169,7 +170,7 @@ func (c EdgeNeedCheck) forApp(
 		case waived:
 			record.Waived = append(record.Waived, need)
 			if c.Degraded != nil {
-				c.Degraded(need, fmt.Sprintf("%s: %s. It affects %s", name, degradeOf[need], affected(detail)))
+				c.Degraded(name, need, fmt.Sprintf("%s: %s. It affects %s", name, degradeOf[need], affected(detail)))
 			}
 		default:
 			return AppNeedVerdict{}, &UnsupportedNeedError{App: name, Need: need, Edge: c.Edge.Kind(), Detail: detail}
@@ -198,7 +199,10 @@ func declaredNeeds(desc edge.ServeDescriptor) []edge.Need {
 	return ordered
 }
 
-func onceChecked(ctx context.Context, check func(context.Context) (edge.CodeEntitlement, error)) func() (edge.CodeEntitlement, error) {
+func (c EdgeNeedCheck) onceChecked(
+	ctx context.Context,
+	check func(context.Context) (edge.CodeEntitlement, error),
+) func() (edge.CodeEntitlement, error) {
 	var entitlement edge.CodeEntitlement
 	var err error
 	asked := false
@@ -206,7 +210,27 @@ func onceChecked(ctx context.Context, check func(context.Context) (edge.CodeEnti
 		if !asked {
 			asked = true
 			entitlement, err = check(ctx)
+			if err == nil && entitlement.Granted == edge.EntitlementUnknown {
+				c.warnUnknown(entitlement.Reason)
+			}
 		}
 		return entitlement, err
 	}
+}
+
+func (c EdgeNeedCheck) warnUnknown(reason string) {
+	if c.Warn == nil {
+		return
+	}
+	kind := c.Edge.Kind()
+	cause := ""
+	if reason != "" {
+		cause = ": " + reason
+	}
+	c.Warn(string(kind), fmt.Sprintf(
+		"this deploy could not confirm the account may run code at the %s edge%s. "+
+			"It proceeds, and if the plan does not run code at the edge the %s edge refuses the code when it is uploaded, "+
+			"after the deploy has begun changing your infrastructure",
+		kind, cause, kind,
+	))
 }

@@ -249,6 +249,11 @@ func (s *Session) Resume() {
 }
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
+	if ev.GetEvent() == nil {
+		s.logf("[diagnostic] %s", ev.GetMessage())
+		s.stream.Emit(lift(ev))
+		return
+	}
 	out := s.stream.Emit(lift(ev)).GetOperation()
 	s.logOperation(out)
 	if span := out.GetSpan(); span != nil {
@@ -266,7 +271,9 @@ func lift(ev *progressv1.OperationEvent) *streamv1.RunEvent {
 		Subject: ev.GetSubject(),
 		Message: ev.GetMessage(),
 		SpanId:  ev.GetSpanId(),
-		Event:   &streamv1.RunEvent_Operation{Operation: ev},
+	}
+	if ev.GetEvent() != nil {
+		run.Event = &streamv1.RunEvent_Operation{Operation: ev}
 	}
 	if ns := ev.GetTimeUnixNano(); ns > 0 {
 		run.Time = timestamppb.New(time.Unix(0, ns))

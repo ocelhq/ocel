@@ -178,13 +178,24 @@ func stageProgressEvent(id StageID, message string) *progressv1.OperationEvent {
 	}
 }
 
-func degradedEvent(need edge.Need, detail string) *progressv1.OperationEvent {
+func degradedEvent(app string, need edge.Need, detail string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Level: progressv1.Level_LEVEL_WARN,
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_CHECK,
+		Subject: app,
 		Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{
 			Need:   string(need),
 			Detail: detail,
 		}},
+	}
+}
+
+func checkWarning(subject, message string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_CHECK,
+		Subject: subject,
+		Message: message,
 	}
 }
 

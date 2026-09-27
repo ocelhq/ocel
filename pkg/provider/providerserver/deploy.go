@@ -558,8 +558,11 @@ func (r *deployRun) checkNeeds(ctx context.Context) error {
 		Edge:          r.front,
 		Root:          appbuild.ArtifactRoot(),
 		AllowDegraded: r.allowDegraded,
-		Degraded: func(need edge.Need, detail string) {
-			r.sender.send(degradedEvent(need, detail))
+		Degraded: func(app string, need edge.Need, detail string) {
+			r.sender.send(degradedEvent(app, need, detail))
+		},
+		Warn: func(subject, message string) {
+			r.sender.send(checkWarning(subject, message))
 		},
 	}
 	verdicts, err := check.Run(ctx, r.manifest)

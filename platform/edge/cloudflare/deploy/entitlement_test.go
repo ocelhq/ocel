@@ -1,8 +1,10 @@
 package cloudflare
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -92,5 +94,42 @@ func TestCodeEntitlementReportsWhatThePlanEntitles(t *testing.T) {
 				t.Errorf("Plan = %q, want %q", got.Plan, tc.wantPlan)
 			}
 		})
+	}
+}
+
+func TestAnUnreadableSubscriptionLeavesTheEntitlementUnknownWithItsReasonAndWritesNothingToStderr(t *testing.T) {
+	t.Setenv(envAccountID, "acct-1")
+	t.Setenv(envAPIToken, "tok")
+	p := entitlementProvider(t, "", http.StatusForbidden)
+
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := os.Stderr
+	os.Stderr = write
+	got, err := p.Hooks().CheckCodeEntitlement(t.Context())
+	os.Stderr = stderr
+	if cerr := write.Close(); cerr != nil {
+		t.Fatal(cerr)
+	}
+	written, rerr := io.ReadAll(read)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+
+	if err != nil {
+		t.Fatalf("CheckCodeEntitlement: %v", err)
+	}
+	if got.Granted != edge.EntitlementUnknown {
+		t.Errorf("Granted = %q, want %q", got.Granted, edge.EntitlementUnknown)
+	}
+	for _, want := range []string{"acct-1", envAPIToken, `"Billing Read"`} {
+		if !strings.Contains(got.Reason, want) {
+			t.Errorf("Reason = %q, want it to name %s", got.Reason, want)
+		}
+	}
+	if len(written) != 0 {
+		t.Errorf("the check wrote %q to stderr, want nothing", written)
 	}
 }

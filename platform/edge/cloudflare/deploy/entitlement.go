@@ -18,24 +18,23 @@ func (p *cloudflare) codeEntitlement(ctx context.Context) (edge.CodeEntitlement,
 	if accountID == "" {
 		return edge.CodeEntitlement{}, fmt.Errorf("%s is not set", envAccountID)
 	}
-	plan, granted := p.workersPlan(ctx, accountID)
-	return edge.CodeEntitlement{Plan: plan, Granted: granted}, nil
+	return p.workersPlan(ctx, accountID), nil
 }
 
 const workersPaidPlan = "Workers Paid"
 
 const workersFreePlan = "Workers Free"
 
-func (p *cloudflare) workersPlan(ctx context.Context, accountID string) (string, edge.Entitlement) {
+func (p *cloudflare) workersPlan(ctx context.Context, accountID string) edge.CodeEntitlement {
 	page, err := p.client.Accounts.Subscriptions.Get(ctx, accounts.SubscriptionGetParams{AccountID: cf.F(accountID)})
 	if err != nil {
-		fmt.Fprintf(os.Stderr,
-			"ocel cloudflare edge: could not read the subscriptions of account %s: %v\n"+
-				"%s must have the \"Billing Read\" permission (Account scope) to tell whether the plan runs code at the edge. "+
-				"Without it this deploy proceeds, and an account on the Workers Free plan is rejected by Cloudflare when the "+
-				"worker is uploaded, after the deploy has begun changing your infrastructure\n",
-			accountID, err, envAPIToken)
-		return "", edge.EntitlementUnknown
+		return edge.CodeEntitlement{
+			Granted: edge.EntitlementUnknown,
+			Reason: fmt.Sprintf(
+				"could not read the subscriptions of account %s: %v. %s must have the \"Billing Read\" permission "+
+					"(Account scope) to tell whether the plan runs code at the edge",
+				accountID, err, envAPIToken),
+		}
 	}
 	for _, sub := range page.Result {
 		if runsWorkerCode(sub.RatePlan) {
@@ -43,10 +42,10 @@ func (p *cloudflare) workersPlan(ctx context.Context, accountID string) (string,
 			if name == "" {
 				name = workersPaidPlan
 			}
-			return name, edge.EntitlementGranted
+			return edge.CodeEntitlement{Plan: name, Granted: edge.EntitlementGranted}
 		}
 	}
-	return workersFreePlan, edge.EntitlementWithheld
+	return edge.CodeEntitlement{Plan: workersFreePlan, Granted: edge.EntitlementWithheld}
 }
 
 func runsWorkerCode(plan shared.RatePlan) bool {

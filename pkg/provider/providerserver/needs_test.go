@@ -109,7 +109,7 @@ func TestNeedCheckDegradesAWaivedNeedRatherThanRefusing(t *testing.T) {
 		Edge:          narrowEdge{Edge: front},
 		Root:          root,
 		AllowDegraded: []string{string(edge.NeedStreaming)},
-		Degraded:      func(need edge.Need, _ string) { degraded = append(degraded, need) },
+		Degraded:      func(_ string, need edge.Need, _ string) { degraded = append(degraded, need) },
 	}.Run(context.Background(), oneApp())
 	if err != nil {
 		t.Fatalf("Run() with the need waived = %v, want it deployed degraded", err)
@@ -225,5 +225,45 @@ func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 	_, err = providerserver.EdgeNeedCheck{Edge: withheld, Root: root}.Run(context.Background(), oneApp())
 	if !errors.As(err, &refused) || refused.BillingPlan != "Workers Free" {
 		t.Errorf("Run() with nothing waived = %v, want the plan named in an entitlement refusal", err)
+	}
+}
+
+func TestNeedCheckWarnsOnceNamingTheEdgeWhenItCannotTellWhetherThePlanRunsCode(t *testing.T) {
+	t.Parallel()
+
+	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}, edge.NeedEdgeRuntime: {Count: 1}},
+	})
+	front, err := fake.NewEdges(fake.NewRecords()).Open(fake.KindRelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	unknown := entitlingEdge{Edge: front, asked: &asked, plan: edge.CodeEntitlement{
+		Granted: edge.EntitlementUnknown,
+		Reason:  "the token cannot read billing",
+	}}
+
+	type warning struct{ subject, message string }
+	var warned []warning
+	records, err := providerserver.EdgeNeedCheck{
+		Edge: unknown,
+		Root: root,
+		Warn: func(subject, message string) { warned = append(warned, warning{subject, message}) },
+	}.Run(context.Background(), oneApp())
+	if err != nil {
+		t.Fatalf("Run() when the entitlement is unknown = %v, want the deploy to proceed", err)
+	}
+	if len(records["web"].InEffect) != 2 {
+		t.Errorf("web's needs in effect are %v, want both code needs served", records["web"].InEffect)
+	}
+	if len(warned) != 1 {
+		t.Fatalf("the check warned %d times (%v), want once for the whole check", len(warned), warned)
+	}
+	if warned[0].subject != string(fake.KindRelay) {
+		t.Errorf("the warning's subject is %q, want the edge %q", warned[0].subject, fake.KindRelay)
+	}
+	if !strings.Contains(warned[0].message, "the token cannot read billing") {
+		t.Errorf("the warning reads %q, want it to carry the edge's reason", warned[0].message)
 	}
 }
