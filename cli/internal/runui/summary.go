@@ -104,10 +104,10 @@ func (s summary) unpromoted() []string {
 	}
 	var why []string
 	if len(failed) > 0 {
-		why = append(why, joinNames(failed)+" failed")
+		why = append(why, Listed(failed)+" failed")
 	}
 	if len(notRun) > 0 {
-		why = append(why, joinNames(notRun)+" did not run")
+		why = append(why, Listed(notRun)+" did not run")
 	}
 	reason := strings.Join(why, " and ")
 	if len(s.result.GetApps()) > 1 {
@@ -118,7 +118,7 @@ func (s summary) unpromoted() []string {
 	case len(deployed) == 1:
 		what = deployed[0] + " deployed but was not promoted"
 	case len(deployed) > 1:
-		what = joinNames(deployed) + " deployed but were not promoted"
+		what = Listed(deployed) + " deployed but were not promoted"
 	}
 	return []string{
 		blockIndent + what + ": " + reason,
@@ -131,13 +131,6 @@ func missingPaint(present Presentation) envgate.Paint {
 		Fail:  func(text string) string { return colorFor(present, color.FgRed).Sprint(text) },
 		Faint: func(text string) string { return faint(present, text) },
 	}
-}
-
-func joinNames(names []string) string {
-	if len(names) < 2 {
-		return strings.Join(names, "")
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 func servedPlace(tier environmentv1.Tier) string {

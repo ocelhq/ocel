@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -73,7 +74,7 @@ func appList(cfg *projectconfig.Config) string {
 	case len(names) == 1:
 		return "app " + names[0]
 	case len(names) <= 4:
-		return fmt.Sprintf("%d apps (%s and %s)", len(names), strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
+		return fmt.Sprintf("%d apps (%s)", len(names), runui.Listed(names))
 	default:
 		return fmt.Sprintf("%d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
 	}

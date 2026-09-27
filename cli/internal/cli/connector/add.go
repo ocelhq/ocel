@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
@@ -14,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -112,9 +112,5 @@ func grantsLine(grants []string) string {
 	if len(grants) == 0 {
 		return "The console may use this connector for nothing yet"
 	}
-	written := slices.Sorted(slices.Values(grants))
-	if len(written) == 1 {
-		return "The console may use this connector for " + written[0]
-	}
-	return "The console may use this connector for " + strings.Join(written[:len(written)-1], ", ") + " and " + written[len(written)-1]
+	return "The console may use this connector for " + runui.Listed(slices.Sorted(slices.Values(grants)))
 }

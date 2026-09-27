@@ -1,6 +1,9 @@
 package runui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAQuotedListOfThreeReadsAsASentence(t *testing.T) {
 	t.Parallel()
@@ -13,5 +16,15 @@ func TestAQuotedListOfThreeReadsAsASentence(t *testing.T) {
 	}
 	if got, want := Quoted([]string{"a"}), `"a"`; got != want {
 		t.Errorf("Quoted() = %s, want %s", got, want)
+	}
+}
+
+func TestAListOfNamesReadsAsASentence(t *testing.T) {
+	t.Parallel()
+
+	for names, want := range map[string]string{"": "", "web": "web", "web api": "web and api", "web api jobs": "web, api and jobs"} {
+		if got := Listed(strings.Fields(names)); got != want {
+			t.Errorf("Listed(%q) = %q, want %q", names, got, want)
+		}
 	}
 }
