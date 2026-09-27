@@ -352,7 +352,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 
 		if opts.reveal {
-			if err := consentToReveal(definitions, key, opts, stderr); err != nil {
+			if err := consentToReveal(definitions, key, opts, run.Phase(progressv1.Phase_PHASE_CHECK).Warn); err != nil {
 				return err
 			}
 			fmt.Fprintln(stdout, resp.GetValue())
@@ -379,7 +379,7 @@ func classOf(definitions []*resourcesv1.VariableDefinition, key string) resource
 	return resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
 }
 
-func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, opts envOptions, stderr io.Writer) error {
+func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, opts envOptions, warn func(message string)) error {
 	if classOf(definitions, key) != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 		return nil
 	}
@@ -387,7 +387,7 @@ func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, 
 		return fmt.Errorf("%s is declared a secret, and --reveal alone will not print one: the plaintext would land in this terminal's scrollback and in whatever shell history, CI log or screen recording is watching. Pass --yes as well to print it anyway",
 			describeCell(key, opts))
 	}
-	fmt.Fprintf(stderr, "%s is a secret and its plaintext is now on stdout, in this terminal's scrollback, and in anything capturing either.\n", describeCell(key, opts))
+	warn(describeCell(key, opts) + " is a secret and its plaintext is now on stdout, in this terminal's scrollback, and in anything capturing either.")
 	return nil
 }
 

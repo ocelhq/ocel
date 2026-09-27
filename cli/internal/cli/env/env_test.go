@@ -764,6 +764,22 @@ func TestRevealingASecret(t *testing.T) {
 		}
 	})
 
+	t.Run("--reveal --yes warns through the run, so nothing reaches stderr beside it", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+		var stdout, stderr, stream bytes.Buffer
+		if err := runEnvGet(context.Background(), streamedDeps(&stream), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
+			t.Fatalf("runEnvGet --reveal --yes err = %v; stream=%s", err, stream.String())
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("stderr = %q, want nothing written around the run", stderr.String())
+		}
+		if !strings.Contains(stream.String(), "WARN  [check] STRIPE_API_KEY") {
+			t.Errorf("stream = %q, want the warning as a WARN line of the run naming the secret", stream.String())
+		}
+	})
+
 	t.Run("a plain value needs no acknowledgement and warns about nothing", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 		envSet(t, root, "LOG_LEVEL", "debug", envOptions{})
