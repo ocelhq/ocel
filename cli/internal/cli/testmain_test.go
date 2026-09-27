@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
 	os.Unsetenv("OCEL_CONFIG")
+	os.Unsetenv("GITHUB_ACTIONS")
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

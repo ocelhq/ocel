@@ -22,6 +22,13 @@ const (
 	heartbeatEvery = 60 * time.Second
 )
 
+var annotationCommands = map[progressv1.Level]string{
+	progressv1.Level_LEVEL_WARN:  "warning",
+	progressv1.Level_LEVEL_ERROR: "error",
+}
+
+var workflowData = strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+
 var phaseGerunds = map[progressv1.Phase]string{
 	progressv1.Phase_PHASE_CHECK:     "checking",
 	progressv1.Phase_PHASE_BUILD:     "building",
@@ -144,9 +151,9 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	case ev.GetCounter() != nil:
 		counted := proto.CloneOf(ev)
 		counted.Message = progressLogLine(ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total)
-		s.within(span, s.detail(counted), blockLine{text: lineOf(counted).render(s.present)})
+		s.within(span, s.detail(counted), s.alone(counted))
 	case ev.GetBody() == nil && ev.GetMessage() != "":
-		s.within(span, s.detail(ev), blockLine{text: lineOf(ev).render(s.present)})
+		s.within(span, s.detail(ev), s.alone(ev))
 	}
 }
 
@@ -164,12 +171,16 @@ func (s *GroupedSink) within(span string, inUnit, alone blockLine) {
 	s.print(alone)
 }
 
+func (s *GroupedSink) alone(ev *streamv1.RunEvent) blockLine {
+	return blockLine{text: lineOf(ev).render(s.present), from: lineOf(ev)}
+}
+
 func (s *GroupedSink) detail(ev *streamv1.RunEvent) blockLine {
 	text := strings.ReplaceAll(ev.GetMessage(), "\n", "\n"+continuationIndent)
 	if ev.GetLevel() != progressv1.Level_LEVEL_INFO {
 		text = levelLabels[ev.GetLevel()].render(s.present) + " " + text
 	}
-	return blockLine{text: continuationIndent + text}
+	return blockLine{text: continuationIndent + text, from: lineOf(ev)}
 }
 
 func (s *GroupedSink) open(span string, ev *streamv1.RunEvent) {
@@ -203,7 +214,15 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 			message += ": " + reason
 		}
 	}
-	s.print(unit.header(ev.GetLevel(), ended.GetStatus(), message, s.present))
+	header := unit.header(ev.GetLevel(), ended.GetStatus(), message, s.present)
+	if s.present.GitHubActions && !failed && len(unit.body) > 0 {
+		header.text = "::group::" + workflowData.Replace(header.text)
+		s.print(header)
+		s.print(unit.body...)
+		s.print(blockLine{text: "::endgroup::"})
+		return
+	}
+	s.print(header)
 	if failed || !s.failed {
 		s.print(unit.body...)
 	}
@@ -231,6 +250,9 @@ func (s *GroupedSink) print(lines ...blockLine) {
 			continue
 		}
 		fmt.Fprintln(s.w, l.text)
+		if command, ok := annotationCommands[l.from.level]; ok && s.present.GitHubActions {
+			fmt.Fprintf(s.w, "::%s::%s\n", command, workflowData.Replace(l.from.annotation()))
+		}
 	}
 }
 
@@ -247,7 +269,7 @@ func (s *GroupedSink) forget(span string) {
 func (u *unitBlock) header(level progressv1.Level, ends progressv1.SpanStatus, message string, present Presentation) blockLine {
 	head := lineOf(u.opened)
 	head.level, head.ends, head.message = level, ends, message
-	return blockLine{text: head.render(present)}
+	return blockLine{text: head.render(present), from: head}
 }
 
 func (s *GroupedSink) Close() error {

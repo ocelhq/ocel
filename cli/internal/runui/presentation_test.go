@@ -115,3 +115,25 @@ func TestAnUnknownWidthFallsBackToEightyColumns(t *testing.T) {
 		t.Errorf("Width = %d, want the 120 the terminal reported", got)
 	}
 }
+
+func TestAGitHubActionsRunnerIsCarriedIntoThePresentation(t *testing.T) {
+	t.Parallel()
+
+	if !Resolve(Origin{LogFormat: "human", GitHubActions: true}).GitHubActions {
+		t.Error("Resolve() dropped the GitHub Actions runner the origin declared")
+	}
+	if Resolve(Origin{LogFormat: "human"}).GitHubActions {
+		t.Error("Resolve() declared a GitHub Actions runner the origin did not")
+	}
+}
+
+func TestDetectRecognisesAGitHubActionsRunnerOnlyWhenItsVariableIsTrue(t *testing.T) {
+	for value, want := range map[string]bool{"true": true, "": false, "false": false, "1": false} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("GITHUB_ACTIONS", value)
+			if got := Detect("human", false, &bytes.Buffer{}).GitHubActions; got != want {
+				t.Errorf("GITHUB_ACTIONS=%q: GitHubActions = %v, want %v", value, got, want)
+			}
+		})
+	}
+}

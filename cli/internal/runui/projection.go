@@ -39,6 +39,7 @@ var overrides = map[protoreflect.FullName]armFunc{
 type blockLine struct {
 	text string
 	raw  bool
+	from line
 }
 
 type block struct {

@@ -15,31 +15,34 @@ const (
 )
 
 type Origin struct {
-	LogFormat Format
-	Verbose   bool
-	NoColor   bool
-	TTY       bool
-	Width     int
-	Height    int
+	LogFormat     Format
+	Verbose       bool
+	NoColor       bool
+	TTY           bool
+	Width         int
+	Height        int
+	GitHubActions bool
 }
 
 type Presentation struct {
-	Format  Format
-	Verbose bool
-	Color   bool
-	TTY     bool
-	Width   int
-	Height  int
+	Format        Format
+	Verbose       bool
+	Color         bool
+	TTY           bool
+	Width         int
+	Height        int
+	GitHubActions bool
 }
 
 func Resolve(o Origin) Presentation {
 	p := Presentation{
-		Format:  FormatHuman,
-		Verbose: o.Verbose,
-		Color:   o.TTY && !o.NoColor,
-		TTY:     o.TTY,
-		Width:   o.Width,
-		Height:  o.Height,
+		Format:        FormatHuman,
+		Verbose:       o.Verbose,
+		Color:         o.TTY && !o.NoColor,
+		TTY:           o.TTY,
+		Width:         o.Width,
+		Height:        o.Height,
+		GitHubActions: o.GitHubActions,
 	}
 	if o.LogFormat == FormatJSON {
 		p.Format = FormatJSON
@@ -59,11 +62,12 @@ func (p Presentation) Live() bool {
 
 func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
 	return Resolve(Origin{
-		LogFormat: logFormat,
-		Verbose:   verbose,
-		NoColor:   color.NoColor || os.Getenv("NO_COLOR") != "",
-		TTY:       IsTerminal(w),
-		Width:     termWidth(w),
-		Height:    termHeight(w),
+		LogFormat:     logFormat,
+		Verbose:       verbose,
+		NoColor:       color.NoColor || os.Getenv("NO_COLOR") != "",
+		TTY:           IsTerminal(w),
+		Width:         termWidth(w),
+		Height:        termHeight(w),
+		GitHubActions: os.Getenv("GITHUB_ACTIONS") == "true",
 	})
 }

@@ -391,3 +391,95 @@ func TestTheSilenceRestartsWhenTheRunResumes(t *testing.T) {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestInGitHubActionsASuccessfulBlockIsACollapsedGroup(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	web := build.Unit("web", "built 12 routes")
+	output(t, web, "Compiled successfully")
+	c.pass(34 * time.Second)
+	web.End(nil)
+	build.Say("every app is built")
+
+	want := "::group::INFO  [build] ✓ web: built 12 routes in 34s\n" +
+		"\n" +
+		"    Compiled successfully\n" +
+		"\n" +
+		"::endgroup::\n" +
+		"INFO  [build] every app is built\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestInGitHubActionsAFailedBlockStaysExpandedAndALaterSuccessKeepsItsBodyFolded(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	web := build.Unit("web", "Building web")
+	api := build.Unit("api", "Building api")
+	output(t, web, "web compiled")
+	output(t, api, "api: missing module")
+	c.pass(3 * time.Second)
+	api.End(errors.New("npm run build exited with status 1"))
+	c.pass(2 * time.Second)
+	web.End(nil)
+
+	want := "ERROR [build] ✗ api: Building api failed after 3s: npm run build exited with status 1\n" +
+		"::error::[build] api: Building api failed after 3s: npm run build exited with status 1\n" +
+		"\n" +
+		"    api: missing module\n" +
+		"\n" +
+		"::group::INFO  [build] ✓ web: Building web in 5s\n" +
+		"\n" +
+		"    web compiled\n" +
+		"\n" +
+		"::endgroup::\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestInGitHubActionsAWarningIsMirroredAsAnAnnotationWithItsNewlinesAndPercentsEscaped(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newGroupedSink(&out, Presentation{GitHubActions: true}, nil)
+	sink.Receive(&streamv1.RunEvent{
+		Level:   progressv1.Level_LEVEL_WARN,
+		Phase:   progressv1.Phase_PHASE_CHECK,
+		Message: "the zone is 100% over quota\r\n::error::forged",
+	})
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	want := "WARN  [check] the zone is 100% over quota\r\n" +
+		"      ::error::forged\n" +
+		"::warning::[check] the zone is 100%25 over quota%0D%0A::error::forged\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "built 100% of routes\n::error::forged")
+	output(t, web, "Compiled successfully")
+	c.pass(time.Second)
+	web.End(nil)
+
+	want := "::group::INFO  [build] ✓ web: built 100%25 of routes%0A      ::error::forged in 1s\n" +
+		"\n" +
+		"    Compiled successfully\n" +
+		"\n" +
+		"::endgroup::\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}

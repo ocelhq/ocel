@@ -65,6 +65,17 @@ func (l line) render(present Presentation) string {
 	return b.String()
 }
 
+func (l line) annotation() string {
+	text := l.message
+	if l.subject != "" {
+		text = l.subject + ": " + text
+	}
+	if name, ok := phaseNames[l.phase]; ok {
+		text = "[" + name + "] " + text
+	}
+	return text
+}
+
 func (l label) render(present Presentation) string {
 	if len(l.attrs) == 0 {
 		return l.text
