@@ -1,0 +1,10 @@
+http:
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+    p1305-noop:
+      headers:
+        customResponseHeaders:
+          X-P1305: "2"

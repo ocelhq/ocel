@@ -1,0 +1,23 @@
+http:
+  routers:
+    dapp-lekbai-router-1:
+      rule: Host(`dapp.p1305.test`)
+      service: dapp-lekbai-service-1
+      middlewares:
+        - redirect-to-https
+      entryPoints:
+        - web
+    dapp-lekbai-router-websecure-1:
+      rule: Host(`dapp.p1305.test`)
+      service: dapp-lekbai-service-1
+      middlewares: []
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+  services:
+    dapp-lekbai-service-1:
+      loadBalancer:
+        servers:
+          - url: http://dapp-lekbai:80
+        passHostHeader: true

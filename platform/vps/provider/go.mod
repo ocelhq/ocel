@@ -4,10 +4,12 @@ go 1.27.0
 
 require (
 	connectrpc.com/connect v1.20.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/creack/pty v1.1.24
 	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

@@ -1,0 +1,60 @@
+http:
+  routers:
+    ocel-ocel-edge-probe-preview-example-com-5ab75bbe:
+      rule: Host(`ocel-edge-probe.preview.example.com`)
+      entryPoints:
+        - https
+      service: ocel-switchboard
+      priority: 1000000
+      tls:
+        certResolver: letsencrypt
+    ocel-ocel-edge-probe-preview-example-com-5ab75bbe-http:
+      rule: Host(`ocel-edge-probe.preview.example.com`)
+      entryPoints:
+        - http
+      middlewares:
+        - ocel-https
+      service: noop@internal
+      priority: 1000000
+    ocel-pr-12--web-preview-example-com-983b404f:
+      rule: Host(`pr-12--web.preview.example.com`)
+      entryPoints:
+        - https
+      service: ocel-switchboard
+      priority: 1000000
+      tls:
+        certResolver: letsencrypt
+    ocel-pr-12--web-preview-example-com-983b404f-http:
+      rule: Host(`pr-12--web.preview.example.com`)
+      entryPoints:
+        - http
+      middlewares:
+        - ocel-https
+      service: noop@internal
+      priority: 1000000
+    ocel-shop-example-com-951623a2:
+      rule: Host(`shop.example.com`)
+      entryPoints:
+        - https
+      service: ocel-switchboard
+      priority: 1000000
+      tls:
+        certResolver: letsencrypt
+    ocel-shop-example-com-951623a2-http:
+      rule: Host(`shop.example.com`)
+      entryPoints:
+        - http
+      middlewares:
+        - ocel-https
+      service: noop@internal
+      priority: 1000000
+  middlewares:
+    ocel-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+  services:
+    ocel-switchboard:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:9000

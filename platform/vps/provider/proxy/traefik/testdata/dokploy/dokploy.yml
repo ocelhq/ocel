@@ -1,0 +1,22 @@
+http:
+  routers:
+    dokploy-router-app:
+      rule: Host(`dash.p1305.test`)
+      service: dokploy-service-app
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+    dokploy-router-app-secure:
+      rule: Host(`dash.p1305.test`)
+      service: dokploy-service-app
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+  services:
+    dokploy-service-app:
+      loadBalancer:
+        servers:
+          - url: http://dokploy:3000
+        passHostHeader: true
