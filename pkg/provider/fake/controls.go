@@ -22,6 +22,7 @@ func (p *Provider) everyHook(hooks *provider.Hooks) {
 	hooks.VerifyGrants = func(context.Context, provider.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy
 	hooks.EnsureImageRegistry = p.EnsureImageRegistry
+	hooks.ProveIdentity = p.ProveIdentity
 }
 
 func (p *Provider) ResourceHooks() resources.Hooks {

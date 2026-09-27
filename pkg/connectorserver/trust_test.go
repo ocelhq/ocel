@@ -352,6 +352,37 @@ func TestGetValueAsksForRevealOnlyWhenItReveals(t *testing.T) {
 	}
 }
 
+func TestAConnectorSyncsOnlyTheEnvSourceADeployRegistered(t *testing.T) {
+	at := consoleServing(t)
+	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsWrite}}))
+
+	synced, err := vars.SyncEnvSource(context.Background(), &envvarsv1.SyncEnvSourceRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug: "shop",
+		From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
+	})
+	if err != nil || synced.GetStatus().GetEnvSource() != "builtin" {
+		t.Fatalf("SyncEnvSource(registered) under the write scope = %+v, %v, want it synced", synced, err)
+	}
+
+	_, err = vars.SyncEnvSource(context.Background(), &envvarsv1.SyncEnvSourceRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug: "shop",
+		From: &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{
+			Project:     "p-1",
+			Environment: "prod",
+			Host:        "https://infisical.example.com",
+			Auth: &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Universal{Universal: &envvarsv1.InfisicalUniversalAuth{
+				ClientIdVariable:     "INFISICAL_CLIENT_ID",
+				ClientSecretVariable: "STRIPE_KEY",
+			}}},
+		}}}},
+	})
+	if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "deploy") {
+		t.Fatalf("SyncEnvSource() naming an env source through a connector = %v, want it refused pointing at a deploy", err)
+	}
+}
+
 func saying(t *testing.T, run func()) string {
 	t.Helper()
 

@@ -16,6 +16,9 @@ func (h *Service) SetValue(ctx context.Context, req *envvarsv1.SetValueRequest) 
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseEnvSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), false); err != nil {
+		return nil, err
+	}
 	metadata, err := store.Set(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetValue(), req.ExpectedVersion)
 	if err != nil {
 		return nil, valuesError(err)
@@ -84,6 +87,9 @@ func (h *Service) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesR
 func (h *Service) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
+		return nil, err
+	}
+	if err := refuseEnvSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), true); err != nil {
 		return nil, err
 	}
 	deleted, err := store.Delete(ctx, scope, coordinateOf(req.GetCoordinate()), req.ExpectedVersion)

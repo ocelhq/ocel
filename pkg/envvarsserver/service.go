@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -19,9 +20,10 @@ import (
 )
 
 type Backend struct {
-	Records      records.Store
-	Cipher       records.Cipher
-	VerifyGrants func(ctx context.Context, binding provider.Binding) error
+	Records       records.Store
+	Cipher        records.Cipher
+	VerifyGrants  func(ctx context.Context, binding provider.Binding) error
+	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 }
 
 type BackendSource interface {
@@ -29,7 +31,8 @@ type BackendSource interface {
 }
 
 type Service struct {
-	Source BackendSource
+	Source               BackendSource
+	CallerNamesEnvSource bool
 }
 
 type FixedBackend Backend
@@ -126,6 +129,7 @@ func metadataProto(scope envvars.Scope, m envvars.Metadata) *envvarsv1.ValueMeta
 		Version:    m.Version,
 		UpdatedAt:  m.UpdatedAt,
 		Size:       m.Size,
+		EnvSource:  m.Provenance.EnvSource,
 	}
 	if m.Target != nil {
 		out.Target = &envvarsv1.Coordinate{

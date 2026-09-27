@@ -6,6 +6,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/envsource"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -22,6 +23,7 @@ type Hooks struct {
 	OpenRegistryImages  func(ctx context.Context, target RegistryTarget) (ImageStore, error)
 	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
+	ProveIdentity       func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 	Cost                *CostHooks
 	FunctionImages      *FunctionImageHooks
 }

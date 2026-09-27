@@ -2,7 +2,9 @@ package providerserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -142,9 +144,28 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			_, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
 			return err
 		},
+		"SyncEnvSource": func() error {
+			_, err := vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{
+				Slug: slug,
+				Tier: environmentv1.Tier_TIER_PRODUCTION,
+				From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}},
+			})
+			return err
+		},
+		"DescribeEnvSource": func() error {
+			_, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
+			return err
+		},
+		"CreateEnvSourceValue": func() error {
+			_, err := vars.CreateEnvSourceValue(ctx, &envvarsv1.CreateEnvSourceValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("KEY")})
+			return err
+		},
 	}
-	if len(calls) != 11 {
-		t.Fatalf("the suite drives %d of EnvVarsService's 11 RPCs", len(calls))
+	methods := envvarsv1.File_provider_envvars_v1_envvars_proto.Services().ByName("EnvVarsService").Methods()
+	for index := range methods.Len() {
+		if name := string(methods.Get(index).Name()); calls[name] == nil {
+			t.Errorf("EnvVarsService declares %s, and the suite never calls it before Configure", name)
+		}
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
@@ -152,5 +173,38 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 				t.Fatalf("%s before Configure: code = %v, want %v", name, got, connect.CodeFailedPrecondition)
 			}
 		})
+	}
+}
+
+func TestAnEnvSourceLogsInWithTheCloudIdentityTheProviderProves(t *testing.T) {
+	p := fake.NewProvider(fake.Options{})
+	p.WithHooks(func(hooks *provider.Hooks) { hooks.ProveIdentity = p.ProveIdentity })
+	vars := varsServedBy(t, p)
+	infisical := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		switch {
+		case r.URL.Path == "/api/v1/auth/gcp-auth/login" && body["jwt"] == fake.IDTokenFor("identity-1"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"accessToken": "token", "expiresIn": 3600})
+		case r.URL.Path == "/api/v4/secrets" && r.Header.Get("Authorization") == "Bearer token":
+			_ = json.NewEncoder(w).Encode(map[string]any{"secrets": []any{}})
+		default:
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	t.Cleanup(infisical.Close)
+
+	_, err := vars.SyncEnvSource(context.Background(), &envvarsv1.SyncEnvSourceRequest{
+		Slug: slug,
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		From: &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{
+			Project:     "p-1",
+			Environment: "prod",
+			Host:        infisical.URL,
+			Auth:        &envvarsv1.InfisicalAuth{Method: &envvarsv1.InfisicalAuth_Identity{Identity: &envvarsv1.InfisicalIdentityAuth{IdentityId: "identity-1"}}},
+		}}}},
+	})
+	if err != nil {
+		t.Fatalf("SyncEnvSource() with identity auth on a provider that proves its cloud identity = %v, want it logged in with the proof the provider gave", err)
 	}
 }

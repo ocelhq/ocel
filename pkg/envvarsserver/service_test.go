@@ -30,14 +30,20 @@ func served(t *testing.T) (envvarsv1connect.EnvVarsServiceClient, *fake.Provider
 
 	provider := fake.NewProvider(fake.Options{})
 	backend := envvarsserver.FixedBackend{Records: provider.Records(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}
+	return serve(t, &envvarsserver.Service{Source: backend, CallerNamesEnvSource: true}), provider
+}
+
+func serve(t *testing.T, service *envvarsserver.Service) envvarsv1connect.EnvVarsServiceClient {
+	t.Helper()
+
 	mux := http.NewServeMux()
 	mux.Handle(envvarsv1connect.NewEnvVarsServiceHandler(
-		&envvarsserver.Service{Source: backend},
+		service,
 		connect.WithInterceptors(validate.NewInterceptor()),
 	))
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
-	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL), provider
+	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
 }
 
 func cell(key string) *envvarsv1.Coordinate {

@@ -105,6 +105,7 @@ func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 		"InspectStack":  hooks.InspectStack != nil,
 		"VerifyGrants":  hooks.VerifyGrants != nil,
 		"PackApp":       hooks.PackApp != nil,
+		"ProveIdentity": hooks.ProveIdentity != nil,
 	} {
 		if set {
 			t.Errorf("the box's hooks set %s, a step no box takes", name)

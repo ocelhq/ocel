@@ -99,6 +99,7 @@ type ValueMetadata struct {
 	UpdatedAt     int64                  `protobuf:"varint,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	Target        *Coordinate            `protobuf:"bytes,5,opt,name=target,proto3,oneof" json:"target,omitempty"`
+	EnvSource     string                 `protobuf:"bytes,6,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -166,6 +167,13 @@ func (x *ValueMetadata) GetTarget() *Coordinate {
 		return x.Target
 	}
 	return nil
+}
+
+func (x *ValueMetadata) GetEnvSource() string {
+	if x != nil {
+		return x.EnvSource
+	}
+	return ""
 }
 
 type VersionEntry struct {
@@ -1592,6 +1600,1204 @@ func (x *PropertyShape) GetList() bool {
 	return false
 }
 
+type EnvSource struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*EnvSource_Builtin
+	//	*EnvSource_Infisical
+	//	*EnvSource_Exec
+	Kind          isEnvSource_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvSource) Reset() {
+	*x = EnvSource{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvSource) ProtoMessage() {}
+
+func (x *EnvSource) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvSource.ProtoReflect.Descriptor instead.
+func (*EnvSource) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *EnvSource) GetKind() isEnvSource_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *EnvSource) GetBuiltin() *BuiltinEnvSource {
+	if x != nil {
+		if x, ok := x.Kind.(*EnvSource_Builtin); ok {
+			return x.Builtin
+		}
+	}
+	return nil
+}
+
+func (x *EnvSource) GetInfisical() *InfisicalEnvSource {
+	if x != nil {
+		if x, ok := x.Kind.(*EnvSource_Infisical); ok {
+			return x.Infisical
+		}
+	}
+	return nil
+}
+
+func (x *EnvSource) GetExec() *ExecEnvSource {
+	if x != nil {
+		if x, ok := x.Kind.(*EnvSource_Exec); ok {
+			return x.Exec
+		}
+	}
+	return nil
+}
+
+type isEnvSource_Kind interface {
+	isEnvSource_Kind()
+}
+
+type EnvSource_Builtin struct {
+	Builtin *BuiltinEnvSource `protobuf:"bytes,1,opt,name=builtin,proto3,oneof"`
+}
+
+type EnvSource_Infisical struct {
+	Infisical *InfisicalEnvSource `protobuf:"bytes,2,opt,name=infisical,proto3,oneof"`
+}
+
+type EnvSource_Exec struct {
+	Exec *ExecEnvSource `protobuf:"bytes,3,opt,name=exec,proto3,oneof"`
+}
+
+func (*EnvSource_Builtin) isEnvSource_Kind() {}
+
+func (*EnvSource_Infisical) isEnvSource_Kind() {}
+
+func (*EnvSource_Exec) isEnvSource_Kind() {}
+
+type BuiltinEnvSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuiltinEnvSource) Reset() {
+	*x = BuiltinEnvSource{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuiltinEnvSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuiltinEnvSource) ProtoMessage() {}
+
+func (x *BuiltinEnvSource) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuiltinEnvSource.ProtoReflect.Descriptor instead.
+func (*BuiltinEnvSource) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{29}
+}
+
+type InfisicalEnvSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Environment   string                 `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
+	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	Host          string                 `protobuf:"bytes,4,opt,name=host,proto3" json:"host,omitempty"`
+	Auth          *InfisicalAuth         `protobuf:"bytes,5,opt,name=auth,proto3" json:"auth,omitempty"`
+	WriteMissing  bool                   `protobuf:"varint,6,opt,name=write_missing,json=writeMissing,proto3" json:"write_missing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InfisicalEnvSource) Reset() {
+	*x = InfisicalEnvSource{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InfisicalEnvSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InfisicalEnvSource) ProtoMessage() {}
+
+func (x *InfisicalEnvSource) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InfisicalEnvSource.ProtoReflect.Descriptor instead.
+func (*InfisicalEnvSource) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *InfisicalEnvSource) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *InfisicalEnvSource) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *InfisicalEnvSource) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *InfisicalEnvSource) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *InfisicalEnvSource) GetAuth() *InfisicalAuth {
+	if x != nil {
+		return x.Auth
+	}
+	return nil
+}
+
+func (x *InfisicalEnvSource) GetWriteMissing() bool {
+	if x != nil {
+		return x.WriteMissing
+	}
+	return false
+}
+
+type InfisicalAuth struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Method:
+	//
+	//	*InfisicalAuth_Universal
+	//	*InfisicalAuth_Identity
+	Method        isInfisicalAuth_Method `protobuf_oneof:"method"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InfisicalAuth) Reset() {
+	*x = InfisicalAuth{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InfisicalAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InfisicalAuth) ProtoMessage() {}
+
+func (x *InfisicalAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InfisicalAuth.ProtoReflect.Descriptor instead.
+func (*InfisicalAuth) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *InfisicalAuth) GetMethod() isInfisicalAuth_Method {
+	if x != nil {
+		return x.Method
+	}
+	return nil
+}
+
+func (x *InfisicalAuth) GetUniversal() *InfisicalUniversalAuth {
+	if x != nil {
+		if x, ok := x.Method.(*InfisicalAuth_Universal); ok {
+			return x.Universal
+		}
+	}
+	return nil
+}
+
+func (x *InfisicalAuth) GetIdentity() *InfisicalIdentityAuth {
+	if x != nil {
+		if x, ok := x.Method.(*InfisicalAuth_Identity); ok {
+			return x.Identity
+		}
+	}
+	return nil
+}
+
+type isInfisicalAuth_Method interface {
+	isInfisicalAuth_Method()
+}
+
+type InfisicalAuth_Universal struct {
+	Universal *InfisicalUniversalAuth `protobuf:"bytes,1,opt,name=universal,proto3,oneof"`
+}
+
+type InfisicalAuth_Identity struct {
+	Identity *InfisicalIdentityAuth `protobuf:"bytes,2,opt,name=identity,proto3,oneof"`
+}
+
+func (*InfisicalAuth_Universal) isInfisicalAuth_Method() {}
+
+func (*InfisicalAuth_Identity) isInfisicalAuth_Method() {}
+
+type InfisicalUniversalAuth struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	ClientIdVariable     string                 `protobuf:"bytes,1,opt,name=client_id_variable,json=clientIdVariable,proto3" json:"client_id_variable,omitempty"`
+	ClientSecretVariable string                 `protobuf:"bytes,2,opt,name=client_secret_variable,json=clientSecretVariable,proto3" json:"client_secret_variable,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *InfisicalUniversalAuth) Reset() {
+	*x = InfisicalUniversalAuth{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InfisicalUniversalAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InfisicalUniversalAuth) ProtoMessage() {}
+
+func (x *InfisicalUniversalAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InfisicalUniversalAuth.ProtoReflect.Descriptor instead.
+func (*InfisicalUniversalAuth) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *InfisicalUniversalAuth) GetClientIdVariable() string {
+	if x != nil {
+		return x.ClientIdVariable
+	}
+	return ""
+}
+
+func (x *InfisicalUniversalAuth) GetClientSecretVariable() string {
+	if x != nil {
+		return x.ClientSecretVariable
+	}
+	return ""
+}
+
+type InfisicalIdentityAuth struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IdentityId    string                 `protobuf:"bytes,1,opt,name=identity_id,json=identityId,proto3" json:"identity_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InfisicalIdentityAuth) Reset() {
+	*x = InfisicalIdentityAuth{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InfisicalIdentityAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InfisicalIdentityAuth) ProtoMessage() {}
+
+func (x *InfisicalIdentityAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InfisicalIdentityAuth.ProtoReflect.Descriptor instead.
+func (*InfisicalIdentityAuth) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *InfisicalIdentityAuth) GetIdentityId() string {
+	if x != nil {
+		return x.IdentityId
+	}
+	return ""
+}
+
+type ExecEnvSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Command       []string               `protobuf:"bytes,1,rep,name=command,proto3" json:"command,omitempty"`
+	Values        []*EnvSourceValue      `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecEnvSource) Reset() {
+	*x = ExecEnvSource{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecEnvSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecEnvSource) ProtoMessage() {}
+
+func (x *ExecEnvSource) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecEnvSource.ProtoReflect.Descriptor instead.
+func (*ExecEnvSource) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ExecEnvSource) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *ExecEnvSource) GetValues() []*EnvSourceValue {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type EnvSourceValue struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cell          *Cell                  `protobuf:"bytes,1,opt,name=cell,proto3" json:"cell,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvSourceValue) Reset() {
+	*x = EnvSourceValue{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvSourceValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvSourceValue) ProtoMessage() {}
+
+func (x *EnvSourceValue) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvSourceValue.ProtoReflect.Descriptor instead.
+func (*EnvSourceValue) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *EnvSourceValue) GetCell() *Cell {
+	if x != nil {
+		return x.Cell
+	}
+	return nil
+}
+
+func (x *EnvSourceValue) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *EnvSourceValue) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type Cell struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Cell) Reset() {
+	*x = Cell{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Cell) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Cell) ProtoMessage() {}
+
+func (x *Cell) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Cell.ProtoReflect.Descriptor instead.
+func (*Cell) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *Cell) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *Cell) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+type EnvSourceStatus struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EnvSource     string                 `protobuf:"bytes,1,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
+	Scheduled     bool                   `protobuf:"varint,2,opt,name=scheduled,proto3" json:"scheduled,omitempty"`
+	Writable      bool                   `protobuf:"varint,3,opt,name=writable,proto3" json:"writable,omitempty"`
+	LastAttemptAt int64                  `protobuf:"varint,4,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
+	LastSuccessAt int64                  `protobuf:"varint,5,opt,name=last_success_at,json=lastSuccessAt,proto3" json:"last_success_at,omitempty"`
+	LastError     string                 `protobuf:"bytes,6,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	Links         []*FolderLink          `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
+	Credentials   []string               `protobuf:"bytes,8,rep,name=credentials,proto3" json:"credentials,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvSourceStatus) Reset() {
+	*x = EnvSourceStatus{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvSourceStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvSourceStatus) ProtoMessage() {}
+
+func (x *EnvSourceStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvSourceStatus.ProtoReflect.Descriptor instead.
+func (*EnvSourceStatus) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *EnvSourceStatus) GetEnvSource() string {
+	if x != nil {
+		return x.EnvSource
+	}
+	return ""
+}
+
+func (x *EnvSourceStatus) GetScheduled() bool {
+	if x != nil {
+		return x.Scheduled
+	}
+	return false
+}
+
+func (x *EnvSourceStatus) GetWritable() bool {
+	if x != nil {
+		return x.Writable
+	}
+	return false
+}
+
+func (x *EnvSourceStatus) GetLastAttemptAt() int64 {
+	if x != nil {
+		return x.LastAttemptAt
+	}
+	return 0
+}
+
+func (x *EnvSourceStatus) GetLastSuccessAt() int64 {
+	if x != nil {
+		return x.LastSuccessAt
+	}
+	return 0
+}
+
+func (x *EnvSourceStatus) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *EnvSourceStatus) GetLinks() []*FolderLink {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *EnvSourceStatus) GetCredentials() []string {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+type FolderLink struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FolderLink) Reset() {
+	*x = FolderLink{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FolderLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FolderLink) ProtoMessage() {}
+
+func (x *FolderLink) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FolderLink.ProtoReflect.Descriptor instead.
+func (*FolderLink) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *FolderLink) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *FolderLink) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type RefusedCell struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cell          *Cell                  `protobuf:"bytes,1,opt,name=cell,proto3" json:"cell,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefusedCell) Reset() {
+	*x = RefusedCell{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefusedCell) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefusedCell) ProtoMessage() {}
+
+func (x *RefusedCell) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefusedCell.ProtoReflect.Descriptor instead.
+func (*RefusedCell) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *RefusedCell) GetCell() *Cell {
+	if x != nil {
+		return x.Cell
+	}
+	return nil
+}
+
+func (x *RefusedCell) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SyncEnvSourceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Tier  v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Slug  string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	// Types that are valid to be assigned to From:
+	//
+	//	*SyncEnvSourceRequest_EnvSource
+	//	*SyncEnvSourceRequest_Registered
+	From          isSyncEnvSourceRequest_From `protobuf_oneof:"from"`
+	Folders       []string                    `protobuf:"bytes,4,rep,name=folders,proto3" json:"folders,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncEnvSourceRequest) Reset() {
+	*x = SyncEnvSourceRequest{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncEnvSourceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncEnvSourceRequest) ProtoMessage() {}
+
+func (x *SyncEnvSourceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncEnvSourceRequest.ProtoReflect.Descriptor instead.
+func (*SyncEnvSourceRequest) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *SyncEnvSourceRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *SyncEnvSourceRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *SyncEnvSourceRequest) GetFrom() isSyncEnvSourceRequest_From {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *SyncEnvSourceRequest) GetEnvSource() *EnvSource {
+	if x != nil {
+		if x, ok := x.From.(*SyncEnvSourceRequest_EnvSource); ok {
+			return x.EnvSource
+		}
+	}
+	return nil
+}
+
+func (x *SyncEnvSourceRequest) GetRegistered() *RegisteredEnvSource {
+	if x != nil {
+		if x, ok := x.From.(*SyncEnvSourceRequest_Registered); ok {
+			return x.Registered
+		}
+	}
+	return nil
+}
+
+func (x *SyncEnvSourceRequest) GetFolders() []string {
+	if x != nil {
+		return x.Folders
+	}
+	return nil
+}
+
+type isSyncEnvSourceRequest_From interface {
+	isSyncEnvSourceRequest_From()
+}
+
+type SyncEnvSourceRequest_EnvSource struct {
+	EnvSource *EnvSource `protobuf:"bytes,3,opt,name=env_source,json=envSource,proto3,oneof"`
+}
+
+type SyncEnvSourceRequest_Registered struct {
+	Registered *RegisteredEnvSource `protobuf:"bytes,5,opt,name=registered,proto3,oneof"`
+}
+
+func (*SyncEnvSourceRequest_EnvSource) isSyncEnvSourceRequest_From() {}
+
+func (*SyncEnvSourceRequest_Registered) isSyncEnvSourceRequest_From() {}
+
+type RegisteredEnvSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisteredEnvSource) Reset() {
+	*x = RegisteredEnvSource{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisteredEnvSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisteredEnvSource) ProtoMessage() {}
+
+func (x *RegisteredEnvSource) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisteredEnvSource.ProtoReflect.Descriptor instead.
+func (*RegisteredEnvSource) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{41}
+}
+
+type SyncEnvSourceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *EnvSourceStatus       `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Present       []*Cell                `protobuf:"bytes,2,rep,name=present,proto3" json:"present,omitempty"`
+	Written       int32                  `protobuf:"varint,3,opt,name=written,proto3" json:"written,omitempty"`
+	Removed       int32                  `protobuf:"varint,4,opt,name=removed,proto3" json:"removed,omitempty"`
+	Refused       []*RefusedCell         `protobuf:"bytes,5,rep,name=refused,proto3" json:"refused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncEnvSourceResponse) Reset() {
+	*x = SyncEnvSourceResponse{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncEnvSourceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncEnvSourceResponse) ProtoMessage() {}
+
+func (x *SyncEnvSourceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncEnvSourceResponse.ProtoReflect.Descriptor instead.
+func (*SyncEnvSourceResponse) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *SyncEnvSourceResponse) GetStatus() *EnvSourceStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *SyncEnvSourceResponse) GetPresent() []*Cell {
+	if x != nil {
+		return x.Present
+	}
+	return nil
+}
+
+func (x *SyncEnvSourceResponse) GetWritten() int32 {
+	if x != nil {
+		return x.Written
+	}
+	return 0
+}
+
+func (x *SyncEnvSourceResponse) GetRemoved() int32 {
+	if x != nil {
+		return x.Removed
+	}
+	return 0
+}
+
+func (x *SyncEnvSourceResponse) GetRefused() []*RefusedCell {
+	if x != nil {
+		return x.Refused
+	}
+	return nil
+}
+
+type DescribeEnvSourceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeEnvSourceRequest) Reset() {
+	*x = DescribeEnvSourceRequest{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeEnvSourceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeEnvSourceRequest) ProtoMessage() {}
+
+func (x *DescribeEnvSourceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeEnvSourceRequest.ProtoReflect.Descriptor instead.
+func (*DescribeEnvSourceRequest) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *DescribeEnvSourceRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *DescribeEnvSourceRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+type DescribeEnvSourceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        *EnvSourceStatus       `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeEnvSourceResponse) Reset() {
+	*x = DescribeEnvSourceResponse{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeEnvSourceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeEnvSourceResponse) ProtoMessage() {}
+
+func (x *DescribeEnvSourceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeEnvSourceResponse.ProtoReflect.Descriptor instead.
+func (*DescribeEnvSourceResponse) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *DescribeEnvSourceResponse) GetStatus() *EnvSourceStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+type CreateEnvSourceValueRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Coordinate    *Coordinate            `protobuf:"bytes,2,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateEnvSourceValueRequest) Reset() {
+	*x = CreateEnvSourceValueRequest{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateEnvSourceValueRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateEnvSourceValueRequest) ProtoMessage() {}
+
+func (x *CreateEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateEnvSourceValueRequest.ProtoReflect.Descriptor instead.
+func (*CreateEnvSourceValueRequest) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *CreateEnvSourceValueRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *CreateEnvSourceValueRequest) GetCoordinate() *Coordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *CreateEnvSourceValueRequest) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *CreateEnvSourceValueRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type CreateEnvSourceValueResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AwaitingApproval bool                   `protobuf:"varint,1,opt,name=awaiting_approval,json=awaitingApproval,proto3" json:"awaiting_approval,omitempty"`
+	Metadata         *ValueMetadata         `protobuf:"bytes,2,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CreateEnvSourceValueResponse) Reset() {
+	*x = CreateEnvSourceValueResponse{}
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateEnvSourceValueResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateEnvSourceValueResponse) ProtoMessage() {}
+
+func (x *CreateEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateEnvSourceValueResponse.ProtoReflect.Descriptor instead.
+func (*CreateEnvSourceValueResponse) Descriptor() ([]byte, []int) {
+	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *CreateEnvSourceValueResponse) GetAwaitingApproval() bool {
+	if x != nil {
+		return x.AwaitingApproval
+	}
+	return false
+}
+
+func (x *CreateEnvSourceValueResponse) GetMetadata() *ValueMetadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 var File_provider_envvars_v1_envvars_proto protoreflect.FileDescriptor
 
 const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
@@ -1604,7 +2810,7 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\x1eenvvars.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12+\n" +
 	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\xae\x01\n" +
 	"\venvironment\x18\x04 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\xe6\x01\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\x85\x02\n" +
 	"\rValueMetadata\x12?\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2\x1f.provider.envvars.v1.CoordinateR\n" +
@@ -1613,7 +2819,9 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\x03R\tupdatedAt\x12\x12\n" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12<\n" +
-	"\x06target\x18\x05 \x01(\v2\x1f.provider.envvars.v1.CoordinateH\x00R\x06target\x88\x01\x01B\t\n" +
+	"\x06target\x18\x05 \x01(\v2\x1f.provider.envvars.v1.CoordinateH\x00R\x06target\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"env_source\x18\x06 \x01(\tR\tenvSourceB\t\n" +
 	"\a_target\"[\n" +
 	"\fVersionEntry\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x1d\n" +
@@ -1726,7 +2934,95 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\rPropertyShape\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tjson_type\x18\x02 \x01(\tR\bjsonType\x12\x12\n" +
-	"\x04list\x18\x03 \x01(\bR\x04list2\xc9\b\n" +
+	"\x04list\x18\x03 \x01(\bR\x04list\"\xe0\x01\n" +
+	"\tEnvSource\x12A\n" +
+	"\abuiltin\x18\x01 \x01(\v2%.provider.envvars.v1.BuiltinEnvSourceH\x00R\abuiltin\x12G\n" +
+	"\tinfisical\x18\x02 \x01(\v2'.provider.envvars.v1.InfisicalEnvSourceH\x00R\tinfisical\x128\n" +
+	"\x04exec\x18\x03 \x01(\v2\".provider.envvars.v1.ExecEnvSourceH\x00R\x04execB\r\n" +
+	"\x04kind\x12\x05\xbaH\x02\b\x01\"\x12\n" +
+	"\x10BuiltinEnvSource\"\x99\x02\n" +
+	"\x12InfisicalEnvSource\x12!\n" +
+	"\aproject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aproject\x12)\n" +
+	"\venvironment\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\venvironment\x12#\n" +
+	"\x04path\x18\x03 \x01(\tB\x0f\xbaH\fr\n" +
+	"2\b^(/.*)?$R\x04path\x12+\n" +
+	"\x04host\x18\x04 \x01(\tB\x17\xbaH\x14r\x122\x10^(https?://.+)?$R\x04host\x12>\n" +
+	"\x04auth\x18\x05 \x01(\v2\".provider.envvars.v1.InfisicalAuthB\x06\xbaH\x03\xc8\x01\x01R\x04auth\x12#\n" +
+	"\rwrite_missing\x18\x06 \x01(\bR\fwriteMissing\"\xb7\x01\n" +
+	"\rInfisicalAuth\x12K\n" +
+	"\tuniversal\x18\x01 \x01(\v2+.provider.envvars.v1.InfisicalUniversalAuthH\x00R\tuniversal\x12H\n" +
+	"\bidentity\x18\x02 \x01(\v2*.provider.envvars.v1.InfisicalIdentityAuthH\x00R\bidentityB\x0f\n" +
+	"\x06method\x12\x05\xbaH\x02\b\x01\"\xb2\x01\n" +
+	"\x16InfisicalUniversalAuth\x12G\n" +
+	"\x12client_id_variable\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x10clientIdVariable\x12O\n" +
+	"\x16client_secret_variable\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x14clientSecretVariable\"A\n" +
+	"\x15InfisicalIdentityAuth\x12(\n" +
+	"\videntity_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"identityId\"p\n" +
+	"\rExecEnvSource\x12\"\n" +
+	"\acommand\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\acommand\x12;\n" +
+	"\x06values\x18\x02 \x03(\v2#.provider.envvars.v1.EnvSourceValueR\x06values\"|\n" +
+	"\x0eEnvSourceValue\x125\n" +
+	"\x04cell\x18\x01 \x01(\v2\x19.provider.envvars.v1.CellB\x06\xbaH\x03\xc8\x01\x01R\x04cell\x12\x19\n" +
+	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\"i\n" +
+	"\x04Cell\x124\n" +
+	"\x06folder\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12+\n" +
+	"\x03key\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\"\xb2\x02\n" +
+	"\x0fEnvSourceStatus\x12\x1d\n" +
+	"\n" +
+	"env_source\x18\x01 \x01(\tR\tenvSource\x12\x1c\n" +
+	"\tscheduled\x18\x02 \x01(\bR\tscheduled\x12\x1a\n" +
+	"\bwritable\x18\x03 \x01(\bR\bwritable\x12&\n" +
+	"\x0flast_attempt_at\x18\x04 \x01(\x03R\rlastAttemptAt\x12&\n" +
+	"\x0flast_success_at\x18\x05 \x01(\x03R\rlastSuccessAt\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x06 \x01(\tR\tlastError\x125\n" +
+	"\x05links\x18\a \x03(\v2\x1f.provider.envvars.v1.FolderLinkR\x05links\x12 \n" +
+	"\vcredentials\x18\b \x03(\tR\vcredentials\"6\n" +
+	"\n" +
+	"FolderLink\x12\x16\n" +
+	"\x06folder\x18\x01 \x01(\tR\x06folder\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\"T\n" +
+	"\vRefusedCell\x12-\n" +
+	"\x04cell\x18\x01 \x01(\v2\x19.provider.envvars.v1.CellR\x04cell\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xdd\x03\n" +
+	"\x14SyncEnvSourceRequest\x12\xb2\x01\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x80\x01\xbaH}\xba\x01z\n" +
+	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
+	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12?\n" +
+	"\n" +
+	"env_source\x18\x03 \x01(\v2\x1e.provider.envvars.v1.EnvSourceH\x00R\tenvSource\x12J\n" +
+	"\n" +
+	"registered\x18\x05 \x01(\v2(.provider.envvars.v1.RegisteredEnvSourceH\x00R\n" +
+	"registered\x12=\n" +
+	"\afolders\x18\x04 \x03(\tB#\xbaH \x92\x01\x1d\x18\x01\"\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\afoldersB\r\n" +
+	"\x04from\x12\x05\xbaH\x02\b\x01\"\x15\n" +
+	"\x13RegisteredEnvSource\"\xfa\x01\n" +
+	"\x15SyncEnvSourceResponse\x12<\n" +
+	"\x06status\x18\x01 \x01(\v2$.provider.envvars.v1.EnvSourceStatusR\x06status\x123\n" +
+	"\apresent\x18\x02 \x03(\v2\x19.provider.envvars.v1.CellR\apresent\x12\x18\n" +
+	"\awritten\x18\x03 \x01(\x05R\awritten\x12\x18\n" +
+	"\aremoved\x18\x04 \x01(\x05R\aremoved\x12:\n" +
+	"\arefused\x18\x05 \x03(\v2 .provider.envvars.v1.RefusedCellR\arefused\"\x86\x02\n" +
+	"\x18DescribeEnvSourceRequest\x12\xb2\x01\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x80\x01\xbaH}\xba\x01z\n" +
+	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
+	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\"Y\n" +
+	"\x19DescribeEnvSourceResponse\x12<\n" +
+	"\x06status\x18\x01 \x01(\v2$.provider.envvars.v1.EnvSourceStatusR\x06status\"\xe1\x02\n" +
+	"\x1bCreateEnvSourceValueRequest\x12\xb2\x01\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x80\x01\xbaH}\xba\x01z\n" +
+	"\x16envvars.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12G\n" +
+	"\n" +
+	"coordinate\x18\x02 \x01(\v2\x1f.provider.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"coordinate\x12\x19\n" +
+	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x12)\n" +
+	"\vdescription\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18xR\vdescription\"\x9d\x01\n" +
+	"\x1cCreateEnvSourceValueResponse\x12+\n" +
+	"\x11awaiting_approval\x18\x01 \x01(\bR\x10awaitingApproval\x12C\n" +
+	"\bmetadata\x18\x02 \x01(\v2\".provider.envvars.v1.ValueMetadataH\x00R\bmetadata\x88\x01\x01B\v\n" +
+	"\t_metadata2\xa2\v\n" +
 	"\x0eEnvVarsService\x12W\n" +
 	"\bSetValue\x12$.provider.envvars.v1.SetValueRequest\x1a%.provider.envvars.v1.SetValueResponse\x12]\n" +
 	"\n" +
@@ -1740,7 +3036,10 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
 	"SetBinding\x12&.provider.envvars.v1.SetBindingRequest\x1a'.provider.envvars.v1.SetBindingResponse\x12f\n" +
 	"\rRemoveBinding\x12).provider.envvars.v1.RemoveBindingRequest\x1a*.provider.envvars.v1.RemoveBindingResponse\x12c\n" +
-	"\fListBindings\x12(.provider.envvars.v1.ListBindingsRequest\x1a).provider.envvars.v1.ListBindingsResponseB@Z>github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1b\x06proto3"
+	"\fListBindings\x12(.provider.envvars.v1.ListBindingsRequest\x1a).provider.envvars.v1.ListBindingsResponse\x12f\n" +
+	"\rSyncEnvSource\x12).provider.envvars.v1.SyncEnvSourceRequest\x1a*.provider.envvars.v1.SyncEnvSourceResponse\x12r\n" +
+	"\x11DescribeEnvSource\x12-.provider.envvars.v1.DescribeEnvSourceRequest\x1a..provider.envvars.v1.DescribeEnvSourceResponse\x12{\n" +
+	"\x14CreateEnvSourceValue\x120.provider.envvars.v1.CreateEnvSourceValueRequest\x1a1.provider.envvars.v1.CreateEnvSourceValueResponseB@Z>github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1b\x06proto3"
 
 var (
 	file_provider_envvars_v1_envvars_proto_rawDescOnce sync.Once
@@ -1754,101 +3053,147 @@ func file_provider_envvars_v1_envvars_proto_rawDescGZIP() []byte {
 	return file_provider_envvars_v1_envvars_proto_rawDescData
 }
 
-var file_provider_envvars_v1_envvars_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_provider_envvars_v1_envvars_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_provider_envvars_v1_envvars_proto_goTypes = []any{
-	(*Coordinate)(nil),             // 0: provider.envvars.v1.Coordinate
-	(*ValueMetadata)(nil),          // 1: provider.envvars.v1.ValueMetadata
-	(*VersionEntry)(nil),           // 2: provider.envvars.v1.VersionEntry
-	(*SetValueRequest)(nil),        // 3: provider.envvars.v1.SetValueRequest
-	(*SetValueResponse)(nil),       // 4: provider.envvars.v1.SetValueResponse
-	(*ListValuesRequest)(nil),      // 5: provider.envvars.v1.ListValuesRequest
-	(*ListValuesResponse)(nil),     // 6: provider.envvars.v1.ListValuesResponse
-	(*GetValueRequest)(nil),        // 7: provider.envvars.v1.GetValueRequest
-	(*GetValueResponse)(nil),       // 8: provider.envvars.v1.GetValueResponse
-	(*RevealValuesRequest)(nil),    // 9: provider.envvars.v1.RevealValuesRequest
-	(*RevealValuesResponse)(nil),   // 10: provider.envvars.v1.RevealValuesResponse
-	(*RevealedValue)(nil),          // 11: provider.envvars.v1.RevealedValue
-	(*DeleteValueRequest)(nil),     // 12: provider.envvars.v1.DeleteValueRequest
-	(*DeleteValueResponse)(nil),    // 13: provider.envvars.v1.DeleteValueResponse
-	(*SetReferenceRequest)(nil),    // 14: provider.envvars.v1.SetReferenceRequest
-	(*SetReferenceResponse)(nil),   // 15: provider.envvars.v1.SetReferenceResponse
-	(*ListReferencesRequest)(nil),  // 16: provider.envvars.v1.ListReferencesRequest
-	(*ListReferencesResponse)(nil), // 17: provider.envvars.v1.ListReferencesResponse
-	(*ListVersionsRequest)(nil),    // 18: provider.envvars.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil),   // 19: provider.envvars.v1.ListVersionsResponse
-	(*SetBindingRequest)(nil),      // 20: provider.envvars.v1.SetBindingRequest
-	(*SetBindingResponse)(nil),     // 21: provider.envvars.v1.SetBindingResponse
-	(*RemoveBindingRequest)(nil),   // 22: provider.envvars.v1.RemoveBindingRequest
-	(*RemoveBindingResponse)(nil),  // 23: provider.envvars.v1.RemoveBindingResponse
-	(*ListBindingsRequest)(nil),    // 24: provider.envvars.v1.ListBindingsRequest
-	(*ListBindingsResponse)(nil),   // 25: provider.envvars.v1.ListBindingsResponse
-	(*BindingSummary)(nil),         // 26: provider.envvars.v1.BindingSummary
-	(*PropertyShape)(nil),          // 27: provider.envvars.v1.PropertyShape
-	(v1.Tier)(0),                   // 28: common.environment.v1.Tier
-	(*v11.Binding)(nil),            // 29: common.bindings.v1.Binding
-	(v11.BindingType)(0),           // 30: common.bindings.v1.BindingType
+	(*Coordinate)(nil),                   // 0: provider.envvars.v1.Coordinate
+	(*ValueMetadata)(nil),                // 1: provider.envvars.v1.ValueMetadata
+	(*VersionEntry)(nil),                 // 2: provider.envvars.v1.VersionEntry
+	(*SetValueRequest)(nil),              // 3: provider.envvars.v1.SetValueRequest
+	(*SetValueResponse)(nil),             // 4: provider.envvars.v1.SetValueResponse
+	(*ListValuesRequest)(nil),            // 5: provider.envvars.v1.ListValuesRequest
+	(*ListValuesResponse)(nil),           // 6: provider.envvars.v1.ListValuesResponse
+	(*GetValueRequest)(nil),              // 7: provider.envvars.v1.GetValueRequest
+	(*GetValueResponse)(nil),             // 8: provider.envvars.v1.GetValueResponse
+	(*RevealValuesRequest)(nil),          // 9: provider.envvars.v1.RevealValuesRequest
+	(*RevealValuesResponse)(nil),         // 10: provider.envvars.v1.RevealValuesResponse
+	(*RevealedValue)(nil),                // 11: provider.envvars.v1.RevealedValue
+	(*DeleteValueRequest)(nil),           // 12: provider.envvars.v1.DeleteValueRequest
+	(*DeleteValueResponse)(nil),          // 13: provider.envvars.v1.DeleteValueResponse
+	(*SetReferenceRequest)(nil),          // 14: provider.envvars.v1.SetReferenceRequest
+	(*SetReferenceResponse)(nil),         // 15: provider.envvars.v1.SetReferenceResponse
+	(*ListReferencesRequest)(nil),        // 16: provider.envvars.v1.ListReferencesRequest
+	(*ListReferencesResponse)(nil),       // 17: provider.envvars.v1.ListReferencesResponse
+	(*ListVersionsRequest)(nil),          // 18: provider.envvars.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil),         // 19: provider.envvars.v1.ListVersionsResponse
+	(*SetBindingRequest)(nil),            // 20: provider.envvars.v1.SetBindingRequest
+	(*SetBindingResponse)(nil),           // 21: provider.envvars.v1.SetBindingResponse
+	(*RemoveBindingRequest)(nil),         // 22: provider.envvars.v1.RemoveBindingRequest
+	(*RemoveBindingResponse)(nil),        // 23: provider.envvars.v1.RemoveBindingResponse
+	(*ListBindingsRequest)(nil),          // 24: provider.envvars.v1.ListBindingsRequest
+	(*ListBindingsResponse)(nil),         // 25: provider.envvars.v1.ListBindingsResponse
+	(*BindingSummary)(nil),               // 26: provider.envvars.v1.BindingSummary
+	(*PropertyShape)(nil),                // 27: provider.envvars.v1.PropertyShape
+	(*EnvSource)(nil),                    // 28: provider.envvars.v1.EnvSource
+	(*BuiltinEnvSource)(nil),             // 29: provider.envvars.v1.BuiltinEnvSource
+	(*InfisicalEnvSource)(nil),           // 30: provider.envvars.v1.InfisicalEnvSource
+	(*InfisicalAuth)(nil),                // 31: provider.envvars.v1.InfisicalAuth
+	(*InfisicalUniversalAuth)(nil),       // 32: provider.envvars.v1.InfisicalUniversalAuth
+	(*InfisicalIdentityAuth)(nil),        // 33: provider.envvars.v1.InfisicalIdentityAuth
+	(*ExecEnvSource)(nil),                // 34: provider.envvars.v1.ExecEnvSource
+	(*EnvSourceValue)(nil),               // 35: provider.envvars.v1.EnvSourceValue
+	(*Cell)(nil),                         // 36: provider.envvars.v1.Cell
+	(*EnvSourceStatus)(nil),              // 37: provider.envvars.v1.EnvSourceStatus
+	(*FolderLink)(nil),                   // 38: provider.envvars.v1.FolderLink
+	(*RefusedCell)(nil),                  // 39: provider.envvars.v1.RefusedCell
+	(*SyncEnvSourceRequest)(nil),         // 40: provider.envvars.v1.SyncEnvSourceRequest
+	(*RegisteredEnvSource)(nil),          // 41: provider.envvars.v1.RegisteredEnvSource
+	(*SyncEnvSourceResponse)(nil),        // 42: provider.envvars.v1.SyncEnvSourceResponse
+	(*DescribeEnvSourceRequest)(nil),     // 43: provider.envvars.v1.DescribeEnvSourceRequest
+	(*DescribeEnvSourceResponse)(nil),    // 44: provider.envvars.v1.DescribeEnvSourceResponse
+	(*CreateEnvSourceValueRequest)(nil),  // 45: provider.envvars.v1.CreateEnvSourceValueRequest
+	(*CreateEnvSourceValueResponse)(nil), // 46: provider.envvars.v1.CreateEnvSourceValueResponse
+	(v1.Tier)(0),                         // 47: common.environment.v1.Tier
+	(*v11.Binding)(nil),                  // 48: common.bindings.v1.Binding
+	(v11.BindingType)(0),                 // 49: common.bindings.v1.BindingType
 }
 var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	0,  // 0: provider.envvars.v1.ValueMetadata.coordinate:type_name -> provider.envvars.v1.Coordinate
 	0,  // 1: provider.envvars.v1.ValueMetadata.target:type_name -> provider.envvars.v1.Coordinate
-	28, // 2: provider.envvars.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 2: provider.envvars.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 3: provider.envvars.v1.SetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	1,  // 4: provider.envvars.v1.SetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	28, // 5: provider.envvars.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 5: provider.envvars.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
 	1,  // 6: provider.envvars.v1.ListValuesResponse.values:type_name -> provider.envvars.v1.ValueMetadata
-	28, // 7: provider.envvars.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 7: provider.envvars.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 8: provider.envvars.v1.GetValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	1,  // 9: provider.envvars.v1.GetValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	28, // 10: provider.envvars.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 10: provider.envvars.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 11: provider.envvars.v1.RevealValuesRequest.cells:type_name -> provider.envvars.v1.Coordinate
 	11, // 12: provider.envvars.v1.RevealValuesResponse.values:type_name -> provider.envvars.v1.RevealedValue
 	1,  // 13: provider.envvars.v1.RevealedValue.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	28, // 14: provider.envvars.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 14: provider.envvars.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 15: provider.envvars.v1.DeleteValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
-	28, // 16: provider.envvars.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 16: provider.envvars.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 17: provider.envvars.v1.SetReferenceRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	0,  // 18: provider.envvars.v1.SetReferenceRequest.target:type_name -> provider.envvars.v1.Coordinate
 	1,  // 19: provider.envvars.v1.SetReferenceResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
-	28, // 20: provider.envvars.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 20: provider.envvars.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 21: provider.envvars.v1.ListReferencesRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	0,  // 22: provider.envvars.v1.ListReferencesResponse.references:type_name -> provider.envvars.v1.Coordinate
-	28, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 24: provider.envvars.v1.ListVersionsRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	2,  // 25: provider.envvars.v1.ListVersionsResponse.versions:type_name -> provider.envvars.v1.VersionEntry
-	28, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
-	29, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
-	28, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
-	28, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
+	48, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
+	47, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
+	47, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
 	26, // 30: provider.envvars.v1.ListBindingsResponse.bindings:type_name -> provider.envvars.v1.BindingSummary
-	30, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
+	49, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
 	27, // 32: provider.envvars.v1.BindingSummary.properties:type_name -> provider.envvars.v1.PropertyShape
-	3,  // 33: provider.envvars.v1.EnvVarsService.SetValue:input_type -> provider.envvars.v1.SetValueRequest
-	5,  // 34: provider.envvars.v1.EnvVarsService.ListValues:input_type -> provider.envvars.v1.ListValuesRequest
-	7,  // 35: provider.envvars.v1.EnvVarsService.GetValue:input_type -> provider.envvars.v1.GetValueRequest
-	9,  // 36: provider.envvars.v1.EnvVarsService.RevealValues:input_type -> provider.envvars.v1.RevealValuesRequest
-	12, // 37: provider.envvars.v1.EnvVarsService.DeleteValue:input_type -> provider.envvars.v1.DeleteValueRequest
-	14, // 38: provider.envvars.v1.EnvVarsService.SetReference:input_type -> provider.envvars.v1.SetReferenceRequest
-	16, // 39: provider.envvars.v1.EnvVarsService.ListReferences:input_type -> provider.envvars.v1.ListReferencesRequest
-	18, // 40: provider.envvars.v1.EnvVarsService.ListVersions:input_type -> provider.envvars.v1.ListVersionsRequest
-	20, // 41: provider.envvars.v1.EnvVarsService.SetBinding:input_type -> provider.envvars.v1.SetBindingRequest
-	22, // 42: provider.envvars.v1.EnvVarsService.RemoveBinding:input_type -> provider.envvars.v1.RemoveBindingRequest
-	24, // 43: provider.envvars.v1.EnvVarsService.ListBindings:input_type -> provider.envvars.v1.ListBindingsRequest
-	4,  // 44: provider.envvars.v1.EnvVarsService.SetValue:output_type -> provider.envvars.v1.SetValueResponse
-	6,  // 45: provider.envvars.v1.EnvVarsService.ListValues:output_type -> provider.envvars.v1.ListValuesResponse
-	8,  // 46: provider.envvars.v1.EnvVarsService.GetValue:output_type -> provider.envvars.v1.GetValueResponse
-	10, // 47: provider.envvars.v1.EnvVarsService.RevealValues:output_type -> provider.envvars.v1.RevealValuesResponse
-	13, // 48: provider.envvars.v1.EnvVarsService.DeleteValue:output_type -> provider.envvars.v1.DeleteValueResponse
-	15, // 49: provider.envvars.v1.EnvVarsService.SetReference:output_type -> provider.envvars.v1.SetReferenceResponse
-	17, // 50: provider.envvars.v1.EnvVarsService.ListReferences:output_type -> provider.envvars.v1.ListReferencesResponse
-	19, // 51: provider.envvars.v1.EnvVarsService.ListVersions:output_type -> provider.envvars.v1.ListVersionsResponse
-	21, // 52: provider.envvars.v1.EnvVarsService.SetBinding:output_type -> provider.envvars.v1.SetBindingResponse
-	23, // 53: provider.envvars.v1.EnvVarsService.RemoveBinding:output_type -> provider.envvars.v1.RemoveBindingResponse
-	25, // 54: provider.envvars.v1.EnvVarsService.ListBindings:output_type -> provider.envvars.v1.ListBindingsResponse
-	44, // [44:55] is the sub-list for method output_type
-	33, // [33:44] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	29, // 33: provider.envvars.v1.EnvSource.builtin:type_name -> provider.envvars.v1.BuiltinEnvSource
+	30, // 34: provider.envvars.v1.EnvSource.infisical:type_name -> provider.envvars.v1.InfisicalEnvSource
+	34, // 35: provider.envvars.v1.EnvSource.exec:type_name -> provider.envvars.v1.ExecEnvSource
+	31, // 36: provider.envvars.v1.InfisicalEnvSource.auth:type_name -> provider.envvars.v1.InfisicalAuth
+	32, // 37: provider.envvars.v1.InfisicalAuth.universal:type_name -> provider.envvars.v1.InfisicalUniversalAuth
+	33, // 38: provider.envvars.v1.InfisicalAuth.identity:type_name -> provider.envvars.v1.InfisicalIdentityAuth
+	35, // 39: provider.envvars.v1.ExecEnvSource.values:type_name -> provider.envvars.v1.EnvSourceValue
+	36, // 40: provider.envvars.v1.EnvSourceValue.cell:type_name -> provider.envvars.v1.Cell
+	38, // 41: provider.envvars.v1.EnvSourceStatus.links:type_name -> provider.envvars.v1.FolderLink
+	36, // 42: provider.envvars.v1.RefusedCell.cell:type_name -> provider.envvars.v1.Cell
+	47, // 43: provider.envvars.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	28, // 44: provider.envvars.v1.SyncEnvSourceRequest.env_source:type_name -> provider.envvars.v1.EnvSource
+	41, // 45: provider.envvars.v1.SyncEnvSourceRequest.registered:type_name -> provider.envvars.v1.RegisteredEnvSource
+	37, // 46: provider.envvars.v1.SyncEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
+	36, // 47: provider.envvars.v1.SyncEnvSourceResponse.present:type_name -> provider.envvars.v1.Cell
+	39, // 48: provider.envvars.v1.SyncEnvSourceResponse.refused:type_name -> provider.envvars.v1.RefusedCell
+	47, // 49: provider.envvars.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	37, // 50: provider.envvars.v1.DescribeEnvSourceResponse.status:type_name -> provider.envvars.v1.EnvSourceStatus
+	47, // 51: provider.envvars.v1.CreateEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
+	0,  // 52: provider.envvars.v1.CreateEnvSourceValueRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
+	1,  // 53: provider.envvars.v1.CreateEnvSourceValueResponse.metadata:type_name -> provider.envvars.v1.ValueMetadata
+	3,  // 54: provider.envvars.v1.EnvVarsService.SetValue:input_type -> provider.envvars.v1.SetValueRequest
+	5,  // 55: provider.envvars.v1.EnvVarsService.ListValues:input_type -> provider.envvars.v1.ListValuesRequest
+	7,  // 56: provider.envvars.v1.EnvVarsService.GetValue:input_type -> provider.envvars.v1.GetValueRequest
+	9,  // 57: provider.envvars.v1.EnvVarsService.RevealValues:input_type -> provider.envvars.v1.RevealValuesRequest
+	12, // 58: provider.envvars.v1.EnvVarsService.DeleteValue:input_type -> provider.envvars.v1.DeleteValueRequest
+	14, // 59: provider.envvars.v1.EnvVarsService.SetReference:input_type -> provider.envvars.v1.SetReferenceRequest
+	16, // 60: provider.envvars.v1.EnvVarsService.ListReferences:input_type -> provider.envvars.v1.ListReferencesRequest
+	18, // 61: provider.envvars.v1.EnvVarsService.ListVersions:input_type -> provider.envvars.v1.ListVersionsRequest
+	20, // 62: provider.envvars.v1.EnvVarsService.SetBinding:input_type -> provider.envvars.v1.SetBindingRequest
+	22, // 63: provider.envvars.v1.EnvVarsService.RemoveBinding:input_type -> provider.envvars.v1.RemoveBindingRequest
+	24, // 64: provider.envvars.v1.EnvVarsService.ListBindings:input_type -> provider.envvars.v1.ListBindingsRequest
+	40, // 65: provider.envvars.v1.EnvVarsService.SyncEnvSource:input_type -> provider.envvars.v1.SyncEnvSourceRequest
+	43, // 66: provider.envvars.v1.EnvVarsService.DescribeEnvSource:input_type -> provider.envvars.v1.DescribeEnvSourceRequest
+	45, // 67: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:input_type -> provider.envvars.v1.CreateEnvSourceValueRequest
+	4,  // 68: provider.envvars.v1.EnvVarsService.SetValue:output_type -> provider.envvars.v1.SetValueResponse
+	6,  // 69: provider.envvars.v1.EnvVarsService.ListValues:output_type -> provider.envvars.v1.ListValuesResponse
+	8,  // 70: provider.envvars.v1.EnvVarsService.GetValue:output_type -> provider.envvars.v1.GetValueResponse
+	10, // 71: provider.envvars.v1.EnvVarsService.RevealValues:output_type -> provider.envvars.v1.RevealValuesResponse
+	13, // 72: provider.envvars.v1.EnvVarsService.DeleteValue:output_type -> provider.envvars.v1.DeleteValueResponse
+	15, // 73: provider.envvars.v1.EnvVarsService.SetReference:output_type -> provider.envvars.v1.SetReferenceResponse
+	17, // 74: provider.envvars.v1.EnvVarsService.ListReferences:output_type -> provider.envvars.v1.ListReferencesResponse
+	19, // 75: provider.envvars.v1.EnvVarsService.ListVersions:output_type -> provider.envvars.v1.ListVersionsResponse
+	21, // 76: provider.envvars.v1.EnvVarsService.SetBinding:output_type -> provider.envvars.v1.SetBindingResponse
+	23, // 77: provider.envvars.v1.EnvVarsService.RemoveBinding:output_type -> provider.envvars.v1.RemoveBindingResponse
+	25, // 78: provider.envvars.v1.EnvVarsService.ListBindings:output_type -> provider.envvars.v1.ListBindingsResponse
+	42, // 79: provider.envvars.v1.EnvVarsService.SyncEnvSource:output_type -> provider.envvars.v1.SyncEnvSourceResponse
+	44, // 80: provider.envvars.v1.EnvVarsService.DescribeEnvSource:output_type -> provider.envvars.v1.DescribeEnvSourceResponse
+	46, // 81: provider.envvars.v1.EnvVarsService.CreateEnvSourceValue:output_type -> provider.envvars.v1.CreateEnvSourceValueResponse
+	68, // [68:82] is the sub-list for method output_type
+	54, // [54:68] is the sub-list for method input_type
+	54, // [54:54] is the sub-list for extension type_name
+	54, // [54:54] is the sub-list for extension extendee
+	0,  // [0:54] is the sub-list for field type_name
 }
 
 func init() { file_provider_envvars_v1_envvars_proto_init() }
@@ -1859,13 +3204,27 @@ func file_provider_envvars_v1_envvars_proto_init() {
 	file_provider_envvars_v1_envvars_proto_msgTypes[1].OneofWrappers = []any{}
 	file_provider_envvars_v1_envvars_proto_msgTypes[3].OneofWrappers = []any{}
 	file_provider_envvars_v1_envvars_proto_msgTypes[12].OneofWrappers = []any{}
+	file_provider_envvars_v1_envvars_proto_msgTypes[28].OneofWrappers = []any{
+		(*EnvSource_Builtin)(nil),
+		(*EnvSource_Infisical)(nil),
+		(*EnvSource_Exec)(nil),
+	}
+	file_provider_envvars_v1_envvars_proto_msgTypes[31].OneofWrappers = []any{
+		(*InfisicalAuth_Universal)(nil),
+		(*InfisicalAuth_Identity)(nil),
+	}
+	file_provider_envvars_v1_envvars_proto_msgTypes[40].OneofWrappers = []any{
+		(*SyncEnvSourceRequest_EnvSource)(nil),
+		(*SyncEnvSourceRequest_Registered)(nil),
+	}
+	file_provider_envvars_v1_envvars_proto_msgTypes[46].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_envvars_v1_envvars_proto_rawDesc), len(file_provider_envvars_v1_envvars_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
