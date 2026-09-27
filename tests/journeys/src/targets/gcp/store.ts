@@ -63,6 +63,7 @@ export const BOOTSTRAP_APIS = [
   "artifactregistry.googleapis.com",
   "iam.googleapis.com",
   "run.googleapis.com",
+  "cloudscheduler.googleapis.com",
 ];
 
 export async function switchOn(endpoint: string, project: string): Promise<void> {

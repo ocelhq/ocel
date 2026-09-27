@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -29,6 +30,7 @@ type iamServer struct {
 	keyPolicy map[string]*iampb.Policy
 	project   *cloudresourcemanager.Policy
 	writes    int
+	created   []*iam.CreateServiceAccountRequest
 }
 
 func (s *iamServer) GetCryptoKey(_ context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
@@ -80,6 +82,10 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 		case strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
 			w.Write([]byte(`{"etag":"BwXhoLB="}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/serviceAccounts"):
+			var asked iam.CreateServiceAccountRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err == nil {
+				s.created = append(s.created, &asked)
+			}
 			w.WriteHeader(http.StatusConflict)
 			w.Write([]byte(`{"error":{"code":409,"message":"already exists"}}`))
 		case r.Method == http.MethodDelete && strings.Contains(path, "/serviceAccounts/"):
@@ -95,10 +101,14 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 
 func (s *iamServer) open(t *testing.T) *clients {
 	t.Helper()
+	return s.serve(t, s.rest(t))
+}
+
+func (s *iamServer) serve(t *testing.T, rest http.HandlerFunc) *clients {
+	t.Helper()
 	grpcServer := grpc.NewServer()
 	kmspb.RegisterKeyManagementServiceServer(grpcServer, s)
 	iampb.RegisterIAMPolicyServer(grpcServer, s)
-	rest := s.rest(t)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			grpcServer.ServeHTTP(w, r)

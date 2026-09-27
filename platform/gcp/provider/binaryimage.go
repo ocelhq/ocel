@@ -3,13 +3,28 @@ package gcp
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+func (p *Provider) pushBinary(ctx context.Context, class edge.Class, name, ref string, binary []byte, path string) error {
+	base, err := p.based(ctx, staticImage)
+	if err != nil {
+		return err
+	}
+	built, err := binaryImage(base, binary, path)
+	if err != nil {
+		return err
+	}
+	return p.pushImage(ctx, class, name, ref, built, nil)
+}
 
 func binaryImage(base v1.Image, binary []byte, path string) (v1.Image, error) {
 	var packed bytes.Buffer

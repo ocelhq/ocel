@@ -35,6 +35,34 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 	}
 }
 
+func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
+	t.Parallel()
+
+	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
+	sent, err := serviceOf(b.syncServing(edge.ClassProduction))
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties := itemProperties(item{Kind: KindService, Name: b.clients.EnvSourceSync(edge.ClassProduction)}, "europe-west1")
+	if properties["ingress"] != sent.Ingress {
+		t.Errorf("shaped ingress %v, the bootstrap sends %v", properties["ingress"], sent.Ingress)
+	}
+	shaped := properties["template"].(map[string]any)
+	scaling := shaped["scaling"].(map[string]any)
+	if int64(scaling["min_instance_count"].(int)) != sent.Template.Scaling.MinInstanceCount ||
+		int64(scaling["max_instance_count"].(int)) != sent.Template.Scaling.MaxInstanceCount {
+		t.Errorf("shaped scaling %v, the bootstrap sends %+v", scaling, sent.Template.Scaling)
+	}
+	resources := shaped["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)
+	limits := resources["limits"].(map[string]any)
+	if resources["cpu_idle"] != sent.Template.Containers[0].Resources.CpuIdle {
+		t.Errorf("shaped cpu_idle %v, the bootstrap sends %v", resources["cpu_idle"], sent.Template.Containers[0].Resources.CpuIdle)
+	}
+	if limits["cpu"] != sent.Template.Containers[0].Resources.Limits["cpu"] || limits["memory"] != sent.Template.Containers[0].Resources.Limits["memory"] {
+		t.Errorf("shaped limits %v, the bootstrap sends %v", limits, sent.Template.Containers[0].Resources.Limits)
+	}
+}
+
 func TestEveryBootstrapItemHasAShape(t *testing.T) {
 	t.Parallel()
 
