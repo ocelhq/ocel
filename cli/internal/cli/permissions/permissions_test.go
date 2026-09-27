@@ -3,11 +3,17 @@ package permissions
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -73,7 +79,8 @@ func TestRunPermissions(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
+		deps.AttachTerminalSink(&stderr)
+		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
@@ -91,7 +98,8 @@ func TestRunPermissions(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, &stdout, &stderr); err != nil {
+		deps.AttachTerminalSink(&stderr)
+		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_BOOTSTRAP") {
@@ -103,7 +111,8 @@ func TestRunPermissions(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 
 		var stdout, stderr bytes.Buffer
-		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {
+		deps.AttachTerminalSink(&stderr)
+		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, want := range []string{
@@ -117,4 +126,43 @@ func TestRunPermissions(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocumentAloneOnStdout(t *testing.T) {
+	root, _ := clitest.SetUpDeployFixture(t)
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var phases []progressv1.Phase
+	var result *streamv1.RunResultEvent
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("stream line %q is not a protojson RunEvent: %v", line, err)
+		}
+		if ev.GetStarted() != nil && len(ev.GetStarted().GetParentSpanId()) == 0 {
+			phases = append(phases, ev.GetPhase())
+		}
+		if ev.GetResult() != nil {
+			result = ev.GetResult()
+		}
+	}
+	if len(phases) == 0 || phases[0] != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("phases = %v, want the run to open with the check phase that starts the provider", phases)
+	}
+	if !result.GetSuccess() {
+		t.Errorf("result = %v, want the run to succeed", result)
+	}
+	if strings.TrimSpace(stdout.String()) == "" || strings.Contains(stderr.String(), "CREDENTIAL_TIER_DEPLOY") {
+		t.Errorf("stdout = %q, stream = %q: want the document on stdout and not on the stream", stdout.String(), stderr.String())
+	}
 }

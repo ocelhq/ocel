@@ -96,6 +96,9 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 		{"domain", "ls"}, {"domain", "status"},
 		{"preview", "ls"},
 		{"deployments", "ls"},
+		{"permissions"},
+		{"connector", "status"},
+		{"doctor"},
 	} {
 		cmd, _, err := rootCmd.Find(path)
 		if err != nil {
@@ -112,7 +115,7 @@ func TestACommandWhoseStdoutIsItsDataDrawsItsRunOnStderr(t *testing.T) {
 }
 
 func TestACommandThatReportsThroughItsRunDrawsItOnStdout(t *testing.T) {
-	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}} {
+	for _, path := range [][]string{{"deploy"}, {"domain", "use"}, {"domain", "add"}, {"connector", "add"}, {"connector", "rm"}} {
 		cmd, _, err := rootCmd.Find(path)
 		if err != nil {
 			t.Fatalf("find %q: %v", path, err)

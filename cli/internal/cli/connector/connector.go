@@ -15,16 +15,16 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-var (
-	check = color.New(color.FgGreen).Sprint("✓")
-	bold  = color.New(color.Bold).SprintFunc()
-)
+var bold = color.New(color.Bold).SprintFunc()
 
 const reachDial = "dial"
 
@@ -71,7 +71,7 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *consolelink.Link) error {
-				return runAdd(ctx, deps, cfg, link, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+				return runAdd(ctx, deps, cfg, link, opts)
 			})
 		},
 	}
@@ -90,7 +90,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *consolelink.Link) error {
-				return runRemove(ctx, deps, cfg, link, opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+				return runRemove(ctx, deps, cfg, link, opts)
 			})
 		},
 	}
@@ -111,7 +111,7 @@ func newStatusCommand(deps cmddeps.Deps) *cobra.Command {
 			})
 		},
 	}
-	return cmd
+	return cmddeps.ReserveStdout(cmd)
 }
 
 func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
@@ -142,6 +142,23 @@ func withOptions(cmd *cobra.Command, deps cmddeps.Deps, opts *options,
 		return &exitsig.ExitError{Code: 1}
 	}
 	return run(ctx, cfg, link)
+}
+
+func reachTarget(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, check *events.Scope) (*providerclient.Provider, *contractv1.DescribeConnectorTargetResponse, error) {
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return nil, nil, err
+	}
+	var described *contractv1.DescribeConnectorTargetResponse
+	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		described, err = client.DescribeConnectorTarget(ctx, &contractv1.DescribeConnectorTargetRequest{})
+		return err
+	})
+	if err != nil {
+		prov.Close()
+		return nil, nil, err
+	}
+	return prov, described, nil
 }
 
 func token(deps cmddeps.Deps) (string, error) {
@@ -184,11 +201,4 @@ func listed(values []string) string {
 	written := slices.Clone(values)
 	slices.Sort(written)
 	return strings.Join(written, ", ")
-}
-
-func readMessage(ev *progressv1.OperationEvent) string {
-	if ev.GetBody() != nil || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
-		return ""
-	}
-	return ev.GetMessage()
 }

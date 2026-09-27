@@ -362,11 +362,6 @@ var ErrClientUnavailable = errors.New("provider: the provider was reached before
 
 type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
 
-func StreamRunner[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
-	_, err := stream(ctx, r, rpc, req, call, onEvent)
-	return err
-}
-
 func stream[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
 	client, err := r.Client()
 	if err != nil {

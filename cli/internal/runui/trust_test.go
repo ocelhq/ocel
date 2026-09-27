@@ -32,7 +32,7 @@ func TestTheTrustIsTheProcessTerminalNotTheProvidersLogStream(t *testing.T) {
 	ui := New(io.Discard, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { ui.Close() })
 
-	trust := TrustFor(host, sessionScope{ui})
+	trust := trustFor(host, sessionScope{ui})
 	if trust.Ask != host.Ask {
 		t.Errorf("the trust asks through %#v, want the terminal the process was started on", trust.Ask)
 	}
@@ -55,7 +55,7 @@ func TestAHostKeyPromptHoldsTheRunWhileItAsks(t *testing.T) {
 	ui := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
 	t.Cleanup(func() { ui.Close() })
 
-	trust := TrustFor(providerclient.Trust{Ask: terminalAsker{}, Out: io.Discard}, sessionScope{ui})
+	trust := trustFor(providerclient.Trust{Ask: terminalAsker{}, Out: io.Discard}, sessionScope{ui})
 	if trust.Hold == nil {
 		t.Fatal("the trust has no way to hold the run while it asks")
 	}
@@ -111,13 +111,13 @@ func TestTheSpinnerTheHumanSinkHandsOutStopsTheLiveView(t *testing.T) {
 	t.Cleanup(spinner.Stop)
 	waitForFrame(t, &terminal)
 
-	resume := TrustFor(providerclient.Trust{}, spinner).Hold(&streamv1.WaitingEvent{})
+	resume := spinner.Suspend()
 	terminal.Reset()
 	time.Sleep(5 * frameRate)
 	if drawn := terminal.String(); drawn != "" {
 		t.Errorf("the spinner drew %q over the trust prompt", drawn)
 	}
 
-	resume("answered")
+	resume()
 	waitForFrame(t, &terminal)
 }

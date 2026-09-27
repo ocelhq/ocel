@@ -3,20 +3,22 @@ package doctor
 import (
 	"bytes"
 	"context"
+	"io"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 var nodeLine = regexp.MustCompile(`(?m)^(  ✓ node is needed — .*) — node .* on PATH$`)
@@ -137,7 +139,8 @@ func TestRunDoctorWithoutAConfig(t *testing.T) {
 	deps := clitest.NewDeps()
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s", code, stdout.String())
 	}
@@ -191,7 +194,8 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -229,7 +233,8 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -255,7 +260,8 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -281,7 +287,8 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want an unfinished apply to fail; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -307,7 +314,8 @@ func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -335,7 +343,8 @@ func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) 
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stderr=%s", err, stderr.String())
 	}
 	got := clitest.ReadJournal(t, journal)
@@ -370,7 +379,8 @@ export default {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -395,7 +405,8 @@ func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) 
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -422,7 +433,8 @@ export default {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a tier nobody asked for to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -454,7 +466,8 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	out := rendered(t, stdout.String())
 
 	if !strings.Contains(out, "Host checks") || !strings.Contains(out, "Certificates") {
@@ -492,7 +505,8 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), deps, root, &stdout, &stderr)
+	deps.AttachTerminalSink(&stderr)
+	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a warning rather than a refusal; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -508,70 +522,44 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 	}
 }
 
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
+func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStdout(t *testing.T) {
+	root := healthyProject(t)
+	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
+	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
 
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
 
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
+		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
 
-func (b *syncBuffer) Reset() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.buf.Reset()
-}
-
-type terminalAsker struct{}
-
-func (terminalAsker) Attended() bool { return true }
-
-func (terminalAsker) Confirm(context.Context, string) (bool, error) { return true, nil }
-
-func waitForFrame(t *testing.T, terminal *syncBuffer) {
-	t.Helper()
-
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if terminal.String() != "" {
-			return
+	var units []progressv1.Phase
+	var result *streamv1.RunResultEvent
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("stream line %q is not a protojson RunEvent: %v", line, err)
 		}
-		time.Sleep(10 * time.Millisecond)
+		if ev.GetStarted() != nil && len(ev.GetStarted().GetParentSpanId()) > 0 {
+			units = append(units, ev.GetPhase())
+		}
+		if ev.GetResult() != nil {
+			result = ev.GetResult()
+		}
 	}
-	t.Fatal("the spinner drew nothing, so this run proves nothing about stopping it")
-}
-
-func TestDoctorStopsTheSpinnerWhileTheHostTrustAsks(t *testing.T) {
-	var terminal syncBuffer
-	host := providerclient.Trust{Ask: terminalAsker{}, Out: &terminal}
-	spinner := runui.StartSpinner(runui.Presentation{Format: runui.FormatHuman, TTY: true, Width: 80}, &terminal, "Checking your setup")
-	t.Cleanup(spinner.Stop)
-
-	trust := runui.TrustFor(host, spinner)
-	if trust.Ask != host.Ask || trust.Out != host.Out {
-		t.Errorf("the trust asks through %#v on %#v, want the terminal the process was started on", trust.Ask, trust.Out)
+	if len(units) == 0 || units[0] != progressv1.Phase_PHASE_CHECK {
+		t.Errorf("unit phases = %v, want the setup checked in a unit of the check phase", units)
 	}
-	if trust.Hold == nil {
-		t.Fatal("the trust has no way to stop the spinner while it asks, so the two share the terminal")
+	if !result.GetSuccess() {
+		t.Errorf("result = %v, want the doctor's run to succeed", result)
 	}
-
-	waitForFrame(t, &terminal)
-
-	resume := trust.Hold(&streamv1.WaitingEvent{})
-	terminal.Reset()
-	time.Sleep(500 * time.Millisecond)
-	if drawn := terminal.String(); drawn != "" {
-		t.Errorf("the spinner drew %q over the trust prompt", drawn)
+	if !strings.Contains(stdout.String(), "Good to go.") || strings.Contains(stderr.String(), "Good to go.") {
+		t.Errorf("stdout = %q, stream = %q: want the report on stdout and not on the stream", stdout.String(), stderr.String())
 	}
-
-	resume("answered")
-	waitForFrame(t, &terminal)
 }

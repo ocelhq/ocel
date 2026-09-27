@@ -59,7 +59,7 @@ func fakeHostTrustDrive(t *testing.T, ctx context.Context, mode string) hostTrus
 		if err := runner.Ready(ctx); err != nil {
 			return err
 		}
-		return StreamRunner(ctx, runner, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
+		return streamed(ctx, runner, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
 	}
 	return fake
 }

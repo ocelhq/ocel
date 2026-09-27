@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-
-	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 const frameRate = 100 * time.Millisecond
@@ -123,9 +121,4 @@ func (s *Spinner) Suspend() func() {
 		}
 		s.startLocked()
 	}
-}
-
-func (s *Spinner) Hold(*streamv1.WaitingEvent) func(reason string) {
-	resume := s.Suspend()
-	return func(string) { resume() }
 }

@@ -5,15 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
@@ -21,7 +26,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/constants"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 const (
@@ -118,9 +126,10 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
 
-	var stdout, stderr bytes.Buffer
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout, &stderr); err != nil {
-		t.Fatalf("runAdd err = %v\n%s", err, stderr.String())
+	var stdout bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
 	}
 
 	if len(srv.upserted) != 1 {
@@ -174,21 +183,27 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	}
 }
 
-func TestAddRelaysWhatTheProviderSaysWhileItInstalls(t *testing.T) {
+func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t)
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	deps := jsonDeps()
 	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
 
-	var stdout, stderr bytes.Buffer
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout, &stderr); err != nil {
-		t.Fatalf("runAdd err = %v\n%s", err, stderr.String())
+	var stream bytes.Buffer
+	deps.AttachTerminalSink(&stream)
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stream.String())
 	}
-	if !strings.Contains(stdout.String(), "  wrote the connector\n") {
-		t.Errorf("stdout = %q, want the line the provider said while installing", stdout.String())
+
+	evs := runEvents(t, stream.String())
+	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetMessage() == "wrote the connector" }) {
+		t.Errorf("stream = %s, want the line the provider said while installing", stream.String())
+	}
+	result := evs[len(evs)-1].GetResult()
+	if !result.GetSuccess() || !strings.Contains(result.GetHeadline(), fingerprint) || !strings.Contains(result.GetHeadline(), "envvars.write") {
+		t.Errorf("result = %v, want a success that names the paired target and what the console may do", result)
 	}
 }
 
@@ -203,7 +218,7 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 	opts := opened(t, srv)
 	opts.reveal = true
 	opts.write = false
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runAdd err = %v", err)
 	}
 
@@ -231,15 +246,15 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 		t.Fatalf("grow the connector past the ceiling: %v", err)
 	}
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	deps := jsonDeps()
+	var stream bytes.Buffer
+	deps.AttachTerminalSink(&stream)
 
-	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL),
-		opened(t, srv), &bytes.Buffer{}, &bytes.Buffer{})
+	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
 		t.Fatal("runAdd err = nil, want a connector over the ceiling refused")
 	}
-	said := err.Error()
+	said := failure(t, stream.String())
 	for _, want := range []string{"vps connector", "over the"} {
 		if !strings.Contains(said, want) {
 			t.Errorf("runAdd err = %q, want it to contain %q", said, want)
@@ -256,15 +271,15 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 	srv.refusePatch = true
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	deps := jsonDeps()
+	var stream bytes.Buffer
+	deps.AttachTerminalSink(&stream)
 
-	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL),
-		opened(t, srv), &bytes.Buffer{}, &bytes.Buffer{})
+	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
 		t.Fatal("a console that refused the address answered no error")
 	}
-	said := err.Error()
+	said := failure(t, stream.String())
 	if !strings.Contains(said, "ocel connector add") || !strings.Contains(said, "already has this target registered") {
 		t.Errorf("runAdd err = %q, and a half-finished add has to say that the console has the target registered and that re-running finishes it", said)
 	}
@@ -285,7 +300,8 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout bytes.Buffer
-	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout, &bytes.Buffer{}); err != nil {
+	deps.AttachTerminalSink(&stdout)
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
 
@@ -309,15 +325,15 @@ func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 	})
 	linked(t, root, srv.URL)
 
-	deps := clitest.NewDeps()
-	clitest.SetLoggedIn(&deps)
+	deps := jsonDeps()
+	var stream bytes.Buffer
+	deps.AttachTerminalSink(&stream)
 
-	var stdout bytes.Buffer
-	err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout, &bytes.Buffer{})
+	err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
 		t.Fatal("runRemove err = nil, want the unreachable machine reported")
 	}
-	said := err.Error()
+	said := failure(t, stream.String())
 	if !strings.Contains(said, "ocel connector status") || !strings.Contains(said, "rm --target") {
 		t.Errorf("runRemove err = %q, want it to name the remedy for a target that will not answer", said)
 	}
@@ -341,7 +357,8 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	opts.target = fingerprint
 
 	var stdout bytes.Buffer
-	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &stdout, &bytes.Buffer{}); err != nil {
+	deps.AttachTerminalSink(&stdout)
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
 	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
@@ -367,7 +384,8 @@ func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
 	opts.target = fingerprint
 
 	var stdout bytes.Buffer
-	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &stdout, &bytes.Buffer{}); err != nil {
+	deps.AttachTerminalSink(&stdout)
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
 	if len(srv.deleted) != 0 {
@@ -491,7 +509,7 @@ func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
 
 	opts := opened(t, srv)
 	opts.compute = "serverless"
-	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runAdd err = %v", err)
 	}
 
@@ -532,4 +550,70 @@ func chdir(t *testing.T, dir string, run func() error) error {
 	}
 	defer os.Chdir(wd)
 	return run()
+}
+
+func jsonDeps() cmddeps.Deps {
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+	return deps
+}
+
+func failure(t *testing.T, stream string) string {
+	t.Helper()
+	evs := runEvents(t, stream)
+	if len(evs) == 0 || evs[len(evs)-1].GetResult() == nil {
+		t.Fatalf("stream = %s, want it to end with the run's result", stream)
+	}
+	result := evs[len(evs)-1].GetResult()
+	if result.GetSuccess() {
+		t.Fatalf("result = %v, want the run to fail", result)
+	}
+	return result.GetDetail()
+}
+
+func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
+	t.Helper()
+	var evs []*streamv1.RunEvent
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		ev := &streamv1.RunEvent{}
+		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
+			t.Fatalf("line %q is not a protojson RunEvent: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	return evs
+}
+
+func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheConsoleHasAloneOnStdout(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+	})
+	linked(t, root, srv.URL)
+
+	deps := jsonDeps()
+	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
+		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stderr.String())
+	if len(evs) == 0 || evs[0].GetStarted() == nil || evs[0].GetPhase() != progressv1.Phase_PHASE_CHECK {
+		t.Fatalf("stream = %s, want a run that opens with the check phase that starts the provider", stderr.String())
+	}
+	if result := evs[len(evs)-1].GetResult(); !result.GetSuccess() {
+		t.Errorf("result = %v, want the status run to succeed", result)
+	}
+	if !strings.Contains(stdout.String(), fingerprint) || strings.Contains(stderr.String(), "container over dial") {
+		t.Errorf("stdout = %q, stream = %q: want what the console has on stdout and not on the stream", stdout.String(), stderr.String())
+	}
 }

@@ -10,8 +10,7 @@ import (
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *consolelink.Link,
@@ -26,7 +25,7 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 	}
 
 	if deps.ConfigPath() != "" {
-		fingerprint, err := fingerprinted(ctx, deps, cfg, stdout)
+		fingerprint, err := fingerprinted(ctx, deps, cfg)
 		if err != nil {
 			return err
 		}
@@ -59,19 +58,23 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 	return nil
 }
 
-func fingerprinted(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout io.Writer) (string, error) {
-	var fingerprint string
-	err := providerclient.Drive(ctx, cfg, stdout, stdout, deps.HostTrust, func(runner *providerclient.Runner) error {
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-		described, err := client.DescribeConnectorTarget(ctx, &contractv1.DescribeConnectorTargetRequest{})
-		if err != nil {
-			return err
-		}
-		fingerprint = described.GetTargetFingerprint()
-		return nil
-	})
-	return fingerprint, err
+func fingerprinted(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) (fingerprint string, err error) {
+	if _, err := cfg.RequireProvider(); err != nil {
+		return "", err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, "ocel connector status", cfg.Dir)
+	if err != nil {
+		return "", err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, described, err := reachTarget(ctx, deps, cfg, check)
+	check.End(err)
+	if err != nil {
+		return "", err
+	}
+	prov.Close()
+	return described.GetTargetFingerprint(), nil
 }

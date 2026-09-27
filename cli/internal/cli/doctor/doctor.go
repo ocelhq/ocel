@@ -19,17 +19,20 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
-	return &cobra.Command{
+	return cmddeps.ReserveStdout(&cobra.Command{
 		Use:   "doctor",
 		Short: "Check that everything is good to go",
 		Long: "Check that everything is good to go.\n\n" +
@@ -46,13 +49,13 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return Run(ctx, deps, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return Run(ctx, deps, cwd, cmd.OutOrStdout())
 		},
-	}
+	})
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) error {
-	found := build(ctx, deps, cwd, stdout, stderr)
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, stdout io.Writer) error {
+	found := build(ctx, deps, cwd)
 	found.render(stdout, newPaint(stdout))
 	if found.failures() > 0 {
 		return &exitsig.ExitError{Code: 1}
@@ -131,7 +134,7 @@ func (r report) count(want verdict) int {
 
 var tiers = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW}
 
-func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) report {
+func build(ctx context.Context, deps cmddeps.Deps, cwd string) report {
 	var found report
 	project := section{name: "Project"}
 
@@ -171,7 +174,7 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 		return found
 	}
 
-	answers := gather(ctx, deps, cfg, stdout, stderr)
+	answers := gather(ctx, deps, cfg)
 	found.add(credentialSections(cfg, answers)...)
 	for _, tier := range tiers {
 		found.add(tierSection(tier, hosts[tier], answers))
@@ -337,20 +340,44 @@ func hostCheckDomains(asking bool, cfg *projectconfig.Config) []string {
 	return named
 }
 
-func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout, stderr io.Writer) *answers {
+func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config) *answers {
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
+	if err := checkSetup(ctx, deps, cfg, got); err != nil && got.problem == "" {
+		got.problem = strings.TrimSpace(err.Error())
+	}
+	return got
+}
 
-	spinner := runui.StartSpinner(deps.Presentation(stdout), stdout, "Checking your setup")
-	err := providerclient.Drive(ctx, cfg, stderr, stderr, runui.TrustFor(deps.HostTrust, spinner), func(runner *providerclient.Runner) error {
-		*got = answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
-		got.pkg = runner.Name()
-		client, err := runner.Client()
-		if err != nil {
-			return err
-		}
-		for _, tier := range tiers {
-			checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
-			resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
+func checkSetup(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, got *answers) error {
+	ctx, run, err := deps.Events.Begin(ctx, "ocel doctor", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		interrupted := ctx.Err()
+		run.End(&interrupted)
+	}()
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	unit := check.Unit(cfg.Slug, "Checking your setup")
+	err = askProvider(ctx, deps, cfg, unit, got)
+	unit.End(err)
+	return err
+}
+
+func askProvider(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, unit *events.Scope, got *answers) error {
+	prov, err := providerclient.Start(ctx, cfg, unit, deps.HostTrust, providerclient.PinToLock)
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
+	got.pkg = prov.Name()
+
+	for _, tier := range tiers {
+		checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
+		var resp *contractv1.PreflightResponse
+		err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+			resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{
 				RequiredTier:     tier,
 				Slug:             cfg.Slug,
 				Domains:          preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
@@ -359,60 +386,63 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 				CheckHosts:       checkHosts,
 				HostCheckDomains: hostCheckDomains(checkHosts, cfg),
 			})
-			if err != nil {
-				if connect.CodeOf(err) == connect.CodeUnimplemented {
-					got.problem = got.pkg + " cannot check credentials; it predates the check"
-					got.fix = upgradeProvider
-					return nil
-				}
-				return err
+			return err
+		})
+		if err != nil {
+			if connect.CodeOf(err) == connect.CodeUnimplemented {
+				got.problem = got.pkg + " cannot check credentials; it predates the check"
+				got.fix = upgradeProvider
+				return nil
 			}
-			if got.identity == nil {
-				got.identity = resp.GetIdentity()
-			}
-			got.keep(resp.GetCredentialProblems())
-			got.addHostChecks(resp.GetHostChecks())
-			if tier == environmentv1.Tier_TIER_PREVIEW {
-				got.wildcard = resp.GetPreviewWildcard()
-			}
+			return err
+		}
+		if got.identity == nil {
+			got.identity = resp.GetIdentity()
+		}
+		got.keep(resp.GetCredentialProblems())
+		got.addHostChecks(resp.GetHostChecks())
+		if tier == environmentv1.Tier_TIER_PREVIEW {
+			got.wildcard = resp.GetPreviewWildcard()
+		}
 
-			planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
-			if err != nil {
-				if connect.CodeOf(err) == connect.CodeUnimplemented {
-					got.tiers[tier] = &tierAnswer{problem: got.pkg + " cannot report what a bootstrap has; it predates the report"}
-					continue
-				}
-				return err
-			}
-			got.tiers[tier] = &tierAnswer{status: planned.GetBootstrap()}
-			if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
+		var planned *contractv1.DescribeBootstrapResponse
+		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: edgewire.Selection(cfg)})
+			return err
+		})
+		if err != nil {
+			if connect.CodeOf(err) == connect.CodeUnimplemented {
+				got.tiers[tier] = &tierAnswer{problem: got.pkg + " cannot report what a bootstrap has; it predates the report"}
 				continue
 			}
-			configured := preflight.Configured(preflight.Hostnames(cfg, bootstrap.Name(tier)))
-			if len(configured) == 0 {
-				continue
-			}
-			bound, err := client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
+			return err
+		}
+		got.tiers[tier] = &tierAnswer{status: planned.GetBootstrap()}
+		if tier != environmentv1.Tier_TIER_PRODUCTION || !planned.GetBootstrap().GetPresent() {
+			continue
+		}
+		configured := preflight.Configured(preflight.Hostnames(cfg, bootstrap.Name(tier)))
+		if len(configured) == 0 {
+			continue
+		}
+		var bound *contractv1.GetHostnameStatusResponse
+		err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+			bound, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,
 				Configured: configured,
 				Edge:       edgewire.Selection(cfg),
 			})
-			if err != nil {
-				if connect.CodeOf(err) == connect.CodeUnimplemented {
-					continue
-				}
-				return err
+			return err
+		})
+		if err != nil {
+			if connect.CodeOf(err) == connect.CodeUnimplemented {
+				continue
 			}
-			got.hostnames = bound.GetHostnames()
+			return err
 		}
-		return nil
-	})
-	spinner.Stop()
-
-	if err != nil && got.problem == "" {
-		got.problem = strings.TrimSpace(err.Error())
+		got.hostnames = bound.GetHostnames()
 	}
-	return got
+	return nil
 }
 
 func (a *answers) keep(problems []*contractv1.CredentialProblem) {

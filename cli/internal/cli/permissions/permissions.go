@@ -14,11 +14,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 func NewCommand(deps cmddeps.Deps) *cobra.Command {
-	return &cobra.Command{
+	return cmddeps.ReserveStdout(&cobra.Command{
 		Use:     "permissions <bootstrap|deploy>",
 		Aliases: []string{"perms"},
 		Short:   "Print the permissions bootstrap or deploy credentials need",
@@ -42,52 +44,74 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
 			defer stop()
 
-			return Run(ctx, deps, cwd, tier, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return Run(ctx, deps, cwd, tier, cmd.OutOrStdout())
 		},
-	}
+	})
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout, stderr io.Writer) error {
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
-
-	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		client, err := runner.Client()
-		if err != nil {
-			return err
+	groups, err := credentialPermissions(ctx, deps, cfg, tier)
+	if err != nil {
+		return err
+	}
+	if len(groups) == 1 {
+		fmt.Fprintln(stdout, groups[0].GetDocument())
+		return nil
+	}
+	for i, group := range groups {
+		if i > 0 {
+			fmt.Fprintln(stdout)
 		}
-		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
+		if heading := group.GetHeading(); heading != "" {
+			fmt.Fprintln(stdout, heading)
+			fmt.Fprintln(stdout)
+		}
+		fmt.Fprintln(stdout, group.GetDocument())
+	}
+	return nil
+}
+
+func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier contractv1.CredentialTier) (groups []*contractv1.CredentialGroup, err error) {
+	if _, err := cfg.RequireProvider(); err != nil {
+		return nil, err
+	}
+
+	ctx, run, err := deps.Events.Begin(ctx, "ocel permissions", cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	defer run.End(&err)
+
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, providerclient.PinToLock)
+	check.End(err)
+	if err != nil {
+		return nil, err
+	}
+	defer prov.Close()
+
+	var permissions *contractv1.CredentialPermissionsResponse
+	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		permissions, err = client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
 			Tier: tier,
 			Edge: edgewire.Selection(cfg),
 		})
-		if err != nil {
-			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return predates(runner.Name())
-			}
-			return err
-		}
-		groups := permissions.GetGroups()
-		if len(groups) == 0 {
-			return predates(runner.Name())
-		}
-		if len(groups) == 1 {
-			fmt.Fprintln(stdout, groups[0].GetDocument())
-			return nil
-		}
-		for i, group := range groups {
-			if i > 0 {
-				fmt.Fprintln(stdout)
-			}
-			if heading := group.GetHeading(); heading != "" {
-				fmt.Fprintln(stdout, heading)
-				fmt.Fprintln(stdout)
-			}
-			fmt.Fprintln(stdout, group.GetDocument())
-		}
-		return nil
+		return err
 	})
+	if connect.CodeOf(err) == connect.CodeUnimplemented {
+		return nil, predates(prov.Name())
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(permissions.GetGroups()) == 0 {
+		return nil, predates(prov.Name())
+	}
+	return permissions.GetGroups(), nil
 }
 
 func predates(pkg string) error {

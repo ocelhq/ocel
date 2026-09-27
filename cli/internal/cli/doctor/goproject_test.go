@@ -46,7 +46,8 @@ func TestDoctorPassesOnAGoProjectWithNoNode(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), deps, root, &stdout, &stderr); err != nil {
+	deps.AttachTerminalSink(&stderr)
+	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if strings.Contains(stdout.String(), "node") {

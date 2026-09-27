@@ -289,7 +289,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
@@ -325,7 +325,7 @@ func TestDeploy(t *testing.T) {
 		var gotFirstEvent atomic.Bool
 		deployErrCh := make(chan error, 1)
 		go func() {
-			deployErrCh <- StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
+			deployErrCh <- streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
@@ -366,7 +366,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if err == nil {
@@ -393,7 +393,7 @@ func TestDeploy(t *testing.T) {
 		var gotFirstEvent atomic.Bool
 		deployErrCh := make(chan error, 1)
 		go func() {
-			deployErrCh <- StreamRunner(called, r, "Deploy", &contractv1.DeployRequest{
+			deployErrCh <- streamed(called, r, "Deploy", &contractv1.DeployRequest{
 				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
 		}()
@@ -436,7 +436,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 
 		var deployErr *OperationFailedError
 		if !errors.As(err, &deployErr) {
@@ -461,7 +461,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var reported []string
-		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) {
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) {
 			for _, app := range ev.GetResult().GetApps() {
 				reported = append(reported, app.GetApp()+"="+app.GetOutcome().String())
 			}
@@ -494,7 +494,7 @@ func TestDeploy(t *testing.T) {
 		}
 
 		var seen int
-		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
 		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { seen++ })
 
@@ -512,7 +512,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "never-ready", Config{ReadyTimeout: 50 * time.Millisecond})
 
-		err := StreamRunner(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
 		if !errors.Is(err, ErrClientUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrClientUnavailable", err)
 		}
@@ -546,7 +546,7 @@ func TestBootstrap(t *testing.T) {
 		}
 
 		var events []*progressv1.OperationEvent
-		err := StreamRunner(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
+		err := streamed(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, func(ev *progressv1.OperationEvent) { events = append(events, ev) })
 		if err != nil {
 			t.Fatalf("Bootstrap() error = %v, want nil", err)
 		}
@@ -572,7 +572,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := StreamRunner(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
+		err := streamed(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
 
 		var failErr *OperationFailedError
 		if !errors.As(err, &failErr) {
@@ -739,4 +739,9 @@ func init() {
 	if _, err := os.Stat(os.Args[0]); err != nil {
 		panic(fmt.Sprintf("provider tests require os.Args[0] to be a runnable test binary: %v", err))
 	}
+}
+
+func streamed[Req any](ctx context.Context, r *Runner, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
+	_, err := stream(ctx, r, rpc, req, call, onEvent)
+	return err
 }
