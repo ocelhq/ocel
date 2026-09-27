@@ -3,6 +3,7 @@ package deploy
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -83,5 +84,20 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 	}
 	if result.ISRWriteSecret != "" {
 		t.Errorf("ISRWriteSecret = %q, want nothing where the account adopts no cache store", result.ISRWriteSecret)
+	}
+}
+
+func TestAReleaseNamesEverySecretItsProgramsCarrySoTheEngineCanMaskThem(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := appStackSpec(t)
+	cfg.OriginSecret, cfg.PreviousOriginSecret = "origin-now", "origin-before"
+	cfg.ISRWriterSeed = "a-seed"
+
+	got := releasing(t, cfg).Secrets(spec)
+	for _, want := range []string{"origin-now", "origin-before", "a-seed", isrWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix)} {
+		if !slices.Contains(got, want) {
+			t.Errorf("the release names %d secrets and not %q, want every secret its programs carry", len(got), want)
+		}
 	}
 }

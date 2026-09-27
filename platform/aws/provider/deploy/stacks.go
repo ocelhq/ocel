@@ -112,6 +112,7 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 		},
 		Program:   created.Run,
 		Configure: created.Configure,
+		Secrets:   created.Secrets,
 		Decode:    created.Decode,
 		Refresh:   refreshPolicy(r.realized),
 		Engine:    r.engine,
@@ -246,6 +247,14 @@ func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.Co
 		return nil, fmt.Errorf("render default tags: %w", err)
 	}
 	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
+}
+
+func (r *release) Secrets(spec provider.StackSpec) []string {
+	secrets := []string{r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, r.cfg.ISRWriterSeed}
+	if r.cfg.ISRWriterSeed != "" && spec.App != nil && spec.App.ISR != nil {
+		secrets = append(secrets, isrWriteSecret(r.cfg.ISRWriterSeed, spec.App.ISR.Prefix))
+	}
+	return secrets
 }
 
 func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {

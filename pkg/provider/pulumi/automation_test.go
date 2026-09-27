@@ -3,6 +3,7 @@ package pulumi_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -359,5 +360,37 @@ func TestDecodeReadsAStacksOutputsIntoTheVendorsOwnType(t *testing.T) {
 	}
 	if decoded.Bucket != "shop-uploads" || decoded.Port != 5432 {
 		t.Errorf("Decode() = %+v, want the outputs the stack answered with", decoded)
+	}
+}
+
+func TestRunHandsTheEngineEverySecretValueItKnowsSoDiagnosticsCanMaskThem(t *testing.T) {
+	t.Parallel()
+
+	engine := &recordingEngine{}
+	app := spec()
+	app.App = &provider.AppSpec{App: "web", Values: provider.AppValues{
+		Plain:     map[string]string{"REGION": "us-east-1"},
+		Sensitive: map[string]string{"STRIPE_API_KEY": "sk_live_app"},
+	}}
+	if _, err := pulumi.New(pulumi.Config{
+		Backend: backend(),
+		Program: program{}.Run,
+		Configure: configuring{program{config: auto.ConfigMap{
+			"app:dbPassword": {Value: "config-s3cret", Secret: true},
+			"app:region":     {Value: "us-east-1"},
+		}}}.Configure,
+		Secrets: func(provider.StackSpec) []string { return []string{"origin-s3cret"} },
+		Engine:  engine,
+	}).Run(context.Background(), app, nil); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+	got := engine.up.Secrets
+	for _, want := range []string{"sk_live_app", "config-s3cret", "origin-s3cret", "a-passphrase"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("the engine masks %d values and not %q, want every secret the run knows", len(got), want)
+		}
+	}
+	if slices.Contains(got, "us-east-1") {
+		t.Error("the engine masks a plain value, want only secrets masked")
 	}
 }

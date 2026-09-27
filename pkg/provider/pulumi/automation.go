@@ -67,6 +67,8 @@ type Config struct {
 
 	Configure func(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error)
 
+	Secrets func(spec provider.StackSpec) []string
+
 	Decode func(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error)
 
 	Parallel int
@@ -112,6 +114,8 @@ type WorkspaceSpec struct {
 	Options []auto.LocalWorkspaceOption
 
 	Config auto.ConfigMap
+
+	Secrets []string
 
 	Parallel int
 
@@ -213,6 +217,7 @@ func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Oper
 	if setup.Config, err = a.StackConfig(ctx, spec); err != nil {
 		return WorkspaceSpec{}, err
 	}
+	setup.Secrets = a.secrets(spec, setup.Config)
 	if a.config.Engine == nil {
 		command, err := pinned.install(ctx, progress)
 		if err != nil {
@@ -435,7 +440,7 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress edge.Pro
 	}
 
 	engineEvents := make(chan events.EngineEvent, 256)
-	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, secretValues(setup.Config))
+	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, setup.Secrets)
 	opts = append(opts, optup.EventStreams(engineEvents))
 
 	start := time.Now()
@@ -528,6 +533,17 @@ func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) e
 		return fmt.Errorf("configure %s: %w", stack.Name(), err)
 	}
 	return nil
+}
+
+func (a *Automation) secrets(spec provider.StackSpec, config auto.ConfigMap) []string {
+	secrets := append(secretValues(config), a.config.Backend.Passphrase)
+	if spec.App != nil {
+		secrets = append(secrets, slices.Collect(maps.Values(spec.App.Values.Sensitive))...)
+	}
+	if a.config.Secrets != nil {
+		secrets = append(secrets, a.config.Secrets(spec)...)
+	}
+	return slices.DeleteFunc(secrets, func(secret string) bool { return secret == "" })
 }
 
 func secretValues(values auto.ConfigMap) []string {
