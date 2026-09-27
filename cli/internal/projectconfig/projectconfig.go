@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -82,6 +83,7 @@ type Config struct {
 	Bindings      []Binding
 	Domains       map[string][]string
 	Registry      *Registry
+	EnvSource     envsource.Tiers
 	Dir           string
 	Path          string
 }
@@ -160,6 +162,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		Bindings:      bindings,
 		Domains:       domains,
 		Registry:      registry,
+		EnvSource:     doc.EnvSource.Tiers(),
 		Dir:           filepath.Dir(configPath),
 		Path:          configPath,
 	}, nil

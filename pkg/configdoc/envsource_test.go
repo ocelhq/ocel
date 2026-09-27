@@ -2,9 +2,12 @@ package configdoc
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/envsource"
 )
 
 func TestDecodeEnvSourceKeyedByItsIdentifierPerTier(t *testing.T) {
@@ -32,6 +35,59 @@ func TestDecodeEnvSourceKeyedByItsIdentifierPerTier(t *testing.T) {
 	dev := doc.EnvSource.Dev
 	if dev == nil || dev.Exec == nil || !slices.Equal(dev.Exec.Command, []string{"op", "inject", "{folder}"}) || dev.Exec.Format != "dotenv" {
 		t.Fatalf("dev = %+v, want exec", dev)
+	}
+}
+
+func TestEveryTierLeftOffOrNamedAloneReadsItsDefaultEnvSource(t *testing.T) {
+	for _, config := range []string{
+		`{"slug":"acme"}`,
+		`{"slug":"acme","envSource":{}}`,
+		`{"slug":"acme","envSource":{"production":"builtin","preview":"builtin","dev":"dotenv"}}`,
+	} {
+		doc, err := Decode([]byte(config), env(nil))
+		if err != nil {
+			t.Fatalf("decode %s: %v", config, err)
+		}
+		if got := doc.EnvSource.Tiers(); !reflect.DeepEqual(got, envsource.DefaultTiers()) {
+			t.Errorf("tiers from %s = %+v, want every tier on its default", config, got)
+		}
+	}
+}
+
+func TestEachTierReadsTheEnvSourceItNamesWithItsDefaultsFilledIn(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","envSource":{
+		"production":{"infisical":{"project":"p-1","environment":"prod","auth":{"universal":{"clientId":{"$env":"ID"},"clientSecret":{"$env":"SECRET"}}}}},
+		"preview":{"infisical":{"project":"p-1","environment":"staging","path":"acme/","host":"https://infisical.example.com/","write":"missing","auth":{"identity":{"identityId":"ident"}}}},
+		"dev":{"exec":{"command":["op","run","{folder}"],"format":"json"}}
+	}}`), env(nil))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	want := envsource.Tiers{
+		Production: envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
+			Project:     "p-1",
+			Environment: "prod",
+			Path:        "/",
+			Host:        "https://app.infisical.com",
+			Write:       envsource.WriteNever,
+			Auth:        envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "ID", ClientSecretVariable: "SECRET"},
+		}},
+		Preview: envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
+			Project:     "p-1",
+			Environment: "staging",
+			Path:        "/acme",
+			Host:        "https://infisical.example.com",
+			Write:       envsource.WriteMissing,
+			Auth:        envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "ident"},
+		}},
+		Dev: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{
+			Command: []string{"op", "run", "{folder}"},
+			Format:  envsource.FormatJSON,
+		}},
+	}
+	if got := doc.EnvSource.Tiers(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("tiers =\n%+v\nwant\n%+v", got, want)
 	}
 }
 
