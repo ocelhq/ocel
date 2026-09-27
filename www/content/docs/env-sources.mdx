@@ -42,9 +42,12 @@ A [TypeScript config](/docs/typescript-config#env-sources) writes the same thing
 ## Who owns a value
 
 Every value has one writer. Once a deployed tier reads from an env source other than
-`builtin`, that source owns the tier's values. ocel keeps a copy it refreshes, and
-`ocel env set`, `ocel env rm`, `ocel env ui` and the console refuse to change one, naming the
-source and linking to where the value lives there.
+`builtin`, that source owns the tier's values. ocel keeps a copy it refreshes. Unless the
+source's `write` lets ocel write into it, `ocel env set`, `ocel env ui` and the console refuse
+to change one of them, naming the source and linking to where the value lives there. With
+`write`, they change it in the source itself (see [Writing into Infisical](#writing-into-infisical)).
+`ocel env rm` and every remove in the UIs always refuse: ocel never deletes a key from an env
+source.
 
 That includes a value the tier held before it switched to the env source. If the source
 lacks it, the first sync removes it, and the deploy names it as missing until you set it
@@ -82,17 +85,49 @@ config names another.
 | `path` | The Infisical folder the project's values sit under. A variables folder such as `/web` reads from that folder beneath it. Left off, `/`. |
 | `host` | The base URL of a self-hosted Infisical. Left off, `https://app.infisical.com`. |
 | `auth` | The machine identity production or preview signs in as: `universal`, or `identity` for the target's own cloud identity. Required there. |
-| `write` | `"missing"` lets ocel create a key a declaration names and Infisical lacks. It never overwrites or deletes one. Left off, `"never"`. |
+| `write` | What ocel may write into Infisical: `"never"`, `"missing"` or `"values"`. Left off, `"never"`. See [Writing into Infisical](#writing-into-infisical). |
 
 `dev` takes neither `auth` nor `write`: it signs in as you, and only reads. See [Dev](#dev).
 
 A deploy that finds a declared value missing or invalid stops, listing each key with a
 link to the Infisical folder it belongs in. Where a browser can open, it opens the
-variables page instead, which links each key the same way. With `write: "missing"`, that
-page creates a missing key with the value you type, and a deploy that cannot open a
-browser, such as one in CI, creates each missing key empty and described, for you to fill
-in. Where the Infisical environment requires approval for changes, ocel reads a created key
-once someone approves it.
+variables page instead, which links each key the same way. With `write`, that page creates
+a missing key with the value you type, and a deploy that cannot open a browser, such as
+one in CI, creates each missing key empty and described, for you to fill in.
+
+### Writing into Infisical
+
+| `write` | What ocel may do there |
+| --- | --- |
+| `"never"` | Nothing. Every change is made in Infisical. |
+| `"missing"` | Create a key a declaration names and Infisical lacks. A key Infisical holds is never overwritten. |
+| `"values"` | Create a missing key, and update a value Infisical holds. |
+
+With `"missing"` or `"values"`, `ocel env set KEY=VALUE`, the variables page and the console
+write a value for the whole tier into Infisical, as far as `write` allows. They then sync
+the tier straight away, so the copy in your account and your apps' live secrets carry it:
+
+```bash
+ocel env set STRIPE_KEY=sk_live_...
+```
+
+A value for one named preview environment (`--environment`) and a credential ocel logs in
+with stay in ocel's own store as always.
+
+ocel never overwrites an edit it has not seen. Before an update it checks that the secret
+is still at the version ocel last copied. If someone changed it in Infisical since, or
+deleted and recreated it, the write is refused and nothing is sent: run `ocel env sync`
+to copy the current value, then set it again. A key Infisical holds that ocel has never
+copied is filled in only while it is empty, as a key a deploy created for you is.
+Infisical offers no way to make that check and the update one step, so an edit made in
+Infisical in the moment between the two is overwritten; Infisical keeps it in the
+secret's version history.
+
+No `write` lets ocel delete a key from Infisical. Remove one there.
+
+Where the Infisical environment requires approval for changes, a create or an update waits
+for someone to approve it. ocel says so, never sends it twice, and copies the value once
+it is approved.
 
 A key Infisical has that nothing in the project declares is drift. The deploy warns about
 it, and `ocel env ui` lists it in an Undeclared section, with a link.
@@ -203,8 +238,8 @@ That prints the role's name; its ARN is `arn:aws:iam::<account>:role/<name>`.
 `ocel bootstrap production --features vars-key` makes the stack, and the same for preview.
 `arn:aws:iam::<account>:*` allows every principal in the account instead.
 
-If the console creates missing values through a [connector](/docs/cli/connector), also
-allow the `ConnectorRole` of the `<namespace>-connector` stack, which signs in to create them.
+If the console writes values into Infisical through a [connector](/docs/cli/connector), also
+allow the `ConnectorRole` of the `<namespace>-connector` stack, which signs in to write them.
 
 #### On Google Cloud
 
@@ -234,8 +269,8 @@ service account, with its key or by impersonating it:
 gcloud auth application-default login --impersonate-service-account=deploy@my-project.iam.gserviceaccount.com
 ```
 
-If the console creates missing values through a [connector](/docs/cli/connector), also
-allow `<namespace>-connector@<project>.iam.gserviceaccount.com`, which signs in to create them.
+If the console writes values into Infisical through a [connector](/docs/cli/connector), also
+allow `<namespace>-connector@<project>.iam.gserviceaccount.com`, which signs in to write them.
 
 ## How fresh a value is
 
