@@ -883,3 +883,28 @@ func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingA
 		t.Errorf("stdout = %q, stream = %q: want the listing on stdout and not on the stream", stdout.String(), stderr.String())
 	}
 }
+
+func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr(t *testing.T) {
+	root := clitest.SetUpEnvGateFixtureWith(t, "[]", `console.error("collecting the declared variables");`+envDeclaringScript(fixtureDefinitions))
+	deps := clitest.NewDeps()
+	deps.Presentation = func(io.Writer) runui.Presentation {
+		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+	}
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stderr)
+	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	evs := runEvents(t, stderr.String())
+	said := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetOutput() != nil && strings.Contains(ev.GetMessage(), "collecting the declared variables")
+	})
+	if said < 0 {
+		t.Fatalf("the collector's line never reached the run as output: %s", stderr.String())
+	}
+	if evs[said].GetPhase() != progressv1.Phase_PHASE_BUILD {
+		t.Errorf("the collector's line is in %v, want the build phase that ran it", evs[said].GetPhase())
+	}
+}

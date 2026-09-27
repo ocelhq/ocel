@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
@@ -36,8 +37,8 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProviderSealing(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		gate, err := discoverVariables(ctx, cfg, prov, opts, stderr)
+	return withEnvProviderSealing(ctx, deps, cwd, opts, "ocel env ui", stdin, stderr, func(ctx context.Context, run *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		gate, err := discoverVariables(ctx, cfg, prov, opts, run)
 		if err != nil {
 			return err
 		}
@@ -81,9 +82,13 @@ func serveAndOpenVarsUI(
 	return varsSession, nil
 }
 
-func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, opts envOptions, run *events.Run) (*envgate.Gate, error) {
 	gate := envGate(cfg, prov, opts)
-	if _, err := deploycollector.PrepareAndCollect(ctx, cfg, gate, io.Discard, stderr); err != nil {
+	err := collecting(run, cfg, func(output io.Writer) error {
+		_, err := deploycollector.PrepareAndCollect(ctx, cfg, gate, io.Discard, output)
+		return err
+	})
+	if err != nil {
 		return nil, err
 	}
 	return gate, nil

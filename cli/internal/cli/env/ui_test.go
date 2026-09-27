@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
@@ -27,7 +28,7 @@ import (
 
 func withProviderValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, prov *providerclient.Provider, values envwire.Values) error) {
 	t.Helper()
-	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, opts, "ocel env", io.Discard, func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, opts, "ocel env", io.Discard, func(ctx context.Context, _ *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		return drive(ctx, cfg.Slug, prov, envwire.Values{
 			Provider: prov,
 			Slug:     cfg.Slug,
@@ -210,8 +211,8 @@ func syncedEnvSourceFixture(t *testing.T, descriptor envsource.Descriptor) strin
 
 func withVarsUI(t *testing.T, root string, drive func(s *varsui.Session)) {
 	t.Helper()
-	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		gate, err := discoverVariables(ctx, cfg, prov, envOptions{}, io.Discard)
+	err := withEnvProvider(context.Background(), clitest.NewDeps(), root, envOptions{}, "ocel env ui", io.Discard, func(ctx context.Context, run *events.Run, prov *providerclient.Provider, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		gate, err := discoverVariables(ctx, cfg, prov, envOptions{}, run)
 		if err != nil {
 			return err
 		}
