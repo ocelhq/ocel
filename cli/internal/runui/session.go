@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -36,7 +37,7 @@ type Session struct {
 	run     *runtrace.Run
 	command string
 	present Presentation
-	gate    gate
+	gate    consent.Gate
 	waiting bool
 	shown   *planv1.ChangePlan
 	apps    []*progressv1.AppResult
@@ -187,9 +188,7 @@ func (s *Session) Spin(message string) *Spinner {
 }
 
 func (s *Session) emit(ev *streamv1.RunEvent) *streamv1.RunEvent {
-	ev = normalize(ev)
-	s.bus.Send(ev)
-	return ev
+	return s.bus.Send(normalize(ev))
 }
 
 func (s *Session) Diagnostic(message string) {
@@ -211,7 +210,7 @@ func (s *Session) Identity(ev *streamv1.IdentityEvent) {
 func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.Clone(plan).(*planv1.ChangePlan)
 	drawn.Headline, drawn.Notes = headline, notes
-	s.shown = s.emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Body: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
+	s.shown = proto.CloneOf(s.emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Body: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan())
 	return s.shown
 }
 

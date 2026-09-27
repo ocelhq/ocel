@@ -6,9 +6,9 @@ stages:
   api
     Provisioning
 plan:
-  infrastructure/shared ACTION_UPDATE function/api
-  infrastructure/shared ACTION_DELETE bucket/logs
   infrastructure/shared ACTION_CREATE bucket/assets
+  infrastructure/shared ACTION_DELETE bucket/logs
+  infrastructure/shared ACTION_UPDATE function/api
 waits:
   waiting on 1 unset, remedy "ocel env ui"
   resumed the page was answered

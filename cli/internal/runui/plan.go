@@ -189,29 +189,13 @@ func changeLabel(change *planv1.Change) string {
 	return change.GetName()
 }
 
-const (
-	rankSpineHead = iota
-	rankSpineEdge
-	rankOffSpine
-)
-
-var spineKinds = map[string]int{
-	provider.StackGroupKind:     rankSpineHead,
-	provider.ParameterGroupKind: rankSpineHead,
-	edge.EdgeGroupKind:          rankSpineEdge,
+var spineKinds = map[string]bool{
+	provider.StackGroupKind:     true,
+	provider.ParameterGroupKind: true,
+	edge.EdgeGroupKind:          true,
 }
 
-func spineRank(kind string) int {
-	if rank, named := spineKinds[kind]; named {
-		return rank
-	}
-	return rankOffSpine
-}
-
-func namedKind(kind string) bool {
-	_, named := spineKinds[kind]
-	return named
-}
+func namedKind(kind string) bool { return spineKinds[kind] }
 
 func groupTag(group *planv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {
@@ -296,17 +280,4 @@ func faceOf(action planv1.Change_Action) actionFace {
 		return face
 	}
 	return actionFace{sigil: "?", words: fmt.Sprintf("act on (%s, an action this CLI does not know)", action)}
-}
-
-func Mutates(plan *planv1.ChangePlan) bool {
-	_, counts := readPlan(plan)
-	return len(counts.acted) > 0
-}
-
-func ConfirmVerb(plan *planv1.ChangePlan) string {
-	_, counts := readPlan(plan)
-	if counts.acted[planv1.Change_ACTION_CREATE] > 0 && len(counts.acted) == 1 {
-		return "Create these"
-	}
-	return "Apply these changes"
 }

@@ -38,3 +38,18 @@ func TestAHoldPausesTheLiveRegionAndTheResumeRedrawsIt(t *testing.T) {
 		t.Errorf("after the resume, out = %q, want the live region drawn again", out.String())
 	}
 }
+
+func TestAPromptsHoldDrawsNothingOfItsOwnAroundTheQuestion(t *testing.T) {
+	t.Parallel()
+
+	var out safeBuffer
+	sink := newHumanSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth, Height: defaultHeight})
+	t.Cleanup(func() { _ = sink.Close() })
+
+	sink.Receive(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{}}})
+	sink.Receive(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "answered"}}})
+
+	if out.String() != "" {
+		t.Errorf("out = %q, want a prompt's hold and resume silent: the question it holds the terminal for is the only thing drawn", out.String())
+	}
+}

@@ -1,15 +1,11 @@
 package runui
 
 import (
-	"fmt"
-	"sort"
-
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -46,12 +42,6 @@ func normalizeMessage(m protoreflect.Message) {
 		}
 		return true
 	})
-	switch v := m.Interface().(type) {
-	case *planv1.ChangePlan:
-		sortGroups(v)
-	case *planv1.ChangeGroup:
-		sortChanges(v)
-	}
 }
 
 func normalizeList(fd protoreflect.FieldDescriptor, list protoreflect.List) {
@@ -70,20 +60,4 @@ func normalizeValue(fd protoreflect.FieldDescriptor, v protoreflect.Value, set f
 			set(protoreflect.ValueOfString(collapsed))
 		}
 	}
-}
-
-func sortGroups(plan *planv1.ChangePlan) {
-	sort.SliceStable(plan.Groups, func(i, j int) bool {
-		return spineRank(plan.Groups[i].GetKind()) < spineRank(plan.Groups[j].GetKind())
-	})
-}
-
-func sortChanges(group *planv1.ChangeGroup) {
-	sort.SliceStable(group.Changes, func(i, j int) bool {
-		return changeKey(group.Changes[i]) < changeKey(group.Changes[j])
-	})
-}
-
-func changeKey(c *planv1.Change) string {
-	return fmt.Sprintf("%s\x00%s\x00%d", c.GetKind(), c.GetName(), c.GetAction())
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -189,7 +190,7 @@ func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, 
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain use", cfg, false, stdout, nil), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel domain use", cfg, false, stdout, nil), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview"); err != nil {
 			return err
 		}
@@ -278,7 +279,7 @@ func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts d
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel domain release", cfg, opts.yes, stdout, stdin)
+	spec := deps.Spec(consent.PlanFirst, "ocel domain release", cfg, opts.yes, stdout, stdin)
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
@@ -331,7 +332,7 @@ func runDomainAdd(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdo
 	if len(configured) == 0 {
 		return fmt.Errorf("this project declares no domains.production in %s, so there is no production hostname to add: declare one and run `ocel domain add` again — no command edits the config", filepath.Base(cfg.Path))
 	}
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain add", cfg, false, stdout, nil), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel domain add", cfg, false, stdout, nil), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
@@ -362,7 +363,7 @@ func runDomainRm(ctx context.Context, deps cmddeps.Deps, cwd, host string, stdou
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel domain rm", cfg, false, stdout, nil), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel domain rm", cfg, false, stdout, nil), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}

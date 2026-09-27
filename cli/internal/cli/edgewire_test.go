@@ -10,7 +10,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 )
 
 func TestBootstrapSendsTheFeatureSetAndNoEdge(t *testing.T) {
@@ -145,7 +145,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 			t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 			t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-			t.Setenv(runui.BypassEnv, "test-app")
+			t.Setenv(consent.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
 			if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {

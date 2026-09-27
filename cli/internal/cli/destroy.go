@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -31,7 +32,7 @@ var destroyCmd = &cobra.Command{
 		"Either is irreversible and requires typing the project name to confirm; --dry prints " +
 		"what would go and stops.\n\n" +
 		"An automated caller that must tear its own project down unattended passes --yes, or sets " +
-		runui.BypassEnv + " to the project name — and only that name. " +
+		consent.BypassEnv + " to the project name — and only that name. " +
 		"Any other value is not a bypass.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
@@ -106,7 +107,7 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		return err
 	}
 
-	bypass, err := runui.Bypass{
+	bypass, err := consent.Bypass{
 		Noun:    "project",
 		Subject: cfg.Slug,
 		Action:  "destroying production",
@@ -119,9 +120,9 @@ func runDestroyProduction(ctx context.Context, deps cmddeps.Deps, cwd string, ye
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel destroy production", cfg, yes || bypass, stdout, stdin)
+	spec := deps.Spec(consent.PlanFirst, "ocel destroy production", cfg, yes || bypass, stdout, stdin)
 	spec.Dry = dry
-	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", runui.BypassEnv)
+	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
@@ -176,7 +177,7 @@ func runDestroyPreviewProject(ctx context.Context, deps cmddeps.Deps, cwd string
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel destroy preview", cfg, yes, stdout, stdin)
+	spec := deps.Spec(consent.PlanFirst, "ocel destroy preview", cfg, yes, stdout, stdin)
 	spec.Dry = dry
 	spec.Unattended = "pass --yes"
 

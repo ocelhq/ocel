@@ -2,98 +2,41 @@ package runui
 
 import (
 	"context"
-	"fmt"
-	"io"
+	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/prompt"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
-type gate struct {
-	command     string
-	class       Consent
-	yes         bool
-	dry         bool
-	interactive bool
-	unattended  string
-	in          io.Reader
-	out         io.Writer
-	say         func(string)
-}
+func (s *Session) Interactive() bool { return s.gate.Interactive }
 
-func (g gate) refuse() error {
-	if g.class != PlanFirst || g.dry || g.yes || g.interactive {
-		return nil
-	}
-	return g.blocked()
-}
+func (s *Session) Dry() bool { return s.gate.Dry }
 
-func (g gate) blocked() error {
-	remedy := g.unattended
-	if remedy == "" {
-		remedy = "pass --yes"
-	}
-	return fmt.Errorf("`%s` needs a terminal to confirm the plan it shows before applying it; to run it unattended, %s", g.command, remedy)
-}
-
-func (g gate) guard(ctx context.Context, question string) (bool, error) {
-	if g.dry || g.yes || !g.interactive {
-		return true, nil
-	}
-	return g.decide(prompt.New(g.out, g.in).Confirm(ctx, question))
-}
-
-func (g gate) consent(ctx context.Context, ask func(prompt.Prompter) (bool, error)) (bool, error) {
-	if g.yes {
-		return true, nil
-	}
-	if !g.interactive {
-		return false, g.blocked()
-	}
-	return g.decide(ask(prompt.New(g.out, g.in)))
-}
-
-func (s *Session) Interactive() bool { return s.gate.interactive }
-
-func (s *Session) Dry() bool { return s.gate.dry }
-
-func (s *Session) Asking() bool { return s.gate.interactive && !s.gate.yes }
+func (s *Session) Asking() bool { return s.gate.Asking() }
 
 func (s *Session) Guard(ctx context.Context, question string) (bool, error) {
-	resume := s.Suspend()
-	defer resume()
-	return s.gate.guard(ctx, question)
+	return s.gate.Guard(ctx, sessionScope{s}, question)
 }
 
 func (s *Session) Consent(ctx context.Context, question string) (bool, error) {
-	if s.nothingToChange() {
-		return true, nil
-	}
-	resume := s.Suspend()
-	defer resume()
-	return s.gate.consent(ctx, func(p prompt.Prompter) (bool, error) {
-		return p.Confirm(ctx, question)
-	})
+	return s.gate.Consent(ctx, sessionScope{s}, s.shown, question)
 }
 
 func (s *Session) ConsentByName(ctx context.Context, label, name string) (bool, error) {
-	if s.nothingToChange() {
-		return true, nil
-	}
-	resume := s.Suspend()
-	defer resume()
-	return s.gate.consent(ctx, func(p prompt.Prompter) (bool, error) {
-		return p.Phrase(ctx, label, name)
-	})
+	return s.gate.ConsentByName(ctx, sessionScope{s}, s.shown, label, name)
 }
 
-func (s *Session) nothingToChange() bool {
-	return len(s.shown.GetGroups()) > 0 && !Mutates(s.shown)
-}
+type sessionScope struct{ *Session }
 
-func (g gate) decide(granted bool, err error) (bool, error) {
-	if err != nil || granted {
-		return granted, err
+func (h sessionScope) Say(message string) { h.Diagnostic(message) }
+
+func (h sessionScope) Hold(waiting *streamv1.WaitingEvent) func(reason string) {
+	h.waiting = true
+	h.emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: waiting}})
+	var once sync.Once
+	return func(reason string) {
+		once.Do(func() {
+			h.waiting = false
+			h.emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: reason}}})
+		})
 	}
-	g.say("Aborted.")
-	return false, nil
 }

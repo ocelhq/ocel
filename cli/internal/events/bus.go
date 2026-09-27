@@ -55,7 +55,7 @@ func (b *Bus) detach(s Sink) {
 	b.sinks = slices.DeleteFunc(b.sinks, func(attached Sink) bool { return attached == s })
 }
 
-func (b *Bus) Send(ev *streamv1.RunEvent) {
+func (b *Bus) Send(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	if ev.GetTime() == nil {
 		ev.Time = timestamppb.New(b.now())
 	}
@@ -63,11 +63,13 @@ func (b *Bus) Send(ev *streamv1.RunEvent) {
 		ev.Level = progressv1.Level_LEVEL_INFO
 	}
 	shown := withoutSecrets(ev)
+	orderPlan(shown.GetPlan())
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, s := range b.sinks {
 		s.Receive(shown)
 	}
+	return shown
 }
 
 func (b *Bus) Close() error {

@@ -75,8 +75,8 @@ func (s *Scope) Hold(waiting *streamv1.WaitingEvent) (resume func(reason string)
 func (s *Scope) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)
 	drawn.Headline, drawn.Notes = headline, notes
-	s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: drawn}}))
-	return drawn
+	shown := s.run.bus.Send(s.scoped(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: drawn}}))
+	return proto.CloneOf(shown.GetPlan())
 }
 
 func (s *Scope) Identity(identity *streamv1.IdentityEvent) {

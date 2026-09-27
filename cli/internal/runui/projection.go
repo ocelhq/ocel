@@ -54,6 +54,8 @@ type projector struct {
 	orphans    map[string][]blockLine
 	pending    []string
 	orphanLine int
+
+	prompting bool
 }
 
 func newProjector(present Presentation) *projector {
@@ -513,6 +515,10 @@ func (p *projector) identity(m protoreflect.Message) []string {
 
 func (p *projector) waiting(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.WaitingEvent)
+	if ev.GetMissing() == nil && ev.GetUrl() == "" {
+		p.prompting = true
+		return nil
+	}
 	out := append(p.strand(warnMark, "paused"), "")
 	out = append(out, envgate.Lines(ev.GetMissing(), p.missingPaint())...)
 	return append(out,
@@ -528,6 +534,10 @@ func (p *projector) waiting(m protoreflect.Message) []string {
 
 func (p *projector) resumed(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.ResumedEvent)
+	if p.prompting {
+		p.prompting = false
+		return nil
+	}
 	return []string{okMark + " Resumed — " + ev.GetReason(), ""}
 }
 

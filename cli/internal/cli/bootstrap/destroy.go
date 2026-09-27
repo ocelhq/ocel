@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -26,7 +27,7 @@ func RunDestroy(ctx context.Context, deps cmddeps.Deps, cwd string, tier environ
 
 func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier environmentv1.Tier, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
 	name := Name(tier)
-	bypass, err := runui.Bypass{
+	bypass, err := consent.Bypass{
 		Noun:          "bootstrap",
 		Subject:       name,
 		Action:        fmt.Sprintf("removing the %s bootstrap", name),
@@ -40,9 +41,9 @@ func runDestroy(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Confi
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, destroyCommand(tier), cfg, opts.Yes || bypass, stdout, stdin)
+	spec := deps.Spec(consent.PlanFirst, destroyCommand(tier), cfg, opts.Yes || bypass, stdout, stdin)
 	spec.Dry = opts.Dry
-	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to %q", runui.BypassEnv, name)
+	spec.Unattended = fmt.Sprintf("pass --yes, or set %s to %q", consent.BypassEnv, name)
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := preflight.Announce(ctx, ui, runner, cfg, tier); err != nil {

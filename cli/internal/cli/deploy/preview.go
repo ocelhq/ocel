@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -200,7 +201,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 	}
 
-	spec := deps.Spec(runui.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin)
+	spec := deps.Spec(consent.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin)
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
@@ -364,7 +365,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 
 	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview rm", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel preview rm", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if persistent {
 			proceed, err := ui.Guard(ctx, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
 			if err != nil {
@@ -429,7 +430,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := preflightPreview(ctx, ui, runner, cfg); err != nil {
 			return err
 		}

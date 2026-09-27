@@ -1,4 +1,4 @@
-package runui
+package consent
 
 import (
 	"fmt"

@@ -15,14 +15,15 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func recorded(t *testing.T, events ...*streamv1.RunEvent) []*streamv1.RunEvent {
+func recorded(t *testing.T, evs ...*streamv1.RunEvent) []*streamv1.RunEvent {
 	t.Helper()
 	var out safeBuffer
-	s := NewJSONSink(&out)
-	for _, ev := range events {
-		s.Receive(ev)
+	bus := events.NewBus(time.Now)
+	bus.Attach(NewJSONSink(&out))
+	for _, ev := range evs {
+		bus.Send(ev)
 	}
-	if err := s.Close(); err != nil {
+	if err := bus.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 	return parseNDJSON(t, out.String())

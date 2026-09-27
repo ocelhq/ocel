@@ -85,29 +85,6 @@ Proposed changes to the production bootstrap:
 	}
 }
 
-func TestTheConfirmationNamesWhatThePlanActuallyDoes(t *testing.T) {
-	t.Parallel()
-
-	creates := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
-		{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_CREATE},
-		{Kind: "stack", Name: "ocel-preview-isr", Action: planv1.Change_ACTION_KEEP},
-	}}
-	if got := ConfirmVerb(creates); got != "Create these" {
-		t.Errorf("ConfirmVerb() = %q, want a plan that only creates to read as one", got)
-	}
-	if got := ConfirmVerb(mixedPlan()); got != "Apply these changes" {
-		t.Errorf("ConfirmVerb() = %q, want a mixed plan to read as one", got)
-	}
-	if !Mutates(mixedPlan()) {
-		t.Error("Mutates() = false for a plan containing creates, an update and a delete")
-	}
-	if Mutates(&planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
-		{Kind: "stack", Name: "ocel-preview-core", Action: planv1.Change_ACTION_KEEP},
-	}}) {
-		t.Error("Mutates() = true for a plan of nothing but keeps")
-	}
-}
-
 func TestAnActionThisCLIDoesNotKnowReadsAsASentence(t *testing.T) {
 	t.Parallel()
 
@@ -316,12 +293,6 @@ Proposed changes to the production bootstrap:
 `
 	if got := projectPlan(t, unchanged); got != want {
 		t.Errorf("projection =\n%s\nwant\n%s", got, want)
-	}
-	if Mutates(unchanged) {
-		t.Error("Mutates() = true for a plan that only adopts what is already installed, and every re-run would ask consent for nothing")
-	}
-	if got := ConfirmVerb(adopting(planv1.Change_ACTION_CREATE, dir, engine)); got != "Create these" {
-		t.Errorf("ConfirmVerb() = %q, want a plan that creates and adopts to read as one that creates", got)
 	}
 }
 

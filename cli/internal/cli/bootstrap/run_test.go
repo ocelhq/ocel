@@ -14,6 +14,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
@@ -46,7 +47,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(runui.BypassEnv, "production")
+		t.Setenv(consent.BypassEnv, "production")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
@@ -56,8 +57,8 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if strings.Contains(stdout.String(), "Type the environment name") {
 			t.Errorf("stdout = %q, want the bypass to skip the typed phrase", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), runui.BypassEnv) {
-			t.Errorf("stderr = %q, want it to name %s so an unconfirmed teardown is never silent", stderr.String(), runui.BypassEnv)
+		if !strings.Contains(stderr.String(), consent.BypassEnv) {
+			t.Errorf("stderr = %q, want it to name %s so an unconfirmed teardown is never silent", stderr.String(), consent.BypassEnv)
 		}
 	})
 
@@ -66,7 +67,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(runui.BypassEnv, "preview")
+		t.Setenv(consent.BypassEnv, "preview")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{}
@@ -74,7 +75,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the mismatched-bypass refusal")
 		}
-		for _, want := range []string{runui.BypassEnv, "preview", "production"} {
+		for _, want := range []string{consent.BypassEnv, "preview", "production"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}
@@ -176,7 +177,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("RunDestroy err = nil, want the no-terminal refusal")
 		}
-		for _, want := range []string{"needs a terminal", "--yes", runui.BypassEnv} {
+		for _, want := range []string{"needs a terminal", "--yes", consent.BypassEnv} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to name %q", err, want)
 			}

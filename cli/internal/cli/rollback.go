@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -62,7 +63,7 @@ func runRollback(ctx context.Context, deps cmddeps.Deps, cwd string, opts rollba
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel rollback", cfg, opts.yes, stdout, stdin)
+	spec := deps.Spec(consent.PlanFirst, "ocel rollback", cfg, opts.yes, stdout, stdin)
 	spec.Dry = opts.dry
 	spec.Unattended = "pass --yes"
 

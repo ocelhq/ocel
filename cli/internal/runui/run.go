@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -11,16 +12,9 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-type Consent int
-
-const (
-	Convergent Consent = iota
-	PlanFirst
-)
-
 type Spec struct {
 	Command     string
-	Consent     Consent
+	Consent     consent.Class
 	Yes         bool
 	Dry         bool
 	Unattended  string
@@ -46,7 +40,7 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 		return err
 	}
 	g := spec.gate()
-	if err := g.refuse(); err != nil {
+	if err := g.Refuse(); err != nil {
 		return err
 	}
 
@@ -57,7 +51,6 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 	defer run.Close()
 
 	ui := New(spec.Stdout, run, spec.Present)
-	g.say = ui.Diagnostic
 	ui.gate = g
 	defer ui.Close()
 
@@ -76,16 +69,16 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 	return nil
 }
 
-func (s Spec) gate() gate {
-	return gate{
-		command:     s.Command,
-		class:       s.Consent,
-		yes:         s.Yes,
-		dry:         s.Dry,
-		interactive: s.Interactive,
-		unattended:  s.Unattended,
-		in:          s.Stdin,
-		out:         s.Stdout,
+func (s Spec) gate() consent.Gate {
+	return consent.Gate{
+		Command:     s.Command,
+		Class:       s.Consent,
+		Yes:         s.Yes,
+		Dry:         s.Dry,
+		Interactive: s.Interactive,
+		Unattended:  s.Unattended,
+		In:          s.Stdin,
+		Out:         s.Stdout,
 	}
 }
 

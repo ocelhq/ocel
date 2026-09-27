@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
@@ -54,10 +55,10 @@ func Yes(cmd *cobra.Command, into *bool) {
 	cmd.Flags().BoolVarP(into, "yes", "y", false, YesUsage)
 }
 
-func (d Deps) Spec(consent runui.Consent, command string, cfg *projectconfig.Config, yes bool, stdout io.Writer, stdin io.Reader) runui.Spec {
+func (d Deps) Spec(class consent.Class, command string, cfg *projectconfig.Config, yes bool, stdout io.Writer, stdin io.Reader) runui.Spec {
 	return runui.Spec{
 		Command:     command,
-		Consent:     consent,
+		Consent:     class,
 		Yes:         yes,
 		Config:      cfg,
 		Present:     d.Presentation(stdout),

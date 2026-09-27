@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -162,7 +163,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		return err
 	}
 
-	spec := deps.Spec(runui.PlanFirst, "ocel bootstrap "+Name(tier), cfg, opts.Yes, stdout, stdin)
+	spec := deps.Spec(consent.PlanFirst, "ocel bootstrap "+Name(tier), cfg, opts.Yes, stdout, stdin)
 	spec.Dry = opts.Dry
 	spec.Unattended = "pass --yes"
 
@@ -247,7 +248,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		switch {
 		case rendered:
 			var notes []string
-			if !runui.Mutates(plan) {
+			if !consent.Mutates(plan) {
 				notes = append(notes, "No infrastructure changes — applying refreshes bootstrap seals and records.")
 			}
 			consented = ui.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", Name(tier)), plan, notes...)
@@ -284,7 +285,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Name())
 		if rendered {
-			title = fmt.Sprintf("%s with %s?", runui.ConfirmVerb(consented), runner.Name())
+			title = fmt.Sprintf("%s with %s?", consent.ConfirmVerb(consented), runner.Name())
 		}
 		granted, err := ui.Consent(ctx, title)
 		if err != nil || !granted {

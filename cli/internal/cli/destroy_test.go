@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 )
 
 func TestRunDestroyPreviewProject(t *testing.T) {
@@ -132,8 +132,8 @@ func TestRunDestroy(t *testing.T) {
 		if err == nil {
 			t.Fatal("runDestroyProduction without a TTY err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), runui.BypassEnv) {
-			t.Errorf("err = %v, want the no-TTY refusal to name %s, the only way production destroys unattended", err, runui.BypassEnv)
+		if !strings.Contains(err.Error(), consent.BypassEnv) {
+			t.Errorf("err = %v, want the no-TTY refusal to name %s, the only way production destroys unattended", err, consent.BypassEnv)
 		}
 	})
 
@@ -142,7 +142,7 @@ func TestRunDestroy(t *testing.T) {
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(runui.BypassEnv, "test-app")
+		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader(""))
@@ -152,8 +152,8 @@ func TestRunDestroy(t *testing.T) {
 		if strings.Contains(stdout.String(), "Type the project name") {
 			t.Errorf("stdout = %q, want the bypass to skip the typed-name confirmation", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), runui.BypassEnv) {
-			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), runui.BypassEnv)
+		if !strings.Contains(stderr.String(), consent.BypassEnv) {
+			t.Errorf("stderr = %q, want it to name %s so an unconfirmed destroy is never silent", stderr.String(), consent.BypassEnv)
 		}
 	})
 
@@ -164,7 +164,7 @@ func TestRunDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(runui.BypassEnv, "test-app")
+		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -197,7 +197,7 @@ func TestRunDestroy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(runui.BypassEnv, "test-app")
+		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -248,7 +248,7 @@ func TestRunDestroy(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		t.Setenv(clitest.FakeEmptyRemovalPlanEnvVar, "1")
-		t.Setenv(runui.BypassEnv, "test-app")
+		t.Setenv(consent.BypassEnv, "test-app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -271,15 +271,15 @@ func TestRunDestroy(t *testing.T) {
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		t.Setenv(runui.BypassEnv, "1")
+		t.Setenv(consent.BypassEnv, "1")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", runui.BypassEnv, stdout.String())
+			t.Fatalf("runDestroyProduction err = nil, want an ambient %s=1 refused; stdout=%s", consent.BypassEnv, stdout.String())
 		}
-		if !strings.Contains(err.Error(), runui.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
-			t.Errorf("err = %v, want it to name %s and the project", err, runui.BypassEnv)
+		if !strings.Contains(err.Error(), consent.BypassEnv) || !strings.Contains(err.Error(), "test-app") {
+			t.Errorf("err = %v, want it to name %s and the project", err, consent.BypassEnv)
 		}
 	})
 
@@ -287,11 +287,11 @@ func TestRunDestroy(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := newDeps()
 		clitest.SetLoggedIn(&deps)
-		t.Setenv(runui.BypassEnv, "")
+		t.Setenv(consent.BypassEnv, "")
 
 		var stdout, stderr bytes.Buffer
 		err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, &stderr, strings.NewReader(""))
-		if err == nil || !strings.Contains(err.Error(), runui.BypassEnv) {
+		if err == nil || !strings.Contains(err.Error(), consent.BypassEnv) {
 			t.Errorf("err = %v, want the no-TTY refusal", err)
 		}
 	})

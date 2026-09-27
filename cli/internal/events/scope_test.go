@@ -155,6 +155,31 @@ func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsScopesPhaseLeavingTheCallersPla
 	}
 }
 
+func TestThePlanAScopeDrawsIsThePlanEverySinkShowsInSpineOrder(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	plan := &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
+		{Kind: "edge", Name: "cloudflare/edge", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "stack", Name: "aws/ocel-bootstrap", Action: planv1.Change_ACTION_UPDATE, Changes: []*planv1.Change{
+			{Kind: "b", Name: "second", Action: planv1.Change_ACTION_UPDATE},
+			{Kind: "a", Name: "first", Action: planv1.Change_ACTION_CREATE},
+		}},
+	}}
+
+	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Proposed changes", plan)
+
+	shown := sink.received()[1].GetPlan()
+	if !proto.Equal(drawn, shown) {
+		t.Fatalf("the plan the scope hands back is\n%v\nand the plan the sinks show is\n%v", drawn, shown)
+	}
+	if first := drawn.GetGroups()[0].GetKind(); first != "stack" {
+		t.Fatalf("the drawn plan opens on a %q group, want the spine order: stack before edge", first)
+	}
+	if first := drawn.GetGroups()[0].GetChanges()[0].GetName(); first != "first" {
+		t.Errorf("the drawn plan's first row is %q, want rows in kind order", first)
+	}
+}
+
 func TestIdentityReachesTheSinksInItsScopesPhase(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
