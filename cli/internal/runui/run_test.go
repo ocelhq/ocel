@@ -599,7 +599,7 @@ func speakingProvider(stdout, stderr string, fails error) func(context.Context, 
 	}
 }
 
-func TestALineTheProviderProcessWritesIsADebugEventNamingTheProvider(t *testing.T) {
+func TestALineTheProviderProcessWritesIsADebugOutputLineNamingTheProviderAndItsStream(t *testing.T) {
 	var out bytes.Buffer
 	spec := specFor(t, &out)
 	spec.Present = runui.Resolve(runui.Origin{LogFormat: "json"})
@@ -609,10 +609,16 @@ func TestALineTheProviderProcessWritesIsADebugEventNamingTheProvider(t *testing.
 		t.Fatalf("Run() = %v", err)
 	}
 
-	for _, want := range []string{"a line on stdout", "a line on stderr"} {
+	for want, stream := range map[string]progressv1.Stream{
+		"a line on stdout": progressv1.Stream_STREAM_STDOUT,
+		"a line on stderr": progressv1.Stream_STREAM_STDERR,
+	} {
 		ev := eventCarrying(t, out.String(), want)
 		if ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetSubject() != "aws" {
 			t.Errorf("the provider's %q landed as level %s subject %q, want a DEBUG event whose subject is the provider %q", want, ev.GetLevel(), ev.GetSubject(), "aws")
+		}
+		if got := ev.GetOperation().GetOutput(); got == nil || got.GetStream() != stream {
+			t.Errorf("the provider's %q landed as %T on %v, want an output line on %v", want, ev.GetEvent(), got.GetStream(), stream)
 		}
 	}
 }

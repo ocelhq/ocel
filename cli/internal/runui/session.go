@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -57,7 +56,7 @@ type Session struct {
 	buildAttempt int
 
 	build   *lineWriter
-	process atomic.Pointer[lineWriter]
+	process sync.Map
 	scopes  sync.Map
 
 	logMu     sync.Mutex
@@ -104,22 +103,28 @@ func (s *Session) LogPath() string { return s.logPath }
 
 func (s *Session) BuildWriter() io.Writer { return s.build }
 
-func (s *Session) ProcessWriter(provider string) io.Writer {
-	w := &lineWriter{emit: func(line string) { s.processLine(provider, line) }}
-	s.process.Store(w)
+func (s *Session) ProcessWriter(provider string, stream progressv1.Stream) io.Writer {
+	w := &lineWriter{emit: func(line string) { s.processLine(provider, stream, line) }}
+	s.process.Store(stream, w)
 	return w
 }
 
-func (s *Session) processLine(provider, line string) {
+func (s *Session) processLine(provider string, stream progressv1.Stream, line string) {
 	s.logf("[debug] %s: %s", provider, line)
-	s.stream.Emit(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Subject: provider, Message: line})
+	s.stream.Emit(lift(&progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_DEBUG,
+		Subject: provider,
+		Message: line,
+		Event:   &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: stream}},
+	}))
 }
 
 func (s *Session) flushLines() {
 	s.build.flush()
-	if w := s.process.Load(); w != nil {
-		w.flush()
-	}
+	s.process.Range(func(_, w any) bool {
+		w.(*lineWriter).flush()
+		return true
+	})
 }
 
 func (s *Session) buildLine(line string) {

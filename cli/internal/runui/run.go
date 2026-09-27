@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type Consent int
@@ -64,8 +65,9 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 	if spec.Dry {
 		driveProvider = driveDry
 	}
-	provW := ui.ProcessWriter(desc.ID)
-	err = driveProvider(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *providerclient.Runner) error {
+	stdout := ui.ProcessWriter(desc.ID, progressv1.Stream_STREAM_STDOUT)
+	stderr := ui.ProcessWriter(desc.ID, progressv1.Stream_STREAM_STDERR)
+	err = driveProvider(ctx, spec.Config, stdout, stderr, TrustFor(spec.Trust, ui), func(runner *providerclient.Runner) error {
 		return body(ctx, runner, ui)
 	})
 	if err != nil {

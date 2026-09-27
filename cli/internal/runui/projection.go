@@ -83,6 +83,8 @@ func (p *projector) project(ev *streamv1.RunEvent) []string {
 		return p.started(ev, op.GetStarted())
 	case op.GetEnded() != nil:
 		return p.ended(ev, op.GetEnded())
+	case op.GetOutput() != nil && len(ev.GetSpanId()) == 0:
+		return p.message(ev)
 	case op.GetOutput() != nil:
 		return p.buffer(ev.GetSpanId(), ev.GetMessage(), true)
 	case op.GetCounter() != nil:

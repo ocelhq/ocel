@@ -111,7 +111,7 @@ func TestAnInterruptTakesTheLiveFrameBackAndFlushesWhatWasInFlight(t *testing.T)
 	t.Cleanup(func() { _ = s.Close() })
 	s.Event(declareProvisioning())
 	s.Event(progress("provisioning the account"))
-	if _, err := s.ProcessWriter("aws").Write([]byte("a line the run never finished")); err != nil {
+	if _, err := s.ProcessWriter("aws", progressv1.Stream_STREAM_STDOUT).Write([]byte("a line the run never finished")); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
 
@@ -702,7 +702,7 @@ func TestProviderProcessOutputShowsOnlyWhenVerboseAndNeverEntersABlock(t *testin
 			const marker = "raw subprocess output"
 			s.Event(declareProvisioning())
 			s.Event(progress("a line the phase owns"))
-			if _, err := s.ProcessWriter("aws").Write([]byte(marker + "\n")); err != nil {
+			if _, err := s.ProcessWriter("aws", progressv1.Stream_STREAM_STDOUT).Write([]byte(marker + "\n")); err != nil {
 				t.Fatalf("Write() = %v", err)
 			}
 			s.Event(closeProvisioning())
