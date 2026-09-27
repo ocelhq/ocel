@@ -40,7 +40,8 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 }
 
 func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) error {
-	if _, err := spec.Config.RequireProvider(); err != nil {
+	desc, err := spec.Config.RequireProvider()
+	if err != nil {
 		return err
 	}
 	g := spec.gate()
@@ -63,7 +64,7 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 	if spec.Dry {
 		driveProvider = driveDry
 	}
-	provW := ui.ProcessWriter()
+	provW := ui.ProcessWriter(desc.ID)
 	err = driveProvider(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *providerclient.Runner) error {
 		return body(ctx, runner, ui)
 	})

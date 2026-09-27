@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func TestMain(m *testing.M) {
@@ -585,4 +586,64 @@ func shownPlan(t *testing.T, stream string) *planv1.ChangePlan {
 	}
 	t.Fatal("the run put no plan on the stream")
 	return nil
+}
+
+func speakingProvider(stdout, stderr string, fails error) func(context.Context, *projectconfig.Config, io.Writer, io.Writer, providerclient.Trust, func(*providerclient.Runner) error) error {
+	return func(_ context.Context, _ *projectconfig.Config, out, errOut io.Writer, _ providerclient.Trust, fn func(*providerclient.Runner) error) error {
+		_, _ = io.WriteString(out, stdout+"\n")
+		_, _ = io.WriteString(errOut, stderr+"\n")
+		if fails != nil {
+			return fails
+		}
+		return fn(nil)
+	}
+}
+
+func TestALineTheProviderProcessWritesIsADebugEventNamingTheProvider(t *testing.T) {
+	var out bytes.Buffer
+	spec := specFor(t, &out)
+	spec.Present = runui.Resolve(runui.Origin{LogFormat: "json"})
+
+	drive := speakingProvider("a line on stdout", "a line on stderr", nil)
+	if err := runui.RunDriving(context.Background(), spec, (&fakeBody{}).run, drive, drive); err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+
+	for _, want := range []string{"a line on stdout", "a line on stderr"} {
+		ev := eventCarrying(t, out.String(), want)
+		if ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetSubject() != "aws" {
+			t.Errorf("the provider's %q landed as level %s subject %q, want a DEBUG event whose subject is the provider %q", want, ev.GetLevel(), ev.GetSubject(), "aws")
+		}
+	}
+}
+
+func eventCarrying(t *testing.T, stream, message string) *streamv1.RunEvent {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(stream), "\n") {
+		var ev streamv1.RunEvent
+		if err := protojson.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("protojson.Unmarshal(%q) = %v", line, err)
+		}
+		if ev.GetMessage() == message {
+			return &ev
+		}
+	}
+	t.Fatalf("stream = %q, want an event whose message is %q", stream, message)
+	return nil
+}
+
+func TestAProviderThatDiesBeforeReadyStillShowsItsStderrInTheFailure(t *testing.T) {
+	var out bytes.Buffer
+	spec := specFor(t, &out)
+
+	crash := "panic: the provider could not read its credentials"
+	drive := speakingProvider("", crash, &providerclient.EarlyExitError{Stderr: crash})
+	err := runui.RunDriving(context.Background(), spec, (&fakeBody{}).run, drive, drive)
+
+	if code, ok := exitsig.ExitCode(err); !ok || code != 1 {
+		t.Fatalf("Run() = %v (exit code %d), want the failure exit code 1", err, code)
+	}
+	if got := strings.Count(out.String(), crash); got != 1 {
+		t.Errorf("stdout = %q shows the provider's stderr %d times, want it once, in the failure, though its raw output is debug", out.String(), got)
+	}
 }

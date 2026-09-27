@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -56,7 +57,7 @@ type Session struct {
 	buildAttempt int
 
 	build   *lineWriter
-	process *lineWriter
+	process atomic.Pointer[lineWriter]
 
 	logMu     sync.Mutex
 	log       *os.File
@@ -86,7 +87,6 @@ func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 		start:   time.Now(),
 	}
 	s.build = &lineWriter{emit: s.buildLine}
-	s.process = &lineWriter{emit: s.Diagnostic}
 	p := filepath.Join(run.Dir(), run.TraceID()+".log")
 	if f, err := os.Create(p); err == nil {
 		s.log = f
@@ -103,7 +103,23 @@ func (s *Session) LogPath() string { return s.logPath }
 
 func (s *Session) BuildWriter() io.Writer { return s.build }
 
-func (s *Session) ProcessWriter() io.Writer { return s.process }
+func (s *Session) ProcessWriter(provider string) io.Writer {
+	w := &lineWriter{emit: func(line string) { s.processLine(provider, line) }}
+	s.process.Store(w)
+	return w
+}
+
+func (s *Session) processLine(provider, line string) {
+	s.logf("[debug] %s: %s", provider, line)
+	s.stream.Emit(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_DEBUG, Subject: provider, Message: line})
+}
+
+func (s *Session) flushLines() {
+	s.build.flush()
+	if w := s.process.Load(); w != nil {
+		w.flush()
+	}
+}
 
 func (s *Session) buildLine(line string) {
 	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Message: line, Event: &progressv1.OperationEvent_Log{
@@ -374,8 +390,7 @@ func (s *Session) Cancel() {
 }
 
 func (s *Session) result(ev *streamv1.RunResultEvent) {
-	s.build.flush()
-	s.process.flush()
+	s.flushLines()
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
 	ev.Apps = s.apps
@@ -397,8 +412,7 @@ func (s *Session) interrupt() {
 
 func (s *Session) shutdown() error {
 	liveSessions.Delete(s)
-	s.build.flush()
-	s.process.flush()
+	s.flushLines()
 	_ = s.stream.Close()
 	if s.log != nil {
 		return s.log.Close()

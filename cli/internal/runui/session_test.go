@@ -105,10 +105,13 @@ func liveSession(t *testing.T) (*Session, *safeBuffer) {
 func TestAnInterruptTakesTheLiveFrameBackAndFlushesWhatWasInFlight(t *testing.T) {
 	t.Parallel()
 
-	s, out := liveSession(t)
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatHuman, TTY: true, Verbose: true, Width: defaultWidth, Height: defaultHeight})
+	t.Cleanup(func() { _ = s.Close() })
 	s.Event(declareProvisioning())
 	s.Event(progress("provisioning the account"))
-	if _, err := s.ProcessWriter().Write([]byte("a line the run never finished")); err != nil {
+	if _, err := s.ProcessWriter("aws").Write([]byte("a line the run never finished")); err != nil {
 		t.Fatalf("Write() = %v", err)
 	}
 
@@ -676,16 +679,17 @@ func traceSpanAttrs(t *testing.T, run *runtrace.Run, spanName string) []traceAtt
 	return nil
 }
 
-func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testing.T) {
+func TestProviderProcessOutputShowsOnlyWhenVerboseAndNeverEntersABlock(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		origin Origin
+		shown  bool
 	}{
-		{"a terminal", Origin{LogFormat: "human", TTY: true}},
-		{"a terminal with --verbose", Origin{LogFormat: "human", TTY: true, Verbose: true}},
-		{"a pipe", Origin{LogFormat: "human"}},
-		{"a pipe with --verbose", Origin{LogFormat: "human", Verbose: true}},
+		{"a terminal", Origin{LogFormat: "human", TTY: true}, false},
+		{"a terminal with --verbose", Origin{LogFormat: "human", TTY: true, Verbose: true}, true},
+		{"a pipe", Origin{LogFormat: "human"}, false},
+		{"a pipe with --verbose", Origin{LogFormat: "human", Verbose: true}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -698,23 +702,23 @@ func TestProviderProcessOutputRidesTheDiagnosticArmAndNeverEntersABlock(t *testi
 			const marker = "raw subprocess output"
 			s.Event(declareProvisioning())
 			s.Event(progress("a line the phase owns"))
-			if _, err := s.ProcessWriter().Write([]byte(marker + "\n")); err != nil {
+			if _, err := s.ProcessWriter("aws").Write([]byte(marker + "\n")); err != nil {
 				t.Fatalf("Write() = %v", err)
 			}
 			s.Event(closeProvisioning())
 
 			got := scrollback(out.String())
-			if !strings.Contains(got, marker+"\n") {
-				t.Errorf("stdout = %q, want provider process output committed on the diagnostic arm at every verbosity", got)
+			if shown := strings.Contains(got, marker+"\n"); shown != tc.shown {
+				t.Errorf("stdout = %q, shows the provider process output = %v, want %v: it is debug output", got, shown, tc.shown)
 			}
 			if strings.Contains(got, blockIndent+marker) {
 				t.Errorf("stdout = %q, want global text kept out of the phase block, which belongs to the unit", got)
 			}
-			if at, block := strings.Index(got, marker), strings.Index(got, blockIndent+"a line the phase owns"); at > block {
-				t.Errorf("stdout = %q, want the diagnostic committed as it landed, before the block it interrupted flushed", got)
+			if at, block := strings.Index(got, marker), strings.Index(got, blockIndent+"a line the phase owns"); tc.shown && at > block {
+				t.Errorf("stdout = %q, want the line committed as it landed, before the block it interrupted flushed", got)
 			}
-			if log := readLog(t, s.LogPath()); !strings.Contains(log, marker) {
-				t.Errorf("log file = %q, want the raw output always recorded regardless of verbosity", log)
+			if log := readLog(t, s.LogPath()); !strings.Contains(log, "aws: "+marker) {
+				t.Errorf("log file = %q, want the raw output always recorded under the provider's name regardless of verbosity", log)
 			}
 		})
 	}
