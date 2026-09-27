@@ -352,7 +352,7 @@ func runEvents(t *testing.T, out string) []*streamv1.RunEvent {
 	return evs
 }
 
-func TestRollbackTarget(t *testing.T) {
+func TestARollbackGoesToThePromotionBeforeTheLiveOneAndRefusesWhenThereIsNoneToName(t *testing.T) {
 	entry := func(id, tag string, active bool) *contractv1.PromotionHistoryEntry {
 		return &contractv1.PromotionHistoryEntry{
 			Promotion: &contractv1.Promotion{PromotionId: id, Tag: tag},
