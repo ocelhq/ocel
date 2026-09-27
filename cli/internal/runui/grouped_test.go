@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/events"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -21,7 +22,7 @@ func groupedRun(t *testing.T, present Presentation) (*events.Run, *bytes.Buffer,
 	t.Helper()
 	var out bytes.Buffer
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
-	_, run := onABus(t, context.Background(), c.now, NewGroupedSink(&out, present))
+	_, run := onABus(t, context.Background(), c.now, newGroupedSink(&out, present, nil))
 	return run, &out, c
 }
 
@@ -223,7 +224,7 @@ func TestAUnitStillOpenWhenTheSinkClosesPrintsWhatItBufferedAsUnfinished(t *test
 	t.Parallel()
 
 	var out bytes.Buffer
-	sink := NewGroupedSink(&out, Presentation{})
+	sink := newGroupedSink(&out, Presentation{}, nil)
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	_, run := onABus(t, context.Background(), c.now, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
@@ -263,6 +264,130 @@ func TestWhatAUnitsChildScopesSayBelongsToTheUnitsBlock(t *testing.T) {
 		"\n" +
 		"    creating bucket assets\n"
 	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func heartbeatRun(t *testing.T) (*events.Run, *GroupedSink, chan<- time.Time, *bytes.Buffer, *clock) {
+	t.Helper()
+	var out bytes.Buffer
+	ticks := make(chan time.Time)
+	sink := newGroupedSink(&out, Presentation{}, ticks)
+	c := &clock{at: time.Unix(1_700_000_000, 0)}
+	_, run := onABus(t, context.Background(), c.now, sink)
+	return run, sink, ticks, &out, c
+}
+
+func closed(t *testing.T, sink *GroupedSink, out *bytes.Buffer) string {
+	t.Helper()
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	return out.String()
+}
+
+func TestThirtySecondsOfSilencePrintsAHeartbeatNamingWhatIsStillRunning(t *testing.T) {
+	t.Parallel()
+
+	run, sink, ticks, out, c := heartbeatRun(t)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	build.Unit("web", "Building web")
+	build.Unit("api", "Building api")
+	start := c.now()
+	ticks <- start.Add(29 * time.Second)
+	ticks <- start.Add(30 * time.Second)
+
+	want := "INFO  [build] Still building web, api — 0/2 done, 30s elapsed\n" +
+		"WARN  [build] web: Building web did not finish\n" +
+		"WARN  [build] api: Building api did not finish\n"
+	if got := closed(t, sink, out); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheNextHeartbeatComesSixtySecondsLater(t *testing.T) {
+	t.Parallel()
+
+	run, sink, ticks, out, c := heartbeatRun(t)
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("api", "deploying api")
+	start := c.now()
+	ticks <- start.Add(30 * time.Second)
+	ticks <- start.Add(89 * time.Second)
+	ticks <- start.Add(90 * time.Second)
+
+	want := "INFO  [deploy] Still deploying api — 0/1 done, 30s elapsed\n" +
+		"INFO  [deploy] Still deploying api — 0/1 done, 1m30s elapsed\n" +
+		"WARN  [deploy] api: deploying api did not finish\n"
+	if got := closed(t, sink, out); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestAPrintedLineRestartsTheSilence(t *testing.T) {
+	t.Parallel()
+
+	run, sink, ticks, out, c := heartbeatRun(t)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	web := build.Unit("web", "Building web")
+	build.Unit("api", "Building api")
+	start := c.now()
+	c.pass(30 * time.Second)
+	web.End(nil)
+	ticks <- start.Add(59 * time.Second)
+	ticks <- start.Add(60 * time.Second)
+
+	want := "INFO  [build] ✓ web: Building web in 30s\n" +
+		"INFO  [build] Still building api — 1/2 done, 1m00s elapsed\n" +
+		"WARN  [build] api: Building api did not finish\n"
+	if got := closed(t, sink, out); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestSilenceWithNothingRunningPrintsNoHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	run, sink, ticks, out, c := heartbeatRun(t)
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	c.pass(time.Second)
+	web.End(nil)
+	ticks <- c.now().Add(5 * time.Minute)
+
+	want := "INFO  [build] ✓ web: Building web in 1s\n"
+	if got := closed(t, sink, out); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestNoHeartbeatPrintsWhileTheRunWaitsOnSomeone(t *testing.T) {
+	t.Parallel()
+
+	run, sink, ticks, out, c := heartbeatRun(t)
+	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	run.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/vars"})
+	ticks <- c.now().Add(5 * time.Minute)
+
+	want := "WARN  [build] web: Building web did not finish\n"
+	if got := closed(t, sink, out); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheSilenceRestartsWhenTheRunResumes(t *testing.T) {
+	t.Parallel()
+
+	run, sink, ticks, out, c := heartbeatRun(t)
+	run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	resume := run.Hold(&streamv1.WaitingEvent{Url: "https://ocel.dev/vars"})
+	start := c.now()
+	c.pass(2 * time.Minute)
+	resume("every variable is set")
+	ticks <- start.Add(2*time.Minute + 29*time.Second)
+	ticks <- start.Add(2*time.Minute + 30*time.Second)
+
+	want := "INFO  [build] Still building web — 0/1 done, 2m30s elapsed\n" +
+		"WARN  [build] web: Building web did not finish\n"
+	if got := closed(t, sink, out); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }

@@ -1,12 +1,14 @@
 package runui
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"maps"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -14,18 +16,45 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-const verbatimIndent = "    "
+const (
+	verbatimIndent = "    "
+	heartbeatAfter = 30 * time.Second
+	heartbeatEvery = 60 * time.Second
+)
+
+var phaseGerunds = map[progressv1.Phase]string{
+	progressv1.Phase_PHASE_CHECK:     "checking",
+	progressv1.Phase_PHASE_BUILD:     "building",
+	progressv1.Phase_PHASE_PLAN:      "planning",
+	progressv1.Phase_PHASE_PROVISION: "provisioning",
+	progressv1.Phase_PHASE_DEPLOY:    "deploying",
+	progressv1.Phase_PHASE_PROMOTE:   "promoting",
+	progressv1.Phase_PHASE_DESTROY:   "destroying",
+}
 
 type GroupedSink struct {
 	w       io.Writer
 	present Presentation
 
-	mu       sync.Mutex
-	units    map[string]*unitBlock
-	started  []string
-	owners   map[string]string
-	verbatim bool
-	failed   bool
+	mu           sync.Mutex
+	units        map[string]*unitBlock
+	started      []string
+	owners       map[string]string
+	verbatim     bool
+	failed       bool
+	tallies      map[progressv1.Phase]*phaseTally
+	beatAt       time.Time
+	silenceBroke bool
+	held         bool
+
+	stopBeats func()
+	stopTicks func()
+	beating   chan struct{}
+}
+
+type phaseTally struct {
+	since       time.Time
+	units, done int
 }
 
 type unitBlock struct {
@@ -34,23 +63,81 @@ type unitBlock struct {
 }
 
 func NewGroupedSink(w io.Writer, present Presentation) *GroupedSink {
-	return &GroupedSink{
-		w:       w,
-		present: present,
-		units:   make(map[string]*unitBlock),
-		owners:  make(map[string]string),
+	ticker := time.NewTicker(time.Second)
+	s := newGroupedSink(w, present, ticker.C)
+	s.stopTicks = ticker.Stop
+	return s
+}
+
+func newGroupedSink(w io.Writer, present Presentation, ticks <-chan time.Time) *GroupedSink {
+	stop := make(chan struct{})
+	s := &GroupedSink{
+		w:         w,
+		present:   present,
+		units:     make(map[string]*unitBlock),
+		owners:    make(map[string]string),
+		tallies:   make(map[progressv1.Phase]*phaseTally),
+		stopBeats: sync.OnceFunc(func() { close(stop) }),
+		stopTicks: func() {},
+		beating:   make(chan struct{}),
 	}
+	go s.beatOn(ticks, stop)
+	return s
+}
+
+func (s *GroupedSink) beatOn(ticks <-chan time.Time, stop <-chan struct{}) {
+	defer close(s.beating)
+	for {
+		select {
+		case <-stop:
+			return
+		case at := <-ticks:
+			s.beat(at)
+		}
+	}
+}
+
+func (s *GroupedSink) beat(at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.held || len(s.started) == 0 || at.Before(s.beatAt) {
+		return
+	}
+	var phases []progressv1.Phase
+	running := map[progressv1.Phase][]string{}
+	for _, span := range s.started {
+		opened := s.units[span].opened
+		phase := opened.GetPhase()
+		if running[phase] == nil {
+			phases = append(phases, phase)
+		}
+		running[phase] = append(running[phase], cmp.Or(opened.GetSubject(), opened.GetMessage()))
+	}
+	for _, phase := range phases {
+		tally := s.tallies[phase]
+		message := fmt.Sprintf("Still %s %s — %d/%d done, %s elapsed",
+			phaseGerunds[phase], strings.Join(running[phase], ", "), tally.done, tally.units, formatDuration(at.Sub(tally.since)))
+		s.print(blockLine{text: line{level: progressv1.Level_LEVEL_INFO, phase: phase, message: message}.render(s.present)})
+	}
+	s.beatAt = at.Add(heartbeatEvery)
 }
 
 func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.silenceBroke = false
+	defer s.heard(ev)
 	span := stageKey(ev.GetSpanId())
 	switch {
 	case ev.GetStarted() != nil:
 		s.open(span, ev)
 	case ev.GetEnded() != nil:
 		s.end(span, ev)
+	case ev.GetWaiting() != nil:
+		s.held = true
+	case ev.GetResumed() != nil:
+		s.held = false
+		s.silenceBroke = true
 	case ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !s.present.Verbose:
 	case ev.GetOutput() != nil:
 		s.within(span, blockLine{text: ev.GetMessage(), raw: true}, blockLine{text: ev.GetMessage(), raw: true})
@@ -60,6 +147,12 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 		s.within(span, s.detail(counted), blockLine{text: lineOf(counted).render(s.present)})
 	case ev.GetBody() == nil && ev.GetMessage() != "":
 		s.within(span, s.detail(ev), blockLine{text: lineOf(ev).render(s.present)})
+	}
+}
+
+func (s *GroupedSink) heard(ev *streamv1.RunEvent) {
+	if s.silenceBroke || s.beatAt.IsZero() {
+		s.beatAt = ev.GetTime().AsTime().Add(heartbeatAfter)
 	}
 }
 
@@ -87,6 +180,7 @@ func (s *GroupedSink) open(span string, ev *streamv1.RunEvent) {
 		s.owners[span] = s.owners[parent]
 	default:
 		s.units[span] = &unitBlock{opened: ev}
+		s.tally(ev).units++
 		s.started = append(s.started, span)
 		s.owners[span] = span
 	}
@@ -98,6 +192,7 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 		return
 	}
 	s.forget(span)
+	s.tally(unit.opened).done++
 	ended := ev.GetEnded()
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
@@ -115,8 +210,18 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	s.failed = s.failed || failed
 }
 
+func (s *GroupedSink) tally(opened *streamv1.RunEvent) *phaseTally {
+	tally := s.tallies[opened.GetPhase()]
+	if tally == nil {
+		tally = &phaseTally{since: opened.GetTime().AsTime()}
+		s.tallies[opened.GetPhase()] = tally
+	}
+	return tally
+}
+
 func (s *GroupedSink) print(lines ...blockLine) {
 	for _, l := range lines {
+		s.silenceBroke = true
 		if l.raw != s.verbatim {
 			fmt.Fprintln(s.w)
 		}
@@ -146,6 +251,9 @@ func (u *unitBlock) header(level progressv1.Level, ends progressv1.SpanStatus, m
 }
 
 func (s *GroupedSink) Close() error {
+	s.stopTicks()
+	s.stopBeats()
+	<-s.beating
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, span := range slices.Clone(s.started) {
