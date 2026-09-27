@@ -76,7 +76,7 @@ func TestACredentialReferencedFromAProjectMustBeOneThatProjectStoresItself(t *te
 		t.Fatalf("ReadCredential() borrowing from a project on ocel's own store = %v", err)
 	}
 
-	if err := envsource.Register(ctx, store.Records, edge.ClassProduction, infisicalRegistration("shared", "https://infisical.example.com", universal, "")); err != nil {
+	if _, err := envsource.Register(ctx, store, edge.ClassProduction, infisicalRegistration("shared", "https://infisical.example.com", universal, "")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{}); err != nil {
@@ -114,20 +114,28 @@ func TestProjectsReadingOneSourceWithOneCredentialShareADedupeKey(t *testing.T) 
 	}
 	setCredentials(t, store, "solo", "id", "secret")
 	descriptor := infisicalRegistration("", "https://infisical.example.com", universal, "").Descriptor
-	shop := envsource.DedupeKey(ctx, store, scopeOf("shop"), descriptor)
-	if admin := envsource.DedupeKey(ctx, store, scopeOf("admin"), descriptor); admin != shop {
+	key := func(project string, descriptor envsource.Descriptor) string {
+		t.Helper()
+		key, err := envsource.DedupeKey(ctx, store, scopeOf(project), descriptor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return key
+	}
+	shop := key("shop", descriptor)
+	if admin := key("admin", descriptor); admin != shop {
 		t.Errorf("admin and shop borrow one credential, and their keys differ: %q, %q", admin, shop)
 	}
-	if solo := envsource.DedupeKey(ctx, store, scopeOf("solo"), descriptor); solo == shop {
+	if solo := key("solo", descriptor); solo == shop {
 		t.Error("solo stores its own credential, and shares shop's key")
 	}
 
 	identity := infisicalRegistration("", "https://infisical.example.com", cloudIdentity, "").Descriptor
-	if envsource.DedupeKey(ctx, store, scopeOf("shop"), identity) != envsource.DedupeKey(ctx, store, scopeOf("admin"), identity) {
+	if key("shop", identity) != key("admin", identity) {
 		t.Error("two projects signing in as one cloud identity have different keys")
 	}
 	other := infisicalRegistration("", "https://infisical.example.com", envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "identity-2"}, "").Descriptor
-	if envsource.DedupeKey(ctx, store, scopeOf("shop"), identity) == envsource.DedupeKey(ctx, store, scopeOf("shop"), other) {
+	if key("shop", identity) == key("shop", other) {
 		t.Error("two cloud identities share a key")
 	}
 }

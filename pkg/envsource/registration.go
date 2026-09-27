@@ -19,6 +19,7 @@ type Registration struct {
 	Project    string     `json:"project"`
 	Descriptor Descriptor `json:"descriptor"`
 	Folders    []string   `json:"folders"`
+	DedupeKey  string     `json:"dedupeKey"`
 }
 
 func (r Registration) Credentials() []envvars.Cell {
@@ -33,29 +34,80 @@ func registrationName(class edge.Class, project string) records.Name {
 	return records.Name{records.RootEnvSources, string(class), project}
 }
 
-func Register(ctx context.Context, store records.Store, class edge.Class, registration Registration) error {
+func Register(ctx context.Context, store envvars.Store, class edge.Class, registration Registration) (Registration, error) {
+	key, err := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Class: class}, registration.Descriptor)
+	if err != nil {
+		return Registration{}, err
+	}
+	registration.DedupeKey = key
 	registration.Folders = slices.Compact(slices.Sorted(slices.Values(registration.Folders)))
 	encoded, err := json.Marshal(registration)
 	if err != nil {
-		return err
+		return Registration{}, err
 	}
 	name := registrationName(class, registration.Project)
 	for range registerAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store, name)
+		recorded, err := records.ReadOrEmpty(ctx, store.Records, name)
 		if err != nil {
-			return err
+			return Registration{}, err
+		}
+		previous, err := registrationOf(recorded)
+		if err != nil {
+			return Registration{}, err
 		}
 		recorded.Bytes = encoded
-		_, err = store.Write(ctx, recorded)
-		if !errors.Is(err, records.ErrStale) {
-			return err
+		_, err = store.Records.Write(ctx, recorded)
+		if errors.Is(err, records.ErrStale) {
+			continue
 		}
+		if err != nil {
+			return Registration{}, err
+		}
+		return registration, moveSharer(ctx, store.Records, class, registration.Project, previous.DedupeKey, key)
 	}
-	return fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
+	return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
 }
 
-func Unregister(ctx context.Context, store records.Store, class edge.Class, project string) error {
-	return records.Forget(ctx, store, registrationName(class, project))
+func rekey(ctx context.Context, store envvars.Store, class edge.Class, project string) error {
+	recorded, err := store.Records.Read(ctx, registrationName(class, project))
+	if errors.Is(err, records.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	current, err := registrationOf(recorded)
+	if err != nil {
+		return err
+	}
+	key, err := DedupeKey(ctx, store, envvars.Scope{Project: project, Class: class}, current.Descriptor)
+	if err != nil || key == current.DedupeKey {
+		return err
+	}
+	previous := current.DedupeKey
+	current.DedupeKey = key
+	if recorded.Bytes, err = json.Marshal(current); err != nil {
+		return err
+	}
+	_, err = store.Records.Write(ctx, recorded)
+	if errors.Is(err, records.ErrStale) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return moveSharer(ctx, store.Records, class, project, previous, key)
+}
+
+func registrationOf(recorded records.Record) (Registration, error) {
+	var out Registration
+	if len(recorded.Bytes) == 0 {
+		return out, nil
+	}
+	if err := json.Unmarshal(recorded.Bytes, &out); err != nil {
+		return Registration{}, fmt.Errorf("read %s: %w", recorded.Name, err)
+	}
+	return out, nil
 }
 
 func Registered(ctx context.Context, store records.Store, class edge.Class, project string) (Registration, bool, error) {
@@ -66,9 +118,9 @@ func Registered(ctx context.Context, store records.Store, class edge.Class, proj
 	if err != nil {
 		return Registration{}, false, err
 	}
-	var out Registration
-	if err := json.Unmarshal(recorded.Bytes, &out); err != nil {
-		return Registration{}, false, fmt.Errorf("read %s's env source registration: %w", project, err)
+	out, err := registrationOf(recorded)
+	if err != nil {
+		return Registration{}, false, err
 	}
 	return out, true, nil
 }

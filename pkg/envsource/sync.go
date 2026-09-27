@@ -81,17 +81,21 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	}
 	var keys []string
 	groups := map[string][]Registration{}
+	var failed []error
 	for _, registration := range registrations {
 		if !registration.Descriptor.IsScheduled() {
 			continue
 		}
-		key := DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor)
+		key, err := s.keyOf(ctx, registration)
+		if err != nil {
+			failed = append(failed, err)
+			continue
+		}
 		if _, seen := groups[key]; !seen {
 			keys = append(keys, key)
 		}
 		groups[key] = append(groups[key], registration)
 	}
-	var failed []error
 	due := make([]string, 0, len(keys))
 	attemptedAt := map[string]time.Time{}
 	for _, key := range keys {
@@ -128,7 +132,10 @@ func (s *Sync) CopyProject(ctx context.Context, registration Registration) (Copy
 }
 
 func (s *Sync) CopyProjectFrom(ctx context.Context, registration Registration, source Source) (CopyResult, error) {
-	key := DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor)
+	key, err := s.keyOf(ctx, registration)
+	if err != nil {
+		return CopyResult{}, err
+	}
 	results, failure, err := s.copyGroup(ctx, key, []Registration{registration}, source)
 	if failure != nil {
 		return CopyResult{}, failure
@@ -140,7 +147,22 @@ func (s *Sync) CopyProjectFrom(ctx context.Context, registration Registration, s
 }
 
 func (s *Sync) Open(ctx context.Context, registration Registration) (Source, error) {
-	return s.open(ctx, DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor), registration)
+	key, err := s.keyOf(ctx, registration)
+	if err != nil {
+		return nil, err
+	}
+	return s.open(ctx, key, registration)
+}
+
+func (s *Sync) keyOf(ctx context.Context, registration Registration) (string, error) {
+	key, err := DedupeKey(ctx, s.Store, s.scope(registration), registration.Descriptor)
+	if err != nil || key == registration.DedupeKey {
+		return key, err
+	}
+	if err := rekey(ctx, s.Store, s.Class, registration.Project); err != nil {
+		return "", err
+	}
+	return key, nil
 }
 
 func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, error, error) {

@@ -17,6 +17,7 @@ import (
 const (
 	statusAttempts      = 3
 	statusNameHashBytes = 16
+	sharersSegment      = "projects"
 )
 
 type Status struct {
@@ -34,8 +35,15 @@ func statusName(class edge.Class, dedupeKey string) records.Name {
 	return records.Name{records.RootEnvSourceStatus, string(class), hex.EncodeToString(sum[:statusNameHashBytes])}
 }
 
+func sharersName(class edge.Class, dedupeKey string) records.Name {
+	return append(statusName(class, dedupeKey), sharersSegment)
+}
+
 func StatusOf(ctx context.Context, store envvars.Store, class edge.Class, registration Registration) (Status, error) {
-	key := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Class: class}, registration.Descriptor)
+	key, err := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Class: class}, registration.Descriptor)
+	if err != nil {
+		return Status{}, err
+	}
 	status, _, err := readStatus(ctx, store.Records, class, key)
 	return status, err
 }
@@ -79,18 +87,39 @@ func ForgetProject(ctx context.Context, store envvars.Store, class edge.Class, p
 	if err != nil || !registered {
 		return err
 	}
-	key := DedupeKey(ctx, store, envvars.Scope{Project: project, Class: class}, registration.Descriptor)
-	if err := Unregister(ctx, store.Records, class, project); err != nil {
+	if err := records.Forget(ctx, store.Records, registrationName(class, project)); err != nil {
 		return err
 	}
-	others, err := Registrations(ctx, store.Records, class)
+	return release(ctx, store.Records, class, registration.DedupeKey, project)
+}
+
+func moveSharer(ctx context.Context, store records.Store, class edge.Class, project, from, to string) error {
+	marker, err := records.ReadOrEmpty(ctx, store, append(sharersName(class, to), project))
 	if err != nil {
 		return err
 	}
-	for _, other := range others {
-		if DedupeKey(ctx, store, envvars.Scope{Project: other.Project, Class: class}, other.Descriptor) == key {
-			return nil
+	if marker.Revision == "" {
+		marker.Bytes = []byte(project)
+		if _, err := store.Write(ctx, marker); err != nil && !errors.Is(err, records.ErrStale) {
+			return err
 		}
 	}
-	return records.Forget(ctx, store.Records, statusName(class, key))
+	if from == "" || from == to {
+		return nil
+	}
+	return release(ctx, store, class, from, project)
+}
+
+func release(ctx context.Context, store records.Store, class edge.Class, dedupeKey, project string) error {
+	if dedupeKey == "" {
+		return nil
+	}
+	if err := records.Forget(ctx, store, append(sharersName(class, dedupeKey), project)); err != nil {
+		return err
+	}
+	sharers, err := store.List(ctx, sharersName(class, dedupeKey))
+	if err != nil || len(sharers) > 0 {
+		return err
+	}
+	return records.Forget(ctx, store, statusName(class, dedupeKey))
 }

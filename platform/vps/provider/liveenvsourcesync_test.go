@@ -126,7 +126,7 @@ func TestLiveTheEnvSourceSyncKeepsAClassesValuesInStepWithItsEnvSourceAndGoesWit
 			Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
 		}},
 	}
-	if err := envsource.Register(ctx, store.Records, class, registration); err != nil {
+	if _, err := envsource.Register(ctx, store, class, registration); err != nil {
 		t.Fatalf("Register() = %v", err)
 	}
 	vm.ssh(t, "sudo systemctl restart "+service)

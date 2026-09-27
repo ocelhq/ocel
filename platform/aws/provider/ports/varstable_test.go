@@ -51,7 +51,8 @@ func TestAnEnvSourceRegistrationAndItsSyncStatusLiveBesideTheValues(t *testing.T
 	table, ddb := newSplitRecords()
 	ctx := context.Background()
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
-	if err := envsource.Register(ctx, table, edge.ClassProduction, registration); err != nil {
+	registration, err := envsource.Register(ctx, envvars.Store{Records: table, Cipher: mustSealer()}, edge.ClassProduction, registration)
+	if err != nil {
 		t.Fatalf("Register err = %v", err)
 	}
 	listed, err := envsource.Registrations(ctx, table, edge.ClassProduction)
