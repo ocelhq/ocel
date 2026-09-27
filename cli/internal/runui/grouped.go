@@ -218,7 +218,7 @@ func (s *GroupedSink) detail(ev *streamv1.RunEvent) blockLine {
 func (s *GroupedSink) open(span string, ev *streamv1.RunEvent) {
 	parent := stageKey(ev.GetStarted().GetParentSpanId())
 	switch {
-	case parent == "" && ev.GetSubject() == "" && ev.GetMessage() == "":
+	case bareScope(ev):
 	case s.owners[parent] != "":
 		s.owners[span] = s.owners[parent]
 	default:
