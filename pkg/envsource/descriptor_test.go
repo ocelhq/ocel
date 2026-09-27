@@ -47,6 +47,24 @@ func TestOnlyUniversalAuthReadsOcelVariables(t *testing.T) {
 	}
 }
 
+func TestAnEnvSourceLogsInWithTheOcelVariablesItsAuthNames(t *testing.T) {
+	universal := envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{
+		Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "ID", ClientSecretVariable: "SECRET"},
+	}}
+	if got := universal.CredentialVariables(); !slices.Equal(got, []string{"ID", "SECRET"}) {
+		t.Errorf("universal CredentialVariables() = %v, want ID and SECRET", got)
+	}
+	for _, descriptor := range []envsource.Descriptor{
+		{Kind: envsource.Builtin},
+		{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"true"}}},
+		{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Auth: envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: "ident"}}},
+	} {
+		if got := descriptor.CredentialVariables(); got != nil {
+			t.Errorf("%s CredentialVariables() = %v, want none", descriptor.ID(), got)
+		}
+	}
+}
+
 func TestAnEnvSourceIsNamedByItsKindAndAnInfisicalOneByItsProjectAndEnvironment(t *testing.T) {
 	for _, c := range []struct {
 		descriptor envsource.Descriptor

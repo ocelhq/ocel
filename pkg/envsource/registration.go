@@ -22,11 +22,8 @@ type Registration struct {
 }
 
 func (r Registration) Credentials() []envvars.Cell {
-	if r.Descriptor.Infisical == nil {
-		return nil
-	}
 	var out []envvars.Cell
-	for _, name := range r.Descriptor.Infisical.Auth.Variables() {
+	for _, name := range r.Descriptor.CredentialVariables() {
 		out = append(out, envvars.Cell{Key: name})
 	}
 	return out

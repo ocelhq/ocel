@@ -117,6 +117,13 @@ func (o InfisicalOptions) secretPath(folder string) string {
 	return path.Join(o.Path, "/"+strings.TrimPrefix(folder, "/"))
 }
 
+func (d Descriptor) CredentialVariables() []string {
+	if d.Kind != Infisical || d.Infisical == nil {
+		return nil
+	}
+	return d.Infisical.Auth.Variables()
+}
+
 func (a InfisicalAuth) Variables() []string {
 	if a.Method != AuthUniversal {
 		return nil
