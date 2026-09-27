@@ -1,6 +1,7 @@
 package envgate_test
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -203,4 +204,53 @@ func TestTheCredentialsAnEnvSourceLogsInWithAreImpliedDeclarations(t *testing.T)
 			t.Errorf("CheckImpliedWritable in /web = %v, want it refused, naming the env source", err)
 		}
 	})
+}
+
+func TestTheMatrixNamesTheEnvSourceEachValueWasCopiedFrom(t *testing.T) {
+	t.Parallel()
+	values := newFakeValues()
+	values.copyFrom("infisical:p-1/prod", "DATABASE_URL", "", "postgres://db")
+	values.set("STRIPE_KEY", "", "sk")
+	g := prefetched(t, values, envgate.Scope{EnvSource: infisicalEnvSource})
+	declare(t, g, def("DATABASE_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN), def("STRIPE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	m := g.Matrix(nil)
+	if got := cell(t, row(t, m, "DATABASE_URL"), "").EnvSource; got != "infisical:p-1/prod" {
+		t.Errorf("DATABASE_URL env source = %q, want infisical:p-1/prod", got)
+	}
+	if got := cell(t, row(t, m, "STRIPE_KEY"), "").EnvSource; got != "" {
+		t.Errorf("STRIPE_KEY env source = %q, want none: ocel stores it itself", got)
+	}
+}
+
+func TestTheMatrixListsWhatAnEnvSourceCopiedAndNothingDeclares(t *testing.T) {
+	t.Parallel()
+	values := newFakeValues()
+	values.copyFrom("infisical:p-1/prod", "DATABASE_URL", "", "postgres://db")
+	values.copyFrom("infisical:p-1/prod", "OLD_TOKEN", "/web", "old")
+	values.copyFrom("infisical:p-1/prod", "SCOPED", "/api", "x")
+	values.copyFrom("infisical:p-1/prod", "ORDERS_PASSWORD", "", "pw")
+	values.copyFrom("infisical:p-1/prod", "INFISICAL_CLIENT_ID", "", "id")
+	values.set("LEFTOVER", "", "stored by ocel")
+	g := prefetched(t, values, envgate.Scope{EnvSource: infisicalEnvSource, Bindings: []envgate.BindingVariables{ordersBinding}})
+	declare(t, g, def("DATABASE_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN), scoped("SCOPED", "/web"))
+
+	want := []envgate.UndeclaredCell{
+		{Cell: envgate.Cell{Key: "OLD_TOKEN", Folder: "/web"}, EnvSource: "infisical:p-1/prod"},
+		{Cell: envgate.Cell{Key: "SCOPED", Folder: "/api"}, EnvSource: "infisical:p-1/prod"},
+	}
+	if got := g.Matrix(nil).Undeclared; !slices.Equal(got, want) {
+		t.Errorf("undeclared = %+v, want %+v", got, want)
+	}
+}
+
+func TestAMatrixWithNothingUndeclaredEncodesNoUndeclaredList(t *testing.T) {
+	t.Parallel()
+	doc, err := json.Marshal(prefetched(t, newFakeValues()).Matrix(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(doc), "undeclared") {
+		t.Errorf("matrix = %s, want no undeclared key", doc)
+	}
 }

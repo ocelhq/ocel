@@ -55,6 +55,7 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 		Preview:      preview,
 		Environments: environments,
 		Recovery:     recovery,
+		EnvSource:    EnvSourceClient{Runner: runner, Config: cfg, Preview: preview},
 	})
 }
 
@@ -154,6 +155,7 @@ func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
 			},
 			Version:   value.GetVersion(),
 			Reference: referenceOf(value.GetTarget()),
+			EnvSource: value.GetEnvSource(),
 		})
 	}
 	return stored, nil

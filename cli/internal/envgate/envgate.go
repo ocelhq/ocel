@@ -28,6 +28,7 @@ type Stored struct {
 	Address
 	Version   int64
 	Reference *Reference
+	EnvSource string
 }
 
 type Reference struct {
