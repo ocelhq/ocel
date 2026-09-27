@@ -65,15 +65,18 @@ func TestAnExecEnvSourceReadsDotenvInTheDirectoryItIsGiven(t *testing.T) {
 	}
 }
 
-func TestAnExecEnvSourceThatFailsNamesItsCommandAndWhatItSaid(t *testing.T) {
+func TestAnExecEnvSourceThatFailsNamesItsCommandAndNeverWhatItPrinted(t *testing.T) {
 	t.Parallel()
-	source, err := envsource.Open(execDescriptor(envsource.FormatJSON, "sh", "-c", "echo vault is sealed >&2; exit 3"), t.TempDir(), noEnv)
+	source, err := envsource.Open(execDescriptor(envsource.FormatJSON, "sh", "-xc", "API_KEY=sk-live-secret; echo \"$API_KEY\"; exit 3"), t.TempDir(), noEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = source.Read(context.Background(), []string{""})
-	if err == nil || !strings.Contains(err.Error(), "sh") || !strings.Contains(err.Error(), "vault is sealed") {
-		t.Fatalf("Read() = %v, want the command and its stderr named", err)
+	if err == nil || !strings.Contains(err.Error(), "sh") || !strings.Contains(err.Error(), "exit status 3") {
+		t.Fatalf("Read() = %v, want the command and how it exited named", err)
+	}
+	if strings.Contains(err.Error(), "sk-live-secret") {
+		t.Fatalf("Read() = %v, want nothing the command printed, where a secret it read may be", err)
 	}
 }
 

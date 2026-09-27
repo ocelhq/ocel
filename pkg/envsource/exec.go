@@ -96,11 +96,7 @@ type commandFailure struct {
 }
 
 func (f *commandFailure) Error() string {
-	said := f.stderr
-	if said != "" {
-		said = ": " + said
-	}
-	return fmt.Sprintf("the env source's command %s failed (%v)%s", f.command, f.cause, said)
+	return fmt.Sprintf("the env source's command %s failed (%v); run it yourself to see what it printed, which ocel never repeats because it may hold a value the command read", f.command, f.cause)
 }
 
 func (f *commandFailure) Unwrap() error { return f.cause }
