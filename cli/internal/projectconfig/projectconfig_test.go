@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -1960,5 +1961,39 @@ func TestConfigEvalPrefersProcessEnvOverDotenv(t *testing.T) {
 	}
 	if cfg.Slug != "from-process" {
 		t.Errorf("Slug = %q, want the real environment to win over the .env", cfg.Slug)
+	}
+}
+
+func TestResolveLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
+	for _, config := range []string{
+		`{"slug":"acme"}`,
+		`{"slug":"acme","envSource":{"production":"builtin","preview":"builtin","dev":"dotenv"}}`,
+	} {
+		cfg := mustResolveJSON(t, config)
+		if !reflect.DeepEqual(cfg.EnvSource, envsource.DefaultTiers()) {
+			t.Errorf("envSource from %s = %+v, want every tier on its default", config, cfg.EnvSource)
+		}
+	}
+}
+
+func TestAProjectWithNoConfigFileLeavesEveryTierOnItsDefaultEnvSource(t *testing.T) {
+	cfg, err := ResolveOptional(context.Background(), t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("ResolveOptional: %v", err)
+	}
+	if !reflect.DeepEqual(cfg.EnvSource, envsource.DefaultTiers()) {
+		t.Errorf("envSource with no config file = %+v, want every tier on its default", cfg.EnvSource)
+	}
+}
+
+func TestResolveReadsEachTiersEnvSourceFromTheConfig(t *testing.T) {
+	cfg := mustResolveJSON(t, `{"slug":"acme","envSource":{
+		"preview":{"infisical":{"project":"p-1","environment":"staging","auth":{"identity":{"identityId":"ident"}}}},
+		"dev":{"exec":{"command":["op","run"],"format":"json"}}
+	}}`)
+
+	preview := cfg.EnvSource.Preview.Infisical
+	if cfg.EnvSource.Production.Kind != envsource.Builtin || preview == nil || preview.Project != "p-1" || preview.Environment != "staging" || cfg.EnvSource.Dev.Kind != envsource.Exec {
+		t.Fatalf("envSource = %+v, want production on builtin, preview on its Infisical project and dev on exec", cfg.EnvSource)
 	}
 }

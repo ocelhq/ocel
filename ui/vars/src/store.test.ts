@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { type Address, addressKey, type MatrixCell, type MatrixRow, type State } from "./model";
+import {
+  type Address,
+  addressKey,
+  type EnvSource,
+  type MatrixCell,
+  type MatrixRow,
+  type State,
+} from "./model";
 import { install, type VarsPort } from "./port";
 
 const store = await import("./store");
@@ -43,6 +50,7 @@ function reset(current: State | null): void {
   store.search.value = "";
   store.unfilledOnly.value = false;
   store.extras.value = [];
+  store.awaitingApproval.value = new Set();
   store.expanded.value = new Set();
   store.focusing.value = null;
   store.drafts.value = new Map();
@@ -52,6 +60,7 @@ function reset(current: State | null): void {
   store.variableGroupsOn.value = new Set();
   store.outcome.value = null;
   store.saving.value = false;
+  store.removing.value = null;
   store.dropped.value = null;
 }
 
@@ -133,13 +142,13 @@ describe("toggleVariableGroup", () => {
 });
 
 interface Sent {
-  verb: "set" | "remove";
+  verb: "set" | "create" | "remove";
   at: Address;
   value?: string;
-  version: number;
+  version?: number;
 }
 
-function record(current: State): Sent[] {
+function record(current: State, awaitingApproval = false): Sent[] {
   const sent: Sent[] = [];
   const port: VarsPort = {
     read: async () => current,
@@ -147,7 +156,10 @@ function record(current: State): Sent[] {
     set: async (at, value, version) => {
       sent.push({ verb: "set", at, value, version });
     },
-    create: async () => ({ awaitingApproval: false }),
+    create: async (at, value) => {
+      sent.push({ verb: "create", at, value });
+      return { awaitingApproval };
+    },
     remove: async (at, version) => {
       sent.push({ verb: "remove", at, version });
     },
@@ -416,5 +428,67 @@ describe("ability", () => {
     expect(
       store.drafts.value.get(addressKey({ key: "GITHUB_ID", folder: "", environment: "" })),
     ).toBe("abc");
+  });
+});
+
+const infisical: EnvSource = { id: "infisical:p-1/prod", writable: true };
+
+const readingFrom = (envSource: EnvSource): State => ({
+  slug: "acme",
+  tier: "production",
+  other: "preview",
+  environments: [],
+  envSource,
+  matrix: {
+    columns: [""],
+    rows: [
+      row("STRIPE_KEY", [cell({ state: "required" })]),
+      row("DATABASE_URL", [
+        cell({ state: "required", set: true, version: 2, envSource: infisical.id }),
+      ]),
+    ],
+    apps: [],
+  },
+});
+
+const at = (key: string): Address => ({ key, folder: "", environment: "" });
+
+describe("saving under an env source", () => {
+  beforeEach(() => {
+    reset(readingFrom(infisical));
+  });
+
+  it("creates a missing value in the env source rather than storing it in ocel", async () => {
+    const sent = record(readingFrom(infisical));
+    store.setDraft(at("STRIPE_KEY"), "sk_live");
+    await store.save();
+    expect(sent).toEqual([{ verb: "create", at: at("STRIPE_KEY"), value: "sk_live" }]);
+    expect(store.outcome.value).toEqual({ text: "Created STRIPE_KEY in infisical:p-1/prod." });
+  });
+
+  it("says when a created value waits for approval in the env source", async () => {
+    record(readingFrom(infisical), true);
+    store.setDraft(at("STRIPE_KEY"), "sk_live");
+    await store.save();
+    expect(store.outcome.value).toEqual({
+      text: "STRIPE_KEY waits for approval in infisical:p-1/prod before ocel can read it.",
+      tone: "error",
+    });
+  });
+
+  it("never asks the env source a second time for a value already waiting for approval", async () => {
+    const sent = record(readingFrom(infisical), true);
+    store.setDraft(at("STRIPE_KEY"), "sk_live");
+    await store.save();
+    store.setDraft(at("STRIPE_KEY"), "sk_live_again");
+    await store.save();
+    expect(sent).toEqual([{ verb: "create", at: at("STRIPE_KEY"), value: "sk_live" }]);
+    expect(store.variants.value.get(addressKey(at("STRIPE_KEY")))?.creatable).toBe(false);
+  });
+
+  it("never offers to remove a value the env source owns", () => {
+    record(readingFrom(infisical));
+    store.askRemoval([at("DATABASE_URL")]);
+    expect(store.removing.value).toBeNull();
   });
 });
