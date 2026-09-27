@@ -178,6 +178,16 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 			"%s in %s reads from %s, which ocel may not write into: set write to \"missing\" on the tier's env source to let ocel create a key it lacks",
 			at.GetKey(), scope.Class, current.ID()))
 	}
+	cell := envvars.Cell{Folder: at.GetFolder(), Key: at.GetKey()}
+	if slices.Contains(registration.Credentials(), cell) {
+		preview := ""
+		if scope.Class == edge.ClassPreview {
+			preview = " --preview"
+		}
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"%s is what ocel logs in to %s with, so ocel stores it itself: set it with `ocel env set %s=<VALUE>%s`",
+			at.GetKey(), registration.Descriptor.ID(), at.GetKey(), preview))
+	}
 	envSync, err := h.envSourceSync(store, scope.Class)
 	if err != nil {
 		return nil, err
@@ -189,7 +199,6 @@ func (h *Service) CreateEnvSourceValue(ctx context.Context, req *envvarsv1.Creat
 	if err != nil {
 		return nil, envSourceError(registration.Descriptor, err)
 	}
-	cell := envvars.Cell{Folder: at.GetFolder(), Key: at.GetKey()}
 	err = source.Create(ctx, cell, []byte(req.GetValue()), req.GetDescription())
 	switch {
 	case errors.Is(err, envsource.ErrAwaitingApproval):
