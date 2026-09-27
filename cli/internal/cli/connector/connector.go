@@ -186,7 +186,7 @@ func listed(values []string) string {
 	return strings.Join(written, ", ")
 }
 
-func said(ev *progressv1.OperationEvent) string {
+func readMessage(ev *progressv1.OperationEvent) string {
 	if ev.GetBody() != nil || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
 		return ""
 	}
