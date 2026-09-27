@@ -567,3 +567,70 @@ func TestARegisteredExecEnvSourceIsReReadOnlyByADeploy(t *testing.T) {
 		t.Fatalf("GetValue(TOKEN) found=%t, %v, want exec's value kept rather than removed by an empty read", got.GetFound(), err)
 	}
 }
+
+func unreadable(host string) *envvarsv1.EnvSource {
+	source := infisicalSource(host, false)
+	source.GetInfisical().Path = "/gone"
+	return source
+}
+
+func TestADeployWhoseNewEnvSourceCannotBeReadLeavesTheOneItReplacedSyncing(t *testing.T) {
+	deploy, connector := servedToDeployAndConnector(t)
+	fake, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, deploy, production)
+	if _, err := syncEnvSource(deploy, production, infisicalSource(server.URL, false)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := syncEnvSource(deploy, production, unreadable(server.URL))
+	if err == nil || len(credentialRefusals(err)) != 0 {
+		t.Fatalf("SyncEnvSource() of a path Infisical lacks = %v, want a read failure", err)
+	}
+	fake.secrets["/web"]["API_KEY"] = "rotated-since"
+	synced, err := syncRegistered(connector, production)
+	if err != nil || synced.GetWritten() != 1 {
+		t.Fatalf("SyncEnvSource(registered) after the failed deploy = %+v, %v, want the working env source read and the rotated value copied", synced, err)
+	}
+}
+
+func TestADeployWhoseFirstEnvSourceCannotBeReadLeavesTheTierBuiltin(t *testing.T) {
+	vars, _ := served(t)
+	_, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+
+	if _, err := syncEnvSource(vars, production, unreadable(server.URL)); err == nil {
+		t.Fatal("SyncEnvSource() of a path Infisical lacks = nil, want a read failure")
+	}
+	described, err := vars.DescribeEnvSource(context.Background(), &envvarsv1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
+	if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
+		t.Fatalf("DescribeEnvSource() = %+v, %v, want builtin: nothing was ever read from the env source", described, err)
+	}
+	if err := setValue(t, vars, production, cell("DATABASE_URL"), "postgres://mine"); err != nil {
+		t.Fatalf("SetValue() after the failed deploy = %v, want ocel's own value taken", err)
+	}
+}
+
+func TestADeployWhoseNewEnvSourceLacksItsCredentialRegistersItSoTheCredentialCanBeSet(t *testing.T) {
+	vars, _ := served(t)
+	_, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	setCredentials(t, vars, production)
+	if _, err := syncEnvSource(vars, production, infisicalSource(server.URL, false)); err != nil {
+		t.Fatal(err)
+	}
+	renamed := infisicalSource(server.URL, false)
+	renamed.GetInfisical().GetAuth().GetUniversal().ClientIdVariable = "OTHER_CLIENT_ID"
+
+	_, err := syncEnvSource(vars, production, renamed)
+	if refused := credentialRefusals(err); refused["OTHER_CLIENT_ID"] == nil {
+		t.Fatalf("SyncEnvSource() with OTHER_CLIENT_ID unset = %v, want it refused for the caller to set", err)
+	}
+	if err := setValue(t, vars, production, cell("OTHER_CLIENT_ID"), "id"); err != nil {
+		t.Fatalf("SetValue(OTHER_CLIENT_ID) = %v, want the credential the new env source logs in with taken", err)
+	}
+	if _, err := syncEnvSource(vars, production, renamed); err != nil {
+		t.Fatalf("SyncEnvSource() once its credential is set = %v", err)
+	}
+}

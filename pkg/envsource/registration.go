@@ -1,6 +1,7 @@
 package envsource
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,6 +67,42 @@ func Register(ctx context.Context, store envvars.Store, class edge.Class, regist
 		return registration, moveSharer(ctx, store.Records, class, registration.Project, previous.DedupeKey, key)
 	}
 	return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
+}
+
+func RestoreRegistration(ctx context.Context, store envvars.Store, class edge.Class, replacing Registration, previous *Registration) error {
+	name := registrationName(class, replacing.Project)
+	recorded, err := store.Records.Read(ctx, name)
+	if errors.Is(err, records.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	replaced, err := json.Marshal(replacing)
+	if err != nil || !bytes.Equal(recorded.Bytes, replaced) {
+		return err
+	}
+	if previous == nil {
+		err := store.Records.Remove(ctx, name, recorded.Revision)
+		if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return release(ctx, store.Records, class, replacing.DedupeKey, replacing.Project)
+	}
+	if recorded.Bytes, err = json.Marshal(previous); err != nil {
+		return err
+	}
+	_, err = store.Records.Write(ctx, recorded)
+	if errors.Is(err, records.ErrStale) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return moveSharer(ctx, store.Records, class, replacing.Project, replacing.DedupeKey, previous.DedupeKey)
 }
 
 func rekey(ctx context.Context, store envvars.Store, class edge.Class, project string) error {

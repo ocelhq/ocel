@@ -62,6 +62,10 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	if !slices.Contains(folders, "") {
 		folders = append(slices.Clone(folders), "")
 	}
+	previous, wasRegistered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
 	registration, err := envsource.Register(ctx, store, scope.Class, envsource.Registration{Project: scope.Project, Descriptor: descriptor, Folders: folders})
 	if err != nil {
 		return nil, provider.RefusalError(err)
@@ -74,6 +78,15 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 		copied, err = envSync.CopyProject(ctx, registration)
 	}
 	if err != nil {
+		if len(credentialErrors(err)) == 0 {
+			var restored *envsource.Registration
+			if wasRegistered {
+				restored = &previous
+			}
+			if restoreErr := envsource.RestoreRegistration(ctx, store, scope.Class, registration, restored); restoreErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore the env source this deploy replaced, so the next sync reads %s instead: %w", descriptor.ID(), restoreErr))
+			}
+		}
 		return nil, envSourceError(descriptor, err)
 	}
 	return syncResponse(ctx, store, scope, registration, copied)
