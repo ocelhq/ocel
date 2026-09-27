@@ -30,6 +30,8 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		newRefsCommand(deps),
 		newHistoryCommand(deps),
 		newUICommand(deps),
+		newEnvSourceCommand(deps),
+		newSyncCommand(deps),
 	)
 	return cmd
 }

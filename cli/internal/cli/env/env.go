@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -589,7 +590,10 @@ func valueRow(v *envvarsv1.ValueMetadata, lead string, descriptions map[string]s
 		environment += " (orphaned)"
 	}
 	size := fmt.Sprint(v.GetSize())
-	source := "—"
+	source := v.GetEnvSource()
+	if source == "" {
+		source = string(envsource.Builtin)
+	}
 	if target := v.GetTarget(); target != nil {
 		size, source = "—", describeCoordinate(target)
 	}
