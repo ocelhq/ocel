@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -42,7 +43,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	if req.GetRegistered() != nil {
 		return h.syncRegistered(ctx, store, scope)
 	}
-	descriptor, read := descriptorOf(req.GetEnvSource())
+	descriptor, read := envsourcewire.Decode(req.GetEnvSource())
 	if descriptor.Kind == envsource.Builtin {
 		if err := envsource.ForgetProject(ctx, store, scope.Class, scope.Project); err != nil {
 			return nil, provider.RefusalError(err)
@@ -295,46 +296,6 @@ func envSourceError(descriptor envsource.Descriptor, err error) error {
 		return provider.RefusalError(err)
 	}
 	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s: %w", descriptor.ID(), err))
-}
-
-func descriptorOf(wire *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]envsource.Value) {
-	switch {
-	case wire.GetInfisical() != nil:
-		sent := wire.GetInfisical()
-		var auth envsource.InfisicalAuth
-		switch method := sent.GetAuth(); {
-		case method.GetUniversal() != nil:
-			auth = envsource.InfisicalAuth{
-				Method:               envsource.AuthUniversal,
-				ClientIDVariable:     method.GetUniversal().GetClientIdVariable(),
-				ClientSecretVariable: method.GetUniversal().GetClientSecretVariable(),
-			}
-		case method.GetIdentity() != nil:
-			auth = envsource.InfisicalAuth{Method: envsource.AuthIdentity, IdentityID: method.GetIdentity().GetIdentityId()}
-		}
-		write := envsource.WriteNever
-		if sent.GetWriteMissing() {
-			write = envsource.WriteMissing
-		}
-		options := envsource.InfisicalOptions{
-			Project:     sent.GetProject(),
-			Environment: sent.GetEnvironment(),
-			Path:        sent.GetPath(),
-			Host:        sent.GetHost(),
-			Auth:        auth,
-			Write:       write,
-		}.Normalize()
-		return envsource.Descriptor{Kind: envsource.Infisical, Infisical: &options}, nil
-	case wire.GetExec() != nil:
-		sent := wire.GetExec()
-		read := make(map[envvars.Cell]envsource.Value, len(sent.GetValues()))
-		for _, value := range sent.GetValues() {
-			at := envvars.Cell{Folder: value.GetCell().GetFolder(), Key: value.GetCell().GetKey()}
-			read[at] = envsource.Value{Plaintext: []byte(value.GetValue()), Version: value.GetVersion()}
-		}
-		return envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: sent.GetCommand()}}, read
-	}
-	return envsource.Descriptor{Kind: envsource.Builtin}, nil
 }
 
 func cellProto(at envvars.Cell) *envvarsv1.Cell {
