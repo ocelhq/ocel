@@ -1,0 +1,3 @@
+{
+  "proxy": { "traefik": { "directory": "/etc/ocel-front-traefik/dynamic", "resolver": "pebble" } }
+}

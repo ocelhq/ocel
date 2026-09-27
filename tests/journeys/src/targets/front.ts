@@ -55,6 +55,9 @@ const portOwners: Record<string, string> = {
   caddy: "caddy listens on :80 and :443",
   "caddy-container": "container ocel-front-caddy publishes :80 and :443",
   "coolify-caddy": "container coolify-proxy publishes :80 and :443",
+  traefik: "traefik listens on :80 and :443",
+  "coolify-traefik": "container coolify-proxy publishes :80 and :443",
+  "dokploy-traefik": "container dokploy-traefik publishes :80 and :443",
 };
 
 export function ownerOf(front: Front): string {

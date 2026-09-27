@@ -1,0 +1,3 @@
+{
+  "proxy": { "traefik": { "preset": "dokploy" } }
+}
