@@ -334,32 +334,52 @@ func TestASyncServiceCloudRunReadsBackWithTheSameTimeoutInAnotherNotationIsCurre
 	}
 }
 
-func TestASyncServiceAnyoneMayCallIsMended(t *testing.T) {
+func TestASyncServiceAnyoneButTheSyncAccountMayCallIsMended(t *testing.T) {
 	t.Parallel()
-	server := newSyncServer()
-	b := server.open(t)
-	ctx := context.Background()
-	class := edge.ClassProduction
-	name := b.clients.EnvSourceSync(class)
-	path := b.clients.servicePath(name)
-	if err := b.makeService(ctx, class, name); err != nil {
-		t.Fatal(err)
-	}
-	server.change(func() {
-		binding := server.policies[path].Bindings[0]
-		binding.Members = append([]string{"allUsers"}, binding.Members...)
-	})
+	for caller, change := range map[string]func(*run.GoogleIamV1Policy){
+		"anyone": func(p *run.GoogleIamV1Policy) {
+			p.Bindings[0].Members = append([]string{"allUsers"}, p.Bindings[0].Members...)
+		},
+		"another account": func(p *run.GoogleIamV1Policy) {
+			p.Bindings[0].Members = append(p.Bindings[0].Members, "serviceAccount:someone@acme-prod.iam.gserviceaccount.com")
+		},
+		"a group under a second binding": func(p *run.GoogleIamV1Policy) {
+			p.Bindings = append(p.Bindings, &run.GoogleIamV1Binding{
+				Role:      "roles/run.invoker",
+				Members:   []string{"group:everyone@acme.example"},
+				Condition: &run.GoogleTypeExpr{Expression: "request.time < timestamp('2100-01-01T00:00:00Z')"},
+			})
+		},
+	} {
+		t.Run(caller, func(t *testing.T) {
+			t.Parallel()
+			server := newSyncServer()
+			b := server.open(t)
+			ctx := context.Background()
+			class := edge.ClassProduction
+			name := b.clients.EnvSourceSync(class)
+			path := b.clients.servicePath(name)
+			if err := b.makeService(ctx, class, name); err != nil {
+				t.Fatal(err)
+			}
+			server.change(func() { change(server.policies[path]) })
 
-	found, err := b.servicePresence(ctx, class, name)
-	if err != nil || !found.present || found.mends != reasonCallersChanged {
-		t.Fatalf("servicePresence() = %+v, %v, want a service allUsers may call mended", found, err)
-	}
-	if err := b.makeService(ctx, class, name); err != nil {
-		t.Fatalf("makeService() over one that exists = %v", err)
-	}
-	member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(class)
-	if policy := server.policy(path); len(policy.Bindings) != 1 || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
-		t.Errorf("the mended policy is %s, want %s alone", encoded(t, policy), member)
+			found, err := b.servicePresence(ctx, class, name)
+			if err != nil || !found.present || found.mends != reasonCallersChanged {
+				t.Fatalf("servicePresence() = %+v, %v, want a service %s may call mended", found, err, caller)
+			}
+			if err := b.makeService(ctx, class, name); err != nil {
+				t.Fatalf("makeService() over one that exists = %v", err)
+			}
+			member := "serviceAccount:" + b.clients.EnvSourceSyncAccountEmail(class)
+			policy := server.policy(path)
+			if len(policy.Bindings) != 1 || policy.Bindings[0].Condition != nil || !slices.Equal(policy.Bindings[0].Members, []string{member}) {
+				t.Errorf("the mended policy is %s, want %s alone", encoded(t, policy), member)
+			}
+			if found, err := b.servicePresence(ctx, class, name); err != nil || found.mends != "" {
+				t.Errorf("servicePresence() after the mend = %+v, %v", found, err)
+			}
+		})
 	}
 }
 

@@ -48,7 +48,7 @@ const (
 
 	reasonUnwritable      = "it exists, and it may not write this project's records or seal under the class key, so the env source sync running as it would write nothing"
 	reasonServiceChanged  = "it runs another env source sync than the one this provider embeds, runs it as another account, or is billed, scaled, cut off or reached otherwise than this bootstrap deploys it"
-	reasonCallersChanged  = "it exists, and the account Cloud Scheduler calls it as may not call it, or anyone may"
+	reasonCallersChanged  = "it exists, and the account Cloud Scheduler calls it as may not call it, or another may"
 	reasonScheduleChanged = "it calls the env source sync on another schedule, at another URL or as another account than this bootstrap names"
 	reasonScheduleStopped = "it is paused, disabled by Cloud Scheduler or left by a failed update, so it never calls the env source sync"
 
@@ -58,8 +58,6 @@ const (
 )
 
 var syncKeyRoles = []string{syncSealingRole, syncOpeningRole}
-
-var publicMembers = []string{"allUsers", "allAuthenticatedUsers"}
 
 var syncImageTag = sync.OnceValue(func() string {
 	sum := sha256.New()
@@ -243,7 +241,8 @@ func (b bootstrap) servicePolicy(ctx context.Context, name string) (*run.GoogleI
 		return nil, err
 	}
 	policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-		return services.Projects.Locations.Services.GetIamPolicy(b.clients.servicePath(name)).Context(ctx).Do(call...)
+		return services.Projects.Locations.Services.GetIamPolicy(b.clients.servicePath(name)).
+			OptionsRequestedPolicyVersion(conditionalPolicyVersion).Context(ctx).Do(call...)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read who may call the Cloud Run service %s: %w", name, err)
@@ -256,7 +255,7 @@ func (b bootstrap) onlySyncCalls(ctx context.Context, class edge.Class, name str
 	if err != nil {
 		return false, err
 	}
-	_, changed := boundInvoker(policy.Bindings, syncMember(b.clients, class))
+	_, changed := onlyInvoker(policy.Bindings, syncMember(b.clients, class))
 	return !changed, nil
 }
 
@@ -275,11 +274,12 @@ func (b bootstrap) letSyncCall(ctx context.Context, class edge.Class, name strin
 		if err != nil {
 			return err
 		}
-		bindings, changed := boundInvoker(policy.Bindings, member)
+		bindings, changed := onlyInvoker(policy.Bindings, member)
 		if !changed {
 			return nil
 		}
 		policy.Bindings = bindings
+		policy.Version = conditionalPolicyVersion
 		_, refused = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
 			return services.Projects.Locations.Services.SetIamPolicy(b.clients.servicePath(name),
 				&run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
@@ -294,18 +294,19 @@ func (b bootstrap) letSyncCall(ctx context.Context, class edge.Class, name strin
 	return fmt.Errorf("let %s call the Cloud Run service %s: %w", member, name, refused)
 }
 
-func boundInvoker(bindings []*run.GoogleIamV1Binding, member string) ([]*run.GoogleIamV1Binding, bool) {
+func onlyInvoker(bindings []*run.GoogleIamV1Binding, member string) ([]*run.GoogleIamV1Binding, bool) {
+	kept := make([]*run.GoogleIamV1Binding, 0, len(bindings))
+	var invokers []*run.GoogleIamV1Binding
 	for _, binding := range bindings {
-		if binding.Role != syncInvokerRole {
+		if binding.Role == syncInvokerRole {
+			invokers = append(invokers, binding)
 			continue
 		}
-		kept := slices.DeleteFunc(slices.Clone(binding.Members), func(each string) bool { return slices.Contains(publicMembers, each) })
-		members, added := boundMembers(kept, member, true)
-		changed := added || len(kept) != len(binding.Members)
-		binding.Members = members
-		return bindings, changed
+		kept = append(kept, binding)
 	}
-	return append(bindings, &run.GoogleIamV1Binding{Role: syncInvokerRole, Members: []string{member}}), true
+	only := []string{member}
+	changed := len(invokers) != 1 || invokers[0].Condition != nil || !slices.Equal(invokers[0].Members, only)
+	return append(kept, &run.GoogleIamV1Binding{Role: syncInvokerRole, Members: only}), changed
 }
 
 func schedulePath(c *clients, name string) string { return c.location() + "/jobs/" + name }
