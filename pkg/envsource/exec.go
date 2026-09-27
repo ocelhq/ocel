@@ -3,8 +3,6 @@ package envsource
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,11 +15,10 @@ import (
 )
 
 const (
-	commandTimeout      = 2 * time.Minute
-	commandOutputBytes  = 1 << 20
-	commandStderrBytes  = 2048
-	rootFolderArgument  = "/"
-	contentVersionBytes = 8
+	commandTimeout     = 2 * time.Minute
+	commandOutputBytes = 1 << 20
+	commandStderrBytes = 2048
+	rootFolderArgument = "/"
 )
 
 type execSource struct {
@@ -50,7 +47,7 @@ func (s execSource) Read(ctx context.Context, folders []string) (map[envvars.Cel
 			if value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(value), Version: contentVersion(value)}
+			out[envvars.Cell{Folder: folder, Key: key}] = Value{Plaintext: []byte(value)}
 		}
 	}
 	return out, nil
@@ -65,11 +62,6 @@ func folderArgument(folder string) string {
 		return rootFolderArgument
 	}
 	return folder
-}
-
-func contentVersion(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:contentVersionBytes])
 }
 
 func runCommand(ctx context.Context, dir string, argv []string) ([]byte, error) {

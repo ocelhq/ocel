@@ -21,7 +21,7 @@ type CopyResult struct {
 	Refused   map[envvars.Cell]string
 }
 
-func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, envSource string, readAt time.Time, read map[envvars.Cell]Value, folders []string, keep []envvars.Cell) (CopyResult, error) {
+func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, key DigestKey, envSource string, readAt time.Time, read map[envvars.Cell]Value, folders []string, keep []envvars.Cell) (CopyResult, error) {
 	result := CopyResult{EnvSource: envSource}
 	listed, err := store.List(ctx, scope)
 	if err != nil {
@@ -43,8 +43,12 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 		}
 		result.Present = append(result.Present, at)
 		next := read[at]
+		version, err := key.version(scope, at, next)
+		if err != nil {
+			return CopyResult{}, err
+		}
 		current, found := stored[at]
-		if found && current.Provenance.EnvSource == envSource && !isNewerVersion(next.Version, current.Provenance.Version) {
+		if found && current.Provenance.EnvSource == envSource && !isNewerVersion(version, current.Provenance.Version) {
 			result.Unchanged = append(result.Unchanged, at)
 			continue
 		}
@@ -52,7 +56,7 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 		if found {
 			expected = current.Version
 		}
-		_, err := store.SetFromEnvSource(ctx, scope, envvars.Coordinate{Cell: at}, string(next.Plaintext), envvars.Provenance{EnvSource: envSource, Version: next.Version, ReadAt: readAt}, expected)
+		_, err = store.SetFromEnvSource(ctx, scope, envvars.Coordinate{Cell: at}, string(next.Plaintext), envvars.Provenance{EnvSource: envSource, Version: version, ReadAt: readAt}, expected)
 		switch {
 		case err == nil:
 			result.Written = append(result.Written, at)

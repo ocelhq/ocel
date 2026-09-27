@@ -331,8 +331,6 @@ message EnvSourceValue {
   Cell cell = 1 [(buf.validate.field).required = true];
 
   string value = 2 [debug_redact = true];
-
-  string version = 3;
 }
 
 message Cell {

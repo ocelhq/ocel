@@ -53,7 +53,7 @@ func (s infisicalExport) Read(ctx context.Context, folders []string) (map[envvar
 			if secret.Value == "" {
 				continue
 			}
-			out[envvars.Cell{Folder: folder, Key: secret.Key}] = Value{Plaintext: []byte(secret.Value), Version: contentVersion(secret.Value)}
+			out[envvars.Cell{Folder: folder, Key: secret.Key}] = Value{Plaintext: []byte(secret.Value)}
 		}
 	}
 	return out, nil

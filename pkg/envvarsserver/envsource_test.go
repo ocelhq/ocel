@@ -329,8 +329,8 @@ func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *
 	exec := &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Exec{Exec: &envvarsv1.ExecEnvSource{
 		Command: []string{"op", "inject"},
 		Values: []*envvarsv1.EnvSourceValue{
-			{Cell: &envvarsv1.Cell{Key: "TOKEN"}, Value: "t", Version: "sha-1"},
-			{Cell: &envvarsv1.Cell{Folder: "/web", Key: "API_KEY"}, Value: "k", Version: "sha-2"},
+			{Cell: &envvarsv1.Cell{Key: "TOKEN"}, Value: "t"},
+			{Cell: &envvarsv1.Cell{Folder: "/web", Key: "API_KEY"}, Value: "k"},
 		},
 	}}}
 	synced, err := syncEnvSource(vars, production, exec)
@@ -552,7 +552,7 @@ func TestARegisteredExecEnvSourceIsReReadOnlyByADeploy(t *testing.T) {
 	production := environmentv1.Tier_TIER_PRODUCTION
 	exec := &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Exec{Exec: &envvarsv1.ExecEnvSource{
 		Command: []string{"op"},
-		Values:  []*envvarsv1.EnvSourceValue{{Cell: &envvarsv1.Cell{Key: "TOKEN"}, Value: "t", Version: "sha-1"}},
+		Values:  []*envvarsv1.EnvSourceValue{{Cell: &envvarsv1.Cell{Key: "TOKEN"}, Value: "t"}},
 	}}}
 	if _, err := syncEnvSource(deploy, production, exec); err != nil {
 		t.Fatal(err)

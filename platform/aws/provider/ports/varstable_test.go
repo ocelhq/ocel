@@ -47,7 +47,7 @@ func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 	}
 }
 
-func TestAnEnvSourceRegistrationAndItsSyncStatusLiveBesideTheValues(t *testing.T) {
+func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(t *testing.T) {
 	table, ddb := newSplitRecords()
 	ctx := context.Background()
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
@@ -60,7 +60,7 @@ func TestAnEnvSourceRegistrationAndItsSyncStatusLiveBesideTheValues(t *testing.T
 		t.Fatalf("Registrations = %+v, %v", listed, err)
 	}
 	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: mustSealer()}, Class: edge.ClassProduction}
-	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", nil)); err != nil {
+	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[envvars.Cell]envsource.Value{{Key: "K"}: {Plaintext: []byte("v")}})); err != nil {
 		t.Fatalf("CopyProjectFrom err = %v", err)
 	}
 

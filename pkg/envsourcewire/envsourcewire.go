@@ -25,9 +25,8 @@ func Encode(descriptor envsource.Descriptor, read map[envvars.Cell]envsource.Val
 		sent := &envvarsv1.ExecEnvSource{Command: descriptor.Exec.Command}
 		for _, at := range slices.SortedFunc(maps.Keys(read), envvars.Cell.Compare) {
 			sent.Values = append(sent.Values, &envvarsv1.EnvSourceValue{
-				Cell:    &envvarsv1.Cell{Folder: at.Folder, Key: at.Key},
-				Value:   string(read[at].Plaintext),
-				Version: read[at].Version,
+				Cell:  &envvarsv1.Cell{Folder: at.Folder, Key: at.Key},
+				Value: string(read[at].Plaintext),
 			})
 		}
 		return &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Exec{Exec: sent}}
@@ -70,7 +69,7 @@ func Decode(wire *envvarsv1.EnvSource) (envsource.Descriptor, map[envvars.Cell]e
 		read := make(map[envvars.Cell]envsource.Value, len(sent.GetValues()))
 		for _, value := range sent.GetValues() {
 			at := envvars.Cell{Folder: value.GetCell().GetFolder(), Key: value.GetCell().GetKey()}
-			read[at] = envsource.Value{Plaintext: []byte(value.GetValue()), Version: value.GetVersion()}
+			read[at] = envsource.Value{Plaintext: []byte(value.GetValue())}
 		}
 		return envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: sent.GetCommand()}}, read
 	}

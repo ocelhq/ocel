@@ -27,8 +27,9 @@ type Sync struct {
 	Now      func() time.Time
 	Interval time.Duration
 
-	mu     sync.Mutex
-	opened map[string]openedSource
+	mu        sync.Mutex
+	opened    map[string]openedSource
+	digestKey DigestKey
 }
 
 type openedSource struct {
@@ -208,13 +209,17 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 		folders = append(folders, registration.Folders...)
 	}
 	folders = slices.Compact(slices.Sorted(slices.Values(folders)))
+	digestKey, err := s.ensureDigestKey(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	read, err := source.Read(ctx, folders)
 	if err != nil {
 		return nil, nil, err
 	}
 	results := make([]CopyResult, 0, len(group))
 	for _, registration := range group {
-		result, err := CopyValues(ctx, s.Store, s.scope(registration), source.ID(), readAt, read, registration.Folders, registration.Credentials())
+		result, err := CopyValues(ctx, s.Store, s.scope(registration), digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -245,6 +250,20 @@ func (s *Sync) open(ctx context.Context, key string, registration Registration) 
 	}
 	s.opened[key] = openedSource{source: source, credential: credential}
 	return source, nil
+}
+
+func (s *Sync) ensureDigestKey(ctx context.Context) (DigestKey, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.digestKey.secret) > 0 {
+		return s.digestKey, nil
+	}
+	key, err := EnsureDigestKey(ctx, s.Store, s.Class)
+	if err != nil {
+		return DigestKey{}, err
+	}
+	s.digestKey = key
+	return key, nil
 }
 
 func (s *Sync) forgetOpened(key string) {

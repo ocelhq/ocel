@@ -300,7 +300,7 @@ func TestInfisicalReadsEachFolderUnderItsPathWithImportsBeneathItsOwnValues(t *t
 		t.Fatalf("Read() = %v, want %v", read, want)
 	}
 	for at, value := range want {
-		if got := read[at]; string(got.Plaintext) != string(value.Plaintext) || !strings.HasPrefix(got.Version, value.Version+"#") {
+		if got := read[at]; string(got.Plaintext) != string(value.Plaintext) || got.Version != value.Version {
 			t.Errorf("Read()[%v] = %s@%s, want %s@%s", at, got.Plaintext, got.Version, value.Plaintext, value.Version)
 		}
 	}
@@ -309,26 +309,6 @@ func TestInfisicalReadsEachFolderUnderItsPathWithImportsBeneathItsOwnValues(t *t
 	}
 	if source.ID() != "infisical:p-1/prod" {
 		t.Errorf("ID() = %q", source.ID())
-	}
-}
-
-func TestInfisicalReadsAValueAReferencedSecretChangedAsANewVersion(t *testing.T) {
-	t.Parallel()
-	fake, server := newFakeInfisical(t)
-	fake.put("/acme", fakeSecret{id: "s1", key: "DATABASE_URL", value: "postgres://one", version: 3})
-	source := signedIn(server, "/acme", envsource.WriteNever)
-	before, err := source.Read(context.Background(), []string{""})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	fake.put("/acme", fakeSecret{id: "s1", key: "DATABASE_URL", value: "postgres://two", version: 3})
-	after, err := source.Read(context.Background(), []string{""})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if was, is := before[cell("", "DATABASE_URL")].Version, after[cell("", "DATABASE_URL")].Version; was == is {
-		t.Fatalf("Version = %q before and after the value it expands to changed, want a new version", is)
 	}
 }
 

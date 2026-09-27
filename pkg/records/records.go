@@ -39,6 +39,8 @@ const (
 	RootConformance     = "conformance"
 	RootEnvSources      = "envsources"
 	RootEnvSourceStatus = "envsourcestatus"
+
+	RootEnvSourceDigestKey = "envsourcedigestkey"
 )
 
 type Name []string

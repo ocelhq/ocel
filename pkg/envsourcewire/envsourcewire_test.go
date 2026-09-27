@@ -31,8 +31,8 @@ func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
 			name:       "exec with what its command printed",
 			descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"vault", "export", "{folder}"}}},
 			read: map[envvars.Cell]envsource.Value{
-				{Key: "DATABASE_URL"}:               {Plaintext: []byte("postgres://db"), Version: "a1"},
-				{Folder: "/web", Key: "STRIPE_KEY"}: {Plaintext: []byte("sk_live"), Version: "b2"},
+				{Key: "DATABASE_URL"}:               {Plaintext: []byte("postgres://db")},
+				{Folder: "/web", Key: "STRIPE_KEY"}: {Plaintext: []byte("sk_live")},
 			},
 		},
 	} {
@@ -46,6 +46,17 @@ func TestAnEnvSourceDecodesToWhatWasEncoded(t *testing.T) {
 				t.Errorf("read = %+v, want %+v", read, c.read)
 			}
 		})
+	}
+}
+
+func TestAnExecValueArrivesWithNoVersionItsSenderChose(t *testing.T) {
+	t.Parallel()
+	sent := envsourcewire.Encode(envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"true"}}}, map[envvars.Cell]envsource.Value{
+		{Key: "A"}: {Plaintext: []byte("1"), Version: "s1@999"},
+	})
+
+	if _, read := envsourcewire.Decode(sent); read[envvars.Cell{Key: "A"}].Version != "" {
+		t.Errorf("A decoded at version %q, want none: only the store it is copied into versions a value", read[envvars.Cell{Key: "A"}].Version)
 	}
 }
 
