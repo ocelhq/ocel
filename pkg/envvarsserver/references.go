@@ -24,6 +24,9 @@ func (h *Service) SetReference(ctx context.Context, req *envvarsv1.SetReferenceR
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseEnvSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), false); err != nil {
+		return nil, err
+	}
 	metadata, err := store.SetReference(ctx, scope, coordinateOf(req.GetCoordinate()), envvars.Target{
 		Project: target.GetSlug(),
 		Cell:    envvars.Cell{Folder: target.GetFolder(), Key: target.GetKey()},

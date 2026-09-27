@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file provider/envvars/v1/envvars.proto.
  */
 export const file_provider_envvars_v1_envvars: GenFile = /*@__PURE__*/
-  fileDesc("CiFwcm92aWRlci9lbnZ2YXJzL3YxL2VudnZhcnMucHJvdG8SE3Byb3ZpZGVyLmVudnZhcnMudjEizgMKCkNvb3JkaW5hdGUSLwoEc2x1ZxgBIAEoCUIhukgechwYPzIYXlthLXowLTldKygtW2EtejAtOV0rKSokEsIBCgZmb2xkZXIYAiABKAlCsQG6SK0BugGQAQoeZW52dmFycy5jb29yZGluYXRlLmZvbGRlci5yb290EmEiLyIgaXMgdGhlIHByb2plY3Qgcm9vdCwgd2hpY2ggaXMgd2hhdCBhbiB1bmJvdW5kIGFwcCBhbHJlYWR5IHJlYWRzOyBsZWF2ZSB0aGUgZm9sZGVyIG9mZiBpbnN0ZWFkGgt0aGlzICE9ICcvJ3IXMhVeKC9bXi8jWzpjbnRybDpdXSspKiQSJgoDa2V5GAMgASgJQhm6SBZyFBABMhBeW14jWzpjbnRybDpdXSokEqEBCgtlbnZpcm9ubWVudBgEIAEoCUKLAbpIhwG6AXAKHmVudnZhcnMuZW52aXJvbm1lbnQuY2xhc3Nfd2lkZRI5IioiIGlzIHJlc2VydmVkOiBpdCBuYW1lcyB0aGUgdmFsdWUgdGhhdCBiaW5kcyBjbGFzcy13aWRlGhMhdGhpcy5jb250YWlucygnKicpchIyEF5bXiNbOmNudHJsOl1dKiQiuAEKDVZhbHVlTWV0YWRhdGESMwoKY29vcmRpbmF0ZRgBIAEoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZRIPCgd2ZXJzaW9uGAIgASgDEhIKCnVwZGF0ZWRfYXQYAyABKAMSDAoEc2l6ZRgEIAEoAxI0CgZ0YXJnZXQYBSABKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGVIAIgBAUIJCgdfdGFyZ2V0IkEKDFZlcnNpb25FbnRyeRIPCgd2ZXJzaW9uGAEgASgDEhIKCmNyZWF0ZWRfYXQYAiABKAMSDAoEc2l6ZRgDIAEoAyLLAQoPU2V0VmFsdWVSZXF1ZXN0EjMKBHRpZXIYASABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckIIukgFggECEAESOwoKY29vcmRpbmF0ZRgCIAEoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZUIGukgDyAEBEhIKBXZhbHVlGAMgASgJQgOAAQESHQoQZXhwZWN0ZWRfdmVyc2lvbhgEIAEoA0gAiAEBQhMKEV9leHBlY3RlZF92ZXJzaW9uIkgKEFNldFZhbHVlUmVzcG9uc2USNAoIbWV0YWRhdGEYASABKAsyIi5wcm92aWRlci5lbnZ2YXJzLnYxLlZhbHVlTWV0YWRhdGEieQoRTGlzdFZhbHVlc1JlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARIvCgRzbHVnGAIgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQiSAoSTGlzdFZhbHVlc1Jlc3BvbnNlEjIKBnZhbHVlcxgBIAMoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuVmFsdWVNZXRhZGF0YSKTAQoPR2V0VmFsdWVSZXF1ZXN0EjMKBHRpZXIYASABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckIIukgFggECEAESOwoKY29vcmRpbmF0ZRgCIAEoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZUIGukgDyAEBEg4KBnJldmVhbBgDIAEoCCJrChBHZXRWYWx1ZVJlc3BvbnNlEg0KBWZvdW5kGAEgASgIEjQKCG1ldGFkYXRhGAIgASgLMiIucHJvdmlkZXIuZW52dmFycy52MS5WYWx1ZU1ldGFkYXRhEhIKBXZhbHVlGAMgASgJQgOAAQEiqwEKE1JldmVhbFZhbHVlc1JlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARIvCgRzbHVnGAIgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQSLgoFY2VsbHMYAyADKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGUiSgoUUmV2ZWFsVmFsdWVzUmVzcG9uc2USMgoGdmFsdWVzGAEgAygLMiIucHJvdmlkZXIuZW52dmFycy52MS5SZXZlYWxlZFZhbHVlIlkKDVJldmVhbGVkVmFsdWUSNAoIbWV0YWRhdGEYASABKAsyIi5wcm92aWRlci5lbnZ2YXJzLnYxLlZhbHVlTWV0YWRhdGESEgoFdmFsdWUYAiABKAlCA4ABASK6AQoSRGVsZXRlVmFsdWVSZXF1ZXN0EjMKBHRpZXIYASABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckIIukgFggECEAESOwoKY29vcmRpbmF0ZRgCIAEoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZUIGukgDyAEBEh0KEGV4cGVjdGVkX3ZlcnNpb24YAyABKANIAIgBAUITChFfZXhwZWN0ZWRfdmVyc2lvbiImChNEZWxldGVWYWx1ZVJlc3BvbnNlEg8KB2RlbGV0ZWQYASABKAgiwAEKE1NldFJlZmVyZW5jZVJlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARI7Cgpjb29yZGluYXRlGAIgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQESNwoGdGFyZ2V0GAMgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQEiTAoUU2V0UmVmZXJlbmNlUmVzcG9uc2USNAoIbWV0YWRhdGEYASABKAsyIi5wcm92aWRlci5lbnZ2YXJzLnYxLlZhbHVlTWV0YWRhdGEiiQEKFUxpc3RSZWZlcmVuY2VzUmVxdWVzdBIzCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCCLpIBYIBAhABEjsKCmNvb3JkaW5hdGUYAiABKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGVCBrpIA8gBASJNChZMaXN0UmVmZXJlbmNlc1Jlc3BvbnNlEjMKCnJlZmVyZW5jZXMYASADKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGUihwEKE0xpc3RWZXJzaW9uc1JlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARI7Cgpjb29yZGluYXRlGAIgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQEiSwoUTGlzdFZlcnNpb25zUmVzcG9uc2USMwoIdmVyc2lvbnMYASADKAsyIS5wcm92aWRlci5lbnZ2YXJzLnYxLlZlcnNpb25FbnRyeSKDBAoRU2V0QmluZGluZ1JlcXVlc3QSLwoEc2x1ZxgBIAEoCUIhukgechwYPzIYXlthLXowLTldKygtW2EtejAtOV0rKSokEtMBCgR0aWVyGAIgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCpwG6SKMBugGfAQoUZW52dmFycy5iaW5kaW5nLnRpZXISd2EgYmluZGluZyBpcyBwdWJsaXNoZWQgdG8gYW4gb2NlbCBjb29yZGluYXRlLCBuZXZlciB0byBhIHN0YWdlIG9yIGEgc3RhY2sgbmFtZTogbmFtZSB0aGUgcHJldmlldyBvciB0aGUgcHJvZHVjdGlvbiB0aWVyGg50aGlzIGluIFsxLCAyXRKhAQoLZW52aXJvbm1lbnQYAyABKAlCiwG6SIcBugFwCh5lbnZ2YXJzLmVudmlyb25tZW50LmNsYXNzX3dpZGUSOSIqIiBpcyByZXNlcnZlZDogaXQgbmFtZXMgdGhlIHZhbHVlIHRoYXQgYmluZHMgY2xhc3Mtd2lkZRoTIXRoaXMuY29udGFpbnMoJyonKXISMhBeW14jWzpjbnRybDpdXSokEjQKB2JpbmRpbmcYBCABKAsyGy5jb21tb24uYmluZGluZ3MudjEuQmluZGluZ0IGukgDyAEBEg0KBW93bmVyGAUgASgJIiUKElNldEJpbmRpbmdSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgEIuoDChRSZW1vdmVCaW5kaW5nUmVxdWVzdBIvCgRzbHVnGAEgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQS0wEKBHRpZXIYAiABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckKnAbpIowG6AZ8BChRlbnZ2YXJzLmJpbmRpbmcudGllchJ3YSBiaW5kaW5nIGlzIHB1Ymxpc2hlZCB0byBhbiBvY2VsIGNvb3JkaW5hdGUsIG5ldmVyIHRvIGEgc3RhZ2Ugb3IgYSBzdGFjayBuYW1lOiBuYW1lIHRoZSBwcmV2aWV3IG9yIHRoZSBwcm9kdWN0aW9uIHRpZXIaDnRoaXMgaW4gWzEsIDJdEqEBCgtlbnZpcm9ubWVudBgDIAEoCUKLAbpIhwG6AXAKHmVudnZhcnMuZW52aXJvbm1lbnQuY2xhc3Nfd2lkZRI5IioiIGlzIHJlc2VydmVkOiBpdCBuYW1lcyB0aGUgdmFsdWUgdGhhdCBiaW5kcyBjbGFzcy13aWRlGhMhdGhpcy5jb250YWlucygnKicpchIyEF5bXiNbOmNudHJsOl1dKiQSJwoEbmFtZRgEIAEoCUIZukgWchQQATIQXlteI1s6Y250cmw6XV0qJCIoChVSZW1vdmVCaW5kaW5nUmVzcG9uc2USDwoHcmVtb3ZlZBgBIAEoCCLAAwoTTGlzdEJpbmRpbmdzUmVxdWVzdBIvCgRzbHVnGAEgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQS0wEKBHRpZXIYAiABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckKnAbpIowG6AZ8BChRlbnZ2YXJzLmJpbmRpbmcudGllchJ3YSBiaW5kaW5nIGlzIHB1Ymxpc2hlZCB0byBhbiBvY2VsIGNvb3JkaW5hdGUsIG5ldmVyIHRvIGEgc3RhZ2Ugb3IgYSBzdGFjayBuYW1lOiBuYW1lIHRoZSBwcmV2aWV3IG9yIHRoZSBwcm9kdWN0aW9uIHRpZXIaDnRoaXMgaW4gWzEsIDJdEqEBCgtlbnZpcm9ubWVudBgDIAEoCUKLAbpIhwG6AXAKHmVudnZhcnMuZW52aXJvbm1lbnQuY2xhc3Nfd2lkZRI5IioiIGlzIHJlc2VydmVkOiBpdCBuYW1lcyB0aGUgdmFsdWUgdGhhdCBiaW5kcyBjbGFzcy13aWRlGhMhdGhpcy5jb250YWlucygnKicpchIyEF5bXiNbOmNudHJsOl1dKiQiTQoUTGlzdEJpbmRpbmdzUmVzcG9uc2USNQoIYmluZGluZ3MYASADKAsyIy5wcm92aWRlci5lbnZ2YXJzLnYxLkJpbmRpbmdTdW1tYXJ5IrUBCg5CaW5kaW5nU3VtbWFyeRIMCgRuYW1lGAEgASgJEi0KBHR5cGUYAiABKA4yHy5jb21tb24uYmluZGluZ3MudjEuQmluZGluZ1R5cGUSDgoGc291cmNlGAMgASgJEg0KBW93bmVyGAQgASgJEg8KB3ZlcnNpb24YBSABKAQSNgoKcHJvcGVydGllcxgGIAMoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuUHJvcGVydHlTaGFwZSI+Cg1Qcm9wZXJ0eVNoYXBlEgwKBG5hbWUYASABKAkSEQoJanNvbl90eXBlGAIgASgJEgwKBGxpc3QYAyABKAgyyQgKDkVudlZhcnNTZXJ2aWNlElcKCFNldFZhbHVlEiQucHJvdmlkZXIuZW52dmFycy52MS5TZXRWYWx1ZVJlcXVlc3QaJS5wcm92aWRlci5lbnZ2YXJzLnYxLlNldFZhbHVlUmVzcG9uc2USXQoKTGlzdFZhbHVlcxImLnByb3ZpZGVyLmVudnZhcnMudjEuTGlzdFZhbHVlc1JlcXVlc3QaJy5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RWYWx1ZXNSZXNwb25zZRJXCghHZXRWYWx1ZRIkLnByb3ZpZGVyLmVudnZhcnMudjEuR2V0VmFsdWVSZXF1ZXN0GiUucHJvdmlkZXIuZW52dmFycy52MS5HZXRWYWx1ZVJlc3BvbnNlEmMKDFJldmVhbFZhbHVlcxIoLnByb3ZpZGVyLmVudnZhcnMudjEuUmV2ZWFsVmFsdWVzUmVxdWVzdBopLnByb3ZpZGVyLmVudnZhcnMudjEuUmV2ZWFsVmFsdWVzUmVzcG9uc2USYAoLRGVsZXRlVmFsdWUSJy5wcm92aWRlci5lbnZ2YXJzLnYxLkRlbGV0ZVZhbHVlUmVxdWVzdBooLnByb3ZpZGVyLmVudnZhcnMudjEuRGVsZXRlVmFsdWVSZXNwb25zZRJjCgxTZXRSZWZlcmVuY2USKC5wcm92aWRlci5lbnZ2YXJzLnYxLlNldFJlZmVyZW5jZVJlcXVlc3QaKS5wcm92aWRlci5lbnZ2YXJzLnYxLlNldFJlZmVyZW5jZVJlc3BvbnNlEmkKDkxpc3RSZWZlcmVuY2VzEioucHJvdmlkZXIuZW52dmFycy52MS5MaXN0UmVmZXJlbmNlc1JlcXVlc3QaKy5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RSZWZlcmVuY2VzUmVzcG9uc2USYwoMTGlzdFZlcnNpb25zEigucHJvdmlkZXIuZW52dmFycy52MS5MaXN0VmVyc2lvbnNSZXF1ZXN0GikucHJvdmlkZXIuZW52dmFycy52MS5MaXN0VmVyc2lvbnNSZXNwb25zZRJdCgpTZXRCaW5kaW5nEiYucHJvdmlkZXIuZW52dmFycy52MS5TZXRCaW5kaW5nUmVxdWVzdBonLnByb3ZpZGVyLmVudnZhcnMudjEuU2V0QmluZGluZ1Jlc3BvbnNlEmYKDVJlbW92ZUJpbmRpbmcSKS5wcm92aWRlci5lbnZ2YXJzLnYxLlJlbW92ZUJpbmRpbmdSZXF1ZXN0GioucHJvdmlkZXIuZW52dmFycy52MS5SZW1vdmVCaW5kaW5nUmVzcG9uc2USYwoMTGlzdEJpbmRpbmdzEigucHJvdmlkZXIuZW52dmFycy52MS5MaXN0QmluZGluZ3NSZXF1ZXN0GikucHJvdmlkZXIuZW52dmFycy52MS5MaXN0QmluZGluZ3NSZXNwb25zZUJAWj5naXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9wcm92aWRlci9lbnZ2YXJzL3YxO2VudnZhcnN2MWIGcHJvdG8z", [file_buf_validate_validate, file_common_environment_v1_environment, file_common_bindings_v1_bindings]);
+  fileDesc("CiFwcm92aWRlci9lbnZ2YXJzL3YxL2VudnZhcnMucHJvdG8SE3Byb3ZpZGVyLmVudnZhcnMudjEizgMKCkNvb3JkaW5hdGUSLwoEc2x1ZxgBIAEoCUIhukgechwYPzIYXlthLXowLTldKygtW2EtejAtOV0rKSokEsIBCgZmb2xkZXIYAiABKAlCsQG6SK0BugGQAQoeZW52dmFycy5jb29yZGluYXRlLmZvbGRlci5yb290EmEiLyIgaXMgdGhlIHByb2plY3Qgcm9vdCwgd2hpY2ggaXMgd2hhdCBhbiB1bmJvdW5kIGFwcCBhbHJlYWR5IHJlYWRzOyBsZWF2ZSB0aGUgZm9sZGVyIG9mZiBpbnN0ZWFkGgt0aGlzICE9ICcvJ3IXMhVeKC9bXi8jWzpjbnRybDpdXSspKiQSJgoDa2V5GAMgASgJQhm6SBZyFBABMhBeW14jWzpjbnRybDpdXSokEqEBCgtlbnZpcm9ubWVudBgEIAEoCUKLAbpIhwG6AXAKHmVudnZhcnMuZW52aXJvbm1lbnQuY2xhc3Nfd2lkZRI5IioiIGlzIHJlc2VydmVkOiBpdCBuYW1lcyB0aGUgdmFsdWUgdGhhdCBiaW5kcyBjbGFzcy13aWRlGhMhdGhpcy5jb250YWlucygnKicpchIyEF5bXiNbOmNudHJsOl1dKiQizAEKDVZhbHVlTWV0YWRhdGESMwoKY29vcmRpbmF0ZRgBIAEoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZRIPCgd2ZXJzaW9uGAIgASgDEhIKCnVwZGF0ZWRfYXQYAyABKAMSDAoEc2l6ZRgEIAEoAxI0CgZ0YXJnZXQYBSABKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGVIAIgBARISCgplbnZfc291cmNlGAYgASgJQgkKB190YXJnZXQiQQoMVmVyc2lvbkVudHJ5Eg8KB3ZlcnNpb24YASABKAMSEgoKY3JlYXRlZF9hdBgCIAEoAxIMCgRzaXplGAMgASgDIssBCg9TZXRWYWx1ZVJlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARI7Cgpjb29yZGluYXRlGAIgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQESEgoFdmFsdWUYAyABKAlCA4ABARIdChBleHBlY3RlZF92ZXJzaW9uGAQgASgDSACIAQFCEwoRX2V4cGVjdGVkX3ZlcnNpb24iSAoQU2V0VmFsdWVSZXNwb25zZRI0CghtZXRhZGF0YRgBIAEoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuVmFsdWVNZXRhZGF0YSJ5ChFMaXN0VmFsdWVzUmVxdWVzdBIzCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCCLpIBYIBAhABEi8KBHNsdWcYAiABKAlCIbpIHnIcGD8yGF5bYS16MC05XSsoLVthLXowLTldKykqJCJIChJMaXN0VmFsdWVzUmVzcG9uc2USMgoGdmFsdWVzGAEgAygLMiIucHJvdmlkZXIuZW52dmFycy52MS5WYWx1ZU1ldGFkYXRhIpMBCg9HZXRWYWx1ZVJlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARI7Cgpjb29yZGluYXRlGAIgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQESDgoGcmV2ZWFsGAMgASgIImsKEEdldFZhbHVlUmVzcG9uc2USDQoFZm91bmQYASABKAgSNAoIbWV0YWRhdGEYAiABKAsyIi5wcm92aWRlci5lbnZ2YXJzLnYxLlZhbHVlTWV0YWRhdGESEgoFdmFsdWUYAyABKAlCA4ABASKrAQoTUmV2ZWFsVmFsdWVzUmVxdWVzdBIzCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCCLpIBYIBAhABEi8KBHNsdWcYAiABKAlCIbpIHnIcGD8yGF5bYS16MC05XSsoLVthLXowLTldKykqJBIuCgVjZWxscxgDIAMoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZSJKChRSZXZlYWxWYWx1ZXNSZXNwb25zZRIyCgZ2YWx1ZXMYASADKAsyIi5wcm92aWRlci5lbnZ2YXJzLnYxLlJldmVhbGVkVmFsdWUiWQoNUmV2ZWFsZWRWYWx1ZRI0CghtZXRhZGF0YRgBIAEoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuVmFsdWVNZXRhZGF0YRISCgV2YWx1ZRgCIAEoCUIDgAEBIroBChJEZWxldGVWYWx1ZVJlcXVlc3QSMwoEdGllchgBIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQgi6SAWCAQIQARI7Cgpjb29yZGluYXRlGAIgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQESHQoQZXhwZWN0ZWRfdmVyc2lvbhgDIAEoA0gAiAEBQhMKEV9leHBlY3RlZF92ZXJzaW9uIiYKE0RlbGV0ZVZhbHVlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoCCLAAQoTU2V0UmVmZXJlbmNlUmVxdWVzdBIzCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCCLpIBYIBAhABEjsKCmNvb3JkaW5hdGUYAiABKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGVCBrpIA8gBARI3CgZ0YXJnZXQYAyABKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGVCBrpIA8gBASJMChRTZXRSZWZlcmVuY2VSZXNwb25zZRI0CghtZXRhZGF0YRgBIAEoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuVmFsdWVNZXRhZGF0YSKJAQoVTGlzdFJlZmVyZW5jZXNSZXF1ZXN0EjMKBHRpZXIYASABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckIIukgFggECEAESOwoKY29vcmRpbmF0ZRgCIAEoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZUIGukgDyAEBIk0KFkxpc3RSZWZlcmVuY2VzUmVzcG9uc2USMwoKcmVmZXJlbmNlcxgBIAMoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuQ29vcmRpbmF0ZSKHAQoTTGlzdFZlcnNpb25zUmVxdWVzdBIzCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCCLpIBYIBAhABEjsKCmNvb3JkaW5hdGUYAiABKAsyHy5wcm92aWRlci5lbnZ2YXJzLnYxLkNvb3JkaW5hdGVCBrpIA8gBASJLChRMaXN0VmVyc2lvbnNSZXNwb25zZRIzCgh2ZXJzaW9ucxgBIAMoCzIhLnByb3ZpZGVyLmVudnZhcnMudjEuVmVyc2lvbkVudHJ5IoMEChFTZXRCaW5kaW5nUmVxdWVzdBIvCgRzbHVnGAEgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQS0wEKBHRpZXIYAiABKA4yGy5jb21tb24uZW52aXJvbm1lbnQudjEuVGllckKnAbpIowG6AZ8BChRlbnZ2YXJzLmJpbmRpbmcudGllchJ3YSBiaW5kaW5nIGlzIHB1Ymxpc2hlZCB0byBhbiBvY2VsIGNvb3JkaW5hdGUsIG5ldmVyIHRvIGEgc3RhZ2Ugb3IgYSBzdGFjayBuYW1lOiBuYW1lIHRoZSBwcmV2aWV3IG9yIHRoZSBwcm9kdWN0aW9uIHRpZXIaDnRoaXMgaW4gWzEsIDJdEqEBCgtlbnZpcm9ubWVudBgDIAEoCUKLAbpIhwG6AXAKHmVudnZhcnMuZW52aXJvbm1lbnQuY2xhc3Nfd2lkZRI5IioiIGlzIHJlc2VydmVkOiBpdCBuYW1lcyB0aGUgdmFsdWUgdGhhdCBiaW5kcyBjbGFzcy13aWRlGhMhdGhpcy5jb250YWlucygnKicpchIyEF5bXiNbOmNudHJsOl1dKiQSNAoHYmluZGluZxgEIAEoCzIbLmNvbW1vbi5iaW5kaW5ncy52MS5CaW5kaW5nQga6SAPIAQESDQoFb3duZXIYBSABKAkiJQoSU2V0QmluZGluZ1Jlc3BvbnNlEg8KB3ZlcnNpb24YASABKAQi6gMKFFJlbW92ZUJpbmRpbmdSZXF1ZXN0Ei8KBHNsdWcYASABKAlCIbpIHnIcGD8yGF5bYS16MC05XSsoLVthLXowLTldKykqJBLTAQoEdGllchgCIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQqcBukijAboBnwEKFGVudnZhcnMuYmluZGluZy50aWVyEndhIGJpbmRpbmcgaXMgcHVibGlzaGVkIHRvIGFuIG9jZWwgY29vcmRpbmF0ZSwgbmV2ZXIgdG8gYSBzdGFnZSBvciBhIHN0YWNrIG5hbWU6IG5hbWUgdGhlIHByZXZpZXcgb3IgdGhlIHByb2R1Y3Rpb24gdGllchoOdGhpcyBpbiBbMSwgMl0SoQEKC2Vudmlyb25tZW50GAMgASgJQosBukiHAboBcAoeZW52dmFycy5lbnZpcm9ubWVudC5jbGFzc193aWRlEjkiKiIgaXMgcmVzZXJ2ZWQ6IGl0IG5hbWVzIHRoZSB2YWx1ZSB0aGF0IGJpbmRzIGNsYXNzLXdpZGUaEyF0aGlzLmNvbnRhaW5zKCcqJylyEjIQXlteI1s6Y250cmw6XV0qJBInCgRuYW1lGAQgASgJQhm6SBZyFBABMhBeW14jWzpjbnRybDpdXSokIigKFVJlbW92ZUJpbmRpbmdSZXNwb25zZRIPCgdyZW1vdmVkGAEgASgIIsADChNMaXN0QmluZGluZ3NSZXF1ZXN0Ei8KBHNsdWcYASABKAlCIbpIHnIcGD8yGF5bYS16MC05XSsoLVthLXowLTldKykqJBLTAQoEdGllchgCIAEoDjIbLmNvbW1vbi5lbnZpcm9ubWVudC52MS5UaWVyQqcBukijAboBnwEKFGVudnZhcnMuYmluZGluZy50aWVyEndhIGJpbmRpbmcgaXMgcHVibGlzaGVkIHRvIGFuIG9jZWwgY29vcmRpbmF0ZSwgbmV2ZXIgdG8gYSBzdGFnZSBvciBhIHN0YWNrIG5hbWU6IG5hbWUgdGhlIHByZXZpZXcgb3IgdGhlIHByb2R1Y3Rpb24gdGllchoOdGhpcyBpbiBbMSwgMl0SoQEKC2Vudmlyb25tZW50GAMgASgJQosBukiHAboBcAoeZW52dmFycy5lbnZpcm9ubWVudC5jbGFzc193aWRlEjkiKiIgaXMgcmVzZXJ2ZWQ6IGl0IG5hbWVzIHRoZSB2YWx1ZSB0aGF0IGJpbmRzIGNsYXNzLXdpZGUaEyF0aGlzLmNvbnRhaW5zKCcqJylyEjIQXlteI1s6Y250cmw6XV0qJCJNChRMaXN0QmluZGluZ3NSZXNwb25zZRI1CghiaW5kaW5ncxgBIAMoCzIjLnByb3ZpZGVyLmVudnZhcnMudjEuQmluZGluZ1N1bW1hcnkitQEKDkJpbmRpbmdTdW1tYXJ5EgwKBG5hbWUYASABKAkSLQoEdHlwZRgCIAEoDjIfLmNvbW1vbi5iaW5kaW5ncy52MS5CaW5kaW5nVHlwZRIOCgZzb3VyY2UYAyABKAkSDQoFb3duZXIYBCABKAkSDwoHdmVyc2lvbhgFIAEoBBI2Cgpwcm9wZXJ0aWVzGAYgAygLMiIucHJvdmlkZXIuZW52dmFycy52MS5Qcm9wZXJ0eVNoYXBlIj4KDVByb3BlcnR5U2hhcGUSDAoEbmFtZRgBIAEoCRIRCglqc29uX3R5cGUYAiABKAkSDAoEbGlzdBgDIAEoCCLGAQoJRW52U291cmNlEjgKB2J1aWx0aW4YASABKAsyJS5wcm92aWRlci5lbnZ2YXJzLnYxLkJ1aWx0aW5FbnZTb3VyY2VIABI8CglpbmZpc2ljYWwYAiABKAsyJy5wcm92aWRlci5lbnZ2YXJzLnYxLkluZmlzaWNhbEVudlNvdXJjZUgAEjIKBGV4ZWMYAyABKAsyIi5wcm92aWRlci5lbnZ2YXJzLnYxLkV4ZWNFbnZTb3VyY2VIAEINCgRraW5kEgW6SAIIASISChBCdWlsdGluRW52U291cmNlIuMBChJJbmZpc2ljYWxFbnZTb3VyY2USGAoHcHJvamVjdBgBIAEoCUIHukgEcgIQARIcCgtlbnZpcm9ubWVudBgCIAEoCUIHukgEcgIQARIdCgRwYXRoGAMgASgJQg+6SAxyCjIIXigvLiopPyQSJQoEaG9zdBgEIAEoCUIXukgUchIyEF4oaHR0cHM/Oi8vLispPyQSOAoEYXV0aBgFIAEoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuSW5maXNpY2FsQXV0aEIGukgDyAEBEhUKDXdyaXRlX21pc3NpbmcYBiABKAgiogEKDUluZmlzaWNhbEF1dGgSQAoJdW5pdmVyc2FsGAEgASgLMisucHJvdmlkZXIuZW52dmFycy52MS5JbmZpc2ljYWxVbml2ZXJzYWxBdXRoSAASPgoIaWRlbnRpdHkYAiABKAsyKi5wcm92aWRlci5lbnZ2YXJzLnYxLkluZmlzaWNhbElkZW50aXR5QXV0aEgAQg8KBm1ldGhvZBIFukgCCAEiigEKFkluZmlzaWNhbFVuaXZlcnNhbEF1dGgSNQoSY2xpZW50X2lkX3ZhcmlhYmxlGAEgASgJQhm6SBZyFBABMhBeW14jWzpjbnRybDpdXSokEjkKFmNsaWVudF9zZWNyZXRfdmFyaWFibGUYAiABKAlCGbpIFnIUEAEyEF5bXiNbOmNudHJsOl1dKiQiNQoVSW5maXNpY2FsSWRlbnRpdHlBdXRoEhwKC2lkZW50aXR5X2lkGAEgASgJQge6SARyAhABIl8KDUV4ZWNFbnZTb3VyY2USGQoHY29tbWFuZBgBIAMoCUIIukgFkgECCAESMwoGdmFsdWVzGAIgAygLMiMucHJvdmlkZXIuZW52dmFycy52MS5FbnZTb3VyY2VWYWx1ZSJmCg5FbnZTb3VyY2VWYWx1ZRIvCgRjZWxsGAEgASgLMhkucHJvdmlkZXIuZW52dmFycy52MS5DZWxsQga6SAPIAQESEgoFdmFsdWUYAiABKAlCA4ABARIPCgd2ZXJzaW9uGAMgASgJIlwKBENlbGwSLAoGZm9sZGVyGAEgASgJQhy6SBlyFzIVXigvW14vI1s6Y250cmw6XV0rKSokEiYKA2tleRgCIAEoCUIZukgWchQQATIQXlteI1s6Y250cmw6XV0qJCLVAQoPRW52U291cmNlU3RhdHVzEhIKCmVudl9zb3VyY2UYASABKAkSEQoJc2NoZWR1bGVkGAIgASgIEhAKCHdyaXRhYmxlGAMgASgIEhcKD2xhc3RfYXR0ZW1wdF9hdBgEIAEoAxIXCg9sYXN0X3N1Y2Nlc3NfYXQYBSABKAMSEgoKbGFzdF9lcnJvchgGIAEoCRIuCgVsaW5rcxgHIAMoCzIfLnByb3ZpZGVyLmVudnZhcnMudjEuRm9sZGVyTGluaxITCgtjcmVkZW50aWFscxgIIAMoCSIpCgpGb2xkZXJMaW5rEg4KBmZvbGRlchgBIAEoCRILCgN1cmwYAiABKAkiRgoLUmVmdXNlZENlbGwSJwoEY2VsbBgBIAEoCzIZLnByb3ZpZGVyLmVudnZhcnMudjEuQ2VsbBIOCgZyZWFzb24YAiABKAkisQMKFFN5bmNFbnZTb3VyY2VSZXF1ZXN0EqwBCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCgAG6SH26AXoKFmVudnZhcnMuZW52c291cmNlLnRpZXISUGFuIGVudiBzb3VyY2UgaXMga2VwdCBwZXIgZGVwbG95ZWQgdGllcjogbmFtZSB0aGUgcHJldmlldyBvciB0aGUgcHJvZHVjdGlvbiB0aWVyGg50aGlzIGluIFsxLCAyXRIvCgRzbHVnGAIgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQSNAoKZW52X3NvdXJjZRgDIAEoCzIeLnByb3ZpZGVyLmVudnZhcnMudjEuRW52U291cmNlSAASPgoKcmVnaXN0ZXJlZBgFIAEoCzIoLnByb3ZpZGVyLmVudnZhcnMudjEuUmVnaXN0ZXJlZEVudlNvdXJjZUgAEjQKB2ZvbGRlcnMYBCADKAlCI7pIIJIBHRgBIhlyFzIVXigvW14vI1s6Y250cmw6XV0rKSokQg0KBGZyb20SBbpIAggBIhUKE1JlZ2lzdGVyZWRFbnZTb3VyY2UizgEKFVN5bmNFbnZTb3VyY2VSZXNwb25zZRI0CgZzdGF0dXMYASABKAsyJC5wcm92aWRlci5lbnZ2YXJzLnYxLkVudlNvdXJjZVN0YXR1cxIqCgdwcmVzZW50GAIgAygLMhkucHJvdmlkZXIuZW52dmFycy52MS5DZWxsEg8KB3dyaXR0ZW4YAyABKAUSDwoHcmVtb3ZlZBgEIAEoBRIxCgdyZWZ1c2VkGAUgAygLMiAucHJvdmlkZXIuZW52dmFycy52MS5SZWZ1c2VkQ2VsbCL6AQoYRGVzY3JpYmVFbnZTb3VyY2VSZXF1ZXN0EqwBCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCgAG6SH26AXoKFmVudnZhcnMuZW52c291cmNlLnRpZXISUGFuIGVudiBzb3VyY2UgaXMga2VwdCBwZXIgZGVwbG95ZWQgdGllcjogbmFtZSB0aGUgcHJldmlldyBvciB0aGUgcHJvZHVjdGlvbiB0aWVyGg50aGlzIGluIFsxLCAyXRIvCgRzbHVnGAIgASgJQiG6SB5yHBg/MhheW2EtejAtOV0rKC1bYS16MC05XSspKiQiUQoZRGVzY3JpYmVFbnZTb3VyY2VSZXNwb25zZRI0CgZzdGF0dXMYASABKAsyJC5wcm92aWRlci5lbnZ2YXJzLnYxLkVudlNvdXJjZVN0YXR1cyK7AgobQ3JlYXRlRW52U291cmNlVmFsdWVSZXF1ZXN0EqwBCgR0aWVyGAEgASgOMhsuY29tbW9uLmVudmlyb25tZW50LnYxLlRpZXJCgAG6SH26AXoKFmVudnZhcnMuZW52c291cmNlLnRpZXISUGFuIGVudiBzb3VyY2UgaXMga2VwdCBwZXIgZGVwbG95ZWQgdGllcjogbmFtZSB0aGUgcHJldmlldyBvciB0aGUgcHJvZHVjdGlvbiB0aWVyGg50aGlzIGluIFsxLCAyXRI7Cgpjb29yZGluYXRlGAIgASgLMh8ucHJvdmlkZXIuZW52dmFycy52MS5Db29yZGluYXRlQga6SAPIAQESEgoFdmFsdWUYAyABKAlCA4ABARIcCgtkZXNjcmlwdGlvbhgEIAEoCUIHukgEcgIYeCKBAQocQ3JlYXRlRW52U291cmNlVmFsdWVSZXNwb25zZRIZChFhd2FpdGluZ19hcHByb3ZhbBgBIAEoCBI5CghtZXRhZGF0YRgCIAEoCzIiLnByb3ZpZGVyLmVudnZhcnMudjEuVmFsdWVNZXRhZGF0YUgAiAEBQgsKCV9tZXRhZGF0YTKiCwoORW52VmFyc1NlcnZpY2USVwoIU2V0VmFsdWUSJC5wcm92aWRlci5lbnZ2YXJzLnYxLlNldFZhbHVlUmVxdWVzdBolLnByb3ZpZGVyLmVudnZhcnMudjEuU2V0VmFsdWVSZXNwb25zZRJdCgpMaXN0VmFsdWVzEiYucHJvdmlkZXIuZW52dmFycy52MS5MaXN0VmFsdWVzUmVxdWVzdBonLnByb3ZpZGVyLmVudnZhcnMudjEuTGlzdFZhbHVlc1Jlc3BvbnNlElcKCEdldFZhbHVlEiQucHJvdmlkZXIuZW52dmFycy52MS5HZXRWYWx1ZVJlcXVlc3QaJS5wcm92aWRlci5lbnZ2YXJzLnYxLkdldFZhbHVlUmVzcG9uc2USYwoMUmV2ZWFsVmFsdWVzEigucHJvdmlkZXIuZW52dmFycy52MS5SZXZlYWxWYWx1ZXNSZXF1ZXN0GikucHJvdmlkZXIuZW52dmFycy52MS5SZXZlYWxWYWx1ZXNSZXNwb25zZRJgCgtEZWxldGVWYWx1ZRInLnByb3ZpZGVyLmVudnZhcnMudjEuRGVsZXRlVmFsdWVSZXF1ZXN0GigucHJvdmlkZXIuZW52dmFycy52MS5EZWxldGVWYWx1ZVJlc3BvbnNlEmMKDFNldFJlZmVyZW5jZRIoLnByb3ZpZGVyLmVudnZhcnMudjEuU2V0UmVmZXJlbmNlUmVxdWVzdBopLnByb3ZpZGVyLmVudnZhcnMudjEuU2V0UmVmZXJlbmNlUmVzcG9uc2USaQoOTGlzdFJlZmVyZW5jZXMSKi5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RSZWZlcmVuY2VzUmVxdWVzdBorLnByb3ZpZGVyLmVudnZhcnMudjEuTGlzdFJlZmVyZW5jZXNSZXNwb25zZRJjCgxMaXN0VmVyc2lvbnMSKC5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RWZXJzaW9uc1JlcXVlc3QaKS5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RWZXJzaW9uc1Jlc3BvbnNlEl0KClNldEJpbmRpbmcSJi5wcm92aWRlci5lbnZ2YXJzLnYxLlNldEJpbmRpbmdSZXF1ZXN0GicucHJvdmlkZXIuZW52dmFycy52MS5TZXRCaW5kaW5nUmVzcG9uc2USZgoNUmVtb3ZlQmluZGluZxIpLnByb3ZpZGVyLmVudnZhcnMudjEuUmVtb3ZlQmluZGluZ1JlcXVlc3QaKi5wcm92aWRlci5lbnZ2YXJzLnYxLlJlbW92ZUJpbmRpbmdSZXNwb25zZRJjCgxMaXN0QmluZGluZ3MSKC5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RCaW5kaW5nc1JlcXVlc3QaKS5wcm92aWRlci5lbnZ2YXJzLnYxLkxpc3RCaW5kaW5nc1Jlc3BvbnNlEmYKDVN5bmNFbnZTb3VyY2USKS5wcm92aWRlci5lbnZ2YXJzLnYxLlN5bmNFbnZTb3VyY2VSZXF1ZXN0GioucHJvdmlkZXIuZW52dmFycy52MS5TeW5jRW52U291cmNlUmVzcG9uc2UScgoRRGVzY3JpYmVFbnZTb3VyY2USLS5wcm92aWRlci5lbnZ2YXJzLnYxLkRlc2NyaWJlRW52U291cmNlUmVxdWVzdBouLnByb3ZpZGVyLmVudnZhcnMudjEuRGVzY3JpYmVFbnZTb3VyY2VSZXNwb25zZRJ7ChRDcmVhdGVFbnZTb3VyY2VWYWx1ZRIwLnByb3ZpZGVyLmVudnZhcnMudjEuQ3JlYXRlRW52U291cmNlVmFsdWVSZXF1ZXN0GjEucHJvdmlkZXIuZW52dmFycy52MS5DcmVhdGVFbnZTb3VyY2VWYWx1ZVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL3Byb3ZpZGVyL2VudnZhcnMvdjE7ZW52dmFyc3YxYgZwcm90bzM", [file_buf_validate_validate, file_common_environment_v1_environment, file_common_bindings_v1_bindings]);
 
 /**
  * @generated from message provider.envvars.v1.Coordinate
@@ -77,6 +77,11 @@ export type ValueMetadata = Message<"provider.envvars.v1.ValueMetadata"> & {
    * @generated from field: optional provider.envvars.v1.Coordinate target = 5;
    */
   target?: Coordinate | undefined;
+
+  /**
+   * @generated from field: string env_source = 6;
+   */
+  envSource: string;
 };
 
 /**
@@ -704,6 +709,518 @@ export const PropertyShapeSchema: GenMessage<PropertyShape> = /*@__PURE__*/
   messageDesc(file_provider_envvars_v1_envvars, 27);
 
 /**
+ * @generated from message provider.envvars.v1.EnvSource
+ */
+export type EnvSource = Message<"provider.envvars.v1.EnvSource"> & {
+  /**
+   * @generated from oneof provider.envvars.v1.EnvSource.kind
+   */
+  kind: {
+    /**
+     * @generated from field: provider.envvars.v1.BuiltinEnvSource builtin = 1;
+     */
+    value: BuiltinEnvSource;
+    case: "builtin";
+  } | {
+    /**
+     * @generated from field: provider.envvars.v1.InfisicalEnvSource infisical = 2;
+     */
+    value: InfisicalEnvSource;
+    case: "infisical";
+  } | {
+    /**
+     * @generated from field: provider.envvars.v1.ExecEnvSource exec = 3;
+     */
+    value: ExecEnvSource;
+    case: "exec";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message provider.envvars.v1.EnvSource.
+ * Use `create(EnvSourceSchema)` to create a new message.
+ */
+export const EnvSourceSchema: GenMessage<EnvSource> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 28);
+
+/**
+ * @generated from message provider.envvars.v1.BuiltinEnvSource
+ */
+export type BuiltinEnvSource = Message<"provider.envvars.v1.BuiltinEnvSource"> & {
+};
+
+/**
+ * Describes the message provider.envvars.v1.BuiltinEnvSource.
+ * Use `create(BuiltinEnvSourceSchema)` to create a new message.
+ */
+export const BuiltinEnvSourceSchema: GenMessage<BuiltinEnvSource> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 29);
+
+/**
+ * @generated from message provider.envvars.v1.InfisicalEnvSource
+ */
+export type InfisicalEnvSource = Message<"provider.envvars.v1.InfisicalEnvSource"> & {
+  /**
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * @generated from field: string environment = 2;
+   */
+  environment: string;
+
+  /**
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * @generated from field: string host = 4;
+   */
+  host: string;
+
+  /**
+   * @generated from field: provider.envvars.v1.InfisicalAuth auth = 5;
+   */
+  auth?: InfisicalAuth | undefined;
+
+  /**
+   * @generated from field: bool write_missing = 6;
+   */
+  writeMissing: boolean;
+};
+
+/**
+ * Describes the message provider.envvars.v1.InfisicalEnvSource.
+ * Use `create(InfisicalEnvSourceSchema)` to create a new message.
+ */
+export const InfisicalEnvSourceSchema: GenMessage<InfisicalEnvSource> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 30);
+
+/**
+ * @generated from message provider.envvars.v1.InfisicalAuth
+ */
+export type InfisicalAuth = Message<"provider.envvars.v1.InfisicalAuth"> & {
+  /**
+   * @generated from oneof provider.envvars.v1.InfisicalAuth.method
+   */
+  method: {
+    /**
+     * @generated from field: provider.envvars.v1.InfisicalUniversalAuth universal = 1;
+     */
+    value: InfisicalUniversalAuth;
+    case: "universal";
+  } | {
+    /**
+     * @generated from field: provider.envvars.v1.InfisicalIdentityAuth identity = 2;
+     */
+    value: InfisicalIdentityAuth;
+    case: "identity";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message provider.envvars.v1.InfisicalAuth.
+ * Use `create(InfisicalAuthSchema)` to create a new message.
+ */
+export const InfisicalAuthSchema: GenMessage<InfisicalAuth> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 31);
+
+/**
+ * @generated from message provider.envvars.v1.InfisicalUniversalAuth
+ */
+export type InfisicalUniversalAuth = Message<"provider.envvars.v1.InfisicalUniversalAuth"> & {
+  /**
+   * @generated from field: string client_id_variable = 1;
+   */
+  clientIdVariable: string;
+
+  /**
+   * @generated from field: string client_secret_variable = 2;
+   */
+  clientSecretVariable: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.InfisicalUniversalAuth.
+ * Use `create(InfisicalUniversalAuthSchema)` to create a new message.
+ */
+export const InfisicalUniversalAuthSchema: GenMessage<InfisicalUniversalAuth> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 32);
+
+/**
+ * @generated from message provider.envvars.v1.InfisicalIdentityAuth
+ */
+export type InfisicalIdentityAuth = Message<"provider.envvars.v1.InfisicalIdentityAuth"> & {
+  /**
+   * @generated from field: string identity_id = 1;
+   */
+  identityId: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.InfisicalIdentityAuth.
+ * Use `create(InfisicalIdentityAuthSchema)` to create a new message.
+ */
+export const InfisicalIdentityAuthSchema: GenMessage<InfisicalIdentityAuth> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 33);
+
+/**
+ * @generated from message provider.envvars.v1.ExecEnvSource
+ */
+export type ExecEnvSource = Message<"provider.envvars.v1.ExecEnvSource"> & {
+  /**
+   * @generated from field: repeated string command = 1;
+   */
+  command: string[];
+
+  /**
+   * @generated from field: repeated provider.envvars.v1.EnvSourceValue values = 2;
+   */
+  values: EnvSourceValue[];
+};
+
+/**
+ * Describes the message provider.envvars.v1.ExecEnvSource.
+ * Use `create(ExecEnvSourceSchema)` to create a new message.
+ */
+export const ExecEnvSourceSchema: GenMessage<ExecEnvSource> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 34);
+
+/**
+ * @generated from message provider.envvars.v1.EnvSourceValue
+ */
+export type EnvSourceValue = Message<"provider.envvars.v1.EnvSourceValue"> & {
+  /**
+   * @generated from field: provider.envvars.v1.Cell cell = 1;
+   */
+  cell?: Cell | undefined;
+
+  /**
+   * @generated from field: string value = 2;
+   */
+  value: string;
+
+  /**
+   * @generated from field: string version = 3;
+   */
+  version: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.EnvSourceValue.
+ * Use `create(EnvSourceValueSchema)` to create a new message.
+ */
+export const EnvSourceValueSchema: GenMessage<EnvSourceValue> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 35);
+
+/**
+ * @generated from message provider.envvars.v1.Cell
+ */
+export type Cell = Message<"provider.envvars.v1.Cell"> & {
+  /**
+   * @generated from field: string folder = 1;
+   */
+  folder: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.Cell.
+ * Use `create(CellSchema)` to create a new message.
+ */
+export const CellSchema: GenMessage<Cell> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 36);
+
+/**
+ * @generated from message provider.envvars.v1.EnvSourceStatus
+ */
+export type EnvSourceStatus = Message<"provider.envvars.v1.EnvSourceStatus"> & {
+  /**
+   * @generated from field: string env_source = 1;
+   */
+  envSource: string;
+
+  /**
+   * @generated from field: bool scheduled = 2;
+   */
+  scheduled: boolean;
+
+  /**
+   * @generated from field: bool writable = 3;
+   */
+  writable: boolean;
+
+  /**
+   * @generated from field: int64 last_attempt_at = 4;
+   */
+  lastAttemptAt: bigint;
+
+  /**
+   * @generated from field: int64 last_success_at = 5;
+   */
+  lastSuccessAt: bigint;
+
+  /**
+   * @generated from field: string last_error = 6;
+   */
+  lastError: string;
+
+  /**
+   * @generated from field: repeated provider.envvars.v1.FolderLink links = 7;
+   */
+  links: FolderLink[];
+
+  /**
+   * @generated from field: repeated string credentials = 8;
+   */
+  credentials: string[];
+};
+
+/**
+ * Describes the message provider.envvars.v1.EnvSourceStatus.
+ * Use `create(EnvSourceStatusSchema)` to create a new message.
+ */
+export const EnvSourceStatusSchema: GenMessage<EnvSourceStatus> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 37);
+
+/**
+ * @generated from message provider.envvars.v1.FolderLink
+ */
+export type FolderLink = Message<"provider.envvars.v1.FolderLink"> & {
+  /**
+   * @generated from field: string folder = 1;
+   */
+  folder: string;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.FolderLink.
+ * Use `create(FolderLinkSchema)` to create a new message.
+ */
+export const FolderLinkSchema: GenMessage<FolderLink> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 38);
+
+/**
+ * @generated from message provider.envvars.v1.RefusedCell
+ */
+export type RefusedCell = Message<"provider.envvars.v1.RefusedCell"> & {
+  /**
+   * @generated from field: provider.envvars.v1.Cell cell = 1;
+   */
+  cell?: Cell | undefined;
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.RefusedCell.
+ * Use `create(RefusedCellSchema)` to create a new message.
+ */
+export const RefusedCellSchema: GenMessage<RefusedCell> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 39);
+
+/**
+ * @generated from message provider.envvars.v1.SyncEnvSourceRequest
+ */
+export type SyncEnvSourceRequest = Message<"provider.envvars.v1.SyncEnvSourceRequest"> & {
+  /**
+   * @generated from field: common.environment.v1.Tier tier = 1;
+   */
+  tier: Tier;
+
+  /**
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from oneof provider.envvars.v1.SyncEnvSourceRequest.from
+   */
+  from: {
+    /**
+     * @generated from field: provider.envvars.v1.EnvSource env_source = 3;
+     */
+    value: EnvSource;
+    case: "envSource";
+  } | {
+    /**
+     * @generated from field: provider.envvars.v1.RegisteredEnvSource registered = 5;
+     */
+    value: RegisteredEnvSource;
+    case: "registered";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * @generated from field: repeated string folders = 4;
+   */
+  folders: string[];
+};
+
+/**
+ * Describes the message provider.envvars.v1.SyncEnvSourceRequest.
+ * Use `create(SyncEnvSourceRequestSchema)` to create a new message.
+ */
+export const SyncEnvSourceRequestSchema: GenMessage<SyncEnvSourceRequest> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 40);
+
+/**
+ * @generated from message provider.envvars.v1.RegisteredEnvSource
+ */
+export type RegisteredEnvSource = Message<"provider.envvars.v1.RegisteredEnvSource"> & {
+};
+
+/**
+ * Describes the message provider.envvars.v1.RegisteredEnvSource.
+ * Use `create(RegisteredEnvSourceSchema)` to create a new message.
+ */
+export const RegisteredEnvSourceSchema: GenMessage<RegisteredEnvSource> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 41);
+
+/**
+ * @generated from message provider.envvars.v1.SyncEnvSourceResponse
+ */
+export type SyncEnvSourceResponse = Message<"provider.envvars.v1.SyncEnvSourceResponse"> & {
+  /**
+   * @generated from field: provider.envvars.v1.EnvSourceStatus status = 1;
+   */
+  status?: EnvSourceStatus | undefined;
+
+  /**
+   * @generated from field: repeated provider.envvars.v1.Cell present = 2;
+   */
+  present: Cell[];
+
+  /**
+   * @generated from field: int32 written = 3;
+   */
+  written: number;
+
+  /**
+   * @generated from field: int32 removed = 4;
+   */
+  removed: number;
+
+  /**
+   * @generated from field: repeated provider.envvars.v1.RefusedCell refused = 5;
+   */
+  refused: RefusedCell[];
+};
+
+/**
+ * Describes the message provider.envvars.v1.SyncEnvSourceResponse.
+ * Use `create(SyncEnvSourceResponseSchema)` to create a new message.
+ */
+export const SyncEnvSourceResponseSchema: GenMessage<SyncEnvSourceResponse> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 42);
+
+/**
+ * @generated from message provider.envvars.v1.DescribeEnvSourceRequest
+ */
+export type DescribeEnvSourceRequest = Message<"provider.envvars.v1.DescribeEnvSourceRequest"> & {
+  /**
+   * @generated from field: common.environment.v1.Tier tier = 1;
+   */
+  tier: Tier;
+
+  /**
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.DescribeEnvSourceRequest.
+ * Use `create(DescribeEnvSourceRequestSchema)` to create a new message.
+ */
+export const DescribeEnvSourceRequestSchema: GenMessage<DescribeEnvSourceRequest> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 43);
+
+/**
+ * @generated from message provider.envvars.v1.DescribeEnvSourceResponse
+ */
+export type DescribeEnvSourceResponse = Message<"provider.envvars.v1.DescribeEnvSourceResponse"> & {
+  /**
+   * @generated from field: provider.envvars.v1.EnvSourceStatus status = 1;
+   */
+  status?: EnvSourceStatus | undefined;
+};
+
+/**
+ * Describes the message provider.envvars.v1.DescribeEnvSourceResponse.
+ * Use `create(DescribeEnvSourceResponseSchema)` to create a new message.
+ */
+export const DescribeEnvSourceResponseSchema: GenMessage<DescribeEnvSourceResponse> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 44);
+
+/**
+ * @generated from message provider.envvars.v1.CreateEnvSourceValueRequest
+ */
+export type CreateEnvSourceValueRequest = Message<"provider.envvars.v1.CreateEnvSourceValueRequest"> & {
+  /**
+   * @generated from field: common.environment.v1.Tier tier = 1;
+   */
+  tier: Tier;
+
+  /**
+   * @generated from field: provider.envvars.v1.Coordinate coordinate = 2;
+   */
+  coordinate?: Coordinate | undefined;
+
+  /**
+   * @generated from field: string value = 3;
+   */
+  value: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message provider.envvars.v1.CreateEnvSourceValueRequest.
+ * Use `create(CreateEnvSourceValueRequestSchema)` to create a new message.
+ */
+export const CreateEnvSourceValueRequestSchema: GenMessage<CreateEnvSourceValueRequest> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 45);
+
+/**
+ * @generated from message provider.envvars.v1.CreateEnvSourceValueResponse
+ */
+export type CreateEnvSourceValueResponse = Message<"provider.envvars.v1.CreateEnvSourceValueResponse"> & {
+  /**
+   * @generated from field: bool awaiting_approval = 1;
+   */
+  awaitingApproval: boolean;
+
+  /**
+   * @generated from field: optional provider.envvars.v1.ValueMetadata metadata = 2;
+   */
+  metadata?: ValueMetadata | undefined;
+};
+
+/**
+ * Describes the message provider.envvars.v1.CreateEnvSourceValueResponse.
+ * Use `create(CreateEnvSourceValueResponseSchema)` to create a new message.
+ */
+export const CreateEnvSourceValueResponseSchema: GenMessage<CreateEnvSourceValueResponse> = /*@__PURE__*/
+  messageDesc(file_provider_envvars_v1_envvars, 46);
+
+/**
  * @generated from service provider.envvars.v1.EnvVarsService
  */
 export const EnvVarsService: GenService<{
@@ -794,6 +1311,30 @@ export const EnvVarsService: GenService<{
     methodKind: "unary";
     input: typeof ListBindingsRequestSchema;
     output: typeof ListBindingsResponseSchema;
+  },
+  /**
+   * @generated from rpc provider.envvars.v1.EnvVarsService.SyncEnvSource
+   */
+  syncEnvSource: {
+    methodKind: "unary";
+    input: typeof SyncEnvSourceRequestSchema;
+    output: typeof SyncEnvSourceResponseSchema;
+  },
+  /**
+   * @generated from rpc provider.envvars.v1.EnvVarsService.DescribeEnvSource
+   */
+  describeEnvSource: {
+    methodKind: "unary";
+    input: typeof DescribeEnvSourceRequestSchema;
+    output: typeof DescribeEnvSourceResponseSchema;
+  },
+  /**
+   * @generated from rpc provider.envvars.v1.EnvVarsService.CreateEnvSourceValue
+   */
+  createEnvSourceValue: {
+    methodKind: "unary";
+    input: typeof CreateEnvSourceValueRequestSchema;
+    output: typeof CreateEnvSourceValueResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_provider_envvars_v1_envvars, 0);

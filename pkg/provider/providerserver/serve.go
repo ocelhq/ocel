@@ -78,7 +78,7 @@ func newMux(config Config) *http.ServeMux {
 	)
 
 	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	services := &handlers{session: s, Service: &envvarsserver.Service{Source: sessionBackend{session: s}}}
+	services := &handlers{session: s, Service: &envvarsserver.Service{Source: sessionBackend{session: s}, CallerNamesEnvSource: true}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
@@ -113,7 +113,13 @@ func (s sessionBackend) Read() (envvarsserver.Backend, error) {
 	if err != nil {
 		return envvarsserver.Backend{}, err
 	}
-	return envvarsserver.Backend{Records: vendor.Records(), Cipher: vendor.Cipher(), VerifyGrants: vendor.Hooks().VerifyGrants}, nil
+	hooks := vendor.Hooks()
+	return envvarsserver.Backend{
+		Records:       vendor.Records(),
+		Cipher:        vendor.Cipher(),
+		VerifyGrants:  hooks.VerifyGrants,
+		ProveIdentity: hooks.ProveIdentity,
+	}, nil
 }
 
 type session struct {

@@ -23,17 +23,20 @@ const sneakProcedure = "/provider.envvars.v1.EnvVarsService/Sneak"
 
 func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 	declared := map[string]string{
-		envvarsv1connect.EnvVarsServiceSetValueProcedure:       CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceDeleteValueProcedure:    CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetReferenceProcedure:   CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetBindingProcedure:     CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:  CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceRevealValuesProcedure:   CapabilityEnvVarsReveal,
-		envvarsv1connect.EnvVarsServiceGetValueProcedure:       CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListValuesProcedure:     CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListReferencesProcedure: CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListVersionsProcedure:   CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListBindingsProcedure:   CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceSetValueProcedure:             CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceDeleteValueProcedure:          CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceSetReferenceProcedure:         CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceSetBindingProcedure:           CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:        CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure:        CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceCreateEnvSourceValueProcedure: CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceRevealValuesProcedure:         CapabilityEnvVarsReveal,
+		envvarsv1connect.EnvVarsServiceGetValueProcedure:             CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListValuesProcedure:           CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListReferencesProcedure:       CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListVersionsProcedure:         CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListBindingsProcedure:         CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceDescribeEnvSourceProcedure:    CapabilityEnvVarsRead,
 	}
 
 	methods := envvarsv1.File_provider_envvars_v1_envvars_proto.Services().ByName("EnvVarsService").Methods()
@@ -46,6 +49,18 @@ func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 		got, mapped := scopeOf(procedure, nil)
 		if !mapped || got != want {
 			t.Fatalf("scopeOf(%s) = (%q, %v), want (%q, true)", procedure, got, mapped, want)
+		}
+	}
+}
+
+func TestSyncingAnEnvSourceAsksForWriteWhateverItNames(t *testing.T) {
+	for name, req := range map[string]*envvarsv1.SyncEnvSourceRequest{
+		"registered": {From: &envvarsv1.SyncEnvSourceRequest_Registered{Registered: &envvarsv1.RegisteredEnvSource{}}},
+		"infisical":  {From: &envvarsv1.SyncEnvSourceRequest_EnvSource{EnvSource: &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Infisical{Infisical: &envvarsv1.InfisicalEnvSource{}}}}},
+	} {
+		got, mapped := scopeOf(envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure, req)
+		if !mapped || got != CapabilityEnvVarsWrite {
+			t.Errorf("scopeOf(SyncEnvSource, %s) = (%q, %v), want (%q, true): a connector syncs only what a deploy registered, so no sync sends anything a caller named", name, got, mapped, CapabilityEnvVarsWrite)
 		}
 	}
 }
