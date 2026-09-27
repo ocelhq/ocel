@@ -432,3 +432,39 @@ func TestATickAfterAShrinkNotYetSignalledStillClearsTheRowsTheLineWrappedInto(t 
 		t.Fatalf("screen after the tick and close\n%q\nwant the transcript alone\n%q", got, want)
 	}
 }
+
+const cursorMovingToolLine = "\x1b[1A\x1b[2Jwarn \x1b[31mred\x1b[0m \x1b]8;;https://x.test\x07link\x1b]8;;\x07 \x1b]0;title\x1b\\\x1b7done\x1b8"
+
+func TestOnATerminalAToolLineKeepsItsColourButNothingThatMovesTheCursorOrTalksToTheTerminal(t *testing.T) {
+	t.Parallel()
+
+	rig := newLineRig(t, Presentation{Width: 80})
+	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	output(t, web, cursorMovingToolLine)
+	web.End(nil)
+
+	got := rig.closed(t)
+	if want := "\n    warn \x1b[31mred\x1b[0m link done\n"; !strings.Contains(got, want) {
+		t.Errorf("wrote\n%q\nwant the tool line with only its colour\n%q", got, want)
+	}
+	for _, escape := range []string{"\x1b[1A", "\x1b[2J", "\x1b]", "\x1b7", "\x1b8"} {
+		if strings.Contains(got, escape) {
+			t.Errorf("wrote %q, which the one live line cannot survive:\n%q", escape, got)
+		}
+	}
+}
+
+func TestOffATerminalAToolLineIsWrittenByteForByte(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	sink := newGroupedSink(&out, Presentation{}, nil)
+	_, piped := onABus(t, context.Background(), time.Now, sink)
+	web := piped.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	output(t, web, cursorMovingToolLine)
+	web.End(nil)
+
+	if want := "\n    " + cursorMovingToolLine + "\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("wrote\n%q\nwant the tool line untouched\n%q", out.String(), want)
+	}
+}

@@ -77,11 +77,13 @@ func NewLineSink(w io.Writer, present Presentation) *LineSink {
 
 func newLineSink(w io.Writer, present Presentation, sources lineSources) *LineSink {
 	commits := &bytes.Buffer{}
+	grouped := newGroupedSink(commits, present, nil)
+	grouped.verbatimText = keepColour
 	stop := make(chan struct{})
 	s := &LineSink{
 		w:       w,
 		present: present,
-		grouped: newGroupedSink(commits, present, nil),
+		grouped: grouped,
 		commits: commits,
 		live:    newLiveLine(sources.now),
 		now:     sources.now,

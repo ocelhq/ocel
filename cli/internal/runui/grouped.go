@@ -48,8 +48,9 @@ var phaseGerunds = map[progressv1.Phase]string{
 }
 
 type GroupedSink struct {
-	w       io.Writer
-	present Presentation
+	w            io.Writer
+	present      Presentation
+	verbatimText func(string) string
 
 	mu            sync.Mutex
 	units         map[string]*unitBlock
@@ -375,7 +376,11 @@ func (s *GroupedSink) print(lines ...blockLine) {
 		s.blank = l.text == "" && !l.raw
 		s.verbatim = l.raw
 		if l.raw {
-			fmt.Fprintln(s.w, verbatimIndent+l.text)
+			text := l.text
+			if s.verbatimText != nil {
+				text = s.verbatimText(text)
+			}
+			fmt.Fprintln(s.w, verbatimIndent+text)
 			continue
 		}
 		text := l.text

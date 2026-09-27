@@ -1,6 +1,7 @@
 package runui
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -34,6 +35,21 @@ func stripInvisible(draft string) string {
 		case unicode.IsControl(r), unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Variation_Selector):
 		default:
 			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+var selectGraphicRendition = regexp.MustCompile(`^(\x1b\[|\x9b)[0-9;:]*m$`)
+
+func keepColour(raw string) string {
+	var b strings.Builder
+	var state byte
+	for rest := raw; rest != ""; {
+		seq, _, n, next := ansi.DecodeSequence(rest, state, nil)
+		state, rest = next, rest[n:]
+		if escapes := seq[0] == ansi.ESC || seq[0] >= 0x80 && seq[0] <= 0x9f; !escapes || selectGraphicRendition.MatchString(seq) {
+			b.WriteString(seq)
 		}
 	}
 	return b.String()
