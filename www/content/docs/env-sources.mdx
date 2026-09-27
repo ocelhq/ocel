@@ -250,6 +250,10 @@ Infisical reaches a live app in about two minutes. Any other value reaches it at
 deploy. When Infisical is down or throttling, the last values read stay, and the sync backs
 off.
 
+A deploy that switches to an env source it cannot read fails, and the sync keeps reading
+the env source the tier read before. The exception is a new env source whose credential is
+unset: the tier then reads from it, so you can set that credential with `ocel env set`.
+
 ```bash
 ocel env source            # where production reads from, when it last synced, the last error
 ocel env source --preview

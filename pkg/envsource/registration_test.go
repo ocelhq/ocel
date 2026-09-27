@@ -64,3 +64,29 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 		t.Fatalf("Registered() after ForgetProject = %v, %v, want nothing", registered, err)
 	}
 }
+
+func TestRestoringARegistrationLeavesOneAnotherDeployRegisteredSince(t *testing.T) {
+	t.Parallel()
+	store, _ := storeFixture()
+	ctx := context.Background()
+	class := edge.ClassProduction
+	register := func(host string) envsource.Registration {
+		t.Helper()
+		registration, err := envsource.Register(ctx, store, class, infisicalRegistration("shop", host, universal, ""))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return registration
+	}
+	working := register("https://working.example.com")
+	failed := register("https://failed.example.com")
+	register("https://since.example.com")
+
+	if err := envsource.RestoreRegistration(ctx, store, class, failed, &working); err != nil {
+		t.Fatal(err)
+	}
+	current, _, err := envsource.Registered(ctx, store.Records, class, "shop")
+	if err != nil || current.Descriptor.Infisical.Host != "https://since.example.com" {
+		t.Fatalf("Registered() = %+v, %v, want the registration made since the failed one left in place", current, err)
+	}
+}
