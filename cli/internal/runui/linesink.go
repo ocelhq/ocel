@@ -9,7 +9,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/fatih/color"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -142,7 +141,7 @@ func (s *LineSink) resize(width int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.width = width
-	drawn := ansi.StringWidth(s.drawn)
+	drawn := displayWidth(s.drawn)
 	if drawn <= width {
 		s.draw()
 		return

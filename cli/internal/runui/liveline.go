@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/x/ansi"
-
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -165,12 +163,12 @@ func (l *liveLine) render(width int) string {
 		}
 	}
 	took := formatDuration(at.Sub(tally.since))
-	room := width - 1 - ansi.StringWidth(took) - len(liveGutter)
+	room := width - 1 - displayWidth(took) - len(liveGutter)
 	if room < 0 {
 		return fitToWidth(head, width-1)
 	}
 	head = fitToWidth(head, room)
-	return head + strings.Repeat(" ", max(room-ansi.StringWidth(head), 0)) + liveGutter + took
+	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + took
 }
 
 func bareScope(ev *streamv1.RunEvent) bool {

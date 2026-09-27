@@ -82,3 +82,22 @@ func TestSanitizingDropsTheIndentAndTrailingSpaceAroundTheText(t *testing.T) {
 		t.Fatalf("sanitize() = %q, %v, want %q, true", got, ok, want)
 	}
 }
+
+func TestSanitizingDropsJoinersVariationSelectorsAndOtherInvisibleCharacters(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"👨\u200d💻 compiling":                           "👨💻 compiling",
+		"☁\ufe0f uploading ✓\ufe0e":                    "☁ uploading ✓",
+		"a\u200bb\u200cc\u200ed\u200ff":                "abcdf",
+		"\u202aleft\u202b\u202c\u202d\u202eright":      "leftright",
+		"line\u2028separator\u2029paragraph":           "lineseparatorparagraph",
+		"\u2060word\u2061joiner\u2062and\u2063\u2064s": "wordjoinerands",
+		"\ufeffbom": "bom",
+	}
+	for raw, want := range cases {
+		if got, ok := sanitize(raw); got != want || !ok {
+			t.Errorf("sanitize(%q) = %q, %v, want %q, true", raw, got, ok, want)
+		}
+	}
+}

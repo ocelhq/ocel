@@ -31,7 +31,7 @@ func visible(draft string) string {
 		switch {
 		case r == '\t':
 			b.WriteString(strings.Repeat(" ", tabStop-ansi.StringWidth(b.String())%tabStop))
-		case unicode.IsControl(r):
+		case unicode.IsControl(r), unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp, unicode.Variation_Selector):
 		default:
 			b.WriteRune(r)
 		}

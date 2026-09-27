@@ -58,5 +58,13 @@ func fitToWidth(s string, columns int) string {
 	if columns < 1 {
 		return ""
 	}
-	return ansi.Truncate(s, columns, "")
+	fitted := ansi.Truncate(s, columns, "")
+	for cut := columns - 1; cut >= 0 && ansi.StringWidthWc(fitted) > columns; cut-- {
+		fitted = ansi.Truncate(s, cut, "")
+	}
+	return fitted
+}
+
+func displayWidth(s string) int {
+	return max(ansi.StringWidth(s), ansi.StringWidthWc(s))
 }

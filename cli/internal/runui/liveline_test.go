@@ -185,12 +185,32 @@ func TestAWideLineIsCutToOneColumnShortOfTheTerminalByDisplayWidth(t *testing.T)
 
 	for width := 1; width <= 120; width++ {
 		got := live.render(width)
-		columns := ansi.StringWidth(got)
+		columns := max(ansi.StringWidth(got), ansi.StringWidthWc(got))
 		if columns > max(width-1, 0) {
 			t.Errorf("render(%d) = %q is %d columns wide, over %d", width, got, columns, width-1)
 		}
 		if width >= 24 && (columns != width-1 || !strings.HasSuffix(got, liveGutter+"1m35s")) {
 			t.Errorf("render(%d) = %q (%d columns), want %d columns ending in the phase's elapsed time", width, got, columns, width-1)
+		}
+	}
+}
+
+func TestAnEmojiLineFitsATerminalThatCountsEachCodePointsWidth(t *testing.T) {
+	t.Parallel()
+
+	run, live, c := liveRun(t)
+	family := "\U0001f468\u200d\U0001f469\u200d\U0001f467"
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit(family+" web", "Building web")
+	say(t, web, "👍🏽 built 🧑🏽‍💻 by "+family+" in 3.2s, and a long English tail after it\n")
+	c.pass(95 * time.Second)
+
+	for width := 1; width <= 120; width++ {
+		got := live.render(width)
+		if columns := max(ansi.StringWidth(got), ansi.StringWidthWc(got)); columns > max(width-1, 0) {
+			t.Errorf("render(%d) = %q is %d columns wide on some terminal, over %d", width, got, columns, width-1)
+		}
+		if width >= 24 && !strings.HasSuffix(got, liveGutter+"1m35s") {
+			t.Errorf("render(%d) = %q, want it to end in the phase's elapsed time", width, got)
 		}
 	}
 }
