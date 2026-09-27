@@ -163,6 +163,22 @@ process.exit(9);
 	}
 }
 
+func TestAJavaScriptAppsUnitEndsInFailureWhenTheBuilderExitsCleanlyMidBuild(t *testing.T) {
+	t.Parallel()
+	cfg := nodeBuilder(t, `
+emit({type: "span_start", id: "1", stage: "build", app: "web"});
+process.exit(0);
+`)
+
+	var units appUnits
+	if err := Build(context.Background(), cfg, nil, units.output()); err == nil {
+		t.Fatal("Build succeeded, want it failed: web's build never ended")
+	}
+	if err, ok := units.ended["web"]; !ok || err == nil {
+		t.Errorf("web ended with %v (ended %t), want it ended in failure", err, ok)
+	}
+}
+
 func TestAGoAppCompiledHereBuildsInAUnitOfItsOwnThatEndsWithItsCompileError(t *testing.T) {
 	t.Parallel()
 

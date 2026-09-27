@@ -168,9 +168,9 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 	}
 	proc.Scan(ctx, pipe)
 	runErr := cmd.Wait()
+	_ = proc.Abort()
 
 	if runErr != nil {
-		proc.Abort()
 		if msg := proc.Failure(); msg != "" {
 			return fmt.Errorf("discovery failed (%w): %s", runErr, msg)
 		}

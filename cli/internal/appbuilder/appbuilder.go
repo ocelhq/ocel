@@ -614,9 +614,9 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 	proc.Scan(ctx, said)
 	_ = said.Close()
 	runErr := cmd.Wait()
+	unended := proc.Abort()
 
 	if runErr != nil {
-		proc.Abort()
 		if msg := proc.Failure(); msg != "" {
 			return fmt.Errorf("node-builder failed (%w): %s", runErr, msg)
 		}
@@ -624,6 +624,9 @@ func runNode(ctx context.Context, scriptPath string, env []string, request []byt
 			return fmt.Errorf("node-builder failed (%w): %s", runErr, summary)
 		}
 		return fmt.Errorf("node-builder failed: %w", runErr)
+	}
+	if unended != nil {
+		return fmt.Errorf("node-builder failed: %w", unended)
 	}
 	return nil
 }

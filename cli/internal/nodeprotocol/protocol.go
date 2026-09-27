@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -91,6 +92,7 @@ type Processor struct {
 	spanCtxByApp map[string]context.Context
 	builds       map[string]func(error)
 	err          string
+	unread       error
 }
 
 const buildStage = "build"
@@ -106,7 +108,10 @@ func (p *Processor) Scan(ctx context.Context, r io.Reader) {
 	for scanner.Scan() {
 		p.line(ctx, scanner.Text())
 	}
-	if scanner.Err() != nil {
+	if err := scanner.Err(); err != nil {
+		p.mu.Lock()
+		p.unread = fmt.Errorf("could not read the node builder's output: %w", err)
+		p.mu.Unlock()
 		_, _ = io.Copy(p.forwardWriter(), r)
 	}
 }
@@ -295,10 +300,11 @@ func (p *Processor) endSpan(rec record) {
 	s.span.End()
 }
 
-func (p *Processor) Abort() {
+func (p *Processor) Abort() error {
 	p.mu.Lock()
 	spans := p.spans
 	builds := p.builds
+	cause := p.unread
 	p.spans = nil
 	p.spanCtxByApp = nil
 	p.builds = nil
@@ -307,9 +313,16 @@ func (p *Processor) Abort() {
 		s.span.SetStatus(codes.Error, "")
 		s.span.End()
 	}
-	for _, ended := range builds {
-		ended(errBuilderExited)
+	if len(builds) == 0 {
+		return nil
 	}
+	if cause == nil {
+		cause = errBuilderExited
+	}
+	for _, ended := range builds {
+		ended(cause)
+	}
+	return cause
 }
 
 func (p *Processor) Failure() string {

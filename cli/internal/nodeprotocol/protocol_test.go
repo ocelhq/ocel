@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,6 +155,46 @@ func TestProcessorAbortEndsAnyOpenSpan(t *testing.T) {
 	}
 	if !strings.Contains(trace, `"code": "STATUS_CODE_ERROR"`) {
 		t.Errorf("trace = %s, want the abandoned span marked as an error", trace)
+	}
+}
+
+type failingReader struct {
+	lines string
+	err   error
+}
+
+func (r *failingReader) Read(b []byte) (int, error) {
+	if r.lines == "" {
+		return 0, r.err
+	}
+	n := copy(b, r.lines)
+	r.lines = r.lines[n:]
+	return n, nil
+}
+
+func TestABuildStillOpenWhenTheBuildersOutputCannotBeReadEndsWithTheReadError(t *testing.T) {
+	var ended error
+	p := &Processor{AppBuild: func(string) func(error) { return func(err error) { ended = err } }}
+	unread := errors.New("the pipe broke")
+
+	p.Scan(context.Background(), &failingReader{
+		lines: Prefix + `{"type":"span_start","id":"1","stage":"build","app":"web"}` + "\n",
+		err:   unread,
+	})
+	if err := p.Abort(); !errors.Is(err, unread) {
+		t.Errorf("Abort() = %v, want the read error", err)
+	}
+	if !errors.Is(ended, unread) {
+		t.Errorf("web's build ended with %v, want the read error that cut the builder's output short", ended)
+	}
+}
+
+func TestAbortReportsNothingWhenNoBuildIsOpen(t *testing.T) {
+	p := &Processor{AppBuild: func(string) func(error) { return func(error) {} }}
+	send(p, context.Background(), record{Type: typeSpanStart, ID: "1", App: "web", Stage: "build"})
+	send(p, context.Background(), record{Type: typeSpanEnd, ID: "1", OK: new(true)})
+	if err := p.Abort(); err != nil {
+		t.Errorf("Abort() = %v, want nil: every build ended", err)
 	}
 }
 
