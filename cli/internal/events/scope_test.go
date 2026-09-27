@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -144,7 +146,7 @@ func TestAPlanIsDrawnWithItsHeadlineAndNotesInItsScopesPhaseLeavingTheCallersPla
 	drawn := run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Deploy to production", plan, "2 resources change")
 
 	ev := sink.received()[1]
-	if ev.GetPlan() != drawn || drawn.GetHeadline() != "Deploy to production" || len(drawn.GetNotes()) != 1 ||
+	if !proto.Equal(ev.GetPlan(), drawn) || drawn.GetHeadline() != "Deploy to production" || len(drawn.GetNotes()) != 1 ||
 		ev.GetPhase() != progressv1.Phase_PHASE_PLAN {
 		t.Fatalf("plan event = %q notes %q phase %s, want the drawn plan in the plan phase", drawn.GetHeadline(), drawn.GetNotes(), ev.GetPhase())
 	}

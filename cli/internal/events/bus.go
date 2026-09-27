@@ -62,10 +62,11 @@ func (b *Bus) Send(ev *streamv1.RunEvent) {
 	if ev.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
 		ev.Level = progressv1.Level_LEVEL_INFO
 	}
+	shown := withoutSecrets(ev)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, s := range b.sinks {
-		s.Receive(ev)
+		s.Receive(shown)
 	}
 }
 

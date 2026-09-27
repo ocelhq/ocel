@@ -2,12 +2,19 @@ package events_test
 
 import (
 	"context"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/ocelhq/ocel/cli/internal/events"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -145,5 +152,59 @@ func TestClosingTheBusClosesEverySink(t *testing.T) {
 
 	if !first.closed || !second.closed {
 		t.Fatalf("closed = %v and %v, want both", first.closed, second.closed)
+	}
+}
+
+func TestNoSinkReceivesASecretABindingInTheOutcomeCarries(t *testing.T) {
+	const password, token = "hunter2-db-password", "sk-live-custom-token"
+	custom, err := structpb.NewStruct(map[string]any{"apiToken": token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome := &progressv1.ResultEvent{Success: true, Bindings: []*bindingsv1.Binding{
+		{Name: "db", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host:     "db.internal",
+			Username: "app",
+			Password: password,
+			Url:      "postgres://app:" + password + "@db.internal/app",
+		}}},
+		{Name: "payments", Properties: &bindingsv1.Binding_Custom{Custom: custom}},
+	}}
+	sink := &recording{}
+	bus := events.NewBus(time.Now)
+	bus.Attach(sink)
+	ctx, run, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logPath := runtrace.FromContext(ctx).LogPath()
+
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
+	run.End(&err)
+
+	logged, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var received []string
+	for _, ev := range sink.received() {
+		line, marshalErr := protojson.Marshal(ev)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		received = append(received, string(line))
+	}
+	for name, written := range map[string]string{"the run's log": string(logged), "an attached sink": strings.Join(received, "\n")} {
+		for _, secret := range []string{password, token} {
+			if strings.Contains(written, secret) {
+				t.Errorf("%s holds %q, want no binding's secret: %s", name, secret, written)
+			}
+		}
+		if !strings.Contains(written, "db.internal") || !strings.Contains(written, "apiToken") {
+			t.Errorf("%s = %s, want each binding to keep where it points and the names of its properties", name, written)
+		}
+	}
+	if outcome.GetBindings()[0].GetPostgres().GetPassword() != password || outcome.GetBindings()[1].GetCustom().GetFields()["apiToken"].GetStringValue() != token {
+		t.Error("the provider's outcome lost its secrets: the deploy still reads them after the sinks")
 	}
 }

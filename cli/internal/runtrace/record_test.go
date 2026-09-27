@@ -2,8 +2,6 @@ package runtrace
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +10,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -181,39 +178,6 @@ func TestEveryWireAttributeKeyMapsToATraceAttribute(t *testing.T) {
 		if _, ok := attributeKey(k); !ok {
 			t.Errorf("attributeKey(%s) = (_, false), want every declared AttributeKey to map somewhere: an unmapped key is silently dropped", name)
 		}
-	}
-}
-
-func TestAFieldTheWireMarksRedactedNeverReachesTheRunsLog(t *testing.T) {
-	const password = "hunter2-db-password"
-	r := startRun(t)
-	outcome := &progressv1.ResultEvent{Success: true, Bindings: []*bindingsv1.Binding{{
-		Name: "db",
-		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
-			Host:     "db.internal",
-			Username: "app",
-			Password: password,
-			Url:      "postgres://app:" + password + "@db.internal/app",
-		}},
-	}}}
-	r.Receive(&streamv1.RunEvent{Body: &streamv1.RunEvent_Outcome{Outcome: outcome}})
-	if err := r.Close(); err != nil {
-		t.Fatalf("Close() = %v", err)
-	}
-
-	raw, err := os.ReadFile(r.LogPath())
-	if err != nil {
-		t.Fatalf("read log: %v", err)
-	}
-	if strings.Contains(string(raw), password) {
-		t.Errorf("log = %s, want the password never persisted", raw)
-	}
-	postgres := loggedEvents(t, r)[0].GetOutcome().GetBindings()[0].GetPostgres()
-	if postgres.GetHost() != "db.internal" || postgres.GetUsername() != "app" {
-		t.Errorf("logged binding lost where it points: host %q user %q", postgres.GetHost(), postgres.GetUsername())
-	}
-	if outcome.GetBindings()[0].GetPostgres().GetPassword() != password {
-		t.Error("the event other sinks see lost its password")
 	}
 }
 
