@@ -91,7 +91,7 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 	}
 	defer host.close()
 	srv, shared := host.srv, host.shared
-	srv.UseValues(storeValues(shared.values, file.Values), envwire.Scope(cfg, false, ""))
+	srv.UseValues(storeValues(shared.values, file.Values), envwire.DevScope(cfg))
 
 	resolved, err := discoverAndSync(ctx, srv, cfg, shared.values, file.Values, scope, invocation{name: "run", loggedOut: shared.loggedOut}, stdout, stderr)
 	if err != nil {
