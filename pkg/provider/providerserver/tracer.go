@@ -47,26 +47,12 @@ func (s Stage) scoped(ev *progressv1.OperationEvent) *progressv1.OperationEvent 
 	return ev
 }
 
-func (s Stage) phaseStage() Stage {
-	stage := PhaseStage(s.Name, s.Phase)
-	stage.Subject = s.Subject
-	return stage
-}
-
 var phaseNames = map[progressv1.Phase]string{
 	progressv1.Phase_PHASE_BUILD:     naming.PhaseBuilding,
 	progressv1.Phase_PHASE_DEPLOY:    naming.PhaseUploading,
 	progressv1.Phase_PHASE_PROVISION: naming.PhaseProvisioning,
 	progressv1.Phase_PHASE_PROMOTE:   naming.PhaseFinalizing,
 	progressv1.Phase_PHASE_DESTROY:   naming.PhaseDeleting,
-}
-
-var phaseTitles = map[progressv1.Phase]string{
-	progressv1.Phase_PHASE_BUILD:     "Building",
-	progressv1.Phase_PHASE_DEPLOY:    "Uploading",
-	progressv1.Phase_PHASE_PROVISION: "Provisioning",
-	progressv1.Phase_PHASE_PROMOTE:   "Finalizing",
-	progressv1.Phase_PHASE_DESTROY:   "Deleting",
 }
 
 const maxStageTitleLen = 200
@@ -97,27 +83,25 @@ func sanitizeMessage(msg string) string {
 	return stripControlChars(msg, 0)
 }
 
-const (
-	environmentUnitTitle = "Environment"
-	edgeUnitTitle        = "Edge"
-	hostnamesUnitTitle   = "Hostnames"
-	promotionUnitTitle   = "Promotion"
-	infraUnitTitle       = "Shared infrastructure"
-	connectorUnitTitle   = "Connector"
-)
-
-func UnitStage(name, title string, phase progressv1.Phase) Stage {
-	return Stage{ID: derivedStageID(naming.UnitID(name)), Name: name, Title: sanitizeTitle(title), Phase: phase}
+func UnitStage(name, subject, title string, phase progressv1.Phase) Stage {
+	return Stage{
+		ID:      derivedStageID(naming.UnitID(name)),
+		Name:    name,
+		Title:   sanitizeTitle(title),
+		Phase:   phase,
+		Subject: subject,
+	}
 }
 
-func PhaseStage(unitName string, phase progressv1.Phase) Stage {
-	name := phaseNames[phase]
+func PhaseStage(unit Stage) Stage {
+	name := phaseNames[unit.Phase]
 	return Stage{
-		ID:       derivedStageID(naming.PhaseID(unitName, name)),
-		ParentID: derivedStageID(naming.UnitID(unitName)),
+		ID:       derivedStageID(naming.PhaseID(unit.Name, name)),
+		ParentID: unit.ID,
 		Name:     name,
-		Title:    phaseTitles[phase],
-		Phase:    phase,
+		Title:    unit.Title,
+		Phase:    unit.Phase,
+		Subject:  unit.Subject,
 	}
 }
 
@@ -166,7 +150,7 @@ type unitRun struct {
 }
 
 func (u *unitRun) phase(do func(edge.Progress) error) error {
-	working := u.stage.phaseStage()
+	working := PhaseStage(u.stage)
 	start := time.Now()
 	u.scope.trace.Start(start, working)
 	progress := newProgress(u.scope.sender, working)

@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -96,7 +96,8 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 }
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
+	unit := UnitStage(naming.UnitPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
 		class, err := classOf(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err
@@ -111,13 +112,12 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 
 		session, err := h.openEdgeSession(ctx, class, req.GetSlug(), req.GetEdge())
 		if undeployed(err) {
-			progress.Say("Nothing to prune.")
+			progress.Say(fmt.Sprintf("Nothing to prune: %s has no deploy in %s", req.GetSlug(), environmentPhrase(class, pointer)))
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		progress.Say("Diffing deployments to reclaim")
 		pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
 		if err != nil {
 			return err
@@ -144,18 +144,33 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 	})
 }
 
+func pruneTitle(req *contractv1.RemoveStalePromotionsRequest) string {
+	env := req.GetEnvironment()
+	where := "production"
+	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
+		where = environmentPhrase(edge.ClassPreview, env.GetIdentity())
+	}
+	return fmt.Sprintf("Pruning the promotions of %s beyond the newest %d", where, req.GetKeepN())
+}
+
 func undeployed(err error) bool {
 	var absent noDeploy
 	return errors.As(err, &absent)
 }
 
 func pruneLines(result edge.PruneResult) []string {
-	if len(result.RemovedPromotionIDs) == 0 {
-		return []string{"Nothing to prune."}
-	}
-	return []string{
-		fmt.Sprintf("Reclaimed %d promotion(s): %s", len(result.RemovedPromotionIDs), strings.Join(result.RemovedPromotionIDs, ", ")),
-		fmt.Sprintf("Kept %d promotion(s).", len(result.KeptPromotionIDs)),
+	kept := len(result.KeptPromotionIDs)
+	switch {
+	case len(result.RemovedPromotionIDs) > 0:
+		reclaimed := "Reclaimed " + namedList("promotion", "promotions", result.RemovedPromotionIDs)
+		if kept == 0 {
+			return []string{reclaimed}
+		}
+		return []string{fmt.Sprintf("%s, kept %d", reclaimed, kept)}
+	case kept == 1:
+		return []string{"Nothing to prune: the one promotion is kept"}
+	default:
+		return []string{fmt.Sprintf("Nothing to prune: all %d promotions are kept", kept)}
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -195,7 +196,8 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
+	unit := UnitStage(naming.UnitEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
 		removal, err := h.openRemoval(ctx, req)
 		if err != nil {
 			return err
@@ -205,6 +207,17 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		}
 		return removal.run(ctx, progress)
 	})
+}
+
+func removalTitle(env *environmentv1.Environment) string {
+	switch {
+	case env.GetTier() != environmentv1.Tier_TIER_PREVIEW:
+		return "Destroying the production footprint"
+	case env.GetIdentity() == EveryPreview:
+		return "Destroying the footprint of every preview"
+	default:
+		return "Destroying the footprint of preview " + env.GetIdentity()
+	}
 }
 
 func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
@@ -232,7 +245,9 @@ func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error 
 	if err := r.unbind(ctx, progress); err != nil {
 		errs = append(errs, err)
 	}
-	for _, stack := range append(slices.Clone(r.apps), r.infra...) {
+	stacks := append(slices.Clone(r.apps), r.infra...)
+	for i, stack := range stacks {
+		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", stack, i+1, len(stacks)))
 		if err := r.destroy(ctx, stack, progress); err != nil {
 			errs = append(errs, err)
 		}
@@ -255,7 +270,7 @@ func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error 
 		errs = append(errs, err)
 	}
 	if err := errors.Join(errs...); err != nil {
-		progress.Say("Leaving the project on record: the rerun reads its progress from what is still here")
+		progress.Say(fmt.Sprintf("Keeping %s on record in %s: a rerun reads its progress from what is still here", r.slug, r.class))
 		return err
 	}
 	return r.forgetProjectIfEmpty(ctx, progress)
@@ -267,13 +282,13 @@ func (r *projectRemoval) unbind(ctx context.Context, progress edge.Progress) err
 	}
 	var errs []error
 	for _, hostname := range r.stack.State().Bound {
-		progress.Say("Unbinding " + hostname + " from the edge")
+		progress.Say(fmt.Sprintf("Unbinding %s from the %s edge", hostname, r.front.Kind()))
 		if err := edge.Heeded(r.stack.UnbindDomain(ctx, hostname), progress); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
 	}
 	for _, pointer := range r.pointers() {
-		progress.Say(fmt.Sprintf("Removing pointer %q from the store", pointer))
+		progress.Say(fmt.Sprintf("Removing the %s routing pointer from the %s edge", pointer, r.front.Kind()))
 		if _, err := r.stack.RemovePointer(ctx, pointer, progress); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
@@ -289,7 +304,6 @@ func (r *projectRemoval) pointers() []string {
 }
 
 func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress edge.Progress) error {
-	progress.Say("Destroying " + stack.String())
 	ref := provider.StackRef{Project: r.slug, Class: r.class, Name: stack}
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
@@ -301,7 +315,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progres
 	if r.stack == nil || r.stack.State().Empty() {
 		return nil
 	}
-	progress.Say("Destroying what the edge stack owns")
+	progress.Say(fmt.Sprintf("Destroying the %s edge stack of %s", r.front.Kind(), r.slug))
 	if err := r.stack.Destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}
@@ -327,7 +341,7 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, certificates [
 }
 
 func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress) error {
-	progress.Say("Removing the project's stored variable values")
+	progress.Say(fmt.Sprintf("Removing the stored variable values of %s in %s", r.slug, r.class))
 	store := envvars.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
 	if err := envsource.ForgetProject(ctx, store, r.class, r.slug); err != nil {
 		return fmt.Errorf("forget %s's env source: %w", r.slug, err)
@@ -369,7 +383,7 @@ func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress edge
 	if len(remaining) > 0 {
 		return nil
 	}
-	progress.Say("Forgetting the project")
+	progress.Say(fmt.Sprintf("Forgetting %s in %s: nothing of it is left", r.slug, r.class))
 	if err := records.Forget(ctx, r.provider.Records(), stackrecords.EdgeStackRecord(r.class, r.slug)); err != nil {
 		return err
 	}

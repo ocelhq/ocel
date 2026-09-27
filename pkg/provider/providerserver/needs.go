@@ -170,7 +170,7 @@ func (c EdgeNeedCheck) forApp(
 		case waived:
 			record.Waived = append(record.Waived, need)
 			if c.Degraded != nil {
-				c.Degraded(name, need, fmt.Sprintf("%s: %s. It affects %s", name, degradeOf[need], affected(detail)))
+				c.Degraded(name, need, fmt.Sprintf("%s. It affects %s", degradeOf[need], affected(detail)))
 			}
 		default:
 			return AppNeedVerdict{}, &UnsupportedNeedError{App: name, Need: need, Edge: c.Edge.Kind(), Detail: detail}
@@ -228,7 +228,7 @@ func (c EdgeNeedCheck) warnUnknown(reason string) {
 		cause = ": " + reason
 	}
 	c.Warn(string(kind), fmt.Sprintf(
-		"this deploy could not confirm the account may run code at the %s edge%s. "+
+		"This deploy could not confirm the account may run code at the %s edge%s. "+
 			"It proceeds, and if the plan does not run code at the edge the %s edge refuses the code when it is uploaded, "+
 			"after the deploy has begun changing your infrastructure",
 		kind, cause, kind,

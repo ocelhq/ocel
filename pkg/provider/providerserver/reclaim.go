@@ -45,8 +45,8 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointe
 	elsewhere, here := releasesOf(surviving), releasesOf(servingHere)
 
 	var errs []error
-	for _, entry := range provisioned {
-		progress.Say("Destroying " + entry.Name.String())
+	for i, entry := range provisioned {
+		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", entry.Name, i+1, len(provisioned)))
 		ref := provider.StackRef{Project: slug, Class: edge.ClassPreview, Name: entry.Name}
 		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
@@ -175,8 +175,8 @@ func destroyReclaimTargets(
 	progress edge.Progress,
 ) error {
 	var errs []error
-	for _, target := range targets {
-		progress.Say("Reclaiming " + target.App + " " + target.Build.String())
+	for i, target := range targets {
+		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
 		ref := provider.StackRef{Project: slug, Class: class, Name: target.Stack}
 		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))

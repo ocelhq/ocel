@@ -23,6 +23,7 @@ import (
 type recorder struct {
 	mu      sync.Mutex
 	said    []string
+	warned  []string
 	details []string
 }
 
@@ -32,7 +33,11 @@ func (r *recorder) Say(message string) {
 	r.said = append(r.said, message)
 }
 
-func (r *recorder) Warn(message string) { r.Say(message) }
+func (r *recorder) Warn(message string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.warned = append(r.warned, message)
+}
 
 func (r *recorder) Error(message string) { r.Say(message) }
 
@@ -46,10 +51,16 @@ func (r *recorder) Debug(line string) { r.Detail(line) }
 
 func (r *recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
-func (r *recorder) told() string {
+func (r *recorder) sayings() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return strings.Join(append(slices.Clone(r.said), r.details...), "\n")
+	return strings.Join(r.said, "\n")
+}
+
+func (r *recorder) warnings() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return strings.Join(r.warned, "\n")
 }
 
 func gated(t *testing.T, writer provider.WrittenBy) (providerserver.Gate, *fake.Provider) {
@@ -229,8 +240,8 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealin
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want only the bootstrap that installed it", got)
 	}
-	if !strings.Contains(progress.told(), "its content is behind") {
-		t.Errorf("EnsureReady() said %q, want it to report the drift it left state", progress.told())
+	if !strings.Contains(progress.warnings(), "its content is behind") {
+		t.Errorf("EnsureReady() warned %q, want a warning about the drift it left state", progress.warnings())
 	}
 }
 
@@ -257,8 +268,8 @@ func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
 	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
 		t.Errorf("EnsureReady() reports %v behind, want the drift it was told to leave state", stale)
 	}
-	if !strings.Contains(progress.told(), "its content is behind") {
-		t.Errorf("EnsureReady() said %q, want it to report the drift it left state", progress.told())
+	if !strings.Contains(progress.warnings(), "its content is behind") {
+		t.Errorf("EnsureReady() warned %q, want a warning about the drift it left state", progress.warnings())
 	}
 }
 
@@ -281,8 +292,8 @@ func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want a development build to leave the account unchanged", got)
 	}
-	if !strings.Contains(progress.told(), "development build (dev+cafebabe)") {
-		t.Errorf("EnsureReady() said %q, want it to name the build that declined to heal", progress.told())
+	if !strings.Contains(progress.sayings(), "development build (dev+cafebabe)") {
+		t.Errorf("EnsureReady() said %q, want it to say which build declined to heal", progress.sayings())
 	}
 }
 
@@ -304,8 +315,8 @@ func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
 		t.Fatalf("EnsureReady() error = %v, want a refused heal to leave the run state", err)
 	}
-	if !strings.Contains(progress.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
-		t.Errorf("EnsureReady() said %q, want the provider's own account of why the heal was denied", progress.told())
+	if !strings.Contains(progress.warnings(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
+		t.Errorf("EnsureReady() warned %q, want a warning with the provider's own account of why the heal was denied", progress.warnings())
 	}
 	written, _, _ := strings.Cut(refusedLine(t, progress), ": ")
 	for _, vendored := range []string{"account", "stack"} {
@@ -318,12 +329,12 @@ func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 func refusedLine(t *testing.T, progress *recorder) string {
 	t.Helper()
 
-	for _, line := range strings.Split(progress.told(), "\n") {
-		if strings.HasPrefix(line, "this run may not refresh") {
+	for _, line := range strings.Split(progress.warnings(), "\n") {
+		if strings.HasPrefix(line, "This run may not refresh") {
 			return line
 		}
 	}
-	t.Fatalf("nothing in %q says the heal was denied", progress.told())
+	t.Fatalf("no warning in %q says the heal was denied", progress.warnings())
 	return ""
 }
 
@@ -346,6 +357,29 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	}
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
 		t.Errorf("providerserver wrote %q, want no colon introducing a reason the provider never gave", line)
+	}
+}
+
+func TestEnsureReadyWarnsThatAHealFailedAndCarriesOnWithTheBootstrapInPlace(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
+	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
+		t.Fatal(err)
+	}
+	bootstrap.MarkStale(fake.FeatureCache)
+	bootstrap.RefuseApply(errors.New("the stack update timed out"))
+
+	progress := &recorder{}
+	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+		t.Fatalf("EnsureReady() error = %v, want a failed heal to leave the run standing", err)
+	}
+	want := "Could not refresh the production bootstrap, so this run continues against the one in place: the stack update timed out"
+	if !strings.Contains(progress.warnings(), want) {
+		t.Errorf("EnsureReady() warned %q, want %q", progress.warnings(), want)
 	}
 }
 

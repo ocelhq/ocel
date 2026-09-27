@@ -159,11 +159,12 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	if spoke == "" {
 		t.Fatal("nothing the flip said reached the stream, so the flip reports through a reporter the run does not have")
 	}
-	if got, want := titles[spoke], "Finalizing"; got != want {
-		t.Errorf("the flip spoke on stage %q, want %q", got, want)
+	promotion := "Switching traffic to promotion " + result.GetPromotionId()
+	if got := titles[spoke]; got != promotion {
+		t.Errorf("the flip spoke on stage %q, want %q", got, promotion)
 	}
-	if got, want := titles[parents[spoke]], "Promotion"; got != want {
-		t.Errorf("the flip spoke under unit %q, want %q", got, want)
+	if unit := parents[spoke]; titles[unit] != promotion || parents[unit] != "" {
+		t.Errorf("the flip spoke under %q, want the unit %q", titles[unit], promotion)
 	}
 }
 
@@ -325,5 +326,46 @@ func TestRemoveStalePromotionsKeepsTheNewestN(t *testing.T) {
 	}
 	if len(listed.GetPromotions()) != 2 {
 		t.Errorf("after the sweep the history has %d promotion(s), want the 2 kept", len(listed.GetPromotions()))
+	}
+}
+
+func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		keep  int32
+		seed  bool
+		wants string
+	}{
+		{"past the newest two", 2, true, "Reclaimed promotion p1, kept 2"},
+		{"when every promotion is within the newest", 5, true, "Nothing to prune: all 3 promotions are kept"},
+		{"when nothing was ever deployed", 2, false, "Nothing to prune: shop has no deploy in production"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client, provider := contractServed(t, "1.0.0")
+			if tc.seed {
+				deployed(t, provider, edge.ClassProduction, "shop")
+				seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2", "p3")
+			}
+
+			stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
+				Slug:        "shop",
+				KeepN:       tc.keep,
+				Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+			})
+			if err != nil {
+				t.Fatalf("RemoveStalePromotions() error = %v", err)
+			}
+			var said []string
+			for _, event := range recorded(stream) {
+				if line := saidLine(event); line != "" {
+					said = append(said, line)
+				}
+			}
+			if !slices.Contains(said, tc.wants) || (tc.name == "past the newest two" && !slices.Contains(said, "Destroying the stack of web build 00000000000000000000000000000001~000000000001 (1 of 1)")) {
+				t.Errorf("the prune said %q, want %q", said, tc.wants)
+			}
+		})
 	}
 }

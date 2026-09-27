@@ -429,3 +429,35 @@ func TestARemovalOpensItsDNSForTheEdgeTheProjectRunsOnWhenTheConfigNamesNone(t *
 		t.Errorf("the removal opened its DNS under %v, want the %s edge the stack runs on", fronts, fake.KindDirect)
 	}
 }
+
+func TestADestroySaysWhichStacksHostnamesAndEdgeItRemovesAndHowFarAlongItIs(t *testing.T) {
+	client, _ := deployedProject(t)
+
+	stream, err := client.RemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	var said []string
+	for _, event := range recorded(stream) {
+		if line := saidLine(event); line != "" {
+			said = append(said, line)
+		}
+	}
+	for _, want := range []string{
+		"Unbinding shop.example from the relay edge",
+		"Removing the @production routing pointer from the relay edge",
+		"Destroying stack prod--infra (2 of 2)",
+		"Destroying the relay edge stack of shop",
+		"Removing the stored variable values of shop in production",
+		"Forgetting shop in production: nothing of it is left",
+	} {
+		if !slices.Contains(said, want) {
+			t.Errorf("the destroy said %q, want %q among it", said, want)
+		}
+	}
+	if !slices.ContainsFunc(said, func(line string) bool {
+		return strings.HasPrefix(line, "Destroying stack prod--web--") && strings.HasSuffix(line, " (1 of 2)")
+	}) {
+		t.Errorf("the destroy said %q, want the web stack named as the first of 2", said)
+	}
+}

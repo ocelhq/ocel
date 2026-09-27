@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -243,7 +244,7 @@ func TestADryRunAdmitsTheRecordAnInlineBindingWritesOnlyAtDeploy(t *testing.T) {
 }
 
 func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
-	said := func(t *testing.T, record *bindingsv1.Binding, kind bindingsv1.BindingType) []string {
+	warnings := func(t *testing.T, record *bindingsv1.Binding, kind bindingsv1.BindingType) []string {
 		t.Helper()
 		builtProject(t)
 		client, vendor := deployServed(t)
@@ -256,7 +257,9 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 		}
 		var messages []string
 		for _, event := range events {
-			messages = append(messages, saidLine(event))
+			if event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_WARN {
+				messages = append(messages, event.GetMessage())
+			}
 		}
 		return messages
 	}
@@ -266,9 +269,9 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 
 	t.Run("shows the binding written as config accepts it, beside a record of the same type", func(t *testing.T) {
 		want := `"bindings": { "postgres": { "orders": "@orders" } }`
-		messages := said(t, postgresRecord("orders", "terraform"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		messages := warnings(t, postgresRecord("orders", "terraform"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 		if !slices.ContainsFunc(messages, func(message string) bool { return strings.Contains(message, want) }) {
-			t.Errorf("no progress message contains %s: the warning must show the binding written as config accepts it", want)
+			t.Errorf("no warning contains %s: the warning must show the binding written as config accepts it", want)
 		}
 	})
 
@@ -277,21 +280,21 @@ func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		messages := said(t, &bindingsv1.Binding{Name: "orders", Source: "terraform", Properties: &bindingsv1.Binding_Custom{Custom: custom}}, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		messages := warnings(t, &bindingsv1.Binding{Name: "orders", Source: "terraform", Properties: &bindingsv1.Binding_Custom{Custom: custom}}, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 		if warned(messages) {
 			t.Errorf("progress = %q, want no advice to bind a custom record: the binding it suggests is refused", messages)
 		}
 	})
 
 	t.Run("says nothing beside a record of another type", func(t *testing.T) {
-		messages := said(t, bucketRecord("orders", "terraform"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		messages := warnings(t, bucketRecord("orders", "terraform"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 		if warned(messages) {
 			t.Errorf("progress = %q, want no advice to bind a bucket as a postgres: the binding it suggests is refused", messages)
 		}
 	})
 
 	t.Run("says nothing beside a record ocel's client cannot serve", func(t *testing.T) {
-		messages := said(t, bucketRecord("uploads", "terraform"), bindingsv1.BindingType_BINDING_TYPE_BUCKET)
+		messages := warnings(t, bucketRecord("uploads", "terraform"), bindingsv1.BindingType_BINDING_TYPE_BUCKET)
 		if warned(messages) {
 			t.Errorf("progress = %q, want no advice to bind a bucket another publisher provisioned: the binding it suggests is refused", messages)
 		}

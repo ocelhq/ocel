@@ -520,3 +520,39 @@ func TestRemoveEnvironmentRefusesProduction(t *testing.T) {
 		t.Fatalf("RemoveEnvironment() = %v, want production refused as an invalid argument", err)
 	}
 }
+
+func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, edge.ClassPreview, "shop")
+	seedPromotions(t, vendor, edge.ClassPreview, "shop", "pr-7", "p1", "p2")
+	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7))), naming.InfraStack("pr-7"))
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	var said []string
+	for _, event := range recorded(stream) {
+		if line := saidLine(event); line != "" {
+			said = append(said, line)
+		}
+	}
+	for _, want := range []string{
+		"Removing the routing pointer of preview pr-7 from the relay edge",
+		"Destroying stack " + naming.InfraStack("pr-7").String() + " (2 of 2)",
+		"Reclaimed promotions p2 and p1",
+		"Destroying the stack of web build 00000000000000000000000000000001~000000000001 (1 of 2)",
+	} {
+		if !slices.Contains(said, want) {
+			t.Errorf("the removal said %q, want %q among it", said, want)
+		}
+	}
+	web := "Destroying stack " + naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7))).String() + " (1 of 2)"
+	if !slices.Contains(said, web) {
+		t.Errorf("the removal said %q, want %q among it", said, web)
+	}
+}

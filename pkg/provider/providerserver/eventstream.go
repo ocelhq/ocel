@@ -117,12 +117,11 @@ func streamResult(
 func streamed(
 	ctx context.Context,
 	stream *connect.ServerStream[progressv1.OperationEvent],
-	unit, title string,
-	phase progressv1.Phase,
+	unit Stage,
 	do func(*eventStream, edge.Progress) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
-		if err := inUnit(sender, unit, title, phase, do); err != nil {
+		if err := inUnit(sender, unit, do); err != nil {
 			return nil, err
 		}
 		return okResult(), nil
@@ -131,11 +130,10 @@ func streamed(
 
 func inUnit(
 	sender *eventStream,
-	unit, title string,
-	phase progressv1.Phase,
+	unit Stage,
 	do func(*eventStream, edge.Progress) error,
 ) error {
-	return newStageScope(sender).unit(UnitStage(unit, title, phase), func(u *unitRun) error {
+	return newStageScope(sender).unit(unit, func(u *unitRun) error {
 		return u.phase(func(progress edge.Progress) error {
 			return do(sender, progress)
 		})
@@ -193,7 +191,7 @@ func degradedEvent(app string, need edge.Need, detail string) *progressv1.Operat
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
 		Subject: app,
-		Message: sanitizeMessage(string(need) + ": " + detail),
+		Message: sanitizeMessage(string(need) + " runs degraded: " + detail),
 	}
 }
 
@@ -217,6 +215,8 @@ func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...stri
 		})
 	}
 	return &progressv1.OperationEvent{
+		Level:   progressv1.Level_LEVEL_WARN,
+		Message: sanitizeMessage(headline),
 		Body: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
 			Headline: headline,
 			Records:  manual,

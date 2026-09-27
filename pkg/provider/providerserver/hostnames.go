@@ -42,14 +42,27 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISION, func(sender *eventStream, progress edge.Progress) error {
+	title := "Attaching " + namedList("production hostname", "production hostnames", requestedHosts(req))
+	unit := UnitStage(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress edge.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
 		}
-		session.cutover.waitForManualRecords(sender)
+		session.cutover.waitForManualRecords(sender, unit)
 		return session.add(ctx, progress)
 	})
+}
+
+func requestedHosts(req *contractv1.HostnameRequest) []string {
+	if req.GetHost() != "" {
+		return []string{req.GetHost()}
+	}
+	hosts := make([]string, 0, len(req.GetConfigured()))
+	for _, configured := range req.GetConfigured() {
+		hosts = append(hosts, configured.GetHostname())
+	}
+	return hosts
 }
 
 func (d *hostnames) add(ctx context.Context, progress edge.Progress) error {
@@ -178,7 +191,12 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving
 }
 
 func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
+	title := "Detaching every production hostname no longer declared"
+	if req.GetHost() != "" {
+		title = "Detaching " + req.GetHost() + " from production"
+	}
+	unit := UnitStage(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err

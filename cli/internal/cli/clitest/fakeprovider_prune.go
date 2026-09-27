@@ -15,9 +15,9 @@ func (s *deployFakeProviderServer) RemoveStalePromotions(ctx context.Context, re
 	}
 	lines := []string{"PRUNE project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}
 	if req.GetKeepN() == 0 {
-		lines = append(lines, "Nothing to prune.")
+		lines = append(lines, "Nothing to prune: the one promotion is kept")
 	} else {
-		lines = append(lines, "Reclaimed 1 promotion(s): promo-1", "Kept 1 promotion(s).")
+		lines = append(lines, "Reclaimed promotion promo-1, kept 1")
 	}
 	for _, line := range lines {
 		if err := stream.Send(fakeProgress(line)); err != nil {

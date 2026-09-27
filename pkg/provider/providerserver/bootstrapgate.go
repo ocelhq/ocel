@@ -352,8 +352,8 @@ func (g Gate) EnsureReady(ctx context.Context, class edge.Class, required []stri
 		}
 	}
 	if stale := status.Stale(required); len(stale) > 0 {
-		detail(progress, fmt.Sprintf(
-			"this account's Ocel bootstrap is the shape this build needs but its content is behind: %s. Re-run `%s` to refresh it",
+		warn(progress, fmt.Sprintf(
+			"This account's Ocel bootstrap is the shape this build needs but its content is behind: %s. Re-run `%s` to refresh it",
 			strings.Join(stale, ", "), command))
 	}
 	return status, nil
@@ -374,13 +374,13 @@ func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []strin
 		return false
 	}
 	if !g.WrittenBy.Release() {
-		detail(progress, fmt.Sprintf(
-			"this provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", g.WrittenBy))
+		say(progress, fmt.Sprintf(
+			"This provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", g.WrittenBy))
 		return false
 	}
 	if !status.WrittenBy.Release() {
-		detail(progress, fmt.Sprintf(
-			"this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", status.WrittenBy))
+		say(progress, fmt.Sprintf(
+			"This account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", status.WrittenBy))
 		return false
 	}
 	err := g.Bootstrap.Apply(ctx, provider.BootstrapRequest{
@@ -392,18 +392,18 @@ func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []strin
 	}, progress)
 	var refused refusal.Refusal
 	if errors.As(err, &refused) && refused.Code == refusal.CodeDenied {
-		detail(progress, denied(refused))
+		warn(progress, denied(refused))
 		return false
 	}
 	if err != nil {
-		detail(progress, "could not refresh this account's bootstrap, and this run continues against the bootstrap already in place: "+err.Error())
+		warn(progress, fmt.Sprintf("Could not refresh the %s bootstrap, so this run continues against the one in place: %s", status.Class, err))
 		return false
 	}
 	return true
 }
 
 func denied(refused refusal.Refusal) string {
-	said := "this run may not refresh what this bootstrap has fallen behind on, so it is left in place"
+	said := "This run may not refresh what this bootstrap has fallen behind on, so it is left in place"
 	if refused.Message == "" {
 		return said
 	}
@@ -563,9 +563,14 @@ func destroyCommand(class edge.Class) string {
 	return "ocel destroy production"
 }
 
-func detail(progress edge.Progress, message string) {
-	if progress == nil {
-		return
+func say(progress edge.Progress, message string) {
+	if progress != nil {
+		progress.Say(message)
 	}
-	progress.Detail(message)
+}
+
+func warn(progress edge.Progress, message string) {
+	if progress != nil {
+		progress.Warn(message)
+	}
 }

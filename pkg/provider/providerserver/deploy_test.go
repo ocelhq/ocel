@@ -623,7 +623,7 @@ func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 		t.Fatalf("Deploy() waiving %s = %q, want the deploy to succeed degraded", edge.NeedStreaming, result.GetError())
 	}
 	if !slices.ContainsFunc(events, func(event *progressv1.OperationEvent) bool {
-		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.HasPrefix(event.GetMessage(), string(edge.NeedStreaming)+": ")
+		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.HasPrefix(event.GetMessage(), string(edge.NeedStreaming)+" runs degraded: ")
 	}) {
 		t.Errorf("the deploy said nothing about %s, want the waived need reported out loud", edge.NeedStreaming)
 	}
@@ -643,7 +643,7 @@ func TestADeployWarnsInTheCheckPhaseNamingTheAppItDegrades(t *testing.T) {
 
 	_, events := deploy(t, client, req)
 	i := slices.IndexFunc(events, func(event *progressv1.OperationEvent) bool {
-		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.HasPrefix(event.GetMessage(), string(edge.NeedStreaming)+": ")
+		return event.GetLevel() == progressv1.Level_LEVEL_WARN && strings.HasPrefix(event.GetMessage(), string(edge.NeedStreaming)+" runs degraded: ")
 	})
 	if i < 0 {
 		t.Fatalf("the deploy said nothing about %s, want the waived need reported", edge.NeedStreaming)
@@ -654,6 +654,11 @@ func TestADeployWarnsInTheCheckPhaseNamingTheAppItDegrades(t *testing.T) {
 	}
 	if degraded.GetSubject() != "web" {
 		t.Errorf("the degraded need's subject is %q, want the app %q", degraded.GetSubject(), "web")
+	}
+	want := "streaming runs degraded: responses are buffered before they leave the origin the way `next start` answers without an edge in front, " +
+		"so the first byte waits on the last. It affects routes /feed"
+	if degraded.GetMessage() != want {
+		t.Errorf("the degraded need reads %q, want %q", degraded.GetMessage(), want)
 	}
 }
 

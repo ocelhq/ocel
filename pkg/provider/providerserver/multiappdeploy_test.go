@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-const promotionUnitSpan = "Promotion"
+var promotionUnitSpan = progressv1.Phase_PHASE_PROMOTE.String()
 
 const webRefusal = "the web stack could not be provisioned"
 
@@ -48,14 +48,18 @@ func appBarrier(t *testing.T, width int) func(provider.StackSpec) error {
 }
 
 func spanStatuses(events []*progressv1.OperationEvent) map[string]progressv1.SpanStatus {
-	titles := map[string]string{}
+	units := map[string]string{}
 	statuses := map[string]progressv1.SpanStatus{}
 	for _, event := range events {
-		if event.GetStarted() != nil {
-			titles[string(event.GetSpanId())] = event.GetMessage()
+		if started := event.GetStarted(); started != nil && len(started.GetParentSpanId()) == 0 {
+			units[string(event.GetSpanId())] = event.GetSubject()
+			if event.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+				units[string(event.GetSpanId())] = event.GetPhase().String()
+			}
 		}
-		if ended := event.GetEnded(); ended != nil {
-			statuses[titles[string(event.GetSpanId())]] = ended.GetStatus()
+		unit, ok := units[string(event.GetSpanId())]
+		if ended := event.GetEnded(); ended != nil && ok {
+			statuses[unit] = ended.GetStatus()
 		}
 	}
 	return statuses

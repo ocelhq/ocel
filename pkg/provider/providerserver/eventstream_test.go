@@ -11,7 +11,6 @@ import (
 	"buf.build/go/protovalidate"
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -216,7 +215,7 @@ func TestADegradedNeedIsAWarnNamingTheAppTheNeedAndTheDegrade(t *testing.T) {
 	if event.GetSubject() != "web" {
 		t.Errorf("subject = %q, want the app", event.GetSubject())
 	}
-	if want := "edge-middleware: the edge cannot run code"; event.GetMessage() != want {
+	if want := "edge-middleware runs degraded: the edge cannot run code"; event.GetMessage() != want {
 		t.Errorf("message = %q, want %q", event.GetMessage(), want)
 	}
 	if event.GetBody() != nil {
@@ -272,14 +271,14 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	}
 }
 
-var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
+var testStage = PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION))
 
 func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
+	stage := PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION))
 	progress := newProgress(sender, stage)
 
 	progress.Say("provisioning the infra stack")
@@ -322,7 +321,7 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISION)
+	stage := PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION))
 	progress := newProgress(sender, stage)
 
 	before := time.Now().UnixNano()

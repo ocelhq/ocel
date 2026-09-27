@@ -27,6 +27,7 @@ type wildcards struct {
 	recorded       stackrecords.Wildcard
 	sel            *contractv1.EdgeSelection
 	progressStream *eventStream
+	progressUnit   Stage
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
@@ -49,7 +50,7 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 	}
 	s := newDNSCutover(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
 	if w.progressStream != nil {
-		s.waitForManualRecords(w.progressStream)
+		s.waitForManualRecords(w.progressStream, w.progressUnit)
 	}
 	return s, nil
 }
@@ -70,7 +71,9 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISION, func(sender *eventStream, progress edge.Progress) error {
+	unit := UnitStage(naming.UnitEdge, string(edge.ClassPreview),
+		"Serving every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain()), progressv1.Phase_PHASE_PROVISION)
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress edge.Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -79,7 +82,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 		if err != nil {
 			return err
 		}
-		w.progressStream = sender
+		w.progressStream, w.progressUnit = sender, unit
 		front, err := h.edgeFor(w.provider, req.GetEdge())
 		if err != nil {
 			return err
@@ -380,7 +383,8 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
+	unit := UnitStage(naming.UnitEdge, string(edge.ClassPreview), "Releasing the global preview domain", progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
@@ -391,7 +395,7 @@ func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.Pr
 
 func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
 	if w.recorded.BaseDomain == "" {
-		progress.Say("This preview bootstrap has no global preview domain")
+		progress.Say("Nothing to release: previews use no global preview domain")
 		return nil
 	}
 	front, err := w.owningEdge()

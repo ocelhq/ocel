@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -146,8 +147,8 @@ func TestAUnitStartsWhenItRunsNotWhenTheDeployBegins(t *testing.T) {
 			sequence = append(sequence, "ended "+unit)
 		}
 	}
-	hostnamesEnded := slices.Index(sequence, "ended Hostnames")
-	promotionStarted := slices.Index(sequence, "started Promotion")
+	hostnamesEnded := slices.IndexFunc(sequence, func(step string) bool { return strings.HasPrefix(step, "ended Attaching") })
+	promotionStarted := slices.IndexFunc(sequence, func(step string) bool { return strings.HasPrefix(step, "started Switching traffic") })
 	if hostnamesEnded < 0 || promotionStarted < hostnamesEnded {
 		t.Errorf("units ran as %v, want Promotion started only after Hostnames ended: a started event says the unit is running", sequence)
 	}
@@ -176,7 +177,7 @@ func TestEveryScopeADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
 	}
 }
 
-func phasesUnder(events []*progressv1.OperationEvent, unit string) []progressv1.Phase {
+func phasesUnder(events []*progressv1.OperationEvent, title string) []progressv1.Phase {
 	units := map[string]string{}
 	var phases []progressv1.Phase
 	for _, scope := range startedScopes(events) {
@@ -184,7 +185,7 @@ func phasesUnder(events []*progressv1.OperationEvent, unit string) []progressv1.
 			units[scope.id] = scope.title
 			continue
 		}
-		if units[scope.parent] == unit {
+		if unit, ok := units[scope.parent]; ok && strings.HasPrefix(unit, title) {
 			phases = append(phases, scope.phase)
 		}
 	}
@@ -199,7 +200,7 @@ func TestADeploysPromotionRunsInThePromotePhase(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	got := phasesUnder(events, "Promotion")
+	got := phasesUnder(events, "Switching traffic")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_PROMOTE {
 		t.Errorf("the Promotion unit runs in %v, want the promote phase", got)
 	}
@@ -213,13 +214,13 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if got := phasesUnder(events, "web"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
+	if got := phasesUnder(events, "Deploying the serverless app"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
 		t.Errorf("the web unit runs in %v, want the deploy phase", got)
 	}
 
 	app := map[string]bool{}
 	for _, scope := range startedScopes(events) {
-		if scope.title == "web" || app[scope.parent] {
+		if strings.HasPrefix(scope.title, "Deploying the serverless app") || app[scope.parent] {
 			app[scope.id] = true
 		}
 	}
@@ -249,7 +250,7 @@ func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
 
 	unit := map[string]bool{}
 	for _, scope := range startedScopes(events) {
-		if scope.title == "Edge" || unit[scope.parent] {
+		if strings.HasPrefix(scope.title, "Reconciling the routes") || unit[scope.parent] {
 			unit[scope.id] = true
 		}
 	}
@@ -280,7 +281,7 @@ func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveEnvironment() error = %v", err)
 	}
-	got := phasesUnder(recorded(stream), "Environment")
+	got := phasesUnder(recorded(stream), "Removing the preview environment")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_DESTROY {
 		t.Errorf("the removal runs in %v, want the destroy phase", got)
 	}

@@ -52,7 +52,8 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		sender.refusing(connect.CodeUnimplemented)
 		var at provider.ConnectorAddress
-		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISION, func(_ *eventStream, progress edge.Progress) error {
+		unit := UnitStage(naming.UnitConnector, naming.UnitConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
+		err := inUnit(sender, unit, func(_ *eventStream, progress edge.Progress) error {
 			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
@@ -73,10 +74,22 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	if err != nil {
 		return err
 	}
-	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DESTROY, func(sender *eventStream, progress edge.Progress) error {
+	unit := UnitStage(naming.UnitConnector, naming.UnitConnector, "Removing the connector from this account", progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress edge.Progress) error {
 		sender.refusing(connect.CodeUnimplemented)
 		return connector.Remove(ctx, progress)
 	})
+}
+
+func connectorInstallTitle(req *contractv1.InstallConnectorRequest) string {
+	title := "Installing the connector"
+	if version := req.GetVersion(); version != "" {
+		title += " " + version
+	}
+	if compute := req.GetCompute(); compute != "" {
+		title += " on " + compute + " compute"
+	}
+	return title + " in this account"
 }
 
 func connectorResult(at provider.ConnectorAddress) *progressv1.OperationEvent {

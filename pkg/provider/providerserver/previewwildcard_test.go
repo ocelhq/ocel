@@ -411,3 +411,22 @@ func TestUsePreviewWildcardPassesOnAWarningTheEdgeRaisesAsAWarning(t *testing.T)
 		t.Errorf("UsePreviewWildcard() warned %q, want the edge's warning passed on as a warning", warned)
 	}
 }
+
+func TestReleasingAGlobalPreviewDomainNobodyUsesSaysThereIsNothingToRelease(t *testing.T) {
+	t.Parallel()
+	client, _ := contractServed(t, "1.0.0")
+
+	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
+	if err != nil {
+		t.Fatalf("RemovePreviewWildcard() error = %v", err)
+	}
+	var said []string
+	for _, event := range recorded(stream) {
+		if line := saidLine(event); line != "" {
+			said = append(said, line)
+		}
+	}
+	if want := "Nothing to release: previews use no global preview domain"; !slices.Contains(said, want) {
+		t.Errorf("the release said %q, want %q", said, want)
+	}
+}

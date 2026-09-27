@@ -127,11 +127,8 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "Reclaimed 1 promotion(s): promo-1") {
-			t.Errorf("stdout = %q, want it to report the reclaimed promotion", out)
-		}
-		if !strings.Contains(out, "Kept 1 promotion(s).") {
-			t.Errorf("stdout = %q, want it to report the kept promotion count", out)
+		if !strings.Contains(out, "Reclaimed promotion promo-1, kept 1") {
+			t.Errorf("stdout = %q, want it to report the reclaimed promotion and the kept count", out)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)
@@ -214,7 +211,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 		t.Fatal("the run reported nothing on its stream")
 	}
 	if !slices.ContainsFunc(evs, func(ev *streamv1.RunEvent) bool {
-		return strings.Contains(ev.GetMessage(), "Reclaimed 1 promotion(s): promo-1")
+		return strings.Contains(ev.GetMessage(), "Reclaimed promotion promo-1")
 	}) {
 		t.Errorf("the stream never said what was reclaimed: %s", stream.String())
 	}

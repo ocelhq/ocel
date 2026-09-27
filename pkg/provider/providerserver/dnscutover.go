@@ -40,19 +40,19 @@ type manualRecordPolicy struct {
 	fail   bool
 }
 
-func reportManualRecords(sender *eventStream) manualRecordPolicy {
+func reportManualRecords(sender *eventStream, unit Stage) manualRecordPolicy {
 	return manualRecordPolicy{report: func(headline string, records []edge.Record, notes ...string) {
-		sender.send(dnsManualRecordsEvent(headline, records, notes...))
+		sender.send(unit.scoped(dnsManualRecordsEvent(headline, records, notes...)))
 	}}
 }
 
-func (s *dnsCutover) waitForManualRecords(sender *eventStream) {
-	s.manual = reportManualRecords(sender)
+func (s *dnsCutover) waitForManualRecords(sender *eventStream, unit Stage) {
+	s.manual = reportManualRecords(sender, unit)
 	s.budget = manualRecordBudget
 }
 
-func failOnManualRecords(sender *eventStream) manualRecordPolicy {
-	policy := reportManualRecords(sender)
+func failOnManualRecords(sender *eventStream, unit Stage) manualRecordPolicy {
+	policy := reportManualRecords(sender, unit)
 	policy.fail = true
 	return policy
 }

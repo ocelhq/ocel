@@ -79,7 +79,8 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		if req.GetDry() {
 			return okResult(), nil
 		}
-		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISION,
+		unit := UnitStage(naming.UnitEnvironment, string(class), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
+		err = inUnit(sender, unit,
 			func(_ *eventStream, progress edge.Progress) error {
 				return gate.Apply(ctx, plan, class, intent, progress)
 			})
@@ -277,13 +278,27 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		return err
 	}
 
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
-		shown, err := PlanFromProto(req.GetConsented())
-		if err != nil {
-			return err
+	shown, shownErr := PlanFromProto(req.GetConsented())
+	unit := UnitStage(naming.UnitEnvironment, string(class), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+		if shownErr != nil {
+			return shownErr
 		}
 		return gate.Remove(ctx, shown, class, progress)
 	})
+}
+
+func bootstrapTitle(verb string, plan provider.Plan) string {
+	var stacks []string
+	for _, group := range plan.Groups {
+		if group.Action.Writes() {
+			stacks = append(stacks, group.Name)
+		}
+	}
+	if len(stacks) == 0 {
+		return verb + " the bootstrap"
+	}
+	return verb + " " + namedList("bootstrap stack", "bootstrap stacks", stacks)
 }
 
 func edgeKind(p provider.Provider, requested string) edge.Kind {

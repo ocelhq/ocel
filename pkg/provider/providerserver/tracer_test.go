@@ -18,6 +18,12 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+const environmentTitle = "Checking the bootstrap, domains and bindings for shop"
+
+func environmentUnit(phase progressv1.Phase) Stage {
+	return UnitStage(naming.UnitEnvironment, "production", environmentTitle, phase)
+}
+
 func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	t.Parallel()
 
@@ -25,8 +31,8 @@ func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	unit := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
-	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISION)
+	unit := environmentUnit(progressv1.Phase_PHASE_PROVISION)
+	phase := PhaseStage(unit)
 	tracer.Start(time.Now(), unit, phase)
 
 	if err := sender.close(); err != nil {
@@ -41,8 +47,8 @@ func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	if opened.GetStarted() == nil || nested.GetStarted() == nil {
 		t.Fatalf("bodies = %T, %T, want both started", opened.GetBody(), nested.GetBody())
 	}
-	if opened.GetMessage() != "Environment" || StageID(opened.GetSpanId()) != unit.ID {
-		t.Errorf("the unit starts as %q %x, want \"Environment\" %x", opened.GetMessage(), opened.GetSpanId(), unit.ID)
+	if opened.GetMessage() != environmentTitle || opened.GetSubject() != "production" || StageID(opened.GetSpanId()) != unit.ID {
+		t.Errorf("the unit starts as %q: %q %x, want \"production\": %q %x", opened.GetSubject(), opened.GetMessage(), opened.GetSpanId(), environmentTitle, unit.ID)
 	}
 	if len(opened.GetStarted().GetParentSpanId()) != 0 {
 		t.Errorf("unit parent = %x, want none (a unit is a root)", opened.GetStarted().GetParentSpanId())
@@ -53,8 +59,9 @@ func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	if StageID(nested.GetStarted().GetParentSpanId()) != unit.ID {
 		t.Errorf("phase parent = %x, want the unit %x", nested.GetStarted().GetParentSpanId(), unit.ID)
 	}
-	if nested.GetMessage() != "Provisioning" || nested.GetPhase() != progressv1.Phase_PHASE_PROVISION {
-		t.Errorf("the phase starts as %q in %v, want \"Provisioning\" in the provision phase", nested.GetMessage(), nested.GetPhase())
+	if nested.GetMessage() != environmentTitle || nested.GetSubject() != "production" || nested.GetPhase() != progressv1.Phase_PHASE_PROVISION {
+		t.Errorf("the phase starts as %q: %q in %v, want its unit's \"production\": %q in the provision phase",
+			nested.GetSubject(), nested.GetMessage(), nested.GetPhase(), environmentTitle)
 	}
 	for i, event := range events {
 		if err := protovalidate.Validate(event); err != nil {
@@ -70,14 +77,13 @@ func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	unit := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
 	tracer.Start(time.Now(),
-		unit,
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILD),
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_DEPLOY),
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISION),
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROMOTE),
-		PhaseStage(unit.Name, progressv1.Phase_PHASE_DESTROY),
+		environmentUnit(progressv1.Phase_PHASE_PROVISION),
+		PhaseStage(environmentUnit(progressv1.Phase_PHASE_BUILD)),
+		PhaseStage(environmentUnit(progressv1.Phase_PHASE_DEPLOY)),
+		PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION)),
+		PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROMOTE)),
+		PhaseStage(environmentUnit(progressv1.Phase_PHASE_DESTROY)),
 	)
 
 	if err := sender.close(); err != nil {
@@ -104,8 +110,7 @@ func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	t.Parallel()
 
-	unit := UnitStage(naming.UnitPromotion, "Promotion", progressv1.Phase_PHASE_PROMOTE)
-	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROMOTE)
+	phase := PhaseStage(UnitStage(naming.UnitPromotion, "production", "Switching traffic to promotion p1", progressv1.Phase_PHASE_PROMOTE))
 	first := NewStage(phase, "detail")
 	second := NewStage(phase, "detail")
 
@@ -124,7 +129,7 @@ func TestAnEndedScopeNamesItsStageEndsAtItsEndAndCarriesItsStartAndAttributes(t 
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	root := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
+	root := environmentUnit(progressv1.Phase_PHASE_PROVISION)
 	child := NewStage(root, "web")
 	start := time.Unix(1000, 0)
 	end := time.Unix(1005, 0)
@@ -168,7 +173,7 @@ func TestAResourcesActionReachesTheWireAsItsOwnAttribute(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	child := NewStage(UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION), "create resource")
+	child := NewStage(environmentUnit(progressv1.Phase_PHASE_PROVISION), "create resource")
 	tracer.End(child, time.Unix(1000, 0), time.Unix(1001, 0), nil,
 		provider.AttrResourceType("aws:s3/bucket:Bucket"), provider.AttrResourceName("assets"), provider.AttrResourceAction(provider.ActionCreate))
 
@@ -189,7 +194,7 @@ func TestAFailedScopeEndsWithAnErrorKindNeverRawText(t *testing.T) {
 	tracer := newEventTrace(sender)
 
 	secret := "postgres://user:hunter2@10.0.0.1:5432/db AKIAABCDEF1234567890"
-	stage := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
+	stage := environmentUnit(progressv1.Phase_PHASE_PROVISION)
 	tracer.End(stage, time.Now(), time.Now(), errors.New(secret))
 
 	if err := sender.close(); err != nil {
@@ -219,7 +224,7 @@ func TestAFailedScopeEndsAtErrorLevelAndASucceededOneAtInfo(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	tracer := newEventTrace(sender)
 
-	stage := UnitStage(naming.UnitEnvironment, "Environment", progressv1.Phase_PHASE_PROVISION)
+	stage := environmentUnit(progressv1.Phase_PHASE_PROVISION)
 	tracer.End(stage, time.Now(), time.Now(), errors.New("the stack refused"))
 	tracer.End(stage, time.Now(), time.Now(), nil)
 
@@ -238,13 +243,13 @@ func TestAFailedScopeEndsAtErrorLevelAndASucceededOneAtInfo(t *testing.T) {
 func TestStageTitlesAreSanitized(t *testing.T) {
 	t.Parallel()
 
-	if got := UnitStage(naming.UnitEnvironment, "\x1b[2J", progressv1.Phase_PHASE_PROVISION).Title; got != "[2J" {
+	if got := UnitStage(naming.UnitEnvironment, "production", "\x1b[2J", progressv1.Phase_PHASE_PROVISION).Title; got != "[2J" {
 		t.Errorf("UnitStage() title = %q, want the control characters gone", got)
 	}
-	if got := UnitStage(naming.UnitEnvironment, "   ", progressv1.Phase_PHASE_PROVISION).Title; got != "stage" {
+	if got := UnitStage(naming.UnitEnvironment, "production", "   ", progressv1.Phase_PHASE_PROVISION).Title; got != "stage" {
 		t.Errorf("UnitStage() title = %q, want a fallback title", got)
 	}
-	if got := UnitStage(naming.UnitEnvironment, strings.Repeat("a", maxStageTitleLen*2), progressv1.Phase_PHASE_PROVISION).Title; len(got) > maxStageTitleLen {
+	if got := UnitStage(naming.UnitEnvironment, "production", strings.Repeat("a", maxStageTitleLen*2), progressv1.Phase_PHASE_PROVISION).Title; len(got) > maxStageTitleLen {
 		t.Errorf("UnitStage() title is %d long, want it capped at %d", len(got), maxStageTitleLen)
 	}
 }
@@ -273,7 +278,7 @@ func TestAFailedUnitSaysWhyAtErrorInItsPhaseOnceBeforeThePhaseEnds(t *testing.T)
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	unit := UnitStage("web", "web", progressv1.Phase_PHASE_DEPLOY)
+	unit := UnitStage("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
 	_ = newStageScope(sender).unit(unit, func(u *unitRun) error {
 		return u.phase(func(edge.Progress) error {
 			return errors.New("the web stack could not be provisioned\x1b[0m")
@@ -289,7 +294,7 @@ func TestAFailedUnitSaysWhyAtErrorInItsPhaseOnceBeforeThePhaseEnds(t *testing.T)
 		t.Fatalf("the failure is said %d times, want once", len(said))
 	}
 	reason := said[0]
-	working := unit.phaseStage()
+	working := PhaseStage(unit)
 	if StageID(reason.GetSpanId()) != working.ID || reason.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
 		t.Errorf("the reason is scoped to %x in %v, want the unit's phase %x in the deploy phase", reason.GetSpanId(), reason.GetPhase(), working.ID)
 	}
@@ -314,7 +319,7 @@ func TestAUnitThatFailsOutsideItsPhaseSaysWhyInItsOwnScope(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	unit := UnitStage("web", "web", progressv1.Phase_PHASE_DEPLOY)
+	unit := UnitStage("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
 	_ = newStageScope(sender).unit(unit, func(*unitRun) error {
 		return errors.New("the web stack is locked")
 	})

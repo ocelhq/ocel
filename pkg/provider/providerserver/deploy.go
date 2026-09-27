@@ -1,6 +1,7 @@
 package providerserver
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -57,22 +58,73 @@ type deployStages struct {
 	Promotion   Stage
 }
 
-func newDeployStages(spec provider.DeploySpec, front edge.Kind) deployStages {
-	s := deployStages{
-		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISION),
-		Infra:       UnitStage(spec.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISION),
-		Edge:        UnitStage(naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISION),
-		Hostnames:   UnitStage(naming.UnitHostnames, hostnamesUnitTitle, progressv1.Phase_PHASE_PROVISION),
-		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_PROMOTE),
-		Apps:        make(map[string]Stage, len(spec.Apps)),
+func (r *deployRun) newStages() deployStages {
+	env, kind := environmentSubject(r.spec.Class, r.spec.Env), string(r.front.Kind())
+	where := environmentPhrase(r.spec.Class, r.spec.Env)
+	routes, infra, app := "Reconciling the routes for %s in %s", "Provisioning %s", "Deploying the %s to %s"
+	if r.dry {
+		routes, infra, app = "Reading the routes for %s in %s", "Planning %s", "Planning the %s for %s"
 	}
-	s.Edge.Subject = string(front)
-	for _, entry := range spec.Apps {
-		app := UnitStage(entry.Stack.String(), entry.App, progressv1.Phase_PHASE_DEPLOY)
-		app.Subject = entry.App
-		s.Apps[entry.App] = app
+	s := deployStages{
+		Environment: UnitStage(naming.UnitEnvironment, env,
+			"Checking the bootstrap, domains and bindings for "+r.spec.Slug, progressv1.Phase_PHASE_PROVISION),
+		Infra: UnitStage(r.spec.Infra.String(), env,
+			fmt.Sprintf(infra, namedList("shared resource", "shared resources", r.manifestResourceNames())), progressv1.Phase_PHASE_PROVISION),
+		Edge: UnitStage(naming.UnitEdge, kind, fmt.Sprintf(routes, r.spec.Slug, where), progressv1.Phase_PHASE_PROVISION),
+		Hostnames: UnitStage(naming.UnitHostnames, kind,
+			"Attaching "+namedList("production hostname", "production hostnames", r.hostnames()), progressv1.Phase_PHASE_PROVISION),
+		Promotion: UnitStage(naming.UnitPromotion, env,
+			"Switching traffic to promotion "+r.spec.PromotionID, progressv1.Phase_PHASE_PROMOTE),
+		Apps: make(map[string]Stage, len(r.spec.Apps)),
+	}
+	for _, entry := range r.spec.Apps {
+		s.Apps[entry.App] = UnitStage(entry.Stack.String(), entry.App,
+			fmt.Sprintf(app, appNoun(entry), where), progressv1.Phase_PHASE_DEPLOY)
 	}
 	return s
+}
+
+func (r *deployRun) manifestResourceNames() []string {
+	names := make([]string, 0, len(r.manifest.GetResources()))
+	for _, resource := range r.manifest.GetResources() {
+		names = append(names, cmp.Or(resource.GetLogicalName(), resource.GetResource().GetName()))
+	}
+	return names
+}
+
+func appNoun(entry provider.AppEntry) string {
+	if entry.Compute() == "" {
+		return "app"
+	}
+	return string(entry.Compute()) + " app"
+}
+
+func environmentSubject(class edge.Class, env string) string {
+	if class == edge.ClassPreview {
+		return env
+	}
+	return string(edge.ClassProduction)
+}
+
+func environmentPhrase(class edge.Class, env string) string {
+	if class == edge.ClassPreview {
+		return "preview " + env
+	}
+	return string(edge.ClassProduction)
+}
+
+func namedList(one, many string, names []string) string {
+	const shown = 3
+	switch n := len(names); {
+	case n == 0:
+		return "no " + many
+	case n == 1:
+		return one + " " + names[0]
+	case n <= shown+1:
+		return many + " " + strings.Join(names[:n-1], ", ") + " and " + names[n-1]
+	default:
+		return fmt.Sprintf("%s %s and %d more", many, strings.Join(names[:shown], ", "), n-shown)
+	}
 }
 
 type deployRun struct {
@@ -183,7 +235,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
-	run.stages = newDeployStages(spec, front.Kind())
+	run.stages = run.newStages()
 	run.outcomes = pendingOutcomes(spec.Apps)
 	run.dryRunPlan.apps = make([]provider.Plan, len(spec.Apps))
 	sender.detailing(run.reportApps)
@@ -289,7 +341,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 		return err
 	}
 	r.installDNSCutover(writer, r.selection.GetDns().GetZone())
-	r.cutover.manual = failOnManualRecords(r.sender)
+	r.cutover.manual = failOnManualRecords(r.sender, r.stages.Hostnames)
 	return nil
 }
 
@@ -330,11 +382,9 @@ func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
 		return u.phase(func(progress edge.Progress) error {
 			if r.dry {
-				progress.Say(fmt.Sprintf("Reading the %s edge", r.front.Kind()))
 				r.dryRunPlan.edge = r.planEdgeGroup()
 				return nil
 			}
-			progress.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
 			return r.reconcileEdge(ctx, progress)
 		})
 	})
@@ -695,7 +745,6 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				Bindings:  r.publishedBindings(),
 			}
 			if r.dry {
-				progress.Say("Planning the environment's infrastructure")
 				planned, err := r.provider.Stacks().Plan(ctx, stack, progress)
 				if err != nil {
 					return err
@@ -704,7 +753,6 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				r.dryRunPlan.parameters, err = r.planValuesGroup(ctx)
 				return err
 			}
-			progress.Say("Provisioning the environment's infrastructure")
 			result, err := r.provider.Stacks().Provision(ctx, stack, progress)
 			if err != nil {
 				return err
@@ -732,11 +780,6 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 		return u.phase(func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
 				return err
-			}
-			if r.dry {
-				progress.Say("Planning " + entry.App)
-			} else {
-				progress.Say("Provisioning " + entry.App)
 			}
 			grants, err := r.grants(ctx, entry)
 			if err != nil {
@@ -1185,7 +1228,6 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
 		return u.phase(func(progress edge.Progress) error {
-			progress.Say("Promoting the deployment")
 			if err := r.stack.Promote(ctx, promotion, r.spec.Pointer, progress); err != nil {
 				return err
 			}

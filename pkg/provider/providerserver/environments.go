@@ -68,7 +68,9 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 }
 
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DESTROY, func(_ *eventStream, progress edge.Progress) error {
+	unit := UnitStage(naming.UnitEnvironment, req.GetEnvironment().GetIdentity(),
+		"Removing the preview environment of "+req.GetSlug(), progressv1.Phase_PHASE_DESTROY)
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
 		pointer, err := envName(req.GetEnvironment())
 		if err != nil {
 			return err
@@ -81,7 +83,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err != nil {
 			return err
 		}
-		progress.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
+		progress.Say(fmt.Sprintf("Removing the routing pointer of %s from the %s edge", environmentPhrase(edge.ClassPreview, pointer), session.front.Kind()))
 		removed, err := session.stack.RemovePointer(ctx, pointer, progress)
 		if err != nil {
 			return err
