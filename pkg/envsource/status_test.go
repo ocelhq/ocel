@@ -169,3 +169,16 @@ func TestADedupeKeyWhoseCredentialCannotBeReadIsAnError(t *testing.T) {
 		t.Fatalf("DedupeKey() over an unreadable store = %q, want the failure rather than a key naming the credential unset", key)
 	}
 }
+
+func TestAStatusRewrittenUnderEveryAttemptToRecordItIsAnError(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, _ := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	registration := infisicalRegistration("shop", host, cloudIdentity, "")
+	register(t, store, registration)
+	sync.Store.Records = &watchedRecords{Store: store.Records, staleUnder: records.Name{records.RootEnvSourceStatus}}
+
+	if _, err := sync.CopyProject(context.Background(), registration); err == nil {
+		t.Fatal("CopyProject() whose status was rewritten under every attempt = nil, want the lost status reported")
+	}
+}
