@@ -1,0 +1,19 @@
+{
+  "table": "ocel-state",
+  "class": "production",
+  "project": "acme",
+  "items": [
+    {
+      "slug": "",
+      "pk": "ledger#production",
+      "sk": "invalidation#",
+      "distributions": ["EWILDCARD"]
+    },
+    {
+      "slug": "acme",
+      "pk": "ledger#production/acme",
+      "sk": "invalidation#",
+      "distributions": ["E1PROD", "E2SECOND"]
+    }
+  ]
+}

@@ -3,13 +3,13 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { invalidateAll } from "../src/invalidate.mjs";
 import type { Raises } from "../src/records.mjs";
 import { pathsPerInvalidation } from "../src/tags.mjs";
-import { bootstrapPartition, targetsSortKey } from "../src/targets.mjs";
+import { bootstrapPartition, ledgerPartition, targetsSortKey } from "../src/targets.mjs";
 
 const TABLE = "ocel-state";
 const CLASS = "production";
 const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
 const RELEASE = "r0a1b2c3d";
-const PROJECT = "EDGELEDGER#production/acme";
+const PROJECT = ledgerPartition(CLASS, "acme");
 
 class FakeDynamo {
   reads: any[] = [];
@@ -20,7 +20,8 @@ class FakeDynamo {
     this.reads.push(command.input);
     if (this.fail !== null) throw this.fail;
     const distributions = this.items.get(command.input.Key.pk.S);
-    return distributions === undefined ? {} : { Item: { distributions: { SS: distributions } } };
+    if (distributions === undefined) return {};
+    return { Item: { body: { B: new TextEncoder().encode(JSON.stringify(distributions)) } } };
   }
 }
 

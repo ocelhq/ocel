@@ -1,8 +1,8 @@
-export const targetsSortKey = "META#invalidation";
+export const targetsSortKey = "invalidation#";
 
-export const targetsAttribute = "distributions";
+export const targetsAttribute = "body";
 
-export const partitionPrefix = "EDGELEDGER#";
+export const partitionPrefix = "ledger#";
 
 export interface DynamoLike {
   send(command: any): Promise<any>;
@@ -36,7 +36,9 @@ async function notedAt(
       },
     }),
   );
-  const distributions = out?.Item?.[targetsAttribute]?.SS;
+  const body: Uint8Array | undefined = out?.Item?.[targetsAttribute]?.B;
+  if (body === undefined) return [];
+  const distributions: unknown = JSON.parse(new TextDecoder().decode(body));
   return Array.isArray(distributions) ? distributions : [];
 }
 
