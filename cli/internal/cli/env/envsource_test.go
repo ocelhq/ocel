@@ -122,10 +122,13 @@ func TestEnvSyncReReadsTheEnvSourceADeployRegistered(t *testing.T) {
 				sources[fields[0]] = fields[len(fields)-1]
 			}
 		}
-		for key, want := range map[string]string{"STRIPE_API_KEY": "infisical:p-1/prod", "LOG_LEVEL": "builtin", "INFISICAL_CLIENT_ID": "builtin"} {
+		for key, want := range map[string]string{"STRIPE_API_KEY": "infisical:p-1/prod", "INFISICAL_CLIENT_ID": "builtin"} {
 			if sources[key] != want {
 				t.Errorf("SOURCE of %s = %q, want %q; ls:\n%s", key, sources[key], want, ls.String())
 			}
+		}
+		if _, listed := sources["LOG_LEVEL"]; listed {
+			t.Errorf("LOG_LEVEL, set in ocel's own store before the tier read from an env source that lacks it, is still listed:\n%s", ls.String())
 		}
 	})
 

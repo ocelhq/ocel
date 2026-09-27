@@ -46,6 +46,11 @@ Every value has one writer. Once a deployed tier reads from an env source other 
 `ocel env set`, `ocel env rm`, `ocel env ui` and the console refuse to change one, naming the
 source and linking to where the value lives there.
 
+That includes a value the tier held before it switched to the env source. If the source
+lacks it, the first sync removes it, and the deploy names it as missing until you set it
+in the source. The credentials ocel logs in with, and a value that
+[references](/docs/cli/env) another project's, stay ocel's own.
+
 A value set for one named preview environment stays ocel's own, and overrides what the env
 source says for that environment alone:
 
