@@ -1,0 +1,289 @@
+---
+title: Env sources
+description: Read a tier's values from Infisical or a command, not only from ocel's own store.
+---
+
+An env source is where a tier's values come from. Each tier names its own under
+`envSource`, and every one of them is optional:
+
+| Tier | Left off | May also be |
+| --- | --- | --- |
+| `production` | `builtin` | `infisical`, `exec` |
+| `preview` | `builtin` | `infisical`, `exec` |
+| `dev` | `dotenv` | `infisical`, `exec` |
+
+`builtin` is ocel's own store in your account, the one `ocel env set` writes to. `dotenv`
+is the project's `.env` file, which only `ocel dev` and `ocel run` read. Naming the default
+is the same as leaving it off.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws",
+  "envSource": {
+    "production": {
+      "infisical": {
+        "project": "4f1c2e0a-...",
+        "environment": "prod",
+        "auth": { "identity": { "identityId": "b7d0..." } }
+      }
+    },
+    "preview": "builtin",
+    "dev": { "infisical": { "project": "4f1c2e0a-...", "environment": "dev" } }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+A [TypeScript config](/docs/typescript-config#env-sources) writes the same thing with
+`infisical()` and `exec()` from `ocel/env-source`.
+
+## Who owns a value
+
+Every value has one writer. Once a deployed tier reads from an env source other than
+`builtin`, that source owns the tier's values. ocel keeps a copy it refreshes, and
+`ocel env set`, `ocel env rm`, `ocel env ui` and the console refuse to change one, naming the
+source and linking to where the value lives there.
+
+A value set for one named preview environment stays ocel's own, and overrides what the env
+source says for that environment alone:
+
+```bash
+ocel env set API_URL=https://pr-12.example.com --preview --environment pr-12
+```
+
+From lowest to highest, a variable resolves to its default in code, then the tier's env
+source, then a named environment's value, then `.env.local` in dev.
+
+`ocel env ls` names where each value came from in its SOURCE column, and `ocel env ui` in
+its Source column.
+
+## Which env source a tier reads
+
+A deploy reads the env source the config names, then registers it for the tier.
+Everything after that reads the registered one and never the config: the scheduled sync,
+`ocel env sync`, and the console through a [connector](/docs/cli/connector). Changing
+`envSource` takes effect at the next deploy, and until then `ocel env source` says the
+config names another.
+
+## Infisical
+
+| Option | What it does |
+| --- | --- |
+| `project` | The id of the Infisical project the values live in. |
+| `environment` | The slug of the Infisical environment this tier reads, such as `prod`. |
+| `path` | The Infisical folder the project's values sit under. A variables folder such as `/web` reads from that folder beneath it. Left off, `/`. |
+| `host` | The base URL of a self-hosted Infisical. Left off, `https://app.infisical.com`. |
+| `auth` | The machine identity production or preview signs in as: `universal`, or `identity` for the target's own cloud identity. Required there. |
+| `write` | `"missing"` lets ocel create a key a declaration names and Infisical lacks. It never overwrites or deletes one. Left off, `"never"`. |
+
+`dev` takes neither `auth` nor `write`: it signs in as you, and only reads. See [Dev](#dev).
+
+A deploy that finds a declared value missing or invalid stops, listing each key with a
+link to the Infisical folder it belongs in. Where a browser can open, it opens the
+variables page instead, which links each key the same way. With `write: "missing"`, that
+page creates a missing key with the value you type, and a deploy that cannot open a
+browser, such as one in CI, creates each missing key empty and described, for you to fill
+in. Where the Infisical environment requires approval for changes, ocel reads a created key
+once someone approves it.
+
+A key Infisical has that nothing in the project declares is drift. The deploy warns about
+it, and `ocel env ui` lists it in an Undeclared section, with a link.
+
+### Credentials
+
+The credentials an env source signs in with are values in ocel's own store, never in the
+source they unlock. A credential goes only to what syncs the source, never to an app, and
+`ocel env ui` lists it in its own "env source" section. Set one in the tier it signs in
+for:
+
+```bash
+ocel env set INFISICAL_CLIENT_ID=... INFISICAL_CLIENT_SECRET=...
+ocel env set INFISICAL_CLIENT_ID=... INFISICAL_CLIENT_SECRET=... --preview
+```
+
+Or reference one shared project's value, so rotating it there rotates it for every project
+that references it:
+
+```bash
+ocel env ref INFISICAL_CLIENT_SECRET --target-project shared
+```
+
+Wherever the reference leads, the value it lands on must be one ocel's own store owns. A
+credential that is unset, that an env source wrote, or that references a value another
+project reads from its own env source stops the deploy, naming the credential and what to
+set.
+
+### Universal auth
+
+A client id and a client secret, each written `{ "$env": "NAME" }` for the ocel variable
+containing it:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "vps": { "ssh": { "host": "203.0.113.10", "user": "deploy" } } },
+  "envSource": {
+    "production": {
+      "infisical": {
+        "project": "4f1c2e0a-...",
+        "environment": "prod",
+        "auth": {
+          "universal": {
+            "clientId": { "$env": "INFISICAL_CLIENT_ID" },
+            "clientSecret": { "$env": "INFISICAL_CLIENT_SECRET" }
+          }
+        }
+      }
+    }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+Create a Universal Auth identity in Infisical, give it access to the project, and set its
+client id and secret as [above](#credentials). Universal auth is the only method a VPS can
+sign in with, because a VPS has no cloud identity of its own to prove.
+
+### Identity auth
+
+The target's own cloud identity signs in, so no secret is stored. `identity` names the
+Infisical machine identity to sign in as, and ocel proves it with the cloud identity of
+wherever it runs:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws",
+  "envSource": {
+    "production": {
+      "infisical": {
+        "project": "4f1c2e0a-...",
+        "environment": "prod",
+        "auth": { "identity": { "identityId": "b7d0..." } }
+      }
+    }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+The same config signs in on AWS and on Google Cloud. What the identity in Infisical must
+allow depends on the cloud.
+
+#### On AWS
+
+Your account's own AWS roles sign in. Create an AWS Auth identity in Infisical and give it
+access to the project. Under **Allowed Principal ARNs**, list the two identities that sign
+in:
+
+- the role or user you deploy as, the one `aws sts get-caller-identity` names. It signs in
+  when a deploy reads the source and when you run `ocel env sync`.
+- the env source sync's role, which reads the source once a minute between deploys. It is
+  the `EnvSourceSyncRole` of the `<namespace>-bootstrap-vars-key` stack, or
+  `<namespace>-bootstrap-vars-key-preview` for preview. The namespace is `ocel` unless
+  you set `OCEL_NAMESPACE`:
+
+```bash
+aws cloudformation describe-stack-resource --stack-name ocel-bootstrap-vars-key \
+  --logical-resource-id EnvSourceSyncRole \
+  --query StackResourceDetail.PhysicalResourceId --output text
+```
+
+That prints the role's name; its ARN is `arn:aws:iam::<account>:role/<name>`.
+`ocel bootstrap production --features vars-key` makes the stack, and the same for preview.
+`arn:aws:iam::<account>:*` allows every principal in the account instead.
+
+If the console creates missing values through a [connector](/docs/cli/connector), also
+allow the `ConnectorRole` of the `<namespace>-connector` stack, which signs in to create them.
+
+#### On Google Cloud
+
+Your project's own service accounts sign in. Create a **GCP ID Token Auth** identity in
+Infisical and give it access to the project. Under **Allowed Service Account Emails**, list
+the two that sign in:
+
+- the service account you deploy as. It signs in when a deploy reads the source and when
+  you run `ocel env sync`.
+- the env source sync's service account, which reads the source once a minute between
+  deploys. Its id is a hash, so find its email by its display name, which names the
+  namespace (`ocel` unless you set `OCEL_NAMESPACE`) and the class:
+
+```bash
+gcloud iam service-accounts list --project my-project \
+  --filter='displayName="ocel env source sync (ocel, production)"' --format='value(email)'
+```
+
+Preview's is `ocel env source sync (<namespace>, preview)`.
+
+Leave **Allowed Projects** and **Allowed Zones** empty. They only match a Compute Engine
+instance, and neither a deploy nor the sync runs on one. Your own login through
+`gcloud auth application-default login` has no service account to prove, so deploy as a
+service account, with its key or by impersonating it:
+
+```bash
+gcloud auth application-default login --impersonate-service-account=deploy@my-project.iam.gserviceaccount.com
+```
+
+If the console creates missing values through a [connector](/docs/cli/connector), also
+allow `<namespace>-connector@<project>.iam.gserviceaccount.com`, which signs in to create them.
+
+## How fresh a value is
+
+Every deploy reads the env source first. Between deploys, `ocel bootstrap` installs an env
+source sync beside your variables that reads it once a minute and writes only what
+changed: a scheduled function on AWS, a Cloud Run service on Google Cloud, and a systemd
+unit on a VPS. Resuming a deploy from the variables page reads it again too, so a value
+you just set in Infisical counts.
+
+A running app reads a changed secret within another 60 seconds, so a secret changed in
+Infisical reaches a live app in about two minutes. Any other value reaches it at the next
+deploy. When Infisical is down or throttling, the last values read stay, and the sync backs
+off.
+
+```bash
+ocel env source            # where production reads from, when it last synced, the last error
+ocel env source --preview
+ocel env sync              # read it now
+```
+
+## exec
+
+A command whose output is the tier's values: a JSON object of names to values, or
+`KEY=VALUE` lines. It runs on the machine that deploys, once per variables folder, with
+`{folder}` replaced by the folder being read.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws",
+  "envSource": {
+    "production": {
+      "exec": { "command": ["./scripts/env.sh", "{folder}"], "format": "dotenv" }
+    }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+Nothing in your account can run it, so a deployed tier reads it only at a deploy. There is
+no scheduled sync, `ocel env sync` refuses and asks you to deploy again, and a change
+reaches a running app at the next deploy.
+
+## Dev
+
+`ocel dev` and `ocel run` read the dev tier's env source on your machine, once, when they
+start. Infisical signs in as you: with `INFISICAL_TOKEN` when it is set, and otherwise
+through the `infisical` CLI you are logged in to.
+
+```bash
+infisical login
+ocel dev
+```
+
+`exec` runs its command on your machine. Under `infisical` or `exec`, `.env` is not read;
+`.env.local` is read under every env source, and wins.
