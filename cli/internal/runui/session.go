@@ -2,6 +2,7 @@ package runui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +34,7 @@ var (
 
 type Session struct {
 	bus     *events.Bus
+	events  *events.Run
 	human   *HumanSink
 	run     *runtrace.Run
 	command string
@@ -78,6 +80,7 @@ func New(stdout io.Writer, run *runtrace.Run, present Presentation) *Session {
 		s.bus.Attach(s.human)
 	}
 	s.bus.Attach(run)
+	_, s.events, _ = s.bus.Begin(context.Background(), s.command, "")
 	s.build = &lineWriter{emit: s.buildLine}
 	liveSessions.Store(s, struct{}{})
 	return s

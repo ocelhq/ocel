@@ -288,6 +288,11 @@ func (p *projector) isPhase(id string) bool {
 	return ok && parent.linkedParent == ""
 }
 
+func (p *projector) isRoot(id string) bool {
+	n, ok := p.tree.nodes[id]
+	return ok && n.linked && n.parentID == ""
+}
+
 func (p *projector) pathOf(id string) string {
 	n, ok := p.tree.nodes[id]
 	if !ok {
@@ -499,7 +504,7 @@ func (p *projector) message(ev *streamv1.RunEvent) []string {
 	if ev.GetMessage() == "" {
 		return nil
 	}
-	if len(ev.GetSpanId()) > 0 && ev.GetLevel() == progressv1.Level_LEVEL_INFO {
+	if id := stageKey(ev.GetSpanId()); id != "" && ev.GetLevel() == progressv1.Level_LEVEL_INFO && !p.isRoot(id) {
 		return p.buffer(ev.GetSpanId(), ev.GetMessage(), false)
 	}
 	lines := strings.Split(strings.TrimRight(ev.GetMessage(), "\n"), "\n")

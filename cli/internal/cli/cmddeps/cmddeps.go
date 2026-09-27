@@ -25,7 +25,7 @@ type Deps struct {
 	LoadCredentials     func() (credentials.Credentials, error)
 	OpenDocker          docker.Opener
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
-	RequireImageBuilder func(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config, archs map[string]string) error
+	RequireImageBuilder func(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error
 	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, out io.Writer) (map[string]string, error)
 	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID        func(projectDir, app string) (string, error)

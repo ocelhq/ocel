@@ -6,12 +6,13 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
-func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config, archs map[string]string) error {
+func RequireBuilder(ctx context.Context, scope *events.Scope, cfg *projectconfig.Config, archs map[string]string) error {
 	var chosen []imagebuild.Choice
 	for _, app := range Apps(cfg) {
 		built, err := Describe(cfg, app)
@@ -31,7 +32,7 @@ func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.
 	for i, choice := range chosen {
 		containers[i] = choice.App.Name
 		if notice := choice.Notice(); notice != "" {
-			rep.Diagnostic(notice)
+			scope.Say(notice)
 		}
 	}
 	if err := imagebuild.Reachable(ctx, slices.Sorted(maps.Values(archs))...); err != nil {

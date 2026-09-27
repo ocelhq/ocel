@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -168,7 +169,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 	spec.Unattended = "pass --yes"
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := preflight.Announce(ctx, ui, runner, cfg, tier); err != nil {
+		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
+			return preflight.Announce(ctx, check, prov, cfg, tier)
+		}); err != nil {
 			return err
 		}
 		client, err := runner.Client()

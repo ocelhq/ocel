@@ -3,11 +3,15 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"io"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/events"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -130,8 +134,8 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization", Required: true},
 		)
-		var out bytes.Buffer
-		err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, runui.Plain(runui.Presentation{}, &out), false, &out, nil)
+		scope, _ := checkScope(t)
+		err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, io.Discard, nil)
 		if err == nil {
 			t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")
 		}
@@ -144,13 +148,13 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 		status := bootstrapOf(core,
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
 		)
-		var out bytes.Buffer
-		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PREVIEW, nil, runui.Plain(runui.Presentation{}, &out), false, &out, nil); err != nil {
+		scope, seen := checkScope(t)
+		if err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, false, io.Discard, nil); err != nil {
 			t.Fatalf("a bootstrap that is merely behind stopped the deploy: %v", err)
 		}
-		for _, want := range []string{"ocel-bootstrap-isr", "ocel bootstrap preview --features isr"} {
-			if !strings.Contains(out.String(), want) {
-				t.Errorf("stdout = %q, want it to contain %q", out.String(), want)
+		for _, want := range []string{"⚠ ", "ocel-bootstrap-isr", "ocel bootstrap preview --features isr"} {
+			if !strings.Contains(seen.said(), want) {
+				t.Errorf("said %q, want a warning containing %q", seen.said(), want)
 			}
 		}
 	})
@@ -159,35 +163,94 @@ func TestOfferBootstrapWithoutATerminal(t *testing.T) {
 		status := bootstrapOf(core,
 			&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, DigestCurrent: true, Required: true},
 		)
-		var out bytes.Buffer
-		if err := Offer(context.Background(), nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, runui.Plain(runui.Presentation{}, &out), false, &out, nil); err != nil {
+		scope, seen := checkScope(t)
+		if err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PRODUCTION, nil, false, io.Discard, nil); err != nil {
 			t.Fatalf("offerBootstrap err = %v", err)
 		}
-		if out.Len() != 0 {
-			t.Errorf("stdout = %q, want nothing said about a bootstrap that is what it should be", out.String())
+		if said := seen.said(); said != "" {
+			t.Errorf("said %q, want nothing said about a bootstrap that is what it should be", said)
 		}
 	})
 }
 
-func TestAHealingBootstrapRelaysWhatItSaysWritesAndWarnsButNotItsDebugOutput(t *testing.T) {
-	span := []byte("provisn1")
-	output := func(level progressv1.Level, line string) *progressv1.OperationEvent {
-		return &progressv1.OperationEvent{Level: level, SpanId: span, Message: line, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}}
-	}
+func TestAHealingPromptHoldsTheRunWhileItAsks(t *testing.T) {
+	core := &contractv1.BootstrapStack{Name: "ocel-bootstrap", Present: true, DigestCurrent: true, Required: true}
+	status := bootstrapOf(core,
+		&contractv1.BootstrapStack{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Required: true},
+	)
+	scope, seen := checkScope(t)
 	var out bytes.Buffer
-	rep := runui.Plain(runui.Presentation{}, &out)
-	for _, ev := range []*progressv1.OperationEvent{
-		{Level: progressv1.Level_LEVEL_INFO, SpanId: span, Message: "Environment", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}},
-		{Level: progressv1.Level_LEVEL_INFO, SpanId: span, Message: "provisioning the isr stack"},
-		output(progressv1.Level_LEVEL_INFO, "created the queue"),
-		output(progressv1.Level_LEVEL_DEBUG, "+  aws:sqs:Queue isr creating (0s)"),
-		{Level: progressv1.Level_LEVEL_WARN, SpanId: span, Message: "the old queue outlived its release"},
-	} {
-		reportEvent(rep, ev)
+
+	if err := Offer(context.Background(), scope, nil, status, environmentv1.Tier_TIER_PREVIEW, nil, true, &out, strings.NewReader("n\n")); err != nil {
+		t.Fatalf("declining to heal a bootstrap that is merely behind stopped the deploy: %v", err)
 	}
 
-	want := "  provisioning the isr stack\n  created the queue\n⚠ the old queue outlived its release\n"
-	if out.String() != want {
-		t.Errorf("relayed %q, want %q", out.String(), want)
+	got := seen.shape()
+	want := []string{"warn", "waiting", "resumed", "warn"}
+	if !slices.Equal(got, want) {
+		t.Errorf("events = %v, want %v: the question is asked while the run is held, and the advice follows the answer", got, want)
 	}
+	if !strings.Contains(out.String(), "ocel bootstrap preview --features isr") {
+		t.Errorf("asked %q, want the command it offers to run named", out.String())
+	}
+}
+
+type heard struct {
+	mu     sync.Mutex
+	events []*streamv1.RunEvent
+}
+
+func (h *heard) Receive(ev *streamv1.RunEvent) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.events = append(h.events, ev)
+}
+
+func (h *heard) Close() error { return nil }
+
+func (h *heard) said() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var b strings.Builder
+	for _, ev := range h.events {
+		if ev.GetBody() != nil {
+			continue
+		}
+		if ev.GetLevel() == progressv1.Level_LEVEL_WARN {
+			b.WriteString("⚠ ")
+		}
+		b.WriteString(ev.GetMessage() + "\n")
+	}
+	return b.String()
+}
+
+func (h *heard) shape() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []string
+	for _, ev := range h.events {
+		switch {
+		case ev.GetWaiting() != nil:
+			out = append(out, "waiting")
+		case ev.GetResumed() != nil:
+			out = append(out, "resumed")
+		case ev.GetBody() == nil && ev.GetLevel() == progressv1.Level_LEVEL_WARN:
+			out = append(out, "warn")
+		case ev.GetBody() == nil:
+			out = append(out, "say")
+		}
+	}
+	return out
+}
+
+func checkScope(t *testing.T) (*events.Scope, *heard) {
+	t.Helper()
+	seen := &heard{}
+	bus := events.NewBus(time.Now)
+	bus.Attach(seen)
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run.Phase(progressv1.Phase_PHASE_CHECK), seen
 }

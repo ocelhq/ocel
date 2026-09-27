@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -80,7 +81,9 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 	}
 
 	return providerclient.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		if err := bootstrap.Ready(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := runui.PlainCheck(deps.Presentation(stdout), stdout, runner, func(check *events.Scope, prov *providerclient.Provider) error {
+			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
+		}); err != nil {
 			return err
 		}
 
@@ -107,7 +110,9 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 	}
 
 	return runui.Run(ctx, deps.Spec(consent.Convergent, "ocel deployments prune", cfg, yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
+		if err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
+			return bootstrap.Ready(ctx, check, prov, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production")
+		}); err != nil {
 			return err
 		}
 

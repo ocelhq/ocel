@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -101,28 +102,31 @@ func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts 
 	}
 
 	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		rep := runui.Plain(deps.Presentation(stderr), stderr)
-		status, err := preflight.Run(ctx, rep, runner, cfg, envTier(opts), "", nil, nil, hint)
-		if err != nil {
-			return err
-		}
-		if sealing != nil {
-			if err := offerVarsKey(ctx, deps, runner, cfg, opts, status.GetBootstrap(), rep, sealing.stdin, stderr); err != nil {
+		var status *contractv1.PreflightResponse
+		if err := runui.PlainCheck(deps.Presentation(stderr), stderr, runner, func(check *events.Scope, prov *providerclient.Provider) error {
+			var err error
+			if status, err = preflight.Run(ctx, check, prov, cfg, envTier(opts), "", nil, nil, hint); err != nil {
 				return err
 			}
+			if sealing == nil {
+				return nil
+			}
+			return offerVarsKey(ctx, deps, check, prov, cfg, opts, status.GetBootstrap(), sealing.stdin, stderr)
+		}); err != nil {
+			return err
 		}
 		return drive(runner, cfg, status)
 	})
 }
 
-func offerVarsKey(ctx context.Context, deps cmddeps.Deps, runner *providerclient.Runner, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, rep runui.Reporter, stdin io.Reader, stderr io.Writer) error {
+func offerVarsKey(ctx context.Context, deps cmddeps.Deps, check *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, stdin io.Reader, stderr io.Writer) error {
 	front := edgewire.Selection(cfg)
-	offered, err := bootstrap.Offers(ctx, runner, envTier(opts), front, provider.FeatureVarsKey)
+	offered, err := bootstrap.Offers(ctx, prov, envTier(opts), front, provider.FeatureVarsKey)
 	if err != nil || !offered {
 		return err
 	}
 	plan := bootstrap.PlanOnly(status, provider.FeatureVarsKey)
-	return bootstrap.OfferPlan(ctx, runner, plan, envTier(opts), front, rep,
+	return bootstrap.OfferPlan(ctx, check, prov, plan, envTier(opts), front,
 		deps.StdinIsTerminal(stdin), stderr, stdin)
 }
 

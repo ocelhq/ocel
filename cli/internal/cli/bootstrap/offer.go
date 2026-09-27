@@ -10,12 +10,12 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
@@ -104,21 +104,22 @@ func (p Plan) Insist(tier environmentv1.Tier) error {
 	)
 }
 
-func (p Plan) Advise(tier environmentv1.Tier, rep runui.Reporter) error {
+func (p Plan) Advise(tier environmentv1.Tier, scope *events.Scope) error {
 	if err := p.Refusal(tier); err != nil {
 		return err
 	}
-	rep.Warning(fmt.Sprintf("The %s bootstrap is behind what this build has: %s.\nRun `%s` to refresh it.",
+	scope.Warn(fmt.Sprintf("The %s bootstrap is behind what this build has: %s.\nRun `%s` to refresh it.",
 		Name(tier), strings.Join(p.Stale, ", "), p.Command(tier)))
 	return nil
 }
 
-func Offers(ctx context.Context, runner *providerclient.Runner, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
-	client, err := runner.Client()
-	if err != nil {
-		return false, err
-	}
-	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: front})
+func Offers(ctx context.Context, prov *providerclient.Provider, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
+	var described *contractv1.DescribeBootstrapResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		var err error
+		described, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: front})
+		return err
+	})
 	if err != nil {
 		if connect.CodeOf(err) == connect.CodeUnimplemented {
 			return false, nil
@@ -144,50 +145,38 @@ func PlanOnly(status *contractv1.BootstrapStatus, feature string) Plan {
 	return plan
 }
 
-func Offer(ctx context.Context, runner *providerclient.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
-	return OfferPlan(ctx, runner, PlanFor(status), tier, front, rep, interactive, out, in)
+func Offer(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
+	return OfferPlan(ctx, scope, prov, PlanFor(status), tier, front, interactive, out, in)
 }
 
-func OfferPlan(ctx context.Context, runner *providerclient.Runner, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
+func OfferPlan(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, interactive bool, out io.Writer, in io.Reader) error {
 	if plan.Empty() {
 		return nil
 	}
 	if !interactive {
-		return plan.Advise(tier, rep)
+		return plan.Advise(tier, scope)
 	}
 
-	rep.Warning(fmt.Sprintf("The %s bootstrap is not what this project needs: %s.", Name(tier), plan.summary()))
-	proceed, err := confirmHealing(ctx, plan, tier, rep, out, in)
+	scope.Warn(fmt.Sprintf("The %s bootstrap is not what this project needs: %s.", Name(tier), plan.summary()))
+	proceed, err := confirmHealing(ctx, plan, tier, scope, out, in)
 	if err != nil {
 		return err
 	}
 	if !proceed {
-		return plan.Advise(tier, rep)
+		return plan.Advise(tier, scope)
 	}
-	return providerclient.StreamRunner(ctx, runner, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap,
-		func(ev *progressv1.OperationEvent) { reportEvent(rep, ev) })
+	_, err = providerclient.Stream(ctx, prov, "Bootstrap", plan.Request(tier, front), contractv1connect.ProviderServiceClient.Bootstrap)
+	return err
 }
 
-func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, rep runui.Reporter, out io.Writer, in io.Reader) (bool, error) {
-	resume := rep.Suspend()
-	defer resume()
+func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, scope *events.Scope, out io.Writer, in io.Reader) (bool, error) {
+	resume := scope.Hold(&streamv1.WaitingEvent{})
+	defer resume("answered")
 	return prompt.New(out, in).Confirm(ctx, fmt.Sprintf("Run `%s` now?", plan.Command(tier)))
 }
 
-func reportEvent(rep runui.Reporter, ev *progressv1.OperationEvent) {
-	if ev.GetBody() != nil && ev.GetOutput() == nil {
-		return
-	}
-	switch ev.GetLevel() {
-	case progressv1.Level_LEVEL_WARN:
-		rep.Warning(ev.GetMessage())
-	case progressv1.Level_LEVEL_INFO:
-		rep.Diagnostic("  " + ev.GetMessage())
-	}
-}
-
-func Ready(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
-	resp, err := preflight.Run(ctx, rep, runner, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
+func Ready(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
+	resp, err := preflight.Run(ctx, scope, prov, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
 	if err != nil {
 		return err
 	}

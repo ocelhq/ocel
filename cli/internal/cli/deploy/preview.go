@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -205,7 +206,12 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	spec.Dry = opts.dry
 
 	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		facts, err := preflightPreviewUp(ctx, deps, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
+		var facts preflightFacts
+		err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
+			var err error
+			facts, err = preflightPreviewUp(ctx, deps, ui, check, prov, cfg, env.GetIdentity(), stdout, stdin)
+			return err
+		})
 		if err != nil {
 			return err
 		}

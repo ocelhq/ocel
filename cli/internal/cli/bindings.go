@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -159,7 +160,9 @@ func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 	}
 
 	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
-		if err := preflight.Credentials(ctx, runui.Plain(deps.Presentation(stderr), stderr), runner, cfg, opts.tier(), hint); err != nil {
+		if err := runui.PlainCheck(deps.Presentation(stderr), stderr, runner, func(check *events.Scope, prov *providerclient.Provider) error {
+			return preflight.Credentials(ctx, check, prov, cfg, opts.tier(), hint)
+		}); err != nil {
 			return err
 		}
 		return drive(runner, cfg)

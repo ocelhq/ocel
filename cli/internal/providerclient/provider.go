@@ -124,3 +124,7 @@ func (w processLines) Write(line []byte) (int, error) {
 	})
 	return len(line), nil
 }
+
+func (r *Runner) Provider(scope *events.Scope) *Provider {
+	return &Provider{scope: scope, config: Config{ProviderName: r.Name()}, runner: r}
+}

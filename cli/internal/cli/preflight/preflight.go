@@ -8,17 +8,18 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func Run(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
-	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, frameworks)
+func Run(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
+	resp, err := announce(ctx, scope, prov, cfg, required, slug, domains, frameworks)
 	if err != nil {
 		return nil, err
 	}
@@ -31,39 +32,39 @@ func Run(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner,
 	return resp, nil
 }
 
-func Announce(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier) error {
-	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Frameworks(cfg))
+func Announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier) error {
+	_, err := announce(ctx, scope, prov, cfg, required, cfg.Slug, nil, Frameworks(cfg))
 	return err
 }
 
-func announce(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
-	client, err := runner.Client()
-	if err != nil {
-		return nil, err
-	}
-
-	spinner := rep.Spin("Checking credentials")
-	resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
-		RequiredTier: required,
-		Slug:         slug,
-		Domains:      domains,
-		Frameworks:   frameworks,
-		Containers:   Containers(cfg),
-		Edge:         edgewire.Selection(cfg),
+func announce(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
+	unit := scope.Unit(prov.Name(), "Checking credentials")
+	var resp *contractv1.PreflightResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		var err error
+		resp, err = client.Preflight(ctx, &contractv1.PreflightRequest{
+			RequiredTier: required,
+			Slug:         slug,
+			Domains:      domains,
+			Frameworks:   frameworks,
+			Containers:   Containers(cfg),
+			Edge:         edgewire.Selection(cfg),
+		})
+		return err
 	})
-	spinner.Stop()
+	unit.End(err)
 	if err != nil {
 		return nil, err
 	}
-	rep.Identity(IdentityEvent(cfg, required, resp.GetIdentity()))
+	scope.Identity(IdentityEvent(cfg, required, resp.GetIdentity()))
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func Credentials(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {
-	_, err := Run(ctx, rep, runner, cfg, required, "", nil, nil, bootstrapHint)
+func Credentials(ctx context.Context, scope *events.Scope, prov *providerclient.Provider, cfg *projectconfig.Config, required environmentv1.Tier, bootstrapHint string) error {
+	_, err := Run(ctx, scope, prov, cfg, required, "", nil, nil, bootstrapHint)
 	return err
 }
 

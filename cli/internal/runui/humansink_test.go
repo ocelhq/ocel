@@ -1,8 +1,10 @@
 package runui
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -81,5 +83,45 @@ func TestAHumanSinkOwnsTheTerminalOnlyOnceARunDrawsOnIt(t *testing.T) {
 	}
 	if liveOwners.Load() != owners {
 		t.Errorf("owners = %d after the sink closed, want %d", liveOwners.Load(), owners)
+	}
+}
+
+func TestAMessageSaidOnAPhaseAndNotInsideAUnitIsALineOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	var out safeBuffer
+	sink := newHumanSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth, Height: defaultHeight})
+	t.Cleanup(func() { _ = sink.Close() })
+	bus := events.NewBus(time.Now)
+	bus.Attach(sink)
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run.Phase(progressv1.Phase_PHASE_CHECK).Say("web builds from services/web/Dockerfile")
+
+	if !strings.Contains(out.String(), "web builds from services/web/Dockerfile\n") {
+		t.Errorf("out = %q, want what the check phase said drawn as a line: no unit's block holds it", out.String())
+	}
+}
+
+func TestACheckUnitIsHeadedByTheCheckPhase(t *testing.T) {
+	t.Parallel()
+
+	var out safeBuffer
+	sink := newHumanSink(&out, Presentation{Format: FormatHuman, Width: defaultWidth, Height: defaultHeight})
+	t.Cleanup(func() { _ = sink.Close() })
+	bus := events.NewBus(time.Now)
+	bus.Attach(sink)
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run.Phase(progressv1.Phase_PHASE_CHECK).Unit("aws", "Checking credentials").End(nil)
+
+	if !strings.Contains(out.String(), "✓ Checking ") {
+		t.Errorf("out = %q, want the credential check's block headed by the check phase", out.String())
 	}
 }

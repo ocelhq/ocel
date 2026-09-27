@@ -1,17 +1,20 @@
 package appimages
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/images"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func awayFromAnyDaemon(t *testing.T) {
@@ -107,10 +110,38 @@ func containerProject(t *testing.T, dockerfile string) *projectconfig.Config {
 	}
 }
 
-func said(t *testing.T) (runui.Reporter, *bytes.Buffer) {
+type heard struct {
+	mu   sync.Mutex
+	said strings.Builder
+}
+
+func (h *heard) Receive(ev *streamv1.RunEvent) {
+	if ev.GetBody() != nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.said.WriteString(ev.GetMessage() + "\n")
+}
+
+func (h *heard) Close() error { return nil }
+
+func (h *heard) String() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.said.String()
+}
+
+func said(t *testing.T) (*events.Scope, *heard) {
 	t.Helper()
-	var b bytes.Buffer
-	return runui.Plain(runui.Presentation{}, &b), &b
+	h := &heard{}
+	bus := events.NewBus(time.Now)
+	bus.Attach(h)
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run.Phase(progressv1.Phase_PHASE_CHECK), h
 }
 
 func TestTheDeployAnnouncesTheDockerfileAnAppSwitchedItselfTo(t *testing.T) {
