@@ -142,24 +142,15 @@ func (r *Renderer) Ingest(ev *streamv1.RunEvent) {
 }
 
 func (r *Renderer) ingestLocked(ev *streamv1.RunEvent) bool {
-	op := ev.GetOperation()
 	id := stageKey(ev.GetSpanId())
 	switch {
-	case op.GetStagePlan() != nil:
-		r.plan.apply(op.GetStagePlan())
-	case op.GetStarted() != nil:
-		r.plan.declare(id, stageKey(op.GetStarted().GetParentSpanId()), stageTitle(ev.GetMessage(), ev.GetPhase()))
-	case op.GetProgress() != nil:
-		p := op.GetProgress()
-		r.trackLocked(stageKey(p.GetStageId()), p.GetMessage(), p.GetCurrent(), p.Total)
-	case op.GetCounter() != nil:
-		r.trackLocked(id, ev.GetMessage(), op.GetCounter().GetCurrent(), op.GetCounter().Total)
-	case op.GetSpan() != nil:
-		span := op.GetSpan()
-		r.endLocked(stageKey(span.GetSpanId()), span.GetStatus(), spanDuration(span))
-	case op.GetEnded() != nil:
-		r.endLocked(id, op.GetEnded().GetStatus(), endedDuration(ev, op.GetEnded()))
-	case ev.GetEvent() == nil && id != "" && ev.GetLevel() == progressv1.Level_LEVEL_INFO:
+	case ev.GetStarted() != nil:
+		r.plan.declare(id, stageKey(ev.GetStarted().GetParentSpanId()), stageTitle(ev.GetMessage(), ev.GetPhase()))
+	case ev.GetCounter() != nil:
+		r.trackLocked(id, ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total)
+	case ev.GetEnded() != nil:
+		r.endLocked(id, ev.GetEnded().GetStatus(), endedDuration(ev, ev.GetEnded()))
+	case ev.GetBody() == nil && id != "" && ev.GetLevel() == progressv1.Level_LEVEL_INFO:
 		r.trackLocked(id, ev.GetMessage(), 0, nil)
 	default:
 		return false

@@ -346,7 +346,7 @@ func bindsBehind(t *testing.T, d *vps.Provider, front string) {
 	var said []string
 	for added.Receive() {
 		event := added.Msg()
-		if line := event.GetMessage(); line != "" && (event.GetEvent() == nil || event.GetOutput() != nil) {
+		if line := event.GetMessage(); line != "" && (event.GetBody() == nil || event.GetOutput() != nil) {
 			said = append(said, line)
 		}
 		if done := event.GetResult(); done != nil && !done.GetSuccess() {

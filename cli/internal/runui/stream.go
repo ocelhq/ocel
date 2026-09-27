@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -159,6 +158,9 @@ func normalize(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	if clone.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
 		clone.Level = progressv1.Level_LEVEL_INFO
 	}
+	if ended := clone.GetEnded(); ended != nil && clone.GetTime().AsTime().UnixNano() < ended.GetStartTimeUnixNano() {
+		clone.Time = timestamppb.Now()
+	}
 	normalizeMessage(clone.ProtoReflect())
 	return clone
 }
@@ -183,21 +185,6 @@ func normalizeMessage(m protoreflect.Message) {
 		sortGroups(v)
 	case *planv1.ChangeGroup:
 		sortChanges(v)
-	case *progressv1.SpanEvent:
-		fillSpanClock(v)
-	}
-}
-
-func fillSpanClock(span *progressv1.SpanEvent) {
-	now := time.Now().UnixNano()
-	if span.StartTimeUnixNano <= 0 {
-		span.StartTimeUnixNano = now
-	}
-	if span.EndTimeUnixNano <= span.StartTimeUnixNano {
-		span.EndTimeUnixNano = now
-	}
-	if span.EndTimeUnixNano < span.StartTimeUnixNano {
-		span.EndTimeUnixNano = span.StartTimeUnixNano
 	}
 }
 

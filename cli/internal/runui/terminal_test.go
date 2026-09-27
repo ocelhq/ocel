@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
-
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 var (
@@ -174,7 +172,7 @@ func TestColoredLiveRowFitsTheTerminal(t *testing.T) {
 		s.r.useClock(func() time.Time { return time.Unix(0, 0) })
 
 		app := appStage(1)
-		s.Emit(stagePlanEvent(&progressv1.Stage{Id: app, Title: "a-long-application-name"}))
+		startAll(s, scope{id: app, title: "a-long-application-name"})
 		s.Emit(progressEvent(app, "uploading a great many static assets", 1, nil))
 		_ = s.Close()
 

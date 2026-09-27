@@ -230,16 +230,14 @@ func reconstruct(events []*streamv1.RunEvent) reconstruction {
 			res := ev.GetResult()
 			r.results = append(r.results, fmt.Sprintf("success=%v interrupted=%v headline=%q detail=%q duration_ms=%d",
 				res.GetSuccess(), res.GetInterrupted(), res.GetHeadline(), res.GetDetail(), res.GetDurationMs()))
-		case ev.GetOperation().GetStagePlan() != nil:
-			for _, st := range ev.GetOperation().GetStagePlan().GetStages() {
-				id := hex.EncodeToString(st.GetId())
-				if _, seen := titles[id]; seen {
-					continue
-				}
-				titles[id] = phaseTitle(st)
-				parents[id] = hex.EncodeToString(st.GetParentId())
-				order = append(order, id)
+		case ev.GetStarted() != nil:
+			id := hex.EncodeToString(ev.GetSpanId())
+			if _, seen := titles[id]; seen {
+				continue
 			}
+			titles[id] = scopeTitle(ev)
+			parents[id] = hex.EncodeToString(ev.GetStarted().GetParentSpanId())
+			order = append(order, id)
 		}
 	}
 	for _, id := range order {
@@ -292,19 +290,16 @@ func TestEveryPhaseOnTheStreamCommitsAStartLineOffTheTerminal(t *testing.T) {
 			units := map[string]string{}
 			var wantStarts []string
 			for _, ev := range events {
-				sp := ev.GetOperation().GetStagePlan()
-				if sp == nil {
+				if ev.GetStarted() == nil {
 					continue
 				}
-				for _, st := range sp.GetStages() {
-					id, parent := hex.EncodeToString(st.GetId()), hex.EncodeToString(st.GetParentId())
-					if parent == "" {
-						units[id] = st.GetTitle()
-						continue
-					}
-					if unit, ok := units[parent]; ok {
-						wantStarts = append(wantStarts, startMark+" "+unit+" › "+phaseTitle(st))
-					}
+				id, parent := hex.EncodeToString(ev.GetSpanId()), hex.EncodeToString(ev.GetStarted().GetParentSpanId())
+				if parent == "" {
+					units[id] = ev.GetMessage()
+					continue
+				}
+				if unit, ok := units[parent]; ok {
+					wantStarts = append(wantStarts, startMark+" "+unit+" › "+scopeTitle(ev))
 				}
 			}
 			if len(wantStarts) == 0 {
@@ -322,11 +317,11 @@ func TestEveryPhaseOnTheStreamCommitsAStartLineOffTheTerminal(t *testing.T) {
 	}
 }
 
-func phaseTitle(st *progressv1.Stage) string {
-	if st.GetTitle() != "" {
-		return st.GetTitle()
+func scopeTitle(ev *streamv1.RunEvent) string {
+	if ev.GetMessage() != "" {
+		return ev.GetMessage()
 	}
-	return phaseLabel(st.GetPhase())
+	return phaseLabel(ev.GetPhase())
 }
 
 type blockText struct {
@@ -387,39 +382,38 @@ func blocksOnTheStream(events []*streamv1.RunEvent) (flushed []*phaseBlock) {
 
 	for _, raw := range events {
 		ev := normalize(raw)
-		op := ev.GetOperation()
+		id := hex.EncodeToString(ev.GetSpanId())
 		switch {
-		case op.GetStagePlan() != nil:
-			for _, st := range op.GetStagePlan().GetStages() {
-				id, parent := hex.EncodeToString(st.GetId()), hex.EncodeToString(st.GetParentId())
-				switch {
-				case parent == "":
-					units[id] = st.GetTitle()
-				case units[parent] != "":
-					open[id] = &phaseBlock{id: id, unit: parent, title: phaseTitle(st)}
-					if phases[parent] == nil {
-						phases[parent] = map[string]bool{}
-					}
-					phases[parent][id] = true
-					blockOf[id] = id
-					order = append(order, id)
-				default:
-					blockOf[id] = blockOf[parent]
+		case ev.GetStarted() != nil:
+			parent := hex.EncodeToString(ev.GetStarted().GetParentSpanId())
+			switch {
+			case parent == "":
+				units[id] = ev.GetMessage()
+			case units[parent] != "":
+				open[id] = &phaseBlock{id: id, unit: parent, title: scopeTitle(ev)}
+				if phases[parent] == nil {
+					phases[parent] = map[string]bool{}
 				}
+				phases[parent][id] = true
+				blockOf[id] = id
+				order = append(order, id)
+			default:
+				blockOf[id] = blockOf[parent]
 			}
-		case op.GetProgress() != nil:
-			p := op.GetProgress()
-			if line := progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total); line != "" {
-				claim(p.GetStageId(), line, false)
+		case ev.GetBody() == nil && ev.GetLevel() == progressv1.Level_LEVEL_INFO && ev.GetMessage() != "":
+			claim(ev.GetSpanId(), ev.GetMessage(), false)
+		case ev.GetCounter() != nil:
+			if line := progressLogLine(ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total); line != "" {
+				claim(ev.GetSpanId(), line, false)
 			}
-		case op.GetLog() != nil:
-			claim(op.GetLog().GetStageId(), op.GetLog().GetMessage(), true)
-		case op.GetSpan() != nil:
+		case ev.GetOutput() != nil:
+			claim(ev.GetSpanId(), ev.GetMessage(), true)
+		case ev.GetEnded() != nil:
 			mark := okMark
-			if op.GetSpan().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {
+			if ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {
 				mark = failMark
 			}
-			close(hex.EncodeToString(op.GetSpan().GetSpanId()), mark)
+			close(id, mark)
 		case ev.GetWaiting() != nil:
 			closeAll(warnMark)
 		case ev.GetResult() != nil:
@@ -540,37 +534,6 @@ func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *tes
 							projection.name, b.path, strings.Join(body, "\n"), strings.Join(b.lines, "\n"))
 					}
 				}
-			}
-		})
-	}
-}
-
-func TestAStreamOfStartedAndEndedScopesProjectsWhatItsStagePlanStreamDid(t *testing.T) {
-	t.Parallel()
-	scoped, err := filepath.Glob(filepath.Join("testdata", "started", "*.ndjson"))
-	if err != nil || len(scoped) == 0 {
-		t.Fatalf("no started/ended copies under testdata/started (glob err = %v)", err)
-	}
-	for _, path := range scoped {
-		name := strings.TrimSuffix(filepath.Base(path), ".ndjson")
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			b, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read copy: %v", err)
-			}
-			events := parseNDJSON(t, string(b))
-			_, planned := fixtureStream(t, name)
-
-			want, err := os.ReadFile(filepath.Join("testdata", "streams", name+".plain"))
-			if err != nil {
-				t.Fatalf("read golden: %v", err)
-			}
-			if got := projectPlain(t, events); got != string(want) {
-				t.Errorf("plain projection of the started/ended copy differs from %s.plain.\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
-			}
-			if got, want := scrollback(projectLive(t, events)), scrollback(projectLive(t, planned)); got != want {
-				t.Errorf("live scrollback of the started/ended copy differs from the stage-plan stream's.\n--- got ---\n%s\n--- want ---\n%s", got, want)
 			}
 		})
 	}

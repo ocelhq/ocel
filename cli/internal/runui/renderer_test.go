@@ -92,33 +92,23 @@ func liveRegion(t *testing.T, s *Stream, out *safeBuffer) []string {
 	return strings.Split(strings.TrimSuffix(drawn, "\n"), "\n")
 }
 
-func stagePlanEvent(stages ...*progressv1.Stage) *streamv1.RunEvent {
-	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-		StagePlan: &progressv1.StagePlanEvent{Stages: stages},
-	}})
+type scope struct {
+	id, parent []byte
+	title      string
+	phase      progressv1.Phase
+}
+
+func startAll(s *Stream, scopes ...scope) {
+	for _, sc := range scopes {
+		s.Emit(startedEvent(sc.id, sc.parent, sc.phase, sc.title))
+	}
 }
 
 func progressEvent(stageID []byte, message string, current uint32, total *uint32) *streamv1.RunEvent {
-	ev := &progressv1.ProgressEvent{StageId: stageID, Message: message, Total: total}
 	if total != nil {
-		ev.Current = &current
+		return counterEvent(stageID, message, current, total)
 	}
-	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{Progress: ev}})
-}
-
-func spanEvent(stageID []byte, failed bool, d time.Duration) *streamv1.RunEvent {
-	status := progressv1.SpanStatus_SPAN_STATUS_OK
-	if failed {
-		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
-	}
-	return operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-		Span: &progressv1.SpanEvent{
-			SpanId:            stageID,
-			StartTimeUnixNano: 1,
-			EndTimeUnixNano:   int64(d) + 1,
-			Status:            status,
-		},
-	}})
+	return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: stageID, Message: message}
 }
 
 func diagnosticEvent(message string) *streamv1.RunEvent {
@@ -130,10 +120,10 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	const notice = "Serving previews on the global preview domain *.preview.ocel.app"
@@ -158,10 +148,10 @@ func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	spinner := s.Spin("Checking credentials")
@@ -181,10 +171,10 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	var elsewhere safeBuffer
@@ -208,10 +198,10 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	r := s.r
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "app-a"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Uploading"},
-	))
+	startAll(s,
+		scope{id: unit, title: "app-a"},
+		scope{id: phase, parent: unit, title: "Uploading"},
+	)
 	s.Emit(progressEvent(phase, "uploading assets", 1, u32(10)))
 
 	resume := r.Suspend()
@@ -237,10 +227,10 @@ func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 		s, out := drivenLiveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
-		s.Emit(stagePlanEvent(
-			&progressv1.Stage{Id: appA, Title: "app-a"},
-			&progressv1.Stage{Id: appB, Title: "app-b"},
-		))
+		startAll(s,
+			scope{id: appA, title: "app-a"},
+			scope{id: appB, title: "app-b"},
+		)
 		s.Emit(progressEvent(appA, "uploading assets", 1, u32(10)))
 		s.Emit(progressEvent(appB, "uploading assets", 9, u32(10)))
 
@@ -258,20 +248,20 @@ func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 		s, out := drivenLiveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
-		s.Emit(stagePlanEvent(
-			&progressv1.Stage{Id: appA, Title: "app-a"},
-			&progressv1.Stage{Id: appB, Title: "app-b"},
-		))
+		startAll(s,
+			scope{id: appA, title: "app-a"},
+			scope{id: appB, title: "app-b"},
+		)
 		s.Emit(progressEvent(appA, "uploading", 1, u32(2)))
 		s.Emit(progressEvent(appB, "uploading", 1, u32(2)))
-		s.Emit(spanEvent(appA, false, time.Second))
+		s.Emit(endedEvent(appA, false, time.Second))
 
 		rows := liveRegion(t, s, out)
 		if len(rows) != 1 || !strings.Contains(rows[0], "app-b") {
 			t.Fatalf("live region = %q, want app-b still spinning with the finished app-a gone from the window", rows)
 		}
 
-		s.Emit(spanEvent(appB, false, time.Second))
+		s.Emit(endedEvent(appB, false, time.Second))
 		if rows := liveRegion(t, s, out); len(rows) != 0 {
 			t.Errorf("live region = %q, want nothing left in flight to show", rows)
 		}
@@ -283,15 +273,15 @@ func TestOrphanStageAttachesRecursively(t *testing.T) {
 	plan := newStagePlan()
 	grandparent, parent, child := appStage(1), appStage(2), appStage(3)
 
-	plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: child, ParentId: parent, Title: "child"},
-	}})
-	plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: parent, ParentId: grandparent, Title: "parent"},
-	}})
-	plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: grandparent, Title: "grandparent"},
-	}})
+	declareAll(plan, []scope{
+		{id: child, parent: parent, title: "child"},
+	}...)
+	declareAll(plan, []scope{
+		{id: parent, parent: grandparent, title: "parent"},
+	}...)
+	declareAll(plan, []scope{
+		{id: grandparent, title: "grandparent"},
+	}...)
 
 	if len(plan.roots) != 1 || plan.roots[0] != stageKey(grandparent) {
 		t.Fatalf("roots = %v, want just grandparent", plan.roots)
@@ -312,13 +302,13 @@ func TestColourIsDecidedFromTheTargetWriter(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "Environment"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "Environment"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "uploading", 1, u32(2)))
-	s.Emit(spanEvent(phase, false, time.Second))
-	s.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+	s.Emit(endedEvent(phase, false, time.Second))
+	s.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
 		Success: true, Headline: "Deployed", Apps: []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.workers.dev"}}},
 	}}})
 
@@ -332,10 +322,10 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
 
 	appA, appB := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: appA, Title: "app-a"},
-		&progressv1.Stage{Id: appB, Title: "app-b"},
-	))
+	startAll(s,
+		scope{id: appA, title: "app-a"},
+		scope{id: appB, title: "app-b"},
+	)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -355,9 +345,7 @@ func TestRendererSingleOwnerRaceFree(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
-			s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-				Log: &progressv1.LogEvent{StageId: appA, Message: fmt.Sprintf("subprocess output line %d", i)},
-			}}))
+			s.Emit(outputEvent(appA, fmt.Sprintf("subprocess output line %d", i)))
 		}
 	}()
 
@@ -396,15 +384,15 @@ func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 	s, out := drivenLiveStream(t)
 
 	unit, slow, quick := appStage(1), appStage(2), appStage(3)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: quick, ParentId: unit, Title: "Uploading"},
-		&progressv1.Stage{Id: slow, ParentId: unit, Title: "Provisioning"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: quick, parent: unit, title: "Uploading"},
+		scope{id: slow, parent: unit, title: "Provisioning"},
+	)
 	s.Emit(progressEvent(quick, "uploading assets", 0, nil))
 	s.Emit(progressEvent(slow, "provisioning", 0, nil))
 
-	s.Emit(spanEvent(quick, false, 90*time.Second))
+	s.Emit(endedEvent(quick, false, 90*time.Second))
 	got := out.String()
 	if !strings.Contains(got, okMark+" web › Uploading  1m30s") {
 		t.Errorf("output = %q, want the phase committed with its span's own duration", got)
@@ -413,7 +401,7 @@ func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 		t.Errorf("output = %q, want the unfinished phase left uncommitted", got)
 	}
 
-	s.Emit(spanEvent(slow, true, time.Second))
+	s.Emit(endedEvent(slow, true, time.Second))
 	if got := out.String(); !strings.Contains(got, failMark+" web › Provisioning failed") {
 		t.Errorf("output = %q, want the failed phase committed as failed", got)
 	}
@@ -424,17 +412,17 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	s, out := drivenLiveStream(t)
 
 	unit, uploading := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: uploading, ParentId: unit, Title: "Uploading"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: uploading, parent: unit, title: "Uploading"},
+	)
 	s.Emit(progressEvent(uploading, "Uploading function artifacts", 1, u32(1)))
 
 	if got := strings.Count(out.String(), okMark); got != 0 {
 		t.Fatalf("committed %d finished lines at 1/1, want none — only the stage's span ends it", got)
 	}
 
-	s.Emit(spanEvent(uploading, false, 12*time.Second))
+	s.Emit(endedEvent(uploading, false, 12*time.Second))
 	if got := out.String(); !strings.Contains(got, okMark+" web  12s") {
 		t.Errorf("scrollback = %q, want the finished phase committed as the unit's block", got)
 	}
@@ -449,10 +437,10 @@ func TestChildStageStaysUnderItsParentUntilTheParentEnds(t *testing.T) {
 	r := s.r
 
 	provisioning, app := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: provisioning, Title: "Provisioning"},
-		&progressv1.Stage{Id: app, ParentId: provisioning, Title: "next-test"},
-	))
+	startAll(s,
+		scope{id: provisioning, title: "Provisioning"},
+		scope{id: app, parent: provisioning, title: "next-test"},
+	)
 	s.Emit(progressEvent(provisioning, "Reconciling the edge stack", 0, nil))
 	s.Emit(progressEvent(app, "creating resources", 0, nil))
 
@@ -461,7 +449,7 @@ func TestChildStageStaysUnderItsParentUntilTheParentEnds(t *testing.T) {
 		t.Fatalf("live region = %q, want next-test named as the detail of the unit's row", rows)
 	}
 
-	s.Emit(spanEvent(app, false, 44*time.Second))
+	s.Emit(endedEvent(app, false, 44*time.Second))
 	if !r.plan.isActive(stageKey(app)) {
 		t.Fatal("want the finished child kept in the live region under its still-running parent")
 	}
@@ -469,7 +457,7 @@ func TestChildStageStaysUnderItsParentUntilTheParentEnds(t *testing.T) {
 		t.Fatalf("live region = %q, want the unit still running on its own row once the child finished", rows)
 	}
 
-	s.Emit(spanEvent(provisioning, false, 50*time.Second))
+	s.Emit(endedEvent(provisioning, false, 50*time.Second))
 	if active := r.plan.activeOrder; len(active) != 1 || active[0] != stageKey(provisioning) {
 		t.Fatalf("activeOrder = %v, want the subtree folded into the unit's own done row", active)
 	}
@@ -497,19 +485,17 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 			s, out := drivenStream(t, tc.present)
 
 			unit, phase := appStage(1), appStage(2)
-			s.Emit(stagePlanEvent(
-				&progressv1.Stage{Id: unit, Title: "web"},
-				&progressv1.Stage{Id: phase, ParentId: unit, Title: "Provisioning"},
-			))
+			startAll(s,
+				scope{id: unit, title: "web"},
+				scope{id: phase, parent: unit, title: "Provisioning"},
+			)
 			s.Emit(progressEvent(phase, "creating bucket assets", 0, nil))
-			s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-				Log: &progressv1.LogEvent{StageId: phase, Message: "@ updating....."},
-			}}))
+			s.Emit(outputEvent(phase, "@ updating....."))
 			if strings.Contains(out.String(), "@ updating.....") {
 				t.Fatalf("output = %q, want the line kept in its block until the phase completes", out.String())
 			}
 
-			s.Emit(spanEvent(phase, tc.failed, time.Second))
+			s.Emit(endedEvent(phase, tc.failed, time.Second))
 			got := out.String()
 			if strings.Contains(got, "  @ updating.....") != tc.want {
 				t.Errorf("output = %q, want the raw engine line shown = %v", got, tc.want)
@@ -521,17 +507,17 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 	}
 }
 
-func TestProgressWithoutAStageIsDropped(t *testing.T) {
+func TestAMessageInNoScopeIsALineOfItsOwnAndNoLiveRow(t *testing.T) {
 	t.Parallel()
 	s, out := drivenLiveStream(t)
 
 	s.Emit(progressEvent(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil))
 
 	if got := len(s.r.plan.nodes); got != 0 {
-		t.Fatalf("got %d nodes, want none: there is no bucket for progress that belongs to no stage", got)
+		t.Fatalf("got %d nodes, want none: there is no row for a message that belongs to no scope", got)
 	}
-	if out.Len() != 0 {
-		t.Errorf("output = %q, want nothing drawn for a stageless progress event", out.String())
+	if got, want := out.String(), "Reclaimed 3 promotion(s): a, b, c\n"; got != want {
+		t.Errorf("output = %q, want only the committed line %q", got, want)
 	}
 }
 
@@ -540,10 +526,10 @@ func TestAFrameTickAdvancesTheSpinnerWhileWorkIsInFlight(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	before := liveRegion(t, s, out)
@@ -566,10 +552,10 @@ func TestALiveStreamRunsItsOwnTicker(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {

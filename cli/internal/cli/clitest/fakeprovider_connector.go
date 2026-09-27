@@ -84,7 +84,7 @@ func (s *deployFakeProviderServer) InstallConnector(_ context.Context, req *cont
 	if err := stream.Send(fakeProgress("wrote the connector")); err != nil {
 		return err
 	}
-	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{
+	return stream.Send(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{
 		Result: &progressv1.ResultEvent{Success: true, Connector: &progressv1.ConnectorInstalled{
 			Url:       "https://" + os.Getenv(FakeConnectorHostEnvVar) + "/" + constants.ProjectStateDirName + "/connector",
 			PublicKey: "ZmFrZS1jb25uZWN0b3Ita2V5",
@@ -100,7 +100,7 @@ func (s *deployFakeProviderServer) RemoveConnector(_ context.Context, _ *contrac
 	if err := declareFakeStages(stream); err != nil {
 		return err
 	}
-	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{
+	return stream.Send(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{
 		Result: &progressv1.ResultEvent{Success: true},
 	}})
 }

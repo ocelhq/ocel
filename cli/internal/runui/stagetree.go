@@ -70,12 +70,6 @@ func stageKey(id []byte) string {
 	return hex.EncodeToString(id)
 }
 
-func (p *stagePlan) apply(ev *progressv1.StagePlanEvent) {
-	for _, s := range ev.GetStages() {
-		p.declare(stageKey(s.GetId()), stageKey(s.GetParentId()), stageTitle(s.GetTitle(), s.GetPhase()))
-	}
-}
-
 func stageTitle(title string, phase progressv1.Phase) string {
 	if title != "" {
 		return title

@@ -37,7 +37,7 @@ func TestDeclaringStagesStartsEachOneTitledUnderItsParent(t *testing.T) {
 
 	opened, nested := events[0], events[1]
 	if opened.GetStarted() == nil || nested.GetStarted() == nil {
-		t.Fatalf("bodies = %T, %T, want both started", opened.GetEvent(), nested.GetEvent())
+		t.Fatalf("bodies = %T, %T, want both started", opened.GetBody(), nested.GetBody())
 	}
 	if opened.GetMessage() != "Environment" || StageID(opened.GetSpanId()) != unit.ID {
 		t.Errorf("the unit starts as %q %x, want \"Environment\" %x", opened.GetMessage(), opened.GetSpanId(), unit.ID)
@@ -134,7 +134,7 @@ func TestAnEndedScopeNamesItsStageEndsAtItsEndAndCarriesItsStartAndAttributes(t 
 	event := stream.recorded()[0]
 	ended := event.GetEnded()
 	if ended == nil {
-		t.Fatalf("body = %T, want ended", event.GetEvent())
+		t.Fatalf("body = %T, want ended", event.GetBody())
 	}
 	if StageID(event.GetSpanId()) != child.ID {
 		t.Errorf("span id = %x, want the stage's id %x", event.GetSpanId(), child.ID)

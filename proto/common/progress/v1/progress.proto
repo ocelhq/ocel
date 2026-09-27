@@ -15,19 +15,14 @@ message OperationEvent {
   string message = 13;
   bytes span_id = 14 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
-  oneof event {
-    ProgressEvent progress = 1;
-    LogEvent log = 2;
-    ResultEvent result = 3;
-    StagePlanEvent stage_plan = 4;
-    SpanEvent span = 5;
-    DegradedEvent degraded = 6;
-    DnsManualRecordsEvent dns_manual_records = 7;
-    common.plan.v1.ChangePlan plan = 8;
+  oneof body {
     Started started = 15;
     Ended ended = 16;
     Output output = 17;
     Counter counter = 18;
+    common.plan.v1.ChangePlan plan = 8;
+    DnsManualRecordsEvent dns_manual_records = 7;
+    ResultEvent result = 3;
   }
 }
 
@@ -75,25 +70,6 @@ enum Phase {
   PHASE_DESTROY = 7;
 }
 
-// A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a
-// unit is a phase, deeper is detail. Events attach at phase depth or deeper, never at a
-// unit; ids are derived from canonical names, so either side derives them alone.
-message Stage {
-  bytes id = 1 [(buf.validate.field).bytes.len = 8];
-
-  bytes parent_id = 2 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
-
-  string title = 3;
-
-  // Set on a phase-depth stage; PHASE_UNSPECIFIED on a unit and on detail.
-  Phase phase = 4;
-}
-
-// Stages this run has committed to. Always additive, never a complete picture.
-message StagePlanEvent {
-  repeated Stage stages = 1;
-}
-
 enum SpanStatus {
   SPAN_STATUS_UNSPECIFIED = 0;
   SPAN_STATUS_OK = 1;
@@ -123,40 +99,6 @@ message SpanAttribute {
   string value = 2;
 }
 
-// A span whose span_id equals a declared stage id closes it — the only end-of-stage signal.
-message SpanEvent {
-  bytes span_id = 1 [(buf.validate.field).bytes.len = 8];
-  bytes parent_span_id = 2 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
-
-  string name = 3;
-
-  int64 start_time_unix_nano = 4;
-  int64 end_time_unix_nano = 5;
-
-  SpanStatus status = 6;
-
-  repeated SpanAttribute attributes = 7;
-}
-
-// A line of progress inside one declared stage. current/total are producer-declared and
-// the only counter; total may grow while a phase runs.
-message ProgressEvent {
-  string message = 1;
-
-  optional uint32 current = 2;
-  optional uint32 total = 3;
-
-  bytes stage_id = 4 [(buf.validate.field).bytes.len = 8];
-}
-
-// Detail text inside one declared stage. Run-scoped text is a diagnostic on the CLI's
-// own stream instead.
-message LogEvent {
-  string message = 1;
-
-  bytes stage_id = 2 [(buf.validate.field).bytes.len = 8];
-}
-
 message DnsRecord {
   string name = 1;
 
@@ -173,12 +115,6 @@ message DnsManualRecordsEvent {
   repeated DnsRecord records = 2;
 
   repeated string notes = 3;
-}
-
-message DegradedEvent {
-  string need = 1;
-
-  string detail = 2;
 }
 
 // What became of one app in a multi-app apply. Promotion is the failure gate: unless

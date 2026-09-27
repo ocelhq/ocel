@@ -1,10 +1,13 @@
-{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILD"}]}}}
-{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
-{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts"}}}
+{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"spanId":"BgAAAAAAAAA=","message":"Building project","level":"LEVEL_INFO"}
+{"spanId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts","output":{}}
 {"waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
 {"resumed":{"reason":"the page was answered"}}
-{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"BgAAAAAAAAA=","parentId":"AQAAAAAAAAA=","title":"Building","phase":"PHASE_BUILD"}]}}}
-{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"Building project"}}}
-{"operation":{"log":{"stageId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2\n ✓ Compiled successfully"}}}
-{"operation":{"span":{"spanId":"BgAAAAAAAAA=","parentSpanId":"AQAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"5000000000","status":"SPAN_STATUS_OK","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}}
+{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"spanId":"BgAAAAAAAAA=","message":"Building project","level":"LEVEL_INFO"}
+{"spanId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
+{"spanId":"BgAAAAAAAAA=","message":" ✓ Compiled successfully","output":{}}
+{"time":"1970-01-01T00:00:05Z","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}
 {"result":{"success":true,"headline":"Deployed","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}

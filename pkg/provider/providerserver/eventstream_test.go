@@ -219,8 +219,8 @@ func TestADegradedNeedIsAWarnNamingTheAppTheNeedAndTheDegrade(t *testing.T) {
 	if want := "edge-middleware: the edge cannot run code"; event.GetMessage() != want {
 		t.Errorf("message = %q, want %q", event.GetMessage(), want)
 	}
-	if event.GetEvent() != nil {
-		t.Errorf("body = %T, want a message-only event", event.GetEvent())
+	if event.GetBody() != nil {
+		t.Errorf("body = %T, want a message-only event", event.GetBody())
 	}
 	if err := protovalidate.Validate(event); err != nil {
 		t.Errorf("a degraded need fails the wire's own rules: %v", err)
@@ -281,17 +281,17 @@ func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t 
 	}
 
 	said, wrote, opened, closed := events[0], events[1], events[2], events[3]
-	if said.GetEvent() != nil || said.GetMessage() != "provisioning the infra stack" || StageID(said.GetSpanId()) != stage.ID {
-		t.Errorf("Say() = %T %q in %x, want a message-only line in the stage %x", said.GetEvent(), said.GetMessage(), said.GetSpanId(), stage.ID)
+	if said.GetBody() != nil || said.GetMessage() != "provisioning the infra stack" || StageID(said.GetSpanId()) != stage.ID {
+		t.Errorf("Say() = %T %q in %x, want a message-only line in the stage %x", said.GetBody(), said.GetMessage(), said.GetSpanId(), stage.ID)
 	}
 	if wrote.GetOutput() == nil || wrote.GetMessage() != "engine said something" || StageID(wrote.GetSpanId()) != stage.ID {
-		t.Errorf("Detail() = %T %q in %x, want an output line in the stage %x", wrote.GetEvent(), wrote.GetMessage(), wrote.GetSpanId(), stage.ID)
+		t.Errorf("Detail() = %T %q in %x, want an output line in the stage %x", wrote.GetBody(), wrote.GetMessage(), wrote.GetSpanId(), stage.ID)
 	}
 	if opened.GetStarted() == nil || opened.GetMessage() != "infra" || StageID(opened.GetStarted().GetParentSpanId()) != stage.ID {
-		t.Errorf("Span() opens %T %q under %x, want the detail scope \"infra\" under the stage %x", opened.GetEvent(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), stage.ID)
+		t.Errorf("Span() opens %T %q under %x, want the detail scope \"infra\" under the stage %x", opened.GetBody(), opened.GetMessage(), opened.GetStarted().GetParentSpanId(), stage.ID)
 	}
 	if closed.GetEnded() == nil || string(closed.GetSpanId()) != string(opened.GetSpanId()) {
-		t.Errorf("Span() closes %T %x, want the scope it opened, %x", closed.GetEvent(), closed.GetSpanId(), opened.GetSpanId())
+		t.Errorf("Span() closes %T %x, want the scope it opened, %x", closed.GetBody(), closed.GetSpanId(), opened.GetSpanId())
 	}
 	if opened.GetTimeUnixNano() != time.Unix(1000, 0).UnixNano() || closed.GetTimeUnixNano() != time.Unix(1005, 0).UnixNano() {
 		t.Errorf("the detail scope runs %d to %d, want its own start and end", opened.GetTimeUnixNano(), closed.GetTimeUnixNano())
@@ -365,8 +365,8 @@ func TestAStagesWarningIsAMessageOnlyWarnScopedToTheStage(t *testing.T) {
 	if warned.GetMessage() != "the old binding outlived its release[2J" {
 		t.Errorf("message = %q, want the warning with its control characters gone", warned.GetMessage())
 	}
-	if warned.GetEvent() != nil {
-		t.Errorf("body = %v, want a message-only event", warned.GetEvent())
+	if warned.GetBody() != nil {
+		t.Errorf("body = %v, want a message-only event", warned.GetBody())
 	}
 	if warned.GetPhase() != testStage.Phase || StageID(warned.GetSpanId()) != testStage.ID {
 		t.Errorf("scope = %v %x, want the stage's %v %x", warned.GetPhase(), warned.GetSpanId(), testStage.Phase, testStage.ID)
@@ -397,7 +397,7 @@ func TestAStagesDebugLineIsADebugOutputLineScopedToTheStage(t *testing.T) {
 		t.Errorf("level = %v, want DEBUG", line.GetLevel())
 	}
 	if line.GetOutput() == nil || line.GetMessage() != "+  aws:s3:Bucket assets creating (0s)" {
-		t.Errorf("Debug() = %T %q, want the line as output", line.GetEvent(), line.GetMessage())
+		t.Errorf("Debug() = %T %q, want the line as output", line.GetBody(), line.GetMessage())
 	}
 	if line.GetPhase() != testStage.Phase || StageID(line.GetSpanId()) != testStage.ID {
 		t.Errorf("scope = %v %x, want the stage's %v %x", line.GetPhase(), line.GetSpanId(), testStage.Phase, testStage.ID)

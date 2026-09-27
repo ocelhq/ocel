@@ -207,7 +207,7 @@ func (s *streamed) observe(event *progressv1.OperationEvent) {
 		s.progress = true
 	case event.GetOutput() != nil:
 		s.logged = true
-	case event.GetEvent() == nil && event.GetLevel() == progressv1.Level_LEVEL_INFO && len(event.GetSpanId()) > 0:
+	case event.GetBody() == nil && event.GetLevel() == progressv1.Level_LEVEL_INFO && len(event.GetSpanId()) > 0:
 		s.progress = true
 	}
 }

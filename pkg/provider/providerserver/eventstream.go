@@ -143,7 +143,7 @@ func inUnit(
 }
 
 func planEvent(plan *planv1.ChangePlan) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Plan{Plan: plan}}
+	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: plan}}
 }
 
 type stageProgress struct {
@@ -210,7 +210,7 @@ func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...stri
 		})
 	}
 	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
+		Body: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
 			Headline: headline,
 			Records:  manual,
 			Notes:    notes,
@@ -222,7 +222,7 @@ func outputEvent(level progressv1.Level, line string) *progressv1.OperationEvent
 	return &progressv1.OperationEvent{
 		Level:   level,
 		Message: line,
-		Event:   &progressv1.OperationEvent_Output{Output: &progressv1.Output{}},
+		Body:    &progressv1.OperationEvent_Output{Output: &progressv1.Output{}},
 	}
 }
 
@@ -233,7 +233,7 @@ func refusedRequest(err error) bool {
 func failureResult(err error) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Level: progressv1.Level_LEVEL_ERROR,
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success: false,
 			Error:   err.Error(),
 		}},
@@ -242,6 +242,6 @@ func failureResult(err error) *progressv1.OperationEvent {
 
 func okResult() *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	}
 }

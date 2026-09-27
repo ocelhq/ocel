@@ -6,18 +6,16 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 func spineOf(t *testing.T, s *Stream, n int) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
 		unit, phase := appStage(byte(2*i)), appStage(byte(2*i+1))
-		s.Emit(stagePlanEvent(
-			&progressv1.Stage{Id: unit, Title: fmt.Sprintf("app-%02d", i)},
-			&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-		))
+		startAll(s,
+			scope{id: unit, title: fmt.Sprintf("app-%02d", i)},
+			scope{id: phase, parent: unit, title: "Building"},
+		)
 		s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 	}
 }
@@ -38,10 +36,10 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 			s, out := drivenStream(t, tc.present)
 
 			unit, phase := appStage(1), appStage(2)
-			s.Emit(stagePlanEvent(
-				&progressv1.Stage{Id: unit, Title: "web"},
-				&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-			))
+			startAll(s,
+				scope{id: unit, title: "web"},
+				scope{id: phase, parent: unit, title: "Building"},
+			)
 			s.Emit(progressEvent(phase, "compiling", 1, u32(2)))
 
 			if got := strings.Contains(out.String(), startMark+" web › Building\n"); got != tc.want {
@@ -56,10 +54,10 @@ func TestAUnitIsOneRowShowingWhatItIsDoingNow(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
 	rows := liveRegion(t, s, out)
@@ -84,10 +82,10 @@ func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
 	s, out := drivenStream(t, Presentation{Format: FormatHuman, TTY: true, Width: 60, Height: 40})
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, strings.Repeat("compiling every module in the project ", 4), 0, nil))
 
 	rows := liveRegion(t, s, out)
@@ -107,10 +105,10 @@ func TestTheRendererNeverInventsCountsAProducerDidNotDeclare(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: phase, parent: unit, title: "Building"},
+	)
 	s.Emit(progressEvent(phase, "compiling", 0, nil))
 
 	rows := liveRegion(t, s, out)
@@ -153,8 +151,8 @@ func TestUnitsBeyondTheTerminalHeightFallIntoTheOverflowLineAndComeBack(t *testi
 	}
 
 	for i := 1; i <= 18; i++ {
-		s.Emit(spanEvent(appStage(byte(2*i+1)), false, time.Second))
-		s.Emit(spanEvent(appStage(byte(2*i)), false, time.Second))
+		s.Emit(endedEvent(appStage(byte(2*i+1)), false, time.Second))
+		s.Emit(endedEvent(appStage(byte(2*i)), false, time.Second))
 	}
 
 	if got := strings.Join(liveRegion(t, s, out), "\n"); !strings.Contains(got, "app-21") {
@@ -167,7 +165,7 @@ func TestAUnitDeclaredButNotYetStartedIsAbsentFromTheWindow(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 1)
 
-	s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(60), Title: "api"}))
+	startAll(s, scope{id: appStage(60), title: "api"})
 
 	rows := liveRegion(t, s, out)
 	if len(rows) != 1 {
@@ -184,12 +182,12 @@ func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
 
 	unit := appStage(1)
 	first, second, third := appStage(2), appStage(3), appStage(4)
-	s.Emit(stagePlanEvent(
-		&progressv1.Stage{Id: unit, Title: "web"},
-		&progressv1.Stage{Id: first, ParentId: unit, Title: "Building"},
-		&progressv1.Stage{Id: second, ParentId: unit, Title: "Uploading"},
-		&progressv1.Stage{Id: third, ParentId: unit, Title: "Provisioning"},
-	))
+	startAll(s,
+		scope{id: unit, title: "web"},
+		scope{id: first, parent: unit, title: "Building"},
+		scope{id: second, parent: unit, title: "Uploading"},
+		scope{id: third, parent: unit, title: "Provisioning"},
+	)
 	for _, id := range [][]byte{third, first, second} {
 		s.Emit(progressEvent(id, "working", 0, nil))
 	}
@@ -205,7 +203,7 @@ func TestARunningBuildKeepsItsDetailWhileTheRestOfTheSpineWaits(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 20)
 	spineOf(t, s, 2)
 	for i := 1; i <= 14; i++ {
-		s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(byte(20 + i)), Title: fmt.Sprintf("waiting-%02d", i)}))
+		startAll(s, scope{id: appStage(byte(20 + i)), title: fmt.Sprintf("waiting-%02d", i)})
 	}
 
 	rows := liveRegion(t, s, out)
@@ -225,8 +223,8 @@ func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 2)
 
-	s.Emit(spanEvent(appStage(3), false, time.Second))
-	s.Emit(spanEvent(appStage(2), false, time.Second))
+	s.Emit(endedEvent(appStage(3), false, time.Second))
+	s.Emit(endedEvent(appStage(2), false, time.Second))
 
 	rows := liveRegion(t, s, out)
 	if got := strings.Join(rows, "\n"); strings.Contains(got, "app-01") {
@@ -248,8 +246,8 @@ func TestTheOverflowLineCountsOnlyWhatIsStillOnTheSpine(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 9)
 	spineOf(t, s, 8)
 
-	s.Emit(spanEvent(appStage(3), false, time.Second))
-	s.Emit(spanEvent(appStage(2), false, time.Second))
+	s.Emit(endedEvent(appStage(3), false, time.Second))
+	s.Emit(endedEvent(appStage(2), false, time.Second))
 
 	rows := liveRegion(t, s, out)
 	if got := rows[len(rows)-1]; !strings.Contains(got, "+2 more: 2 running") {
@@ -262,7 +260,7 @@ func TestAFailedUnitStaysPinnedWhileItsSiblingsRun(t *testing.T) {
 	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 3)
 
-	s.Emit(spanEvent(appStage(3), true, time.Second))
+	s.Emit(endedEvent(appStage(3), true, time.Second))
 
 	rows := liveRegion(t, s, out)
 	if !strings.Contains(rows[0], failMark) || !strings.Contains(rows[0], "app-01") {

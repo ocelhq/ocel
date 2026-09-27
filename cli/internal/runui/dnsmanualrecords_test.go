@@ -91,7 +91,7 @@ func dnsOutput(t *testing.T, present Presentation, headline string, records []*p
 	var out safeBuffer
 	s := newStream(&out, present)
 	t.Cleanup(func() { _ = s.Close() })
-	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_DnsManualRecords{
+	s.Emit(lift(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_DnsManualRecords{
 		DnsManualRecords: &progressv1.DnsManualRecordsEvent{Headline: headline, Records: records, Notes: notes},
 	}}))
 	return out.String()
@@ -150,7 +150,7 @@ func TestDNSManualRecordsProjection(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("recorded %d envelopes, want 1", len(got))
 		}
-		records := got[0].GetOperation().GetDnsManualRecords().GetRecords()
+		records := got[0].GetDnsManualRecords().GetRecords()
 		if len(records) != 1 {
 			t.Fatalf("envelope names %v, want one record", records)
 		}

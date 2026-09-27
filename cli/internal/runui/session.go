@@ -28,17 +28,7 @@ import (
 var (
 	environmentUnitID = naming.UnitID(naming.UnitEnvironment)
 	buildStageID      = naming.PhaseID(naming.UnitEnvironment, naming.PhaseBuilding)
-
-	environmentRoster = []*progressv1.Stage{
-		{Id: environmentUnitID, Title: "Environment"},
-		{Id: buildStageID, ParentId: environmentUnitID, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
-		{
-			Id:       naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning),
-			ParentId: environmentUnitID,
-			Title:    "Provisioning",
-			Phase:    progressv1.Phase_PHASE_PROVISION,
-		},
-	}
+	provisionStageID  = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
 )
 
 type Session struct {
@@ -111,12 +101,12 @@ func (s *Session) ProcessWriter(provider string, stream progressv1.Stream) io.Wr
 
 func (s *Session) processLine(provider string, stream progressv1.Stream, line string) {
 	s.logf("[debug] %s: %s", provider, line)
-	s.stream.Emit(lift(&progressv1.OperationEvent{
+	s.stream.Emit(&streamv1.RunEvent{
 		Level:   progressv1.Level_LEVEL_DEBUG,
 		Subject: provider,
 		Message: line,
-		Event:   &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: stream}},
-	}))
+		Body:    &streamv1.RunEvent_Output{Output: &progressv1.Output{Stream: stream}},
+	})
 }
 
 func (s *Session) flushLines() {
@@ -128,9 +118,12 @@ func (s *Session) flushLines() {
 }
 
 func (s *Session) buildLine(line string) {
-	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Message: line, Event: &progressv1.OperationEvent_Log{
-		Log: &progressv1.LogEvent{StageId: buildStageID, Message: line},
-	}})
+	s.record(&streamv1.RunEvent{
+		Phase:   progressv1.Phase_PHASE_BUILD,
+		SpanId:  buildStageID,
+		Message: line,
+		Body:    &streamv1.RunEvent_Output{Output: &progressv1.Output{}},
+	})
 }
 
 const maxBufferedLine = 64 << 10
@@ -204,26 +197,33 @@ func (s *Session) say(message string, level progressv1.Level) {
 
 func (s *Session) Identity(ev *streamv1.IdentityEvent) {
 	s.logf("[identity] %s", identityLogLine(ev))
-	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Identity{Identity: ev}})
+	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Identity{Identity: ev}})
 }
 
 func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string) *planv1.ChangePlan {
 	drawn := proto.Clone(plan).(*planv1.ChangePlan)
 	drawn.Headline, drawn.Notes = headline, notes
 	s.logf("[plan] %s", headline)
-	s.shown = s.stream.Emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Event: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
+	s.shown = s.stream.Emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Body: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
 	return s.shown
 }
 
 func (s *Session) Building() {
 	s.logf("[building] Building project")
 	s.buildStart = time.Now()
-	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, Event: &progressv1.OperationEvent_StagePlan{
-		StagePlan: &progressv1.StagePlanEvent{Stages: environmentRoster},
-	}})
-	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Message: "Building project", Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: buildStageID, Message: "Building project"},
-	}})
+	s.started(environmentUnitID, nil, progressv1.Phase_PHASE_BUILD, "Environment")
+	s.started(buildStageID, environmentUnitID, progressv1.Phase_PHASE_BUILD, "Building")
+	s.started(provisionStageID, environmentUnitID, progressv1.Phase_PHASE_PROVISION, "Provisioning")
+	s.record(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Message: "Building project"})
+}
+
+func (s *Session) started(id, parentID []byte, phase progressv1.Phase, title string) {
+	s.record(&streamv1.RunEvent{
+		Phase:   phase,
+		SpanId:  id,
+		Message: title,
+		Body:    &streamv1.RunEvent_Started{Started: &progressv1.Started{ParentSpanId: parentID}},
+	})
 }
 
 func (s *Session) BuildOK() {
@@ -231,22 +231,22 @@ func (s *Session) BuildOK() {
 		return
 	}
 	s.build.flush()
-	end := time.Now()
-	span := &progressv1.SpanEvent{
-		SpanId:            buildStageID,
-		ParentSpanId:      environmentUnitID,
-		Name:              naming.PhaseBuilding,
-		StartTimeUnixNano: s.buildStart.UnixNano(),
-		EndTimeUnixNano:   end.UnixNano(),
+	ended := &progressv1.Ended{
 		Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
+		StartTimeUnixNano: s.buildStart.UnixNano(),
 	}
 	if s.buildAttempt > 0 {
-		span.Attributes = []*progressv1.SpanAttribute{{
+		ended.Attributes = []*progressv1.SpanAttribute{{
 			Key:   progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT,
 			Value: strconv.Itoa(s.buildAttempt),
 		}}
 	}
-	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Event: &progressv1.OperationEvent_Span{Span: span}})
+	s.record(&streamv1.RunEvent{
+		Time:   timestamppb.Now(),
+		Phase:  progressv1.Phase_PHASE_BUILD,
+		SpanId: buildStageID,
+		Body:   &streamv1.RunEvent_Ended{Ended: ended},
+	})
 	s.buildStart = time.Time{}
 }
 
@@ -255,7 +255,7 @@ func (s *Session) Waiting(missing *streamv1.MissingVariables, url string) {
 	s.waiting = true
 	s.build.flush()
 	s.buildStart = time.Time{}
-	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
+	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{
 		Waiting: &streamv1.WaitingEvent{Missing: missing, Url: url},
 	}})
 }
@@ -263,7 +263,7 @@ func (s *Session) Waiting(missing *streamv1.MissingVariables, url string) {
 func (s *Session) Resume() {
 	s.waiting = false
 	s.buildAttempt++
-	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{
+	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{
 		Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"},
 	}})
 	s.stream.Restart(buildStageID)
@@ -271,27 +271,22 @@ func (s *Session) Resume() {
 }
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
-	if ev.GetEvent() == nil {
-		s.logf("[diagnostic] %s", ev.GetMessage())
-		s.stream.Emit(lift(ev))
-		return
-	}
-	run := s.stream.Emit(lift(ev))
-	out := run.GetOperation()
-	s.logOperation(out)
+	s.record(lift(ev))
+}
+
+func (s *Session) record(ev *streamv1.RunEvent) {
+	run := s.stream.Emit(ev)
+	s.logEvent(run)
 	switch {
-	case out.GetSpan() != nil:
-		s.ingestSpan(out.GetSpan())
-	case out.GetStarted() != nil:
+	case run.GetStarted() != nil:
 		s.scopes.Store(stageKey(run.GetSpanId()), startedScope{
-			parentID: out.GetStarted().GetParentSpanId(),
+			parentID: run.GetStarted().GetParentSpanId(),
 			name:     stageTitle(run.GetMessage(), run.GetPhase()),
 		})
-	case out.GetEnded() != nil:
-		s.ingestEnded(run, out.GetEnded())
-	}
-	if apps := out.GetResult().GetApps(); len(apps) > 0 {
-		s.apps = apps
+	case run.GetEnded() != nil:
+		s.ingestEnded(run, run.GetEnded())
+	case len(run.GetOutcome().GetApps()) > 0:
+		s.apps = run.GetOutcome().GetApps()
 	}
 }
 
@@ -308,8 +303,21 @@ func lift(ev *progressv1.OperationEvent) *streamv1.RunEvent {
 		Message: ev.GetMessage(),
 		SpanId:  ev.GetSpanId(),
 	}
-	if ev.GetEvent() != nil {
-		run.Event = &streamv1.RunEvent_Operation{Operation: ev}
+	switch body := ev.GetBody().(type) {
+	case *progressv1.OperationEvent_Started:
+		run.Body = &streamv1.RunEvent_Started{Started: body.Started}
+	case *progressv1.OperationEvent_Ended:
+		run.Body = &streamv1.RunEvent_Ended{Ended: body.Ended}
+	case *progressv1.OperationEvent_Output:
+		run.Body = &streamv1.RunEvent_Output{Output: body.Output}
+	case *progressv1.OperationEvent_Counter:
+		run.Body = &streamv1.RunEvent_Counter{Counter: body.Counter}
+	case *progressv1.OperationEvent_Plan:
+		run.Body = &streamv1.RunEvent_Plan{Plan: body.Plan}
+	case *progressv1.OperationEvent_DnsManualRecords:
+		run.Body = &streamv1.RunEvent_DnsManualRecords{DnsManualRecords: body.DnsManualRecords}
+	case *progressv1.OperationEvent_Result:
+		run.Body = &streamv1.RunEvent_Outcome{Outcome: body.Result}
 	}
 	if ns := ev.GetTimeUnixNano(); ns > 0 {
 		run.Time = timestamppb.New(time.Unix(0, ns))
@@ -317,19 +325,16 @@ func lift(ev *progressv1.OperationEvent) *streamv1.RunEvent {
 	return run
 }
 
-func (s *Session) logOperation(ev *progressv1.OperationEvent) {
+func (s *Session) logEvent(ev *streamv1.RunEvent) {
 	switch {
-	case ev.GetProgress() != nil:
-		p := ev.GetProgress()
-		s.logf("[progress] %s", progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
-	case ev.GetLog() != nil:
-		s.logf("[log] %s", ev.GetLog().GetMessage())
+	case ev.GetBody() == nil && len(ev.GetSpanId()) > 0 && ev.GetLevel() == progressv1.Level_LEVEL_INFO:
+		s.logf("[progress] %s", ev.GetMessage())
+	case ev.GetBody() == nil:
+		s.logf("[diagnostic] %s", ev.GetMessage())
 	case ev.GetCounter() != nil:
 		s.logf("[progress] %s", progressLogLine(ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total))
 	case ev.GetOutput() != nil:
 		s.logf("[log] %s", ev.GetMessage())
-	case ev.GetDegraded() != nil:
-		s.logf("[degraded] %s: %s", ev.GetDegraded().GetNeed(), ev.GetDegraded().GetDetail())
 	case ev.GetDnsManualRecords() != nil:
 		s.logf("[dns] %s: %s", ev.GetDnsManualRecords().GetHeadline(), dnsLogLine(ev.GetDnsManualRecords().GetRecords()))
 	}
@@ -352,12 +357,6 @@ func dnsLogLine(records []*progressv1.DnsRecord) string {
 		lines = append(lines, fmt.Sprintf("%s %s %s", rec.GetName(), rec.GetType(), rec.GetValue()))
 	}
 	return strings.Join(lines, "; ")
-}
-
-func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
-	s.trace(span.GetSpanId(), span.GetParentSpanId(), span.GetName(),
-		unixNano(span.GetStartTimeUnixNano()), unixNano(span.GetEndTimeUnixNano()),
-		span.GetStatus(), span.GetAttributes())
 }
 
 func (s *Session) ingestEnded(run *streamv1.RunEvent, ended *progressv1.Ended) {
@@ -429,7 +428,7 @@ func (s *Session) result(ev *streamv1.RunResultEvent) {
 	ev.DurationMs = time.Since(s.start).Milliseconds()
 	ev.LogPath = s.logPath
 	ev.Apps = s.apps
-	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: ev}})
+	s.stream.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: ev}})
 }
 
 func (s *Session) Close() error {

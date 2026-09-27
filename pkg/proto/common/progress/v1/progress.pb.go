@@ -389,21 +389,16 @@ type OperationEvent struct {
 	Subject      string                 `protobuf:"bytes,12,opt,name=subject,proto3" json:"subject,omitempty"`
 	Message      string                 `protobuf:"bytes,13,opt,name=message,proto3" json:"message,omitempty"`
 	SpanId       []byte                 `protobuf:"bytes,14,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
-	// Types that are valid to be assigned to Event:
+	// Types that are valid to be assigned to Body:
 	//
-	//	*OperationEvent_Progress
-	//	*OperationEvent_Log
-	//	*OperationEvent_Result
-	//	*OperationEvent_StagePlan
-	//	*OperationEvent_Span
-	//	*OperationEvent_Degraded
-	//	*OperationEvent_DnsManualRecords
-	//	*OperationEvent_Plan
 	//	*OperationEvent_Started
 	//	*OperationEvent_Ended
 	//	*OperationEvent_Output
 	//	*OperationEvent_Counter
-	Event         isOperationEvent_Event `protobuf_oneof:"event"`
+	//	*OperationEvent_Plan
+	//	*OperationEvent_DnsManualRecords
+	//	*OperationEvent_Result
+	Body          isOperationEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -480,88 +475,16 @@ func (x *OperationEvent) GetSpanId() []byte {
 	return nil
 }
 
-func (x *OperationEvent) GetEvent() isOperationEvent_Event {
+func (x *OperationEvent) GetBody() isOperationEvent_Body {
 	if x != nil {
-		return x.Event
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetProgress() *ProgressEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Progress); ok {
-			return x.Progress
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetLog() *LogEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Log); ok {
-			return x.Log
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetResult() *ResultEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Result); ok {
-			return x.Result
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetStagePlan() *StagePlanEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_StagePlan); ok {
-			return x.StagePlan
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetSpan() *SpanEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Span); ok {
-			return x.Span
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetDegraded() *DegradedEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Degraded); ok {
-			return x.Degraded
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetDnsManualRecords() *DnsManualRecordsEvent {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_DnsManualRecords); ok {
-			return x.DnsManualRecords
-		}
-	}
-	return nil
-}
-
-func (x *OperationEvent) GetPlan() *v1.ChangePlan {
-	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Plan); ok {
-			return x.Plan
-		}
+		return x.Body
 	}
 	return nil
 }
 
 func (x *OperationEvent) GetStarted() *Started {
 	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Started); ok {
+		if x, ok := x.Body.(*OperationEvent_Started); ok {
 			return x.Started
 		}
 	}
@@ -570,7 +493,7 @@ func (x *OperationEvent) GetStarted() *Started {
 
 func (x *OperationEvent) GetEnded() *Ended {
 	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Ended); ok {
+		if x, ok := x.Body.(*OperationEvent_Ended); ok {
 			return x.Ended
 		}
 	}
@@ -579,7 +502,7 @@ func (x *OperationEvent) GetEnded() *Ended {
 
 func (x *OperationEvent) GetOutput() *Output {
 	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Output); ok {
+		if x, ok := x.Body.(*OperationEvent_Output); ok {
 			return x.Output
 		}
 	}
@@ -588,47 +511,42 @@ func (x *OperationEvent) GetOutput() *Output {
 
 func (x *OperationEvent) GetCounter() *Counter {
 	if x != nil {
-		if x, ok := x.Event.(*OperationEvent_Counter); ok {
+		if x, ok := x.Body.(*OperationEvent_Counter); ok {
 			return x.Counter
 		}
 	}
 	return nil
 }
 
-type isOperationEvent_Event interface {
-	isOperationEvent_Event()
+func (x *OperationEvent) GetPlan() *v1.ChangePlan {
+	if x != nil {
+		if x, ok := x.Body.(*OperationEvent_Plan); ok {
+			return x.Plan
+		}
+	}
+	return nil
 }
 
-type OperationEvent_Progress struct {
-	Progress *ProgressEvent `protobuf:"bytes,1,opt,name=progress,proto3,oneof"`
+func (x *OperationEvent) GetDnsManualRecords() *DnsManualRecordsEvent {
+	if x != nil {
+		if x, ok := x.Body.(*OperationEvent_DnsManualRecords); ok {
+			return x.DnsManualRecords
+		}
+	}
+	return nil
 }
 
-type OperationEvent_Log struct {
-	Log *LogEvent `protobuf:"bytes,2,opt,name=log,proto3,oneof"`
+func (x *OperationEvent) GetResult() *ResultEvent {
+	if x != nil {
+		if x, ok := x.Body.(*OperationEvent_Result); ok {
+			return x.Result
+		}
+	}
+	return nil
 }
 
-type OperationEvent_Result struct {
-	Result *ResultEvent `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
-}
-
-type OperationEvent_StagePlan struct {
-	StagePlan *StagePlanEvent `protobuf:"bytes,4,opt,name=stage_plan,json=stagePlan,proto3,oneof"`
-}
-
-type OperationEvent_Span struct {
-	Span *SpanEvent `protobuf:"bytes,5,opt,name=span,proto3,oneof"`
-}
-
-type OperationEvent_Degraded struct {
-	Degraded *DegradedEvent `protobuf:"bytes,6,opt,name=degraded,proto3,oneof"`
-}
-
-type OperationEvent_DnsManualRecords struct {
-	DnsManualRecords *DnsManualRecordsEvent `protobuf:"bytes,7,opt,name=dns_manual_records,json=dnsManualRecords,proto3,oneof"`
-}
-
-type OperationEvent_Plan struct {
-	Plan *v1.ChangePlan `protobuf:"bytes,8,opt,name=plan,proto3,oneof"`
+type isOperationEvent_Body interface {
+	isOperationEvent_Body()
 }
 
 type OperationEvent_Started struct {
@@ -647,29 +565,31 @@ type OperationEvent_Counter struct {
 	Counter *Counter `protobuf:"bytes,18,opt,name=counter,proto3,oneof"`
 }
 
-func (*OperationEvent_Progress) isOperationEvent_Event() {}
+type OperationEvent_Plan struct {
+	Plan *v1.ChangePlan `protobuf:"bytes,8,opt,name=plan,proto3,oneof"`
+}
 
-func (*OperationEvent_Log) isOperationEvent_Event() {}
+type OperationEvent_DnsManualRecords struct {
+	DnsManualRecords *DnsManualRecordsEvent `protobuf:"bytes,7,opt,name=dns_manual_records,json=dnsManualRecords,proto3,oneof"`
+}
 
-func (*OperationEvent_Result) isOperationEvent_Event() {}
+type OperationEvent_Result struct {
+	Result *ResultEvent `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
+}
 
-func (*OperationEvent_StagePlan) isOperationEvent_Event() {}
+func (*OperationEvent_Started) isOperationEvent_Body() {}
 
-func (*OperationEvent_Span) isOperationEvent_Event() {}
+func (*OperationEvent_Ended) isOperationEvent_Body() {}
 
-func (*OperationEvent_Degraded) isOperationEvent_Event() {}
+func (*OperationEvent_Output) isOperationEvent_Body() {}
 
-func (*OperationEvent_DnsManualRecords) isOperationEvent_Event() {}
+func (*OperationEvent_Counter) isOperationEvent_Body() {}
 
-func (*OperationEvent_Plan) isOperationEvent_Event() {}
+func (*OperationEvent_Plan) isOperationEvent_Body() {}
 
-func (*OperationEvent_Started) isOperationEvent_Event() {}
+func (*OperationEvent_DnsManualRecords) isOperationEvent_Body() {}
 
-func (*OperationEvent_Ended) isOperationEvent_Event() {}
-
-func (*OperationEvent_Output) isOperationEvent_Event() {}
-
-func (*OperationEvent_Counter) isOperationEvent_Event() {}
+func (*OperationEvent_Result) isOperationEvent_Body() {}
 
 type Started struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -871,123 +791,6 @@ func (x *Counter) GetTotal() uint32 {
 	return 0
 }
 
-// A node of the run's stage tree, app-major: a parentless stage is a unit, a child of a
-// unit is a phase, deeper is detail. Events attach at phase depth or deeper, never at a
-// unit; ids are derived from canonical names, so either side derives them alone.
-type Stage struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Id       []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ParentId []byte                 `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	Title    string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	// Set on a phase-depth stage; PHASE_UNSPECIFIED on a unit and on detail.
-	Phase         Phase `protobuf:"varint,4,opt,name=phase,proto3,enum=common.progress.v1.Phase" json:"phase,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Stage) Reset() {
-	*x = Stage{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Stage) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Stage) ProtoMessage() {}
-
-func (x *Stage) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Stage.ProtoReflect.Descriptor instead.
-func (*Stage) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *Stage) GetId() []byte {
-	if x != nil {
-		return x.Id
-	}
-	return nil
-}
-
-func (x *Stage) GetParentId() []byte {
-	if x != nil {
-		return x.ParentId
-	}
-	return nil
-}
-
-func (x *Stage) GetTitle() string {
-	if x != nil {
-		return x.Title
-	}
-	return ""
-}
-
-func (x *Stage) GetPhase() Phase {
-	if x != nil {
-		return x.Phase
-	}
-	return Phase_PHASE_UNSPECIFIED
-}
-
-// Stages this run has committed to. Always additive, never a complete picture.
-type StagePlanEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Stages        []*Stage               `protobuf:"bytes,1,rep,name=stages,proto3" json:"stages,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StagePlanEvent) Reset() {
-	*x = StagePlanEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StagePlanEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StagePlanEvent) ProtoMessage() {}
-
-func (x *StagePlanEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StagePlanEvent.ProtoReflect.Descriptor instead.
-func (*StagePlanEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *StagePlanEvent) GetStages() []*Stage {
-	if x != nil {
-		return x.Stages
-	}
-	return nil
-}
-
 type SpanAttribute struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           AttributeKey           `protobuf:"varint,1,opt,name=key,proto3,enum=common.progress.v1.AttributeKey" json:"key,omitempty"`
@@ -998,7 +801,7 @@ type SpanAttribute struct {
 
 func (x *SpanAttribute) Reset() {
 	*x = SpanAttribute{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[7]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1010,7 +813,7 @@ func (x *SpanAttribute) String() string {
 func (*SpanAttribute) ProtoMessage() {}
 
 func (x *SpanAttribute) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[7]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1023,7 +826,7 @@ func (x *SpanAttribute) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SpanAttribute.ProtoReflect.Descriptor instead.
 func (*SpanAttribute) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{7}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SpanAttribute) GetKey() AttributeKey {
@@ -1040,223 +843,6 @@ func (x *SpanAttribute) GetValue() string {
 	return ""
 }
 
-// A span whose span_id equals a declared stage id closes it — the only end-of-stage signal.
-type SpanEvent struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	SpanId            []byte                 `protobuf:"bytes,1,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
-	ParentSpanId      []byte                 `protobuf:"bytes,2,opt,name=parent_span_id,json=parentSpanId,proto3" json:"parent_span_id,omitempty"`
-	Name              string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	StartTimeUnixNano int64                  `protobuf:"varint,4,opt,name=start_time_unix_nano,json=startTimeUnixNano,proto3" json:"start_time_unix_nano,omitempty"`
-	EndTimeUnixNano   int64                  `protobuf:"varint,5,opt,name=end_time_unix_nano,json=endTimeUnixNano,proto3" json:"end_time_unix_nano,omitempty"`
-	Status            SpanStatus             `protobuf:"varint,6,opt,name=status,proto3,enum=common.progress.v1.SpanStatus" json:"status,omitempty"`
-	Attributes        []*SpanAttribute       `protobuf:"bytes,7,rep,name=attributes,proto3" json:"attributes,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *SpanEvent) Reset() {
-	*x = SpanEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SpanEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SpanEvent) ProtoMessage() {}
-
-func (x *SpanEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SpanEvent.ProtoReflect.Descriptor instead.
-func (*SpanEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *SpanEvent) GetSpanId() []byte {
-	if x != nil {
-		return x.SpanId
-	}
-	return nil
-}
-
-func (x *SpanEvent) GetParentSpanId() []byte {
-	if x != nil {
-		return x.ParentSpanId
-	}
-	return nil
-}
-
-func (x *SpanEvent) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *SpanEvent) GetStartTimeUnixNano() int64 {
-	if x != nil {
-		return x.StartTimeUnixNano
-	}
-	return 0
-}
-
-func (x *SpanEvent) GetEndTimeUnixNano() int64 {
-	if x != nil {
-		return x.EndTimeUnixNano
-	}
-	return 0
-}
-
-func (x *SpanEvent) GetStatus() SpanStatus {
-	if x != nil {
-		return x.Status
-	}
-	return SpanStatus_SPAN_STATUS_UNSPECIFIED
-}
-
-func (x *SpanEvent) GetAttributes() []*SpanAttribute {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
-// A line of progress inside one declared stage. current/total are producer-declared and
-// the only counter; total may grow while a phase runs.
-type ProgressEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Current       *uint32                `protobuf:"varint,2,opt,name=current,proto3,oneof" json:"current,omitempty"`
-	Total         *uint32                `protobuf:"varint,3,opt,name=total,proto3,oneof" json:"total,omitempty"`
-	StageId       []byte                 `protobuf:"bytes,4,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ProgressEvent) Reset() {
-	*x = ProgressEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ProgressEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ProgressEvent) ProtoMessage() {}
-
-func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ProgressEvent.ProtoReflect.Descriptor instead.
-func (*ProgressEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ProgressEvent) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *ProgressEvent) GetCurrent() uint32 {
-	if x != nil && x.Current != nil {
-		return *x.Current
-	}
-	return 0
-}
-
-func (x *ProgressEvent) GetTotal() uint32 {
-	if x != nil && x.Total != nil {
-		return *x.Total
-	}
-	return 0
-}
-
-func (x *ProgressEvent) GetStageId() []byte {
-	if x != nil {
-		return x.StageId
-	}
-	return nil
-}
-
-// Detail text inside one declared stage. Run-scoped text is a diagnostic on the CLI's
-// own stream instead.
-type LogEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	StageId       []byte                 `protobuf:"bytes,2,opt,name=stage_id,json=stageId,proto3" json:"stage_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *LogEvent) Reset() {
-	*x = LogEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LogEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LogEvent) ProtoMessage() {}
-
-func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
-func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *LogEvent) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *LogEvent) GetStageId() []byte {
-	if x != nil {
-		return x.StageId
-	}
-	return nil
-}
-
 type DnsRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1269,7 +855,7 @@ type DnsRecord struct {
 
 func (x *DnsRecord) Reset() {
 	*x = DnsRecord{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1281,7 +867,7 @@ func (x *DnsRecord) String() string {
 func (*DnsRecord) ProtoMessage() {}
 
 func (x *DnsRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1294,7 +880,7 @@ func (x *DnsRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DnsRecord.ProtoReflect.Descriptor instead.
 func (*DnsRecord) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{11}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DnsRecord) GetName() string {
@@ -1336,7 +922,7 @@ type DnsManualRecordsEvent struct {
 
 func (x *DnsManualRecordsEvent) Reset() {
 	*x = DnsManualRecordsEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1348,7 +934,7 @@ func (x *DnsManualRecordsEvent) String() string {
 func (*DnsManualRecordsEvent) ProtoMessage() {}
 
 func (x *DnsManualRecordsEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1361,7 +947,7 @@ func (x *DnsManualRecordsEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DnsManualRecordsEvent.ProtoReflect.Descriptor instead.
 func (*DnsManualRecordsEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{12}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DnsManualRecordsEvent) GetHeadline() string {
@@ -1385,58 +971,6 @@ func (x *DnsManualRecordsEvent) GetNotes() []string {
 	return nil
 }
 
-type DegradedEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Need          string                 `protobuf:"bytes,1,opt,name=need,proto3" json:"need,omitempty"`
-	Detail        string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DegradedEvent) Reset() {
-	*x = DegradedEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DegradedEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DegradedEvent) ProtoMessage() {}
-
-func (x *DegradedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DegradedEvent.ProtoReflect.Descriptor instead.
-func (*DegradedEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *DegradedEvent) GetNeed() string {
-	if x != nil {
-		return x.Need
-	}
-	return ""
-}
-
-func (x *DegradedEvent) GetDetail() string {
-	if x != nil {
-		return x.Detail
-	}
-	return ""
-}
-
 type AppResult struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	App     string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
@@ -1450,7 +984,7 @@ type AppResult struct {
 
 func (x *AppResult) Reset() {
 	*x = AppResult{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[14]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1462,7 +996,7 @@ func (x *AppResult) String() string {
 func (*AppResult) ProtoMessage() {}
 
 func (x *AppResult) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[14]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1475,7 +1009,7 @@ func (x *AppResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppResult.ProtoReflect.Descriptor instead.
 func (*AppResult) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{14}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AppResult) GetApp() string {
@@ -1527,7 +1061,7 @@ type ResultEvent struct {
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[15]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1539,7 +1073,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[15]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,7 +1086,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{15}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -1636,7 +1170,7 @@ type ConnectorInstalled struct {
 
 func (x *ConnectorInstalled) Reset() {
 	*x = ConnectorInstalled{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[16]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1648,7 +1182,7 @@ func (x *ConnectorInstalled) String() string {
 func (*ConnectorInstalled) ProtoMessage() {}
 
 func (x *ConnectorInstalled) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[16]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1661,7 +1195,7 @@ func (x *ConnectorInstalled) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorInstalled.ProtoReflect.Descriptor instead.
 func (*ConnectorInstalled) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{16}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ConnectorInstalled) GetUrl() string {
@@ -1695,7 +1229,7 @@ type FunctionOutput struct {
 
 func (x *FunctionOutput) Reset() {
 	*x = FunctionOutput{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[17]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1707,7 +1241,7 @@ func (x *FunctionOutput) String() string {
 func (*FunctionOutput) ProtoMessage() {}
 
 func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[17]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1720,7 +1254,7 @@ func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionOutput.ProtoReflect.Descriptor instead.
 func (*FunctionOutput) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{17}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *FunctionOutput) GetLogicalName() string {
@@ -1747,7 +1281,7 @@ type FlipBound struct {
 
 func (x *FlipBound) Reset() {
 	*x = FlipBound{}
-	mi := &file_common_progress_v1_progress_proto_msgTypes[18]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1759,7 +1293,7 @@ func (x *FlipBound) String() string {
 func (*FlipBound) ProtoMessage() {}
 
 func (x *FlipBound) ProtoReflect() protoreflect.Message {
-	mi := &file_common_progress_v1_progress_proto_msgTypes[18]
+	mi := &file_common_progress_v1_progress_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1306,7 @@ func (x *FlipBound) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlipBound.ProtoReflect.Descriptor instead.
 func (*FlipBound) Descriptor() ([]byte, []int) {
-	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{18}
+	return file_common_progress_v1_progress_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *FlipBound) GetTypicalMs() int64 {
@@ -1793,7 +1327,7 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\xcb\a\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\x9c\x05\n" +
 	"\x0eOperationEvent\x12$\n" +
 	"\x0etime_unix_nano\x18\t \x01(\x03R\ftimeUnixNano\x12/\n" +
 	"\x05level\x18\n" +
@@ -1802,21 +1336,15 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\asubject\x18\f \x01(\tR\asubject\x12\x18\n" +
 	"\amessage\x18\r \x01(\tR\amessage\x12#\n" +
 	"\aspan_id\x18\x0e \x01(\fB\n" +
-	"\xbaH\a\xd8\x01\x01z\x02h\bR\x06spanId\x12?\n" +
-	"\bprogress\x18\x01 \x01(\v2!.common.progress.v1.ProgressEventH\x00R\bprogress\x120\n" +
-	"\x03log\x18\x02 \x01(\v2\x1c.common.progress.v1.LogEventH\x00R\x03log\x129\n" +
-	"\x06result\x18\x03 \x01(\v2\x1f.common.progress.v1.ResultEventH\x00R\x06result\x12C\n" +
-	"\n" +
-	"stage_plan\x18\x04 \x01(\v2\".common.progress.v1.StagePlanEventH\x00R\tstagePlan\x123\n" +
-	"\x04span\x18\x05 \x01(\v2\x1d.common.progress.v1.SpanEventH\x00R\x04span\x12?\n" +
-	"\bdegraded\x18\x06 \x01(\v2!.common.progress.v1.DegradedEventH\x00R\bdegraded\x12Y\n" +
-	"\x12dns_manual_records\x18\a \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x120\n" +
-	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x127\n" +
+	"\xbaH\a\xd8\x01\x01z\x02h\bR\x06spanId\x127\n" +
 	"\astarted\x18\x0f \x01(\v2\x1b.common.progress.v1.StartedH\x00R\astarted\x121\n" +
 	"\x05ended\x18\x10 \x01(\v2\x19.common.progress.v1.EndedH\x00R\x05ended\x124\n" +
 	"\x06output\x18\x11 \x01(\v2\x1a.common.progress.v1.OutputH\x00R\x06output\x127\n" +
-	"\acounter\x18\x12 \x01(\v2\x1b.common.progress.v1.CounterH\x00R\acounterB\a\n" +
-	"\x05event\";\n" +
+	"\acounter\x18\x12 \x01(\v2\x1b.common.progress.v1.CounterH\x00R\acounter\x120\n" +
+	"\x04plan\x18\b \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12Y\n" +
+	"\x12dns_manual_records\x18\a \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x129\n" +
+	"\x06result\x18\x03 \x01(\v2\x1f.common.progress.v1.ResultEventH\x00R\x06resultB\x06\n" +
+	"\x04body\";\n" +
 	"\aStarted\x120\n" +
 	"\x0eparent_span_id\x18\x01 \x01(\fB\n" +
 	"\xbaH\a\xd8\x01\x01z\x02h\bR\fparentSpanId\"\xb3\x01\n" +
@@ -1831,40 +1359,10 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\aCounter\x12\x18\n" +
 	"\acurrent\x18\x01 \x01(\rR\acurrent\x12\x19\n" +
 	"\x05total\x18\x02 \x01(\rH\x00R\x05total\x88\x01\x01B\b\n" +
-	"\x06_total\"\x90\x01\n" +
-	"\x05Stage\x12\x17\n" +
-	"\x02id\x18\x01 \x01(\fB\a\xbaH\x04z\x02h\bR\x02id\x12'\n" +
-	"\tparent_id\x18\x02 \x01(\fB\n" +
-	"\xbaH\a\xd8\x01\x01z\x02h\bR\bparentId\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\x12/\n" +
-	"\x05phase\x18\x04 \x01(\x0e2\x19.common.progress.v1.PhaseR\x05phase\"C\n" +
-	"\x0eStagePlanEvent\x121\n" +
-	"\x06stages\x18\x01 \x03(\v2\x19.common.progress.v1.StageR\x06stages\"Y\n" +
+	"\x06_total\"Y\n" +
 	"\rSpanAttribute\x122\n" +
 	"\x03key\x18\x01 \x01(\x0e2 .common.progress.v1.AttributeKeyR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\xcc\x02\n" +
-	"\tSpanEvent\x12 \n" +
-	"\aspan_id\x18\x01 \x01(\fB\a\xbaH\x04z\x02h\bR\x06spanId\x120\n" +
-	"\x0eparent_span_id\x18\x02 \x01(\fB\n" +
-	"\xbaH\a\xd8\x01\x01z\x02h\bR\fparentSpanId\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12/\n" +
-	"\x14start_time_unix_nano\x18\x04 \x01(\x03R\x11startTimeUnixNano\x12+\n" +
-	"\x12end_time_unix_nano\x18\x05 \x01(\x03R\x0fendTimeUnixNano\x126\n" +
-	"\x06status\x18\x06 \x01(\x0e2\x1e.common.progress.v1.SpanStatusR\x06status\x12A\n" +
-	"\n" +
-	"attributes\x18\a \x03(\v2!.common.progress.v1.SpanAttributeR\n" +
-	"attributes\"\x9d\x01\n" +
-	"\rProgressEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1d\n" +
-	"\acurrent\x18\x02 \x01(\rH\x00R\acurrent\x88\x01\x01\x12\x19\n" +
-	"\x05total\x18\x03 \x01(\rH\x01R\x05total\x88\x01\x01\x12\"\n" +
-	"\bstage_id\x18\x04 \x01(\fB\a\xbaH\x04z\x02h\bR\astageIdB\n" +
-	"\n" +
-	"\b_currentB\b\n" +
-	"\x06_total\"H\n" +
-	"\bLogEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\"\n" +
-	"\bstage_id\x18\x02 \x01(\fB\a\xbaH\x04z\x02h\bR\astageId\"c\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"c\n" +
 	"\tDnsRecord\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
@@ -1873,10 +1371,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x15DnsManualRecordsEvent\x12\x1a\n" +
 	"\bheadline\x18\x01 \x01(\tR\bheadline\x127\n" +
 	"\arecords\x18\x02 \x03(\v2\x1d.common.progress.v1.DnsRecordR\arecords\x12\x14\n" +
-	"\x05notes\x18\x03 \x03(\tR\x05notes\";\n" +
-	"\rDegradedEvent\x12\x12\n" +
-	"\x04need\x18\x01 \x01(\tR\x04need\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\"\x81\x01\n" +
+	"\x05notes\x18\x03 \x03(\tR\x05notes\"\x81\x01\n" +
 	"\tAppResult\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
@@ -1971,7 +1466,7 @@ func file_common_progress_v1_progress_proto_rawDescGZIP() []byte {
 }
 
 var file_common_progress_v1_progress_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_common_progress_v1_progress_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_common_progress_v1_progress_proto_goTypes = []any{
 	(Stream)(0),                   // 0: common.progress.v1.Stream
 	(Level)(0),                    // 1: common.progress.v1.Level
@@ -1984,58 +1479,43 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*Ended)(nil),                 // 8: common.progress.v1.Ended
 	(*Output)(nil),                // 9: common.progress.v1.Output
 	(*Counter)(nil),               // 10: common.progress.v1.Counter
-	(*Stage)(nil),                 // 11: common.progress.v1.Stage
-	(*StagePlanEvent)(nil),        // 12: common.progress.v1.StagePlanEvent
-	(*SpanAttribute)(nil),         // 13: common.progress.v1.SpanAttribute
-	(*SpanEvent)(nil),             // 14: common.progress.v1.SpanEvent
-	(*ProgressEvent)(nil),         // 15: common.progress.v1.ProgressEvent
-	(*LogEvent)(nil),              // 16: common.progress.v1.LogEvent
-	(*DnsRecord)(nil),             // 17: common.progress.v1.DnsRecord
-	(*DnsManualRecordsEvent)(nil), // 18: common.progress.v1.DnsManualRecordsEvent
-	(*DegradedEvent)(nil),         // 19: common.progress.v1.DegradedEvent
-	(*AppResult)(nil),             // 20: common.progress.v1.AppResult
-	(*ResultEvent)(nil),           // 21: common.progress.v1.ResultEvent
-	(*ConnectorInstalled)(nil),    // 22: common.progress.v1.ConnectorInstalled
-	(*FunctionOutput)(nil),        // 23: common.progress.v1.FunctionOutput
-	(*FlipBound)(nil),             // 24: common.progress.v1.FlipBound
-	(*v1.ChangePlan)(nil),         // 25: common.plan.v1.ChangePlan
-	(*v11.Binding)(nil),           // 26: common.bindings.v1.Binding
+	(*SpanAttribute)(nil),         // 11: common.progress.v1.SpanAttribute
+	(*DnsRecord)(nil),             // 12: common.progress.v1.DnsRecord
+	(*DnsManualRecordsEvent)(nil), // 13: common.progress.v1.DnsManualRecordsEvent
+	(*AppResult)(nil),             // 14: common.progress.v1.AppResult
+	(*ResultEvent)(nil),           // 15: common.progress.v1.ResultEvent
+	(*ConnectorInstalled)(nil),    // 16: common.progress.v1.ConnectorInstalled
+	(*FunctionOutput)(nil),        // 17: common.progress.v1.FunctionOutput
+	(*FlipBound)(nil),             // 18: common.progress.v1.FlipBound
+	(*v1.ChangePlan)(nil),         // 19: common.plan.v1.ChangePlan
+	(*v11.Binding)(nil),           // 20: common.bindings.v1.Binding
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	1,  // 0: common.progress.v1.OperationEvent.level:type_name -> common.progress.v1.Level
 	2,  // 1: common.progress.v1.OperationEvent.phase:type_name -> common.progress.v1.Phase
-	15, // 2: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
-	16, // 3: common.progress.v1.OperationEvent.log:type_name -> common.progress.v1.LogEvent
-	21, // 4: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
-	12, // 5: common.progress.v1.OperationEvent.stage_plan:type_name -> common.progress.v1.StagePlanEvent
-	14, // 6: common.progress.v1.OperationEvent.span:type_name -> common.progress.v1.SpanEvent
-	19, // 7: common.progress.v1.OperationEvent.degraded:type_name -> common.progress.v1.DegradedEvent
-	18, // 8: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
-	25, // 9: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
-	7,  // 10: common.progress.v1.OperationEvent.started:type_name -> common.progress.v1.Started
-	8,  // 11: common.progress.v1.OperationEvent.ended:type_name -> common.progress.v1.Ended
-	9,  // 12: common.progress.v1.OperationEvent.output:type_name -> common.progress.v1.Output
-	10, // 13: common.progress.v1.OperationEvent.counter:type_name -> common.progress.v1.Counter
-	3,  // 14: common.progress.v1.Ended.status:type_name -> common.progress.v1.SpanStatus
-	13, // 15: common.progress.v1.Ended.attributes:type_name -> common.progress.v1.SpanAttribute
-	0,  // 16: common.progress.v1.Output.stream:type_name -> common.progress.v1.Stream
-	2,  // 17: common.progress.v1.Stage.phase:type_name -> common.progress.v1.Phase
-	11, // 18: common.progress.v1.StagePlanEvent.stages:type_name -> common.progress.v1.Stage
-	4,  // 19: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
-	3,  // 20: common.progress.v1.SpanEvent.status:type_name -> common.progress.v1.SpanStatus
-	13, // 21: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
-	17, // 22: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
-	5,  // 23: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
-	26, // 24: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
-	23, // 25: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
-	24, // 26: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	20, // 27: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
-	22, // 28: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
-	29, // [29:29] is the sub-list for method output_type
-	29, // [29:29] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	7,  // 2: common.progress.v1.OperationEvent.started:type_name -> common.progress.v1.Started
+	8,  // 3: common.progress.v1.OperationEvent.ended:type_name -> common.progress.v1.Ended
+	9,  // 4: common.progress.v1.OperationEvent.output:type_name -> common.progress.v1.Output
+	10, // 5: common.progress.v1.OperationEvent.counter:type_name -> common.progress.v1.Counter
+	19, // 6: common.progress.v1.OperationEvent.plan:type_name -> common.plan.v1.ChangePlan
+	13, // 7: common.progress.v1.OperationEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
+	15, // 8: common.progress.v1.OperationEvent.result:type_name -> common.progress.v1.ResultEvent
+	3,  // 9: common.progress.v1.Ended.status:type_name -> common.progress.v1.SpanStatus
+	11, // 10: common.progress.v1.Ended.attributes:type_name -> common.progress.v1.SpanAttribute
+	0,  // 11: common.progress.v1.Output.stream:type_name -> common.progress.v1.Stream
+	4,  // 12: common.progress.v1.SpanAttribute.key:type_name -> common.progress.v1.AttributeKey
+	12, // 13: common.progress.v1.DnsManualRecordsEvent.records:type_name -> common.progress.v1.DnsRecord
+	5,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
+	20, // 15: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
+	17, // 16: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
+	18, // 17: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	14, // 18: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult
+	16, // 19: common.progress.v1.ResultEvent.connector:type_name -> common.progress.v1.ConnectorInstalled
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }
@@ -2044,28 +1524,22 @@ func file_common_progress_v1_progress_proto_init() {
 		return
 	}
 	file_common_progress_v1_progress_proto_msgTypes[0].OneofWrappers = []any{
-		(*OperationEvent_Progress)(nil),
-		(*OperationEvent_Log)(nil),
-		(*OperationEvent_Result)(nil),
-		(*OperationEvent_StagePlan)(nil),
-		(*OperationEvent_Span)(nil),
-		(*OperationEvent_Degraded)(nil),
-		(*OperationEvent_DnsManualRecords)(nil),
-		(*OperationEvent_Plan)(nil),
 		(*OperationEvent_Started)(nil),
 		(*OperationEvent_Ended)(nil),
 		(*OperationEvent_Output)(nil),
 		(*OperationEvent_Counter)(nil),
+		(*OperationEvent_Plan)(nil),
+		(*OperationEvent_DnsManualRecords)(nil),
+		(*OperationEvent_Result)(nil),
 	}
 	file_common_progress_v1_progress_proto_msgTypes[4].OneofWrappers = []any{}
-	file_common_progress_v1_progress_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_progress_v1_progress_proto_rawDesc), len(file_common_progress_v1_progress_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   19,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

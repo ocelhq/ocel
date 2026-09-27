@@ -1,9 +1,12 @@
-{"operation":{"stagePlan":{"stages":[{"id":"AQAAAAAAAAA=","title":"Environment"},{"id":"AgAAAAAAAAA=","title":"web"},{"id":"AwAAAAAAAAA=","title":"api"}]}}}
-{"operation":{"stagePlan":{"stages":[{"id":"BAAAAAAAAAA=","parentId":"AgAAAAAAAAA=","phase":"PHASE_BUILD"},{"id":"BQAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_BUILD"}]}}}
-{"operation":{"log":{"stageId":"BAAAAAAAAAA=","message":"Packages: +812"}}}
-{"operation":{"log":{"stageId":"BQAAAAAAAAA=","message":"go: downloading ocel.dev v0.4.1"}}}
-{"operation":{"span":{"spanId":"BQAAAAAAAAA=","parentSpanId":"AwAAAAAAAAA=","name":"building","startTimeUnixNano":"1000000000","endTimeUnixNano":"5000000000","status":"SPAN_STATUS_OK"}}}
-{"operation":{"stagePlan":{"stages":[{"id":"BgAAAAAAAAA=","parentId":"AwAAAAAAAAA=","phase":"PHASE_DEPLOY"}]}}}
-{"operation":{"progress":{"stageId":"BgAAAAAAAAA=","message":"pushing api:8f3c1a","current":3,"total":9}}}
-{"operation":{"log":{"stageId":"BAAAAAAAAAA=","message":"▲ Next.js 15.4.2"}}}
+{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"spanId":"AgAAAAAAAAA=","message":"web","started":{}}
+{"spanId":"AwAAAAAAAAA=","message":"api","started":{}}
+{"spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AgAAAAAAAAA="}}
+{"spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"spanId":"BAAAAAAAAAA=","message":"Packages: +812","output":{}}
+{"spanId":"BQAAAAAAAAA=","message":"go: downloading ocel.dev v0.4.1","output":{}}
+{"time":"1970-01-01T00:00:05Z","spanId":"BQAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
+{"spanId":"BgAAAAAAAAA=","phase":"PHASE_DEPLOY","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"spanId":"BgAAAAAAAAA=","message":"pushing api:8f3c1a","counter":{"current":3,"total":9}}
+{"spanId":"BAAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
 {"result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}

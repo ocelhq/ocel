@@ -25,6 +25,6 @@ func (s *deployFakeProviderServer) RemoveStalePromotions(ctx context.Context, re
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }

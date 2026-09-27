@@ -187,7 +187,7 @@ func listed(values []string) string {
 }
 
 func said(ev *progressv1.OperationEvent) string {
-	if ev.GetEvent() != nil || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
+	if ev.GetBody() != nil || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
 		return ""
 	}
 	return ev.GetMessage()

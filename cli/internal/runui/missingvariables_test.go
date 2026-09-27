@@ -12,7 +12,7 @@ import (
 
 func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	t.Parallel()
-	ev := &streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
+	ev := &streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
 		Url: "http://127.0.0.1:5555/#t=abc",
 		Missing: &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{
 			{Key: "DATABASE_URL", Reason: "no value", Description: "The primary database connection string"},
@@ -44,7 +44,7 @@ func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 
 func TestTheDeployTUIHeadsAGroupOnce(t *testing.T) {
 	t.Parallel()
-	ev := &streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
+	ev := &streamv1.RunEvent{Body: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
 		Url: "http://127.0.0.1:5555/#t=abc",
 		Missing: &streamv1.MissingVariables{
 			Cells: []*streamv1.MissingVariable{

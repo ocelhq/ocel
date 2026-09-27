@@ -617,8 +617,8 @@ func TestALineTheProviderProcessWritesIsADebugOutputLineNamingTheProviderAndItsS
 		if ev.GetLevel() != progressv1.Level_LEVEL_DEBUG || ev.GetSubject() != "aws" {
 			t.Errorf("the provider's %q landed as level %s subject %q, want a DEBUG event whose subject is the provider %q", want, ev.GetLevel(), ev.GetSubject(), "aws")
 		}
-		if got := ev.GetOperation().GetOutput(); got == nil || got.GetStream() != stream {
-			t.Errorf("the provider's %q landed as %T on %v, want an output line on %v", want, ev.GetEvent(), got.GetStream(), stream)
+		if got := ev.GetOutput(); got == nil || got.GetStream() != stream {
+			t.Errorf("the provider's %q landed as %T on %v, want an output line on %v", want, ev.GetBody(), got.GetStream(), stream)
 		}
 	}
 }

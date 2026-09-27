@@ -25,12 +25,7 @@ const (
 type armFunc func(*projector, protoreflect.Message) []string
 
 var overrides = map[protoreflect.FullName]armFunc{
-	"common.progress.v1.StagePlanEvent":        (*projector).stagePlan,
-	"common.progress.v1.ProgressEvent":         (*projector).progress,
-	"common.progress.v1.LogEvent":              (*projector).log,
-	"common.progress.v1.SpanEvent":             (*projector).span,
 	"common.progress.v1.DnsManualRecordsEvent": (*projector).dnsManualRecords,
-	"common.progress.v1.DegradedEvent":         (*projector).degraded,
 	"common.progress.v1.ResultEvent":           (*projector).outcome,
 	"cli.stream.v1.RunResultEvent":             (*projector).result,
 	"cli.stream.v1.IdentityEvent":              (*projector).identity,
@@ -75,20 +70,19 @@ func (p *projector) project(ev *streamv1.RunEvent) []string {
 	if ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !p.present.Verbose {
 		return nil
 	}
-	op := ev.GetOperation()
 	switch {
-	case ev.GetEvent() == nil:
+	case ev.GetBody() == nil:
 		return p.message(ev)
-	case op.GetStarted() != nil:
-		return p.started(ev, op.GetStarted())
-	case op.GetEnded() != nil:
-		return p.ended(ev, op.GetEnded())
-	case op.GetOutput() != nil && len(ev.GetSpanId()) == 0:
+	case ev.GetStarted() != nil:
+		return p.started(ev, ev.GetStarted())
+	case ev.GetEnded() != nil:
+		return p.ended(ev, ev.GetEnded())
+	case ev.GetOutput() != nil && len(ev.GetSpanId()) == 0:
 		return p.message(ev)
-	case op.GetOutput() != nil:
+	case ev.GetOutput() != nil:
 		return p.buffer(ev.GetSpanId(), ev.GetMessage(), true)
-	case op.GetCounter() != nil:
-		return p.counter(ev, op.GetCounter())
+	case ev.GetCounter() != nil:
+		return p.counter(ev, ev.GetCounter())
 	}
 	return p.render(ev.ProtoReflect())
 }
@@ -260,14 +254,6 @@ func screamingSnake(name string) string {
 	return b.String()
 }
 
-func (p *projector) stagePlan(m protoreflect.Message) []string {
-	ev := m.Interface().(*progressv1.StagePlanEvent)
-	for _, s := range ev.GetStages() {
-		p.declare(stageKey(s.GetId()), stageKey(s.GetParentId()), stageTitle(s.GetTitle(), s.GetPhase()))
-	}
-	return p.adopt()
-}
-
 func (p *projector) started(ev *streamv1.RunEvent, started *progressv1.Started) []string {
 	p.declare(stageKey(ev.GetSpanId()), stageKey(started.GetParentSpanId()), stageTitle(ev.GetMessage(), ev.GetPhase()))
 	return p.adopt()
@@ -406,31 +392,12 @@ func (p *projector) adopt() []string {
 	return out
 }
 
-func (p *projector) progress(m protoreflect.Message) []string {
-	ev := m.Interface().(*progressv1.ProgressEvent)
-	line := progressLogLine(ev.GetMessage(), ev.GetCurrent(), ev.Total)
-	if line == "" {
-		return nil
-	}
-	return p.buffer(ev.GetStageId(), line, false)
-}
-
 func (p *projector) counter(ev *streamv1.RunEvent, c *progressv1.Counter) []string {
 	line := progressLogLine(ev.GetMessage(), c.GetCurrent(), c.Total)
 	if line == "" {
 		return nil
 	}
 	return p.buffer(ev.GetSpanId(), line, false)
-}
-
-func (p *projector) log(m protoreflect.Message) []string {
-	ev := m.Interface().(*progressv1.LogEvent)
-	return p.buffer(ev.GetStageId(), ev.GetMessage(), true)
-}
-
-func (p *projector) span(m protoreflect.Message) []string {
-	ev := m.Interface().(*progressv1.SpanEvent)
-	return p.closeScope(stageKey(ev.GetSpanId()), spanDuration(ev), ev.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR)
 }
 
 func (p *projector) ended(ev *streamv1.RunEvent, ended *progressv1.Ended) []string {
@@ -443,10 +410,6 @@ func (p *projector) closeScope(id string, d time.Duration, failed bool) []string
 	}
 	b, started := p.openPhase(id)
 	return append(started, p.closeBlock(b, d, failed)...)
-}
-
-func spanDuration(ev *progressv1.SpanEvent) time.Duration {
-	return elapsed(ev.GetStartTimeUnixNano(), ev.GetEndTimeUnixNano())
 }
 
 func endedDuration(ev *streamv1.RunEvent, ended *progressv1.Ended) time.Duration {
@@ -528,11 +491,6 @@ func (p *projector) dnsManualRecords(m protoreflect.Message) []string {
 		out = append(out, dnsIndent+note)
 	}
 	return append(out, "")
-}
-
-func (p *projector) degraded(m protoreflect.Message) []string {
-	ev := m.Interface().(*progressv1.DegradedEvent)
-	return []string{fmt.Sprintf("%s %s: %s", warnMark, ev.GetNeed(), ev.GetDetail())}
 }
 
 func (p *projector) message(ev *streamv1.RunEvent) []string {

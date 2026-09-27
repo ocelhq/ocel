@@ -157,7 +157,7 @@ func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	}
 
 	if events[0].GetStarted() == nil {
-		t.Fatalf("the first event is %T, want a started scope: the CLI draws the tree before any work reports into it", events[0].GetEvent())
+		t.Fatalf("the first event is %T, want a started scope: the CLI draws the tree before any work reports into it", events[0].GetBody())
 	}
 
 	specs := p.FakeStacks().Provisioned()

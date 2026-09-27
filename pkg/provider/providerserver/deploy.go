@@ -1247,7 +1247,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 		}
 	}
 	result.UrlNotes = r.pending
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
+	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: result}}, nil
 }
 
 func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) error {

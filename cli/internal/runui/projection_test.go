@@ -20,7 +20,7 @@ func TestTheProviderResultIsNotProjectedAtTheHuman(t *testing.T) {
 	t.Parallel()
 
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+	got := p.project(lift(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 		Success:     true,
 		PromotionId: "prm_1",
 		Apps:        []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.com"}}},
@@ -36,7 +36,7 @@ func TestTheSuccessResultIsTheURLsColoured(t *testing.T) {
 	t.Parallel()
 
 	p := newProjector(Presentation{Format: FormatHuman, TTY: true, Color: true, Width: defaultWidth})
-	got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+	got := strings.Join(p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
 		Success:    true,
 		Headline:   "Deployed shop to production",
 		DurationMs: 1000,
@@ -58,7 +58,7 @@ func TestTheSuccessResultIsTheURLsColoured(t *testing.T) {
 func projectedResult(t *testing.T, apps ...*progressv1.AppResult) []string {
 	t.Helper()
 	p := newProjector(Presentation{Format: FormatHuman, TTY: true, Color: true, Width: defaultWidth})
-	return p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+	return p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
 		Success:  true,
 		Headline: "Deployed",
 		Apps:     apps,
@@ -104,7 +104,7 @@ func TestTheSuccessResultPrintsTheNoteBesideTheURLsItPrinted(t *testing.T) {
 		"api.shop.example is not served yet: it does not answer",
 	}
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	got := p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+	got := p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
 		Success:  true,
 		Headline: "Deployed",
 		Apps:     []*progressv1.AppResult{{App: "web", Urls: []string{"https://shop.example"}}},
@@ -138,31 +138,23 @@ func TestEveryPhaseCommitsAStartLineThenItsBlockWhole(t *testing.T) {
 	unit, phase := appStage(1), appStage(2)
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
 
-	start := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-		Stages: []*progressv1.Stage{
-			{Id: unit, Title: "web"},
-			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
-		},
-	}}}))
+	start := projectStarted(p, []scope{
+		{id: unit, title: "web"},
+		{id: phase, parent: unit, title: "Building", phase: progressv1.Phase_PHASE_BUILD},
+	}...)
 	if len(start) != 0 {
 		t.Fatalf("on the phase being declared, committed %q, want nothing until it says something", start)
 	}
 
 	var got []string
 	for _, message := range []string{"step 1", "step 2"} {
-		got = append(got, p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-			Progress: &progressv1.ProgressEvent{StageId: phase, Message: message},
-		}}))...)
+		got = append(got, p.project(progressEvent(phase, message, 0, nil))...)
 	}
 	if want := []string{"→ web › Building"}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("committed %q mid-phase, want %q and the block buffered until the phase completes", got, want)
 	}
 
-	got = p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-		SpanId:            phase,
-		StartTimeUnixNano: 1,
-		EndTimeUnixNano:   int64(6*time.Second) + 1,
-	}}}))
+	got = p.project(endedEvent(phase, false, 6*time.Second))
 	want := []string{"", okMark + " web  6s", "  step 1", "  step 2"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("flushed block =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -175,23 +167,15 @@ func TestABlockDropsBlankLinesAtTheEdgesOfWhatItIsGivenAndKeepsTheOnesInside(t *
 	unit, phase := appStage(1), appStage(2)
 	p := newProjector(Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 
-	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-		Stages: []*progressv1.Stage{
-			{Id: unit, Title: "web"},
-			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
-		},
-	}}}))
+	projectStarted(p, []scope{
+		{id: unit, title: "web"},
+		{id: phase, parent: unit, title: "Building", phase: progressv1.Phase_PHASE_BUILD},
+	}...)
 	for _, message := range []string{"", "\n", "  \n\n", "\n\nPackages: +812\n\ncompiled\n\n"} {
-		p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{StageId: phase, Message: message},
-		}}))
+		p.project(outputEvent(phase, message))
 	}
 
-	got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-		SpanId:            phase,
-		StartTimeUnixNano: 1,
-		EndTimeUnixNano:   int64(6*time.Second) + 1,
-	}}}))
+	got := p.project(endedEvent(phase, false, 6*time.Second))
 	want := []string{"", okMark + " web  6s", "  Packages: +812", "  ", "  compiled"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("flushed block =\n%q\nwant\n%q", got, want)
@@ -203,23 +187,23 @@ func TestABlockIsHeadedByWhatTheRosterSaysTheUnitRuns(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		roster []*progressv1.Stage
+		roster []scope
 		want   string
 	}{
 		{
 			"a unit that runs one phase is its own headline",
-			[]*progressv1.Stage{
-				{Id: appStage(1), Title: "Edge"},
-				{Id: appStage(2), ParentId: appStage(1), Title: "Provisioning"},
+			[]scope{
+				{id: appStage(1), title: "Edge"},
+				{id: appStage(2), parent: appStage(1), title: "Provisioning"},
 			},
 			okMark + " Edge  6s",
 		},
 		{
 			"a unit that runs more than one names the phase, from the first block on",
-			[]*progressv1.Stage{
-				{Id: appStage(1), Title: "Environment"},
-				{Id: appStage(2), ParentId: appStage(1), Title: "Provisioning"},
-				{Id: appStage(3), ParentId: appStage(1), Title: "Uploading"},
+			[]scope{
+				{id: appStage(1), title: "Environment"},
+				{id: appStage(2), parent: appStage(1), title: "Provisioning"},
+				{id: appStage(3), parent: appStage(1), title: "Uploading"},
 			},
 			okMark + " Environment › Provisioning  6s",
 		},
@@ -227,15 +211,9 @@ func TestABlockIsHeadedByWhatTheRosterSaysTheUnitRuns(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-				StagePlan: &progressv1.StagePlanEvent{Stages: tc.roster},
-			}}))
+			projectStarted(p, tc.roster...)
 
-			got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-				SpanId:            appStage(2),
-				StartTimeUnixNano: 1,
-				EndTimeUnixNano:   int64(6*time.Second) + 1,
-			}}}))
+			got := p.project(endedEvent(appStage(2), false, 6*time.Second))
 			if !slices.Contains(got, tc.want) {
 				t.Errorf("the first block closed as %q, want %q", got, tc.want)
 			}
@@ -250,23 +228,17 @@ func TestBlocksFlushInPhaseCompletionOrder(t *testing.T) {
 	unitB, phaseB := appStage(3), appStage(4)
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
 
-	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-		Stages: []*progressv1.Stage{
-			{Id: unitA, Title: "app-a"},
-			{Id: phaseA, ParentId: unitA, Title: "Provisioning"},
-			{Id: unitB, Title: "app-b"},
-			{Id: phaseB, ParentId: unitB, Title: "Provisioning"},
-		},
-	}}}))
-	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: phaseA, Message: "a detail"},
-	}}))
-	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: phaseB, Message: "b detail"},
-	}}))
+	projectStarted(p, []scope{
+		{id: unitA, title: "app-a"},
+		{id: phaseA, parent: unitA, title: "Provisioning"},
+		{id: unitB, title: "app-b"},
+		{id: phaseB, parent: unitB, title: "Provisioning"},
+	}...)
+	p.project(progressEvent(phaseA, "a detail", 0, nil))
+	p.project(progressEvent(phaseB, "b detail", 0, nil))
 
-	second := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{SpanId: phaseB}}}))
-	first := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{SpanId: phaseA}}}))
+	second := p.project(endedEvent(phaseB, false, 0))
+	first := p.project(endedEvent(phaseA, false, 0))
 
 	if !strings.Contains(strings.Join(second, "\n"), "b detail") {
 		t.Errorf("first flush = %q, want app-b's block, the first phase to complete", second)
@@ -274,10 +246,6 @@ func TestBlocksFlushInPhaseCompletionOrder(t *testing.T) {
 	if !strings.Contains(strings.Join(first, "\n"), "a detail") {
 		t.Errorf("second flush = %q, want app-a's block", first)
 	}
-}
-
-func operation(ev *progressv1.OperationEvent) *streamv1.RunEvent {
-	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Operation{Operation: ev}}
 }
 
 func TestAnOpenBlockFlushesWithTheOutcomeTheRunActuallyHad(t *testing.T) {
@@ -296,17 +264,13 @@ func TestAnOpenBlockFlushesWithTheOutcomeTheRunActuallyHad(t *testing.T) {
 			t.Parallel()
 			unit, phase := appStage(1), appStage(2)
 			p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-				Stages: []*progressv1.Stage{
-					{Id: unit, Title: "web"},
-					{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
-				},
-			}}}))
-			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-				Progress: &progressv1.ProgressEvent{StageId: phase, Message: "step 1"},
-			}}))
+			projectStarted(p, []scope{
+				{id: unit, title: "web"},
+				{id: phase, parent: unit, title: "Building", phase: progressv1.Phase_PHASE_BUILD},
+			}...)
+			p.project(progressEvent(phase, "step 1", 0, nil))
 
-			got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: tc.result}}), "\n")
+			got := strings.Join(p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{Result: tc.result}}), "\n")
 			if !strings.Contains(got, tc.want+"\n  step 1\n") {
 				t.Errorf("result projection =\n%s\nwant the in-flight block flushed whole, closed by %q", got, tc.want)
 			}
@@ -319,17 +283,13 @@ func TestARunWhoseEveryPhaseCompletedSaysNothingAboutBeingInterrupted(t *testing
 
 	unit, phase := appStage(1), appStage(2)
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-		Stages: []*progressv1.Stage{
-			{Id: unit, Title: "web"},
-			{Id: phase, ParentId: unit, Title: "Building", Phase: progressv1.Phase_PHASE_BUILD},
-		},
-	}}}))
-	p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-		SpanId: phase, StartTimeUnixNano: 1, EndTimeUnixNano: int64(time.Second) + 1,
-	}}}))
+	projectStarted(p, []scope{
+		{id: unit, title: "web"},
+		{id: phase, parent: unit, title: "Building", phase: progressv1.Phase_PHASE_BUILD},
+	}...)
+	p.project(endedEvent(phase, false, time.Second))
 
-	got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{
+	got := strings.Join(p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Result{
 		Result: &streamv1.RunResultEvent{Success: true, Headline: "Deployed", DurationMs: 1000},
 	}}), "\n")
 	if strings.Contains(got, "interrupted") {
@@ -352,44 +312,20 @@ func TestADebugLineIsHiddenFromTheHumanUnlessVerboseEvenInAFailedBlock(t *testin
 			t.Parallel()
 			unit, phase := appStage(1), appStage(2)
 			p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth, Verbose: tc.verbose})
-			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-				Stages: []*progressv1.Stage{
-					{Id: unit, Title: "web"},
-					{Id: phase, ParentId: unit, Title: "Provisioning", Phase: progressv1.Phase_PHASE_DEPLOY},
-				},
-			}}}))
-			debug := operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-				Log: &progressv1.LogEvent{StageId: phase, Message: "+  aws:s3:Bucket assets creating (0s)"},
-			}})
+			projectStarted(p, []scope{
+				{id: unit, title: "web"},
+				{id: phase, parent: unit, title: "Provisioning", phase: progressv1.Phase_PHASE_DEPLOY},
+			}...)
+			debug := outputEvent(phase, "+  aws:s3:Bucket assets creating (0s)")
 			debug.Level = progressv1.Level_LEVEL_DEBUG
 			p.project(debug)
-			p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-				Log: &progressv1.LogEvent{StageId: phase, Message: "the stack refused the change"},
-			}}))
+			p.project(outputEvent(phase, "the stack refused the change"))
 
-			got := p.project(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: &progressv1.SpanEvent{
-				SpanId: phase, StartTimeUnixNano: 1, EndTimeUnixNano: int64(time.Second) + 1,
-				Status: progressv1.SpanStatus_SPAN_STATUS_ERROR,
-			}}}))
+			got := p.project(endedEvent(phase, true, time.Second))
 			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
 				t.Errorf("failed block =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(tc.want, "\n"))
 			}
 		})
-	}
-}
-
-func TestADegradationKeepsItsMarkAndItsOneLine(t *testing.T) {
-	t.Parallel()
-
-	got := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth}).project(
-		operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Degraded{Degraded: &progressv1.DegradedEvent{
-			Need:   "edge-middleware",
-			Detail: "web: middleware runs in the origin",
-		}}}))
-
-	want := []string{warnMark + " edge-middleware: web: middleware runs in the origin"}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("projection = %q, want %q", got, want)
 	}
 }
 
@@ -435,8 +371,16 @@ func TestAKindTheProjectionHasNeverSeenStillRenders(t *testing.T) {
 	}
 }
 
+func projectStarted(p *projector, scopes ...scope) []string {
+	var out []string
+	for _, sc := range scopes {
+		out = append(out, p.project(startedEvent(sc.id, sc.parent, sc.phase, sc.title))...)
+	}
+	return out
+}
+
 func startedEvent(id, parent []byte, phase progressv1.Phase, title string) *streamv1.RunEvent {
-	return lift(&progressv1.OperationEvent{Phase: phase, SpanId: id, Message: title, Event: &progressv1.OperationEvent_Started{
+	return lift(&progressv1.OperationEvent{Phase: phase, SpanId: id, Message: title, Body: &progressv1.OperationEvent_Started{
 		Started: &progressv1.Started{ParentSpanId: parent},
 	}})
 }
@@ -446,12 +390,12 @@ func endedEvent(id []byte, failed bool, d time.Duration) *streamv1.RunEvent {
 	if failed {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
 	}
-	return lift(&progressv1.OperationEvent{TimeUnixNano: int64(d) + 1, SpanId: id, Event: &progressv1.OperationEvent_Ended{
+	return lift(&progressv1.OperationEvent{TimeUnixNano: int64(d) + 1, SpanId: id, Body: &progressv1.OperationEvent_Ended{
 		Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: 1},
 	}})
 }
 
-func TestAStartedAndEndedPairRendersTheBlockAStagePlanAndSpanDid(t *testing.T) {
+func TestAStartedAndEndedPhaseCommitsItsStartLineThenItsClosedBlock(t *testing.T) {
 	t.Parallel()
 
 	unit, phase := appStage(1), appStage(2)
@@ -470,7 +414,7 @@ func TestAStartedAndEndedPairRendersTheBlockAStagePlanAndSpanDid(t *testing.T) {
 }
 
 func outputEvent(id []byte, line string) *streamv1.RunEvent {
-	return lift(&progressv1.OperationEvent{SpanId: id, Message: line, Event: &progressv1.OperationEvent_Output{
+	return lift(&progressv1.OperationEvent{SpanId: id, Message: line, Body: &progressv1.OperationEvent_Output{
 		Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
 	}})
 }
@@ -525,7 +469,7 @@ func TestAScopedMessageIsAProgressLineOfItsBlock(t *testing.T) {
 }
 
 func counterEvent(id []byte, message string, current uint32, total *uint32) *streamv1.RunEvent {
-	return lift(&progressv1.OperationEvent{SpanId: id, Message: message, Event: &progressv1.OperationEvent_Counter{
+	return lift(&progressv1.OperationEvent{SpanId: id, Message: message, Body: &progressv1.OperationEvent_Counter{
 		Counter: &progressv1.Counter{Current: current, Total: total},
 	}})
 }

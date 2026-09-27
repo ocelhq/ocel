@@ -3,9 +3,13 @@ package runui
 import (
 	"testing"
 	"time"
-
-	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
+
+func declareAll(p *stagePlan, scopes ...scope) {
+	for _, sc := range scopes {
+		p.declare(stageKey(sc.id), stageKey(sc.parent), stageTitle(sc.title, sc.phase))
+	}
+}
 
 func activate(p *stagePlan, ids ...[]byte) {
 	for _, id := range ids {
@@ -20,11 +24,11 @@ func TestCyclicDeclarationsStayVisible(t *testing.T) {
 
 	selfy, left, right := appStage(1), appStage(2), appStage(3)
 	p := newStagePlan()
-	p.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-		{Id: selfy, ParentId: selfy, Title: "selfy"},
-		{Id: left, ParentId: right, Title: "left"},
-		{Id: right, ParentId: left, Title: "right"},
-	}})
+	declareAll(p, []scope{
+		{id: selfy, parent: selfy, title: "selfy"},
+		{id: left, parent: right, title: "left"},
+		{id: right, parent: left, title: "right"},
+	}...)
 
 	activate(p, selfy, left, right)
 

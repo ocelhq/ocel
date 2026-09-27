@@ -50,7 +50,7 @@ func assertStagesClose(t *testing.T, events []*progressv1.OperationEvent) {
 }
 
 func saidLine(event *progressv1.OperationEvent) string {
-	if event.GetEvent() != nil || event.GetLevel() != progressv1.Level_LEVEL_INFO {
+	if event.GetBody() != nil || event.GetLevel() != progressv1.Level_LEVEL_INFO {
 		return ""
 	}
 	return event.GetMessage()

@@ -15,7 +15,7 @@ func stamped(event *progressv1.OperationEvent) *progressv1.OperationEvent {
 }
 
 func planned() *progressv1.OperationEvent {
-	return stamped(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Plan{Plan: &planv1.ChangePlan{}}})
+	return stamped(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: &planv1.ChangePlan{}}})
 }
 
 var scope = []byte("provisn1")
@@ -24,7 +24,7 @@ func logged() *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{
 		SpanId:  scope,
 		Message: "working",
-		Event:   &progressv1.OperationEvent_Output{Output: &progressv1.Output{}},
+		Body:    &progressv1.OperationEvent_Output{Output: &progressv1.Output{}},
 	})
 }
 
@@ -37,7 +37,7 @@ func counted() *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{
 		SpanId:  scope,
 		Message: "uploading",
-		Event:   &progressv1.OperationEvent_Counter{Counter: &progressv1.Counter{Current: 1, Total: &total}},
+		Body:    &progressv1.OperationEvent_Counter{Counter: &progressv1.Counter{Current: 1, Total: &total}},
 	})
 }
 
@@ -45,14 +45,14 @@ func started(id string) *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{
 		SpanId:  []byte(id),
 		Message: id,
-		Event:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
+		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
 	})
 }
 
 func ended(id string) *progressv1.OperationEvent {
 	return stamped(&progressv1.OperationEvent{
 		SpanId: []byte(id),
-		Event:  &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{}},
+		Body:   &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{}},
 	})
 }
 

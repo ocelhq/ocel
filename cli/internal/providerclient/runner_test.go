@@ -285,12 +285,12 @@ func TestDeploy(t *testing.T) {
 		if len(events) != 2 {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
-		if events[0].GetEvent() != nil || events[0].GetMessage() != "step 1" {
-			t.Errorf("events[0] is %T %q, want the message-only line \"step 1\"", events[0].GetEvent(), events[0].GetMessage())
+		if events[0].GetBody() != nil || events[0].GetMessage() != "step 1" {
+			t.Errorf("events[0] is %T %q, want the message-only line \"step 1\"", events[0].GetBody(), events[0].GetMessage())
 		}
 		result := events[1].GetResult()
 		if result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
+			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetBody(), events[1].GetResult().GetError())
 		}
 
 		r.Close()
@@ -520,7 +520,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
 		if result := events[1].GetResult(); result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
+			t.Errorf("events[1] is %T failing with %q, want a successful ResultEvent", events[1].GetBody(), events[1].GetResult().GetError())
 		}
 
 		r.Close()

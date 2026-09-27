@@ -17,17 +17,17 @@ message RunEvent {
   string message = 12;
   bytes span_id = 13 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
-  oneof event {
+  oneof body {
+    common.progress.v1.Started started = 14;
+    common.progress.v1.Ended ended = 15;
+    common.progress.v1.Output output = 16;
+    common.progress.v1.Counter counter = 17;
     common.plan.v1.ChangePlan plan = 1;
-
-    common.progress.v1.OperationEvent operation = 2;
-
+    common.progress.v1.DnsManualRecordsEvent dns_manual_records = 18;
+    common.progress.v1.ResultEvent outcome = 19;
     WaitingEvent waiting = 3;
-
     ResumedEvent resumed = 4;
-
     RunResultEvent result = 5;
-
     IdentityEvent identity = 7;
   }
 }

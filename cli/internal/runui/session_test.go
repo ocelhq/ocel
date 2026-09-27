@@ -55,41 +55,57 @@ func newVerboseTestSession(t *testing.T, command string) (*Session, *safeBuffer,
 
 var testStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
 
-func declareProvisioning() *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: naming.UnitID(naming.UnitEnvironment), Title: "Environment"},
-			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Phase: progressv1.Phase_PHASE_PROVISION},
-		}},
+func startScopes(s *Session, scopes ...scope) {
+	for _, sc := range scopes {
+		s.Event(&progressv1.OperationEvent{Phase: sc.phase, SpanId: sc.id, Message: sc.title, Body: &progressv1.OperationEvent_Started{
+			Started: &progressv1.Started{ParentSpanId: sc.parent},
+		}})
+	}
+}
+
+func startProvisioning(s *Session) {
+	startScopes(s,
+		scope{id: naming.UnitID(naming.UnitEnvironment), title: "Environment"},
+		scope{id: testStageID, parent: naming.UnitID(naming.UnitEnvironment), phase: progressv1.Phase_PHASE_PROVISION},
+	)
+}
+
+func endedOp(id []byte, failed bool, d time.Duration) *progressv1.OperationEvent {
+	status := progressv1.SpanStatus_SPAN_STATUS_OK
+	if failed {
+		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
+	}
+	return &progressv1.OperationEvent{TimeUnixNano: int64(d) + 1, SpanId: id, Body: &progressv1.OperationEvent_Ended{
+		Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: 1},
 	}}
+}
+
+func endScope(s *Session, id []byte, name string, status progressv1.SpanStatus, attrs []*progressv1.SpanAttribute) {
+	startScopes(s, scope{id: id, title: name})
+	s.Event(&progressv1.OperationEvent{SpanId: id, Body: &progressv1.OperationEvent_Ended{
+		Ended: &progressv1.Ended{Status: status, Attributes: attrs},
+	}})
 }
 
 func closeProvisioning() *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-		Span: &progressv1.SpanEvent{
-			SpanId:            testStageID,
-			StartTimeUnixNano: 1,
-			EndTimeUnixNano:   int64(time.Second) + 1,
-			Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
-		},
-	}}
+	return endedOp(testStageID, false, time.Second)
+}
+
+func outputOp(id []byte, line string) *progressv1.OperationEvent {
+	return &progressv1.OperationEvent{SpanId: id, Message: line, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}}
 }
 
 func logLine(msg string) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-		Log: &progressv1.LogEvent{StageId: testStageID, Message: msg},
-	}}
+	return outputOp(testStageID, msg)
 }
 
 func progress(msg string) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: testStageID, Message: msg},
-	}}
+	return &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: testStageID, Message: msg}
 }
 
 func progressN(msg string, current, total uint32) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: testStageID, Message: msg, Current: &current, Total: &total},
+	return &progressv1.OperationEvent{SpanId: testStageID, Message: msg, Body: &progressv1.OperationEvent_Counter{
+		Counter: &progressv1.Counter{Current: current, Total: &total},
 	}}
 }
 
@@ -109,7 +125,7 @@ func TestAnInterruptTakesTheLiveFrameBackAndFlushesWhatWasInFlight(t *testing.T)
 	var out safeBuffer
 	s := New(&out, run, Presentation{Format: FormatHuman, TTY: true, Verbose: true, Width: defaultWidth, Height: defaultHeight})
 	t.Cleanup(func() { _ = s.Close() })
-	s.Event(declareProvisioning())
+	startProvisioning(s)
 	s.Event(progress("provisioning the account"))
 	if _, err := s.ProcessWriter("aws", progressv1.Stream_STREAM_STDOUT).Write([]byte("a line the run never finished")); err != nil {
 		t.Fatalf("Write() = %v", err)
@@ -149,7 +165,7 @@ func TestAnInterruptedRunIsNotCancelledTwiceWhenItsCloseStillRuns(t *testing.T) 
 
 func TestInterruptReachesEveryRunUIStillOwningATerminal(t *testing.T) {
 	s, out := liveSession(t)
-	s.Event(declareProvisioning())
+	startProvisioning(s)
 	s.Event(progress("provisioning the account"))
 
 	Interrupt()
@@ -176,13 +192,13 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 		s, out, logPath := newTestSession(t, "ocel deploy")
 
-		s.Event(declareProvisioning())
+		startProvisioning(s)
 		s.Event(progress("Uploading function artifacts"))
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{Message: "pulumi engine line"},
-		}})
+		engine := outputOp(nil, "pulumi engine line")
+		engine.Level = progressv1.Level_LEVEL_DEBUG
+		s.Event(engine)
 		s.Event(closeProvisioning())
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		s.Event(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success: true,
 			Apps:    []*progressv1.AppResult{{App: "web", Urls: []string{"https://app.example.workers.dev"}}},
 		}}})
@@ -221,7 +237,7 @@ func TestSession(t *testing.T) {
 		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		logPath := s.LogPath()
 
-		s.Event(declareProvisioning())
+		startProvisioning(s)
 		s.Event(logLine("uploading 10%\ruploading 60%\ruploaded"))
 		s.Event(progress("provisioning 1%\rprovisioning done"))
 		s.Event(logLine("carriage returned\r"))
@@ -400,11 +416,7 @@ func TestSession(t *testing.T) {
 		s, _, _ := newTestSession(t, "ocel deploy")
 
 		build := []byte{1, 0, 0, 0, 0, 0, 0, 0}
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-			StagePlan: &progressv1.StagePlanEvent{
-				Stages: []*progressv1.Stage{{Id: build, Title: "Building"}},
-			},
-		}})
+		startScopes(s, []scope{{id: build, title: "Building"}}...)
 
 		if title := s.stream.r.plan.nodes[stageKey(build)].title; title != "Building" {
 			t.Errorf("stage title = %q, want %q", title, "Building")
@@ -416,11 +428,7 @@ func TestSession(t *testing.T) {
 		s, _, _ := newTestSession(t, "ocel deploy")
 
 		stage := []byte{2, 0, 0, 0, 0, 0, 0, 0}
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-			StagePlan: &progressv1.StagePlanEvent{
-				Stages: []*progressv1.Stage{{Id: stage, Phase: progressv1.Phase_PHASE_PROVISION}},
-			},
-		}})
+		startScopes(s, []scope{{id: stage, phase: progressv1.Phase_PHASE_PROVISION}}...)
 
 		if title := s.stream.r.plan.nodes[stageKey(stage)].title; title != "Provisioning" {
 			t.Errorf("stage title = %q, want the phase label the declaration names", title)
@@ -433,9 +441,9 @@ func TestSession(t *testing.T) {
 		parent := []byte{9, 0, 0, 0, 0, 0, 0, 0}
 		child := []byte{10, 0, 0, 0, 0, 0, 0, 0}
 
-		plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: child, ParentId: parent, Title: "app-a"},
-		}})
+		declareAll(plan, []scope{
+			{id: child, parent: parent, title: "app-a"},
+		}...)
 		if _, ok := plan.nodes[stageKey(child)]; !ok {
 			t.Fatal("orphan child was not recorded at all")
 		}
@@ -443,9 +451,9 @@ func TestSession(t *testing.T) {
 			t.Error("orphan child linked before its parent arrived")
 		}
 
-		plan.apply(&progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: parent, Title: "apps"},
-		}})
+		declareAll(plan, []scope{
+			{id: parent, title: "apps"},
+		}...)
 
 		parentNode := plan.nodes[stageKey(parent)]
 		if len(parentNode.children) != 1 || parentNode.children[0] != stageKey(child) {
@@ -521,17 +529,10 @@ func TestIngestedSpanResourceIdentityReachesTheTraceFile(t *testing.T) {
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-		Span: &progressv1.SpanEvent{
-			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
-			Name:   "resource operation failed",
-			Status: progressv1.SpanStatus_SPAN_STATUS_ERROR,
-			Attributes: []*progressv1.SpanAttribute{
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "aws:s3:Bucket"},
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: "uploads"},
-			},
-		},
-	}})
+	endScope(s, []byte{1, 2, 3, 4, 5, 6, 7, 8}, "resource operation failed", progressv1.SpanStatus_SPAN_STATUS_ERROR, []*progressv1.SpanAttribute{
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "aws:s3:Bucket"},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: "uploads"},
+	})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("run.Close() = %v", err)
@@ -558,20 +559,13 @@ func TestNumericSpanAttributesLandAsIntValueInTheTraceFile(t *testing.T) {
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-		Span: &progressv1.SpanEvent{
-			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
-			Name:   "upload batch",
-			Status: progressv1.SpanStatus_SPAN_STATUS_OK,
-			Attributes: []*progressv1.SpanAttribute{
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "1048576"},
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "150"},
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"},
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE, Value: "1"},
-			},
-		},
-	}})
+	endScope(s, []byte{1, 2, 3, 4, 5, 6, 7, 8}, "upload batch", progressv1.SpanStatus_SPAN_STATUS_OK, []*progressv1.SpanAttribute{
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "1048576"},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "150"},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"},
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_EXIT_CODE, Value: "1"},
+	})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("run.Close() = %v", err)
@@ -613,15 +607,9 @@ func TestNonNumericValueForANumericKeyDegradesToStringValue(t *testing.T) {
 	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-		Span: &progressv1.SpanEvent{
-			SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8},
-			Name:   "malformed byte count",
-			Attributes: []*progressv1.SpanAttribute{
-				{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "not-a-number"},
-			},
-		},
-	}})
+	endScope(s, []byte{1, 2, 3, 4, 5, 6, 7, 8}, "malformed byte count", progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED, []*progressv1.SpanAttribute{
+		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "not-a-number"},
+	})
 
 	if err := run.Close(); err != nil {
 		t.Fatalf("run.Close() = %v", err)
@@ -700,7 +688,7 @@ func TestProviderProcessOutputShowsOnlyWhenVerboseAndNeverEntersABlock(t *testin
 			t.Cleanup(func() { _ = s.Close() })
 
 			const marker = "raw subprocess output"
-			s.Event(declareProvisioning())
+			startProvisioning(s)
 			s.Event(progress("a line the phase owns"))
 			if _, err := s.ProcessWriter("aws", progressv1.Stream_STREAM_STDOUT).Write([]byte(marker + "\n")); err != nil {
 				t.Fatalf("Write() = %v", err)
@@ -835,8 +823,8 @@ func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
 	if level := got[0].GetLevel(); level != progressv1.Level_LEVEL_INFO {
 		t.Errorf("level = %v, want INFO", level)
 	}
-	if got[0].GetEvent() != nil {
-		t.Errorf("body = %v, want a message-only event", got[0].GetEvent())
+	if got[0].GetBody() != nil {
+		t.Errorf("body = %v, want a message-only event", got[0].GetBody())
 	}
 }
 
@@ -875,8 +863,8 @@ func TestFormatAxis(t *testing.T) {
 		s.Deployed("Deployed", nil, Flip{}, nil, nil)
 
 		lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-		if len(lines) != 4 {
-			t.Fatalf("got %d stdout lines, want 4 (build stage plan, build progress, progress, deployed): %q", len(lines), out.String())
+		if len(lines) != 6 {
+			t.Fatalf("got %d stdout lines, want 6 (three started scopes, build progress, progress, deployed): %q", len(lines), out.String())
 		}
 		for _, line := range lines {
 			var rec map[string]any
@@ -884,11 +872,11 @@ func TestFormatAxis(t *testing.T) {
 				t.Fatalf("line %q is not valid JSON: %v", line, err)
 			}
 		}
-		if got := parseNDJSON(t, out.String()); len(got) != 4 || got[3].GetResult() == nil {
-			t.Errorf("stream = %q, want four envelopes ending in the run result", out.String())
+		if got := parseNDJSON(t, out.String()); len(got) != 6 || got[5].GetResult() == nil {
+			t.Errorf("stream = %q, want six envelopes ending in the run result", out.String())
 		}
-		if strings.Contains(lines[2], "\r") || strings.HasPrefix(lines[2], "Uploading") {
-			t.Errorf("progress line %q looks like the raw human line, not a JSON record", lines[2])
+		if strings.Contains(lines[4], "\r") || strings.HasPrefix(lines[4], "Uploading") {
+			t.Errorf("progress line %q looks like the raw human line, not a JSON record", lines[4])
 		}
 	})
 
@@ -919,7 +907,7 @@ func TestFormatAxis(t *testing.T) {
 		}
 	})
 
-	t.Run("build output rides the stream as a log envelope tagged with the build phase", func(t *testing.T) {
+	t.Run("build output rides the stream as an output line in the build phase", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
@@ -935,12 +923,11 @@ func TestFormatAxis(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("recorded %d envelopes, want the build line sent as one", len(got))
 		}
-		log := got[0].GetOperation().GetLog()
-		if log.GetMessage() != "webpack compiled" {
-			t.Errorf("log message = %q, want the build line", log.GetMessage())
+		if got[0].GetOutput() == nil || got[0].GetMessage() != "webpack compiled" {
+			t.Errorf("event = %s, want the build line as an output line", protojson.Format(got[0]))
 		}
-		if stageKey(log.GetStageId()) != stageKey(buildStageID) {
-			t.Errorf("log stage = %s, want the environment building phase", stageKey(log.GetStageId()))
+		if stageKey(got[0].GetSpanId()) != stageKey(buildStageID) {
+			t.Errorf("output scope = %s, want the environment building phase", stageKey(got[0].GetSpanId()))
 		}
 		if got := readLog(t, s.LogPath()); !strings.Contains(got, "webpack compiled") {
 			t.Errorf("log = %q, want the build output recorded in the run log too", got)
@@ -955,7 +942,7 @@ func TestFormatAxis(t *testing.T) {
 		s := New(&out, run, Presentation{Format: FormatHuman, Verbose: true, Width: defaultWidth})
 		t.Cleanup(func() { _ = s.Close() })
 
-		s.Event(declareProvisioning())
+		startProvisioning(s)
 		s.Event(progress("Building project"))
 		s.Event(closeProvisioning())
 
@@ -969,7 +956,7 @@ func TestFormatAxis(t *testing.T) {
 	})
 }
 
-func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
+func TestAnEndedScopeWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 	t.Parallel()
 
 	stage := []byte{7, 0, 0, 0, 0, 0, 0, 0}
@@ -992,24 +979,14 @@ func TestSpanWithoutAUsableEndFallsBackToElapsedWallClock(t *testing.T) {
 			t.Cleanup(func() { _ = s.Close() })
 			s.stream.r.useClock(func() time.Time { return now })
 
-			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-				StagePlan: &progressv1.StagePlanEvent{
-					Stages: []*progressv1.Stage{{Id: stage, Title: "Provisioning"}},
-				},
-			}})
-			s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-				Span: &progressv1.SpanEvent{
-					SpanId:            stage,
-					Name:              "provision",
-					StartTimeUnixNano: start.UnixNano(),
-					EndTimeUnixNano:   tc.end,
-					Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
-				},
+			startScopes(s, scope{id: stage, title: "Provisioning"})
+			s.Event(&progressv1.OperationEvent{TimeUnixNano: tc.end, SpanId: stage, Body: &progressv1.OperationEvent_Ended{
+				Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK, StartTimeUnixNano: start.UnixNano()},
 			}})
 
 			got := s.stream.r.plan.nodes[stageKey(stage)].doneDur
 			if got < 2*time.Minute || got > 2*time.Minute+time.Second {
-				t.Errorf("committed duration = %v, want the 2m the stage actually ran, not a collapsed span end", got)
+				t.Errorf("committed duration = %v, want the 2m the stage actually ran, not a collapsed end", got)
 			}
 		})
 	}
@@ -1042,32 +1019,18 @@ func TestEveryEnvironmentBlockNamesThePhaseThatFilledIt(t *testing.T) {
 	s, out, _ := newTestSession(t, "ocel deploy")
 
 	uploadStageID := naming.PhaseID(naming.UnitEnvironment, naming.PhaseUploading)
-	closing := func(id []byte) *progressv1.OperationEvent {
-		return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-			Span: &progressv1.SpanEvent{
-				SpanId:            id,
-				StartTimeUnixNano: 1,
-				EndTimeUnixNano:   int64(time.Second) + 1,
-				Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
-			},
-		}}
-	}
 
 	s.Building()
 	s.BuildOK()
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-		StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-			{Id: naming.UnitID(naming.UnitEnvironment), Title: "Environment"},
-			{Id: testStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Provisioning", Phase: progressv1.Phase_PHASE_PROVISION},
-			{Id: uploadStageID, ParentId: naming.UnitID(naming.UnitEnvironment), Title: "Uploading", Phase: progressv1.Phase_PHASE_DEPLOY},
-		}},
-	}})
+	startScopes(s,
+		scope{id: naming.UnitID(naming.UnitEnvironment), title: "Environment"},
+		scope{id: testStageID, parent: naming.UnitID(naming.UnitEnvironment), title: "Provisioning", phase: progressv1.Phase_PHASE_PROVISION},
+		scope{id: uploadStageID, parent: naming.UnitID(naming.UnitEnvironment), title: "Uploading", phase: progressv1.Phase_PHASE_DEPLOY},
+	)
 	s.Event(progress("provisioning the account"))
-	s.Event(closing(testStageID))
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{StageId: uploadStageID, Message: "uploading the bundle"},
-	}})
-	s.Event(closing(uploadStageID))
+	s.Event(endedOp(testStageID, false, time.Second))
+	s.Event(&progressv1.OperationEvent{SpanId: uploadStageID, Message: "uploading the bundle"})
+	s.Event(endedOp(uploadStageID, false, time.Second))
 
 	got := out.String()
 	for _, want := range []string{"Environment › Building", "Environment › Provisioning", "Environment › Uploading"} {
@@ -1152,16 +1115,9 @@ func TestAFailedPhaseShowsItsRawOutputWhateverTheVerbosity(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
 
-		s.Event(declareProvisioning())
+		startProvisioning(s)
 		s.Event(logLine("error: creating bucket assets: AccessDenied"))
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{
-			Span: &progressv1.SpanEvent{
-				SpanId:            testStageID,
-				StartTimeUnixNano: 1,
-				EndTimeUnixNano:   int64(time.Second) + 1,
-				Status:            progressv1.SpanStatus_SPAN_STATUS_ERROR,
-			},
-		}})
+		s.Event(endedOp(testStageID, true, time.Second))
 
 		if got := out.String(); !strings.Contains(got, blockIndent+"error: creating bucket assets: AccessDenied\n") {
 			t.Errorf("stdout = %q, want the failed phase's raw output shown without being asked twice", got)
@@ -1172,7 +1128,7 @@ func TestAFailedPhaseShowsItsRawOutputWhateverTheVerbosity(t *testing.T) {
 		t.Parallel()
 		s, out, _ := newTestSession(t, "ocel deploy")
 
-		s.Event(declareProvisioning())
+		startProvisioning(s)
 		s.Event(logLine("error: creating bucket assets: AccessDenied"))
 		s.Fail(errors.New("provision production: AccessDenied"))
 
@@ -1198,8 +1154,8 @@ func TestABuildLineThatCollapsesToNothingIsNeverEmitted(t *testing.T) {
 
 	var messages []string
 	for _, ev := range parseNDJSON(t, out.String()) {
-		if log := ev.GetOperation().GetLog(); log != nil {
-			messages = append(messages, log.GetMessage())
+		if ev.GetOutput() != nil {
+			messages = append(messages, ev.GetMessage())
 		}
 	}
 	if want := []string{"Packages: +812"}; strings.Join(messages, "|") != strings.Join(want, "|") {
@@ -1230,7 +1186,7 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 			t.Fatalf("stdout = %q, want an orphan buffered until its stage is declared, never committed out of band", got)
 		}
 
-		s.Event(declareProvisioning())
+		startProvisioning(s)
 		s.Event(logLine("and again once it was declared"))
 		s.Event(closeProvisioning())
 
@@ -1250,15 +1206,11 @@ func TestAnOrphanLogWaitsForItsStageAndFoldsIntoThatStagesBlock(t *testing.T) {
 		s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 		vertex := []byte{9, 9, 9, 9, 9, 9, 9, 9}
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-			Log: &progressv1.LogEvent{StageId: vertex, Message: "[build 6/9] RUN pnpm build"},
-		}})
-		s.Event(declareProvisioning())
-		s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
-			StagePlan: &progressv1.StagePlanEvent{Stages: []*progressv1.Stage{
-				{Id: vertex, ParentId: testStageID, Title: "RUN pnpm build"},
-			}},
-		}})
+		s.Event(outputOp(vertex, "[build 6/9] RUN pnpm build"))
+		startProvisioning(s)
+		startScopes(s, []scope{
+			{id: vertex, parent: testStageID, title: "RUN pnpm build"},
+		}...)
 		s.Event(closeProvisioning())
 
 		if got := out.String(); !strings.Contains(got, blockIndent+"[build 6/9] RUN pnpm build\n") {
@@ -1271,24 +1223,17 @@ func TestAnOrphanWhoseStageIsNeverDeclaredNeverCommits(t *testing.T) {
 	t.Parallel()
 	s, out, logPath := newTestSession(t, "ocel deploy")
 
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-		Log: &progressv1.LogEvent{StageId: []byte{1, 2, 3, 4, 5, 6, 7, 8}, Message: "a stage nothing ever declared"},
-	}})
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
-		Log: &progressv1.LogEvent{Message: "no stage at all"},
-	}})
-	s.Event(declareProvisioning())
+	s.Event(outputOp([]byte{1, 2, 3, 4, 5, 6, 7, 8}, "a stage nothing ever declared"))
+	startProvisioning(s)
 	s.Event(closeProvisioning())
 	s.Deployed("Deployed", nil, Flip{}, nil, nil)
 
 	got := out.String()
-	for _, unwanted := range []string{"a stage nothing ever declared", "no stage at all"} {
-		if strings.Contains(got, unwanted) {
-			t.Errorf("stdout = %q, want %q kept out of the human projection — nothing commits out of band", got, unwanted)
-		}
+	if strings.Contains(got, "a stage nothing ever declared") {
+		t.Errorf("stdout = %q, want the orphan kept out of the human projection — nothing commits out of band", got)
 	}
-	if log := readLog(t, logPath); !strings.Contains(log, "a stage nothing ever declared") || !strings.Contains(log, "no stage at all") {
-		t.Errorf("log = %q, want both lines recorded even though neither reaches a block", log)
+	if log := readLog(t, logPath); !strings.Contains(log, "a stage nothing ever declared") {
+		t.Errorf("log = %q, want the orphan recorded even though it never reaches a block", log)
 	}
 }
 
@@ -1297,7 +1242,7 @@ func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) 
 	s, out, _ := newVerboseTestSession(t, "ocel deploy")
 
 	const padded = "Route (app)                     Size     First Load JS   "
-	s.Event(declareProvisioning())
+	startProvisioning(s)
 	s.Event(logLine(padded))
 	s.Event(logLine(""))
 	s.Event(closeProvisioning())
@@ -1314,7 +1259,7 @@ func TestABlockCommitsItsLinesVerbatimRightHandWhitespaceIncluded(t *testing.T) 
 func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the stream re-declares the build phase after the resume", func(t *testing.T) {
+	t.Run("the stream starts the build phase again after the resume", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
@@ -1334,26 +1279,20 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 				order = append(order, "waiting")
 			case ev.GetResumed() != nil:
 				order = append(order, "resumed")
-			case ev.GetOperation().GetStagePlan() != nil:
-				for _, st := range ev.GetOperation().GetStagePlan().GetStages() {
-					if bytes.Equal(st.GetId(), buildStageID) {
-						order = append(order, "build phase declared")
-					}
-				}
-			case ev.GetOperation().GetSpan() != nil:
-				if bytes.Equal(ev.GetOperation().GetSpan().GetSpanId(), buildStageID) {
-					order = append(order, "build phase ended")
-				}
+			case ev.GetStarted() != nil && bytes.Equal(ev.GetSpanId(), buildStageID):
+				order = append(order, "build phase started")
+			case ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), buildStageID):
+				order = append(order, "build phase ended")
 			}
 		}
 
-		want := []string{"build phase declared", "waiting", "resumed", "build phase declared", "build phase ended"}
+		want := []string{"build phase started", "waiting", "resumed", "build phase started", "build phase ended"}
 		if strings.Join(order, ", ") != strings.Join(want, ", ") {
 			t.Errorf("stream = %v, want %v", order, want)
 		}
 	})
 
-	t.Run("the resumed build ends on a span marked with the retry count", func(t *testing.T) {
+	t.Run("the resumed build ends marked with the retry count", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		run := startTestRun(t, dir, "ocel deploy")
@@ -1366,18 +1305,18 @@ func TestAPausedBuildResumesAsAFreshPhase(t *testing.T) {
 		s.Resume()
 		s.BuildOK()
 
-		var spans []*progressv1.SpanEvent
+		var ends []*progressv1.Ended
 		for _, ev := range parseNDJSON(t, out.String()) {
-			if span := ev.GetOperation().GetSpan(); span != nil && bytes.Equal(span.GetSpanId(), buildStageID) {
-				spans = append(spans, span)
+			if ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), buildStageID) {
+				ends = append(ends, ev.GetEnded())
 			}
 		}
-		if len(spans) != 1 {
-			t.Fatalf("stream contains %d build spans, want the one the resumed phase ends on", len(spans))
+		if len(ends) != 1 {
+			t.Fatalf("stream ends the build %d times, want once, when the resumed phase ends", len(ends))
 		}
-		attrs := spans[0].GetAttributes()
+		attrs := ends[0].GetAttributes()
 		if len(attrs) != 1 || attrs[0].GetKey() != progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT || attrs[0].GetValue() != "1" {
-			t.Errorf("build span attributes = %v, want the retry count at 1", attrs)
+			t.Errorf("the build ends with %d attributes, want only the retry count, at 1", len(attrs))
 		}
 	})
 
@@ -1433,9 +1372,7 @@ func TestAProviderEventKeepsItsEnvelopeOnTheRunsStream(t *testing.T) {
 		Subject:      "web",
 		Message:      "Uploading 3 function artifacts",
 		SpanId:       appStage(1),
-		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
-			StageId: appStage(1), Message: "Uploading 3 function artifacts",
-		}},
+		Body:         &progressv1.OperationEvent_Counter{Counter: &progressv1.Counter{Current: 1, Total: u32(3)}},
 	})
 
 	got := parseNDJSON(t, out.String())
@@ -1454,6 +1391,9 @@ func TestAProviderEventKeepsItsEnvelopeOnTheRunsStream(t *testing.T) {
 	}
 	if !bytes.Equal(ev.GetSpanId(), appStage(1)) {
 		t.Errorf("span id = %x, want the provider's %x", ev.GetSpanId(), appStage(1))
+	}
+	if c := ev.GetCounter(); c.GetCurrent() != 1 || c.GetTotal() != 3 {
+		t.Errorf("counter = %d/%d, want the provider's 1/3 as the run event's own body", c.GetCurrent(), c.GetTotal())
 	}
 }
 
@@ -1496,8 +1436,8 @@ func TestAProvidersMessageOnlyEventIsAMessageOnlyRunEvent(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("recorded %d envelopes, want 1", len(got))
 	}
-	if got[0].GetEvent() != nil {
-		t.Errorf("body = %v, want a message-only event", got[0].GetEvent())
+	if got[0].GetBody() != nil {
+		t.Errorf("body = %v, want a message-only event", got[0].GetBody())
 	}
 	if got[0].GetSubject() != "relay" || got[0].GetMessage() != "the plan is unknown" {
 		t.Errorf("subject, message = %q, %q, want the provider's", got[0].GetSubject(), got[0].GetMessage())
@@ -1518,7 +1458,7 @@ func TestAPlanTheRunShowsIsInThePlanPhase(t *testing.T) {
 	}
 }
 
-func TestTheProjectBuildIsInTheBuildPhase(t *testing.T) {
+func TestTheProjectBuildIsAScopeInTheBuildPhaseThatStartsSaysOutputsAndEnds(t *testing.T) {
 	t.Parallel()
 	run := startTestRun(t, t.TempDir(), "ocel deploy")
 	var out safeBuffer
@@ -1531,14 +1471,28 @@ func TestTheProjectBuildIsInTheBuildPhase(t *testing.T) {
 	}
 	s.BuildOK()
 
-	got := parseNDJSON(t, out.String())
-	if len(got) != 4 {
-		t.Fatalf("recorded %d envelopes, want stage plan, start, output and end: %q", len(got), out.String())
-	}
-	for i, ev := range got {
-		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD {
-			t.Errorf("event %d phase = %v, want the build phase: %s", i, ev.GetPhase(), protojson.Format(ev))
+	var got []string
+	for _, ev := range parseNDJSON(t, out.String()) {
+		if !bytes.Equal(ev.GetSpanId(), buildStageID) {
+			continue
 		}
+		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD {
+			t.Errorf("%s is in phase %v, want the build phase", protojson.Format(ev), ev.GetPhase())
+		}
+		switch {
+		case ev.GetStarted() != nil:
+			got = append(got, "started "+ev.GetMessage())
+		case ev.GetOutput() != nil:
+			got = append(got, "output "+ev.GetMessage())
+		case ev.GetEnded() != nil:
+			got = append(got, "ended "+ev.GetEnded().GetStatus().String())
+		case ev.GetBody() == nil:
+			got = append(got, "said "+ev.GetMessage())
+		}
+	}
+	want := []string{"started Building", "said Building project", "output webpack compiled", "ended SPAN_STATUS_OK"}
+	if strings.Join(got, ", ") != strings.Join(want, ", ") {
+		t.Errorf("the build scope's events = %q, want %q", got, want)
 	}
 }
 
@@ -1588,11 +1542,11 @@ func TestAnEndedScopeIsATraceSpanNamedForWhatItStartedAsUnderItsParent(t *testin
 	t.Cleanup(func() { _ = s.Close() })
 
 	unit, phase := []byte{1, 1, 1, 1, 1, 1, 1, 1}, []byte{2, 2, 2, 2, 2, 2, 2, 2}
-	s.Event(&progressv1.OperationEvent{SpanId: unit, Message: "web", Event: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
-	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, SpanId: phase, Message: "Uploading", Event: &progressv1.OperationEvent_Started{
+	s.Event(&progressv1.OperationEvent{SpanId: unit, Message: "web", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
+	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, SpanId: phase, Message: "Uploading", Body: &progressv1.OperationEvent_Started{
 		Started: &progressv1.Started{ParentSpanId: unit},
 	}})
-	s.Event(&progressv1.OperationEvent{TimeUnixNano: 9_000_000_000, SpanId: phase, Event: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
+	s.Event(&progressv1.OperationEvent{TimeUnixNano: 9_000_000_000, SpanId: phase, Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 		Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
 		StartTimeUnixNano: 1_000_000_000,
 		Attributes:        []*progressv1.SpanAttribute{{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"}},
@@ -1617,10 +1571,10 @@ func TestAnOutputLineAndACounterReachTheRunLog(t *testing.T) {
 	t.Parallel()
 	s, _, logPath := newTestSession(t, "ocel deploy")
 
-	s.Event(&progressv1.OperationEvent{SpanId: testStageID, Message: "Packages: +812", Event: &progressv1.OperationEvent_Output{
+	s.Event(&progressv1.OperationEvent{SpanId: testStageID, Message: "Packages: +812", Body: &progressv1.OperationEvent_Output{
 		Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
 	}})
-	s.Event(&progressv1.OperationEvent{SpanId: testStageID, Message: "Generating static pages", Event: &progressv1.OperationEvent_Counter{
+	s.Event(&progressv1.OperationEvent{SpanId: testStageID, Message: "Generating static pages", Body: &progressv1.OperationEvent_Counter{
 		Counter: &progressv1.Counter{Current: 28, Total: u32(28)},
 	}})
 	if err := s.Close(); err != nil {

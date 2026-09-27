@@ -11,7 +11,7 @@ import (
 func projectPlan(t *testing.T, plan *planv1.ChangePlan) string {
 	t.Helper()
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
-	lines := p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: plan}})
+	lines := p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: plan}})
 	return strings.Join(lines, "\n")
 }
 
@@ -126,7 +126,7 @@ func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 	t.Parallel()
 
 	p := newProjector(Presentation{Format: FormatHuman, Color: true, Width: defaultWidth})
-	got := strings.Join(p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
+	got := strings.Join(p.project(&streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
 		Headline: "Proposed changes to the production bootstrap",
 		Groups: []*planv1.ChangeGroup{
 			{

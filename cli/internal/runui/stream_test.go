@@ -46,19 +46,14 @@ func parseNDJSON(t *testing.T, raw string) []*streamv1.RunEvent {
 func TestCarriageReturnRewritesCollapseOnIngest(t *testing.T) {
 	t.Parallel()
 
-	got := recorded(t, operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
-		Progress: &progressv1.ProgressEvent{
-			StageId: appStage(1),
-			Message: "downloading 10%\rdownloading 60%\rdownloading 100%",
-		},
-	}}))
+	got := recorded(t, progressEvent(appStage(1), "downloading 10%\rdownloading 60%\rdownloading 100%", 0, nil))
 
 	if len(got) != 1 {
 		t.Fatalf("recorded %d envelopes, want 1", len(got))
 	}
-	if want := "downloading 100%"; got[0].GetOperation().GetProgress().GetMessage() != want {
+	if want := "downloading 100%"; got[0].GetMessage() != want {
 		t.Errorf("recorded message = %q, want %q — rewrites collapse before anything projects them",
-			got[0].GetOperation().GetProgress().GetMessage(), want)
+			got[0].GetMessage(), want)
 	}
 }
 
@@ -113,7 +108,7 @@ func TestPlanGroupsReachTheStreamInSpineOrderWhateverOrderTheyArriveIn(t *testin
 }
 
 func planOf(groups []*planv1.ChangeGroup) *streamv1.RunEvent {
-	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
+	return &streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
 		Subject: "production",
 		Groups:  groups,
 	}}}
@@ -128,7 +123,7 @@ func groupNames(ev *streamv1.RunEvent) string {
 }
 
 func plan(changes []*planv1.Change) *streamv1.RunEvent {
-	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
+	return &streamv1.RunEvent{Body: &streamv1.RunEvent_Plan{Plan: &planv1.ChangePlan{
 		Subject: "production",
 		Groups:  []*planv1.ChangeGroup{{Kind: "app", Name: "web", Changes: changes}},
 	}}}
@@ -151,9 +146,7 @@ func TestNDJSONIsOneEnvelopePerLineAndNeverBuffers(t *testing.T) {
 	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
 	t.Cleanup(func() { _ = s.Close() })
 
-	s.Emit(operation(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{StagePlan: &progressv1.StagePlanEvent{
-		Stages: []*progressv1.Stage{{Id: appStage(1), Title: "web"}},
-	}}}))
+	s.Emit(startedEvent(appStage(1), nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
 
 	if lines := strings.Count(out.String(), "\n"); lines != 1 {
 		t.Errorf("after one envelope the stream has %d lines, want 1 — the machine surface is the off-TTY liveness surface", lines)
@@ -168,7 +161,7 @@ func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *t
 
 	var out safeBuffer
 	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
-	s.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
+	s.Emit(&streamv1.RunEvent{Body: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}

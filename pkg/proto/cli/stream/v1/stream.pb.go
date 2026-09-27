@@ -34,15 +34,20 @@ type RunEvent struct {
 	Subject string                 `protobuf:"bytes,11,opt,name=subject,proto3" json:"subject,omitempty"`
 	Message string                 `protobuf:"bytes,12,opt,name=message,proto3" json:"message,omitempty"`
 	SpanId  []byte                 `protobuf:"bytes,13,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
-	// Types that are valid to be assigned to Event:
+	// Types that are valid to be assigned to Body:
 	//
+	//	*RunEvent_Started
+	//	*RunEvent_Ended
+	//	*RunEvent_Output
+	//	*RunEvent_Counter
 	//	*RunEvent_Plan
-	//	*RunEvent_Operation
+	//	*RunEvent_DnsManualRecords
+	//	*RunEvent_Outcome
 	//	*RunEvent_Waiting
 	//	*RunEvent_Resumed
 	//	*RunEvent_Result
 	//	*RunEvent_Identity
-	Event         isRunEvent_Event `protobuf_oneof:"event"`
+	Body          isRunEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -119,26 +124,71 @@ func (x *RunEvent) GetSpanId() []byte {
 	return nil
 }
 
-func (x *RunEvent) GetEvent() isRunEvent_Event {
+func (x *RunEvent) GetBody() isRunEvent_Body {
 	if x != nil {
-		return x.Event
+		return x.Body
+	}
+	return nil
+}
+
+func (x *RunEvent) GetStarted() *v1.Started {
+	if x != nil {
+		if x, ok := x.Body.(*RunEvent_Started); ok {
+			return x.Started
+		}
+	}
+	return nil
+}
+
+func (x *RunEvent) GetEnded() *v1.Ended {
+	if x != nil {
+		if x, ok := x.Body.(*RunEvent_Ended); ok {
+			return x.Ended
+		}
+	}
+	return nil
+}
+
+func (x *RunEvent) GetOutput() *v1.Output {
+	if x != nil {
+		if x, ok := x.Body.(*RunEvent_Output); ok {
+			return x.Output
+		}
+	}
+	return nil
+}
+
+func (x *RunEvent) GetCounter() *v1.Counter {
+	if x != nil {
+		if x, ok := x.Body.(*RunEvent_Counter); ok {
+			return x.Counter
+		}
 	}
 	return nil
 }
 
 func (x *RunEvent) GetPlan() *v11.ChangePlan {
 	if x != nil {
-		if x, ok := x.Event.(*RunEvent_Plan); ok {
+		if x, ok := x.Body.(*RunEvent_Plan); ok {
 			return x.Plan
 		}
 	}
 	return nil
 }
 
-func (x *RunEvent) GetOperation() *v1.OperationEvent {
+func (x *RunEvent) GetDnsManualRecords() *v1.DnsManualRecordsEvent {
 	if x != nil {
-		if x, ok := x.Event.(*RunEvent_Operation); ok {
-			return x.Operation
+		if x, ok := x.Body.(*RunEvent_DnsManualRecords); ok {
+			return x.DnsManualRecords
+		}
+	}
+	return nil
+}
+
+func (x *RunEvent) GetOutcome() *v1.ResultEvent {
+	if x != nil {
+		if x, ok := x.Body.(*RunEvent_Outcome); ok {
+			return x.Outcome
 		}
 	}
 	return nil
@@ -146,7 +196,7 @@ func (x *RunEvent) GetOperation() *v1.OperationEvent {
 
 func (x *RunEvent) GetWaiting() *WaitingEvent {
 	if x != nil {
-		if x, ok := x.Event.(*RunEvent_Waiting); ok {
+		if x, ok := x.Body.(*RunEvent_Waiting); ok {
 			return x.Waiting
 		}
 	}
@@ -155,7 +205,7 @@ func (x *RunEvent) GetWaiting() *WaitingEvent {
 
 func (x *RunEvent) GetResumed() *ResumedEvent {
 	if x != nil {
-		if x, ok := x.Event.(*RunEvent_Resumed); ok {
+		if x, ok := x.Body.(*RunEvent_Resumed); ok {
 			return x.Resumed
 		}
 	}
@@ -164,7 +214,7 @@ func (x *RunEvent) GetResumed() *ResumedEvent {
 
 func (x *RunEvent) GetResult() *RunResultEvent {
 	if x != nil {
-		if x, ok := x.Event.(*RunEvent_Result); ok {
+		if x, ok := x.Body.(*RunEvent_Result); ok {
 			return x.Result
 		}
 	}
@@ -173,23 +223,43 @@ func (x *RunEvent) GetResult() *RunResultEvent {
 
 func (x *RunEvent) GetIdentity() *IdentityEvent {
 	if x != nil {
-		if x, ok := x.Event.(*RunEvent_Identity); ok {
+		if x, ok := x.Body.(*RunEvent_Identity); ok {
 			return x.Identity
 		}
 	}
 	return nil
 }
 
-type isRunEvent_Event interface {
-	isRunEvent_Event()
+type isRunEvent_Body interface {
+	isRunEvent_Body()
+}
+
+type RunEvent_Started struct {
+	Started *v1.Started `protobuf:"bytes,14,opt,name=started,proto3,oneof"`
+}
+
+type RunEvent_Ended struct {
+	Ended *v1.Ended `protobuf:"bytes,15,opt,name=ended,proto3,oneof"`
+}
+
+type RunEvent_Output struct {
+	Output *v1.Output `protobuf:"bytes,16,opt,name=output,proto3,oneof"`
+}
+
+type RunEvent_Counter struct {
+	Counter *v1.Counter `protobuf:"bytes,17,opt,name=counter,proto3,oneof"`
 }
 
 type RunEvent_Plan struct {
 	Plan *v11.ChangePlan `protobuf:"bytes,1,opt,name=plan,proto3,oneof"`
 }
 
-type RunEvent_Operation struct {
-	Operation *v1.OperationEvent `protobuf:"bytes,2,opt,name=operation,proto3,oneof"`
+type RunEvent_DnsManualRecords struct {
+	DnsManualRecords *v1.DnsManualRecordsEvent `protobuf:"bytes,18,opt,name=dns_manual_records,json=dnsManualRecords,proto3,oneof"`
+}
+
+type RunEvent_Outcome struct {
+	Outcome *v1.ResultEvent `protobuf:"bytes,19,opt,name=outcome,proto3,oneof"`
 }
 
 type RunEvent_Waiting struct {
@@ -208,17 +278,27 @@ type RunEvent_Identity struct {
 	Identity *IdentityEvent `protobuf:"bytes,7,opt,name=identity,proto3,oneof"`
 }
 
-func (*RunEvent_Plan) isRunEvent_Event() {}
+func (*RunEvent_Started) isRunEvent_Body() {}
 
-func (*RunEvent_Operation) isRunEvent_Event() {}
+func (*RunEvent_Ended) isRunEvent_Body() {}
 
-func (*RunEvent_Waiting) isRunEvent_Event() {}
+func (*RunEvent_Output) isRunEvent_Body() {}
 
-func (*RunEvent_Resumed) isRunEvent_Event() {}
+func (*RunEvent_Counter) isRunEvent_Body() {}
 
-func (*RunEvent_Result) isRunEvent_Event() {}
+func (*RunEvent_Plan) isRunEvent_Body() {}
 
-func (*RunEvent_Identity) isRunEvent_Event() {}
+func (*RunEvent_DnsManualRecords) isRunEvent_Body() {}
+
+func (*RunEvent_Outcome) isRunEvent_Body() {}
+
+func (*RunEvent_Waiting) isRunEvent_Body() {}
+
+func (*RunEvent_Resumed) isRunEvent_Body() {}
+
+func (*RunEvent_Result) isRunEvent_Body() {}
+
+func (*RunEvent_Identity) isRunEvent_Body() {}
 
 type IdentityEvent struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -765,7 +845,7 @@ var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdb\x04\n" +
+	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x19common/plan/v1/plan.proto\x1a!common/progress/v1/progress.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x89\a\n" +
 	"\bRunEvent\x12.\n" +
 	"\x04time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12/\n" +
 	"\x05level\x18\t \x01(\x0e2\x19.common.progress.v1.LevelR\x05level\x12/\n" +
@@ -774,14 +854,19 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\asubject\x18\v \x01(\tR\asubject\x12\x18\n" +
 	"\amessage\x18\f \x01(\tR\amessage\x12#\n" +
 	"\aspan_id\x18\r \x01(\fB\n" +
-	"\xbaH\a\xd8\x01\x01z\x02h\bR\x06spanId\x120\n" +
-	"\x04plan\x18\x01 \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12B\n" +
-	"\toperation\x18\x02 \x01(\v2\".common.progress.v1.OperationEventH\x00R\toperation\x127\n" +
+	"\xbaH\a\xd8\x01\x01z\x02h\bR\x06spanId\x127\n" +
+	"\astarted\x18\x0e \x01(\v2\x1b.common.progress.v1.StartedH\x00R\astarted\x121\n" +
+	"\x05ended\x18\x0f \x01(\v2\x19.common.progress.v1.EndedH\x00R\x05ended\x124\n" +
+	"\x06output\x18\x10 \x01(\v2\x1a.common.progress.v1.OutputH\x00R\x06output\x127\n" +
+	"\acounter\x18\x11 \x01(\v2\x1b.common.progress.v1.CounterH\x00R\acounter\x120\n" +
+	"\x04plan\x18\x01 \x01(\v2\x1a.common.plan.v1.ChangePlanH\x00R\x04plan\x12Y\n" +
+	"\x12dns_manual_records\x18\x12 \x01(\v2).common.progress.v1.DnsManualRecordsEventH\x00R\x10dnsManualRecords\x12;\n" +
+	"\aoutcome\x18\x13 \x01(\v2\x1f.common.progress.v1.ResultEventH\x00R\aoutcome\x127\n" +
 	"\awaiting\x18\x03 \x01(\v2\x1b.cli.stream.v1.WaitingEventH\x00R\awaiting\x127\n" +
 	"\aresumed\x18\x04 \x01(\v2\x1b.cli.stream.v1.ResumedEventH\x00R\aresumed\x127\n" +
 	"\x06result\x18\x05 \x01(\v2\x1d.cli.stream.v1.RunResultEventH\x00R\x06result\x12:\n" +
-	"\bidentity\x18\a \x01(\v2\x1c.cli.stream.v1.IdentityEventH\x00R\bidentityB\a\n" +
-	"\x05event\"\xb2\x01\n" +
+	"\bidentity\x18\a \x01(\v2\x1c.cli.stream.v1.IdentityEventH\x00R\bidentityB\x06\n" +
+	"\x04body\"\xb2\x01\n" +
 	"\rIdentityEvent\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12/\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12,\n" +
@@ -839,48 +924,58 @@ func file_cli_stream_v1_stream_proto_rawDescGZIP() []byte {
 
 var file_cli_stream_v1_stream_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_cli_stream_v1_stream_proto_goTypes = []any{
-	(*RunEvent)(nil),              // 0: cli.stream.v1.RunEvent
-	(*IdentityEvent)(nil),         // 1: cli.stream.v1.IdentityEvent
-	(*Party)(nil),                 // 2: cli.stream.v1.Party
-	(*WaitingEvent)(nil),          // 3: cli.stream.v1.WaitingEvent
-	(*MissingVariables)(nil),      // 4: cli.stream.v1.MissingVariables
-	(*MissingVariable)(nil),       // 5: cli.stream.v1.MissingVariable
-	(*MissingGroup)(nil),          // 6: cli.stream.v1.MissingGroup
-	(*ResumedEvent)(nil),          // 7: cli.stream.v1.ResumedEvent
-	(*RunResultEvent)(nil),        // 8: cli.stream.v1.RunResultEvent
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(v1.Level)(0),                 // 10: common.progress.v1.Level
-	(v1.Phase)(0),                 // 11: common.progress.v1.Phase
-	(*v11.ChangePlan)(nil),        // 12: common.plan.v1.ChangePlan
-	(*v1.OperationEvent)(nil),     // 13: common.progress.v1.OperationEvent
-	(v12.Tier)(0),                 // 14: common.environment.v1.Tier
-	(*v1.FlipBound)(nil),          // 15: common.progress.v1.FlipBound
-	(*v1.AppResult)(nil),          // 16: common.progress.v1.AppResult
+	(*RunEvent)(nil),                 // 0: cli.stream.v1.RunEvent
+	(*IdentityEvent)(nil),            // 1: cli.stream.v1.IdentityEvent
+	(*Party)(nil),                    // 2: cli.stream.v1.Party
+	(*WaitingEvent)(nil),             // 3: cli.stream.v1.WaitingEvent
+	(*MissingVariables)(nil),         // 4: cli.stream.v1.MissingVariables
+	(*MissingVariable)(nil),          // 5: cli.stream.v1.MissingVariable
+	(*MissingGroup)(nil),             // 6: cli.stream.v1.MissingGroup
+	(*ResumedEvent)(nil),             // 7: cli.stream.v1.ResumedEvent
+	(*RunResultEvent)(nil),           // 8: cli.stream.v1.RunResultEvent
+	(*timestamppb.Timestamp)(nil),    // 9: google.protobuf.Timestamp
+	(v1.Level)(0),                    // 10: common.progress.v1.Level
+	(v1.Phase)(0),                    // 11: common.progress.v1.Phase
+	(*v1.Started)(nil),               // 12: common.progress.v1.Started
+	(*v1.Ended)(nil),                 // 13: common.progress.v1.Ended
+	(*v1.Output)(nil),                // 14: common.progress.v1.Output
+	(*v1.Counter)(nil),               // 15: common.progress.v1.Counter
+	(*v11.ChangePlan)(nil),           // 16: common.plan.v1.ChangePlan
+	(*v1.DnsManualRecordsEvent)(nil), // 17: common.progress.v1.DnsManualRecordsEvent
+	(*v1.ResultEvent)(nil),           // 18: common.progress.v1.ResultEvent
+	(v12.Tier)(0),                    // 19: common.environment.v1.Tier
+	(*v1.FlipBound)(nil),             // 20: common.progress.v1.FlipBound
+	(*v1.AppResult)(nil),             // 21: common.progress.v1.AppResult
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	9,  // 0: cli.stream.v1.RunEvent.time:type_name -> google.protobuf.Timestamp
 	10, // 1: cli.stream.v1.RunEvent.level:type_name -> common.progress.v1.Level
 	11, // 2: cli.stream.v1.RunEvent.phase:type_name -> common.progress.v1.Phase
-	12, // 3: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
-	13, // 4: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
-	3,  // 5: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
-	7,  // 6: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
-	8,  // 7: cli.stream.v1.RunEvent.result:type_name -> cli.stream.v1.RunResultEvent
-	1,  // 8: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
-	14, // 9: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
-	2,  // 10: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
-	2,  // 11: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
-	4,  // 12: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
-	5,  // 13: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
-	6,  // 14: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
-	15, // 15: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
-	16, // 16: cli.stream.v1.RunResultEvent.apps:type_name -> common.progress.v1.AppResult
-	4,  // 17: cli.stream.v1.RunResultEvent.missing:type_name -> cli.stream.v1.MissingVariables
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	12, // 3: cli.stream.v1.RunEvent.started:type_name -> common.progress.v1.Started
+	13, // 4: cli.stream.v1.RunEvent.ended:type_name -> common.progress.v1.Ended
+	14, // 5: cli.stream.v1.RunEvent.output:type_name -> common.progress.v1.Output
+	15, // 6: cli.stream.v1.RunEvent.counter:type_name -> common.progress.v1.Counter
+	16, // 7: cli.stream.v1.RunEvent.plan:type_name -> common.plan.v1.ChangePlan
+	17, // 8: cli.stream.v1.RunEvent.dns_manual_records:type_name -> common.progress.v1.DnsManualRecordsEvent
+	18, // 9: cli.stream.v1.RunEvent.outcome:type_name -> common.progress.v1.ResultEvent
+	3,  // 10: cli.stream.v1.RunEvent.waiting:type_name -> cli.stream.v1.WaitingEvent
+	7,  // 11: cli.stream.v1.RunEvent.resumed:type_name -> cli.stream.v1.ResumedEvent
+	8,  // 12: cli.stream.v1.RunEvent.result:type_name -> cli.stream.v1.RunResultEvent
+	1,  // 13: cli.stream.v1.RunEvent.identity:type_name -> cli.stream.v1.IdentityEvent
+	19, // 14: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
+	2,  // 15: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
+	2,  // 16: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
+	4,  // 17: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
+	5,  // 18: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
+	6,  // 19: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
+	20, // 20: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
+	21, // 21: cli.stream.v1.RunResultEvent.apps:type_name -> common.progress.v1.AppResult
+	4,  // 22: cli.stream.v1.RunResultEvent.missing:type_name -> cli.stream.v1.MissingVariables
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_cli_stream_v1_stream_proto_init() }
@@ -889,8 +984,13 @@ func file_cli_stream_v1_stream_proto_init() {
 		return
 	}
 	file_cli_stream_v1_stream_proto_msgTypes[0].OneofWrappers = []any{
+		(*RunEvent_Started)(nil),
+		(*RunEvent_Ended)(nil),
+		(*RunEvent_Output)(nil),
+		(*RunEvent_Counter)(nil),
 		(*RunEvent_Plan)(nil),
-		(*RunEvent_Operation)(nil),
+		(*RunEvent_DnsManualRecords)(nil),
+		(*RunEvent_Outcome)(nil),
 		(*RunEvent_Waiting)(nil),
 		(*RunEvent_Resumed)(nil),
 		(*RunEvent_Result)(nil),

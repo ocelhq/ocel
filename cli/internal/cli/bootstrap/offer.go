@@ -175,7 +175,7 @@ func confirmHealing(ctx context.Context, plan Plan, tier environmentv1.Tier, rep
 }
 
 func reportEvent(rep runui.Reporter, ev *progressv1.OperationEvent) {
-	if ev.GetEvent() != nil && ev.GetOutput() == nil {
+	if ev.GetBody() != nil && ev.GetOutput() == nil {
 		return
 	}
 	switch ev.GetLevel() {

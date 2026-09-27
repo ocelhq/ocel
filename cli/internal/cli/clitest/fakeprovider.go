@@ -208,7 +208,7 @@ func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) 
 		Level:   progressv1.Level_LEVEL_INFO,
 		SpanId:  fakeUnitID,
 		Message: "Environment",
-		Event:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
+		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
 	}); err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) 
 		Level:  progressv1.Level_LEVEL_INFO,
 		Phase:  progressv1.Phase_PHASE_PROVISION,
 		SpanId: fakePhaseID,
-		Event:  &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
+		Body:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
 	})
 }
 
@@ -255,7 +255,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 
 	if err := validateFixtureManifest(req.GetManifest()); err != nil {
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: err.Error()}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: err.Error()}},
 		})
 	}
 
@@ -266,7 +266,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 	if refusal := os.Getenv(FakeNeedsRefusalEnvVar); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
 		})
 	}
 
@@ -317,7 +317,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 	if refusal := refuseUnpublishedFakeBindings(req.GetManifest(), req.GetEnvironment(), req.GetDry()); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
 		})
 	}
 
@@ -335,12 +335,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 
 	if req.GetDry() {
 		if err := stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Plan{Plan: fakeDeployPlan(req)},
+			Body: &progressv1.OperationEvent_Plan{Plan: fakeDeployPlan(req)},
 		}); err != nil {
 			return err
 		}
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 		})
 	}
 
@@ -350,11 +350,11 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 
 	if s.mode == "fail" {
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
 		})
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success:     true,
 			Apps:        fakeAppResults(req.GetManifest()),
 			PromotionId: FakePromotionID,
@@ -740,19 +740,19 @@ func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *contractv
 		return err
 	}
 	if plan := fakeChangePlan(req); plan != nil && req.GetConsented() == nil {
-		if err := stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Plan{Plan: plan}}); err != nil {
+		if err := stream.Send(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: plan}}); err != nil {
 			return err
 		}
 	}
 	if req.GetDry() {
 		journalIntent(req)
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 		})
 	}
 	journalBootstrap(req)
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -832,7 +832,7 @@ func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *con
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -1142,7 +1142,7 @@ func (s *deployFakeProviderServer) UsePreviewWildcard(ctx context.Context, req *
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -1189,7 +1189,7 @@ func (s *deployFakeProviderServer) RemovePreviewWildcard(ctx context.Context, re
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -1204,7 +1204,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 	}
 	if host := req.GetHost(); host != "" && !slices.Contains(fakeConfigured(req), host) {
 		return stream.Send(&progressv1.OperationEvent{
-			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 				Success: false,
 				Error:   fmt.Sprintf("this project does not declare %q: add it to domains.production and run this again — no command edits the config, which declares %s", host, strings.Join(fakeConfigured(req), ", ")),
 			}},
@@ -1236,7 +1236,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 		}
 		if outstanding := os.Getenv(FakeDomainTimeoutEnvVar); outstanding != "" {
 			return stream.Send(&progressv1.OperationEvent{
-				Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
+				Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 					Success: false,
 					Error:   fmt.Sprintf("gave up after 5m0s waiting for https://%s/ to answer as the cloudflare edge; still outstanding: %s", host, outstanding),
 				}},
@@ -1247,7 +1247,7 @@ func (s *deployFakeProviderServer) AddHostname(ctx context.Context, req *contrac
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -1267,7 +1267,7 @@ func (s *deployFakeProviderServer) RemoveHostname(ctx context.Context, req *cont
 		}
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -1355,7 +1355,7 @@ func (s *deployFakeProviderServer) RemoveEnvironment(ctx context.Context, req *c
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 
@@ -1451,7 +1451,7 @@ func (s *deployFakeProviderServer) RemoveProject(ctx context.Context, req *contr
 		return err
 	}
 	return stream.Send(&progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
+		Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},
 	})
 }
 

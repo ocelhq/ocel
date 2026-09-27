@@ -1,4 +1,0 @@
-{"spanId":"AQAAAAAAAAA=","message":"Environment","operation":{"started":{}}}
-{"spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","operation":{"started":{"parentSpanId":"AQAAAAAAAAA="}}}
-{"spanId":"AgAAAAAAAAA=","message":"Bundling web","level":"LEVEL_INFO"}
-{"result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"4000"}}

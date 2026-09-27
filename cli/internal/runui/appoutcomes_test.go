@@ -10,7 +10,7 @@ import (
 )
 
 func providerResult(success bool, apps ...*progressv1.AppResult) *progressv1.OperationEvent {
-	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{
+	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{
 		Result: &progressv1.ResultEvent{Success: success, Apps: apps},
 	}}
 }

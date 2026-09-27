@@ -209,7 +209,7 @@ func (t *eventTrace) Start(at time.Time, stages ...Stage) {
 		t.sender.send(s.scoped(&progressv1.OperationEvent{
 			TimeUnixNano: at.UnixNano(),
 			Message:      s.Title,
-			Event: &progressv1.OperationEvent_Started{Started: &progressv1.Started{
+			Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{
 				ParentSpanId: nonZeroStageID(s.ParentID),
 			}},
 		}))
@@ -233,7 +233,7 @@ func (t *eventTrace) End(stage Stage, phase progressv1.Phase, start, end time.Ti
 		Phase:        phase,
 		Subject:      stage.Subject,
 		SpanId:       stage.ID[:],
-		Event: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
+		Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
 			Status:            status,
 			StartTimeUnixNano: start.UnixNano(),
 			Attributes:        pbAttrs,
