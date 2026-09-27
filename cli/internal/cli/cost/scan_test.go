@@ -209,7 +209,7 @@ func TestAScanStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsItsEstimateAloneO
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, Options{}, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

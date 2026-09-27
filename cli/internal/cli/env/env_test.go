@@ -39,7 +39,7 @@ const fixtureDefinitions = `[
 
 func streamedDeps(stream io.Writer) cmddeps.Deps {
 	deps := clitest.NewDeps()
-	deps.AttachTerminalSink(stream)
+	clitest.AttachTerminalSink(deps, stream)
 	return deps
 }
 
@@ -882,7 +882,7 @@ func TestListingValuesSaysWhoItActsAsInTheCheckPhaseOfItsRunAndPrintsTheListingA
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -908,7 +908,7 @@ func TestWhatTheDeclarationCollectorPrintsReachesTheRunAsOutputAndNeverRawStderr
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runEnvLs(context.Background(), deps, root, envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

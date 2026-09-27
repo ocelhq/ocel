@@ -139,7 +139,7 @@ func TestRunDoctorWithoutAConfig(t *testing.T) {
 	deps := clitest.NewDeps()
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s", code, stdout.String())
@@ -194,7 +194,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -233,7 +233,7 @@ func TestRunDoctorReportsACredentialProblem(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want 1; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -260,7 +260,7 @@ func TestRunDoctorWarnsAboutAStaleBootstrap(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -287,7 +287,7 @@ func TestRunDoctorFailsAnUnfinishedBootstrap(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 1 {
 		t.Fatalf("exit code = %d, want an unfinished apply to fail; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -314,7 +314,7 @@ func TestRunDoctorWarnsAboutAStaleStackNoFeatureRequires(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want warnings alone to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -343,7 +343,7 @@ func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) 
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stderr=%s", err, stderr.String())
 	}
@@ -379,7 +379,7 @@ export default {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -405,7 +405,7 @@ func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) 
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -433,7 +433,7 @@ export default {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a tier nobody asked for to pass; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -466,7 +466,7 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	out := rendered(t, stdout.String())
 
@@ -505,7 +505,7 @@ func TestRunDoctorWarnsThatNothingRenewsAPinnedWildcardAboutToExpire(t *testing.
 	clitest.SetLoggedIn(&deps)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	err := Run(context.Background(), deps, root, &stdout)
 	if code := exitCode(t, err); code != 0 {
 		t.Fatalf("exit code = %d, want a warning rather than a refusal; stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -534,7 +534,7 @@ func TestDoctorChecksTheSetupInTheCheckPhaseOfItsRunAndPrintsItsReportAloneOnStd
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

@@ -51,10 +51,6 @@ func (d Deps) BrowserReachable(stdin io.Reader) bool {
 	return os.Getenv(NoBrowserEnvVar) == "" && d.StdinIsTerminal(stdin)
 }
 
-func (d Deps) AttachTerminalSink(w io.Writer) {
-	d.Events.Attach(runui.NewTerminalSink(d.Presentation(w), w))
-}
-
 func (d Deps) AttachCommandSink(cmd *cobra.Command) {
 	w := ChooseRunOutput(cmd)
 	present := d.Presentation(w)

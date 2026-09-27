@@ -38,7 +38,7 @@ func deployBound(t *testing.T, bindings string) (root string, stdout, stderr byt
 	root, _ = clitest.SetUpDeployFixture(t)
 	writeBoundMonorepo(t, root, bindings)
 
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	err = runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	return root, stdout, stderr, err
 }

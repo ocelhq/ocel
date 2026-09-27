@@ -127,7 +127,7 @@ func TestGateRecoveryTracesEachAttemptAndTheHumanWait(t *testing.T) {
 	var stderr bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		deps.AttachTerminalSink(&out)
+		clitest.AttachTerminalSink(deps, &out)
 		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 	}()
 

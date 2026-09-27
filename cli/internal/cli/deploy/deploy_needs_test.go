@@ -51,7 +51,7 @@ func TestDeployRendersTheNeedsRefusalInHumanMode(t *testing.T) {
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())
@@ -71,7 +71,7 @@ func TestDeployRendersTheNeedsRefusalInJSONMode(t *testing.T) {
 	t.Setenv(clitest.FakeNeedsRefusalEnvVar, needsRefusal)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the unsupported need to fail the deploy; stdout=%s", stdout.String())
@@ -101,7 +101,7 @@ func TestDeployRendersADegradedNeedInHumanMode(t *testing.T) {
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -120,7 +120,7 @@ func TestDeployRendersADegradedNeedAsACheckPhaseWarningInJSON(t *testing.T) {
 	t.Setenv(clitest.FakeDegradedEnvVar, "edge-middleware="+degradedDetail+";ppr-resume=web: the shell comes from the origin. It affects routes /")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -147,7 +147,7 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -164,7 +164,7 @@ func TestDeploySaysNothingAboutNeedsForAnAppThatDeclaresNone(t *testing.T) {
 		useJSONLogFormat(t, &deps)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}

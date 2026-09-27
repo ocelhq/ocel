@@ -24,7 +24,7 @@ func TestRunDeploymentsLs(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -54,7 +54,7 @@ func TestRunDeploymentsLs(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -92,7 +92,7 @@ func TestRunDeploymentsLs(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runPromotionsLs err = nil, want a class-mismatch error")
@@ -121,7 +121,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPromotionsPrune(context.Background(), deps, root, 10); err != nil {
 			t.Fatalf("runPromotionsPrune err = %v; stdout=%s", err, stdout.String())
 		}
@@ -143,7 +143,7 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPromotionsPrune(context.Background(), deps, root, 10)
 		if err == nil {
 			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
@@ -169,7 +169,7 @@ func TestListingDeploymentsSaysWhoItActsAsInTheCheckPhaseAndPrintsItsTableBeside
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 	if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 		t.Fatalf("runPromotionsLs err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
@@ -201,7 +201,7 @@ func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 	if err := runPromotionsPrune(context.Background(), deps, root, 10); err != nil {
 		t.Fatalf("runPromotionsPrune err = %v; stream=%s", err, stream.String())
 	}

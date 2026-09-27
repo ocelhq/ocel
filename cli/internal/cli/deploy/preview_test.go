@@ -51,7 +51,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -88,7 +88,7 @@ func TestRunPreviewUp(t *testing.T) {
 		})
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -113,7 +113,7 @@ func TestRunPreviewUp(t *testing.T) {
 		})
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -145,7 +145,7 @@ func TestRunPreviewUp(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -186,7 +186,7 @@ func TestRunPreviewUp(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -209,7 +209,7 @@ func TestRunPreviewUp(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -234,7 +234,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
@@ -271,7 +271,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -296,7 +296,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
@@ -319,7 +319,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a missing-infrastructure error")
@@ -344,7 +344,7 @@ export default {
 		t.Setenv(clitest.FakeKnownSlugsEnvVar, "my-application,billing")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("n\n")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -393,7 +393,7 @@ export default {
 `)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -416,7 +416,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -447,7 +447,7 @@ func TestRunPreviewRm(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -467,7 +467,7 @@ func TestRunPreviewRm(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging", yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -492,7 +492,7 @@ func TestTearingDownANamedPreviewAsksThroughConsentWhileTheRunIsHeld(t *testing.
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stream, stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 	if err := runPreviewRm(context.Background(), deps, root, previewRmOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("y\n")); err != nil {
 		t.Fatalf("runPreviewRm err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}
@@ -538,7 +538,7 @@ func TestRunPreviewPrune(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := previewPruneOptions{keep: defaultPreviewPruneKeepN}
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -566,7 +566,7 @@ func TestRunPreviewPrune(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := previewPruneOptions{ref: "release/v2", keep: defaultPreviewPruneKeepN}
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -587,7 +587,7 @@ func TestRunPreviewPrune(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		opts := previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewPrune(context.Background(), deps, root, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -609,7 +609,7 @@ func TestListingPreviewsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheList
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runPreviewLs(context.Background(), deps, root, &stdout); err != nil {
 		t.Fatalf("runPreviewLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -753,7 +753,7 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 		root, journal, deps := setUpPreview(t)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -775,11 +775,11 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 		run  func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error
 	}{
 		{"rm", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-			deps.AttachTerminalSink(stdout)
+			clitest.AttachTerminalSink(deps, stdout)
 			return runPreviewRm(context.Background(), deps, root, previewRmOptions{}, stdout, stderr, strings.NewReader(""))
 		}},
 		{"prune", func(t *testing.T, deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
-			deps.AttachTerminalSink(stdout)
+			clitest.AttachTerminalSink(deps, stdout)
 			return runPreviewPrune(context.Background(), deps, root, previewPruneOptions{name: "staging", keep: defaultPreviewPruneKeepN}, stdout, stderr, strings.NewReader(""))
 		}},
 	}

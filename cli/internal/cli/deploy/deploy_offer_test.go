@@ -17,7 +17,7 @@ func TestDeployYesNeverStopsToAsk(t *testing.T) {
 	deps.StdinIsTerminal = func(io.Reader) bool { return true }
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("an unattended deploy against a bootstrap missing a feature it needs was allowed through")
@@ -43,7 +43,7 @@ func TestDeployWithoutATerminalRefusesTheBootstrapItCannotOffer(t *testing.T) {
 			t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 			var stdout, stderr bytes.Buffer
-			deps.AttachTerminalSink(&stdout)
+			clitest.AttachTerminalSink(deps, &stdout)
 			err := runDeploy(context.Background(), deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 			if err == nil {
 				t.Fatal("a deploy against a bootstrap missing a feature it needs was allowed through")

@@ -15,6 +15,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -50,7 +51,7 @@ func TestAddingTheSDKIsAUnitOnTheInitRunAndThePackageManagerSpeaksThroughIt(t *t
 		return nil
 	}
 	var stdout, stderr syncBuffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	dir := initTestDir(t, "proj")
 	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
 		t.Fatalf("write lockfile: %v", err)
@@ -118,7 +119,7 @@ func TestRunInit(t *testing.T) {
 		dir := initTestDir(t, "My Cool App")
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
@@ -137,7 +138,7 @@ func TestRunInit(t *testing.T) {
 		dir := initTestDir(t, "ignored-dir-name")
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
@@ -293,7 +294,7 @@ func TestRunInit(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
@@ -328,7 +329,7 @@ func TestRunInit(t *testing.T) {
 		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", projectconfig.DefaultFileName)}
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runInit(context.Background(), deps, cwd, "", opts); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}

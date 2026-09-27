@@ -22,7 +22,7 @@ func nothingToDeployHeadline(t *testing.T, config string) string {
 	writeAppSource(t, root, "web", "api")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}

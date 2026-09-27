@@ -36,6 +36,10 @@ func DiscoveryDir(root string) string {
 	return filepath.Join(root, constants.DefaultDiscoveryDirName)
 }
 
+func AttachTerminalSink(deps cmddeps.Deps, w io.Writer) {
+	deps.Events.Attach(runui.NewTerminalSink(deps.Presentation(w), w))
+}
+
 func NewDeps() cmddeps.Deps {
 	return cmddeps.Deps{
 		LoadCredentials:     credentials.Load,

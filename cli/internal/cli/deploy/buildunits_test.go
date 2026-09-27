@@ -103,7 +103,7 @@ func TestEachAppBuildsAsAUnitOfItsOwnInTheBuildPhaseOnceTheDeclarationsAreCollec
 	deps.BuildApp = buildingEach("")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
@@ -144,7 +144,7 @@ func TestAnAppWhoseBuildFailsEndsItsOwnUnitInFailureAndTheDeployWithIt(t *testin
 	deps.BuildApp = buildingEach("api")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatal("runDeploy succeeded, want api's build failure")
 	}
@@ -168,7 +168,7 @@ func TestEachAppsBuildPrintsAsABlockOfItsOwnWhenThatAppFinishes(t *testing.T) {
 	deps.BuildApp = buildingEach("")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
@@ -193,7 +193,7 @@ func TestABuilderFailureOutsideEveryAppsBuildEndsAUnitOfItsOwnHoldingWhatTheBuil
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatal("runDeploy succeeded, want the builder's failure")
 	}
@@ -216,7 +216,7 @@ func TestAnAppsOwnBuildFailureEndsNoSecondUnit(t *testing.T) {
 	deps.BuildApp = buildingEach("web")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatal("runDeploy succeeded, want web's build failure")
 	}
@@ -243,7 +243,7 @@ func TestAFailureAssemblingTheManifestAfterTheBuildsEndsAUnitOfItsOwn(t *testing
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatal("runDeploy succeeded, want the manifest's failure")
 	}

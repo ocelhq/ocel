@@ -33,7 +33,7 @@ export default {
 	copyFixtureApp(t, "../../imagebuild/testdata/dockerfileapp", filepath.Join(root, "apps", "api"))
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

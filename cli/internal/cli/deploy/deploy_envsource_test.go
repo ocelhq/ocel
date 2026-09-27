@@ -57,7 +57,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -71,7 +71,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
@@ -94,7 +94,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
@@ -110,7 +110,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil || built {
 			t.Fatalf("runDeploy err = %v, built = %v, want an unreadable env source to stop the deploy first", err, built)
@@ -128,7 +128,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		out := stdout.String()
 		if err == nil || !strings.Contains(out, "1 variable is not ready") || !strings.Contains(out, "INFISICAL_CLIENT_SECRET  root  no value") {
@@ -153,7 +153,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var out syncBuffer
 		var stderr bytes.Buffer
-		deps.AttachTerminalSink(&out)
+		clitest.AttachTerminalSink(deps, &out)
 		done := make(chan error, 1)
 		go func() {
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
@@ -182,7 +182,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse: an empty key is still unset")
 		}
@@ -204,7 +204,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		_ = runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader(""))
 		registrations, err := clitest.LoadFakeRegistrations()
 		if err != nil {
@@ -227,7 +227,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
@@ -251,7 +251,7 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 		})
 		var first, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&first)
+		clitest.AttachTerminalSink(deps, &first)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &first, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, first.String())
 		}
@@ -265,7 +265,7 @@ export default {
 
 		var second bytes.Buffer
 		deps = clitest.NewDeps()
-		deps.AttachTerminalSink(&second)
+		clitest.AttachTerminalSink(deps, &second)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &second, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, second.String())
 		}

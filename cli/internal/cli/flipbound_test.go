@@ -46,7 +46,7 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
-			deps.AttachTerminalSink(&stdout)
+			clitest.AttachTerminalSink(deps, &stdout)
 			if err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -78,7 +78,7 @@ func TestFlipBoundIsAbsentFromThePromotionList(t *testing.T) {
 	t.Setenv(clitest.FakeFlipBoundEnvVar, "5000")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr); err != nil {
 		t.Fatalf("runPromotionsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

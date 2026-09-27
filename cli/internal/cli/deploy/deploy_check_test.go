@@ -20,7 +20,7 @@ func TestDeployChecksCredentialsAndTheProjectsBootstrapAsACheckUnitNamedForItsPr
 	root, _ := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -60,7 +60,7 @@ func TestAnUnbootstrappedProductionFailsTheCheckUnitWithTheCommandThatBootstraps
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "0")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
 		t.Fatalf("runDeploy succeeded against no bootstrap: %s", stdout.String())
 	}
@@ -88,7 +88,7 @@ func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t 
 	root, _ := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

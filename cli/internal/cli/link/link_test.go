@@ -288,7 +288,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		opts := options{apiURL: srv.URL}
 		if err := run(context.Background(), deps, dir, "other", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
@@ -316,7 +316,7 @@ func TestRunLink(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		opts := options{apiURL: srv.URL}
 		if err := run(context.Background(), deps, dir, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("")); err != nil {
 			t.Fatalf("run err = %v", err)
@@ -342,7 +342,7 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 		return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON, TTY: true, Width: 80})
 	}
 	var stdout safeBuffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other", "other"))
 	srv.slow = 300 * time.Millisecond
 
@@ -379,7 +379,7 @@ func TestLinkingShowsEachConsoleWaitAsAUnitOnItsRunAndNothingElseWritesTheTermin
 func failedLink(t *testing.T, deps cmddeps.Deps, dir, projectRef string, opts options) string {
 	t.Helper()
 	var out bytes.Buffer
-	deps.AttachTerminalSink(&out)
+	clitest.AttachTerminalSink(deps, &out)
 	err := run(context.Background(), deps, dir, projectRef, opts, &out, &bytes.Buffer{}, strings.NewReader(""))
 	var exitErr *exitsig.ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 1 {

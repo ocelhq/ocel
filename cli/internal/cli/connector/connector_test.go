@@ -127,7 +127,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
 
 	var stdout bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
 	}
@@ -192,7 +192,7 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
 
 	var stream bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runAdd err = %v\n%s", err, stream.String())
 	}
@@ -253,7 +253,7 @@ func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
 
 	deps := jsonDeps()
 	var stream bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 
 	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
@@ -278,7 +278,7 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 
 	deps := jsonDeps()
 	var stream bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 
 	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
@@ -305,7 +305,7 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	clitest.SetLoggedIn(&deps)
 
 	var stdout bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
@@ -332,7 +332,7 @@ func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 
 	deps := jsonDeps()
 	var stream bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 
 	err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv))
 	if err == nil {
@@ -362,7 +362,7 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	opts.target = fingerprint
 
 	var stdout bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
@@ -389,7 +389,7 @@ func TestRmTargetSaysSoWhenTheConsoleHasNoSuchTarget(t *testing.T) {
 	opts.target = fingerprint
 
 	var stdout bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
 		t.Fatalf("runRemove err = %v", err)
 	}
@@ -606,7 +606,7 @@ func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheCo
 	deps.ConfigPath = func() string { return filepath.Join(root, "ocel.vps.json") }
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
 		t.Fatalf("runStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

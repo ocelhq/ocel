@@ -79,7 +79,7 @@ func TestRunPermissions(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -98,7 +98,7 @@ func TestRunPermissions(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -111,7 +111,7 @@ func TestRunPermissions(t *testing.T) {
 		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -137,7 +137,7 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 	}
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

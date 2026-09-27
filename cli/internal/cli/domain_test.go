@@ -99,7 +99,7 @@ func TestRunDomainStatusJSON(t *testing.T) {
 	t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -149,7 +149,7 @@ func TestRunDomain(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		runs := map[string]error{
 			"use":     runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{}, &stdout, &stderr),
 			"release": runDomainRelease(context.Background(), deps, root, domainOptions{}, &stdout, &stderr, strings.NewReader("")),
@@ -173,7 +173,7 @@ func TestRunDomain(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -194,7 +194,7 @@ func TestRunDomain(t *testing.T) {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -226,7 +226,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainUse(context.Background(), deps, root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -245,7 +245,7 @@ export default {
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDomainUse(context.Background(), deps, root, "preview.acme.com", domainOptions{preview: true}, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runDomainUse err = nil, want a wildcard refusal")
@@ -266,7 +266,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainProjectsEnvVar, "shop,blog")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainLs(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -294,7 +294,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "1755500000")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainLs(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -322,7 +322,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainLs(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -349,7 +349,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainLs(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -372,7 +372,7 @@ export default {
 		t.Setenv(clitest.FakeServedPreviewsEnvVar, "shop, blog")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDomainRelease err = nil, want the release refused; stdout=%s", stdout.String())
@@ -397,7 +397,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true, yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDomainRelease err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -437,7 +437,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -473,7 +473,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainAdd(context.Background(), deps, root, "www.app.com", &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainAdd err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -505,7 +505,7 @@ export default {
 		t.Setenv(clitest.FakeDomainTimeoutEnvVar, "add a proxied (orange cloud) DNS record at shop.app.com")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr)
 		if err == nil {
 			t.Fatalf("runDomainAdd err = nil, want the timeout surfaced; stdout=%s", stdout.String())
@@ -532,7 +532,7 @@ export default {
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDomainAdd(context.Background(), deps, root, "other.app.com", &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runDomainAdd err = nil, want a refusal: no command edits the config")
@@ -551,7 +551,7 @@ export default {
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDomainAdd(context.Background(), deps, root, "", &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runDomainAdd err = nil, want a refusal with nothing declared")
@@ -577,7 +577,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainRm(context.Background(), deps, root, "", &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -601,7 +601,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		if err := runDomainRm(context.Background(), deps, root, "old.app.com", &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -626,7 +626,7 @@ export default {
 		t.Setenv(clitest.FakeGlobalDomainManualRecordsEnvVar, "_ocel.shop.app.com CNAME _target.acm-validations.aws")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -658,7 +658,7 @@ export default {
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -682,7 +682,7 @@ export default {
 		t.Setenv(clitest.FakeDomainReadyAfterEnvVar, "5")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -703,7 +703,7 @@ export default {
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainStatus(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -725,7 +725,7 @@ export default {
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		if err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr); err != nil {
 			t.Fatalf("runDomainStatus --wait err = %v, want a wait that outlasts a couple of failed checks; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -747,7 +747,7 @@ export default {
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr)
 		if err == nil || !strings.Contains(stderr.String(), "failed checks in a row") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to give up naming the repeated failures", err, stderr.String())
@@ -764,7 +764,7 @@ export default {
 		quickDomainWait(t)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stderr)
+		clitest.AttachTerminalSink(deps, &stderr)
 		err := runDomainStatus(context.Background(), deps, root, domainOptions{wait: true}, &stdout, &stderr)
 		if err == nil || !strings.Contains(stderr.String(), "nothing to wait for") {
 			t.Fatalf("runDomainStatus --wait err = %v; stderr=%s, want it to refuse at once with nothing declared", err, stderr.String())
@@ -778,7 +778,7 @@ export default {
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDomainRelease err = nil, want it to refuse without a terminal")
@@ -866,7 +866,7 @@ func TestDomainLsListsThisProjectsOwnHostnamesWithoutPreview(t *testing.T) {
 	t.Setenv(clitest.FakeDomainCertEnvVar, "ISSUED proxy:shop.app.com")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runDomainLs(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -890,7 +890,7 @@ func TestDomainLsReadsStateWhileStatusChecksTheEdgeLive(t *testing.T) {
 	t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runDomainLs(context.Background(), deps, root, domainOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runDomainLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -932,7 +932,7 @@ func TestReleasingThePreviewDomainAsksForItsNameWhileTheRunIsHeldAfterThePlanItS
 	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.acme.com")
 
 	var stream, stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stream)
+	clitest.AttachTerminalSink(deps, &stream)
 	if err := runDomainRelease(context.Background(), deps, root, domainOptions{preview: true}, &stdout, &stderr, strings.NewReader("preview.acme.com\n")); err != nil {
 		t.Fatalf("runDomainRelease err = %v; stream=%s stdout=%s stderr=%s", err, stream.String(), stdout.String(), stderr.String())
 	}

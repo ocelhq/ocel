@@ -19,7 +19,7 @@ func TestACommandThatReadsTheBootstrapNamesTheFeatureItLacks(t *testing.T) {
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("a command reading a bootstrap that lacks a feature this project needs ran on regardless")

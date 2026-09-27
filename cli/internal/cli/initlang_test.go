@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -41,7 +42,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 			argv := stubPackageManager(&deps, nil)
 
 			var stdout bytes.Buffer
-			deps.AttachTerminalSink(&stdout)
+			clitest.AttachTerminalSink(deps, &stdout)
 			if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "aws"}); err != nil {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}

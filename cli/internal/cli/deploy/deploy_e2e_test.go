@@ -27,7 +27,7 @@ func TestDeployE2E(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -50,7 +50,7 @@ func TestDeployE2E(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		deps := clitest.NewDeps()
-		deps.AttachTerminalSink(&stdout)
+		clitest.AttachTerminalSink(deps, &stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())

@@ -66,7 +66,7 @@ func bindingLs(t *testing.T, root string, opts bindingsOptions) string {
 
 func bindingDeps(stderr io.Writer) cmddeps.Deps {
 	deps := newTestDeps()
-	deps.AttachTerminalSink(stderr)
+	clitest.AttachTerminalSink(deps, stderr)
 	return deps
 }
 
@@ -541,7 +541,7 @@ func TestListingBindingsAsJSONSaysWhoItActsAsOnItsRunAndPrintsOneJSONDocumentAlo
 	deps := newTestDeps()
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stderr)
+	clitest.AttachTerminalSink(deps, &stderr)
 	if err := runBindingsLs(context.Background(), deps, root, bindingsOptions{}, &stdout); err != nil {
 		t.Fatalf("runBindingsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

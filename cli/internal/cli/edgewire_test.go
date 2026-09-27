@@ -30,7 +30,7 @@ func TestBootstrapSendsTheFeatureSetAndNoEdge(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 			opts := bootstrap.Options{Yes: true, Features: tc.features, FeaturesDeclared: true}
-			deps.AttachTerminalSink(&stdout)
+			clitest.AttachTerminalSink(deps, &stdout)
 			if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -54,7 +54,7 @@ func TestBootstrapWithoutTheFlagKeepsWhatIsThere(t *testing.T) {
 	t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 
 	var stdout, stderr bytes.Buffer
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, bootstrap.Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -71,7 +71,7 @@ func TestBootstrapLeavesOutWhatItWasNotAskedAbout(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	opts := bootstrap.Options{Yes: true, Features: "isr", FeaturesDeclared: true}
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -87,7 +87,7 @@ func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	opts := bootstrap.Options{Yes: true, Remove: "image-optimization", Force: true}
-	deps.AttachTerminalSink(&stdout)
+	clitest.AttachTerminalSink(deps, &stdout)
 	if err := bootstrap.Run(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runBootstrap err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -113,7 +113,7 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 
 			var stdout, stderr bytes.Buffer
 			opts := bootstrap.Options{Yes: true}
-			deps.AttachTerminalSink(&stdout)
+			clitest.AttachTerminalSink(deps, &stdout)
 			if err := bootstrap.RunDestroy(context.Background(), deps, root, environmentv1.Tier_TIER_PRODUCTION, opts, &stdout, strings.NewReader("")); err != nil {
 				t.Fatalf("RunDestroy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -153,7 +153,7 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			t.Setenv(consent.BypassEnv, "test-app")
 
 			var stdout, stderr bytes.Buffer
-			deps.AttachTerminalSink(&stdout)
+			clitest.AttachTerminalSink(deps, &stdout)
 			if err := runDestroyProduction(context.Background(), deps, root, false, false, &stdout, strings.NewReader("")); err != nil {
 				t.Fatalf("runDestroyProduction err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}

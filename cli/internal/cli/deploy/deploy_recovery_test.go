@@ -178,7 +178,7 @@ func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T
 
 	var out syncBuffer
 	var stderr bytes.Buffer
-	deps.AttachTerminalSink(&out)
+	clitest.AttachTerminalSink(deps, &out)
 	done := make(chan error, 1)
 	go func() {
 		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
@@ -239,7 +239,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -289,7 +289,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -333,7 +333,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -368,7 +368,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -412,7 +412,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -457,7 +457,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -508,7 +508,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -603,7 +603,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
-				deps.AttachTerminalSink(&stdout)
+				clitest.AttachTerminalSink(deps, &stdout)
 				err := runDeploy(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runDeploy err = nil, want the vars requirement to be terminal")
@@ -646,7 +646,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			deps.AttachTerminalSink(&out)
+			clitest.AttachTerminalSink(deps, &out)
 			done <- runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -697,7 +697,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
-				deps.AttachTerminalSink(&stdout)
+				clitest.AttachTerminalSink(deps, &stdout)
 				err := runPreviewUp(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runPreviewUp err = nil, want the hard refusal kept")
