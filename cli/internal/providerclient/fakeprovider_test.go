@@ -213,6 +213,10 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 	case "hang-deploy":
 		time.Sleep(30 * time.Second)
 		return nil
+	case "crash-deploy":
+		fmt.Fprintln(os.Stderr, "panic: assignment to entry in nil map")
+		os.Exit(2)
+		return nil
 	default:
 		return stream.Send(&progressv1.OperationEvent{
 			Body: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: true}},

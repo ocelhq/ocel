@@ -343,6 +343,26 @@ func TestDeploy(t *testing.T) {
 		assertNoStaleSocket(t, sockPath)
 	})
 
+	t.Run("a provider that crashes mid-call shows what it printed to stderr in the error", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "crash-deploy", Config{})
+		if err := r.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v, want nil", err)
+		}
+
+		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
+			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+		}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		if err == nil {
+			t.Fatal("Deploy() error = nil, want the crash reported")
+		}
+		if !strings.Contains(err.Error(), "panic: assignment to entry in nil map") {
+			t.Errorf("Deploy() error = %q, want the provider's last stderr lines: without --verbose they are the only trace of why it died", err)
+		}
+	})
+
 	t.Run("cancelling the run is reported as a cancellation rather than a lost connection", func(t *testing.T) {
 		t.Parallel()
 

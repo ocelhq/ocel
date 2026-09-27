@@ -381,16 +381,19 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 		if cancelled(callErr) {
 			return fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
 		}
-		return fmt.Errorf("provider: call %s: %w", rpc, callErr)
+		return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, callErr))
 	}
 	defer stream.Close()
 
+	refused := false
 	for stream.Receive() {
 		ev := stream.Msg()
 		if onEvent != nil {
 			onEvent(ev)
 		}
-		if result := ev.GetResult(); result != nil && !result.GetRefused() {
+		result := ev.GetResult()
+		refused = refused || result.GetRefused()
+		if result != nil && !result.GetRefused() {
 			if result.GetSuccess() {
 				return nil
 			}
@@ -403,11 +406,37 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 			return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
 		}
 		if connect.CodeOf(err) == connect.CodeInvalidArgument {
-			return fmt.Errorf("provider: call %s: %w", rpc, err)
+			if refused {
+				return fmt.Errorf("provider: call %s: %w", rpc, err)
+			}
+			return r.withExitStderr(fmt.Errorf("provider: call %s: %w", rpc, err))
 		}
-		return fmt.Errorf("provider: provider connection lost: %w", err)
+		return r.withExitStderr(fmt.Errorf("provider: provider connection lost: %w", err))
 	}
-	return fmt.Errorf("provider: provider closed the %s stream without a result", rpc)
+	return r.withExitStderr(fmt.Errorf("provider: provider closed the %s stream without a result", rpc))
+}
+
+const (
+	exitGrace      = 500 * time.Millisecond
+	exitStderrTail = 20
+)
+
+func (r *Runner) withExitStderr(err error) error {
+	select {
+	case <-r.done:
+	case <-time.After(exitGrace):
+		return err
+	}
+	r.stderrMu.Lock()
+	lines := strings.Split(strings.TrimSpace(r.stderrBuf.String()), "\n")
+	r.stderrMu.Unlock()
+	if len(lines) > exitStderrTail {
+		lines = lines[len(lines)-exitStderrTail:]
+	}
+	if tail := strings.Join(lines, "\n"); tail != "" {
+		return fmt.Errorf("%w\n%s", err, tail)
+	}
+	return err
 }
 
 func cancelled(err error) bool {
