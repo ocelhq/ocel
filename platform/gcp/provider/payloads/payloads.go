@@ -15,6 +15,7 @@ const ContainerArch = "amd64"
 var (
 	nodeRuntime      = load("dist/serve.mjs")
 	containerRuntime = load("dist/container-runtime-" + ContainerArch)
+	envSourceSync    = load("dist/envsourcesync-" + ContainerArch)
 )
 
 func NodeRuntime() []byte { return nodeRuntime }
@@ -25,6 +26,8 @@ func ContainerRuntime(arch string) ([]byte, error) {
 	}
 	return containerRuntime, nil
 }
+
+func EnvSourceSync() []byte { return envSourceSync }
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)

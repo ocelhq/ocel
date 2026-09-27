@@ -14,5 +14,7 @@ cp "$root/frameworks/node/runtime/dist/serve.mjs" "$dist/serve.mjs"
   cd "$runtime_dir"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/container-runtime-amd64" ./cmd/container
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/envsourcesync-amd64" ./cmd/envsourcesync
 )
-chmod 755 "$dist/container-runtime-amd64"
+chmod 755 "$dist/container-runtime-amd64" "$dist/envsourcesync-amd64"
