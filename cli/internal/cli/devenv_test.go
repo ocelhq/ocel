@@ -1169,6 +1169,49 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	}
 }
 
+func TestDevNeedsNoValueADeployedTierAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	for _, command := range []struct {
+		name string
+		run  func(root string, appCmd []string, stdout, stderr io.Writer) error
+	}{
+		{"dev", func(root string, appCmd []string, stdout, stderr io.Writer) error {
+			return runDev(context.Background(), devDeps(), false, root, appCmd, stdout, stderr, strings.NewReader(""))
+		}},
+		{"run", func(root string, appCmd []string, stdout, stderr io.Writer) error {
+			return runRun(context.Background(), devDeps(), root, appCmd, stdout, stderr, strings.NewReader(""))
+		}},
+	} {
+		t.Run(command.name+" starts without a production binding's variables or env source credentials", func(t *testing.T) {
+			root := t.TempDir()
+			t.Cleanup(func() { _ = devlock.Remove(root) })
+
+			clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { aws: {} },
+  bindings: { postgres: { main: { url: { $env: "MAIN_DATABASE_URL" } } } },
+  envSource: {
+    production: { infisical: { project: "p-1", environment: "prod", auth: { universal: { clientId: { $env: "INFISICAL_CLIENT_ID" }, clientSecret: { $env: "INFISICAL_CLIENT_SECRET" } } } } },
+  },
+};
+`)
+			clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN"}`))
+
+			var stdout, stderr syncBuffer
+			err := command.run(root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr)
+
+			var exitErr *exitsig.ExitError
+			if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+				t.Fatalf("err = %v, want the app started and its exit 7 passed through; stderr=%s", err, stderr.String())
+			}
+		})
+	}
+}
+
 func readTestFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
