@@ -84,6 +84,10 @@ func EnsureDigestKey(ctx context.Context, store envvars.Store, class edge.Class)
 	return DigestKey{}, fmt.Errorf("the %s env source digest key was rewritten under every attempt to read it", class)
 }
 
+func ForgetDigestKey(ctx context.Context, store records.Store, class edge.Class) error {
+	return records.Forget(ctx, store, digestKeyRecord(class))
+}
+
 func openDigestKey(ctx context.Context, cipher records.Cipher, class edge.Class, recorded records.Record) (DigestKey, error) {
 	var kept sealedDigestKey
 	if err := json.Unmarshal(recorded.Bytes, &kept); err != nil {

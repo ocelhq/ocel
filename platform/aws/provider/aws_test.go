@@ -10,8 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -69,6 +73,52 @@ func (s stubBootstrap) Remove(context.Context, edge.Class, edge.Progress) error 
 	return s.err
 }
 
+func unkeyed(context.Context, edge.Class) (string, error) { return "", nil }
+
+func keyedAs(keys ...string) func(context.Context, edge.Class) (string, error) {
+	return func(context.Context, edge.Class) (string, error) {
+		next := keys[0]
+		keys = keys[1:]
+		return next, nil
+	}
+}
+
+func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string) error {
+	t.Helper()
+	ctx := context.Background()
+	store := envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()}
+	if _, err := envsource.EnsureDigestKey(ctx, store, req.Class); err != nil {
+		t.Fatal(err)
+	}
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: func() {}, key: keyedAs(keys...), records: store.Records}).
+		Apply(ctx, req, nil); err != nil {
+		t.Fatal(err)
+	}
+	_, err := store.Records.Read(ctx, records.Name{records.RootEnvSourceDigestKey, string(req.Class)})
+	return err
+}
+
+func TestAnApplyThatTakesTheVarsKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
+	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{provider.FeatureVarsKey}}
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, records.ErrNotFound) {
+		t.Fatalf("the digest key after the vars key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
+	}
+}
+
+func TestAnApplyThatBringsAnotherVarsKeyForgetsTheDigestKeySealedUnderTheOldOne(t *testing.T) {
+	req := provider.BootstrapRequest{Class: edge.ClassPreview}
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, records.ErrNotFound) {
+		t.Fatalf("the digest key after the vars key changed reads %v, want it forgotten", err)
+	}
+}
+
+func TestAnApplyThatKeepsTheVarsKeyKeepsTheDigestKey(t *testing.T) {
+	req := provider.BootstrapRequest{Class: edge.ClassProduction}
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/one"); err != nil {
+		t.Fatalf("the digest key after an apply that kept the vars key reads %v, want it kept", err)
+	}
+}
+
 func forgetOf(t *testing.T, p *Provider) func() {
 	t.Helper()
 	boot, err := p.Bootstrap(edges.DefaultKind)
@@ -117,7 +167,7 @@ func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p)}).
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
 		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +182,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p)}).
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
 		Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +198,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	primed(t, p, "before")
 
 	refused := errors.New("refused")
-	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p)}).
+	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed}).
 		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
