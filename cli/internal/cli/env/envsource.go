@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
@@ -100,6 +101,7 @@ func runEnvSource(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOp
 		}
 		renderEnvSource(stdout, tierName(opts), described.GetStatus(), time.Now())
 		renderConfiguredEnvSource(stdout, described.GetStatus(), envwire.DeployedEnvSource(cfg, opts.preview), opts)
+		fmt.Fprintf(stdout, "dev reads from %s, then %s on top\n", cfg.EnvSource.Dev.ID(), dotenv.LocalFileName)
 		return nil
 	})
 }

@@ -31,3 +31,24 @@ func TestLoadReadsTheFileInTheDirectory(t *testing.T) {
 		t.Fatalf("Load = %+v, want the value read and line 2 reported unreadable", file)
 	}
 }
+
+func TestLoadLocalReadsTheDevelopersOwnFileAndNotTheSharedOne(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("SHARED=yes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, LocalFileName), []byte("MINE=yes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := LoadLocal(dir)
+	if err != nil {
+		t.Fatalf("LoadLocal: %v", err)
+	}
+	if file.Values["MINE"] != "yes" || len(file.Values) != 1 {
+		t.Fatalf("LoadLocal = %v, want only %s's value", file.Values, LocalFileName)
+	}
+	if absent, err := LoadLocal(t.TempDir()); err != nil || len(absent.Values) != 0 {
+		t.Fatalf("LoadLocal of a directory without %s = %v, %v, want empty", LocalFileName, absent.Values, err)
+	}
+}
