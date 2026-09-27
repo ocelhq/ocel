@@ -56,10 +56,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			}
 
 			opts := opts
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return runDeploy(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDeploy(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 

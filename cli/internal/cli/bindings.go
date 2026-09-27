@@ -141,9 +141,7 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-	defer stop()
-	return run(ctx, cwd)
+	return run(cmd.Context(), cwd)
 }
 
 func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerclient.Provider, *projectconfig.Config) error) (err error) {

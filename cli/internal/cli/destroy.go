@@ -58,10 +58,7 @@ var destroyProductionCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-
-		return runDestroyProduction(ctx, newDeps(), cwd, destroyProductionYes, destroyProductionDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDestroyProduction(cmd.Context(), newDeps(), cwd, destroyProductionYes, destroyProductionDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -87,10 +84,7 @@ func init() {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return runDestroyPreviewProject(ctx, newDeps(), cwd, destroyPreviewYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(cmd.Context(), newDeps(), cwd, destroyPreviewYes, destroyPreviewDry, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	cmddeps.Yes(previewCmd, &destroyPreviewYes)

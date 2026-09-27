@@ -73,9 +73,7 @@ func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-	defer stop()
-	return run(ctx, cwd)
+	return run(cmd.Context(), cwd)
 }
 
 type envSeal struct{ stdin io.Reader }

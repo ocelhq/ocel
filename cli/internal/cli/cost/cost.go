@@ -44,10 +44,7 @@ func newScanCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return Run(ctx, deps, cwd, opts, cmd.OutOrStdout())
+			return Run(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&opts.Env, "env", envProduction, "Environment to price: production or preview")

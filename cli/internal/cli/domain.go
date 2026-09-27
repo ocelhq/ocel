@@ -59,9 +59,7 @@ var domainUseCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runDomainUse(ctx, newDeps(), cwd, args[0], domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainUse(cmd.Context(), newDeps(), cwd, args[0], domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -74,9 +72,7 @@ var domainLsCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runDomainLs(ctx, newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainLs(cmd.Context(), newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -89,9 +85,7 @@ var domainReleaseCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runDomainRelease(ctx, newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDomainRelease(cmd.Context(), newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -104,9 +98,7 @@ var domainAddCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runDomainAdd(ctx, newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainAdd(cmd.Context(), newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -119,9 +111,7 @@ var domainRmCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runDomainRm(ctx, newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainRm(cmd.Context(), newDeps(), cwd, firstArg(args), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -134,9 +124,7 @@ var domainStatusCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runDomainStatus(ctx, newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runDomainStatus(cmd.Context(), newDeps(), cwd, domainOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 

@@ -52,10 +52,7 @@ var devCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installDevInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-
-		return runDev(ctx, newDeps(), devReset, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(cmd.Context(), newDeps(), devReset, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 

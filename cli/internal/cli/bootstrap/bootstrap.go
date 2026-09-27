@@ -87,10 +87,7 @@ func newProvisionCommand(deps cmddeps.Deps, tier environmentv1.Tier, aliases []s
 			opts.FeaturesDeclared = cmd.Flags().Changed("features")
 			opts.AutoHealDeclared = cmd.Flags().Changed("auto-heal")
 
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return Run(ctx, deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return Run(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 
@@ -129,10 +126,7 @@ func newDestroyCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return RunDestroy(ctx, deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return RunDestroy(cmd.Context(), deps, cwd, tier, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 

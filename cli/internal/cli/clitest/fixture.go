@@ -53,9 +53,6 @@ func NewDeps() cmddeps.Deps {
 		ConfigPath:          func() string { return os.Getenv("OCEL_CONFIG") },
 		Presentation:        func(io.Writer) runui.Presentation { return runui.Resolve(runui.Origin{}) },
 		Events:              events.NewBus(time.Now),
-		Interrupt: func(ctx context.Context, _ io.Writer) (context.Context, context.CancelFunc) {
-			return context.WithCancel(ctx)
-		},
 	}
 }
 

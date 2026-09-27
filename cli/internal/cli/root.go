@@ -69,15 +69,31 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 }
 
+var stopInterruptHandler context.CancelFunc = func() {}
+
 func Execute() error {
 	err := rootCmd.Execute()
+	stopInterruptHandler()
 	return errors.Join(err, bus.Close())
+}
+
+func handleInterrupts(cmd *cobra.Command) {
+	install := installInterruptHandler
+	if cmd == devCmd || cmd == runCmd {
+		install = installDevInterruptHandler
+	}
+	ctx, stop := install(cmd.Root().Context(), cmd.ErrOrStderr())
+	cmd.SetContext(ctx)
+	stopInterruptHandler = stop
 }
 
 func init() {
 	runui.Version = version.Version
 	s := newDeps()
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) { s.AttachCommandSink(cmd) }
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+		s.AttachCommandSink(cmd)
+		handleInterrupts(cmd)
+	}
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json, ocel.yaml, ocel.yml or ocel.config.ts)")
@@ -134,7 +150,6 @@ func newDeps() cmddeps.Deps {
 		ConfigPath:          explicitConfigPath,
 		Presentation:        presentation,
 		Events:              bus,
-		Interrupt:           installInterruptHandler,
 	}
 }
 

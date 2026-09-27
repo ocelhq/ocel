@@ -42,7 +42,6 @@ type Deps struct {
 	ConfigPath          func() string
 	Presentation        func(w io.Writer) runui.Presentation
 	Events              *events.Bus
-	Interrupt           func(ctx context.Context, stderr io.Writer) (context.Context, context.CancelFunc)
 }
 
 const NoBrowserEnvVar = "OCEL_NO_BROWSER"

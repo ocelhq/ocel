@@ -46,10 +46,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-
-			return Run(ctx, deps, cwd, cmd.OutOrStdout())
+			return Run(cmd.Context(), deps, cwd, cmd.OutOrStdout())
 		},
 	})
 }

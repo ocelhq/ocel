@@ -44,9 +44,7 @@ var rollbackCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runRollback(ctx, newDeps(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runRollback(cmd.Context(), newDeps(), cwd, rollbackOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 

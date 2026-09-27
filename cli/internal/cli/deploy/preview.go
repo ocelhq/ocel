@@ -105,9 +105,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			opts := rmOpts
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-			return runPreviewRm(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runPreviewRm(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	rm.Flags().StringVar(&rmOpts.ref, "ref", "", "Tear down the preview for this git `ref` instead of the current branch")
@@ -124,9 +122,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-			return runPreviewLs(ctx, deps, cwd, cmd.OutOrStdout())
+			return runPreviewLs(cmd.Context(), deps, cwd, cmd.OutOrStdout())
 		},
 	}
 
@@ -147,9 +143,7 @@ func NewPreviewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 			opts := pruneOpts
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-			return runPreviewPrune(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runPreviewPrune(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
 	prune.Flags().StringVar(&pruneOpts.ref, "ref", "", "Prune the preview for this git `ref` instead of the current branch")
@@ -176,9 +170,7 @@ func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 		opts := *upOpts
-		ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runPreviewUp(ctx, deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runPreviewUp(cmd.Context(), deps, cwd, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	}
 }
 

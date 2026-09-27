@@ -38,9 +38,7 @@ var deploymentsLsCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runPromotionsLs(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runPromotionsLs(cmd.Context(), newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
@@ -60,9 +58,7 @@ var deploymentsPruneCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-		return runPromotionsPrune(ctx, newDeps(), cwd, pruneKeepN)
+		return runPromotionsPrune(cmd.Context(), newDeps(), cwd, pruneKeepN)
 	},
 }
 

@@ -25,8 +25,7 @@ var lockCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
+		ctx := cmd.Context()
 
 		cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
 		if err != nil {

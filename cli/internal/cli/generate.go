@@ -33,10 +33,7 @@ var generateCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-
-		return runGenerate(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runGenerate(cmd.Context(), newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 

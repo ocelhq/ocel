@@ -84,10 +84,6 @@ func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, 
 	defer linking.End(&err)
 
 	apiURL := strings.TrimRight(opts.apiURL, "/")
-	// TODO: link installs no interrupt handler, so SIGINT still hard-kills here —
-	// migrating these reads to the prompt package without also installing deps.Interrupt
-	// would look like a cleanup but would reintroduce the raw-mode/masked-SIGINT bug
-	// the other commands fixed (see #245).
 	scanner := bufio.NewScanner(stdin)
 	projectRef = strings.TrimSpace(projectRef)
 
@@ -153,15 +149,24 @@ func (c linkRun) wait(phase progressv1.Phase, subject, message string, fn func()
 	return err
 }
 
-func (c linkRun) ask(question func(stdout io.Writer)) (string, error) {
+func (c linkRun) ask(ctx context.Context, question func(stdout io.Writer)) (string, error) {
 	resume := c.run.Hold(&streamv1.WaitingEvent{})
 	defer resume("answered")
 	question(c.stdout)
-	answer := ""
-	if c.scanner.Scan() {
-		answer = strings.TrimSpace(c.scanner.Text())
+	answered := make(chan string, 1)
+	go func() {
+		answer := ""
+		if c.scanner.Scan() {
+			answer = strings.TrimSpace(c.scanner.Text())
+		}
+		answered <- answer
+	}()
+	select {
+	case answer := <-answered:
+		return answer, c.scanner.Err()
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
-	return answer, c.scanner.Err()
 }
 
 func consoleHost(apiURL string) string {
@@ -208,14 +213,14 @@ func selectOrCreateProject(
 	}
 
 	if len(projects) == 0 {
-		name, err := promptProjectName(lr, projectDir, fmt.Sprintf("%s has no projects yet.\n", org.Name))
+		name, err := promptProjectName(ctx, lr, projectDir, fmt.Sprintf("%s has no projects yet.\n", org.Name))
 		if err != nil {
 			return nil, err
 		}
 		return create(name)
 	}
 
-	selection, err := lr.ask(func(stdout io.Writer) {
+	selection, err := lr.ask(ctx, func(stdout io.Writer) {
 		fmt.Fprintf(stdout, "Projects in %s:\n", org.Name)
 		for i, p := range projects {
 			fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, p.Name, p.Slug)
@@ -230,7 +235,7 @@ func selectOrCreateProject(
 	case selection == "":
 		return nil, errors.New("no project selected; rerun `ocel link`")
 	case strings.EqualFold(selection, "n"):
-		name, err := promptProjectName(lr, projectDir, "")
+		name, err := promptProjectName(ctx, lr, projectDir, "")
 		if err != nil {
 			return nil, err
 		}
@@ -283,9 +288,9 @@ func defaultProjectName(projectDir, name string) string {
 	return filepath.Base(projectDir)
 }
 
-func promptProjectName(lr linkRun, projectDir, lead string) (string, error) {
+func promptProjectName(ctx context.Context, lr linkRun, projectDir, lead string) (string, error) {
 	fallback := filepath.Base(projectDir)
-	name, err := lr.ask(func(stdout io.Writer) {
+	name, err := lr.ask(ctx, func(stdout io.Writer) {
 		fmt.Fprint(stdout, lead)
 		fmt.Fprintf(stdout, "Project name (%s): ", fallback)
 	})
@@ -330,7 +335,7 @@ func pickOrganization(ctx context.Context, lr linkRun, client *auth.Client, acce
 		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs))
 	}
 
-	selection, err := lr.ask(func(stdout io.Writer) {
+	selection, err := lr.ask(ctx, func(stdout io.Writer) {
 		fmt.Fprintln(stdout, "Organizations:")
 		for i, org := range orgs {
 			fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)

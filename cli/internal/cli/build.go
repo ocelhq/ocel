@@ -36,10 +36,7 @@ var buildCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-		defer stop()
-
-		return runBuild(ctx, newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return runBuild(cmd.Context(), newDeps(), cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 

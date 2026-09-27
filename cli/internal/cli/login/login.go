@@ -27,9 +27,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 			"  $ OCEL_CONSOLE_URL=https://console.example.com ocel login",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			ctx, stop := deps.Interrupt(cmd.Context(), cmd.ErrOrStderr())
-			defer stop()
-			return run(ctx, deps, force, cmd.InOrStdin(), cmd.OutOrStdout())
+			return run(cmd.Context(), deps, force, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Log in again even if already logged in")
