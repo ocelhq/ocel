@@ -36,18 +36,21 @@ const releaseAttempts = 4
 const maxRequestTimeout = 3600 * time.Second
 
 type serving struct {
-	service string
-	image   string
-	env     map[string]string
-	account string
-	compute provider.Compute
-	health  string
-	public  bool
-	memory  int
-	most    int
-	timeout time.Duration
-	ingress string
-	mounts  []secretMount
+	service     string
+	image       string
+	env         map[string]string
+	account     string
+	compute     provider.Compute
+	health      string
+	public      bool
+	cpu         string
+	memory      int
+	concurrency int
+	generation  string
+	most        int
+	timeout     time.Duration
+	ingress     string
+	mounts      []secretMount
 }
 
 type secretMount struct {
@@ -76,6 +79,7 @@ func volumesOf(mounts []secretMount) ([]*run.GoogleCloudRunV2Volume, []*run.Goog
 const (
 	ingressEverywhere   = "INGRESS_TRAFFIC_ALL"
 	ingressLoadBalancer = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+	ingressInternal     = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 )
 
 func ingressFor(facts edge.Facts) string {
@@ -97,13 +101,17 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if s.memory > 0 {
 		memory = strconv.Itoa(s.memory) + "Mi"
 	}
+	cpu := revisionCPU
+	if s.cpu != "" {
+		cpu = s.cpu
+	}
 	container := &run.GoogleCloudRunV2Container{
 		Image: s.image,
 		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: appbuild.InjectedPort}},
 		Env:   environmentOf(s.env),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
 			CpuIdle:         s.compute == provider.ComputeServerless,
-			Limits:          map[string]string{"cpu": revisionCPU, "memory": memory},
+			Limits:          map[string]string{"cpu": cpu, "memory": memory},
 			ForceSendFields: []string{"CpuIdle"},
 		},
 	}
@@ -120,10 +128,12 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	volumes, mounted := volumesOf(s.mounts)
 	container.VolumeMounts = mounted
 	template := &run.GoogleCloudRunV2RevisionTemplate{
-		Containers:     []*run.GoogleCloudRunV2Container{container},
-		Scaling:        scaling,
-		ServiceAccount: s.account,
-		Volumes:        volumes,
+		Containers:                    []*run.GoogleCloudRunV2Container{container},
+		Scaling:                       scaling,
+		ServiceAccount:                s.account,
+		Volumes:                       volumes,
+		MaxInstanceRequestConcurrency: int64(s.concurrency),
+		ExecutionEnvironment:          s.generation,
 	}
 	if s.timeout > 0 {
 		if s.timeout > maxRequestTimeout {

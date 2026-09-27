@@ -152,13 +152,16 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 		}
 	}
 	rows := map[string]string{
-		"firestore:database/" + liveNames(t).Database():                provider.StackGroupKind,
-		"iam:serviceaccount/" + liveNames(t).WorkloadAccount(class):    provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).Bucket(class):                 provider.StackGroupKind,
-		"storage:bucket/" + liveNames(t).StateBucket(class):            provider.StackGroupKind,
-		"kms:keyring/" + liveNames(t).KeyRing():                        provider.StackGroupKind,
-		"kms:key/" + string(class):                                     provider.StackGroupKind,
-		"secretmanager:secret/" + liveNames(t).PassphraseSecret(class): provider.ParameterGroupKind,
+		"firestore:database/" + liveNames(t).Database():                  provider.StackGroupKind,
+		"iam:serviceaccount/" + liveNames(t).WorkloadAccount(class):      provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).Bucket(class):                   provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).StateBucket(class):              provider.StackGroupKind,
+		"kms:keyring/" + liveNames(t).KeyRing():                          provider.StackGroupKind,
+		"kms:key/" + string(class):                                       provider.StackGroupKind,
+		"secretmanager:secret/" + liveNames(t).PassphraseSecret(class):   provider.ParameterGroupKind,
+		"iam:serviceaccount/" + liveNames(t).EnvSourceSyncAccount(class): provider.StackGroupKind,
+		"run:service/" + liveNames(t).EnvSourceSync(class):               provider.StackGroupKind,
+		"cloudscheduler:job/" + liveNames(t).EnvSourceSync(class):        provider.StackGroupKind,
 	}
 	if !emulated() {
 		rows["artifactregistry:repository/"+liveNames(t).Repository(class)] = provider.StackGroupKind

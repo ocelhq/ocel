@@ -73,7 +73,13 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 	if err != nil {
 		return bootstrap{}, err
 	}
-	return bootstrap{clients: opened, fronts: g.p.Edges()}, nil
+	return bootstrap{
+		clients:       opened,
+		fronts:        g.p.Edges(),
+		pushBinary:    g.p.pushBinary,
+		deployService: g.p.deployService,
+		tearDown:      g.p.tearDown,
+	}, nil
 }
 
 func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
@@ -119,6 +125,10 @@ func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress ed
 type bootstrap struct {
 	clients *clients
 	fronts  provider.Edges
+
+	pushBinary    func(ctx context.Context, class edge.Class, name, ref string, binary []byte, path string) error
+	deployService func(ctx context.Context, s serving, progress edge.Progress) (release, error)
+	tearDown      func(ctx context.Context, service string, progress edge.Progress) error
 }
 
 func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
@@ -324,6 +334,10 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 		return b.makeRepository(ctx, target.Name)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, target.Name)
+	case KindService:
+		return b.makeService(ctx, read.Class, target.Name)
+	case KindSchedule:
+		return b.makeSchedule(ctx, read.Class, target.Name)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
@@ -524,16 +538,40 @@ func (b bootstrap) makeSecret(ctx context.Context, name string) error {
 	return nil
 }
 
+type accountPurpose struct {
+	displayName string
+	description string
+	ungranted   string
+	grant       func(ctx context.Context, class edge.Class) error
+	forget      func(ctx context.Context, class edge.Class) error
+	granted     func(ctx context.Context, class edge.Class) (bool, error)
+}
+
+func (b bootstrap) purposeOf(class edge.Class, name string) accountPurpose {
+	if name == b.clients.EnvSourceSyncAccount(class) {
+		return b.syncPurpose(class)
+	}
+	return accountPurpose{
+		displayName: "ocel " + string(class) + " apps",
+		description: "the identity every app ocel deploys in the " + string(class) + " class runs as",
+		ungranted:   reasonUnread,
+		grant:       b.grantReads,
+		forget:      b.forgetReads,
+		granted:     b.readsGranted,
+	}
+}
+
 func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) error {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
 	}
+	purpose := b.purposeOf(read.Class, name)
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
-			DisplayName: "ocel " + string(read.Class) + " apps",
-			Description: "the identity every app ocel deploys in the " + string(read.Class) + " class runs as",
+			DisplayName: purpose.displayName,
+			Description: purpose.description,
 		},
 	}).Context(ctx).Do)
 	if err != nil && !taken(err) {
@@ -542,7 +580,7 @@ func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) er
 	if err := b.grantRunAs(ctx, name); err != nil {
 		return err
 	}
-	return b.grantReads(ctx, read.Class)
+	return purpose.grant(ctx, read.Class)
 }
 
 func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
@@ -580,7 +618,7 @@ func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 }
 
 func (b bootstrap) takeAccount(ctx context.Context, class edge.Class, name string) error {
-	if err := b.forgetReads(ctx, class); err != nil {
+	if err := b.purposeOf(class, name).forget(ctx, class); err != nil {
 		return err
 	}
 	service, err := b.clients.Accounts()
@@ -800,33 +838,23 @@ func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, []provider.ChangeGroup{stack, params})}, nil
 }
 
-func removals(read survey) []removal {
-	items := bootstrapItems(read.Names, read.Class, read.Emulated)
-	byKind := map[Kind]item{}
-	buckets := map[string]item{}
-	for _, item := range items {
-		byKind[item.Kind] = item
-		if item.Kind == KindBucket {
-			buckets[item.Name] = item
-		}
-	}
-	ordered := []item{
-		byKind[KindSecret],
-		byKind[KindKey],
-		byKind[KindKeyRing],
-		byKind[KindDatabase],
-		byKind[KindServiceAccount],
-		byKind[KindRepository],
-		buckets[read.Names.StateBucket(read.Class)],
-		buckets[read.Names.Bucket(read.Class)],
-	}
+var removalOrder = []Kind{
+	KindSecret, KindSchedule, KindService, KindKey, KindKeyRing, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+}
 
-	out := make([]removal, 0, len(ordered))
-	for _, item := range ordered {
-		if item.Kind == "" {
-			continue
+func removals(read survey) []removal {
+	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(read.Class)}
+	rank := func(target item) int {
+		if target.ID() == stampBucket.ID() {
+			return len(removalOrder)
 		}
-		out = append(out, removing(read, item))
+		return slices.Index(removalOrder, target.Kind)
+	}
+	items := bootstrapItems(read.Names, read.Class, read.Emulated)
+	slices.SortStableFunc(items, func(a, b item) int { return rank(a) - rank(b) })
+	out := make([]removal, 0, len(items))
+	for _, target := range items {
+		out = append(out, removing(read, target))
 	}
 	return out
 }
@@ -911,6 +939,10 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) error {
 		return b.takeRepository(ctx, target.Name)
 	case KindServiceAccount:
 		return b.takeAccount(ctx, read.Class, target.Name)
+	case KindService:
+		return b.takeService(ctx, target.Name)
+	case KindSchedule:
+		return b.takeSchedule(ctx, target.Name)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing takes down a %s", target.Kind)
 	}

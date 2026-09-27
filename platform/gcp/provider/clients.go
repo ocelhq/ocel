@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/cloudscheduler/v1"
 	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iam/v1"
@@ -49,6 +50,7 @@ type clients struct {
 	images    memo[*artifactregistry.Service]
 	accounts  memo[*iam.Service]
 	runs      memo[*run.Service]
+	schedules memo[*cloudscheduler.Service]
 	compute   memo[*compute.Service]
 	certs     memo[*certmanager.Service]
 	principal memo[string]
@@ -109,6 +111,12 @@ func (c *clients) Repositories() (*artifactregistry.Service, error) {
 func (c *clients) Run() (*run.Service, error) {
 	return opened(c, &c.runs, "Cloud Run", func() (*run.Service, error) {
 		return run.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Scheduler() (*cloudscheduler.Service, error) {
+	return opened(c, &c.schedules, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
+		return cloudscheduler.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 

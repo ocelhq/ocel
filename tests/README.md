@@ -185,7 +185,7 @@ which the `Nightly` workflow drives and which you can drive by hand:
 gcloud auth application-default login
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
-  iam.googleapis.com run.googleapis.com --project <project>
+  iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com --project <project>
 OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
   go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
 ```
@@ -226,10 +226,10 @@ to include a run id leaves no room for a service name inside Cloud Run's 49 char
 
 Preparing the project is a human's one-time job:
 
-1. Create (or pick) the project, and enable the seven services a bootstrap reads:
+1. Create (or pick) the project, and enable the eight services a bootstrap reads:
    `gcloud services enable firestore.googleapis.com storage.googleapis.com
    cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com
-   iam.googleapis.com run.googleapis.com --project <project>`.
+   iam.googleapis.com run.googleapis.com cloudscheduler.googleapis.com --project <project>`.
 2. Create a workload identity pool and a provider for GitHub's OIDC issuer
    (`https://token.actions.githubusercontent.com`), with the attribute condition pinning
    `assertion.repository` to this repository, and put the provider's full resource name
@@ -244,7 +244,8 @@ Preparing the project is a human's one-time job:
    `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin` —
    and what a bootstrap adds on top: `roles/datastore.owner`, `roles/storage.admin`,
    `roles/cloudkms.admin`, `roles/secretmanager.admin`, `roles/artifactregistry.admin`,
-   `roles/iam.serviceAccountAdmin`. `ocel doctor` and the bootstrap's own preflight name
+   `roles/iam.serviceAccountAdmin`, `roles/resourcemanager.projectIamAdmin`,
+   `roles/cloudscheduler.admin`. `ocel doctor` and the bootstrap's own preflight name
    the exact permissions when one is missing.
 5. Make sure the org policy `constraints/iam.allowedPolicyMemberDomains` does not deny
    `allUsers`: a deploy opens each service to the internet with `roles/run.invoker`, and

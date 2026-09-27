@@ -30,6 +30,7 @@ const (
 	minDatabaseID  = 4
 	maxServiceName = 49
 	serviceHashLen = 6
+	accountHashLen = 10
 )
 
 const longestClass = edge.ClassProduction
@@ -106,9 +107,25 @@ func (n Names) PreviewService(label, app, function string) (string, error) {
 	return service, nil
 }
 
-func serviceHash(parts ...string) string {
+func serviceHash(parts ...string) string { return truncatedHash(serviceHashLen, parts...) }
+
+func truncatedHash(length int, parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(sum[:])[:serviceHashLen]
+	return hex.EncodeToString(sum[:])[:length]
+}
+
+const envSourceSyncName = "envsourcesync"
+
+func (n Names) EnvSourceSync(class edge.Class) string {
+	return string(n.namespace) + "-" + string(class) + "-" + envSourceSyncName
+}
+
+func (n Names) EnvSourceSyncAccount(class edge.Class) string {
+	return string(n.namespace) + "-" + truncatedHash(accountHashLen, string(class), envSourceSyncName)
+}
+
+func (n Names) EnvSourceSyncAccountEmail(class edge.Class) string {
+	return n.EnvSourceSyncAccount(class) + "@" + n.project + accountDomain
 }
 
 const connectorSuffix = "-connector"

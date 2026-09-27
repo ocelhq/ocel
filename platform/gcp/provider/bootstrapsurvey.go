@@ -169,24 +169,28 @@ type presence struct {
 	mends   string
 }
 
-func (b bootstrap) presenceOf(ctx context.Context, class edge.Class, repository item) (presence, error) {
-	switch repository.Kind {
+func (b bootstrap) presenceOf(ctx context.Context, class edge.Class, target item) (presence, error) {
+	switch target.Kind {
 	case KindDatabase:
 		return b.databasePresence(ctx)
 	case KindBucket:
-		return b.bucketPresence(ctx, repository.Name)
+		return b.bucketPresence(ctx, target.Name)
 	case KindKeyRing:
 		return presenceFrom(b.keyRingExists(ctx))
 	case KindKey:
-		return presenceFrom(b.keyUsable(ctx, repository.Name))
+		return presenceFrom(b.keyUsable(ctx, target.Name))
 	case KindSecret:
-		return presenceFrom(b.secretExists(ctx, repository.Name))
+		return presenceFrom(b.secretExists(ctx, target.Name))
 	case KindRepository:
-		return b.repositoryPresence(ctx, repository.Name)
+		return b.repositoryPresence(ctx, target.Name)
 	case KindServiceAccount:
-		return b.accountPresence(ctx, class, repository.Name)
+		return b.accountPresence(ctx, class, target.Name)
+	case KindService:
+		return b.servicePresence(ctx, class, target.Name)
+	case KindSchedule:
+		return b.schedulePresence(ctx, class, target.Name)
 	}
-	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", repository.Kind)
+	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 }
 
 func presenceFrom(present bool, err error) (presence, error) { return presence{present: present}, err }
@@ -380,12 +384,13 @@ func (b bootstrap) accountPresence(ctx context.Context, class edge.Class, name s
 	if !granted(policy, memberOf(member)) {
 		return presence{present: true, mends: reasonUngranted}, nil
 	}
-	reads, err := b.readsGranted(ctx, class)
+	purpose := b.purposeOf(class, name)
+	grants, err := purpose.granted(ctx, class)
 	if err != nil {
 		return presence{}, err
 	}
-	if !reads {
-		return presence{present: true, mends: reasonUnread}, nil
+	if !grants {
+		return presence{present: true, mends: purpose.ungranted}, nil
 	}
 	return presence{present: true}, nil
 }

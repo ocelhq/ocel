@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -21,6 +22,7 @@ const (
 	tfServiceAccount      = "google_service_account"
 	tfArtifactRepository  = "google_artifact_registry_repository"
 	tfSecretManagerSecret = "google_secret_manager_secret"
+	tfSchedulerJob        = "google_cloud_scheduler_job"
 
 	revisionMinInstancesContainer  = 1
 	revisionMinInstancesServerless = 0
@@ -34,6 +36,8 @@ var itemTypes = map[Kind]string{
 	KindServiceAccount: tfServiceAccount,
 	KindRepository:     tfArtifactRepository,
 	KindSecret:         tfSecretManagerSecret,
+	KindService:        tfCloudRunService,
+	KindSchedule:       tfSchedulerJob,
 }
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -105,6 +109,24 @@ func itemProperties(item item, region string) map[string]any {
 		return map[string]any{"location": region, "format": "DOCKER"}
 	case KindSecret:
 		return map[string]any{"replication": map[string]any{"auto": map[string]any{}}}
+	case KindService:
+		return map[string]any{
+			"location":                   region,
+			"ingress":                    ingressInternal,
+			"requests_per_hour":          syncRequestsPerHour,
+			"billed_seconds_per_request": syncBilledSecondsEach,
+			"template": map[string]any{
+				"scaling": map[string]any{"min_instance_count": 0, "max_instance_count": syncInstances},
+				"containers": []any{map[string]any{
+					"resources": map[string]any{
+						"cpu_idle": true,
+						"limits":   map[string]any{"cpu": syncCPU, "memory": strconv.Itoa(syncMemoryMiB) + "Mi"},
+					},
+				}},
+			},
+		}
+	case KindSchedule:
+		return map[string]any{"region": region, "schedule": syncSchedule}
 	}
 	return map[string]any{}
 }

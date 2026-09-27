@@ -19,6 +19,8 @@ const (
 	KindSecret         Kind = "secretmanager:secret"
 	KindRepository     Kind = "artifactregistry:repository"
 	KindServiceAccount Kind = "iam:serviceaccount"
+	KindService        Kind = "run:service"
+	KindSchedule       Kind = "cloudscheduler:job"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -31,6 +33,7 @@ var BootstrapAPIs = []string{
 	"artifactregistry.googleapis.com",
 	"iam.googleapis.com",
 	"run.googleapis.com",
+	"cloudscheduler.googleapis.com",
 }
 
 type item struct {
@@ -75,6 +78,18 @@ func stackItems(names Names, class edge.Class, emulated bool) []item {
 		{
 			Kind: KindRepository, Name: names.Repository(class),
 			Note: "the images this class runs, and an untagged image lives at least a week",
+		},
+		{
+			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(class),
+			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this project's records, seals and opens under the class key, and calls the sync service alone",
+		},
+		{
+			Kind: KindService, Name: names.EnvSourceSync(class),
+			Note: "the env source sync: each call syncs every scheduled env source this class registers once, and it bills only while a sync runs",
+		},
+		{
+			Kind: KindSchedule, Name: names.EnvSourceSync(class),
+			Note: "calls the env source sync once a minute, with no retry because the next minute is the retry",
 		},
 	}
 	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })

@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"slices"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -52,9 +53,10 @@ func TestTheRuntimeAccountIsProvisionedWhereverTheBootstrapIs(t *testing.T) {
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
 	for _, emulated := range []bool{false, true} {
-		if got := kindsOf(bootstrapItems(names, class, emulated))[KindServiceAccount]; got != names.WorkloadAccount(class) {
-			t.Errorf("a bootstrap with emulated=%t names %q as its runtime account, want %q: an app has to run as something wherever it runs",
-				emulated, got, names.WorkloadAccount(class))
+		account := item{Kind: KindServiceAccount, Name: names.WorkloadAccount(class)}
+		if ids := idsOf(bootstrapItems(names, class, emulated)); !slices.Contains(ids, account.ID()) {
+			t.Errorf("a bootstrap with emulated=%t provisions %v, want %s among them: an app has to run as something wherever it runs",
+				emulated, ids, account.ID())
 		}
 	}
 }
