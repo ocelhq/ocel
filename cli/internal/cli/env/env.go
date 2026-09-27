@@ -146,7 +146,7 @@ func envAddress(key string, opts envOptions) envgate.Address {
 }
 
 func envValues(runner *providerclient.Runner, slug string, opts envOptions) envwire.Values {
-	return envwire.Values{Runner: runner, Slug: slug, Tier: envTier(opts)}
+	return envwire.Values{Provider: runner.Provider(nil), Slug: slug, Tier: envTier(opts)}
 }
 
 func staleCell(err error, key string, opts envOptions) error {
@@ -188,7 +188,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
-		envSource := envwire.EnvSourceClient{Runner: runner, Config: cfg, Preview: opts.preview}
+		envSource := envwire.EnvSourceClient{Provider: runner.Provider(nil), Config: cfg, Preview: opts.preview}
 		var owner envgate.EnvSource
 		if opts.environment == "" {
 			if owner, err = envSource.Describe(ctx); err != nil {
@@ -292,7 +292,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 		}
 		var environments []string
 		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = envwire.NamedEnvironments(ctx, runner, cfg.Slug); err != nil {
+			if environments, err = envwire.NamedEnvironments(ctx, runner.Provider(nil), cfg.Slug); err != nil {
 				return err
 			}
 		}

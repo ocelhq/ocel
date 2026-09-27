@@ -70,7 +70,7 @@ func deployCommand(opts envOptions) string {
 
 func runEnvSync(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		synced, err := envwire.SyncRegisteredEnvSource(ctx, runner, cfg.Slug, opts.preview)
+		synced, err := envwire.SyncRegisteredEnvSource(ctx, runner.Provider(nil), cfg.Slug, opts.preview)
 		if err != nil {
 			return err
 		}

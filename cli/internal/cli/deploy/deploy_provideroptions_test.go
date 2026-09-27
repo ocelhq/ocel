@@ -60,6 +60,7 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 		[]string{"./transforms/net.transform.ts"})
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -78,6 +79,7 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	root, _, deps := setUpProviderFixture(t, `{ regionn: "eu-west-2" }`)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want options the provider refuses reported; stdout=%s", stdout.String())

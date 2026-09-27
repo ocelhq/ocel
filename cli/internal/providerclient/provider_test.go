@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -87,6 +89,35 @@ func TestAStartedProvidersStreamEventsReachTheScope(t *testing.T) {
 	}
 	if !outcome {
 		t.Error("the scope never saw the provider's result as the run's outcome")
+	}
+}
+
+func TestAPlanningStreamHandsBackThePlanAndForwardsEveryOtherEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, scope, seen := deployScope(t)
+	p := startFake(t, ctx, "success", scope, Trust{})
+
+	plan, err := Plan(ctx, p, "Deploy", &contractv1.DeployRequest{
+		Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+		Dry:      true,
+	}, contractv1connect.ProviderServiceClient.Deploy)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if !proto.Equal(plan, fakePlan) {
+		t.Errorf("plan = %v, want the plan the provider streamed", plan)
+	}
+
+	var said bool
+	for _, ev := range seen.received() {
+		said = said || ev.GetMessage() == "step 1"
+		if ev.GetPlan() != nil {
+			t.Error("the scope saw the plan, want it handed back for the command to draw")
+		}
+	}
+	if !said {
+		t.Error("the scope never saw the provider's \"step 1\" line")
 	}
 }
 

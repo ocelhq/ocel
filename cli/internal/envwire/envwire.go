@@ -16,13 +16,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const RootApp = "this project's app"
 
-func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
@@ -33,15 +34,15 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 		tier, other = other, tier
 	}
 	store := Values{
-		Runner: runner,
-		Slug:   cfg.Slug,
-		Tier:   tier,
+		Provider: prov,
+		Slug:     cfg.Slug,
+		Tier:     tier,
 	}
 
 	var environments []string
 	if preview {
 		var err error
-		if environments, err = NamedEnvironments(ctx, runner, cfg.Slug); err != nil {
+		if environments, err = NamedEnvironments(ctx, prov, cfg.Slug); err != nil {
 			return nil, err
 		}
 	}
@@ -50,22 +51,23 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 		Assets:       assets,
 		Gate:         gate,
 		Store:        store,
-		Other:        Values{Runner: runner, Slug: cfg.Slug, Tier: other},
+		Other:        Values{Provider: prov, Slug: cfg.Slug, Tier: other},
 		Slug:         cfg.Slug,
 		Preview:      preview,
 		Environments: environments,
 		Recovery:     recovery,
-		EnvSource:    EnvSourceClient{Runner: runner, Config: cfg, Preview: preview},
+		EnvSource:    EnvSourceClient{Provider: prov, Config: cfg, Preview: preview},
 	})
 }
 
-func NamedEnvironments(ctx context.Context, runner *providerclient.Runner, slug string) ([]string, error) {
-	client, err := runner.Client()
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
-		Slug: slug,
+func NamedEnvironments(ctx context.Context, prov *providerclient.Provider, slug string) ([]string, error) {
+	var resp *contractv1.ListEnvironmentsResponse
+	err := prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		var err error
+		resp, err = client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{
+			Slug: slug,
+		})
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -127,13 +129,13 @@ func Apps(cfg *projectconfig.Config) []envgate.App {
 }
 
 type Values struct {
-	Runner *providerclient.Runner
-	Slug   string
-	Tier   environmentv1.Tier
+	Provider *providerclient.Provider
+	Slug     string
+	Tier     environmentv1.Tier
 }
 
 func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
-	vars, err := v.Runner.Vars()
+	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +188,7 @@ func (v Values) reveal(ctx context.Context, rows []envgate.Address) (*envvarsv1.
 	for _, row := range rows {
 		named = append(named, v.coordinate(row))
 	}
-	vars, err := v.Runner.Vars()
+	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +222,7 @@ func (v Values) coordinate(at envgate.Address) *envvarsv1.Coordinate {
 }
 
 func (v Values) Version(ctx context.Context, at envgate.Address) (int64, error) {
-	vars, err := v.Runner.Vars()
+	vars, err := v.Provider.Vars()
 	if err != nil {
 		return 0, err
 	}
@@ -235,7 +237,7 @@ func (v Values) Version(ctx context.Context, at envgate.Address) (int64, error) 
 }
 
 func (v Values) Write(ctx context.Context, at envgate.Address, value string, expected *int64) (*envvarsv1.ValueMetadata, error) {
-	vars, err := v.Runner.Vars()
+	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +254,7 @@ func (v Values) Write(ctx context.Context, at envgate.Address, value string, exp
 }
 
 func (v Values) Remove(ctx context.Context, at envgate.Address, expected *int64) (bool, error) {
-	vars, err := v.Runner.Vars()
+	vars, err := v.Provider.Vars()
 	if err != nil {
 		return false, err
 	}
@@ -288,7 +290,7 @@ func staleOrBroken(err error) error {
 }
 
 func (v Values) History(ctx context.Context, at envgate.Address) ([]varsui.Version, error) {
-	vars, err := v.Runner.Vars()
+	vars, err := v.Provider.Vars()
 	if err != nil {
 		return nil, err
 	}

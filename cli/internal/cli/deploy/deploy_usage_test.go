@@ -23,6 +23,7 @@ func TestDeployUsageEdges(t *testing.T) {
 		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -43,6 +44,7 @@ func TestDeployUsageEdges(t *testing.T) {
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -74,6 +76,7 @@ export async function late() {
 `)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s", stdout.String())
@@ -96,6 +99,7 @@ func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
 	writeSharedResourceMonorepo(t, root)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -126,6 +130,7 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 	root, sockPath := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -150,6 +155,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s", stdout.String())
@@ -173,6 +179,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		clitest.WriteUsageMonorepo(t, root)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the app no configured app covers to refuse the deploy; stdout=%s", stdout.String())
@@ -201,6 +208,7 @@ export default {
 `)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want a path naming nothing to refuse the deploy rather than ship an app no resource reaches; stdout=%s", stdout.String())

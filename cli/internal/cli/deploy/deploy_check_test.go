@@ -20,6 +20,7 @@ func TestDeployChecksCredentialsAsACheckUnitNamedForItsProviderThenSaysWhoItActs
 	root, _ := clitest.SetUpDeployFixture(t)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -47,5 +48,37 @@ func TestDeployChecksCredentialsAsACheckUnitNamedForItsProviderThenSaysWhoItActs
 	}
 	if evs[identity].GetPhase() != progressv1.Phase_PHASE_CHECK {
 		t.Errorf("identity in %s, want the check phase", evs[identity].GetPhase())
+	}
+}
+
+func TestDeploysEventsAreInTheCheckPhaseThenBuildThenTheProvidersDeployPhases(t *testing.T) {
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+	clitest.StubBuild(&deps, nil)
+	useJSONLogFormat(t, &deps)
+	root, _ := clitest.SetUpDeployFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	var order []progressv1.Phase
+	for _, ev := range envelopes(t, stdout.String()) {
+		phase := ev.GetPhase()
+		if phase == progressv1.Phase_PHASE_UNSPECIFIED || (len(order) > 0 && order[len(order)-1] == phase) {
+			continue
+		}
+		order = append(order, phase)
+	}
+	deploying := []progressv1.Phase{progressv1.Phase_PHASE_PROVISION, progressv1.Phase_PHASE_DEPLOY, progressv1.Phase_PHASE_PROMOTE}
+	if len(order) < 3 || order[0] != progressv1.Phase_PHASE_CHECK || order[1] != progressv1.Phase_PHASE_BUILD {
+		t.Fatalf("phases in order %v, want check, then build, then the provider's deploy phases", order)
+	}
+	for _, phase := range order[2:] {
+		if !slices.Contains(deploying, phase) {
+			t.Errorf("phases in order %v: %s after the build, want only the provider's deploy phases %v", order, phase, deploying)
+		}
 	}
 }

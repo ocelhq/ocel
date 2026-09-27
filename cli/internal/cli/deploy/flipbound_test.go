@@ -44,6 +44,7 @@ func TestFlipBoundOnTheProductionDeployPromotionLine(t *testing.T) {
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
+			deps.AttachTerminalSink(&stdout)
 			if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -67,6 +68,7 @@ func TestFlipBoundOnThePreviewDeployPromotionLine(t *testing.T) {
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
+			deps.AttachTerminalSink(&stdout)
 			if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}

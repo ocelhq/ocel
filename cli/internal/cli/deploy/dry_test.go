@@ -59,6 +59,7 @@ func TestADryDeployShowsThePlanAndWritesNothing(t *testing.T) {
 	writeServeDescriptor(t, root, "api", "bld_api_1")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -89,6 +90,7 @@ func TestADryPreviewUpShowsThePlanAndWritesNothing(t *testing.T) {
 	t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -120,6 +122,7 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 		{
 			name: "deploy",
 			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+				deps.AttachTerminalSink(stdout)
 				return runDeploy(context.Background(), deps, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 			remedy: "ocel bootstrap production",
@@ -127,6 +130,7 @@ func TestADryRunRefusesOnAnUnbootstrappedAccount(t *testing.T) {
 		{
 			name: "preview up",
 			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+				deps.AttachTerminalSink(stdout)
 				return runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 			remedy: "ocel bootstrap preview",
@@ -162,6 +166,7 @@ func TestADryRunRefusesABootstrapThatIsBehindTheBuild(t *testing.T) {
 	t.Setenv(clitest.FakeBootstrapEnvVar, "stale")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
@@ -186,6 +191,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 		{
 			name: "deploy",
 			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+				deps.AttachTerminalSink(stdout)
 				return runDeploy(context.Background(), deps, root, deployOptions{dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 		},
@@ -193,6 +199,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 			name:    "preview up",
 			preview: true,
 			run: func(deps cmddeps.Deps, root string, stdout, stderr *bytes.Buffer) error {
+				deps.AttachTerminalSink(stdout)
 				return runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging", dry: true}, stdout, stderr, strings.NewReader(""))
 			},
 		},
@@ -206,7 +213,7 @@ func TestADryRunNeverOpensTheVarsUI(t *testing.T) {
 			deps := clitest.NewDeps()
 			terminalStdin(&deps)
 			served := 0
-			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *providerclient.Runner, bool, *envgate.Gate, *varsui.Recovery) (*varsui.Session, error) {
+			deps.ServeVarsUI = func(context.Context, *projectconfig.Config, *providerclient.Provider, bool, *envgate.Gate, *varsui.Recovery) (*varsui.Session, error) {
 				served++
 				return nil, errors.New("a dry run must never serve the variables UI")
 			}
@@ -234,6 +241,7 @@ func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 	t.Setenv(clitest.FakeBootstrapEnvVar, "missing")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want a refusal; stdout=%s", stdout.String())
@@ -314,6 +322,7 @@ func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
 	before := projectFiles(t, root)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
@@ -335,6 +344,7 @@ func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
 	tsconfig := writeAppTSConfig(t, root, "api")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())

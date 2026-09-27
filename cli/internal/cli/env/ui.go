@@ -66,7 +66,7 @@ func serveAndOpenVarsUI(
 	stdin io.Reader,
 	stdout io.Writer,
 ) (*varsui.Session, error) {
-	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner, preview, gate, nil)
+	varsSession, err := deps.ServeVarsUI(ctx, cfg, runner.Provider(nil), preview, gate, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +91,8 @@ func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *p
 
 func envGate(cfg *projectconfig.Config, runner *providerclient.Runner, opts envOptions) *envgate.Gate {
 	return envgate.New(envwire.Values{
-		Runner: runner,
-		Slug:   cfg.Slug,
-		Tier:   envTier(opts),
+		Provider: runner.Provider(nil),
+		Slug:     cfg.Slug,
+		Tier:     envTier(opts),
 	}, envwire.Scope(cfg, opts.preview, ""))
 }

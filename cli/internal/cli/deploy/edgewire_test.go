@@ -24,6 +24,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 			root, journal, deps := clitest.SetUpEdgeFixture(t, tc.declaration)
 
 			var stdout, stderr bytes.Buffer
+			deps.AttachTerminalSink(&stdout)
 			if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
@@ -43,6 +44,7 @@ func TestDeploySendsTheEdgeSettingsUnchanged(t *testing.T) {
 	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n  dns: { cloudflare: { zone: \"acme.com\" } },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -65,6 +67,7 @@ func TestDeployRendersAnEdgeTheOriginRefuses(t *testing.T) {
 	t.Setenv(clitest.FakeEdgeRefusalEnvVar, refusal)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatalf("runDeploy err = nil, want the refused edge to fail the deploy; stdout=%s stderr=%s", stdout.String(), stderr.String())

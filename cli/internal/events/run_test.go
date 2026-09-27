@@ -166,6 +166,36 @@ func TestASuccessfulRunEndsWithASuccessResultAndNoError(t *testing.T) {
 	}
 }
 
+func TestADeployedRunsSuccessResultCarriesItsHeadlineURLNotesAndFlipBound(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	flip := &progressv1.FlipBound{TypicalMs: 3000, Published: true}
+	run.Deployed("Deployed", []string{"web: https://web.example.com"}, flip)
+
+	var err error
+	run.End(&err)
+
+	result := sink.received()[len(sink.received())-1].GetResult()
+	if !result.GetSuccess() || result.GetHeadline() != "Deployed" ||
+		strings.Join(result.GetUrlNotes(), ",") != "web: https://web.example.com" || result.GetFlipBound().GetTypicalMs() != 3000 {
+		t.Fatalf("result = %s, want a success headed Deployed with its url notes and flip bound", protojson.Format(result))
+	}
+}
+
+func TestARunThatFailsAfterReportingAHeadlineEndsWithTheFailureAlone(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	run.Finish("Nothing to deploy")
+
+	err := errors.New("the service map could not be written")
+	run.End(&err)
+
+	result := sink.received()[len(sink.received())-1].GetResult()
+	if result.GetSuccess() || result.GetHeadline() != "" || result.GetDetail() != "the service map could not be written" {
+		t.Fatalf("result = %s, want the failure with no success headline", protojson.Format(result))
+	}
+}
+
 func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)

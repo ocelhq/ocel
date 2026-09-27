@@ -29,7 +29,7 @@ func (r *Run) remember(ev *streamv1.RunEvent) {
 	parentID, _ := spanID(ev.GetStarted().GetParentSpanId())
 	name := ev.GetMessage()
 	if name == "" {
-		name = strings.ToLower(strings.TrimPrefix(ev.GetPhase().String(), "PHASE_"))
+		name = strings.ToLower(strings.TrimPrefix(ev.GetPhase().String(), "PHASE_")) + " phase"
 	}
 	r.scopesMu.Lock()
 	defer r.scopesMu.Unlock()

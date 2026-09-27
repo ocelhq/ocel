@@ -60,6 +60,7 @@ func (r inlineRun) deploy(t *testing.T, opts deployOptions) (string, error) {
 	})
 	opts.yes = true
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, r.root, opts, &stdout, &stderr, strings.NewReader(""))
 	return stdout.String() + stderr.String(), err
 }

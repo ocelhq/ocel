@@ -25,11 +25,12 @@ type Run struct {
 	start   time.Time
 	trace   *runtrace.Run
 
-	mu     sync.Mutex
-	phases map[progressv1.Phase]*Scope
-	open   []*Scope
-	holds  int
-	apps   []*progressv1.AppResult
+	mu      sync.Mutex
+	phases  map[progressv1.Phase]*Scope
+	open    []*Scope
+	holds   int
+	apps    []*progressv1.AppResult
+	success *streamv1.RunResultEvent
 
 	endOnce sync.Once
 }
@@ -68,7 +69,13 @@ func (r *Run) interrupt() {
 func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
 	switch {
 	case err == nil:
-		return &streamv1.RunResultEvent{Success: true}, 0
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		result := &streamv1.RunResultEvent{Success: true}
+		if r.success != nil {
+			result = r.success
+		}
+		return result, 0
 	case r.ctx.Err() != nil:
 		note := "Resources may be partially created."
 		if r.held() {
@@ -87,6 +94,16 @@ func (r *Run) result(err error) (*streamv1.RunResultEvent, int) {
 		result.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), refusal.Error()), "\n")
 	}
 	return result, 1
+}
+
+func (r *Run) Finish(headline string) {
+	r.Deployed(headline, nil, nil)
+}
+
+func (r *Run) Deployed(headline string, urlNotes []string, flip *progressv1.FlipBound) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.success = &streamv1.RunResultEvent{Success: true, Headline: headline, UrlNotes: urlNotes, FlipBound: flip}
 }
 
 func resultLevel(result *streamv1.RunResultEvent) progressv1.Level {

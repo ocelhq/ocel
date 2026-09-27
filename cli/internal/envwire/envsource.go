@@ -42,7 +42,7 @@ func Folders(cfg *projectconfig.Config) []string {
 	return folders
 }
 
-func SyncEnvSource(ctx context.Context, runner *providerclient.Runner, cfg *projectconfig.Config, preview bool) (*envvarsv1.SyncEnvSourceResponse, error) {
+func SyncEnvSource(ctx context.Context, prov *providerclient.Provider, cfg *projectconfig.Config, preview bool) (*envvarsv1.SyncEnvSourceResponse, error) {
 	descriptor := DeployedEnvSource(cfg, preview)
 	folders := Folders(cfg)
 	var read map[envvars.Cell]envsource.Value
@@ -55,7 +55,7 @@ func SyncEnvSource(ctx context.Context, runner *providerclient.Runner, cfg *proj
 			return nil, err
 		}
 	}
-	vars, err := runner.Vars()
+	vars, err := prov.Vars()
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,8 @@ func SyncEnvSource(ctx context.Context, runner *providerclient.Runner, cfg *proj
 	})
 }
 
-func SyncRegisteredEnvSource(ctx context.Context, runner *providerclient.Runner, slug string, preview bool) (*envvarsv1.SyncEnvSourceResponse, error) {
-	vars, err := runner.Vars()
+func SyncRegisteredEnvSource(ctx context.Context, prov *providerclient.Provider, slug string, preview bool) (*envvarsv1.SyncEnvSourceResponse, error) {
+	vars, err := prov.Vars()
 	if err != nil {
 		return nil, err
 	}
@@ -123,13 +123,13 @@ func EnvSourceOfStatus(status *envvarsv1.EnvSourceStatus) envgate.EnvSource {
 }
 
 type EnvSourceClient struct {
-	Runner  *providerclient.Runner
-	Config  *projectconfig.Config
-	Preview bool
+	Provider *providerclient.Provider
+	Config   *projectconfig.Config
+	Preview  bool
 }
 
 func (c EnvSourceClient) Describe(ctx context.Context) (envgate.EnvSource, error) {
-	vars, err := c.Runner.Vars()
+	vars, err := c.Provider.Vars()
 	if err != nil {
 		return envgate.EnvSource{}, err
 	}
@@ -141,12 +141,12 @@ func (c EnvSourceClient) Describe(ctx context.Context) (envgate.EnvSource, error
 }
 
 func (c EnvSourceClient) Sync(ctx context.Context) error {
-	_, err := SyncEnvSource(ctx, c.Runner, c.Config, c.Preview)
+	_, err := SyncEnvSource(ctx, c.Provider, c.Config, c.Preview)
 	return err
 }
 
 func (c EnvSourceClient) Set(ctx context.Context, at envgate.Cell, value, description string) (bool, error) {
-	vars, err := c.Runner.Vars()
+	vars, err := c.Provider.Vars()
 	if err != nil {
 		return false, err
 	}

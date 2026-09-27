@@ -23,21 +23,22 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
-	buildOut := ui.BuildWriter()
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt, dry bool, scope *events.Scope, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
+	buildOut := scope.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
 
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(buildOut, captured)
@@ -50,15 +51,15 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, nil, err
 	}
 	for _, warning := range warnings {
-		ui.Warning(warning)
+		scope.Warn(warning)
 	}
 	for _, warning := range envgate.Undeclared(gate.Declared(), gate.Scope().EnvSource) {
-		ui.Warning(warning)
+		scope.Warn(warning)
 	}
 	if err := gate.Check(); err != nil {
 		return nil, nil, err
 	}
-	inline, err := inlineRecords(ctx, deps, cfg, gate, resources, ui)
+	inline, err := inlineRecords(ctx, deps, cfg, gate, resources, scope)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,12 +80,12 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, nil, err
 		}
-		ui.Diagnostic("using prebuilt output in " + constants.ProjectStateDirName + "/output")
+		scope.Say("using prebuilt output in " + constants.ProjectStateDirName + "/output")
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, nil, err
 		}
-		if !ui.Dry() {
+		if !dry {
 			if err := clientenv.PointImports(cfg.Dir, clients); err != nil {
 				return nil, nil, err
 			}
@@ -113,14 +114,14 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, nil, err
 	}
 	for _, warning := range edgeWarnings {
-		ui.Warning(warning)
+		scope.Warn(warning)
 	}
 
 	if len(functions) == 0 && len(images) == 0 {
 		if len(resources) == 0 {
 			return nil, nil, nil
 		}
-		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
+		scope.Say("no functions to deploy; deploying infrastructure only")
 	}
 
 	attributionApps, err := toAttributionApps(cfg, functions, compute, configName)
@@ -146,7 +147,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, ui *runui.Session) ([]inlinebinding.Record, error) {
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, scope *events.Scope) ([]inlinebinding.Record, error) {
 	values, err := gate.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
@@ -166,7 +167,7 @@ func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 	}
 	warnings, err := inlinebinding.Verify(ctx, records, declared, inlinebinding.Probes{Postgres: deps.ProbePostgres, Bucket: deps.ProbeBucket})
 	for _, warning := range warnings {
-		ui.Warning(warning)
+		scope.Warn(warning)
 	}
 	return records, err
 }

@@ -8,8 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 )
 
 type Provider struct {
@@ -100,13 +102,33 @@ func (p *Provider) Call(ctx context.Context, call func(contractv1connect.Provide
 }
 
 func Stream[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*progressv1.ResultEvent, error) {
+	return forward(ctx, p, rpc, req, call, p.scope.Forward)
+}
+
+func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*planv1.ChangePlan, error) {
+	var plan *planv1.ChangePlan
+	_, err := forward(ctx, p, rpc, req, call, func(ev *progressv1.OperationEvent) {
+		if shown := ev.GetPlan(); shown != nil {
+			plan = shown
+			return
+		}
+		p.scope.Forward(ev)
+	})
+	return plan, err
+}
+
+func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.ResultEvent, error) {
 	var result *progressv1.ResultEvent
 	err := p.callTrusting(ctx, func(r *Runner) error {
 		var err error
-		result, err = stream(ctx, r, rpc, req, call, p.scope.Forward)
+		result, err = stream(ctx, r, rpc, req, call, each)
 		return err
 	})
 	return result, err
+}
+
+func (p *Provider) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
+	return p.current().Vars()
 }
 
 type processLines struct {

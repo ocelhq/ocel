@@ -115,6 +115,7 @@ export default {
 		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-preview")
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want a domain-claim refusal")
@@ -146,7 +147,9 @@ export default {
 		t.Setenv(clitest.FakeDomainOwnerEnvVar, "ocel-other-production-web")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		deps := clitest.NewDeps()
+		deps.AttachTerminalSink(&stdout)
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a domain-claim refusal")
 		}
@@ -180,6 +183,7 @@ export default {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}

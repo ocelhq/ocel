@@ -55,6 +55,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
@@ -86,6 +87,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
@@ -110,6 +112,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the gate to refuse on what it knows itself")
@@ -130,7 +133,9 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		deps := clitest.NewDeps()
+		deps.AttachTerminalSink(&stdout)
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "Deployed") {
@@ -144,7 +149,9 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		t.Setenv(clitest.FakeRevealFailureEnvVar, "the store is unreachable")
 
 		var stdout, stderr bytes.Buffer
-		err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		deps := clitest.NewDeps()
+		deps.AttachTerminalSink(&stdout)
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a store it cannot read to stop the deploy")
 		}
@@ -164,7 +171,9 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_CELLS_OUT", cellsPath)
 
 		var stdout, stderr bytes.Buffer
-		if err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		deps := clitest.NewDeps()
+		deps.AttachTerminalSink(&stdout)
+		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
@@ -204,6 +213,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		clitest.StubBuild(&deps, nil)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v, want a dead scope to warn, not stop the deploy; stdout=%s", err, stdout.String())
 		}
@@ -226,6 +236,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		got := captureBuildEnv(&deps)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 		}
@@ -247,6 +258,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want a half-finished folder rename to stop the deploy")
@@ -271,6 +283,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		got := captureBuildEnv(&deps)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -290,6 +303,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		stubAppBuildRecorder(&deps, &built)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runPreviewUp err = nil, want the preview gate to refuse: the production store is not the preview one")
@@ -328,6 +342,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 				got := captureBuildEnv(&deps)
 
 				var stdout, stderr bytes.Buffer
+				deps.AttachTerminalSink(&stdout)
 				if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: tc.deploying}, &stdout, &stderr, strings.NewReader("")); err != nil {
 					t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 				}
@@ -355,6 +370,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 		got := captureBuildEnv(&deps)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the gate; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -384,6 +400,7 @@ func TestEnvGateOnPreviewUp(t *testing.T) {
 			t.Helper()
 			*got = nil
 			var stdout, stderr bytes.Buffer
+			deps.AttachTerminalSink(&stdout)
 			if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runPreviewUp %s err = %v; stdout=%s stderr=%s", when, err, stdout.String(), stderr.String())
 			}

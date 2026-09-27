@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -182,7 +183,7 @@ func previewUpRunE(deps cmddeps.Deps, upOpts *previewUpOptions) func(cmd *cobra.
 	}
 }
 
-func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
@@ -202,95 +203,107 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 	}
 
-	spec := deps.Spec(consent.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin)
-	spec.Dry = opts.dry
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	gate := deps.Gate(consent.Convergent, "ocel preview up", opts.yes, stdout, stdin)
+	gate.Dry = opts.dry
+	if err := gate.Refuse(); err != nil {
+		return err
+	}
 
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		var facts preflightFacts
-		err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			var err error
-			facts, err = preflightPreviewUp(ctx, deps, ui, check, prov, cfg, env.GetIdentity(), stdout, stdin)
-			return err
-		})
-		if err != nil {
-			return err
-		}
+	ctx, run, err := deps.Events.Begin(ctx, "ocel preview up", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
 
-		proceed, err := guardNewProject(ctx, ui, cfg, facts.knownSlugs)
-		if err != nil || !proceed {
-			return err
-		}
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, pinning(opts.dry))
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
 
-		ui.Building()
-		browser := deps.BrowserReachable(stdin)
-		scope := envwire.Scope(cfg, true, env.GetIdentity())
-		scope.Browser = browser
-		recovery := gateRecovery{
-			deps:    deps,
-			cfg:     cfg,
-			runner:  runner,
-			preview: true,
-			newGate: func(synced envgate.EnvSource) *envgate.Gate {
-				scope := scope
-				scope.EnvSource = synced
-				return envgate.New(envwire.Values{
-					Runner: runner,
-					Slug:   cfg.Slug,
-					Tier:   environmentv1.Tier_TIER_PREVIEW,
-				}, scope)
-			},
-			command:        "ocel preview up",
-			compute:        facts.compute,
-			containerArchs: facts.containerArchs,
-			urls:           facts.urls,
-			ui:             ui,
-			enabled:        !opts.dry && browser,
-		}
-		manifest, inline, err := recovery.buildManifest(ctx, opts.prebuilt)
-		if err != nil {
-			return err
-		}
-		if manifest == nil {
-			ui.Finish("Nothing to deploy")
-			return nil
-		}
-		ui.BuildOK()
-
-		registry, err := imageRegistry(ctx, runner, cfg, env.GetTier())
-		if err != nil {
-			return err
-		}
-
-		req := &contractv1.DeployRequest{
-			Manifest:    manifest,
-			Environment: env,
-			Edge:        edgewire.Selection(cfg),
-			Dry:         opts.dry,
-
-			ImageRegistry: registry,
-		}
-
-		if opts.dry {
-			return showDeployPlan(ctx, runner, ui, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()))
-		}
-
-		out, err := streamDeploy(ctx, runner, ui, cfg.Slug, req, inline)
-		if err != nil {
-			return err
-		}
-
-		if err := recordDeployResult(cfg, manifest, env, "", out.promotionID, out.apps); err != nil {
-			return err
-		}
-		if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.bindings); err != nil {
-			return err
-		}
-		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.urlNotes, out.flip)
+	facts, err := preflightPreviewUp(ctx, deps, gate, check, prov, cfg, env.GetIdentity(), stdout, stdin)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+	if facts.declined {
+		run.Finish("Nothing deployed")
 		return nil
-	})
+	}
+
+	browser := deps.BrowserReachable(stdin)
+	scope := envwire.Scope(cfg, true, env.GetIdentity())
+	scope.Browser = browser
+	recovery := gateRecovery{
+		deps:    deps,
+		cfg:     cfg,
+		prov:    prov,
+		preview: true,
+		newGate: func(synced envgate.EnvSource) *envgate.Gate {
+			scope := scope
+			scope.EnvSource = synced
+			return envgate.New(envwire.Values{
+				Provider: prov,
+				Slug:     cfg.Slug,
+				Tier:     environmentv1.Tier_TIER_PREVIEW,
+			}, scope)
+		},
+		command:        "ocel preview up",
+		compute:        facts.compute,
+		containerArchs: facts.containerArchs,
+		urls:           facts.urls,
+		dry:            opts.dry,
+		enabled:        !opts.dry && browser,
+	}
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
+	build.End(err)
+	if err != nil {
+		return err
+	}
+	if manifest == nil {
+		run.Finish("Nothing to deploy")
+		return nil
+	}
+
+	registry, err := imageRegistry(ctx, prov, cfg, env.GetTier())
+	if err != nil {
+		return err
+	}
+
+	req := &contractv1.DeployRequest{
+		Manifest:    manifest,
+		Environment: env,
+		Edge:        edgewire.Selection(cfg),
+		Dry:         opts.dry,
+
+		ImageRegistry: registry,
+	}
+
+	if opts.dry {
+		return showDeployPlan(ctx, run, prov, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()))
+	}
+
+	out, err := streamDeploy(ctx, prov, cfg.Slug, req, inline)
+	if err != nil {
+		return err
+	}
+
+	if err := recordDeployResult(cfg, manifest, env, "", out.promotionID, out.apps); err != nil {
+		return err
+	}
+	if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.bindings); err != nil {
+		return err
+	}
+	run.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.urlNotes, out.flip)
+	return nil
 }
 
-func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, rep runui.Reporter) (edge.PreviewSite, error) {
+func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, pointer string, check *events.Scope) (edge.PreviewSite, error) {
 	declared := ""
 	if hosts := preflight.Hostnames(cfg, "preview"); len(hosts) > 0 {
 		declared = hosts[0].Name
@@ -310,13 +323,13 @@ func requirePreviewDomain(cfg *projectconfig.Config, wildcard *contractv1.Previe
 		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
 			return edge.PreviewSite{}, err
 		}
-		rep.Diagnostic(fmt.Sprintf("Serving previews on global *.%s", base))
+		check.Say(fmt.Sprintf("Serving previews on global *.%s", base))
 
 	case declared == edge.PreviewWildcard(base):
-		rep.Diagnostic(fmt.Sprintf("Serving previews on project-level %s, also the global preview domain", declared))
+		check.Say(fmt.Sprintf("Serving previews on project-level %s, also the global preview domain", declared))
 
 	case base != "":
-		rep.Diagnostic(fmt.Sprintf("Serving previews on project-level %s; global *.%s ignored", declared, base))
+		check.Say(fmt.Sprintf("Serving previews on project-level %s; global *.%s ignored", declared, base))
 	}
 
 	site := edge.ProjectPreview(strings.TrimPrefix(declared, "*."))

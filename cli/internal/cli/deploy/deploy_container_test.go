@@ -48,6 +48,7 @@ func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *tes
   registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runDeploy() built and deployed a project whose registry password is nowhere to be read, want it refused at the plan")
@@ -69,6 +70,7 @@ func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) 
   registry: { server: "ghcr.io", password: "`+token+`" },`)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runDeploy() took a pasted token as the name of an environment variable, and would authenticate as nobody")
@@ -91,6 +93,7 @@ func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
   registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -103,6 +106,7 @@ func TestAProjectThatNamesNoRegistryDemandsNoSecret(t *testing.T) {
 	deps, root, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -137,6 +141,7 @@ func deployContainerProject(t *testing.T, health string) string {
 
 	deps, root, sockPath := containerProject(t, health)
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -173,6 +178,7 @@ func TestAContainerAppRendersADigestPinnedManifestUnderDry(t *testing.T) {
 	deps, root, sockPath := containerProject(t, "")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, dry: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy --dry err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -191,6 +197,7 @@ func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testin
   registry: { server: "ghcr.io", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -205,6 +212,7 @@ func TestADeployThatNamesNoRegistrySendsNone(t *testing.T) {
 	deps, root, _ := registryProject(t, "")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -233,6 +241,7 @@ export default {
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
@@ -256,6 +265,7 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 	}
 
 	var stdout, stderr bytes.Buffer
+	deps.AttachTerminalSink(&stdout)
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}

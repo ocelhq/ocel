@@ -33,7 +33,7 @@ type Deps struct {
 	OpenBrowser         func(url string) error
 	ProbePostgres       inlinebinding.PostgresProbe
 	ProbeBucket         inlinebinding.BucketProbe
-	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
+	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
 	CurrentGitBranch    func(dir string) (string, error)
 	DiscoverPRNumber    func() string
 	RunPackageManager   func(ctx context.Context, dir string, argv []string, output io.Writer) error
@@ -59,6 +59,17 @@ const YesUsage = "Consent in advance to any confirmation this command would ask 
 
 func Yes(cmd *cobra.Command, into *bool) {
 	cmd.Flags().BoolVarP(into, "yes", "y", false, YesUsage)
+}
+
+func (d Deps) Gate(class consent.Class, command string, yes bool, stdout io.Writer, stdin io.Reader) consent.Gate {
+	return consent.Gate{
+		Command:     command,
+		Class:       class,
+		Yes:         yes,
+		Interactive: d.StdinIsTerminal(stdin),
+		In:          stdin,
+		Out:         stdout,
+	}
 }
 
 func (d Deps) Spec(class consent.Class, command string, cfg *projectconfig.Config, yes bool, stdout io.Writer, stdin io.Reader) runui.Spec {

@@ -11,13 +11,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
@@ -25,7 +26,7 @@ import (
 type gateRecovery struct {
 	deps    cmddeps.Deps
 	cfg     *projectconfig.Config
-	runner  *providerclient.Runner
+	prov    *providerclient.Provider
 	preview bool
 
 	newGate func(envgate.EnvSource) *envgate.Gate
@@ -35,16 +36,22 @@ type gateRecovery struct {
 	containerArchs map[string]string
 	urls           map[string]string
 
-	ui *runui.Session
-
+	dry     bool
 	enabled bool
 }
 
-func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r gateRecovery) buildManifest(ctx context.Context, phase *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
+	scope := phase.Unit(r.cfg.Slug, "Building project")
+	manifest, inline, err := r.build(ctx, scope, prebuilt)
+	scope.End(err)
+	return manifest, inline, err
+}
+
+func (r gateRecovery) build(ctx context.Context, scope *events.Scope, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	gate, err := r.gate(ctx)
 	var refusal *envgate.Refusal
 	if errors.As(err, &refusal) && r.enabled {
-		if err := r.fill(ctx, gate, refusal); err != nil {
+		if err := r.fill(ctx, scope, gate, refusal); err != nil {
 			return nil, nil, err
 		}
 		gate, err = r.gate(ctx)
@@ -52,26 +59,26 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contra
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest, inline, err := r.attempt(ctx, gate, prebuilt, 0)
+	manifest, inline, err := r.attempt(ctx, scope, gate, prebuilt, 0)
 
 	if !errors.As(err, &refusal) {
 		return manifest, inline, err
 	}
 	if !r.enabled {
-		r.createInEnvSource(ctx, gate, refusal)
+		r.createInEnvSource(ctx, scope, gate, refusal)
 		return manifest, inline, err
 	}
-	if err := r.fill(ctx, gate, refusal); err != nil {
+	if err := r.fill(ctx, scope, gate, refusal); err != nil {
 		return nil, nil, err
 	}
 	if gate, err = r.gate(ctx); err != nil {
 		return nil, nil, err
 	}
-	return r.attempt(ctx, gate, prebuilt, 1)
+	return r.attempt(ctx, scope, gate, prebuilt, 1)
 }
 
 func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
-	synced, err := envwire.SyncEnvSource(ctx, r.runner, r.cfg, r.preview)
+	synced, err := envwire.SyncEnvSource(ctx, r.prov, r.cfg, r.preview)
 	if problems := envwire.CredentialProblems(err); len(problems) > 0 {
 		gate := r.newGate(envwire.ConfiguredEnvSource(r.cfg, r.preview))
 		return gate, gate.RefuseCredentials(problems)
@@ -82,12 +89,12 @@ func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
 	return r.newGate(envwire.EnvSourceOf(synced)), nil
 }
 
-func (r gateRecovery) createInEnvSource(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) {
+func (r gateRecovery) createInEnvSource(ctx context.Context, scope *events.Scope, gate *envgate.Gate, refusal *envgate.Refusal) {
 	source := gate.Scope().EnvSource
-	if !source.CanCreate || r.ui.Dry() {
+	if !source.CanCreate || r.dry {
 		return
 	}
-	vars, err := r.runner.Vars()
+	vars, err := r.prov.Vars()
 	if err != nil {
 		return
 	}
@@ -102,36 +109,36 @@ func (r gateRecovery) createInEnvSource(ctx context.Context, gate *envgate.Gate,
 		})
 		switch {
 		case err != nil:
-			r.ui.Warning(fmt.Sprintf("%s has no %s, and creating it there failed: %v", source.ID, problem.GetKey(), err))
+			scope.Warn(fmt.Sprintf("%s has no %s, and creating it there failed: %v", source.ID, problem.GetKey(), err))
 		case resp.GetAwaitingApproval():
-			r.ui.Warning(fmt.Sprintf("asked %s to create %s empty; the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
+			scope.Warn(fmt.Sprintf("asked %s to create %s empty; the change waits for approval there, then for you to fill it in", source.ID, problem.GetKey()))
 		default:
-			r.ui.Warning(fmt.Sprintf("created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
+			scope.Warn(fmt.Sprintf("created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
 		}
 	}
 }
 
-func (r gateRecovery) attempt(ctx context.Context, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
+func (r gateRecovery) attempt(ctx context.Context, scope *events.Scope, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	attemptCtx := ctx
 	var span trace.Span
 	if run := runtrace.FromContext(ctx); run != nil {
 		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(retry))
 	}
-	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute, r.containerArchs, r.urls)
+	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.dry, scope, r.compute, r.containerArchs, r.urls)
 	endAttemptSpan(span, err)
 	return manifest, inline, err
 }
 
-func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {
-	varsSession, err := r.deps.ServeVarsUI(ctx, r.cfg, r.runner, r.preview, gate, r.recovery(refusal))
+func (r gateRecovery) fill(ctx context.Context, scope *events.Scope, gate *envgate.Gate, refusal *envgate.Refusal) error {
+	varsSession, err := r.deps.ServeVarsUI(ctx, r.cfg, r.prov, r.preview, gate, r.recovery(refusal))
 	if err != nil {
 		return err
 	}
 	defer varsSession.Close()
 
-	r.ui.Waiting(refusal.Missing(), varsSession.URL)
+	resume := scope.Hold(&streamv1.WaitingEvent{Missing: refusal.Missing(), Url: varsSession.URL})
 	if err := r.deps.OpenBrowser(varsSession.URL); err != nil {
-		r.ui.Warning("Couldn't open your browser automatically — open the link above yourself.")
+		scope.Warn("Couldn't open your browser automatically — open the link above yourself.")
 	}
 
 	run := runtrace.FromContext(ctx)
@@ -145,7 +152,7 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 
 	switch {
 	case waitErr == nil:
-		r.ui.Resume()
+		resume("the page was answered")
 		return nil
 	case errors.Is(waitErr, varsui.ErrAbandoned):
 		return &abandonedRefusal{refusal: refusal}

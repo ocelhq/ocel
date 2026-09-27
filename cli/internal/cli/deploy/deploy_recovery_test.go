@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -47,8 +50,8 @@ type varsUISessions struct {
 func captureVarsUI(deps *cmddeps.Deps) *varsUISessions {
 	sessions := &varsUISessions{}
 	prev := deps.ServeVarsUI
-	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
-		session, err := prev(ctx, cfg, runner, preview, gate, recovery)
+	deps.ServeVarsUI = func(ctx context.Context, cfg *projectconfig.Config, prov *providerclient.Provider, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
+		session, err := prev(ctx, cfg, prov, preview, gate, recovery)
 		if err == nil {
 			sessions.mu.Lock()
 			sessions.all = append(sessions.all, session)
@@ -163,6 +166,62 @@ func varsUITier(t *testing.T, address, token string) string {
 
 const missingStripeKey = `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`
 
+func TestAMissingVariableHoldsTheRunWithTheWaitingEventAndResumesIt(t *testing.T) {
+	root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	problems := problemsFile(t, missingStripeKey)
+	deps := clitest.NewDeps()
+	terminalStdin(&deps)
+	useJSONLogFormat(t, &deps)
+	var mu sync.Mutex
+	var opened []string
+	recordBrowser(&deps, &opened, &mu)
+
+	var out syncBuffer
+	var stderr bytes.Buffer
+	deps.AttachTerminalSink(&out)
+	done := make(chan error, 1)
+	go func() {
+		done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+	}()
+
+	address, token := awaitVarsUI(t, &out, 1)
+	setCell(t, address, token, "STRIPE_API_KEY", "sk_live_filled_in")
+	clitest.WriteFile(t, problems, "[]")
+	markDone(t, address, token)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, out.String(), stderr.String())
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("runDeploy never returned after the matrix was marked done")
+	}
+
+	evs := envelopes(t, out.String())
+	waiting := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	if waiting < 0 {
+		t.Fatalf("the run was never held for the missing variable: %s", out.String())
+	}
+	held := evs[waiting]
+	if held.GetPhase() != progressv1.Phase_PHASE_BUILD || !strings.HasPrefix(held.GetWaiting().GetUrl(), address) {
+		t.Errorf("waiting in %s at %q, want the build held at the variables page %s", held.GetPhase(), held.GetWaiting().GetUrl(), address)
+	}
+	if missing := held.GetWaiting().GetMissing().GetCells(); len(missing) != 1 || missing[0].GetKey() != "STRIPE_API_KEY" {
+		t.Errorf("waiting names %v missing, want STRIPE_API_KEY", missing)
+	}
+	resumed := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if resumed < waiting || !bytes.Equal(evs[resumed].GetSpanId(), held.GetSpanId()) {
+		t.Fatalf("resumed at event %d, waiting at %d: want the same scope resumed after the hold: %s", resumed, waiting, out.String())
+	}
+	built := slices.IndexFunc(evs, func(ev *streamv1.RunEvent) bool {
+		return ev.GetEnded() != nil && bytes.Equal(ev.GetSpanId(), held.GetSpanId())
+	})
+	if built < resumed || evs[built].GetEnded().GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK {
+		t.Errorf("the held build ended at event %d (resumed at %d), want it to finish OK after it resumed", built, resumed)
+	}
+}
+
 func TestGateRecoveryOnDeploy(t *testing.T) {
 	t.Run("a gate refusal in a terminal opens the UI and resumes into the build", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
@@ -180,6 +239,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -229,6 +289,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -272,6 +333,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -306,6 +368,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(ctx, deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -349,6 +412,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -393,6 +457,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -443,6 +508,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -537,6 +603,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
+				deps.AttachTerminalSink(&stdout)
 				err := runDeploy(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runDeploy err = nil, want the vars requirement to be terminal")
@@ -579,6 +646,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 		var stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
+			deps.AttachTerminalSink(&out)
 			done <- runPreviewUp(context.Background(), deps, root, previewUpOptions{name: "staging"}, &out, &stderr, strings.NewReader(""))
 		}()
 
@@ -629,6 +697,7 @@ func TestGateRecoveryOnPreviewUp(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 				var stdout, stderr bytes.Buffer
+				deps.AttachTerminalSink(&stdout)
 				err := runPreviewUp(ctx, deps, root, tc.opts, &stdout, &stderr, strings.NewReader(""))
 				if err == nil {
 					t.Fatal("runPreviewUp err = nil, want the hard refusal kept")

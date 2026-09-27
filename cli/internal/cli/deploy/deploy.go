@@ -14,13 +14,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
-	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerclient"
-	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -72,7 +71,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	return cmd
 }
 
-func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
@@ -87,94 +86,113 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		}
 	}
 
-	spec := deps.Spec(consent.Convergent, "ocel deploy", cfg, opts.yes, stdout, stdin)
-	spec.Dry = opts.dry
+	if _, err := cfg.RequireProvider(); err != nil {
+		return err
+	}
+	gate := deps.Gate(consent.Convergent, "ocel deploy", opts.yes, stdout, stdin)
+	gate.Dry = opts.dry
+	if err := gate.Refuse(); err != nil {
+		return err
+	}
 
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
-		var facts preflightFacts
-		err := ui.Check(runner, func(check *events.Scope, prov *providerclient.Provider) error {
-			var err error
-			facts, err = preflightDeploy(ctx, deps, ui, check, prov, cfg, stdout, stdin)
-			return err
-		})
-		if err != nil {
-			return err
-		}
+	ctx, run, err := deps.Events.Begin(ctx, "ocel deploy", cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer run.End(&err)
 
-		proceed, err := guardNewProject(ctx, ui, cfg, facts.knownSlugs)
-		if err != nil || !proceed {
-			return err
-		}
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	prov, err := providerclient.Start(ctx, cfg, check, deps.HostTrust, pinning(opts.dry))
+	if err != nil {
+		return err
+	}
+	defer prov.Close()
 
-		ui.Building()
-		browser := deps.BrowserReachable(stdin)
-		scope := envwire.Scope(cfg, false, "")
-		scope.Browser = browser
-		recovery := gateRecovery{
-			deps:   deps,
-			cfg:    cfg,
-			runner: runner,
-			newGate: func(synced envgate.EnvSource) *envgate.Gate {
-				scope := scope
-				scope.EnvSource = synced
-				return envgate.New(envwire.Values{
-					Runner: runner,
-					Slug:   cfg.Slug,
-					Tier:   environmentv1.Tier_TIER_PRODUCTION,
-				}, scope)
-			},
-			command:        "ocel deploy",
-			compute:        facts.compute,
-			containerArchs: facts.containerArchs,
-			urls:           facts.urls,
-			ui:             ui,
-			enabled:        !opts.dry && browser,
-		}
-		manifest, inline, err := recovery.buildManifest(ctx, opts.prebuilt)
-		if err != nil {
-			return err
-		}
-		if manifest == nil {
-			ui.Finish("Nothing to deploy")
-			return nil
-		}
-		ui.BuildOK()
-
-		env := &environmentv1.Environment{
-			Tier:      environmentv1.Tier_TIER_PRODUCTION,
-			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
-		}
-		registry, err := imageRegistry(ctx, runner, cfg, env.GetTier())
-		if err != nil {
-			return err
-		}
-
-		req := &contractv1.DeployRequest{
-			Manifest:    manifest,
-			Environment: env,
-			Tag:         opts.tag,
-			Edge:        edgewire.Selection(cfg),
-			Dry:         opts.dry,
-
-			ImageRegistry: registry,
-		}
-
-		if opts.dry {
-			return showDeployPlan(ctx, runner, ui, req, "Proposed changes to production")
-		}
-
-		out, err := streamDeploy(ctx, runner, ui, cfg.Slug, req, inline)
-		if err != nil {
-			return err
-		}
-
-		if err := recordDeployResult(cfg, manifest, env, opts.tag, out.promotionID, out.apps); err != nil {
-			return err
-		}
-		if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.bindings); err != nil {
-			return err
-		}
-		ui.Deployed("Deployed", out.urlNotes, out.flip)
+	facts, err := preflightDeploy(ctx, deps, gate, check, prov, cfg, stdout, stdin)
+	check.End(err)
+	if err != nil {
+		return err
+	}
+	if facts.declined {
+		run.Finish("Nothing deployed")
 		return nil
-	})
+	}
+
+	browser := deps.BrowserReachable(stdin)
+	scope := envwire.Scope(cfg, false, "")
+	scope.Browser = browser
+	recovery := gateRecovery{
+		deps: deps,
+		cfg:  cfg,
+		prov: prov,
+		newGate: func(synced envgate.EnvSource) *envgate.Gate {
+			scope := scope
+			scope.EnvSource = synced
+			return envgate.New(envwire.Values{
+				Provider: prov,
+				Slug:     cfg.Slug,
+				Tier:     environmentv1.Tier_TIER_PRODUCTION,
+			}, scope)
+		},
+		command:        "ocel deploy",
+		compute:        facts.compute,
+		containerArchs: facts.containerArchs,
+		urls:           facts.urls,
+		dry:            opts.dry,
+		enabled:        !opts.dry && browser,
+	}
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	manifest, inline, err := recovery.buildManifest(ctx, build, opts.prebuilt)
+	build.End(err)
+	if err != nil {
+		return err
+	}
+	if manifest == nil {
+		run.Finish("Nothing to deploy")
+		return nil
+	}
+
+	env := &environmentv1.Environment{
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
+	}
+	registry, err := imageRegistry(ctx, prov, cfg, env.GetTier())
+	if err != nil {
+		return err
+	}
+
+	req := &contractv1.DeployRequest{
+		Manifest:    manifest,
+		Environment: env,
+		Tag:         opts.tag,
+		Edge:        edgewire.Selection(cfg),
+		Dry:         opts.dry,
+
+		ImageRegistry: registry,
+	}
+
+	if opts.dry {
+		return showDeployPlan(ctx, run, prov, req, "Proposed changes to production")
+	}
+
+	out, err := streamDeploy(ctx, prov, cfg.Slug, req, inline)
+	if err != nil {
+		return err
+	}
+
+	if err := recordDeployResult(cfg, manifest, env, opts.tag, out.promotionID, out.apps); err != nil {
+		return err
+	}
+	if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.bindings); err != nil {
+		return err
+	}
+	run.Deployed("Deployed", out.urlNotes, out.flip)
+	return nil
+}
+
+func pinning(dry bool) providerclient.Pinning {
+	if dry {
+		return providerclient.PinInMemory
+	}
+	return providerclient.PinToLock
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -189,6 +190,8 @@ var fakeStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisionin
 
 const fakeOversizedEventBytes = 1 << 16
 
+var fakePlan = &planv1.ChangePlan{Subject: "acme", Groups: []*planv1.ChangeGroup{{Kind: "stack", Name: "acme", Action: planv1.Change_ACTION_CREATE}}}
+
 func fakeSaid(message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: fakeStageID, Message: message}
 }
@@ -200,6 +203,12 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 
 	if err := stream.Send(fakeSaid("step 1")); err != nil {
 		return err
+	}
+
+	if req.GetDry() {
+		if err := stream.Send(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: fakePlan}}); err != nil {
+			return err
+		}
 	}
 
 	switch s.mode {

@@ -46,14 +46,14 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := &projectconfig.Config{
 			Dir:  root,
 			Slug: "prebuilt",
 			Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "container"}},
 		}
 		clitest.StubAppImages(&deps, "api")
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -68,9 +68,9 @@ func TestTheManifestNamesEveryAppsCompute(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := &projectconfig.Config{Dir: root, Slug: "prebuilt"}
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "container", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest() landed an app the config never names on container compute, so a provider would be handed an app with no image")
 		}
@@ -113,7 +113,7 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	deps := clitest.NewDeps()
 	recordBuildApp(&deps)
 
-	s, _ := newBuildManifestSession(t)
+	s, _ := newBuildScope(t)
 	cfg := &projectconfig.Config{
 		Dir:  root,
 		Slug: "prebuilt",
@@ -121,7 +121,7 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 	clitest.StubAppImages(&deps, "api")
 
-	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "container", nil, nil)
+	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "container", nil, nil)
 	if err != nil {
 		t.Fatalf("collectAndBuildManifest over a container app with no runtime: %v", err)
 	}

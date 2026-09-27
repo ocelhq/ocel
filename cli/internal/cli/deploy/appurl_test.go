@@ -48,10 +48,10 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 		return nil
 	}
 
-	s, _ := newBuildManifestSession(t)
+	s, _ := newBuildScope(t)
 	cfg := prebuiltConfig(root)
 	urls := map[string]string{"api": "https://api.acme.com"}
-	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, s, "serverless", nil, urls)
+	manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, "serverless", nil, urls)
 	if err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
@@ -92,14 +92,14 @@ func TestPrebuiltRefusesAnOutputBuiltForAnotherURL(t *testing.T) {
 	recordBuildApp(&deps)
 	cfg := prebuiltConfig(root)
 
-	s, _ := newBuildManifestSession(t)
-	if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, s, "serverless", nil,
+	s, _ := newBuildScope(t)
+	if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, "serverless", nil,
 		map[string]string{"api": "https://api.acme.com"}); err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
 
-	s, _ = newBuildManifestSession(t)
-	_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil,
+	s, _ = newBuildScope(t)
+	_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil,
 		map[string]string{"api": "https://pr-1.preview.acme.com"})
 	if err == nil {
 		t.Fatal("collectAndBuildManifest = nil for output built against another hostname, want a refusal: the url is inlined into the browser bundle, so this deploy would serve the wrong one")

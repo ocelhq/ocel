@@ -30,9 +30,9 @@ func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx
 	ctx := context.Background()
 	err := withEnvProvider(ctx, clitest.NewDeps(), root, opts, io.Discard, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		return drive(ctx, cfg.Slug, runner, envwire.Values{
-			Runner: runner,
-			Slug:   cfg.Slug,
-			Tier:   envTier(opts),
+			Provider: runner.Provider(nil),
+			Slug:     cfg.Slug,
+			Tier:     envTier(opts),
 		})
 	})
 	if err != nil {
@@ -217,7 +217,7 @@ func withVarsUI(t *testing.T, root string, drive func(s *varsui.Session)) {
 		if err != nil {
 			return err
 		}
-		s, err := envwire.ServeVarsUI(ctx, cfg, runner, false, gate, nil)
+		s, err := envwire.ServeVarsUI(ctx, cfg, runner.Provider(nil), false, gate, nil)
 		if err != nil {
 			return err
 		}

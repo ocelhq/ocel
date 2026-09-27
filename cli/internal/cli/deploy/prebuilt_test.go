@@ -8,36 +8,37 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/events"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 )
 
-func newBuildManifestSession(t *testing.T) (*runui.Session, *bytes.Buffer) {
+func newBuildScope(t *testing.T) (*events.Scope, *bytes.Buffer) {
 	t.Helper()
-	_, run, err := runtrace.Start(context.Background(), t.TempDir(), "ocel deploy")
-	if err != nil {
-		t.Fatalf("runtrace.Start() = %v", err)
-	}
-	t.Cleanup(func() { _ = run.Close() })
-
 	var out bytes.Buffer
-	s := runui.New(&out, run, runui.Resolve(runui.Origin{Verbose: true}))
-	t.Cleanup(func() { _ = s.Close() })
-	return s, &out
+	bus := events.NewBus(time.Now)
+	bus.Attach(runui.NewTerminalSink(runui.Resolve(runui.Origin{Verbose: true}), &out))
+	t.Cleanup(func() { _ = bus.Close() })
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatalf("Begin() = %v", err)
+	}
+	return run.Phase(progressv1.Phase_PHASE_BUILD), &out
 }
 
 func recordBuildApp(deps *cmddeps.Deps) *bool {
@@ -119,9 +120,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		ran := recordBuildApp(&deps)
 
-		s, out := newBuildManifestSession(t)
+		s, out := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -150,9 +151,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		ran := recordBuildApp(&deps)
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, false, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 		if !*ran {
@@ -164,9 +165,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		recordBuildApp(&deps)
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 		}
@@ -182,9 +183,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "deployment-id"), recorded+"\n")
 		deps := clitest.NewDeps()
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -203,9 +204,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		deps := clitest.NewDeps()
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, false, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded for an app no build stamped, want error")
 		}
@@ -229,9 +230,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			return nil
 		}
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		cfg := prebuiltConfig(root)
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), false, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), false, false, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 
@@ -254,9 +255,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		gate := clientValueGate(t, cfg, "https://rotated.example.com")
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, false, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
 		}
@@ -278,8 +279,8 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s, _ := newBuildManifestSession(t)
-		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), true, s, "serverless", nil, nil)
+		s, _ := newBuildScope(t)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), true, false, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
 		}
@@ -304,9 +305,9 @@ func TestCollectAndBuildManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		s, _ := newBuildManifestSession(t)
+		s, _ := newBuildScope(t)
 		gate := clientValueGate(t, cfg, "https://example.com")
-		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, false, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 	})
@@ -353,6 +354,7 @@ func TestPrebuiltDeploy(t *testing.T) {
 		recordBuildApp(&deps)
 
 		var stdout, stderr bytes.Buffer
+		deps.AttachTerminalSink(&stdout)
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true, prebuilt: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
 			t.Fatal("runDeploy err = nil, want the missing build output reported")
