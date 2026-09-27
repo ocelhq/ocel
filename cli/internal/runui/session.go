@@ -14,6 +14,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -105,7 +106,7 @@ func (s *Session) BuildWriter() io.Writer { return s.build }
 func (s *Session) ProcessWriter() io.Writer { return s.process }
 
 func (s *Session) buildLine(line string) {
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Log{
+	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Message: line, Event: &progressv1.OperationEvent_Log{
 		Log: &progressv1.LogEvent{StageId: buildStageID, Message: line},
 	}})
 }
@@ -167,18 +168,16 @@ func (s *Session) Suspend() func() { return s.stream.Suspend() }
 func (s *Session) Spin(message string) *Spinner { return s.stream.Spin(message) }
 
 func (s *Session) Diagnostic(message string) {
-	s.diagnose(message, streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO)
+	s.say(message, progressv1.Level_LEVEL_INFO)
 }
 
 func (s *Session) Warning(message string) {
-	s.diagnose(message, streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_WARNING)
+	s.say(message, progressv1.Level_LEVEL_WARN)
 }
 
-func (s *Session) diagnose(message string, level streamv1.DiagnosticLevel) {
+func (s *Session) say(message string, level progressv1.Level) {
 	s.logf("[diagnostic] %s", message)
-	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Diagnostic{
-		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: level},
-	}})
+	s.stream.Emit(&streamv1.RunEvent{Level: level, Message: message})
 }
 
 func (s *Session) Identity(ev *streamv1.IdentityEvent) {
@@ -190,17 +189,17 @@ func (s *Session) Plan(headline string, plan *planv1.ChangePlan, notes ...string
 	drawn := proto.Clone(plan).(*planv1.ChangePlan)
 	drawn.Headline, drawn.Notes = headline, notes
 	s.logf("[plan] %s", headline)
-	s.shown = s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
+	s.shown = s.stream.Emit(&streamv1.RunEvent{Phase: progressv1.Phase_PHASE_PLAN, Event: &streamv1.RunEvent_Plan{Plan: drawn}}).GetPlan()
 	return s.shown
 }
 
 func (s *Session) Building() {
 	s.logf("[building] Building project")
 	s.buildStart = time.Now()
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_StagePlan{
+	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, Event: &progressv1.OperationEvent_StagePlan{
 		StagePlan: &progressv1.StagePlanEvent{Stages: environmentRoster},
 	}})
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Progress{
+	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Message: "Building project", Event: &progressv1.OperationEvent_Progress{
 		Progress: &progressv1.ProgressEvent{StageId: buildStageID, Message: "Building project"},
 	}})
 }
@@ -225,7 +224,7 @@ func (s *Session) BuildOK() {
 			Value: strconv.Itoa(s.buildAttempt),
 		}}
 	}
-	s.Event(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Span{Span: span}})
+	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_BUILD, SpanId: buildStageID, Event: &progressv1.OperationEvent_Span{Span: span}})
 	s.buildStart = time.Time{}
 }
 
@@ -250,7 +249,7 @@ func (s *Session) Resume() {
 }
 
 func (s *Session) Event(ev *progressv1.OperationEvent) {
-	out := s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Operation{Operation: ev}}).GetOperation()
+	out := s.stream.Emit(lift(ev)).GetOperation()
 	s.logOperation(out)
 	if span := out.GetSpan(); span != nil {
 		s.ingestSpan(span)
@@ -258,6 +257,21 @@ func (s *Session) Event(ev *progressv1.OperationEvent) {
 	if apps := out.GetResult().GetApps(); len(apps) > 0 {
 		s.apps = apps
 	}
+}
+
+func lift(ev *progressv1.OperationEvent) *streamv1.RunEvent {
+	run := &streamv1.RunEvent{
+		Level:   ev.GetLevel(),
+		Phase:   ev.GetPhase(),
+		Subject: ev.GetSubject(),
+		Message: ev.GetMessage(),
+		SpanId:  ev.GetSpanId(),
+		Event:   &streamv1.RunEvent_Operation{Operation: ev},
+	}
+	if ns := ev.GetTimeUnixNano(); ns > 0 {
+		run.Time = timestamppb.New(time.Unix(0, ns))
+	}
+	return run
 }
 
 func (s *Session) logOperation(ev *progressv1.OperationEvent) {

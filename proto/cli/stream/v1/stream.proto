@@ -7,16 +7,19 @@ import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
 import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
+import "google/protobuf/timestamp.proto";
 
-// One event of a run as the CLI tells it. Stable: the arm and its typed fields.
-// Presentation, free to change: human text, level, order of concurrent events.
 message RunEvent {
-  oneof event {
-    option (buf.validate.oneof).required = true;
+  google.protobuf.Timestamp time = 8;
+  common.progress.v1.Level level = 9;
+  common.progress.v1.Phase phase = 10;
+  string subject = 11;
+  string message = 12;
+  bytes span_id = 13 [(buf.validate.field).bytes.len = 8, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 
+  oneof event {
     common.plan.v1.ChangePlan plan = 1;
 
-    // Everything the provider says, verbatim.
     common.progress.v1.OperationEvent operation = 2;
 
     WaitingEvent waiting = 3;
@@ -25,10 +28,6 @@ message RunEvent {
 
     RunResultEvent result = 5;
 
-    // Text belonging to the run rather than to any stage.
-    DiagnosticEvent diagnostic = 6;
-
-    // Where the run acts, told once before anything else happens.
     IdentityEvent identity = 7;
   }
 }
@@ -114,18 +113,4 @@ message RunResultEvent {
   repeated common.progress.v1.AppResult apps = 10;
 
   MissingVariables missing = 11;
-}
-
-enum DiagnosticLevel {
-  DIAGNOSTIC_LEVEL_UNSPECIFIED = 0;
-  DIAGNOSTIC_LEVEL_INFO = 1;
-  DIAGNOSTIC_LEVEL_WARNING = 2;
-}
-
-message DiagnosticEvent {
-  string code = 1;
-
-  string message = 2;
-
-  DiagnosticLevel level = 3;
 }

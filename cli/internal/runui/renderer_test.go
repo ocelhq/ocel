@@ -122,9 +122,7 @@ func spanEvent(stageID []byte, failed bool, d time.Duration) *streamv1.RunEvent 
 }
 
 func diagnosticEvent(message string) *streamv1.RunEvent {
-	return &streamv1.RunEvent{Event: &streamv1.RunEvent_Diagnostic{
-		Diagnostic: &streamv1.DiagnosticEvent{Message: message, Level: streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_INFO},
-	}}
+	return &streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, Message: message}
 }
 
 func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testing.T) {

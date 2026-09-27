@@ -1,10 +1,13 @@
 package runui
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -157,5 +160,58 @@ func TestNDJSONIsOneEnvelopePerLineAndNeverBuffers(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "\n ") || strings.Contains(strings.TrimRight(out.String(), "\n"), "\n") {
 		t.Errorf("stream = %q, want exactly one line per envelope", out.String())
+	}
+}
+
+func TestEveryNDJSONLineCarriesTimeLevelPhaseSubjectAndMessageEvenWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	var out safeBuffer
+	s := NewStream(&out, Presentation{Format: FormatJSON, Width: defaultWidth})
+	s.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Resumed{Resumed: &streamv1.ResumedEvent{Reason: "the page was answered"}}})
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &rec); err != nil {
+		t.Fatalf("line %q is not JSON: %v", out.String(), err)
+	}
+	for key, want := range map[string]any{
+		"level":   "LEVEL_INFO",
+		"phase":   "PHASE_UNSPECIFIED",
+		"subject": "",
+		"message": "",
+	} {
+		if got, ok := rec[key]; !ok || got != want {
+			t.Errorf("%q = %v (present %v), want %q on a line %q", key, got, ok, want, out.String())
+		}
+	}
+	if stamp, _ := rec["time"].(string); stamp == "" {
+		t.Errorf("time = %v, want the moment the event landed on a line %q", rec["time"], out.String())
+	}
+	if reason := rec["resumed"].(map[string]any)["reason"]; reason != "the page was answered" {
+		t.Errorf("resumed.reason = %v, want the body beside the envelope", reason)
+	}
+}
+
+func TestATimelessEventIsStampedWhenItLands(t *testing.T) {
+	t.Parallel()
+
+	before := time.Now()
+	got := recorded(t, &streamv1.RunEvent{Message: "no functions to deploy; deploying infrastructure only"})
+	after := time.Now()
+
+	if len(got) != 1 {
+		t.Fatalf("recorded %d envelopes, want 1", len(got))
+	}
+	if at := got[0].GetTime().AsTime(); at.Before(before) || at.After(after) {
+		t.Errorf("time = %v, want the moment it landed, between %v and %v", at, before, after)
+	}
+
+	stamped := timestamppb.New(time.Date(2026, 9, 27, 6, 0, 0, 0, time.UTC))
+	kept := recorded(t, &streamv1.RunEvent{Time: stamped, Message: "already stamped"})
+	if !kept[0].GetTime().AsTime().Equal(stamped.AsTime()) {
+		t.Errorf("time = %v, want the producer's stamp %v kept", kept[0].GetTime().AsTime(), stamped.AsTime())
 	}
 }

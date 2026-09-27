@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -106,21 +109,55 @@ func (s *Stream) Close() error {
 }
 
 func (s *Stream) writeJSONLocked(ev *streamv1.RunEvent) {
-	raw, err := protojson.Marshal(ev)
+	line, err := envelopeJSON(ev)
 	if err != nil {
 		return
 	}
-	var stable bytes.Buffer
-	if err := json.Compact(&stable, raw); err != nil {
-		return
+	fmt.Fprintln(s.w, line)
+}
+
+func envelopeJSON(ev *streamv1.RunEvent) (string, error) {
+	body := proto.CloneOf(ev)
+	body.Time, body.Level, body.Phase, body.Subject, body.Message = nil, 0, 0, "", ""
+	fields := []proto.Message{
+		ev.GetTime(),
+		wrapperspb.String(ev.GetLevel().String()),
+		wrapperspb.String(ev.GetPhase().String()),
+		wrapperspb.String(ev.GetSubject()),
+		wrapperspb.String(ev.GetMessage()),
 	}
-	fmt.Fprintln(s.w, stable.String())
+	parts := make([]string, 0, 6)
+	for i, key := range []string{"time", "level", "phase", "subject", "message"} {
+		value, err := protojson.Marshal(fields[i])
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("%q:%s", key, value))
+	}
+	rest, err := protojson.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+	if inner := bytes.TrimSpace(bytes.TrimSuffix(bytes.TrimPrefix(bytes.TrimSpace(rest), []byte("{")), []byte("}"))); len(inner) > 0 {
+		parts = append(parts, string(inner))
+	}
+	var stable bytes.Buffer
+	if err := json.Compact(&stable, []byte("{"+strings.Join(parts, ",")+"}")); err != nil {
+		return "", err
+	}
+	return stable.String(), nil
 }
 
 func normalize(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	clone, ok := proto.Clone(ev).(*streamv1.RunEvent)
 	if !ok {
 		return ev
+	}
+	if clone.GetTime() == nil {
+		clone.Time = timestamppb.Now()
+	}
+	if clone.GetLevel() == progressv1.Level_LEVEL_UNSPECIFIED {
+		clone.Level = progressv1.Level_LEVEL_INFO
 	}
 	normalizeMessage(clone.ProtoReflect())
 	return clone

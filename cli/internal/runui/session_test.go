@@ -13,9 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -822,8 +825,35 @@ func TestDiagnosticEmitsAStructuredRecordUnderJSONFormat(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("recorded %d envelopes, want 1", len(got))
 	}
-	if msg := got[0].GetDiagnostic().GetMessage(); msg != "warning: POSTHOG_ID is scoped to /web, which no app binds" {
-		t.Errorf("diagnostic message = %q, want the diagnostic text", msg)
+	if msg := got[0].GetMessage(); msg != "warning: POSTHOG_ID is scoped to /web, which no app binds" {
+		t.Errorf("message = %q, want the diagnostic text", msg)
+	}
+	if level := got[0].GetLevel(); level != progressv1.Level_LEVEL_INFO {
+		t.Errorf("level = %v, want INFO", level)
+	}
+	if got[0].GetEvent() != nil {
+		t.Errorf("body = %v, want a message-only event", got[0].GetEvent())
+	}
+}
+
+func TestAWarningIsAWarnEventWithItsTextAsTheMessage(t *testing.T) {
+	t.Parallel()
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Warning("web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts")
+
+	got := parseNDJSON(t, out.String())
+	if len(got) != 1 {
+		t.Fatalf("recorded %d envelopes, want 1", len(got))
+	}
+	if level := got[0].GetLevel(); level != progressv1.Level_LEVEL_WARN {
+		t.Errorf("level = %v, want WARN", level)
+	}
+	if msg := got[0].GetMessage(); msg != "web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts" {
+		t.Errorf("message = %q, want the warning text", msg)
 	}
 }
 
@@ -1381,5 +1411,82 @@ func missingStripeKey() *streamv1.MissingVariables {
 	return &streamv1.MissingVariables{
 		Cells:  []*streamv1.MissingVariable{{Key: "STRIPE_API_KEY", Reason: "no value"}},
 		Remedy: "ocel env ui",
+	}
+}
+
+func TestAProviderEventKeepsItsEnvelopeOnTheRunsStream(t *testing.T) {
+	t.Parallel()
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	at := time.Date(2026, 9, 27, 6, 0, 0, 0, time.UTC)
+	s.Event(&progressv1.OperationEvent{
+		TimeUnixNano: at.UnixNano(),
+		Level:        progressv1.Level_LEVEL_WARN,
+		Phase:        progressv1.Phase_PHASE_DEPLOY,
+		Subject:      "web",
+		Message:      "Uploading 3 function artifacts",
+		SpanId:       appStage(1),
+		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
+			StageId: appStage(1), Message: "Uploading 3 function artifacts",
+		}},
+	})
+
+	got := parseNDJSON(t, out.String())
+	if len(got) != 1 {
+		t.Fatalf("recorded %d envelopes, want 1", len(got))
+	}
+	ev := got[0]
+	if ev.GetPhase() != progressv1.Phase_PHASE_DEPLOY || ev.GetSubject() != "web" {
+		t.Errorf("phase, subject = %v, %q, want the provider's deploy phase and app", ev.GetPhase(), ev.GetSubject())
+	}
+	if ev.GetLevel() != progressv1.Level_LEVEL_WARN || ev.GetMessage() != "Uploading 3 function artifacts" {
+		t.Errorf("level, message = %v, %q, want the provider's", ev.GetLevel(), ev.GetMessage())
+	}
+	if !ev.GetTime().AsTime().Equal(at) {
+		t.Errorf("time = %v, want the provider's stamp %v", ev.GetTime().AsTime(), at)
+	}
+	if !bytes.Equal(ev.GetSpanId(), appStage(1)) {
+		t.Errorf("span id = %x, want the provider's %x", ev.GetSpanId(), appStage(1))
+	}
+}
+
+func TestAPlanTheRunShowsIsInThePlanPhase(t *testing.T) {
+	t.Parallel()
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Plan("Proposed changes to production", &planv1.ChangePlan{Subject: "production"})
+
+	if got := parseNDJSON(t, out.String()); len(got) != 1 || got[0].GetPhase() != progressv1.Phase_PHASE_PLAN {
+		t.Errorf("stream = %q, want one plan event in the plan phase", out.String())
+	}
+}
+
+func TestTheProjectBuildIsInTheBuildPhase(t *testing.T) {
+	t.Parallel()
+	run := startTestRun(t, t.TempDir(), "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatJSON, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	s.Building()
+	if _, err := io.WriteString(s.BuildWriter(), "webpack compiled\n"); err != nil {
+		t.Fatalf("BuildWriter().Write() = %v", err)
+	}
+	s.BuildOK()
+
+	got := parseNDJSON(t, out.String())
+	if len(got) != 4 {
+		t.Fatalf("recorded %d envelopes, want stage plan, start, output and end: %q", len(got), out.String())
+	}
+	for i, ev := range got {
+		if ev.GetPhase() != progressv1.Phase_PHASE_BUILD {
+			t.Errorf("event %d phase = %v, want the build phase: %s", i, ev.GetPhase(), protojson.Format(ev))
+		}
 	}
 }

@@ -1,9 +1,7 @@
 package runui
 
 import (
-	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +12,7 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -186,16 +185,14 @@ func TestTheNDJSONProjectionIsOneProtojsonLinePerEnvelopeWrittenAsItLands(t *tes
 					t.Fatalf("after envelope %d the stream has %d lines, want one line per envelope emitted so far", i, len(lines))
 				}
 
-				want, err := protojson.Marshal(normalize(ev))
-				if err != nil {
-					t.Fatalf("marshal: %v", err)
+				got := &streamv1.RunEvent{}
+				if err := protojson.Unmarshal([]byte(lines[i]), got); err != nil {
+					t.Fatalf("line %d %q is not protojson: %v", i, lines[i], err)
 				}
-				var compact bytes.Buffer
-				if err := json.Compact(&compact, want); err != nil {
-					t.Fatalf("compact: %v", err)
-				}
-				if got := lines[i]; got != compact.String() {
-					t.Fatalf("line %d is not the protojson of its envelope.\n--- got ---\n%s\n--- want ---\n%s", i, got, compact.String())
+				want := normalize(ev)
+				want.Time = got.GetTime()
+				if !proto.Equal(got, want) {
+					t.Fatalf("line %d is not the protojson of its envelope.\n--- got ---\n%s\n--- want ---\n%s", i, lines[i], protojson.Format(want))
 				}
 			}
 			if err := s.Close(); err != nil {

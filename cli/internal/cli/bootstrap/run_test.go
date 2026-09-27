@@ -535,7 +535,7 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 		}
 
 		want := "Removing isr from the production bootstrap tears down what it installed."
-		said := streamDiagnostics(t, stdout.String())
+		said := streamMessages(t, stdout.String())
 		if !slices.Contains(said, want) {
 			t.Errorf("the stream said %v, want it to contain %q — the consent that follows covers it", said, want)
 		}
@@ -545,23 +545,19 @@ func TestBootstrapYesMeansYes(t *testing.T) {
 	})
 }
 
-func streamDiagnostics(t *testing.T, out string) []string {
+func streamMessages(t *testing.T, out string) []string {
 	t.Helper()
 	var said []string
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		if line == "" {
 			continue
 		}
-		var ev struct {
-			Diagnostic struct {
-				Message string `json:"message"`
-			} `json:"diagnostic"`
-		}
+		var ev map[string]any
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			continue
 		}
-		if ev.Diagnostic.Message != "" {
-			said = append(said, ev.Diagnostic.Message)
+		if message, ok := ev["message"].(string); ok && message != "" {
+			said = append(said, message)
 		}
 	}
 	return said

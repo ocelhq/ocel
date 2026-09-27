@@ -33,7 +33,6 @@ var overrides = map[protoreflect.FullName]armFunc{
 	"common.progress.v1.DegradedEvent":         (*projector).degraded,
 	"common.progress.v1.ResultEvent":           (*projector).outcome,
 	"cli.stream.v1.RunResultEvent":             (*projector).result,
-	"cli.stream.v1.DiagnosticEvent":            (*projector).diagnostic,
 	"cli.stream.v1.IdentityEvent":              (*projector).identity,
 	"cli.stream.v1.WaitingEvent":               (*projector).waiting,
 	"cli.stream.v1.ResumedEvent":               (*projector).resumed,
@@ -73,6 +72,9 @@ func newProjector(present Presentation) *projector {
 }
 
 func (p *projector) project(ev *streamv1.RunEvent) []string {
+	if ev.GetEvent() == nil {
+		return p.message(ev)
+	}
 	return p.render(ev.ProtoReflect())
 }
 
@@ -485,13 +487,12 @@ func (p *projector) degraded(m protoreflect.Message) []string {
 	return []string{fmt.Sprintf("%s %s: %s", warnMark, ev.GetNeed(), ev.GetDetail())}
 }
 
-func (p *projector) diagnostic(m protoreflect.Message) []string {
-	ev := m.Interface().(*streamv1.DiagnosticEvent)
+func (p *projector) message(ev *streamv1.RunEvent) []string {
 	if ev.GetMessage() == "" {
 		return nil
 	}
 	lines := strings.Split(strings.TrimRight(ev.GetMessage(), "\n"), "\n")
-	if ev.GetLevel() == streamv1.DiagnosticLevel_DIAGNOSTIC_LEVEL_WARNING {
+	if ev.GetLevel() == progressv1.Level_LEVEL_WARN {
 		lines[0] = warnMark + " " + lines[0]
 	}
 	return lines
