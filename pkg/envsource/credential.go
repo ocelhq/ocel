@@ -19,6 +19,7 @@ import (
 
 type Credential interface {
 	logIn(ctx context.Context, client *infisicalClient) (session, error)
+	sameAs(other Credential) bool
 }
 
 type CredentialError struct {
@@ -100,6 +101,11 @@ func UniversalAuth(clientID, clientSecret string) Credential {
 	return universalAuth{clientID: clientID, clientSecret: clientSecret}
 }
 
+func (u universalAuth) sameAs(other Credential) bool {
+	same, ok := other.(universalAuth)
+	return ok && same == u
+}
+
 func (u universalAuth) logIn(ctx context.Context, client *infisicalClient) (session, error) {
 	return client.logIn(ctx, "universal-auth", map[string]string{"clientId": u.clientID, "clientSecret": u.clientSecret})
 }
@@ -116,6 +122,11 @@ type identityAuth struct {
 
 func IdentityAuth(identityID string, proveIdentity func(ctx context.Context, audience string) (IdentityProof, error)) Credential {
 	return identityAuth{identityID: identityID, prove: proveIdentity}
+}
+
+func (a identityAuth) sameAs(other Credential) bool {
+	same, ok := other.(identityAuth)
+	return ok && same.identityID == a.identityID
 }
 
 func (a identityAuth) logIn(ctx context.Context, client *infisicalClient) (session, error) {
@@ -164,6 +175,11 @@ func logInWithSignedRequest(ctx context.Context, client *infisicalClient, identi
 type accessToken string
 
 func AccessToken(token string) Credential { return accessToken(token) }
+
+func (a accessToken) sameAs(other Credential) bool {
+	same, ok := other.(accessToken)
+	return ok && same == a
+}
 
 func (a accessToken) logIn(context.Context, *infisicalClient) (session, error) {
 	return session{token: string(a), fixed: true}, nil

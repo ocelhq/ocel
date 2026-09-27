@@ -28,7 +28,12 @@ type Sync struct {
 	Interval time.Duration
 
 	mu     sync.Mutex
-	opened map[string]Source
+	opened map[string]openedSource
+}
+
+type openedSource struct {
+	source     Source
+	credential Credential
 }
 
 func (s *Sync) now() time.Time {
@@ -203,23 +208,20 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 }
 
 func (s *Sync) open(ctx context.Context, key string, registration Registration) (Source, error) {
-	s.mu.Lock()
-	source, found := s.opened[key]
-	s.mu.Unlock()
-	if found {
-		return source, nil
-	}
 	credential, err := ReadCredential(ctx, s.Store, s.scope(registration), registration.Descriptor, s.Login)
 	if err != nil {
 		return nil, err
 	}
-	source = NewInfisical(*registration.Descriptor.Infisical, credential, s.Login.Client)
 	s.mu.Lock()
-	if s.opened == nil {
-		s.opened = map[string]Source{}
+	defer s.mu.Unlock()
+	if current, found := s.opened[key]; found && current.credential.sameAs(credential) {
+		return current.source, nil
 	}
-	s.opened[key] = source
-	s.mu.Unlock()
+	source := NewInfisical(*registration.Descriptor.Infisical, credential, s.Login.Client)
+	if s.opened == nil {
+		s.opened = map[string]openedSource{}
+	}
+	s.opened[key] = openedSource{source: source, credential: credential}
 	return source, nil
 }
 

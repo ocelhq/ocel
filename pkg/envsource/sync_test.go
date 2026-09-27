@@ -269,6 +269,50 @@ func TestAnUnsetCredentialIsRecordedAndTheSourceNeverLoggedInTo(t *testing.T) {
 	}
 }
 
+func TestEachSyncLogsInWithTheCredentialStoredNow(t *testing.T) {
+	t.Parallel()
+	sync, store, fake, host, at := syncFixture(t)
+	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
+	setCredentials(t, store, "shop", "client-id", "client-secret")
+	registration := infisicalRegistration("shop", host, universal, "")
+	register(t, store, registration)
+	ctx := context.Background()
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	fake.set(func(f *fakeInfisical) { f.secret = "rotated" })
+	setCredentials(t, store, "shop", "client-id", "rotated")
+	at.advance(time.Minute)
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var secrets []string
+	fake.set(func(f *fakeInfisical) {
+		for _, body := range f.loginBodies {
+			secrets = append(secrets, body["clientSecret"])
+		}
+	})
+	if !slices.Equal(secrets, []string{"client-secret", "rotated"}) {
+		t.Fatalf("logged in with %v, want the rotated secret used by the sync after it was stored", secrets)
+	}
+
+	if _, err := store.Delete(ctx, scopeOf("shop"), classWide("", "INFISICAL_CLIENT_SECRET"), nil); err != nil {
+		t.Fatal(err)
+	}
+	reads := len(fake.listedPaths())
+	at.advance(time.Minute)
+	if err := sync.CopyScheduled(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.listedPaths()) != reads {
+		t.Fatal("a sync read the env source with a credential that was removed from ocel's store")
+	}
+	if status := statusOf(t, store, registration); !strings.Contains(status.LastError, "INFISICAL_CLIENT_SECRET") {
+		t.Fatalf("status = %+v, want the removed credential named", status)
+	}
+}
+
 func TestProjectReturnsTheFailureAndRecordsIt(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
