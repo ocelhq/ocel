@@ -13,7 +13,10 @@ type Keyed interface {
 }
 
 func keyedSchema(target reflect.Type, shorthands []string) object {
-	alternatives := []any{object{"type": "string", "enum": toAny(shorthands)}}
+	var alternatives []any
+	if len(shorthands) > 0 {
+		alternatives = append(alternatives, object{"type": "string", "enum": toAny(shorthands)})
+	}
 	for _, field := range jsonFields(target) {
 		property := schemaOf(field.kind)
 		if field.doc != "" {
@@ -61,6 +64,9 @@ func checkKeyed(path string, target reflect.Type, shorthands []string, value any
 			}
 			return checkValue(JoinPath(path, key), fields[at].kind, value)
 		}
+	}
+	if len(shorthands) == 0 {
+		return fmt.Errorf("%s must be an object with one of the keys %s", PathName(path), strings.Join(keys, ", "))
 	}
 	quoted := make([]string, 0, len(shorthands))
 	for _, shorthand := range shorthands {

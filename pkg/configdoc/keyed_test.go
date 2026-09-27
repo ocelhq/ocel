@@ -116,6 +116,50 @@ func TestAKeyedUnionRefusesAnythingButOneKnownKeyOrAShorthand(t *testing.T) {
 	}
 }
 
+type vehicle struct {
+	Lane *lane `json:"lane,omitempty" doc:"Drive a lane."`
+}
+
+func (vehicle) Shorthands() []string { return nil }
+
+type fleet struct {
+	Vehicle *vehicle `json:"vehicle,omitempty"`
+}
+
+func TestAKeyedUnionWithNoShorthandIsOnlyItsObjects(t *testing.T) {
+	generated, err := ProviderSchema[string, string]("acme", fleet{}, nil, nil)
+	if err != nil {
+		t.Fatalf("provider schema: %v", err)
+	}
+	var fragment struct {
+		Options struct {
+			Properties struct {
+				Vehicle struct {
+					OneOf []struct {
+						Type string `json:"type"`
+					} `json:"oneOf"`
+				} `json:"vehicle"`
+			} `json:"properties"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal(generated, &fragment); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, alternative := range fragment.Options.Properties.Vehicle.OneOf {
+		if alternative.Type != "object" {
+			t.Errorf("vehicle schema offers a %s, want only objects", alternative.Type)
+		}
+	}
+
+	err = Check("fleet", fleet{}, map[string]any{"vehicle": "lane"})
+	if err == nil {
+		t.Fatal("Check(vehicle: lane) = nil, want a refusal")
+	}
+	if strings.Contains(err.Error(), "one of ,") || !strings.Contains(err.Error(), "an object with one of the keys lane") {
+		t.Errorf("Check(vehicle: lane) = %q, want it to ask only for an object keyed by lane", err)
+	}
+}
+
 func TestAKeyedUnionNamesItsKeysInTheOrderItDeclaresThem(t *testing.T) {
 	if got, want := strings.Join(KeysOf(route{}), " "), "lane road"; got != want {
 		t.Errorf("KeysOf(route) = %q, want %q", got, want)
