@@ -235,6 +235,20 @@ func TestACheckWarningIsAMessageOnlyEventTheWireAdmits(t *testing.T) {
 	}
 }
 
+func TestACheckWarningAndADegradedNeedCarryNoControlCharactersFromARemoteReason(t *testing.T) {
+	t.Parallel()
+
+	remote := "the plan is unknown: api answered \x1b[2J\x1b]8;;https://evil.example\x07click\r\n"
+	for name, event := range map[string]*progressv1.OperationEvent{
+		"check warning": checkWarning("relay", remote),
+		"degraded need": degradedEvent("web", edge.NeedEdgeMiddleware, remote),
+	} {
+		if strings.ContainsAny(event.GetMessage(), "\x1b\x07\r\n") {
+			t.Errorf("the %s's message is %q, want the control characters a remote api sent stripped", name, event.GetMessage())
+		}
+	}
+}
+
 func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	t.Parallel()
 

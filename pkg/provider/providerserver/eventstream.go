@@ -186,7 +186,7 @@ func degradedEvent(app string, need edge.Need, detail string) *progressv1.Operat
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
 		Subject: app,
-		Message: string(need) + ": " + detail,
+		Message: sanitizeMessage(string(need) + ": " + detail),
 	}
 }
 
@@ -195,7 +195,7 @@ func checkWarning(subject, message string) *progressv1.OperationEvent {
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_CHECK,
 		Subject: subject,
-		Message: message,
+		Message: sanitizeMessage(message),
 	}
 }
 
