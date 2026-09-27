@@ -5,7 +5,6 @@ stages:
     Planning changes
   Environment
     Provisioning
-      OcelRouterFunction
 plan:
   stack/aws/ocel-bootstrap ACTION_UPDATE AWS::Lambda::Function/OcelRouterFunction
   stack/aws/ocel-bootstrap ACTION_KEEP AWS::SecretsManager::Secret/OcelOriginSecret

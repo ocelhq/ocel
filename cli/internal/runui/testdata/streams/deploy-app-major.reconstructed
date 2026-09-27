@@ -7,13 +7,16 @@ stages:
     Provisioning
   Shared infrastructure
     Provisioning
-      assets
+      pulumi resource operations
+      create resource
   web
+    Uploading
   api
     Uploading
-    Uploading
-      aws:ecs/Service acme-prod-web
-      api
+      pulumi resource operations
+      update resource
+      pulumi resource operations
+      update resource
   Promotion
     Finalizing
 plan:

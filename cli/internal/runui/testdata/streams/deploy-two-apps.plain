@@ -28,15 +28,18 @@ Change plan, fronted by the cloudfront edge:
 
 INFO  [build] acme: Resumed — the page was answered
 INFO  [build] ✓ acme: Building project in 6s
-      Bundling web (1/2)
-      Bundling api (2/2)
-WARN  [check] web: edge-middleware: middleware runs in the origin
-ERROR [deploy] ✗ api failed after 3s (1 failed): updating function api: InsufficientCapacity
-      updating function api
-      ✗ api (aws:lambda/function:Function) failed to update
-      ERROR api (aws:lambda/function:Function): InsufficientCapacity
-INFO  [deploy] ✓ web in 12s (1 created)
 
-✗ Failed in 21s — api: updating function api: InsufficientCapacity
+    Bundling web
+    Bundling api
+
+WARN  [check] web: edge-middleware: middleware runs in the origin
+ERROR [deploy] ✗ api: api failed after 3s (1 failed)
+      Provisioning api
+      ✗ api (aws:lambda/function:Function) failed to update
+      ERROR api (aws:lambda/function:Function): updating Lambda Function (api): InsufficientCapacity: not enough capacity in us-east-1a
+      ERROR provision api: update failed
+INFO  [deploy] ✓ web: web in 12s (1 created)
+
+✗ Failed in 21s — internal: provision api: update failed
   web deployed but was not promoted: promotion needs every app, and api failed
   production still serves what it served before this run

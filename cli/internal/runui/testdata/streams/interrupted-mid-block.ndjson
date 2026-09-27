@@ -1,8 +1,9 @@
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","started":{}}
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"Building project","started":{"parentSpanId":"AQAAAAAAAAA="}}
 {"time":"2026-09-27T10:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","message":"go: downloading ocel.dev v0.4.1","output":{"stream":"STREAM_STDOUT"}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","subject":"acme","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","message":"api","started":{}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","message":"Uploading","started":{"parentSpanId":"FAAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","message":"pushing api:8f3c1a","counter":{"current":3,"total":9}}
-{"time":"2026-09-27T10:00:12Z","level":"LEVEL_INFO","result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"api","started":{}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading","started":{"parentSpanId":"FAAAAAAAAAA="}}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Provisioning api"}
+{"time":"2026-09-27T10:00:12Z","level":"LEVEL_WARN","result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}

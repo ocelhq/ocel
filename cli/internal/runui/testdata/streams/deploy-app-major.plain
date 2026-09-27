@@ -10,26 +10,25 @@ INFO  [build] ✓ acme: Building project in 24s
     go: downloading ocel.dev v0.4.1
     ▲ Next.js 15.4.2
      ✓ Compiled successfully
-
-      Generating static pages (28/28)
-
+       Generating static pages (28/28)
     Route (app)                     Size     First Load JS
 
-INFO  [provision] ✓ Edge in 2s
+INFO  [provision] ✓ cloudflare: Edge in 2s
       Reconciling the cloudflare edge
 
     routes pruned: 3
 
 INFO  [provision] ✓ Shared infrastructure in 4s (1 created)
+      Provisioning the environment's infrastructure
       + assets (aws:s3/bucket:Bucket) created
-INFO  [deploy] ✓ api in 8s (1 updated)
-      updating function api
+INFO  [deploy] ✓ api: api in 8s (1 updated)
+      Provisioning api
       ~ api (aws:lambda/function:Function) updated
-INFO  [deploy] ✓ web in 21s
-      waiting for steady state
-      2 of 2 tasks healthy
+INFO  [deploy] ✓ web: web in 21s (1 updated)
+      Provisioning web
+      ~ acme-prod-web (aws:ecs/service:Service) updated
 INFO  [promote] ✓ Promotion in 2s
-      promoting p-7f3a to production
+      Promoting the deployment
 
 ✓ Deployed acme to production in 54s
   production now serves promotion p-7f3a

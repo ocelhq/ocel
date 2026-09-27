@@ -20,8 +20,17 @@ This cannot be undone.
 
 2 to create, 1 to update, 2 unchanged.
 
-INFO  [provision] ✓ Environment in 6s (1 updated)
-      updating OcelRouterFunction
-      ~ OcelRouterFunction (aws:lambda/function:Function) updated
+INFO  [provision] ✓ Environment in 6s
+      Ensuring the secret the origin's own front authenticates with (SSM SecureString)
+
+    reused the existing origin secret
+
+      Ensuring Pulumi state bucket and state table (CloudFormation)
+
+    applied ocel-bootstrap
+
+      Ensuring Pulumi passphrase (SSM SecureString)
+
+    reused the existing Pulumi passphrase
 
 ✓ Bootstrapped production in 11s

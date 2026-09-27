@@ -5,11 +5,13 @@ stages:
   [build]
     Building project
   web
+    Uploading
   api
     Uploading
-    Uploading
-      api
-      assets
+      pulumi resource operations
+      resource operation failed
+      pulumi resource operations
+      create resource
 plan:
   infrastructure/shared ACTION_CREATE bucket/assets
   infrastructure/shared ACTION_DELETE bucket/logs
@@ -18,4 +20,4 @@ waits:
   waiting on 1 unset, remedy "ocel env ui"
   resumed the page was answered
 results:
-  success=false interrupted=false headline="" detail="api: updating function api: InsufficientCapacity" duration_ms=21000
+  success=false interrupted=false headline="" detail="internal: provision api: update failed" duration_ms=21000
