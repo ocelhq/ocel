@@ -269,6 +269,19 @@ func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *tes
 	}
 }
 
+func TestAnEventWithNoTimeOrLevelOfItsOwnLandsStampedWithTheMomentItArrivedAtInfo(t *testing.T) {
+	sink := &recording{}
+	run, c := begin(t, sink)
+	c.advance(3 * time.Second)
+
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Message: "no functions to deploy; deploying infrastructure only"})
+
+	ev := sink.received()[1]
+	if !ev.GetTime().AsTime().Equal(c.read()) || ev.GetLevel() != progressv1.Level_LEVEL_INFO {
+		t.Fatalf("the event landed at %s level %s, want %s at INFO", ev.GetTime().AsTime(), ev.GetLevel(), c.read())
+	}
+}
+
 func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThingItSaid(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
@@ -364,7 +377,11 @@ func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t
 	build.Debug("engine chatter")
 	build.End(nil)
 	run.End(&err)
-	bus.Send(&streamv1.RunEvent{Message: "after the run"})
+	_, next, err := bus.Begin(context.Background(), "ocel env ls", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next.Phase(progressv1.Phase_PHASE_CHECK).Say("after the run")
 
 	raw, readErr := os.ReadFile(logPath)
 	if readErr != nil {

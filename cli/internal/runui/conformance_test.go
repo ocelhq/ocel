@@ -10,12 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/events"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -40,23 +38,7 @@ func fixtureStream(t *testing.T, name string) (raw string, events []*streamv1.Ru
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	return string(b), throughTheBus(parseNDJSON(t, string(b)))
-}
-
-type collected struct{ events []*streamv1.RunEvent }
-
-func (c *collected) Receive(ev *streamv1.RunEvent) { c.events = append(c.events, ev) }
-
-func (c *collected) Close() error { return nil }
-
-func throughTheBus(recorded []*streamv1.RunEvent) []*streamv1.RunEvent {
-	bus := events.NewBus(time.Now)
-	delivered := &collected{}
-	bus.Attach(delivered)
-	for _, ev := range recorded {
-		bus.Send(ev)
-	}
-	return delivered.events
+	return string(b), parseNDJSON(t, string(b))
 }
 
 func golden(t *testing.T, name, ext, got string) {

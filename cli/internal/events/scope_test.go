@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -196,6 +197,73 @@ func TestThePlanAScopeDrawsIsThePlanEverySinkShowsInSpineOrder(t *testing.T) {
 	}
 	if first := drawn.GetGroups()[0].GetChanges()[0].GetName(); first != "first" {
 		t.Errorf("the drawn plan's first row is %q, want rows in kind order", first)
+	}
+}
+
+func drawn(t *testing.T, groups ...*planv1.ChangeGroup) *planv1.ChangePlan {
+	t.Helper()
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	run.Phase(progressv1.Phase_PHASE_PLAN).Plan("Proposed changes", &planv1.ChangePlan{Subject: "production", Groups: groups})
+	return sink.received()[1].GetPlan()
+}
+
+func TestPlanRowsReachEverySinkInOneOrderWhateverOrderTheyArriveIn(t *testing.T) {
+	rows := []*planv1.Change{
+		{Kind: "bucket", Name: "assets", Action: planv1.Change_ACTION_CREATE},
+		{Kind: "function", Name: "api", Action: planv1.Change_ACTION_UPDATE},
+		{Kind: "bucket", Name: "logs", Action: planv1.Change_ACTION_DELETE},
+	}
+	rowNames := func(plan *planv1.ChangePlan) string {
+		var names []string
+		for _, c := range plan.GetGroups()[0].GetChanges() {
+			names = append(names, c.GetKind()+"/"+c.GetName())
+		}
+		return strings.Join(names, " ")
+	}
+
+	first := drawn(t, &planv1.ChangeGroup{Kind: "app", Name: "web", Changes: rows})
+	second := drawn(t, &planv1.ChangeGroup{Kind: "app", Name: "web", Changes: []*planv1.Change{rows[2], rows[0], rows[1]}})
+
+	if a, b := rowNames(first), rowNames(second); a != b {
+		t.Errorf("row order = %q for one arrival order and %q for another, want one order for one plan", a, b)
+	}
+	if want := "bucket/assets bucket/logs function/api"; rowNames(first) != want {
+		t.Errorf("row order = %q, want %q", rowNames(first), want)
+	}
+}
+
+func TestPlanGroupsReachEverySinkInSpineOrderWhateverOrderTheyArriveIn(t *testing.T) {
+	spine := []*planv1.ChangeGroup{
+		{Kind: "stack", Name: "aws/ocel-production-core"},
+		{Kind: "parameters", Name: "aws/parameters"},
+		{Kind: "stack", Name: "aws/shop--web--b1"},
+		{Kind: "stack", Name: "aws/shop--api--b1"},
+		{Kind: "edge", Name: "cloudfront/edge"},
+		{Kind: "certificate", Name: "ocels-cert"},
+		{Kind: "DNS record", Name: "shop.example"},
+		{Kind: "variable values", Name: "shop"},
+		{Kind: "stored objects", Name: "shop"},
+	}
+	arrived := []*planv1.ChangeGroup{
+		spine[5], spine[4], spine[0], spine[6], spine[1], spine[2], spine[7], spine[3], spine[8],
+	}
+	groupNames := func(plan *planv1.ChangePlan) string {
+		var names []string
+		for _, g := range plan.GetGroups() {
+			names = append(names, g.GetKind()+"/"+g.GetName())
+		}
+		return strings.Join(names, " ")
+	}
+
+	want := "stack/aws/ocel-production-core parameters/aws/parameters stack/aws/shop--web--b1 " +
+		"stack/aws/shop--api--b1 edge/cloudfront/edge certificate/ocels-cert DNS record/shop.example " +
+		"variable values/shop stored objects/shop"
+	if names := groupNames(drawn(t, arrived...)); names != want {
+		t.Errorf("group order = %q, want %q — infra and apps in the order the plan names them, then edge, then what sits outside the spine", names, want)
+	}
+	if names := groupNames(drawn(t, spine...)); names != want {
+		t.Errorf("group order = %q for a plan that arrived in spine order already, want %q", names, want)
 	}
 }
 

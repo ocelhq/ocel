@@ -1,37 +1,37 @@
-{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
-{"spanId":"AgAAAAAAAAA=","message":"Shared infrastructure","started":{}}
-{"spanId":"AwAAAAAAAAA=","message":"web","started":{}}
-{"spanId":"BAAAAAAAAAA=","message":"api","started":{}}
-{"spanId":"DQAAAAAAAAA=","message":"Edge","started":{}}
-{"spanId":"BQAAAAAAAAA=","message":"Promotion","started":{}}
-{"spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AwAAAAAAAAA="}}
-{"spanId":"BwAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"BAAAAAAAAAA="}}
-{"spanId":"BgAAAAAAAAA=","message":"Packages: +812","output":{}}
-{"spanId":"BwAAAAAAAAA=","message":"go: downloading ocel.dev v0.4.1","output":{}}
-{"spanId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
-{"spanId":"BgAAAAAAAAA=","message":" ✓ Compiled successfully","output":{}}
-{"spanId":"BgAAAAAAAAA=","message":"Generating static pages","counter":{"current":28,"total":28}}
-{"spanId":"BwAAAAAAAAA=","message":"go build ./...","output":{}}
-{"time":"1970-01-01T00:00:09Z","spanId":"BwAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
-{"spanId":"BgAAAAAAAAA=","message":"Route (app)                     Size     First Load JS","output":{}}
-{"time":"1970-01-01T00:00:25Z","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
-{"spanId":"DgAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"DQAAAAAAAAA="}}
-{"spanId":"DgAAAAAAAAA=","message":"Reconciling the cloudflare edge","level":"LEVEL_INFO"}
-{"spanId":"DgAAAAAAAAA=","message":"routes pruned: 3","output":{}}
-{"time":"1970-01-01T00:00:27Z","spanId":"DgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"25000000000"}}
-{"spanId":"CAAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"AgAAAAAAAAA="}}
-{"spanId":"CAAAAAAAAAA=","message":"creating bucket assets","level":"LEVEL_INFO"}
-{"time":"1970-01-01T00:00:31Z","spanId":"CAAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"25000000000"}}
-{"spanId":"CQAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"AwAAAAAAAAA="}}
-{"spanId":"CgAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"BAAAAAAAAAA="}}
-{"spanId":"CwAAAAAAAAA=","message":"aws:ecs/Service acme-prod-web","started":{"parentSpanId":"CQAAAAAAAAA="}}
-{"spanId":"CgAAAAAAAAA=","message":"updating function api","level":"LEVEL_INFO"}
-{"spanId":"CwAAAAAAAAA=","message":"waiting for steady state","level":"LEVEL_INFO"}
-{"spanId":"CgAAAAAAAAA=","message":"api: 2 of 2 tasks healthy","output":{}}
-{"time":"1970-01-01T00:00:39Z","spanId":"CgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"31000000000"}}
-{"spanId":"CwAAAAAAAAA=","message":"2 of 2 tasks healthy","level":"LEVEL_INFO"}
-{"time":"1970-01-01T00:00:52Z","spanId":"CQAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"31000000000"}}
-{"spanId":"DAAAAAAAAAA=","phase":"PHASE_PROMOTE","started":{"parentSpanId":"BQAAAAAAAAA="}}
-{"spanId":"DAAAAAAAAAA=","message":"promoting r7 to production","level":"LEVEL_INFO"}
-{"time":"1970-01-01T00:00:54Z","spanId":"DAAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"52000000000"}}
-{"result":{"success":true,"headline":"Deployed","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}],"durationMs":"54000"}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","message":"Shared infrastructure","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","message":"web","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","message":"api","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"DQAAAAAAAAA=","message":"Edge","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","message":"Promotion","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BwAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"BAAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"Packages: +812","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BwAAAAAAAAA=","message":"go: downloading ocel.dev v0.4.1","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":" ✓ Compiled successfully","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"Generating static pages","counter":{"current":28,"total":28}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BwAAAAAAAAA=","message":"go build ./...","output":{}}
+{"time":"1970-01-01T00:00:09Z","level":"LEVEL_INFO","spanId":"BwAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
+{"time":"1970-01-01T00:00:09Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"Route (app)                     Size     First Load JS","output":{}}
+{"time":"1970-01-01T00:00:25Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
+{"time":"1970-01-01T00:00:25Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"DQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:25Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","message":"Reconciling the cloudflare edge"}
+{"time":"1970-01-01T00:00:25Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","message":"routes pruned: 3","output":{}}
+{"time":"1970-01-01T00:00:27Z","level":"LEVEL_INFO","spanId":"DgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"25000000000"}}
+{"time":"1970-01-01T00:00:27Z","level":"LEVEL_INFO","spanId":"CAAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"AgAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:27Z","level":"LEVEL_INFO","spanId":"CAAAAAAAAAA=","message":"creating bucket assets"}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CAAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"25000000000"}}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CQAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","phase":"PHASE_PROVISION","started":{"parentSpanId":"BAAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","message":"aws:ecs/Service acme-prod-web","started":{"parentSpanId":"CQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","message":"updating function api"}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","message":"waiting for steady state"}
+{"time":"1970-01-01T00:00:31Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","message":"api: 2 of 2 tasks healthy","output":{}}
+{"time":"1970-01-01T00:00:39Z","level":"LEVEL_INFO","spanId":"CgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"31000000000"}}
+{"time":"1970-01-01T00:00:39Z","level":"LEVEL_INFO","spanId":"CwAAAAAAAAA=","message":"2 of 2 tasks healthy"}
+{"time":"1970-01-01T00:00:52Z","level":"LEVEL_INFO","spanId":"CQAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"31000000000"}}
+{"time":"1970-01-01T00:00:52Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","phase":"PHASE_PROMOTE","started":{"parentSpanId":"BQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:52Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","message":"promoting r7 to production"}
+{"time":"1970-01-01T00:00:54Z","level":"LEVEL_INFO","spanId":"DAAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"52000000000"}}
+{"time":"1970-01-01T00:00:54Z","level":"LEVEL_INFO","result":{"success":true,"headline":"Deployed","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}],"durationMs":"54000"}}

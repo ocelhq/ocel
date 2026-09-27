@@ -1,20 +1,20 @@
-{"identity":{"project":"acme","tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"},"edge":{"vendor":"cloudfront","account":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}}}
-{"plan":{"subject":"production","edgeKind":"cloudfront","groups":[{"kind":"infrastructure","name":"shared","changes":[{"kind":"bucket","name":"assets","action":"ACTION_CREATE"},{"kind":"bucket","name":"logs","action":"ACTION_DELETE","reason":"no longer declared"},{"kind":"function","name":"api","action":"ACTION_UPDATE"}]}]}}
-{"level":"LEVEL_WARN","message":"web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts"}
-{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
-{"spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"spanId":"AgAAAAAAAAA=","message":"Bundling web","counter":{"current":1,"total":2}}
-{"spanId":"AgAAAAAAAAA=","message":"Bundling api","counter":{"current":2,"total":2}}
-{"time":"1970-01-01T00:00:07Z","spanId":"AgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
-{"waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
-{"resumed":{"reason":"the page was answered"}}
-{"spanId":"AwAAAAAAAAA=","message":"web","started":{}}
-{"spanId":"BAAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Provisioning","started":{"parentSpanId":"AwAAAAAAAAA="}}
-{"spanId":"BQAAAAAAAAA=","message":"api","started":{}}
-{"spanId":"BgAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Provisioning","started":{"parentSpanId":"BQAAAAAAAAA="}}
-{"spanId":"BAAAAAAAAAA=","message":"creating bucket assets","level":"LEVEL_INFO"}
-{"spanId":"BgAAAAAAAAA=","message":"updating function api","level":"LEVEL_INFO"}
-{"level":"LEVEL_WARN","phase":"PHASE_CHECK","subject":"web","message":"edge-middleware: web: middleware runs in the origin"}
-{"time":"1970-01-01T00:00:19Z","spanId":"BAAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"7000000000"}}
-{"time":"1970-01-01T00:00:10Z","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_ERROR","startTimeUnixNano":"7000000000"}}
-{"result":{"detail":"updating function api: InsufficientCapacity","durationMs":"21000","logPath":""}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","identity":{"project":"acme","tier":"TIER_PRODUCTION","origin":{"vendor":"aws","account":"123456789012","principal":"deploy","location":"us-east-1"},"edge":{"vendor":"cloudfront","account":"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"}}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","plan":{"subject":"production","edgeKind":"cloudfront","groups":[{"kind":"infrastructure","name":"shared","changes":[{"kind":"bucket","name":"assets","action":"ACTION_CREATE"},{"kind":"bucket","name":"logs","action":"ACTION_DELETE","reason":"no longer declared"},{"kind":"function","name":"api","action":"ACTION_UPDATE"}]}]}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_WARN","message":"web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts"}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","message":"Bundling web","counter":{"current":1,"total":2}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","message":"Bundling api","counter":{"current":2,"total":2}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","resumed":{"reason":"the page was answered"}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","message":"web","started":{}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Provisioning","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","message":"api","started":{}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_PROVISION","message":"Provisioning","started":{"parentSpanId":"BQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","message":"creating bucket assets"}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"updating function api"}
+{"time":"1970-01-01T00:00:07Z","level":"LEVEL_WARN","phase":"PHASE_CHECK","subject":"web","message":"edge-middleware: web: middleware runs in the origin"}
+{"time":"1970-01-01T00:00:19Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"7000000000"}}
+{"time":"1970-01-01T00:00:10Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_ERROR","startTimeUnixNano":"7000000000"}}
+{"time":"1970-01-01T00:00:10Z","level":"LEVEL_INFO","result":{"detail":"updating function api: InsufficientCapacity","durationMs":"21000","logPath":""}}

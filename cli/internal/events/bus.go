@@ -73,7 +73,7 @@ func (b *Bus) detach(s Sink) {
 	b.sinks = slices.DeleteFunc(b.sinks, func(attached Sink) bool { return attached == s })
 }
 
-func (b *Bus) Send(ev *streamv1.RunEvent) *streamv1.RunEvent {
+func (b *Bus) send(ev *streamv1.RunEvent) *streamv1.RunEvent {
 	b.stamp(ev)
 	shown := withoutSecrets(ev)
 	collapse(shown.ProtoReflect())

@@ -1,12 +1,12 @@
-{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
-{"spanId":"AgAAAAAAAAA=","message":"web","started":{}}
-{"spanId":"AwAAAAAAAAA=","message":"api","started":{}}
-{"spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AgAAAAAAAAA="}}
-{"spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AwAAAAAAAAA="}}
-{"spanId":"BAAAAAAAAAA=","message":"Packages: +812","output":{}}
-{"spanId":"BQAAAAAAAAA=","message":"go: downloading ocel.dev v0.4.1","output":{}}
-{"time":"1970-01-01T00:00:05Z","spanId":"BQAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
-{"spanId":"BgAAAAAAAAA=","phase":"PHASE_DEPLOY","started":{"parentSpanId":"AwAAAAAAAAA="}}
-{"spanId":"BgAAAAAAAAA=","message":"pushing api:8f3c1a","counter":{"current":3,"total":9}}
-{"spanId":"BAAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
-{"result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AgAAAAAAAAA=","message":"web","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","message":"api","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AgAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","phase":"PHASE_BUILD","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","message":"Packages: +812","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","message":"go: downloading ocel.dev v0.4.1","output":{}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","spanId":"BQAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000"}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_DEPLOY","started":{"parentSpanId":"AwAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"pushing api:8f3c1a","counter":{"current":3,"total":9}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","spanId":"BAAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","result":{"interrupted":true,"headline":"Cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}

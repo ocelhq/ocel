@@ -1,13 +1,13 @@
-{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
-{"spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"spanId":"BgAAAAAAAAA=","message":"Building project","level":"LEVEL_INFO"}
-{"spanId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts","output":{}}
-{"waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
-{"resumed":{"reason":"the page was answered"}}
-{"spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
-{"spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
-{"spanId":"BgAAAAAAAAA=","message":"Building project","level":"LEVEL_INFO"}
-{"spanId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
-{"spanId":"BgAAAAAAAAA=","message":" ✓ Compiled successfully","output":{}}
-{"time":"1970-01-01T00:00:05Z","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}
-{"result":{"success":true,"headline":"Deployed","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"Building project"}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"Reading ocel.aws.config.ts","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","waiting":{"url":"http://127.0.0.1:5555/#t=abc","missing":{"cells":[{"key":"STRIPE_API_KEY","reason":"no value"}],"remedy":"ocel env ui"}}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","resumed":{"reason":"the page was answered"}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","message":"Environment","started":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","phase":"PHASE_BUILD","message":"Building","started":{"parentSpanId":"AQAAAAAAAAA="}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"Building project"}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":"▲ Next.js 15.4.2","output":{}}
+{"time":"1970-01-01T00:00:00Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","message":" ✓ Compiled successfully","output":{}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","spanId":"BgAAAAAAAAA=","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1000000000","attributes":[{"key":"ATTRIBUTE_KEY_RETRY_COUNT","value":"1"}]}}
+{"time":"1970-01-01T00:00:05Z","level":"LEVEL_INFO","result":{"success":true,"headline":"Deployed","durationMs":"12000","apps":[{"app":"web","outcome":"APP_OUTCOME_SUCCEEDED","urls":["https://acme.example.com"]}]}}
