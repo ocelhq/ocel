@@ -145,7 +145,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		return err
 	}
 	if manifest == nil {
-		run.Finish(fmt.Sprintf("Nothing to deploy: %s declares no apps or resources", cfg.Slug))
+		run.Finish(nothingToDeploy(cfg))
 		return nil
 	}
 

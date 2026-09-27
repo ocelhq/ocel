@@ -52,17 +52,28 @@ func buildTitle(cfg *projectconfig.Config, prebuilt bool) string {
 	if !prebuilt || len(cfg.Apps) == 0 {
 		return "Collecting the resources " + cfg.Slug + " declares"
 	}
+	return "Reading the prebuilt output of " + appList(cfg)
+}
+
+func nothingToDeploy(cfg *projectconfig.Config) string {
+	if len(cfg.Apps) == 0 {
+		return "Nothing to deploy: " + cfg.Slug + " declares no apps or resources"
+	}
+	return "Nothing to deploy: " + appList(cfg) + " built no function or image, and " + cfg.Slug + " declares no resources"
+}
+
+func appList(cfg *projectconfig.Config) string {
 	names := make([]string, 0, len(cfg.Apps))
 	for _, app := range cfg.Apps {
 		names = append(names, app.Name)
 	}
 	switch {
 	case len(names) == 1:
-		return "Reading the prebuilt output of app " + names[0]
+		return "app " + names[0]
 	case len(names) <= 4:
-		return fmt.Sprintf("Reading the prebuilt output of %d apps (%s and %s)", len(names), strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
+		return fmt.Sprintf("%d apps (%s and %s)", len(names), strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
 	default:
-		return fmt.Sprintf("Reading the prebuilt output of %d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
+		return fmt.Sprintf("%d apps (%s and %d more)", len(names), strings.Join(names[:3], ", "), len(names)-3)
 	}
 }
 

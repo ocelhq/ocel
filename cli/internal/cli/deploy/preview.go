@@ -257,7 +257,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		return err
 	}
 	if manifest == nil {
-		run.Finish(fmt.Sprintf("Nothing to deploy: %s declares no apps or resources", cfg.Slug))
+		run.Finish(nothingToDeploy(cfg))
 		return nil
 	}
 
