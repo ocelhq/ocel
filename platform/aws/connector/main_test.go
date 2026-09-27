@@ -12,6 +12,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
@@ -96,5 +97,16 @@ func TestAScheduledWakeBeatsAndAnythingElseIsServedAsARequest(t *testing.T) {
 	}
 	if beats.Load() != 1 || len(serve.requests) != 1 || serve.requests[0].RawPath != "/v1/capabilities" {
 		t.Errorf("a request beat %d times and served %v, want it served and nothing beaten", beats.Load(), serve.requests)
+	}
+}
+
+func TestTheConnectorProvesItsIdentityAsItsOwnRole(t *testing.T) {
+	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", "")}
+	prove := envVars(cfg, nil).ProveIdentity
+	if prove == nil {
+		t.Fatal("the connector's backend has no ProveIdentity, so an Infisical env source with identity auth is refused through the console")
+	}
+	if proof, err := prove(context.Background(), "identity-1"); err != nil || proof.SignedRequest == nil || proof.SignedRequest.URL != "https://sts.eu-west-2.amazonaws.com/" {
+		t.Fatalf("ProveIdentity() = %+v, %v, want a request signed for the connector's own region", proof, err)
 	}
 }
