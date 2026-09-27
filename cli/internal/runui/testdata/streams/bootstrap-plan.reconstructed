@@ -4,7 +4,6 @@ stages:
   [plan]
     Planning the changes to the production bootstrap
   Updating bootstrap stacks ocel-bootstrap and ocel-bootstrap-isr
-    Updating bootstrap stacks ocel-bootstrap and ocel-bootstrap-isr
 plan:
   stack/aws/ocel-bootstrap ACTION_UPDATE AWS::Lambda::Function/OcelRouterFunction
   stack/aws/ocel-bootstrap ACTION_KEEP AWS::SecretsManager::Secret/OcelOriginSecret

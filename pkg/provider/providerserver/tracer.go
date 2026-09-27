@@ -34,7 +34,6 @@ func derivedStageID(raw []byte) StageID {
 type Stage struct {
 	ID       StageID
 	ParentID StageID
-	Name     string
 	Title    string
 	Phase    progressv1.Phase
 	Subject  string
@@ -45,14 +44,6 @@ func (s Stage) scoped(ev *progressv1.OperationEvent) *progressv1.OperationEvent 
 	ev.Subject = s.Subject
 	ev.SpanId = s.ID[:]
 	return ev
-}
-
-var phaseNames = map[progressv1.Phase]string{
-	progressv1.Phase_PHASE_BUILD:     naming.PhaseBuilding,
-	progressv1.Phase_PHASE_DEPLOY:    naming.PhaseUploading,
-	progressv1.Phase_PHASE_PROVISION: naming.PhaseProvisioning,
-	progressv1.Phase_PHASE_PROMOTE:   naming.PhaseFinalizing,
-	progressv1.Phase_PHASE_DESTROY:   naming.PhaseDeleting,
 }
 
 const maxStageTitleLen = 200
@@ -86,22 +77,9 @@ func sanitizeMessage(msg string) string {
 func UnitStage(name, subject, title string, phase progressv1.Phase) Stage {
 	return Stage{
 		ID:      derivedStageID(naming.UnitID(name)),
-		Name:    name,
 		Title:   sanitizeTitle(title),
 		Phase:   phase,
 		Subject: subject,
-	}
-}
-
-func PhaseStage(unit Stage) Stage {
-	name := phaseNames[unit.Phase]
-	return Stage{
-		ID:       derivedStageID(naming.PhaseID(unit.Name, name)),
-		ParentID: unit.ID,
-		Name:     name,
-		Title:    unit.Title,
-		Phase:    unit.Phase,
-		Subject:  unit.Subject,
 	}
 }
 
@@ -157,16 +135,12 @@ type unitRun struct {
 func (u *unitRun) recordPartial(result string) { u.partial = result }
 
 func (u *unitRun) phase(do func(edge.Progress) error) error {
-	working := PhaseStage(u.stage)
-	start := time.Now()
-	u.scope.trace.Start(start, working)
-	progress := newProgress(u.scope.sender, working)
+	progress := newProgress(u.scope.sender, u.stage)
 	err := do(progress)
 	if err != nil {
 		progress.Error(err.Error())
 		u.said = err
 	}
-	u.scope.trace.End(working, start, time.Now(), err)
 	return err
 }
 

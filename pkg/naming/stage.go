@@ -13,25 +13,12 @@ const (
 	UnitPromotion   = "promotion"
 	UnitConnector   = "connector"
 
-	PhaseBuilding     = "building"
-	PhaseUploading    = "uploading"
-	PhaseProvisioning = "provisioning"
-	PhaseFinalizing   = "finalizing"
-	PhaseDeleting     = "deleting"
-
 	StageIDLen = 8
 )
 
 func UnitID(unit string) []byte {
 	h := sha256.New()
 	writeStageField(h, unit)
-	return h.Sum(nil)[:StageIDLen]
-}
-
-func PhaseID(unit, phase string) []byte {
-	h := sha256.New()
-	writeStageField(h, unit)
-	writeStageField(h, phase)
 	return h.Sum(nil)[:StageIDLen]
 }
 

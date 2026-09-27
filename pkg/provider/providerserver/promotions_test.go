@@ -160,11 +160,8 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 		t.Fatal("nothing the flip said reached the stream, so the flip reports through a reporter the run does not have")
 	}
 	promotion := "Switching traffic to promotion " + result.GetPromotionId()
-	if got := titles[spoke]; got != promotion {
-		t.Errorf("the flip spoke on stage %q, want %q", got, promotion)
-	}
-	if unit := parents[spoke]; titles[unit] != promotion || parents[unit] != "" {
-		t.Errorf("the flip spoke under %q, want the unit %q", titles[unit], promotion)
+	if titles[spoke] != promotion || parents[spoke] != "" {
+		t.Errorf("the flip spoke on stage %q, want the unit %q", titles[spoke], promotion)
 	}
 }
 

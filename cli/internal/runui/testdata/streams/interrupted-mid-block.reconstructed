@@ -3,7 +3,6 @@ stages:
     Collecting the resources acme declares
     Building app api
   Deploying the serverless app to production
-    Deploying the serverless app to production
 plan:
 waits:
 results:

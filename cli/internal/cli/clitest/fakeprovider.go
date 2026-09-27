@@ -202,29 +202,16 @@ type deployFakeProviderServer struct {
 	preflightTier     environmentv1.Tier
 }
 
-var (
-	fakeUnitID  = naming.UnitID(naming.UnitEnvironment)
-	fakePhaseID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
-)
+var fakeUnitID = naming.UnitID(naming.UnitEnvironment)
 
 func declareFakeStages(stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	if err := stream.Send(&progressv1.OperationEvent{
+	return stream.Send(&progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_INFO,
 		Phase:   progressv1.Phase_PHASE_PROVISION,
 		SpanId:  fakeUnitID,
 		Subject: "production",
 		Message: "Applying the fake provider's changes",
 		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
-	}); err != nil {
-		return err
-	}
-	return stream.Send(&progressv1.OperationEvent{
-		Level:   progressv1.Level_LEVEL_INFO,
-		Phase:   progressv1.Phase_PHASE_PROVISION,
-		SpanId:  fakePhaseID,
-		Subject: "production",
-		Message: "Applying the fake provider's changes",
-		Body:    &progressv1.OperationEvent_Started{Started: &progressv1.Started{ParentSpanId: fakeUnitID}},
 	})
 }
 
@@ -311,7 +298,7 @@ func fakeProgress(message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_INFO,
 		Phase:   progressv1.Phase_PHASE_PROVISION,
-		SpanId:  fakePhaseID,
+		SpanId:  fakeUnitID,
 		Message: message,
 	}
 }

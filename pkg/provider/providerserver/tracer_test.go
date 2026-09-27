@@ -32,8 +32,8 @@ func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	tracer := newEventTrace(sender)
 
 	unit := environmentUnit(progressv1.Phase_PHASE_PROVISION)
-	phase := PhaseStage(unit)
-	tracer.Start(time.Now(), unit, phase)
+	detail := NewStage(unit, "dns records")
+	tracer.Start(time.Now(), unit, detail)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -57,11 +57,11 @@ func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 		t.Errorf("unit phase = %v, want the provision phase it runs in", got)
 	}
 	if StageID(nested.GetStarted().GetParentSpanId()) != unit.ID {
-		t.Errorf("phase parent = %x, want the unit %x", nested.GetStarted().GetParentSpanId(), unit.ID)
+		t.Errorf("detail parent = %x, want the unit %x", nested.GetStarted().GetParentSpanId(), unit.ID)
 	}
-	if nested.GetMessage() != environmentTitle || nested.GetSubject() != "production" || nested.GetPhase() != progressv1.Phase_PHASE_PROVISION {
-		t.Errorf("the phase starts as %q: %q in %v, want its unit's \"production\": %q in the provision phase",
-			nested.GetSubject(), nested.GetMessage(), nested.GetPhase(), environmentTitle)
+	if nested.GetMessage() != "dns records" || nested.GetSubject() != "production" || nested.GetPhase() != progressv1.Phase_PHASE_PROVISION {
+		t.Errorf("the detail starts as %q: %q in %v, want its unit's \"production\": \"dns records\" in the provision phase",
+			nested.GetSubject(), nested.GetMessage(), nested.GetPhase())
 	}
 	for i, event := range events {
 		if err := protovalidate.Validate(event); err != nil {
@@ -70,7 +70,7 @@ func TestAStartedStageIsTitledUnderItsParent(t *testing.T) {
 	}
 }
 
-func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
+func TestUnitIDsAreTheSharedNamingDigests(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -79,11 +79,8 @@ func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 
 	tracer.Start(time.Now(),
 		environmentUnit(progressv1.Phase_PHASE_PROVISION),
-		PhaseStage(environmentUnit(progressv1.Phase_PHASE_BUILD)),
-		PhaseStage(environmentUnit(progressv1.Phase_PHASE_DEPLOY)),
-		PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION)),
-		PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROMOTE)),
-		PhaseStage(environmentUnit(progressv1.Phase_PHASE_DESTROY)),
+		UnitStage(naming.UnitEdge, "cloudflare", "Reconciling the routes for shop in production", progressv1.Phase_PHASE_DEPLOY),
+		UnitStage(naming.UnitPromotion, "production", "Switching traffic to promotion p1", progressv1.Phase_PHASE_PROMOTE),
 	)
 
 	if err := sender.close(); err != nil {
@@ -92,11 +89,8 @@ func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	events := stream.recorded()
 	for i, want := range []string{
 		"9f2ecbbdfa2db89d",
-		"4b5ac07b8124802c",
-		"8b528c00a0fb6065",
-		"ed0ca2aae3a67905",
-		"92988f8d30813314",
-		"7da3bb7483e4884a",
+		"000c0a32c587a5a8",
+		"17505ced11f71bd3",
 	} {
 		if got := hex.EncodeToString(events[i].GetSpanId()); got != want {
 			t.Errorf("stage %d id = %s, want the naming digest %s", i, got, want)
@@ -107,18 +101,18 @@ func TestUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	}
 }
 
-func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
+func TestDetailStagesMintTheirOwnIDUnderTheirUnit(t *testing.T) {
 	t.Parallel()
 
-	phase := PhaseStage(UnitStage(naming.UnitPromotion, "production", "Switching traffic to promotion p1", progressv1.Phase_PHASE_PROMOTE))
-	first := NewStage(phase, "detail")
-	second := NewStage(phase, "detail")
+	unit := UnitStage(naming.UnitPromotion, "production", "Switching traffic to promotion p1", progressv1.Phase_PHASE_PROMOTE)
+	first := NewStage(unit, "detail")
+	second := NewStage(unit, "detail")
 
 	if first.ID == second.ID {
 		t.Error("two detail stages share an id, want each minted on its own")
 	}
-	if first.ParentID != phase.ID {
-		t.Error("a detail stage hangs off something other than its phase")
+	if first.ParentID != unit.ID {
+		t.Error("a detail stage hangs off something other than its unit")
 	}
 }
 
@@ -273,7 +267,7 @@ func reasonsSaid(events []*progressv1.OperationEvent) []*progressv1.OperationEve
 	return said
 }
 
-func TestAFailedUnitSaysWhyAtErrorInItsPhaseOnceBeforeThePhaseEnds(t *testing.T) {
+func TestAFailedUnitSaysWhyAtErrorInItsUnitOnceBeforeTheUnitEnds(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
@@ -294,9 +288,8 @@ func TestAFailedUnitSaysWhyAtErrorInItsPhaseOnceBeforeThePhaseEnds(t *testing.T)
 		t.Fatalf("the failure is said %d times, want once", len(said))
 	}
 	reason := said[0]
-	working := PhaseStage(unit)
-	if StageID(reason.GetSpanId()) != working.ID || reason.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
-		t.Errorf("the reason is scoped to %x in %v, want the unit's phase %x in the deploy phase", reason.GetSpanId(), reason.GetPhase(), working.ID)
+	if StageID(reason.GetSpanId()) != unit.ID || reason.GetPhase() != progressv1.Phase_PHASE_DEPLOY {
+		t.Errorf("the reason is scoped to %x in %v, want the unit %x in the deploy phase", reason.GetSpanId(), reason.GetPhase(), unit.ID)
 	}
 	if got, want := reason.GetMessage(), "the web stack could not be provisioned[0m"; got != want {
 		t.Errorf("the reason reads %q, want the error sanitized like any message: %q", got, want)
@@ -304,13 +297,43 @@ func TestAFailedUnitSaysWhyAtErrorInItsPhaseOnceBeforeThePhaseEnds(t *testing.T)
 	at := slices.Index(events, reason)
 	for _, event := range events[:at] {
 		if event.GetEnded() != nil {
-			t.Fatalf("a scope ended before the reason was said, want the reason inside its phase")
+			t.Fatalf("a scope ended before the reason was said, want the reason inside its unit")
 		}
 	}
 	for _, event := range events {
 		if event.GetEnded() != nil && event.GetMessage() != "" {
 			t.Errorf("an Ended carries %q, want Ended without text", event.GetMessage())
 		}
+	}
+}
+
+func TestAUnitsWorkSpeaksInTheUnitsOwnSpanWithNoSpanOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	stream := &recordingStream{}
+	sender := newEventStream(context.Background(), stream.send)
+	unit := UnitStage("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
+	_ = newStageScope(sender).unit(unit, func(u *unitRun) error {
+		return u.phase(func(progress edge.Progress) error {
+			progress.Say("Uploading function web's artifact (1.2 MiB)")
+			return nil
+		})
+	})
+
+	if err := sender.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+	var started int
+	for _, event := range stream.recorded() {
+		if StageID(event.GetSpanId()) != unit.ID {
+			t.Errorf("an event is scoped to %x, want every one in the unit's span %x", event.GetSpanId(), unit.ID)
+		}
+		if event.GetStarted() != nil {
+			started++
+		}
+	}
+	if started != 1 {
+		t.Errorf("%d spans started, want only the unit's", started)
 	}
 }
 

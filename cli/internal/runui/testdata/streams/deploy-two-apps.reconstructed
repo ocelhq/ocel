@@ -7,13 +7,11 @@ stages:
     Building app web
     Building app api
   Deploying the serverless app to production
-    Deploying the serverless app to production
   Deploying the serverless app to production
-    Deploying the serverless app to production
-      pulumi resource operations
-      resource operation failed
-      pulumi resource operations
-      create resource
+    pulumi resource operations
+    resource operation failed
+    pulumi resource operations
+    create resource
 plan:
   infrastructure/shared ACTION_CREATE bucket/assets
   infrastructure/shared ACTION_DELETE bucket/logs

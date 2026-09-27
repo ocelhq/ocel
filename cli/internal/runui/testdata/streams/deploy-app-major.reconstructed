@@ -6,25 +6,18 @@ stages:
     Building app api
     Building the image of app web
   Checking the bootstrap, domains and bindings for acme
-    Checking the bootstrap, domains and bindings for acme
   Reconciling the routes for acme in production
-    Reconciling the routes for acme in production
   Provisioning shared resource assets
-    Provisioning shared resource assets
-      pulumi resource operations
-      create resource
+    pulumi resource operations
+    create resource
   Deploying the container app to production
-    Deploying the container app to production
   Deploying the serverless app to production
-    Deploying the serverless app to production
-      pulumi resource operations
-      update resource
-      pulumi resource operations
-      update resource
+    pulumi resource operations
+    update resource
+    pulumi resource operations
+    update resource
   Attaching production hostname acme.example.com
-    Attaching production hostname acme.example.com
   Switching traffic to promotion p-7f3a
-    Switching traffic to promotion p-7f3a
 plan:
 waits:
 results:

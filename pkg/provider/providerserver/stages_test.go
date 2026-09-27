@@ -177,15 +177,10 @@ func TestEveryScopeADeployOpensStartsAndEndsInTheSamePhase(t *testing.T) {
 	}
 }
 
-func phasesUnder(events []*progressv1.OperationEvent, title string) []progressv1.Phase {
-	units := map[string]string{}
+func unitPhases(events []*progressv1.OperationEvent, title string) []progressv1.Phase {
 	var phases []progressv1.Phase
 	for _, scope := range startedScopes(events) {
-		if scope.parent == "" {
-			units[scope.id] = scope.title
-			continue
-		}
-		if unit, ok := units[scope.parent]; ok && strings.HasPrefix(unit, title) {
+		if scope.parent == "" && strings.HasPrefix(scope.title, title) {
 			phases = append(phases, scope.phase)
 		}
 	}
@@ -200,7 +195,7 @@ func TestADeploysPromotionRunsInThePromotePhase(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	got := phasesUnder(events, "Switching traffic")
+	got := unitPhases(events, "Switching traffic")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_PROMOTE {
 		t.Errorf("the Promotion unit runs in %v, want the promote phase", got)
 	}
@@ -214,7 +209,7 @@ func TestAnAppUnitsEventsNameTheAppAsSubjectInTheDeployPhase(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if got := phasesUnder(events, "Deploying the serverless app"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
+	if got := unitPhases(events, "Deploying the serverless app"); len(got) != 1 || got[0] != progressv1.Phase_PHASE_DEPLOY {
 		t.Errorf("the web unit runs in %v, want the deploy phase", got)
 	}
 
@@ -281,7 +276,7 @@ func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveEnvironment() error = %v", err)
 	}
-	got := phasesUnder(recorded(stream), "Removing the preview environment")
+	got := unitPhases(recorded(stream), "Removing the preview environment")
 	if len(got) != 1 || got[0] != progressv1.Phase_PHASE_DESTROY {
 		t.Errorf("the removal runs in %v, want the destroy phase", got)
 	}

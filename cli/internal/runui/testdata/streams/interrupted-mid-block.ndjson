@@ -6,6 +6,5 @@
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AwAAAAAAAAA=","phase":"PHASE_BUILD","subject":"api","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503201000000000"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"AQAAAAAAAAA=","phase":"PHASE_BUILD","ended":{"status":"SPAN_STATUS_OK","startTimeUnixNano":"1790503200000000000"}}
 {"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Deploying the serverless app to production","started":{"parentSpanId":"FAAAAAAAAAA="}}
-{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FQAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading function api's artifact (1.2 MiB)"}
+{"time":"2026-09-27T10:00:05Z","level":"LEVEL_INFO","spanId":"FAAAAAAAAAA=","phase":"PHASE_DEPLOY","subject":"api","message":"Uploading function api's artifact (1.2 MiB)"}
 {"time":"2026-09-27T10:00:12Z","level":"LEVEL_WARN","result":{"interrupted":true,"headline":"Deploy cancelled","detail":"Resources may be partially created.\nRe-run `ocel deploy` to reconcile.","durationMs":"12000"}}

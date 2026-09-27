@@ -271,14 +271,14 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	}
 }
 
-var testStage = PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION))
+var testStage = environmentUnit(progressv1.Phase_PHASE_PROVISION)
 
 func TestAStageSaysAMessageOnlyLineWritesOutputAndOpensAndEndsItsDetailScopes(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION))
+	stage := environmentUnit(progressv1.Phase_PHASE_PROVISION)
 	progress := newProgress(sender, stage)
 
 	progress.Say("provisioning the infra stack")
@@ -321,7 +321,7 @@ func TestEveryEventAStageSendsCarriesATimeALevelAndTheStagesPhase(t *testing.T) 
 
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
-	stage := PhaseStage(environmentUnit(progressv1.Phase_PHASE_PROVISION))
+	stage := environmentUnit(progressv1.Phase_PHASE_PROVISION)
 	progress := newProgress(sender, stage)
 
 	before := time.Now().UnixNano()
