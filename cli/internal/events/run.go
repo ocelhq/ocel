@@ -38,7 +38,7 @@ type Run struct {
 func (r *Run) End(errp *error) {
 	r.endOnce.Do(func() {
 		err := *errp
-		for _, s := range slices.Backward(r.children(nil)) {
+		for _, s := range slices.Backward(r.stillOpen()) {
 			s.End(err)
 		}
 		result, code := r.result(err)
@@ -158,6 +158,12 @@ func (r *Run) close(s *Scope) {
 		delete(r.phases, s.phase)
 	}
 	r.open = slices.DeleteFunc(r.open, func(o *Scope) bool { return o == s })
+}
+
+func (r *Run) stillOpen() []*Scope {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.open)
 }
 
 func (r *Run) children(parent *Scope) []*Scope {

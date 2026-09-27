@@ -65,6 +65,28 @@ func TestEveryScopeARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *tes
 	}
 }
 
+func TestAUnitOpenedOnAnEndedScopeStillEndsOnceWhenTheRunEnds(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check.End(nil)
+	check.Unit("aws", "Checking credentials").Say("still here")
+
+	var err error
+	run.End(&err)
+
+	ended := 0
+	got := sink.received()
+	for _, ev := range got[:len(got)-1] {
+		if ev.GetEnded() != nil && ev.GetSubject() == "aws" {
+			ended++
+		}
+	}
+	if ended != 1 {
+		t.Fatalf("the unit opened after its phase ended ended %d times before the result, want once", ended)
+	}
+}
+
 func TestAFailedRunEndsWithAnErrorResultAndExitsWithOne(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)
