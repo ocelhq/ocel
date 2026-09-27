@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/envvars"
 )
@@ -20,7 +21,7 @@ type CopyResult struct {
 	Refused   map[envvars.Cell]string
 }
 
-func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, envSource string, read map[envvars.Cell]Value, folders []string, keep []envvars.Cell) (CopyResult, error) {
+func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, envSource string, readAt time.Time, read map[envvars.Cell]Value, folders []string, keep []envvars.Cell) (CopyResult, error) {
 	result := CopyResult{EnvSource: envSource}
 	listed, err := store.List(ctx, scope)
 	if err != nil {
@@ -51,7 +52,7 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 		if found {
 			expected = current.Version
 		}
-		_, err := store.SetFromEnvSource(ctx, scope, envvars.Coordinate{Cell: at}, string(next.Plaintext), envvars.Provenance{EnvSource: envSource, Version: next.Version}, expected)
+		_, err := store.SetFromEnvSource(ctx, scope, envvars.Coordinate{Cell: at}, string(next.Plaintext), envvars.Provenance{EnvSource: envSource, Version: next.Version, ReadAt: readAt}, expected)
 		switch {
 		case err == nil:
 			result.Written = append(result.Written, at)
@@ -71,8 +72,7 @@ func CopyValues(ctx context.Context, store envvars.Store, scope envvars.Scope, e
 		if _, present := read[at]; present {
 			continue
 		}
-		expected := metadata.Version
-		removed, err := store.Delete(ctx, scope, metadata.Coordinate, &expected)
+		removed, err := store.DeleteFromEnvSource(ctx, scope, metadata.Coordinate, envvars.Provenance{EnvSource: envSource, ReadAt: readAt}, metadata.Version)
 		if errors.Is(err, envvars.ErrStaleVersion) {
 			continue
 		}
