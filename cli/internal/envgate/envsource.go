@@ -54,6 +54,12 @@ func (s EnvSource) isCredential(key string) bool {
 	return slices.Contains(s.Credentials, key)
 }
 
+func (s EnvSource) areCredentials(problems []*resourcesv1.VariableProblem) bool {
+	return len(problems) > 0 && !slices.ContainsFunc(problems, func(problem *resourcesv1.VariableProblem) bool {
+		return problem.GetFolder() != "" || !s.isCredential(problem.GetKey())
+	})
+}
+
 func (s EnvSource) remedy(problems []*resourcesv1.VariableProblem, scope Scope) string {
 	var folders []string
 	for _, problem := range problems {

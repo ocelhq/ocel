@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -114,12 +116,54 @@ func TestADeployReadsItsTiersEnvSourceBeforeTheGate(t *testing.T) {
 	t.Run("an unset credential stops the deploy with the command that sets it", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), infisicalProduction)
+		envSet(t, root, "INFISICAL_CLIENT_ID", "client-id", envOptions{})
 		useFakeEnvSource(t, clitest.FakeEnvSource{})
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), clitest.NewDeps(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
-		if out := stdout.String() + stderr.String(); err == nil || !strings.Contains(out+err.Error(), "ocel env set INFISICAL_CLIENT_ID=<VALUE>") {
-			t.Fatalf("runDeploy err = %v; output=%s, want the credential's command named", err, out)
+		out := stdout.String()
+		if err == nil || !strings.Contains(out, "1 variable is not ready") || !strings.Contains(out, "INFISICAL_CLIENT_SECRET  root  no value") {
+			t.Fatalf("runDeploy err = %v; stdout=%s, want the gate to refuse the unset credential alone", err, out)
+		}
+		if !strings.Contains(out, "ocel env set INFISICAL_CLIENT_SECRET=<VALUE>") {
+			t.Errorf("stdout = %q, want the credential's command named, not the env source", out)
+		}
+	})
+
+	t.Run("an unset credential opens the recovery page, and saving it there resumes the deploy", func(t *testing.T) {
+		root := clitest.SetUpEnvGateFixtureWith(t, stripeDeclared, clitest.EnvDeclareOnlyScript)
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), infisicalProduction)
+		useFakeEnvSource(t, clitest.FakeEnvSource{
+			Values: []clitest.FakeEnvSourceValue{{Key: "STRIPE_API_KEY", Value: "sk_live_from_infisical"}},
+		})
+		deps := clitest.NewDeps()
+		terminalStdin(&deps)
+		var mu sync.Mutex
+		var opened []string
+		recordBrowser(&deps, &opened, &mu)
+
+		var out syncBuffer
+		var stderr bytes.Buffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &out, &stderr, strings.NewReader(""))
+		}()
+
+		address, token := awaitVarsUI(t, &out, 1)
+		setCell(t, address, token, "INFISICAL_CLIENT_ID", "client-id")
+		setCell(t, address, token, "INFISICAL_CLIENT_SECRET", "client-secret")
+		markDone(t, address, token)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("runDeploy err = %v, want the deploy to resume on the env source's values; stdout=%s", err, out.String())
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("runDeploy never returned after the credentials were saved")
+		}
+		if !strings.Contains(out.String(), "Deployed") {
+			t.Errorf("stdout = %q, want the resumed deploy to have completed", out.String())
 		}
 	})
 

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strings"
 
 	connect "connectrpc.com/connect"
 
@@ -227,15 +228,29 @@ func clearFakeProvenance(tier environmentv1.Tier, slug string) error {
 }
 
 func refuseFakeCredentialUnset(store FakeStore, tier environmentv1.Tier, slug string, descriptor envsource.Descriptor) error {
+	class := edge.Class(fakeClass(tier))
+	var messages []string
+	var refused []*envvarsv1.CredentialRefusal
 	for _, name := range descriptor.CredentialVariables() {
 		if store[FakeCoordinateID(tier, &envvarsv1.Coordinate{Slug: slug, Key: name})].LiveVersion() > 0 {
 			continue
 		}
-		class := edge.Class(fakeClass(tier))
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s logs in with %s, which has no value in %s: set it with `%s`", descriptor.ID(), name, class, envsource.SetCommand(class, name)))
+		reason := fmt.Sprintf("has no value in %s: set it with `%s`", class, envsource.SetCommand(class, name))
+		messages = append(messages, fmt.Sprintf("%s logs in with %s, which %s", descriptor.ID(), name, reason))
+		refused = append(refused, &envvarsv1.CredentialRefusal{Variable: name, Unset: true, Reason: reason})
 	}
-	return nil
+	if len(refused) == 0 {
+		return nil
+	}
+	wire := connect.NewError(connect.CodeFailedPrecondition, errors.New(strings.Join(messages, "\n")))
+	for _, credential := range refused {
+		detail, err := connect.NewErrorDetail(credential)
+		if err != nil {
+			return err
+		}
+		wire.AddDetail(detail)
+	}
+	return wire
 }
 
 func fakeClass(tier environmentv1.Tier) string {

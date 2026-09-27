@@ -3,6 +3,7 @@ package envvarsserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -206,6 +207,42 @@ func TestADeploySyncReadsInfisicalWithTheCredentialOcelStores(t *testing.T) {
 	}
 	if got := described.GetStatus().GetCredentials(); len(got) != 2 || got[0] != "INFISICAL_CLIENT_ID" {
 		t.Fatalf("credentials = %v, want the two variables universal auth reads", got)
+	}
+}
+
+func credentialRefusals(err error) map[string]*envvarsv1.CredentialRefusal {
+	out := map[string]*envvarsv1.CredentialRefusal{}
+	var wire *connect.Error
+	if !errors.As(err, &wire) {
+		return out
+	}
+	for _, detail := range wire.Details() {
+		if value, err := detail.Value(); err == nil {
+			if refused, ok := value.(*envvarsv1.CredentialRefusal); ok {
+				out[refused.GetVariable()] = refused
+			}
+		}
+	}
+	return out
+}
+
+func TestASyncRefusedForItsCredentialsNamesEachOneForTheCallerToSet(t *testing.T) {
+	vars, _ := served(t)
+	_, server := newInfisical(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+
+	_, err := syncEnvSource(vars, production, infisicalSource(server.URL, false))
+	refused := credentialRefusals(err)
+	if len(refused) != 2 || !refused["INFISICAL_CLIENT_ID"].GetUnset() || !refused["INFISICAL_CLIENT_SECRET"].GetUnset() {
+		t.Fatalf("SyncEnvSource() with no credential set = %v, want both credentials refused as unset", err)
+	}
+
+	if err := setValue(t, vars, production, cell("INFISICAL_CLIENT_ID"), "id"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = syncEnvSource(vars, production, infisicalSource(server.URL, false))
+	if refused := credentialRefusals(err); len(refused) != 1 || refused["INFISICAL_CLIENT_SECRET"] == nil {
+		t.Fatalf("SyncEnvSource() with the client secret unset = %v, want the client secret alone refused", err)
 	}
 }
 

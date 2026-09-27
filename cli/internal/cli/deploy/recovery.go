@@ -42,12 +42,18 @@ type gateRecovery struct {
 
 func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	gate, err := r.gate(ctx)
+	var refusal *envgate.Refusal
+	if errors.As(err, &refusal) && r.enabled {
+		if err := r.fill(ctx, gate, refusal); err != nil {
+			return nil, nil, err
+		}
+		gate, err = r.gate(ctx)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 	manifest, inline, err := r.attempt(ctx, gate, prebuilt, 0)
 
-	var refusal *envgate.Refusal
 	if !errors.As(err, &refusal) {
 		return manifest, inline, err
 	}
@@ -66,6 +72,10 @@ func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contra
 
 func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
 	synced, err := envwire.SyncEnvSource(ctx, r.runner, r.cfg, r.preview)
+	if problems := envwire.CredentialProblems(err); len(problems) > 0 {
+		gate := r.newGate(envwire.ConfiguredEnvSource(r.cfg, r.preview))
+		return gate, gate.RefuseCredentials(problems)
+	}
 	if err != nil {
 		return nil, err
 	}

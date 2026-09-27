@@ -314,6 +314,15 @@ func (g *Gate) Check() error {
 	return &Refusal{Problems: problems, Definitions: definitions, Groups: groups, Scope: g.scope}
 }
 
+func (g *Gate) RefuseCredentials(problems []*resourcesv1.VariableProblem) *Refusal {
+	return &Refusal{
+		Problems:    problems,
+		Definitions: g.Declared(),
+		Groups:      append(g.Groups(), g.scope.impliedGroups()...),
+		Scope:       g.scope,
+	}
+}
+
 func declaredAt(definitions []*resourcesv1.VariableDefinition, key string) int {
 	for i, definition := range definitions {
 		if definition.GetKey() == key {
