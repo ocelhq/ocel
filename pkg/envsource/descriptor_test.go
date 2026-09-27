@@ -47,6 +47,22 @@ func TestOnlyUniversalAuthReadsOcelVariables(t *testing.T) {
 	}
 }
 
+func TestAnEnvSourceIsNamedByItsKindAndAnInfisicalOneByItsProjectAndEnvironment(t *testing.T) {
+	for _, c := range []struct {
+		descriptor envsource.Descriptor
+		want       string
+	}{
+		{envsource.Descriptor{Kind: envsource.Builtin}, "builtin"},
+		{envsource.Descriptor{Kind: envsource.Dotenv}, "dotenv"},
+		{envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"vault"}}}, "exec"},
+		{envsource.Descriptor{Kind: envsource.Infisical, Infisical: &envsource.InfisicalOptions{Project: "p-1", Environment: "prod", Path: "/acme"}}, "infisical:p-1/prod"},
+	} {
+		if got := c.descriptor.ID(); got != c.want {
+			t.Errorf("%s ID() = %q, want %q", c.descriptor.Kind, got, c.want)
+		}
+	}
+}
+
 func TestNormalizeRootsThePathAndFillsTheCloudHostAndNeverWriting(t *testing.T) {
 	got := envsource.InfisicalOptions{Project: "p", Environment: "prod", Path: "acme//web/"}.Normalize()
 	want := envsource.InfisicalOptions{Project: "p", Environment: "prod", Path: "/acme/web", Host: "https://app.infisical.com", Write: envsource.WriteNever}
