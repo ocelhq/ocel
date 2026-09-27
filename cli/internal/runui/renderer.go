@@ -132,25 +132,39 @@ func (r *Renderer) paint(line string) string {
 }
 
 func (r *Renderer) Ingest(ev *streamv1.RunEvent) {
-	op := ev.GetOperation()
-	if op == nil {
-		return
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	switch {
-	case op.GetStagePlan() != nil:
-		r.plan.apply(op.GetStagePlan())
-	case op.GetProgress() != nil:
-		p := op.GetProgress()
-		r.trackLocked(stageKey(p.GetStageId()), p.GetMessage(), p.GetCurrent(), p.Total)
-	case op.GetSpan() != nil:
-		r.endLocked(op.GetSpan())
-	default:
+	if !r.ingestLocked(ev) {
 		return
 	}
 	r.eraseLiveLocked()
 	r.drawLiveLocked()
+}
+
+func (r *Renderer) ingestLocked(ev *streamv1.RunEvent) bool {
+	op := ev.GetOperation()
+	id := stageKey(ev.GetSpanId())
+	switch {
+	case op.GetStagePlan() != nil:
+		r.plan.apply(op.GetStagePlan())
+	case op.GetStarted() != nil:
+		r.plan.declare(id, stageKey(op.GetStarted().GetParentSpanId()), stageTitle(ev.GetMessage(), ev.GetPhase()))
+	case op.GetProgress() != nil:
+		p := op.GetProgress()
+		r.trackLocked(stageKey(p.GetStageId()), p.GetMessage(), p.GetCurrent(), p.Total)
+	case op.GetCounter() != nil:
+		r.trackLocked(id, ev.GetMessage(), op.GetCounter().GetCurrent(), op.GetCounter().Total)
+	case op.GetSpan() != nil:
+		span := op.GetSpan()
+		r.endLocked(stageKey(span.GetSpanId()), span.GetStatus(), spanDuration(span))
+	case op.GetEnded() != nil:
+		r.endLocked(id, op.GetEnded().GetStatus(), endedDuration(ev, op.GetEnded()))
+	case ev.GetEvent() == nil && id != "" && ev.GetLevel() == progressv1.Level_LEVEL_INFO:
+		r.trackLocked(id, ev.GetMessage(), 0, nil)
+	default:
+		return false
+	}
+	return true
 }
 
 func (r *Renderer) trackLocked(id, message string, current uint32, total *uint32) {
@@ -169,15 +183,14 @@ func (r *Renderer) trackLocked(id, message string, current uint32, total *uint32
 	}
 }
 
-func (r *Renderer) endLocked(span *progressv1.SpanEvent) {
-	id := stageKey(span.GetSpanId())
+func (r *Renderer) endLocked(id string, status progressv1.SpanStatus, d time.Duration) {
 	n, ok := r.plan.nodes[id]
 	if !ok {
 		return
 	}
 	n.state = stageDone
-	n.doneFailed = span.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	n.doneDur = spanDuration(span)
+	n.doneFailed = status == progressv1.SpanStatus_SPAN_STATUS_ERROR
+	n.doneDur = d
 	r.plan.foldSubtree(id)
 }
 

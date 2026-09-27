@@ -58,6 +58,7 @@ type Session struct {
 
 	build   *lineWriter
 	process atomic.Pointer[lineWriter]
+	scopes  sync.Map
 
 	logMu     sync.Mutex
 	log       *os.File
@@ -270,14 +271,28 @@ func (s *Session) Event(ev *progressv1.OperationEvent) {
 		s.stream.Emit(lift(ev))
 		return
 	}
-	out := s.stream.Emit(lift(ev)).GetOperation()
+	run := s.stream.Emit(lift(ev))
+	out := run.GetOperation()
 	s.logOperation(out)
-	if span := out.GetSpan(); span != nil {
-		s.ingestSpan(span)
+	switch {
+	case out.GetSpan() != nil:
+		s.ingestSpan(out.GetSpan())
+	case out.GetStarted() != nil:
+		s.scopes.Store(stageKey(run.GetSpanId()), startedScope{
+			parentID: out.GetStarted().GetParentSpanId(),
+			name:     stageTitle(run.GetMessage(), run.GetPhase()),
+		})
+	case out.GetEnded() != nil:
+		s.ingestEnded(run, out.GetEnded())
 	}
 	if apps := out.GetResult().GetApps(); len(apps) > 0 {
 		s.apps = apps
 	}
+}
+
+type startedScope struct {
+	parentID []byte
+	name     string
 }
 
 func lift(ev *progressv1.OperationEvent) *streamv1.RunEvent {
@@ -304,6 +319,10 @@ func (s *Session) logOperation(ev *progressv1.OperationEvent) {
 		s.logf("[progress] %s", progressLogLine(p.GetMessage(), p.GetCurrent(), p.Total))
 	case ev.GetLog() != nil:
 		s.logf("[log] %s", ev.GetLog().GetMessage())
+	case ev.GetCounter() != nil:
+		s.logf("[progress] %s", progressLogLine(ev.GetMessage(), ev.GetCounter().GetCurrent(), ev.GetCounter().Total))
+	case ev.GetOutput() != nil:
+		s.logf("[log] %s", ev.GetMessage())
 	case ev.GetDegraded() != nil:
 		s.logf("[degraded] %s: %s", ev.GetDegraded().GetNeed(), ev.GetDegraded().GetDetail())
 	case ev.GetDnsManualRecords() != nil:
@@ -331,24 +350,35 @@ func dnsLogLine(records []*progressv1.DnsRecord) string {
 }
 
 func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
+	s.trace(span.GetSpanId(), span.GetParentSpanId(), span.GetName(),
+		unixNano(span.GetStartTimeUnixNano()), unixNano(span.GetEndTimeUnixNano()),
+		span.GetStatus(), span.GetAttributes())
+}
+
+func (s *Session) ingestEnded(run *streamv1.RunEvent, ended *progressv1.Ended) {
+	var scope startedScope
+	if started, ok := s.scopes.LoadAndDelete(stageKey(run.GetSpanId())); ok {
+		scope = started.(startedScope)
+	}
+	end := run.GetTime().AsTime().UTC()
+	start := unixNano(ended.GetStartTimeUnixNano())
+	if start.IsZero() || start.After(end) {
+		start = end
+	}
+	s.trace(run.GetSpanId(), scope.parentID, scope.name, start, end, ended.GetStatus(), ended.GetAttributes())
+}
+
+func (s *Session) trace(id, parentID []byte, name string, start, end time.Time, status progressv1.SpanStatus, attrs []*progressv1.SpanAttribute) {
 	var spanID, parentSpanID [8]byte
-	if id := span.GetSpanId(); len(id) == 8 {
-		copy(spanID[:], id)
-	} else {
-		s.logf("[warn] dropped a provider span with a malformed span id (%d bytes, want 8)", len(span.GetSpanId()))
+	if len(id) != 8 {
+		s.logf("[warn] dropped a provider span with a malformed span id (%d bytes, want 8)", len(id))
 		return
 	}
-	if id := span.GetParentSpanId(); len(id) == 8 {
-		copy(parentSpanID[:], id)
+	copy(spanID[:], id)
+	if len(parentID) == 8 {
+		copy(parentSpanID[:], parentID)
 	}
-
-	s.run.IngestSpan(
-		spanID, parentSpanID,
-		span.GetName(),
-		unixNano(span.GetStartTimeUnixNano()), unixNano(span.GetEndTimeUnixNano()),
-		spanStatus(span.GetStatus()),
-		spanAttributes(span.GetAttributes()),
-	)
+	s.run.IngestSpan(spanID, parentSpanID, name, start, end, spanStatus(status), spanAttributes(attrs))
 }
 
 func (s *Session) Deployed(headline string, urlNotes []string, flip Flip, bindings []*bindingsv1.Binding, functions []*progressv1.FunctionOutput) {

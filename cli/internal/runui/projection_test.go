@@ -434,3 +434,114 @@ func TestAKindTheProjectionHasNeverSeenStillRenders(t *testing.T) {
 			strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+func startedEvent(id, parent []byte, phase progressv1.Phase, title string) *streamv1.RunEvent {
+	return lift(&progressv1.OperationEvent{Phase: phase, SpanId: id, Message: title, Event: &progressv1.OperationEvent_Started{
+		Started: &progressv1.Started{ParentSpanId: parent},
+	}})
+}
+
+func endedEvent(id []byte, failed bool, d time.Duration) *streamv1.RunEvent {
+	status := progressv1.SpanStatus_SPAN_STATUS_OK
+	if failed {
+		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
+	}
+	return lift(&progressv1.OperationEvent{TimeUnixNano: int64(d) + 1, SpanId: id, Event: &progressv1.OperationEvent_Ended{
+		Ended: &progressv1.Ended{Status: status, StartTimeUnixNano: 1},
+	}})
+}
+
+func TestAStartedAndEndedPairRendersTheBlockAStagePlanAndSpanDid(t *testing.T) {
+	t.Parallel()
+
+	unit, phase := appStage(1), appStage(2)
+	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+
+	var got []string
+	got = append(got, p.project(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))...)
+	got = append(got, p.project(startedEvent(phase, unit, progressv1.Phase_PHASE_BUILD, ""))...)
+	got = append(got, p.project(endedEvent(phase, false, 6*time.Second))...)
+	got = append(got, p.project(endedEvent(unit, false, 6*time.Second))...)
+
+	want := []string{"→ web › Building", "", okMark + " web  6s"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("projected =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func outputEvent(id []byte, line string) *streamv1.RunEvent {
+	return lift(&progressv1.OperationEvent{SpanId: id, Message: line, Event: &progressv1.OperationEvent_Output{
+		Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
+	}})
+}
+
+func TestOutputLinesAreThatBlocksRawLines(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		verbose bool
+		failed  bool
+		want    []string
+	}{
+		{"hidden from a successful block", false, false, []string{"", okMark + " web  6s"}},
+		{"shown when verbose", true, false, []string{"", okMark + " web  6s", "  Packages: +812"}},
+		{"shown when the block failed", false, true, []string{"", failMark + " web failed  6s", "  Packages: +812"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			unit, phase := appStage(1), appStage(2)
+			p := newProjector(Presentation{Format: FormatHuman, Verbose: tc.verbose, Width: defaultWidth})
+			p.project(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+			p.project(startedEvent(phase, unit, progressv1.Phase_PHASE_BUILD, ""))
+
+			if got := p.project(outputEvent(phase, "Packages: +812")); strings.Join(got, "\n") != "→ web › Building" {
+				t.Fatalf("on its first output line the phase committed %q, want only its start line", got)
+			}
+			got := p.project(endedEvent(phase, tc.failed, 6*time.Second))
+			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Errorf("flushed block =\n%q\nwant\n%q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAScopedMessageIsAProgressLineOfItsBlock(t *testing.T) {
+	t.Parallel()
+
+	unit, phase := appStage(1), appStage(2)
+	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+	p.project(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	p.project(startedEvent(phase, unit, progressv1.Phase_PHASE_BUILD, ""))
+
+	said := p.project(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: phase, Message: "Generating static pages"})
+	if strings.Join(said, "\n") != "→ web › Building" {
+		t.Fatalf("on the phase saying something it committed %q, want only its start line", said)
+	}
+	got := p.project(endedEvent(phase, false, 6*time.Second))
+	want := []string{"", okMark + " web  6s", "  Generating static pages"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("flushed block =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func counterEvent(id []byte, message string, current uint32, total *uint32) *streamv1.RunEvent {
+	return lift(&progressv1.OperationEvent{SpanId: id, Message: message, Event: &progressv1.OperationEvent_Counter{
+		Counter: &progressv1.Counter{Current: current, Total: total},
+	}})
+}
+
+func TestACounterRendersAsCurrentOfTotal(t *testing.T) {
+	t.Parallel()
+
+	unit, phase := appStage(1), appStage(2)
+	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+	p.project(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	p.project(startedEvent(phase, unit, progressv1.Phase_PHASE_BUILD, ""))
+
+	p.project(counterEvent(phase, "Generating static pages", 28, u32(28)))
+	got := p.project(endedEvent(phase, false, 6*time.Second))
+	want := []string{"", okMark + " web  6s", "  Generating static pages (28/28)"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("flushed block =\n%q\nwant\n%q", got, want)
+	}
+}

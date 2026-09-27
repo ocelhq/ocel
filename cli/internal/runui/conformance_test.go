@@ -544,3 +544,34 @@ func TestAnInterruptedRunFlushesEveryInFlightBlockWithAnInterruptedMarker(t *tes
 		})
 	}
 }
+
+func TestAStreamOfStartedAndEndedScopesProjectsWhatItsStagePlanStreamDid(t *testing.T) {
+	t.Parallel()
+	scoped, err := filepath.Glob(filepath.Join("testdata", "started", "*.ndjson"))
+	if err != nil || len(scoped) == 0 {
+		t.Fatalf("no started/ended copies under testdata/started (glob err = %v)", err)
+	}
+	for _, path := range scoped {
+		name := strings.TrimSuffix(filepath.Base(path), ".ndjson")
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read copy: %v", err)
+			}
+			events := parseNDJSON(t, string(b))
+			_, planned := fixtureStream(t, name)
+
+			want, err := os.ReadFile(filepath.Join("testdata", "streams", name+".plain"))
+			if err != nil {
+				t.Fatalf("read golden: %v", err)
+			}
+			if got := projectPlain(t, events); got != string(want) {
+				t.Errorf("plain projection of the started/ended copy differs from %s.plain.\n--- got ---\n%s\n--- want ---\n%s", name, got, want)
+			}
+			if got, want := scrollback(projectLive(t, events)), scrollback(projectLive(t, planned)); got != want {
+				t.Errorf("live scrollback of the started/ended copy differs from the stage-plan stream's.\n--- got ---\n%s\n--- want ---\n%s", got, want)
+			}
+		})
+	}
+}

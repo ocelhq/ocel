@@ -589,3 +589,41 @@ func rowGlyph(t *testing.T, row string) string {
 	}
 	return string(glyphs[0])
 }
+
+func TestAStartedPhaseRowCountsLiveUntilItEnds(t *testing.T) {
+	t.Parallel()
+	s, out := drivenLiveStream(t)
+
+	unit, uploading := appStage(1), appStage(2)
+	s.Emit(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	s.Emit(startedEvent(uploading, unit, progressv1.Phase_PHASE_DEPLOY, "Uploading"))
+	s.Emit(counterEvent(uploading, "Uploading function artifacts", 1, u32(2)))
+
+	rows := liveRegion(t, s, out)
+	if len(rows) != 1 || !strings.Contains(rows[0], "web") || !strings.Contains(rows[0], "1/2") {
+		t.Fatalf("live region = %q, want web's row counting 1/2", rows)
+	}
+
+	s.Emit(endedEvent(uploading, false, 12*time.Second))
+	if got := out.String(); !strings.Contains(got, okMark+" web  12s") {
+		t.Errorf("scrollback = %q, want the ended phase committed as the unit's block", got)
+	}
+	if rows := liveRegion(t, s, out); len(rows) != 0 {
+		t.Errorf("live region = %q, want the phase's row taken back by its own ended event", rows)
+	}
+}
+
+func TestAScopedMessageIsTheLiveRowsDetail(t *testing.T) {
+	t.Parallel()
+	s, out := drivenLiveStream(t)
+
+	unit, provisioning := appStage(1), appStage(2)
+	s.Emit(startedEvent(unit, nil, progressv1.Phase_PHASE_UNSPECIFIED, "web"))
+	s.Emit(startedEvent(provisioning, unit, progressv1.Phase_PHASE_PROVISION, ""))
+	s.Emit(&streamv1.RunEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: provisioning, Message: "creating bucket assets"})
+
+	rows := liveRegion(t, s, out)
+	if len(rows) != 1 || !strings.Contains(rows[0], "creating bucket assets") {
+		t.Fatalf("live region = %q, want web's row to say what its phase is doing", rows)
+	}
+}

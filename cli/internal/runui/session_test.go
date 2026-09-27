@@ -1541,3 +1541,96 @@ func TestTheProjectBuildIsInTheBuildPhase(t *testing.T) {
 		}
 	}
 }
+
+type traceSpan struct {
+	Name         string      `json:"name"`
+	ParentSpanID string      `json:"parentSpanId"`
+	Start        string      `json:"startTimeUnixNano"`
+	End          string      `json:"endTimeUnixNano"`
+	Attributes   []traceAttr `json:"attributes"`
+}
+
+func traceSpanNamed(t *testing.T, run *runtrace.Run, name string) traceSpan {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(run.Dir(), run.TraceID()+".otlp.json"))
+	if err != nil {
+		t.Fatalf("read trace file: %v", err)
+	}
+	var doc struct {
+		ResourceSpans []struct {
+			ScopeSpans []struct {
+				Spans []traceSpan `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("trace file is not valid OTLP/JSON: %v", err)
+	}
+	for _, rs := range doc.ResourceSpans {
+		for _, ss := range rs.ScopeSpans {
+			for _, sp := range ss.Spans {
+				if sp.Name == name {
+					return sp
+				}
+			}
+		}
+	}
+	t.Fatalf("no span named %q in the trace file:\n%s", name, raw)
+	return traceSpan{}
+}
+
+func TestAnEndedScopeIsATraceSpanNamedForWhatItStartedAsUnderItsParent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	run := startTestRun(t, dir, "ocel deploy")
+	var out safeBuffer
+	s := New(&out, run, Presentation{Format: FormatHuman, Width: defaultWidth})
+	t.Cleanup(func() { _ = s.Close() })
+
+	unit, phase := []byte{1, 1, 1, 1, 1, 1, 1, 1}, []byte{2, 2, 2, 2, 2, 2, 2, 2}
+	s.Event(&progressv1.OperationEvent{SpanId: unit, Message: "web", Event: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
+	s.Event(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, SpanId: phase, Message: "Uploading", Event: &progressv1.OperationEvent_Started{
+		Started: &progressv1.Started{ParentSpanId: unit},
+	}})
+	s.Event(&progressv1.OperationEvent{TimeUnixNano: 9_000_000_000, SpanId: phase, Event: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
+		Status:            progressv1.SpanStatus_SPAN_STATUS_OK,
+		StartTimeUnixNano: 1_000_000_000,
+		Attributes:        []*progressv1.SpanAttribute{{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RETRY_COUNT, Value: "2"}},
+	}}})
+	if err := run.Close(); err != nil {
+		t.Fatalf("run.Close() = %v", err)
+	}
+
+	got := traceSpanNamed(t, run, "Uploading")
+	if got.ParentSpanID != "0101010101010101" {
+		t.Errorf("parent span id = %q, want the unit the phase started under", got.ParentSpanID)
+	}
+	if got.Start != "1000000000" || got.End != "9000000000" {
+		t.Errorf("span runs %s..%s, want its started time to the ended event's time", got.Start, got.End)
+	}
+	if len(got.Attributes) != 1 || got.Attributes[0].Key != "ocel.retry_count" {
+		t.Errorf("attributes = %v, want the ended event's retry count", got.Attributes)
+	}
+}
+
+func TestAnOutputLineAndACounterReachTheRunLog(t *testing.T) {
+	t.Parallel()
+	s, _, logPath := newTestSession(t, "ocel deploy")
+
+	s.Event(&progressv1.OperationEvent{SpanId: testStageID, Message: "Packages: +812", Event: &progressv1.OperationEvent_Output{
+		Output: &progressv1.Output{Stream: progressv1.Stream_STREAM_STDOUT},
+	}})
+	s.Event(&progressv1.OperationEvent{SpanId: testStageID, Message: "Generating static pages", Event: &progressv1.OperationEvent_Counter{
+		Counter: &progressv1.Counter{Current: 28, Total: u32(28)},
+	}})
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	log := readLog(t, logPath)
+	for _, want := range []string{"[log] Packages: +812\n", "[progress] Generating static pages (28/28)\n"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("run log = %q, want it to contain %q", log, want)
+		}
+	}
+}

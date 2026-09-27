@@ -75,8 +75,18 @@ func (p *projector) project(ev *streamv1.RunEvent) []string {
 	if ev.GetLevel() == progressv1.Level_LEVEL_DEBUG && !p.present.Verbose {
 		return nil
 	}
-	if ev.GetEvent() == nil {
+	op := ev.GetOperation()
+	switch {
+	case ev.GetEvent() == nil:
 		return p.message(ev)
+	case op.GetStarted() != nil:
+		return p.started(ev, op.GetStarted())
+	case op.GetEnded() != nil:
+		return p.ended(ev, op.GetEnded())
+	case op.GetOutput() != nil:
+		return p.buffer(ev.GetSpanId(), ev.GetMessage(), true)
+	case op.GetCounter() != nil:
+		return p.counter(ev, op.GetCounter())
 	}
 	return p.render(ev.ProtoReflect())
 }
@@ -251,10 +261,19 @@ func screamingSnake(name string) string {
 func (p *projector) stagePlan(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.StagePlanEvent)
 	for _, s := range ev.GetStages() {
-		p.tree.declare(s)
-		delete(p.finished, stageKey(s.GetId()))
+		p.declare(stageKey(s.GetId()), stageKey(s.GetParentId()), stageTitle(s.GetTitle(), s.GetPhase()))
 	}
 	return p.adopt()
+}
+
+func (p *projector) started(ev *streamv1.RunEvent, started *progressv1.Started) []string {
+	p.declare(stageKey(ev.GetSpanId()), stageKey(started.GetParentSpanId()), stageTitle(ev.GetMessage(), ev.GetPhase()))
+	return p.adopt()
+}
+
+func (p *projector) declare(id, parentID, title string) {
+	p.tree.declare(id, parentID, title)
+	delete(p.finished, id)
 }
 
 func (p *projector) openPhase(id string) (*block, []string) {
@@ -394,6 +413,14 @@ func (p *projector) progress(m protoreflect.Message) []string {
 	return p.buffer(ev.GetStageId(), line, false)
 }
 
+func (p *projector) counter(ev *streamv1.RunEvent, c *progressv1.Counter) []string {
+	line := progressLogLine(ev.GetMessage(), c.GetCurrent(), c.Total)
+	if line == "" {
+		return nil
+	}
+	return p.buffer(ev.GetSpanId(), line, false)
+}
+
 func (p *projector) log(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.LogEvent)
 	return p.buffer(ev.GetStageId(), ev.GetMessage(), true)
@@ -401,17 +428,33 @@ func (p *projector) log(m protoreflect.Message) []string {
 
 func (p *projector) span(m protoreflect.Message) []string {
 	ev := m.Interface().(*progressv1.SpanEvent)
-	id := stageKey(ev.GetSpanId())
+	return p.closeScope(stageKey(ev.GetSpanId()), spanDuration(ev), ev.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR)
+}
+
+func (p *projector) ended(ev *streamv1.RunEvent, ended *progressv1.Ended) []string {
+	return p.closeScope(stageKey(ev.GetSpanId()), endedDuration(ev, ended), ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR)
+}
+
+func (p *projector) closeScope(id string, d time.Duration, failed bool) []string {
 	if _, open := p.blocks[id]; !open && (p.finished[id] || !p.isPhase(id)) {
 		return nil
 	}
 	b, started := p.openPhase(id)
-	failed := ev.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
-	return append(started, p.closeBlock(b, spanDuration(ev), failed)...)
+	return append(started, p.closeBlock(b, d, failed)...)
 }
 
 func spanDuration(ev *progressv1.SpanEvent) time.Duration {
-	start, end := ev.GetStartTimeUnixNano(), ev.GetEndTimeUnixNano()
+	return elapsed(ev.GetStartTimeUnixNano(), ev.GetEndTimeUnixNano())
+}
+
+func endedDuration(ev *streamv1.RunEvent, ended *progressv1.Ended) time.Duration {
+	if ev.GetTime() == nil {
+		return 0
+	}
+	return elapsed(ended.GetStartTimeUnixNano(), ev.GetTime().AsTime().UnixNano())
+}
+
+func elapsed(start, end int64) time.Duration {
 	if start <= 0 || end <= start {
 		return 0
 	}
@@ -493,6 +536,9 @@ func (p *projector) degraded(m protoreflect.Message) []string {
 func (p *projector) message(ev *streamv1.RunEvent) []string {
 	if ev.GetMessage() == "" {
 		return nil
+	}
+	if len(ev.GetSpanId()) > 0 && ev.GetLevel() == progressv1.Level_LEVEL_INFO {
+		return p.buffer(ev.GetSpanId(), ev.GetMessage(), false)
 	}
 	lines := strings.Split(strings.TrimRight(ev.GetMessage(), "\n"), "\n")
 	if ev.GetLevel() == progressv1.Level_LEVEL_WARN {

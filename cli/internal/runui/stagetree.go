@@ -72,12 +72,18 @@ func stageKey(id []byte) string {
 
 func (p *stagePlan) apply(ev *progressv1.StagePlanEvent) {
 	for _, s := range ev.GetStages() {
-		p.declare(s)
+		p.declare(stageKey(s.GetId()), stageKey(s.GetParentId()), stageTitle(s.GetTitle(), s.GetPhase()))
 	}
 }
 
-func (p *stagePlan) declare(s *progressv1.Stage) {
-	id := stageKey(s.GetId())
+func stageTitle(title string, phase progressv1.Phase) string {
+	if title != "" {
+		return title
+	}
+	return phaseLabel(phase)
+}
+
+func (p *stagePlan) declare(id, parentID, title string) {
 	if id == "" {
 		return
 	}
@@ -88,11 +94,8 @@ func (p *stagePlan) declare(s *progressv1.Stage) {
 	if !tracked {
 		return
 	}
-	n.title = s.GetTitle()
-	if n.title == "" {
-		n.title = phaseLabel(s.GetPhase())
-	}
-	n.parentID = stageKey(s.GetParentId())
+	n.title = title
+	n.parentID = parentID
 	p.link(n)
 }
 
