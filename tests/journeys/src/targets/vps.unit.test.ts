@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
-import { boxLane, hostnamesWithoutUrl, recordFile, slugsOf, ssh } from "./vps";
+import { boxLane, hostnamesWithoutUrl, recordFile, slugsOf, ssh, stampRewritten } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 
@@ -70,6 +70,37 @@ describe("slugsOf", () => {
   it("refuses to read a box with no records tier as a box storing nothing", () => {
     expect(() => slugsOf("no-records-tier\n")).toThrow(
       /records\/projects\/production does not exist/,
+    );
+  });
+});
+
+describe("stampRewritten", () => {
+  const stamp = (fingerprint: string, digest: string, state = "complete") =>
+    JSON.stringify({
+      schema: 3,
+      state,
+      writer: "ocel dev",
+      seal: { fingerprint, algorithm: "age-x25519", createdAt: "2026-09-28T10:00:00Z" },
+      digests: { host: digest },
+    });
+
+  it("passes a re-apply that leaves the seal and every digest as the apply wrote them", () => {
+    expect(stampRewritten(stamp("SHA256:a", "d1"), stamp("SHA256:a", "d1"))).toBeUndefined();
+  });
+
+  it("names a seal the re-apply minted over the one the apply wrote", () => {
+    expect(stampRewritten(stamp("SHA256:a", "d1"), stamp("SHA256:b", "d1"))).toContain("SHA256:b");
+  });
+
+  it("names a digest the re-apply rewrote", () => {
+    expect(stampRewritten(stamp("SHA256:a", "d1"), stamp("SHA256:a", "d2"))).toContain(
+      "rewrote the host",
+    );
+  });
+
+  it("names a stamp the re-apply left unfinished", () => {
+    expect(stampRewritten(stamp("SHA256:a", "d1"), stamp("SHA256:a", "d1", "applying"))).toContain(
+      '"applying"',
     );
   });
 });

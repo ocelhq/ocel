@@ -19,6 +19,7 @@ import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
+import { bootstrappedMissed, unbootstrappedMissed } from "./doctor";
 import { adoptionMissed, engineSeries } from "./engine";
 import {
   coveredNames,
@@ -30,6 +31,7 @@ import {
   stepCommand,
 } from "./front";
 import { type Gateway, openGateway } from "./gateway";
+import { plannedWrites } from "./planStream";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
 const DEPLOY_LOGIN = "ocel-deploy";
@@ -38,6 +40,48 @@ const PROJECT_RECORDS = "/var/lib/ocel/production/records/projects/production";
 const NO_RECORDS_TIER = "no-records-tier";
 const CONTAINER_APP_ROOT = "/app";
 const CONTAINER_LIVE_DIR = "/ocel/live";
+const BOOTSTRAP_DIR = path.join(outputRoot, "vps", "box");
+const BOOTSTRAP_SLUG = `${HARNESS_PREFIX}journey-bootstrap`;
+const BOOTSTRAP_REMOVED = "Removed the production bootstrap";
+const KNOWN_HOSTS_REMEDY = "ssh-keygen -R";
+const OCEL_CONTAINERS = ["ocel-proxy", "ocel-switchboard"];
+const OCEL_LABELS = ["ocel.app", "ocel.project"];
+const OCEL_PATHS = [
+  "/etc/ocel",
+  "/var/lib/ocel",
+  "/usr/local/lib/ocel",
+  "/etc/sudoers.d/ocel-seal-production",
+];
+const STAMP = "/etc/ocel/production/stamp.json";
+const ENV_FILES = "sudo find /var/lib/ocel -maxdepth 2 -type f -name '*.env'";
+const DECOY = "ocel-journey-decoy";
+const DECOY_DATA = "/var/lib/ocel-journey-decoy";
+const DECOY_RUN_IMAGE = "public.ecr.aws/docker/library/busybox:stable";
+const DECOY_PULLED_IMAGE = "public.ecr.aws/docker/library/alpine:3.20";
+const PLANT_DECOY = [
+  `sudo docker rm -f ${DECOY} >/dev/null 2>&1 || true`,
+  `sudo install -d -m 0755 ${DECOY_DATA}`,
+  `echo 'a file ocel never wrote' | sudo tee ${DECOY_DATA}/data >/dev/null`,
+  `sudo docker pull -q ${DECOY_PULLED_IMAGE} >/dev/null`,
+  `sudo docker run -d --name ${DECOY} -v ${DECOY_DATA}:/data ${DECOY_RUN_IMAGE} sleep 86400 >/dev/null`,
+].join(" && ");
+const DECOY_FINGERPRINT = [
+  `sudo docker inspect -f 'container {{.Id}} {{.State.Status}}' ${DECOY} 2>&1`,
+  `sudo docker image inspect -f 'image {{.Id}}' ${DECOY_PULLED_IMAGE} 2>&1`,
+  `sudo sha256sum ${DECOY_DATA}/data 2>&1`,
+  "true",
+].join("; ");
+const LEFT_BEHIND = [
+  ...OCEL_PATHS.map((held) => `sudo test -e '${held}' && echo '${held}'`),
+  `getent passwd ${DEPLOY_LOGIN} >/dev/null && echo 'the login ${DEPLOY_LOGIN}'`,
+  ...OCEL_CONTAINERS.map(
+    (named) => `sudo docker inspect ${named} >/dev/null 2>&1 && echo 'the container ${named}'`,
+  ),
+  ...OCEL_LABELS.map(
+    (label) => `sudo docker ps -a --filter label=${label} --format 'the container {{.Names}}'`,
+  ),
+  "true",
+].join("; ");
 
 const BRING_A_BOX_UP = [
   "scripts/incus.sh create <name>",
@@ -171,6 +215,31 @@ export function sshFed(
   });
 }
 
+type Stamp = { state?: string; seal?: unknown; digests?: unknown };
+
+export function stampRewritten(before: string, after: string): string | undefined {
+  const was = JSON.parse(before) as Stamp;
+  const now = JSON.parse(after) as Stamp;
+  const missed: string[] = [];
+  if (now.state !== "complete") {
+    missed.push(`it reads state ${JSON.stringify(now.state)}, want "complete"`);
+  }
+  if (JSON.stringify(now.seal) !== JSON.stringify(was.seal)) {
+    missed.push(
+      `it names the seal ${JSON.stringify(now.seal)} over ${JSON.stringify(was.seal)}, and a key nothing asked to rotate takes every value sealed under the old one`,
+    );
+  }
+  if (JSON.stringify(now.digests) !== JSON.stringify(was.digests)) {
+    missed.push(
+      `its digests read ${JSON.stringify(now.digests)} where they read ${JSON.stringify(was.digests)}, so the re-apply rewrote the host`,
+    );
+  }
+  if (missed.length === 0) {
+    return undefined;
+  }
+  return `the stamp a re-apply left at ${STAMP}: ${missed.join("; ")}`;
+}
+
 export class VpsTarget implements Target, ReleaseCycle {
   readonly name = "vps";
   readonly workers = 2;
@@ -181,6 +250,7 @@ export class VpsTarget implements Target, ReleaseCycle {
   private resolvedBox: Box | undefined;
   private resolvedZone: string | undefined;
   private resolvedFront: { front: Front | undefined } | undefined;
+  private decoy: string | undefined;
 
   readonly sweeper: Sweeper = {
     list: () => this.recordedSlugs(),
@@ -214,37 +284,58 @@ export class VpsTarget implements Target, ReleaseCycle {
         stepCommand(coveredNames(this.zone())),
         frontStep(front, "up.sh"),
       );
-      const log = path.join(outputRoot, "vps", "box", `${front.name}-up.log`);
+      const log = path.join(BOOTSTRAP_DIR, `${front.name}-up.log`);
       await mkdir(path.dirname(log), { recursive: true });
       await writeFile(log, redact(said), "utf8");
       await this.refusedUnfronted(front);
     }
-    const dir = await this.boxConfig(
-      path.join(outputRoot, "vps", "box"),
-      `${HARNESS_PREFIX}journey-bootstrap`,
-      target.user,
-      front?.proxy,
-    );
-    const args = ["bootstrap", "production", "--yes"];
-    const result = await spawnOcel(dir, args, this.boxEnv(target.user));
-    const log = redact(`${result.stdout}${result.stderr}`);
-    await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
-    if (result.code !== 0) {
-      throw exitedBadly(args, result);
+    const dir = await this.bootstrapConfig();
+    const env = this.boxEnv(target.user);
+    const fresh = unbootstrappedMissed(await this.said(dir, "doctor-fresh.log", ["doctor"], env));
+    if (fresh !== undefined) {
+      throw new Error(
+        `${fresh}\nThe lane bootstraps a box nothing has bootstrapped yet. Bring a new one up:\n  ${BRING_A_BOX_UP}`,
+      );
     }
+    const log = await this.said(dir, "bootstrap.log", ["bootstrap", "production", "--yes"], env);
     const series = engineSeries(process.env);
     const missed = series === undefined ? undefined : adoptionMissed(log, series);
     if (missed !== undefined) {
       throw new Error(missed);
     }
+    const doctored = bootstrappedMissed(
+      await this.said(dir, "doctor.log", ["doctor"], env),
+      front === undefined,
+    );
+    if (doctored !== undefined) {
+      throw new Error(doctored);
+    }
+    const stamped = await ssh(target, target.user, `sudo cat ${STAMP}`);
+    for (const [name, args] of [
+      ["replan.log", ["bootstrap", "production", "--dry", "--log-format", "json"]],
+      ["reapply.log", ["bootstrap", "production", "--yes", "--log-format", "json"]],
+    ] as const) {
+      const writes = plannedWrites(await this.said(dir, name, [...args], env));
+      if (writes.length > 0) {
+        throw new Error(
+          `\`ocel ${args.join(" ")}\` right after an apply plans to write ${writes.join(", ")}, and a box bootstrap just wrote has nothing left to write`,
+        );
+      }
+    }
+    const rewritten = stampRewritten(stamped, await ssh(target, target.user, `sudo cat ${STAMP}`));
+    if (rewritten !== undefined) {
+      throw new Error(rewritten);
+    }
+    await ssh(target, target.user, PLANT_DECOY);
+    this.decoy = await ssh(target, target.user, DECOY_FINGERPRINT);
     return {};
   }
 
   private async refusedUnfronted(front: Front): Promise<void> {
     const target = this.box();
     const dir = await this.boxConfig(
-      path.join(outputRoot, "vps", "box", "unfronted"),
-      `${HARNESS_PREFIX}journey-bootstrap`,
+      path.join(BOOTSTRAP_DIR, "unfronted"),
+      BOOTSTRAP_SLUG,
       target.user,
       undefined,
     );
@@ -266,12 +357,97 @@ export class VpsTarget implements Target, ReleaseCycle {
   }
 
   async finishLane(): Promise<void> {
+    const refusals: string[] = [];
+    for (const step of [() => this.givenBack(), () => this.frontUntouched()]) {
+      await step().catch((error: unknown) => {
+        refusals.push(error instanceof Error ? error.message : String(error));
+      });
+    }
+    if (refusals.length > 0) {
+      throw new Error(refusals.join("\n\n"));
+    }
+  }
+
+  private async givenBack(): Promise<void> {
+    if ((await this.recordedSlugs()).length > 0) {
+      return;
+    }
+    const target = this.box();
+    const envFiles = (await ssh(target, target.user, ENV_FILES)).trim();
+    if (envFiles !== "") {
+      throw new Error(
+        `${envFiles.split("\n").join(", ")} outlived every deploy on the box, and an env file keeps every value its deploy resolved in plaintext`,
+      );
+    }
+    const dir = await this.bootstrapConfig();
+    const env = this.boxEnv(target.user);
+    const removed = await this.said(
+      dir,
+      "bootstrap-destroy.log",
+      ["bootstrap", "destroy", "production", "--yes"],
+      env,
+    );
+    const unsaid = [BOOTSTRAP_REMOVED, KNOWN_HOSTS_REMEDY].filter(
+      (want) => !removed.includes(want),
+    );
+    if (unsaid.length > 0) {
+      throw new Error(
+        `\`ocel bootstrap destroy production --yes\` never said ${unsaid.map((want) => `"${want}"`).join(" or ")}:\n${removed}`,
+      );
+    }
+    const doctored = unbootstrappedMissed(
+      await this.said(dir, "doctor-destroyed.log", ["doctor"], env),
+    );
+    if (doctored !== undefined) {
+      throw new Error(doctored);
+    }
+    const said = await ssh(target, target.user, LEFT_BEHIND);
+    const left = [...new Set(said.split("\n").map((line) => line.trim()))].filter(Boolean);
+    if (left.length > 0) {
+      throw new Error(
+        `the box still holds ${left.join(", ")} after \`ocel bootstrap destroy production\`, so the machine was not given back`,
+      );
+    }
+    const decoy = await ssh(target, target.user, DECOY_FINGERPRINT);
+    if (this.decoy !== undefined && decoy !== this.decoy) {
+      throw new Error(
+        `\`ocel bootstrap destroy production\` changed what the box ran and kept beside ocel, which is not ocel's to take:\nbefore:\n${this.decoy}\nafter:\n${decoy}`,
+      );
+    }
+    const engine = (await ssh(target, target.user, "systemctl is-active docker || true")).trim();
+    if (engine !== "active") {
+      throw new Error(
+        `docker reads ${engine} after \`ocel bootstrap destroy production\`, and removing ocel from a box leaves the engine everything else on it runs on`,
+      );
+    }
+  }
+
+  private async frontUntouched(): Promise<void> {
     const front = this.front();
     if (!front) {
       return;
     }
     const target = this.box();
     await sshFed(target, target.user, stepCommand([]), frontStep(front, "check.sh"));
+  }
+
+  private async said(
+    dir: string,
+    log: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ): Promise<string> {
+    const result = await spawnOcel(dir, args, env);
+    const said = redact(`${result.stdout}\n${result.stderr}`);
+    await writeFile(path.join(dir, log), said, "utf8");
+    if (result.code !== 0) {
+      throw exitedBadly(args, result);
+    }
+    return said;
+  }
+
+  private bootstrapConfig(): Promise<string> {
+    return this.boxConfig(BOOTSTRAP_DIR, BOOTSTRAP_SLUG, this.box().user, this.front()?.proxy);
   }
 
   async deploy(cell: CellUnderTest): Promise<Deployment> {
@@ -285,9 +461,13 @@ export class VpsTarget implements Target, ReleaseCycle {
       await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
     }
     const deployed = await drive("deploy", ["deploy", "--yes"]);
-    const pending = hostnamesWithoutUrl(`${deployed.stdout}\n${deployed.stderr}`, [
-      ...this.hostnamesOf(cell).values(),
-    ]);
+    const transcript = `${deployed.stdout}\n${deployed.stderr}`;
+    if (setsSecret(cell.fixture.checks) && transcript.includes(SECRET_TOKEN)) {
+      throw new Error(
+        "the deploy printed the value SECRET_TOKEN was set to, and its transcript is what a ci log keeps",
+      );
+    }
+    const pending = hostnamesWithoutUrl(transcript, [...this.hostnamesOf(cell).values()]);
     if (pending.length > 0) {
       throw new Error(
         `the deploy printed no url for ${pending.join(", ")}, so it left a declared hostname ` +
