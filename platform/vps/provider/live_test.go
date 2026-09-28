@@ -214,3 +214,11 @@ func named(details []provider.PrincipalDetail) map[string]bool {
 	}
 	return labels
 }
+
+func lines(rendered string) []string {
+	trimmed := strings.TrimSpace(rendered)
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "\n")
+}
