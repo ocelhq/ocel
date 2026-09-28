@@ -230,8 +230,8 @@ type jostle struct {
 	once sync.Once
 }
 
-func (j *jostle) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
-	if record.Key.String() == j.at.String() {
+func (j *jostle) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if entry.Key.String() == j.at.String() {
 		j.once.Do(func() {
 			recorded, err := keyvalue.ReadOrEmpty(ctx, j.Store, j.at)
 			if err != nil {
@@ -241,7 +241,7 @@ func (j *jostle) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Rev
 			_, _ = j.Store.Write(ctx, recorded)
 		})
 	}
-	return j.Store.Write(ctx, record)
+	return j.Store.Write(ctx, entry)
 }
 
 func TestAnEdgeWithItsOwnLedgerStillWorks(t *testing.T) {

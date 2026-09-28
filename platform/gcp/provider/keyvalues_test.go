@@ -71,7 +71,7 @@ func firestoreServing(t *testing.T, answering answeringFirestore) string {
 	return "http://" + listener.Addr().String()
 }
 
-func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheRecordIsMissing(t *testing.T) {
+func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheEntryIsMissing(t *testing.T) {
 	name := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance}.Key("absent")
 
 	t.Run("a database that is not there", func(t *testing.T) {

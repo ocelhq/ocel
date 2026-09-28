@@ -173,11 +173,11 @@ type staleAt struct {
 	at string
 }
 
-func (s staleAt) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
-	if slices.Contains(record.Key.Path, s.at) {
+func (s staleAt) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if slices.Contains(entry.Key.Path, s.at) {
 		return "", keyvalue.ErrStale
 	}
-	return s.Store.Write(ctx, record)
+	return s.Store.Write(ctx, entry)
 }
 
 func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
@@ -209,11 +209,11 @@ func (h honouring) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry,
 	return h.Store.Read(ctx, name)
 }
 
-func (h honouring) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+func (h honouring) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return h.Store.Write(ctx, record)
+	return h.Store.Write(ctx, entry)
 }
 
 func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {

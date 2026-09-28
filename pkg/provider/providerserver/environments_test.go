@@ -439,10 +439,10 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 	stack := seedContainerStack(t, vendor, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	store, ok := vendor.KeyValues().(*fake.KeyValues)
 	if !ok {
-		t.Fatalf("this test drives the record store's removal refusal and the provider has a %T", vendor.KeyValues())
+		t.Fatalf("this test drives the key-value store's removal refusal and the provider has a %T", vendor.KeyValues())
 	}
 	store.SetRemovalError(stackrecords.StackKey(environment.TierPreview, "shop", stack),
-		errors.New("the record store answered nothing"))
+		errors.New("the key-value store answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
 		t.Fatal("a teardown whose stack record would not be forgotten reported success")

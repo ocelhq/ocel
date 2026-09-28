@@ -232,14 +232,14 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Tier, hostname)
-	record, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
+	entry, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
 	owner := Surface(s.state.Slug, s.state.Tier)
-	if len(record.Value) > 0 {
+	if len(entry.Value) > 0 {
 		var existing claim
-		if err := json.Unmarshal(record.Value, &existing); err != nil {
+		if err := json.Unmarshal(entry.Value, &existing); err != nil {
 			return false, fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
 		if existing.Owner == owner {
@@ -251,8 +251,8 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
-	record.Value = encoded
-	_, err = s.e.deps.KeyValues.Write(ctx, record)
+	entry.Value = encoded
+	_, err = s.e.deps.KeyValues.Write(ctx, entry)
 	if errors.Is(err, keyvalue.ErrStale) {
 		return false, s.claimedMeanwhile(ctx, hostname, name)
 	}
@@ -263,13 +263,13 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 }
 
 func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name keyvalue.Key) error {
-	record, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
-	if err != nil || len(record.Value) == 0 {
+	entry, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
+	if err != nil || len(entry.Value) == 0 {
 		return refusal.Refuse(refusal.CodeBusy,
 			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
 	}
 	var existing claim
-	if err := json.Unmarshal(record.Value, &existing); err != nil {
+	if err := json.Unmarshal(entry.Value, &existing); err != nil {
 		return fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
 	return claimedBy(hostname, existing.Owner)

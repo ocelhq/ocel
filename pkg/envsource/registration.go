@@ -172,10 +172,10 @@ func Registrations(ctx context.Context, store keyvalue.Store, tier environment.T
 		return nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
 	}
 	out := make([]Registration, 0, len(recorded))
-	for _, record := range recorded {
+	for _, entry := range recorded {
 		var registration Registration
-		if err := json.Unmarshal(record.Value, &registration); err != nil {
-			return nil, fmt.Errorf("read %s: %w", record.Key, err)
+		if err := json.Unmarshal(entry.Value, &registration); err != nil {
+			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
 		}
 		out = append(out, registration)
 	}

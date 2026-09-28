@@ -70,12 +70,12 @@ func (s Store) References(ctx context.Context, scope Scope, at Coordinate) ([]Re
 		return nil, fmt.Errorf("read what references %s: %w", at, err)
 	}
 	out := make([]Reference, 0, len(recorded))
-	for _, record := range recorded {
-		sourceAt, ok := cellOf(record.Key)
-		if !ok || len(record.Key.Path) < 4 {
+	for _, entry := range recorded {
+		sourceAt, ok := cellOf(entry.Key)
+		if !ok || len(entry.Key.Path) < 4 {
 			continue
 		}
-		out = append(out, Reference{Project: record.Key.Path[len(record.Key.Path)-4], Coordinate: sourceAt})
+		out = append(out, Reference{Project: entry.Key.Path[len(entry.Key.Path)-4], Coordinate: sourceAt})
 	}
 	slices.SortFunc(out, func(a, b Reference) int { return strings.Compare(a.String(), b.String()) })
 	return out, nil

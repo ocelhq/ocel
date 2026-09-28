@@ -308,14 +308,14 @@ func (g Gate) RecordedFeatures(ctx context.Context, tier environment.Tier) (map[
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
-	for _, record := range projects {
-		rest := record.Key.Path
-		if len(rest) != 1 || len(record.Value) == 0 {
+	for _, entry := range projects {
+		rest := entry.Key.Path
+		if len(rest) != 1 || len(entry.Value) == 0 {
 			continue
 		}
 		var project stackrecords.Project
-		if err := json.Unmarshal(record.Value, &project); err != nil {
-			return nil, fmt.Errorf("read %s's record: %w", record.Key, err)
+		if err := json.Unmarshal(entry.Value, &project); err != nil {
+			return nil, fmt.Errorf("read %s's record: %w", entry.Key, err)
 		}
 		recorded[rest[0]] = project.Features
 	}
@@ -453,8 +453,8 @@ func (g Gate) BootstrapUsers(ctx context.Context, tier environment.Tier) (Bootst
 		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
-	for _, record := range recorded {
-		rest := record.Key.Path
+	for _, entry := range recorded {
+		rest := entry.Key.Path
 		if len(rest) != 1 {
 			continue
 		}

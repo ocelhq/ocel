@@ -57,12 +57,12 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	record, err := keyvalue.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.EdgeStackKey(environment.TierProduction, slug))
+	entry, err := keyvalue.ReadOrEmpty(ctx, p.KeyValues(), stackrecords.EdgeStackKey(environment.TierProduction, slug))
 	if err != nil {
 		t.Fatalf("read the edge stack record current on this box: %v", err)
 	}
-	record.Value = body
-	if _, err := p.KeyValues().Write(ctx, record); err != nil {
+	entry.Value = body
+	if _, err := p.KeyValues().Write(ctx, entry); err != nil {
 		t.Fatalf("record the edge stack providerserver opens: %v", err)
 	}
 }

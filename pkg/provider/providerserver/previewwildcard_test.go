@@ -48,25 +48,25 @@ func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wil
 		t.Fatal(err)
 	}
 	name := stackrecords.WildcardKey(environment.TierPreview)
-	record, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
+	entry, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record.Value = encoded
-	if _, err := vendor.KeyValues().Write(context.Background(), record); err != nil {
+	entry.Value = encoded
+	if _, err := vendor.KeyValues().Write(context.Background(), entry); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func readRecordedWildcard(t *testing.T, vendor *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
-	record, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.WildcardKey(environment.TierPreview))
+	entry, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.WildcardKey(environment.TierPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var wildcard stackrecords.Wildcard
-	if len(record.Value) > 0 {
-		if err := json.Unmarshal(record.Value, &wildcard); err != nil {
+	if len(entry.Value) > 0 {
+		if err := json.Unmarshal(entry.Value, &wildcard); err != nil {
 			t.Fatal(err)
 		}
 	}

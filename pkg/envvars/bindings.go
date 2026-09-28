@@ -463,8 +463,8 @@ func (p *recordCache) load(ctx context.Context, under keyvalue.Key) error {
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", p.scope.Project, err)
 	}
-	for _, record := range stored {
-		p.byName[record.Key.String()] = record
+	for _, entry := range stored {
+		p.byName[entry.Key.String()] = entry
 	}
 	return nil
 }
@@ -477,13 +477,13 @@ func (s Store) PublishedNames(ctx context.Context, scope Scope, environment stri
 		return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
 	}
 	names := map[string]bool{}
-	for _, record := range recorded {
-		at := record.Key.Path[len(record.Key.Path)-1]
+	for _, entry := range recorded {
+		at := entry.Key.Path[len(entry.Key.Path)-1]
 		if !bindsTo(at, environment) {
 			continue
 		}
 		var index ownerIndex
-		if err := json.Unmarshal(record.Value, &index); err != nil {
+		if err := json.Unmarshal(entry.Value, &index); err != nil {
 			return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
 		}
 		for _, name := range index.Names {
@@ -522,14 +522,14 @@ func (s Store) claims(ctx context.Context, scope Scope) (map[string][]claim, err
 		return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
 	}
 	out := map[string][]claim{}
-	for _, record := range recorded {
-		rest, named := record.Key.Under(bindingOwnersPrefix(scope).Path...)
+	for _, entry := range recorded {
+		rest, named := entry.Key.Under(bindingOwnersPrefix(scope).Path...)
 		if !named || len(rest) != 2 {
 			continue
 		}
 		owner, at := rest[0], rest[1]
 		var index ownerIndex
-		if err := json.Unmarshal(record.Value, &index); err != nil {
+		if err := json.Unmarshal(entry.Value, &index); err != nil {
 			return nil, fmt.Errorf("read %s's published bindings: %w", scope.Project, err)
 		}
 		for _, name := range index.Names {

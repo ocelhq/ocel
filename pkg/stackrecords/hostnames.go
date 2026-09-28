@@ -171,15 +171,15 @@ func (s *EdgeState) Forget(hostname string) {
 
 func ReadWildcard(ctx context.Context, store keyvalue.Store) (Wildcard, error) {
 	name := WildcardKey(environment.TierPreview)
-	record, err := keyvalue.ReadOrEmpty(ctx, store, name)
+	entry, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	var wildcard Wildcard
-	if len(record.Value) == 0 {
+	if len(entry.Value) == 0 {
 		return wildcard, nil
 	}
-	if err := json.Unmarshal(record.Value, &wildcard); err != nil {
+	if err := json.Unmarshal(entry.Value, &wildcard); err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	return wildcard, nil
@@ -194,16 +194,16 @@ func ProjectsServedOnPreview(ctx context.Context, store keyvalue.Store, baseDoma
 		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
 	}
 	var served []string
-	for _, record := range recorded {
-		if len(record.Key.Path) != 1 || len(record.Value) == 0 {
+	for _, entry := range recorded {
+		if len(entry.Key.Path) != 1 || len(entry.Value) == 0 {
 			continue
 		}
 		var state EdgeState
-		if err := json.Unmarshal(record.Value, &state); err != nil {
-			return nil, fmt.Errorf("read %s: %w", record.Key, err)
+		if err := json.Unmarshal(entry.Value, &state); err != nil {
+			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
 		}
 		if state.Edge.ServedOnGlobalPreview(baseDomain) {
-			served = append(served, record.Key.Path[0])
+			served = append(served, entry.Key.Path[0])
 		}
 	}
 	slices.Sort(served)

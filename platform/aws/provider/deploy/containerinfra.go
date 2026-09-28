@@ -110,24 +110,24 @@ type lease struct {
 	Destroying bool `json:"destroying,omitempty"`
 }
 
-func leaseOf(record keyvalue.Entry) (lease, error) {
+func leaseOf(entry keyvalue.Entry) (lease, error) {
 	var state lease
-	if len(record.Value) == 0 {
+	if len(entry.Value) == 0 {
 		return state, nil
 	}
-	if err := json.Unmarshal(record.Value, &state); err != nil {
-		return lease{}, fmt.Errorf("read the container infrastructure lease %s: %w", record.Key, err)
+	if err := json.Unmarshal(entry.Value, &state); err != nil {
+		return lease{}, fmt.Errorf("read the container infrastructure lease %s: %w", entry.Key, err)
 	}
 	return state, nil
 }
 
-func writeLease(ctx context.Context, store keyvalue.Store, record keyvalue.Entry, state lease) error {
+func writeLease(ctx context.Context, store keyvalue.Store, entry keyvalue.Entry, state lease) error {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode the container infrastructure lease: %w", err)
 	}
-	record.Value = encoded
-	_, err = store.Write(ctx, record)
+	entry.Value = encoded
+	_, err = store.Write(ctx, entry)
 	return err
 }
 
@@ -231,12 +231,12 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 					"the shared container infrastructure for the %s tier is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will provision a fresh one", ref.Tier),
 				keyvalue.Forget(ctx, store, consumerAt(ref)))
 		}
-		record, err := keyvalue.ReadOrEmpty(ctx, store, consumerAt(ref))
+		entry, err := keyvalue.ReadOrEmpty(ctx, store, consumerAt(ref))
 		if err != nil {
 			return err
 		}
-		record.Value = []byte("{}")
-		if _, err := store.Write(ctx, record); err != nil && !errors.Is(err, keyvalue.ErrStale) {
+		entry.Value = []byte("{}")
+		if _, err := store.Write(ctx, entry); err != nil && !errors.Is(err, keyvalue.ErrStale) {
 			return fmt.Errorf("record %s as a consumer of the shared container infrastructure: %w", ref.Name, err)
 		}
 		err = writeLease(ctx, store, leased, state)

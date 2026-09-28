@@ -553,12 +553,12 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 		t.Fatal(err)
 	}
 	name := stackrecords.EdgeStackKey(environment.TierPreview, slug)
-	record, err := keyvalue.ReadOrEmpty(ctx, front.deps.KeyValues, name)
+	entry, err := keyvalue.ReadOrEmpty(ctx, front.deps.KeyValues, name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record.Value = encoded
-	if _, err := front.deps.KeyValues.Write(ctx, record); err != nil {
+	entry.Value = encoded
+	if _, err := front.deps.KeyValues.Write(ctx, entry); err != nil {
 		t.Fatal(err)
 	}
 }
