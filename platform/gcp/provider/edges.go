@@ -24,8 +24,23 @@ type edges struct {
 
 var supportedEdges = []edge.Kind{direct.Kind, alb.Kind}
 
-func (e edges) albDeps() alb.Deps {
-	return alb.Deps{
+func (p *Provider) edges() edges {
+	return edges{
+		namespace: p.namespace,
+		keyValues: p.KeyValues(),
+		pins:      p,
+		stacks:    albStacks{p: p},
+		routes:    p,
+		entries:   p,
+		project:   p.options.Project,
+		region:    p.options.Region,
+	}
+}
+
+func (e edges) openDirect() *direct.Edge { return direct.New(e.keyValues, e.pins) }
+
+func (e edges) openALB() *alb.Edge {
+	return alb.New(alb.Deps{
 		KeyValues: e.keyValues,
 		Stacks:    e.stacks,
 		Routes:    e.routes,
@@ -33,15 +48,15 @@ func (e edges) albDeps() alb.Deps {
 		Pins:      e.pins,
 		Project:   e.project,
 		Region:    e.region,
-	}
+	})
 }
 
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	switch kind {
 	case direct.Kind:
-		return direct.New(e.keyValues, e.pins), nil
+		return e.openDirect(), nil
 	case alb.Kind:
-		return alb.New(e.albDeps()), nil
+		return e.openALB(), nil
 	case cloudflare.Kind:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge yet: that edge answers every request from a worker it runs, "+

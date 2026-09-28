@@ -144,19 +144,6 @@ func (p *Provider) Edges() provider.Edges { return p.edges() }
 
 func (p *Provider) Routers() provider.Routers { return routers{edges: p.edges()} }
 
-func (p *Provider) edges() edges {
-	return edges{
-		namespace: p.namespace,
-		keyValues: p.KeyValues(),
-		pins:      p,
-		stacks:    albStacks{p: p},
-		routes:    p,
-		entries:   p,
-		project:   p.options.Project,
-		region:    p.options.Region,
-	}
-}
-
 func (p *Provider) DNS() provider.DNS { return dns{} }
 
 func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
