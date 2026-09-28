@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -61,15 +61,15 @@ type Records struct {
 }
 
 type Tables interface {
-	Table(ctx context.Context, class edge.Class) (string, error)
-	ValuesTable(ctx context.Context, class edge.Class) (string, error)
+	Table(ctx context.Context, tier environment.Tier) (string, error)
+	ValuesTable(ctx context.Context, tier environment.Tier) (string, error)
 }
 
 type Table string
 
-func (t Table) Table(context.Context, edge.Class) (string, error) { return string(t), nil }
+func (t Table) Table(context.Context, environment.Tier) (string, error) { return string(t), nil }
 
-func (t Table) ValuesTable(context.Context, edge.Class) (string, error) { return string(t), nil }
+func (t Table) ValuesTable(context.Context, environment.Tier) (string, error) { return string(t), nil }
 
 func isValueRecord(name records.Name) bool {
 	if len(name) == 0 {
@@ -83,18 +83,18 @@ func isValueRecord(name records.Name) bool {
 }
 
 func (r Records) table(ctx context.Context, name records.Name) (string, error) {
-	class, named := stackrecords.ClassOf(name)
+	tier, named := stackrecords.TierOf(name)
 	if !named {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"%s names no class, and this account keeps each class's records in the bootstrap that owns them", name)
+			"%s names no tier, and this account keeps each tier's records in the bootstrap that owns them", name)
 	}
 	if r.Tables == nil {
 		return "", nil
 	}
 	if isValueRecord(name) {
-		return r.Tables.ValuesTable(ctx, class)
+		return r.Tables.ValuesTable(ctx, tier)
 	}
-	return r.Tables.Table(ctx, class)
+	return r.Tables.Table(ctx, tier)
 }
 
 func Partition(name records.Name) (string, error) {
@@ -103,9 +103,9 @@ func Partition(name records.Name) (string, error) {
 }
 
 func unbootstrapped(name records.Name) error {
-	class, _ := stackrecords.ClassOf(name)
+	tier, _ := stackrecords.TierOf(name)
 	return refusal.Refuse(refusal.CodeNotReady,
-		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", provider.BootstrapCommand(class))
+		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", provider.BootstrapCommand(tier))
 }
 
 func tableGone(err error) bool {

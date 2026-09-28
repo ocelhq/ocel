@@ -33,7 +33,7 @@ func TestSurfaceConformance(t *testing.T) {
 
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
 
-	req := transform.Request{Provider: transformProvider, EnvClass: "production", Env: "prod"}
+	req := transform.Request{Provider: transformProvider, EnvTier: "production", Env: "prod"}
 	var candidates []transformCandidate
 	for _, kind := range slices.Sorted(maps.Keys(rendered)) {
 		req.Resources = append(req.Resources, transform.Resource{Type: kind, Name: kind + "-under-test"})

@@ -20,6 +20,7 @@ type boundaryTemplate struct {
 		Type       string `yaml:"Type"`
 		Properties struct {
 			ManagedPolicyName string `yaml:"ManagedPolicyName"`
+			Description       string `yaml:"Description"`
 			PolicyDocument    struct {
 				Statement []boundaryStatement `yaml:"Statement"`
 			} `yaml:"PolicyDocument"`
@@ -27,10 +28,10 @@ type boundaryTemplate struct {
 	} `yaml:"Resources"`
 }
 
-func boundaryStatements(t *testing.T, class, broughtKey string) []boundaryStatement {
+func boundaryStatements(t *testing.T, tier, broughtKey string) []boundaryStatement {
 	t.Helper()
 	var tmpl boundaryTemplate
-	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, class, broughtKey)), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, tier, broughtKey)), &tmpl); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
 	boundary, ok := tmpl.Resources["AppBoundary"]
@@ -40,16 +41,27 @@ func boundaryStatements(t *testing.T, class, broughtKey string) []boundaryStatem
 	if boundary.Type != "AWS::IAM::ManagedPolicy" {
 		t.Errorf("AppBoundary Type = %q, want AWS::IAM::ManagedPolicy", boundary.Type)
 	}
-	if got, want := boundary.Properties.ManagedPolicyName, defaultNamespace.AppBoundaryNameFor(class); got != want {
+	if got, want := boundary.Properties.ManagedPolicyName, defaultNamespace.AppBoundaryNameFor(tier); got != want {
 		t.Errorf("ManagedPolicyName = %q, want %q", got, want)
 	}
 	return boundary.Properties.PolicyDocument.Statement
 }
 
-func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t *testing.T) {
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		t.Run(class, func(t *testing.T) {
-			for _, st := range boundaryStatements(t, class, "") {
+func TestTheAppBoundaryKeepsTheDescriptionItWasCreatedWith(t *testing.T) {
+	var tmpl boundaryTemplate
+	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, TierPreview, "")), &tmpl); err != nil {
+		t.Fatalf("template is not valid YAML: %v", err)
+	}
+	want := "Permissions boundary for the roles Ocel creates for apps in the preview class."
+	if got := tmpl.Resources["AppBoundary"].Properties.Description; got != want {
+		t.Errorf("AppBoundary Description = %q, want %q: CloudFormation replaces a managed policy whose description changes, and the replacement cannot take the ManagedPolicyName the policy already holds", got, want)
+	}
+}
+
+func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsTierOwns(t *testing.T) {
+	for _, tier := range []string{TierProduction, TierPreview} {
+		t.Run(tier, func(t *testing.T) {
+			for _, st := range boundaryStatements(t, tier, "") {
 				if st.Effect != "Allow" {
 					t.Errorf("statement Effect = %q, want Allow", st.Effect)
 				}
@@ -60,8 +72,8 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t
 						t.Errorf("the boundary admits %s; the only parameters under Ocel's name are the passphrase, the edge credentials and the origin secret, and no app may read them", action)
 					case "kms":
 						aliases, _ := st.Condition["ForAnyValue:StringEquals"].(map[string]any)
-						if got, want := aliases["kms:ResourceAliases"], defaultNamespace.varsKeyAliasFor(class); got != want {
-							t.Errorf("%s is admitted under %v, want it pinned to %s alone: a %s role must not open what the other class sealed", action, st.Condition, want, class)
+						if got, want := aliases["kms:ResourceAliases"], defaultNamespace.varsKeyAliasFor(tier); got != want {
+							t.Errorf("%s is admitted under %v, want it pinned to %s alone: a %s role must not open what the other tier sealed", action, st.Condition, want, tier)
 						}
 						if st.Resource != "*" {
 							t.Errorf("%s is admitted on %q; the alias Ocel put on the key it made is the fence, and no key ARN is known before that stack is provisioned", action, st.Resource)
@@ -82,10 +94,10 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t
 }
 
 func TestTheAppBoundaryAdmitsABroughtKeyByItsARNAndPutsNoAliasOnIt(t *testing.T) {
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		t.Run(class, func(t *testing.T) {
+	for _, tier := range []string{TierProduction, TierPreview} {
+		t.Run(tier, func(t *testing.T) {
 			var keyed []boundaryStatement
-			for _, st := range boundaryStatements(t, class, broughtKeyARN) {
+			for _, st := range boundaryStatements(t, tier, broughtKeyARN) {
 				if slices.ContainsFunc(yamlStrings(st.Action), func(action string) bool { return strings.HasPrefix(action, "kms:") }) {
 					keyed = append(keyed, st)
 				}
@@ -104,10 +116,10 @@ func TestTheAppBoundaryAdmitsABroughtKeyByItsARNAndPutsNoAliasOnIt(t *testing.T)
 }
 
 func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		t.Run(class, func(t *testing.T) {
+	for _, tier := range []string{TierProduction, TierPreview} {
+		t.Run(tier, func(t *testing.T) {
 			var admitted []string
-			for _, st := range boundaryStatements(t, class, "") {
+			for _, st := range boundaryStatements(t, tier, "") {
 				admitted = append(admitted, yamlStrings(st.Action)...)
 			}
 			for _, action := range []string{

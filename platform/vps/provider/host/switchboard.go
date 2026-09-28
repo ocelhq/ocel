@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -151,7 +151,7 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and it cannot be started again without %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.name, h.named(), strings.Join(missing, ", "), edge.ClassProduction)
+			board.name, h.named(), strings.Join(missing, ", "), environment.TierProduction)
 	}
 	if board.config == "" {
 		return unread("the switchboard binary's sha256", strings.TrimSpace(said))
@@ -165,7 +165,7 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s container on %s, and starting it again failed: %s\n"+
 				"Run `ocel bootstrap %s`",
-			board.name, h.named(), spoken(result), edge.ClassProduction)
+			board.name, h.named(), spoken(result), environment.TierProduction)
 	}
 	return nil
 }

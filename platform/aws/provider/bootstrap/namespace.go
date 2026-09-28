@@ -5,13 +5,14 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Namespace provider.Namespace
 
-func suffixed(class, base string) string {
-	if class == ClassPreview {
+func suffixed(tier, base string) string {
+	if tier == TierPreview {
 		return base + "-preview"
 	}
 	return base
@@ -19,28 +20,28 @@ func suffixed(class, base string) string {
 
 func (n Namespace) CoreStackName() string { return string(n) + "-bootstrap" }
 
-func (n Namespace) StackNameFor(class string) (string, error) {
-	switch class {
-	case ClassProduction, ClassPreview:
-		return suffixed(class, n.CoreStackName()), nil
+func (n Namespace) StackNameFor(tier string) (string, error) {
+	switch tier {
+	case TierProduction, TierPreview:
+		return suffixed(tier, n.CoreStackName()), nil
 	default:
-		return "", fmt.Errorf("bootstrap: unknown class %q", class)
+		return "", fmt.Errorf("bootstrap: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) runtimeStackName(class string) string {
-	return suffixed(class, n.CoreStackName()+"-runtime")
+func (n Namespace) runtimeStackName(tier string) string {
+	return suffixed(tier, n.CoreStackName()+"-runtime")
 }
 
-func (n Namespace) featureStackName(feature, class string) string {
-	return suffixed(class, n.CoreStackName()+"-"+feature)
+func (n Namespace) featureStackName(feature, tier string) string {
+	return suffixed(tier, n.CoreStackName()+"-"+feature)
 }
 
-func (n Namespace) FeatureStackName(name, class string) string {
+func (n Namespace) FeatureStackName(name, tier string) string {
 	if _, ok := featureNamed(name); !ok {
 		return name
 	}
-	return n.featureStackName(name, class)
+	return n.featureStackName(name, tier)
 }
 
 func (n Namespace) paramRoot() string { return "/" + string(n) }
@@ -49,93 +50,93 @@ func (n Namespace) PassphraseParamName() string { return n.paramRoot() + "/pulum
 
 func (n Namespace) stackRecordRoot() string { return n.paramRoot() + "/rootstack" }
 
-func (n Namespace) EdgeUserNameFor(class string) (string, error) {
-	switch class {
-	case ClassProduction, ClassPreview:
-		return suffixed(class, string(n)+"-edge"), nil
+func (n Namespace) EdgeUserNameFor(tier string) (string, error) {
+	switch tier {
+	case TierProduction, TierPreview:
+		return suffixed(tier, string(n)+"-edge"), nil
 	default:
-		return "", fmt.Errorf("edge: unknown class %q", class)
+		return "", fmt.Errorf("edge: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) AppBoundaryNameFor(class string) string {
-	return suffixed(class, string(n)+"-app-boundary")
+func (n Namespace) AppBoundaryNameFor(tier string) string {
+	return suffixed(tier, string(n)+"-app-boundary")
 }
 
-func (n Namespace) OriginSecretParamFor(class string) (string, error) {
-	switch class {
-	case ClassProduction:
+func (n Namespace) OriginSecretParamFor(tier string) (string, error) {
+	switch tier {
+	case TierProduction:
 		return n.paramRoot() + "/origin/secret", nil
-	case ClassPreview:
+	case TierPreview:
 		return n.paramRoot() + "/origin/secret-preview", nil
 	default:
-		return "", fmt.Errorf("edge: unknown class %q", class)
+		return "", fmt.Errorf("edge: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) EdgeParamPrefix(class string, kind edge.Kind) (string, error) {
+func (n Namespace) EdgeParamPrefix(tier string, kind edge.Kind) (string, error) {
 	if kind == "" {
-		return "", fmt.Errorf("edge: the %s bootstrap's edge parameters are namespaced by edge kind, and this run names none", class)
+		return "", fmt.Errorf("edge: the %s bootstrap's edge parameters are namespaced by edge kind, and this run names none", tier)
 	}
-	switch class {
-	case ClassProduction, ClassPreview:
-		return suffixed(class, n.paramRoot()+"/edge/"+string(kind)), nil
+	switch tier {
+	case TierProduction, TierPreview:
+		return suffixed(tier, n.paramRoot()+"/edge/"+string(kind)), nil
 	default:
-		return "", fmt.Errorf("edge: unknown class %q", class)
+		return "", fmt.Errorf("edge: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) varsKeyAliasFor(class string) string {
-	return "alias/" + string(n) + "-vars-" + class
+func (n Namespace) varsKeyAliasFor(tier string) string {
+	return "alias/" + string(n) + "-vars-" + tier
 }
 
-func (n Namespace) EdgeInvokeRoleName(class edge.Class) string {
-	return n.edgeSetName("edge-invoke", class)
+func (n Namespace) EdgeInvokeRoleName(tier environment.Tier) string {
+	return n.edgeSetName("edge-invoke", tier)
 }
 
-func (n Namespace) EdgeNotFoundAPIName(class edge.Class) string {
-	return string(n) + "-not-found-" + string(class)
+func (n Namespace) EdgeNotFoundAPIName(tier environment.Tier) string {
+	return string(n) + "-not-found-" + string(tier)
 }
 
-func (n Namespace) EdgeRoutesStoreName(class edge.Class) string {
-	return n.edgeSetName("routes", class)
+func (n Namespace) EdgeRoutesStoreName(tier environment.Tier) string {
+	return n.edgeSetName("routes", tier)
 }
 
-func (n Namespace) EdgeResolverName(class edge.Class) string {
-	return n.edgeSetName("resolver", class)
+func (n Namespace) EdgeResolverName(tier environment.Tier) string {
+	return n.edgeSetName("resolver", tier)
 }
 
-func (n Namespace) EdgeEmptyBodyName(class edge.Class) string {
-	return n.edgeSetName("empty-body", class)
+func (n Namespace) EdgeEmptyBodyName(tier environment.Tier) string {
+	return n.edgeSetName("empty-body", tier)
 }
 
-func (n Namespace) edgeCachePolicyName(class edge.Class) string {
-	return n.edgeSetName("cache", class)
+func (n Namespace) edgeCachePolicyName(tier environment.Tier) string {
+	return n.edgeSetName("cache", tier)
 }
 
-func (n Namespace) edgeHeadersPolicyName(class edge.Class) string {
-	return n.edgeSetName("headers", class)
+func (n Namespace) edgeHeadersPolicyName(tier environment.Tier) string {
+	return n.edgeSetName("headers", tier)
 }
 
-func (n Namespace) edgeAssetAccessName(class edge.Class) string {
-	return n.edgeSetName("assets", class)
+func (n Namespace) edgeAssetAccessName(tier environment.Tier) string {
+	return n.edgeSetName("assets", tier)
 }
 
-func (n Namespace) edgeSetName(what string, class edge.Class) string {
-	return suffixed(string(class), string(n)+"-"+what)
+func (n Namespace) edgeSetName(what string, tier environment.Tier) string {
+	return suffixed(string(tier), string(n)+"-"+what)
 }
 
-func (n Namespace) revalidateQueueNames(class string) (queue, dlq string) {
-	base := suffixed(class, string(n)+"-revalidate")
+func (n Namespace) revalidateQueueNames(tier string) (queue, dlq string) {
+	base := suffixed(tier, string(n)+"-revalidate")
 	return base + ".fifo", base + "-dlq.fifo"
 }
 
-func (n Namespace) envSourceSyncScheduleGroupName(class string) string {
-	return suffixed(class, n.CoreStackName())
+func (n Namespace) envSourceSyncScheduleGroupName(tier string) string {
+	return suffixed(tier, n.CoreStackName())
 }
 
-func (n Namespace) envSourceSyncScheduleName(class string) string {
-	return suffixed(class, string(n)+"-env-sync")
+func (n Namespace) envSourceSyncScheduleName(tier string) string {
+	return suffixed(tier, string(n)+"-env-sync")
 }
 
 func (n Namespace) PolicyName(what string) string { return string(n) + "-" + what }

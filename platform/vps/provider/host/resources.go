@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -25,8 +25,8 @@ const (
 	keptDir    = "kept"
 )
 
-func KeptPath(class edge.Class, name string) string {
-	return StateDir(class) + "/" + keptDir + "/" + name
+func KeptPath(tier environment.Tier, name string) string {
+	return StateDir(tier) + "/" + keptDir + "/" + name
 }
 
 func keptCommand(path string) string {
@@ -45,8 +45,8 @@ func (h *Host) unhand(ctx context.Context, delivery handoff) error {
 	return nil
 }
 
-func handedBack(class edge.Class, path string) string {
-	return "if [ \"$(id -u)\" -eq 0 ]; then chown -R --reference=" + quoted(StateDir(class)) + " " + quoted(path) + "; fi"
+func handedBack(tier environment.Tier, path string) string {
+	return "if [ \"$(id -u)\" -eq 0 ]; then chown -R --reference=" + quoted(StateDir(tier)) + " " + quoted(path) + "; fi"
 }
 
 func (h *Host) owning(ctx context.Context, what, command string, stdin []byte) (string, error) {
@@ -67,7 +67,7 @@ func (h *Host) owning(ctx context.Context, what, command string, stdin []byte) (
 	return h.ran(ctx, what, command, fed(), elevation)
 }
 
-func keepCommand(class edge.Class, path string) string {
+func keepCommand(tier environment.Tier, path string) string {
 	dir := path[:strings.LastIndex(path, "/")]
 	return "set -e\n" +
 		"umask 077\n" +
@@ -76,34 +76,34 @@ func keepCommand(class edge.Class, path string) string {
 		"cat >\"$writing\"\n" +
 		"ln \"$writing\" " + quoted(path) + " 2>/dev/null || true\n" +
 		"rm -f \"$writing\"\n" +
-		handedBack(class, dir) + "\n" +
+		handedBack(tier, dir) + "\n" +
 		"cat " + quoted(path)
 }
 
-func (h *Host) ForgetKept(ctx context.Context, class edge.Class, names []string) error {
+func (h *Host) ForgetKept(ctx context.Context, tier environment.Tier, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
 	paths := make([]string, 0, len(names))
 	for _, name := range names {
-		paths = append(paths, quoted(KeptPath(class, name)))
+		paths = append(paths, quoted(KeptPath(tier, name)))
 	}
 	_, err := h.owning(ctx, "forget what "+strings.Join(names, ", ")+" was bound to",
 		"rm -f "+strings.Join(paths, " "), nil)
 	return err
 }
 
-func (h *Host) Kept(ctx context.Context, class edge.Class, name string) ([]byte, error) {
-	said, err := h.owning(ctx, "read what is kept for "+name, keptCommand(KeptPath(class, name)), nil)
+func (h *Host) Kept(ctx context.Context, tier environment.Tier, name string) ([]byte, error) {
+	said, err := h.owning(ctx, "read what is kept for "+name, keptCommand(KeptPath(tier, name)), nil)
 	if err != nil {
 		return nil, err
 	}
 	return unkept(name, said)
 }
 
-func (h *Host) KeepOnce(ctx context.Context, class edge.Class, name string, candidate []byte) ([]byte, error) {
+func (h *Host) KeepOnce(ctx context.Context, tier environment.Tier, name string, candidate []byte) ([]byte, error) {
 	fed := base64.StdEncoding.EncodeToString(candidate) + "\n"
-	said, err := h.owning(ctx, "keep what "+name+" is bound to", keepCommand(class, KeptPath(class, name)), []byte(fed))
+	said, err := h.owning(ctx, "keep what "+name+" is bound to", keepCommand(tier, KeptPath(tier, name)), []byte(fed))
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ type ResourceContainer struct {
 	Name     string
 	Project  string
 	Resource string
-	Class    edge.Class
+	Tier     environment.Tier
 
 	Image        string
 	Args         []string
@@ -168,7 +168,7 @@ func (r ResourceContainer) digest() (string, error) {
 
 func (r ResourceContainer) labels() []string {
 	argv := []string{
-		"--label", LabelClass + "=" + string(r.Class),
+		"--label", LabelTier + "=" + string(r.Tier),
 		"--label", LabelProject + "=" + naming.Sanitize(r.Project),
 		"--label", LabelResource + "=" + r.Resource,
 	}
@@ -191,9 +191,9 @@ func (r ResourceContainer) volume() string { return volumeName(r.Name, r.Volume.
 
 func (r ResourceContainer) VolumeName() string { return r.volume() }
 
-func volumesOf(class edge.Class, project, resource, name string) string {
+func volumesOf(tier environment.Tier, project, resource, name string) string {
 	return "docker volume ls --filter " + quoted("name=^"+name) +
-		" --filter " + quoted("label="+LabelClass+"="+string(class)) +
+		" --filter " + quoted("label="+LabelTier+"="+string(tier)) +
 		" --filter " + quoted("label="+LabelProject+"="+naming.Sanitize(project)) +
 		" --filter " + quoted("label="+LabelResource+"="+resource)
 }
@@ -220,7 +220,7 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
-		"--network", AppNetwork(spec.Class, spec.Project),
+		"--network", AppNetwork(spec.Tier, spec.Project),
 	}
 	argv = append(argv, spec.labels()...)
 	argv = append(argv, "--label", LabelRef+"="+spec.Image, "--label", LabelEnv+"="+digest)
@@ -240,7 +240,7 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 }
 
 func generationCommand(spec ResourceContainer) string {
-	return volumesOf(spec.Class, spec.Project, spec.Resource, spec.Name) +
+	return volumesOf(spec.Tier, spec.Project, spec.Resource, spec.Name) +
 		" --format " + quoted(`{{.Label "`+LabelGeneration+`"}}`)
 }
 
@@ -279,7 +279,7 @@ func swapCommand(spec ResourceContainer, from, digest, envFile, dump string) str
 		volumeCreating(spec) + "\n" +
 		words(resourceRun(spec, digest, envFile)) + " >/dev/null\n" +
 		readyCommand(spec) + "\n" +
-		restoreCommand(spec.Class, spec.Name, spec.Database, dump) + "\n" +
+		restoreCommand(spec.Tier, spec.Name, spec.Database, dump) + "\n" +
 		"swapped=1\n" +
 		"docker rm --force " + retired + " >/dev/null\n" +
 		"docker volume rm " + stale + " >/dev/null"
@@ -287,7 +287,7 @@ func swapCommand(spec ResourceContainer, from, digest, envFile, dump string) str
 
 func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret, elevation string) (err error) {
 	dumped, err := h.ran(ctx, "dump "+spec.Resource+" while version "+from+" still serves it",
-		dumpCommand(spec.Class, spec.Name, spec.Database), nil, elevation)
+		dumpCommand(spec.Tier, spec.Name, spec.Database), nil, elevation)
 	if err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 	if err != nil {
 		return handoff{}, err
 	}
-	delivery := handoff{path: EnvFile(spec.Class, spec.Name)}
+	delivery := handoff{path: EnvFile(spec.Tier, spec.Name)}
 	_, err = h.owning(ctx, "write what "+spec.Resource+" is handed",
 		"install -m 0600 /dev/stdin "+quoted(delivery.path), rendered)
 	return delivery, err
@@ -344,7 +344,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 	if err != nil {
 		return err
 	}
-	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, joinNetworkScript(spec.Class, spec.Project), elevation); err != nil {
+	if err := h.joining(ctx, spec.Resource, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation); err != nil {
 		return err
 	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
@@ -401,7 +401,7 @@ func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret s
 }
 
 type ResourceRef struct {
-	Class    edge.Class
+	Tier     environment.Tier
 	Project  string
 	Resource string
 	Name     string
@@ -412,7 +412,7 @@ func (h *Host) RemoveResource(ctx context.Context, ref ResourceRef) error {
 	if err != nil {
 		return err
 	}
-	volumes := volumesOf(ref.Class, ref.Project, ref.Resource, ref.Name) + " --quiet"
+	volumes := volumesOf(ref.Tier, ref.Project, ref.Resource, ref.Name) + " --quiet"
 	_, err = h.ran(ctx, "take "+ref.Name+" and its data down",
 		"docker rm --force "+quoted(ref.Name)+" "+quoted(ref.Name+retiredSuffix)+" >/dev/null 2>&1 || true\n"+
 			volumes+" | xargs -r docker volume rm >/dev/null\n"+
@@ -421,6 +421,6 @@ func (h *Host) RemoveResource(ctx context.Context, ref ResourceRef) error {
 		return err
 	}
 	_, err = h.ran(ctx, "remove "+ref.Name+"'s kept credential and backups",
-		"rm -f "+quoted(KeptPath(ref.Class, ref.Name))+"\nrm -rf "+quoted(BackupsDir(ref.Class, ref.Name)), nil, elevation)
+		"rm -f "+quoted(KeptPath(ref.Tier, ref.Name))+"\nrm -rf "+quoted(BackupsDir(ref.Tier, ref.Name)), nil, elevation)
 	return err
 }

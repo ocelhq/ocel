@@ -13,7 +13,7 @@ import (
 
 const (
 	ConnectorBinary   = boxstore.Dir + "/connector"
-	connectorRoot     = classRoot + "/connector"
+	connectorRoot     = tierRoot + "/connector"
 	ConnectorConfig   = connectorRoot + "/config.json"
 	ConnectorKey      = connectorRoot + "/key"
 	ConnectorUnit     = "ocel-connector.service"
@@ -51,7 +51,7 @@ func ConnectorItems(binary, config []byte) []Item {
 	return []Item{
 		{Kind: KindFile, Name: ConnectorBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
 			Note: "console connector"},
-		dir(classRoot, 0o755, rootOwner, "ocel's config root"),
+		dir(tierRoot, 0o755, rootOwner, "ocel's config root"),
 		dir(connectorRoot, 0o700, stateOwner, ""),
 		{Kind: KindFile, Name: ConnectorConfig, Mode: 0o600, Owner: stateOwner, Content: config,
 			Note: "the console it trusts"},

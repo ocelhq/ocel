@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -25,7 +25,7 @@ func aPostgres(t *testing.T, version string) resources.ProvisionRequest {
 		t.Fatal(err)
 	}
 	return resources.ProvisionRequest{
-		Ref: provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref: provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Resource: provider.Resource{
 			Name: "main", Type: provider.BindingPostgres,
 			Postgres: &provider.PostgresSpec{Version: version},
@@ -75,7 +75,7 @@ func TestADeclaredPostgresRunsAsOneContainerOnlyItsProjectReaches(t *testing.T) 
 	runCommand := machine.commands()[run]
 	for _, want := range []string{
 		"'--network' 'ocel-production-shop'",
-		"ocel.class=production",
+		"ocel.tier=production",
 		"ocel.project=shop",
 		"ocel.resource=main",
 		"'--cap-drop' 'ALL'",
@@ -137,7 +137,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 		fed := machine.feeds()[at]
 		raw, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(fed))
 		if strings.Contains(fed, password) || strings.Contains(string(raw), password) {
-			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(edge.ClassProduction, "prod-web-r0a1b2c3d-main-pg"))
+			t.Errorf("the box keeps the password in plaintext under %s, where it outlives every deploy", host.KeptPath(environment.TierProduction, "prod-web-r0a1b2c3d-main-pg"))
 		}
 	}
 	sealing := machine.at(boxstore.SealHelper)
@@ -228,13 +228,13 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	if !strings.Contains(joined, "docker volume rm") {
 		t.Errorf("a teardown ran %q and left the data on the box, where no later deploy reclaims it", joined)
 	}
-	if !strings.Contains(joined, host.BackupsDir(edge.ClassProduction, name)) {
+	if !strings.Contains(joined, host.BackupsDir(environment.TierProduction, name)) {
 		t.Errorf("a teardown ran %q and left the dumps taken of it on the box", joined)
 	}
 	if !strings.Contains(joined, name+"-retired") {
 		t.Errorf("a teardown ran %q and would leave the server an interrupted upgrade retired", joined)
 	}
-	if !strings.Contains(joined, host.KeptPath(edge.ClassProduction, name)) {
+	if !strings.Contains(joined, host.KeptPath(environment.TierProduction, name)) {
 		t.Errorf("a teardown ran %q and left the sealed password behind", joined)
 	}
 }

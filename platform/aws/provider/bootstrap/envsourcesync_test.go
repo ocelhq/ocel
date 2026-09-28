@@ -95,19 +95,19 @@ func valuesOf(value any) []string {
 }
 
 type varsKeyStackCase struct {
-	name  string
-	class string
-	body  string
-	key   string
+	name string
+	tier string
+	body string
+	key  string
 }
 
 func varsKeyStackCases() []varsKeyStackCase {
 	var cases []varsKeyStackCase
-	for _, class := range []string{ClassProduction, ClassPreview} {
+	for _, tier := range []string{TierProduction, TierPreview} {
 		cases = append(cases,
-			varsKeyStackCase{"made/" + class, class, featureTemplate(provider.FeatureVarsKey, class), "VarsKey.Arn"},
-			varsKeyStackCase{"brought/" + class, class, varsKeyFeature.template(featureInputs{
-				ns: defaultNamespace, class: class, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
+			varsKeyStackCase{"made/" + tier, tier, featureTemplate(provider.FeatureVarsKey, tier), "VarsKey.Arn"},
+			varsKeyStackCase{"brought/" + tier, tier, varsKeyFeature.template(featureInputs{
+				ns: defaultNamespace, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
 			}).body, broughtKeyARN},
 		)
 	}
@@ -131,12 +131,12 @@ func TestEveryVarsKeyStackMakesAnEnvSourceSync(t *testing.T) {
 				t.Errorf("EnvSourceSync Role = %q, want its own EnvSourceSyncRole", fn.Properties.Role)
 			}
 			want := map[string]string{
-				"OCEL_VARS_TABLE":  paramVarsTableName,
-				"OCEL_VARS_KEY":    tc.key,
-				"OCEL_INFRA_CLASS": tc.class,
+				"OCEL_VARS_TABLE": paramVarsTableName,
+				"OCEL_VARS_KEY":   tc.key,
+				"OCEL_INFRA_TIER": tc.tier,
 			}
 			if got := fn.Properties.Environment.Variables; !maps.Equal(got, want) {
-				t.Errorf("EnvSourceSync environment = %v, want exactly %v: where the class's values are, never a value itself", got, want)
+				t.Errorf("EnvSourceSync environment = %v, want exactly %v: where the tier's values are, never a value itself", got, want)
 			}
 		})
 	}
@@ -151,7 +151,7 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 			if !ok || group.Type != "AWS::Scheduler::ScheduleGroup" {
 				t.Fatal("the vars-key stack declares no EnvSourceSyncScheduleGroup, so its schedule has no group the bootstrap credential is scoped to")
 			}
-			if want := defaultNamespace.envSourceSyncScheduleGroupName(tc.class); group.Properties.Name != want {
+			if want := defaultNamespace.envSourceSyncScheduleGroupName(tc.tier); group.Properties.Name != want {
 				t.Errorf("EnvSourceSyncScheduleGroup Name = %q, want %q, the name the bootstrap credential is scoped to", group.Properties.Name, want)
 			}
 
@@ -160,7 +160,7 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 				t.Fatal("the vars-key stack declares no EnvSourceSyncSchedule, so the sync never runs")
 			}
 			p := schedule.Properties
-			if want := defaultNamespace.envSourceSyncScheduleName(tc.class); p.Name != want || p.GroupName != "EnvSourceSyncScheduleGroup" {
+			if want := defaultNamespace.envSourceSyncScheduleName(tc.tier); p.Name != want || p.GroupName != "EnvSourceSyncScheduleGroup" {
 				t.Errorf("schedule is %q in group %q, want %q in EnvSourceSyncScheduleGroup", p.Name, p.GroupName, want)
 			}
 			if p.ScheduleExpression != "rate(1 minute)" {
@@ -191,7 +191,7 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 				t.Errorf("EnvSourceSyncScheduleRole trust has %v, want it bound to this account", trust[0].Condition)
 			}
 			if trust[0].Condition["ArnEquals"]["aws:SourceArn"] != "EnvSourceSyncScheduleGroup.Arn" {
-				t.Errorf("EnvSourceSyncScheduleRole trust has %v, want it bound to this class's schedule group", trust[0].Condition)
+				t.Errorf("EnvSourceSyncScheduleRole trust has %v, want it bound to this tier's schedule group", trust[0].Condition)
 			}
 			if len(role.Properties.ManagedPolicyArns) != 0 {
 				t.Errorf("EnvSourceSyncScheduleRole attaches %v, want only its inline invoke grant", role.Properties.ManagedPolicyArns)
@@ -216,12 +216,12 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 func TestNoTwoVarsKeyStacksInOneAccountNameTheSameSchedule(t *testing.T) {
 	seen := map[string]string{}
 	for _, ns := range []Namespace{defaultNamespace, Namespace("j-1-deploy-next"), Namespace("j-2-deploy-next")} {
-		for _, class := range []string{ClassProduction, ClassPreview} {
+		for _, tier := range []string{TierProduction, TierPreview} {
 			body := varsKeyFeature.template(featureInputs{
-				ns: ns, class: class, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
+				ns: ns, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
 			}).body
 			name := parseEnvSourceSyncTemplate(t, body).Resources["EnvSourceSyncSchedule"].Properties.Name
-			stack := ns.featureStackName(provider.FeatureVarsKey, class)
+			stack := ns.featureStackName(provider.FeatureVarsKey, tier)
 			if other, taken := seen[name]; taken {
 				t.Errorf("%s and %s both name their schedule %q, and CloudFormation identifies a schedule by its name alone, whatever its group, so the second stack fails to create", other, stack, name)
 			}
@@ -257,15 +257,15 @@ func TestTheBootstrapCredentialConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherF
 		"lambda:PutFunctionEventInvokeConfig", "lambda:GetFunctionEventInvokeConfig",
 		"lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
 	}
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		function := "arn:aws:lambda:us-east-1:111122223333:function:" + defaultNamespace.featureStackName(provider.FeatureVarsKey, class) + "-EnvSourceSync-A1B2C3"
+	for _, tier := range []string{TierProduction, TierPreview} {
+		function := "arn:aws:lambda:us-east-1:111122223333:function:" + defaultNamespace.featureStackName(provider.FeatureVarsKey, tier) + "-EnvSourceSync-A1B2C3"
 		for _, action := range actions {
 			reached := false
 			for g := range bootstrapGrants {
 				reached = reached || (g.action == action && matchesIAMPattern(g.resource, function))
 			}
 			if !reached {
-				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot configure how the %s sync is invoked", action, function, class)
+				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot configure how the %s sync is invoked", action, function, tier)
 			}
 		}
 	}
@@ -331,21 +331,21 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 		}
 		return false
 	}
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		group := defaultNamespace.envSourceSyncScheduleGroupName(class)
+	for _, tier := range []string{TierProduction, TierPreview} {
+		group := defaultNamespace.envSourceSyncScheduleGroupName(tier)
 		groupARN := "arn:aws:scheduler:us-east-1:111122223333:schedule-group/" + group
 		for _, action := range []string{
 			"scheduler:CreateScheduleGroup", "scheduler:DeleteScheduleGroup", "scheduler:GetScheduleGroup",
 			"scheduler:ListTagsForResource", "scheduler:TagResource", "scheduler:UntagResource",
 		} {
 			if !reaches(action, groupARN) {
-				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule group", action, groupARN, class)
+				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule group", action, groupARN, tier)
 			}
 		}
-		scheduleARN := "arn:aws:scheduler:us-east-1:111122223333:schedule/" + group + "/" + defaultNamespace.envSourceSyncScheduleName(class)
+		scheduleARN := "arn:aws:scheduler:us-east-1:111122223333:schedule/" + group + "/" + defaultNamespace.envSourceSyncScheduleName(tier)
 		for _, action := range []string{"scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule", "scheduler:UpdateSchedule"} {
 			if !reaches(action, scheduleARN) {
-				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule", action, scheduleARN, class)
+				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule", action, scheduleARN, tier)
 			}
 		}
 	}

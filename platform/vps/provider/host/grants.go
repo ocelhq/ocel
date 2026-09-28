@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -14,10 +14,10 @@ type Grant struct {
 	Detail string
 }
 
-func Grants(class edge.Class) []Grant { return grants(class, ArchAMD64) }
+func Grants(tier environment.Tier) []Grant { return grants(tier, ArchAMD64) }
 
-func grants(class edge.Class, arch string) []Grant {
-	items := Items(class, nil, arch, Front{})
+func grants(tier environment.Tier, arch string) []Grant {
+	items := Items(tier, nil, arch, Front{})
 	deployer := deployLogin()
 
 	var grants []Grant
@@ -59,22 +59,22 @@ func grants(class edge.Class, arch string) []Grant {
 				board.Mode, deployer.name, SwitchboardContainer),
 		})
 	}
-	grants = append(grants, sealing(items, class, deployer)...)
+	grants = append(grants, sealing(items, tier, deployer)...)
 	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
 		grants = append(grants, Grant{
 			Name: "no hand in " + LiveSocket,
 			Detail: "root's agent at " + agent.Name + ", run by systemd as " + LiveService + ", not by " + deployer.name +
 				". App containers get " + LiveSocketDir + " read-only; the agent identifies them by connecting process, " +
-				"opens values under the class key, and answers no process outside a container",
+				"opens values under the tier key, and answers no process outside a container",
 		})
 	}
-	if unit := written(items, KindUnit, EnvSourceSyncService(class)); unit.Name != "" {
+	if unit := written(items, KindUnit, EnvSourceSyncService(tier)); unit.Name != "" {
 		grants = append(grants, Grant{
 			Name: "no hand in " + unit.Name,
 			Detail: "root's env source sync, " + LiveBinary + " " + live.EnvSourceSyncCommand + ", run by systemd, not by " + deployer.name +
-				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + RecordsDir(class) +
+				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + RecordsDir(tier) +
 				" and nothing beside, seals through " + boxstore.SealHelper + " without sudo, and logs in to each env source with the credential " +
-				string(class) + " stores in ocel's own values",
+				string(tier) + " stores in ocel's own values",
 		})
 	}
 	for _, item := range items {
@@ -89,20 +89,20 @@ func grants(class edge.Class, arch string) []Grant {
 	return grants
 }
 
-func sealing(items []Item, class edge.Class, deployer login) []Grant {
-	fragment := written(items, KindFile, sudoersSeal(class))
-	key := written(items, KindSealKey, SealKeyPath(class))
+func sealing(items []Item, tier environment.Tier, deployer login) []Grant {
+	fragment := written(items, KindFile, sudoersSeal(tier))
+	key := written(items, KindSealKey, SealKeyPath(tier))
 	if fragment.Name == "" || key.Name == "" {
 		return nil
 	}
 	return []Grant{{
 		Name: "runs " + boxstore.SealHelper + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
-			"\n\n    the only sudo " + deployer.name + " has. The helper seals and opens values under the " + string(class) +
-			" key only; it mints no key, reaches no other class, and never prints the key",
+			"\n\n    the only sudo " + deployer.name + " has. The helper seals and opens values under the " + string(tier) +
+			" key only; it mints no key, reaches no other tier, and never prints the key",
 	}, {
 		Name: "no read of " + key.Name,
-		Detail: fmt.Sprintf("root-owned at %04o, minted on this machine and never leaves it; %s uses it through the helper and cannot read the %s key. It is never rotated; `ocel destroy` removes it with the class",
+		Detail: fmt.Sprintf("root-owned at %04o, minted on this machine and never leaves it; %s uses it through the helper and cannot read the %s key. It is never rotated; `ocel destroy` removes it with the tier",
 			key.Mode, deployer.name, SealAlgorithm),
 	}}
 }

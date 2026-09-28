@@ -2,6 +2,7 @@ package provider
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 )
@@ -36,7 +37,7 @@ type Facts struct {
 }
 
 type EdgeProgramRequest struct {
-	Class             edge.Class
+	Tier              environment.Tier
 	Kind              edge.Kind
 	Slug              string
 	Env               string

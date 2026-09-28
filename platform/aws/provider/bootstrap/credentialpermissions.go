@@ -109,7 +109,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		scheduleGroup:      "arn:aws:scheduler:*:*:schedule-group/" + core + "*",
 		schedule:           "arn:aws:scheduler:*:*:schedule/" + core + "*/*",
 		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
-		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(ClassProduction) + "*",
+		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(TierProduction) + "*",
 		varsAlias:          "arn:aws:kms:*:*:alias/" + string(n) + "-vars-*",
 		passphraseParam:    parameterARNPrefix + n.PassphraseParamName(),
 		edgeParam:          parameterARNPrefix + n.paramRoot() + "/edge/*",
@@ -148,7 +148,7 @@ func managedByAnAppCluster() map[string]any {
 
 func withinAppBoundary(ns Namespace) map[string]any {
 	return map[string]any{"StringEquals": map[string]any{
-		"iam:PermissionsBoundary": []string{appBoundaryARNFor(ns, ClassProduction), appBoundaryARNFor(ns, ClassPreview)},
+		"iam:PermissionsBoundary": []string{appBoundaryARNFor(ns, TierProduction), appBoundaryARNFor(ns, TierPreview)},
 	}}
 }
 

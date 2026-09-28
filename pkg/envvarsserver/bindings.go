@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -121,11 +121,11 @@ func (h *Service) ListBindings(ctx context.Context, req *envvarsv1.ListBindingsR
 	return resp, nil
 }
 
-func bindingTarget(tier environmentv1.Tier, environment string) error {
-	if environment != "" && tier != environmentv1.Tier_TIER_PREVIEW {
+func bindingTarget(tier environmentv1.Tier, env string) error {
+	if env != "" && tier != environmentv1.Tier_TIER_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"environment %q is named alongside class %q: an ocel coordinate is a class and, in %s, one preview environment; leave the environment off",
-			environment, edge.ClassProduction, edge.ClassPreview))
+			"environment %q is named alongside tier %q: an ocel coordinate is a tier and, in %s, one preview environment; leave the environment off",
+			env, environment.TierProduction, environment.TierPreview))
 	}
 	return nil
 }

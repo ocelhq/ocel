@@ -22,6 +22,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -504,7 +505,7 @@ func staging(t *testing.T, vendor *fake.Provider) *stagingLedger {
 	t.Helper()
 	stager := &stagingLedger{}
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		stager.Ledger = ledger.New(vendor.Records(), state.Class, state.Slug)
+		stager.Ledger = ledger.New(vendor.Records(), state.Tier, state.Slug)
 		return stager
 	})
 	return stager
@@ -605,7 +606,7 @@ func TestTheStagedRecordNamesTheContainerTheReleaseProvisioned(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	entries, err := stackrecords.List(context.Background(), vendor.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.Records(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}

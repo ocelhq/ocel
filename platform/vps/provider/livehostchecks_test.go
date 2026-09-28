@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -16,7 +16,7 @@ const adminDecoy = "ocel-live-admin-decoy"
 func hostChecksOn(t *testing.T, p *vps.Provider, hostnames []string) []provider.HostCheck {
 	t.Helper()
 	checks, err := p.CheckHost(context.Background(), provider.HostCheckRequest{
-		Class:     edge.ClassProduction,
+		Tier:      environment.TierProduction,
 		Hostnames: hostnames,
 	})
 	if err != nil {

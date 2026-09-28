@@ -6,7 +6,7 @@ import { pathsPerInvalidation } from "../src/tags.mjs";
 import { bootstrapPartition, targetsSortKey } from "../src/targets.mjs";
 
 const TABLE = "ocel-state";
-const CLASS = "production";
+const TIER = "production";
 const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
 const RELEASE = "r0a1b2c3d";
 const PROJECT = "EDGELEDGER#production/acme";
@@ -63,7 +63,7 @@ function invalidator(dynamo: FakeDynamo, cloudfront: FakeCloudFront) {
     dynamo,
     commands,
     table: TABLE,
-    bootstrapClass: CLASS,
+    bootstrapTier: TIER,
     sleep: async () => {},
   };
 }
@@ -84,7 +84,7 @@ it("invalidates every distribution the ledger names for the project", async () =
     {
       TableName: TABLE,
       ConsistentRead: true,
-      Key: { pk: { S: bootstrapPartition(CLASS) }, sk: { S: targetsSortKey } },
+      Key: { pk: { S: bootstrapPartition(TIER) }, sk: { S: targetsSortKey } },
     },
     {
       TableName: TABLE,
@@ -105,7 +105,7 @@ it("invalidates every distribution the ledger names for the project", async () =
 it("reaches the bootstrap's wildcard as well as the project's own front", async () => {
   const both = new FakeDynamo(
     new Map([
-      [bootstrapPartition(CLASS), ["EWILDCARD"]],
+      [bootstrapPartition(TIER), ["EWILDCARD"]],
       [PROJECT, ["E1PROD"]],
     ]),
   );
@@ -119,7 +119,7 @@ it("reaches the bootstrap's wildcard as well as the project's own front", async 
 });
 
 it("reaches the wildcard for a project that names no front of its own", async () => {
-  const wildcardOnly = new FakeDynamo(new Map([[bootstrapPartition(CLASS), ["EWILDCARD"]]]));
+  const wildcardOnly = new FakeDynamo(new Map([[bootstrapPartition(TIER), ["EWILDCARD"]]]));
 
   await invalidateAll(invalidator(wildcardOnly, cloudfront), raises(["products"]));
 

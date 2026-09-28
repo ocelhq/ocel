@@ -9,7 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -267,7 +267,7 @@ func TestTheEdgeUnitsEventsNameTheEdgeKindAsSubject(t *testing.T) {
 func TestARemovalRunsInTheDestroyPhase(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
+	deployed(t, vendor, environment.TierPreview, "shop")
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug:        "shop",

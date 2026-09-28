@@ -33,7 +33,7 @@ func ensureEnvSourceSyncPayload(ctx context.Context, store ObjectStore, bucket s
 	return payloads.Place(ctx, store, bucket, envSourceSyncKeyPrefix, envSourceSyncLabel, payloads.EnvSourceSync())
 }
 
-func envSourceSyncResources(ns Namespace, code payloads.Placement, class, key string) string {
+func envSourceSyncResources(ns Namespace, code payloads.Placement, tier, key string) string {
 	return fmt.Sprintf(`  EnvSourceSyncRole:
     Type: AWS::IAM::Role
     Properties:
@@ -70,7 +70,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, class, key st
   EnvSourceSync:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel env source sync - reads each scheduled env source registered in the %[1]s class and writes what changed into its vars table."
+      Description: "Ocel env source sync - reads each scheduled env source registered in the %[1]s tier and writes what changed into its vars table."
       Runtime: %[6]s
       Architectures:
         - %[7]s
@@ -96,7 +96,7 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, class, key st
   EnvSourceSyncScheduleGroup:
     Type: AWS::Scheduler::ScheduleGroup
     Metadata:
-      Description: "The %[1]s class's schedule group. A schedule takes no tags, so the bootstrap credential reaches this group's schedules by the group's name."
+      Description: "The %[1]s tier's schedule group. A schedule takes no tags, so the bootstrap credential reaches this group's schedules by the group's name."
     Properties:
       Name: %[17]s
   EnvSourceSyncScheduleRole:
@@ -138,10 +138,10 @@ func envSourceSyncResources(ns Namespace, code payloads.Placement, class, key st
         RoleArn: !GetAtt EnvSourceSyncScheduleRole.Arn
         RetryPolicy:
           MaximumRetryAttempts: 0
-`, class, LambdaServicePrincipal, ns.PolicyName("envsourcesync"), paramVarsTableARN, key,
+`, tier, LambdaServicePrincipal, ns.PolicyName("envsourcesync"), paramVarsTableARN, key,
 		envSourceSyncRuntime, envSourceSyncArchitecture, envSourceSyncHandler, envSourceSyncMemoryMB, envSourceSyncTimeoutSeconds,
 		code.Bucket, code.Key,
-		awsports.VarsTableEnvVar, paramVarsTableName, awsports.VarsKeyEnvVar, awsports.ClassEnvVar,
-		ns.envSourceSyncScheduleGroupName(class), schedulerServicePrincipal, ns.PolicyName("envsourcesync-schedule"),
-		ns.envSourceSyncScheduleName(class), envSourceSyncRate)
+		awsports.VarsTableEnvVar, paramVarsTableName, awsports.VarsKeyEnvVar, awsports.TierEnvVar,
+		ns.envSourceSyncScheduleGroupName(tier), schedulerServicePrincipal, ns.PolicyName("envsourcesync-schedule"),
+		ns.envSourceSyncScheduleName(tier), envSourceSyncRate)
 }

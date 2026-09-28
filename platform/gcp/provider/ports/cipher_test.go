@@ -55,9 +55,9 @@ func servingKMS(t *testing.T) (*Clients, *recordingKMS) {
 	return &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://" + listener.Addr().String()}, fake
 }
 
-var sealedAt = records.SealScope{Project: "shop", Class: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+var sealedAt = records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
 
-func TestAValueIsSealedUnderItsClassKeyAndBoundToItsCoordinateBytes(t *testing.T) {
+func TestAValueIsSealedUnderItsTierKeyAndBoundToItsCoordinateBytes(t *testing.T) {
 	clients, fake := servingKMS(t)
 
 	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), sealedAt, []byte("sk_live_secret")); err != nil {
@@ -74,7 +74,7 @@ func TestAValueIsSealedUnderItsClassKeyAndBoundToItsCoordinateBytes(t *testing.T
 	}
 }
 
-func TestAValueAlreadySealedUnderItsClassKeyAndCoordinateBytesStillOpens(t *testing.T) {
+func TestAValueAlreadySealedUnderItsTierKeyAndCoordinateBytesStillOpens(t *testing.T) {
 	clients, _ := servingKMS(t)
 
 	opened, err := (Cipher{Clients: clients}).Open(context.Background(), sealedAt, []byte("sealed"))

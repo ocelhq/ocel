@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -21,7 +22,7 @@ func previewSpec(label string) provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
-			Class:   edge.ClassPreview,
+			Tier:    environment.TierPreview,
 			Name:    naming.StackName{Env: "pr-7", App: "web"},
 		},
 		Kind: provider.StackApp,
@@ -91,7 +92,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 
 	production := &fake.Progress{}
 	spec := previewSpec("")
-	spec.Ref.Class = edge.ClassProduction
+	spec.Ref.Tier = environment.TierProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 	if _, err := p.ProvisionContainers(context.Background(), spec, production); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
@@ -119,7 +120,7 @@ func TestAProductionReleaseIsNamedNoDifferentlyForHavingNoPreviewLabel(t *testin
 	server := &runServer{}
 	p := server.open(t)
 	spec := previewSpec("")
-	spec.Ref.Class = edge.ClassProduction
+	spec.Ref.Tier = environment.TierProduction
 	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 
 	containers, err := p.ProvisionContainers(context.Background(), spec, nil)

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -58,16 +58,16 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		storeOnly := base
 		storeOnly.CacheStoreBucket = "isr"
 		storeOnly.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
-		if err := checkISRWriterAgrees(edge.ClassProduction, storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
+		if err := checkISRWriterAgrees(environment.TierProduction, storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
 			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
 
 		writerOnly := adoptISRWriter(t, base)
-		if err := checkISRWriterAgrees(edge.ClassProduction, writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
+		if err := checkISRWriterAgrees(environment.TierProduction, writerOnly.objectStores(), writerOnly.isrWriter()); err == nil {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 
-		pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Slug: "shop", Class: edge.ClassProduction, Env: "prod"}}
+		pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction, Env: "prod"}}
 		if err := newStacks(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
 			t.Error("a bootstrap that disagrees with itself must fail preflight, before a byte of this deploy is uploaded")
 		}
@@ -115,7 +115,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 
 func isrSpec(app, prefix string) provider.StackSpec {
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, deployedAs(testDeploymentID).Release())},
+		Ref:  provider.StackRef{Project: "proj", Tier: environment.TierProduction, Name: naming.AppStack("prod", app, deployedAs(testDeploymentID).Release())},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
 			App:       app,

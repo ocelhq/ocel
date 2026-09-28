@@ -3,11 +3,11 @@ package fake
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func (p *Provider) EnsureImageRegistry(context.Context, edge.Class, []string) (provider.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(context.Context, environment.Tier, []string) (provider.RegistryTarget, error) {
 	return provider.RegistryTarget{Server: RegistryServer, Namespace: RegistryNamespace, Username: "fake", Password: "fake-token"}, nil
 }
 

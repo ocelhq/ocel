@@ -13,7 +13,7 @@ import (
 	"google.golang.org/api/cloudscheduler/v1"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type syncServer struct {
@@ -63,7 +63,7 @@ func (s *syncServer) open(t *testing.T) bootstrap {
 		clients:       c,
 		deployService: p.deployService,
 		tearDown:      p.tearDown,
-		pushBinary: func(_ context.Context, _ edge.Class, _, ref string, _ []byte, _ string) error {
+		pushBinary: func(_ context.Context, _ environment.Tier, _, ref string, _ []byte, _ string) error {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			s.pushed = append(s.pushed, ref)

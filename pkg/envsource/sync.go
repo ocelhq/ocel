@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 )
 
@@ -22,7 +22,7 @@ const (
 
 type Sync struct {
 	Store    envvars.Store
-	Class    edge.Class
+	Tier     environment.Tier
 	Login    Login
 	Now      func() time.Time
 	Interval time.Duration
@@ -76,7 +76,7 @@ func (s *Sync) budget() time.Duration {
 func (s *Sync) CopyScheduled(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, s.budget())
 	defer cancel()
-	registrations, err := Registrations(ctx, s.Store.Records, s.Class)
+	registrations, err := Registrations(ctx, s.Store.Records, s.Tier)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	due := make([]string, 0, len(keys))
 	attemptedAt := map[string]time.Time{}
 	for _, key := range keys {
-		status, _, err := readStatus(ctx, s.Store.Records, s.Class, key)
+		status, _, err := readStatus(ctx, s.Store.Records, s.Tier, key)
 		if err != nil {
 			failed = append(failed, err)
 			continue
@@ -160,7 +160,7 @@ func (s *Sync) keyOf(ctx context.Context, registration Registration) (string, er
 	if err != nil || key == registration.DedupeKey {
 		return key, err
 	}
-	if err := rekey(ctx, s.Store, s.Class, registration.Project); err != nil {
+	if err := rekey(ctx, s.Store, s.Tier, registration.Project); err != nil {
 		return "", err
 	}
 	return key, nil
@@ -174,7 +174,7 @@ func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, 
 	}
 	statusCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), statusWriteTimeout)
 	defer cancel()
-	err := writeStatus(statusCtx, s.Store.Records, s.Class, key, func(status *Status) {
+	err := writeStatus(statusCtx, s.Store.Records, s.Tier, key, func(status *Status) {
 		status.LastAttemptAt = attemptedAt
 		if failure == nil {
 			status.EnvSource = results[0].EnvSource
@@ -258,7 +258,7 @@ func (s *Sync) ensureDigestKey(ctx context.Context) (DigestKey, error) {
 	if len(s.digestKey.secret) > 0 {
 		return s.digestKey, nil
 	}
-	key, err := EnsureDigestKey(ctx, s.Store, s.Class)
+	key, err := EnsureDigestKey(ctx, s.Store, s.Tier)
 	if err != nil {
 		return DigestKey{}, err
 	}
@@ -278,5 +278,5 @@ func (s *Sync) backoff(failures int) time.Duration {
 }
 
 func (s *Sync) scope(registration Registration) envvars.Scope {
-	return envvars.Scope{Project: registration.Project, Class: s.Class}
+	return envvars.Scope{Project: registration.Project, Tier: s.Tier}
 }

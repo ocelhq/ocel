@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -51,11 +52,11 @@ func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
 
 func (s *stack) slug() string { return s.state.Slug }
 
-func (s *stack) class() edge.Class { return s.state.Class }
+func (s *stack) tier() environment.Tier { return s.state.Tier }
 
 func (s *stack) spec() distributionSpec {
 	return distributionSpec{
-		name:          distributionName(s.p.ns, s.slug(), s.class()),
+		name:          distributionName(s.p.ns, s.slug(), s.tier()),
 		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
 		function:      s.own.Function,
 		emptyBody:     s.own.EmptyBodyFunction,
@@ -74,11 +75,11 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 	if err != nil || s.provisioned() {
 		return c, err
 	}
-	deployed, err := s.p.bootstrap(ctx, c, s.class())
+	deployed, err := s.p.bootstrap(ctx, c, s.tier())
 	if err != nil || !deployed.Present {
 		return c, err
 	}
-	set, err := edgeSetOf(deployed, s.class())
+	set, err := edgeSetOf(deployed, s.tier())
 	if err != nil {
 		return c, err
 	}
@@ -95,7 +96,7 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 }
 
 func (s *stack) openLedger(c Clients) *ledger.Ledger {
-	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
+	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.tier(), s.slug())
 }
 
 func (s *stack) routes(c Clients) routeStore {
@@ -279,7 +280,7 @@ func (s *stack) previewBase() string {
 }
 
 func (s *stack) previewSite() edge.PreviewSite {
-	if s.class() != edge.ClassPreview {
+	if s.tier() != environment.TierPreview {
 		return edge.PreviewSite{}
 	}
 	return edge.SharedPreview(s.slug(), s.previewBase())
@@ -365,12 +366,12 @@ func (s *stack) records(c Clients) awsports.Records {
 }
 
 func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.Promotion, app, identity string) (awsports.ContainerFront, error) {
-	front, found, err := awsports.ReadContainerFront(ctx, s.records(c), s.class())
+	front, found, err := awsports.ReadContainerFront(ctx, s.records(c), s.tier())
 	if err != nil {
 		return awsports.ContainerFront{}, err
 	}
 	if !found {
-		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s class records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotion.PromotionID, app, identity, s.class())
+		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s tier records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotion.PromotionID, app, identity, s.tier())
 	}
 	if s.onPreviewWildcard() {
 		base := s.previewBase()
@@ -395,8 +396,8 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.P
 }
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
-	command := provider.BootstrapCommand(s.class())
-	name, err := s.p.ns.OriginSecretParamFor(string(s.class()))
+	command := provider.BootstrapCommand(s.tier())
+	name, err := s.p.ns.OriginSecretParamFor(string(s.tier()))
 	if err != nil {
 		return bootstrap.OriginSecret{}, err
 	}

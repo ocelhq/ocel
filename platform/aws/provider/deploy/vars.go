@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
@@ -34,7 +35,7 @@ func varsReadPolicy(r executionRole) (string, error) {
 		})
 	}
 	if r.ValuesTableARN != "" {
-		own, err := valuePartition(r.Slug, r.VarsClass)
+		own, err := valuePartition(r.Slug, r.VarsTier)
 		if err != nil {
 			return "", err
 		}
@@ -43,7 +44,7 @@ func varsReadPolicy(r executionRole) (string, error) {
 			if owner == r.Slug {
 				continue
 			}
-			partition, err := valuePartition(owner, r.VarsClass)
+			partition, err := valuePartition(owner, r.VarsTier)
 			if err != nil {
 				return "", err
 			}
@@ -67,8 +68,8 @@ func varsReadPolicy(r executionRole) (string, error) {
 	return string(out), nil
 }
 
-func valuePartition(slug, class string) (string, error) {
-	return awsports.Partition(envvars.ScopedRecordName(envvars.Scope{Project: slug, Class: edge.Class(class)}))
+func valuePartition(slug, tier string) (string, error) {
+	return awsports.Partition(envvars.ScopedRecordName(envvars.Scope{Project: slug, Tier: environment.Tier(tier)}))
 }
 
 type appBundle struct {
@@ -107,7 +108,7 @@ func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, ke
 		Slug:        slug,
 		Table:       cfg.VarsTable,
 		KeyARN:      cfg.VarsKeyARN,
-		Class:       string(cfg.Class),
+		Tier:        string(cfg.Tier),
 		Environment: overrideEnvironment(cfg),
 		Keys:        keys,
 		Bindings:    bindings,
@@ -166,7 +167,7 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 }
 
 func overrideEnvironment(cfg Config) string {
-	if cfg.Class != edge.ClassPreview {
+	if cfg.Tier != environment.TierPreview {
 		return ""
 	}
 	return cfg.Env

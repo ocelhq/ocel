@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -54,10 +54,10 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 
 func publishers(said string) []string { return strings.Fields(said) }
 
-func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) provider.HostCheck {
+func (h *Host) CheckSwitchboard(ctx context.Context, tier environment.Tier) provider.HostCheck {
 	board := switchboardBox(nil, h.proxyOption)
 	check := provider.HostCheck{Subject: board.name, Verdict: provider.HostFail,
-		Fix: "run `" + provider.BootstrapCommand(class) + "` to start it again"}
+		Fix: "run `" + provider.BootstrapCommand(tier) + "` to start it again"}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		check.Finding = fmt.Sprintf("ask the engine about %s: %v", board.name, err)

@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -29,7 +29,7 @@ func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, k
 func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 	t.Helper()
 	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s): %v", key, err)
 	}
@@ -84,6 +84,14 @@ func TestAContainerAppRefusesTheNameTheProviderInjects(t *testing.T) {
 		if !strings.Contains(message, want) {
 			t.Errorf("the refusal reads %q and never names %q", message, want)
 		}
+	}
+}
+
+func TestAVariableOfAClassNoFunctionTakesIsRefusedNamingItsClass(t *testing.T) {
+	message := refusedDeploy(t, declaring(deployRequest(),
+		resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED, "DATABASE_URL", ""), nil)
+	if want := "declares DATABASE_URL with class VARIABLE_CLASS_DERIVED"; !strings.Contains(message, want) {
+		t.Errorf("the refusal reads %q, want it to say %q", message, want)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
@@ -42,9 +42,9 @@ func TestSealerConformance(t *testing.T) {
 	conformance.RunCipher(t, sealer)
 }
 
-func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
+func TestValueRecordsPartitionOnTheProjectAndTier(t *testing.T) {
 	table, ddb := newRecords(t)
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := envvars.Store{Records: table, Cipher: mustSealer()}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
@@ -60,8 +60,8 @@ func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
 			t.Errorf("a value write landed in partition %q, and a function's role is scoped to %q alone", written, partition)
 		}
 	}
-	if !strings.Contains(partition, scope.Project) || !strings.Contains(partition, string(scope.Class)) {
-		t.Errorf("value partition = %q, want it to name both the project and the class a role is granted", partition)
+	if !strings.Contains(partition, scope.Project) || !strings.Contains(partition, string(scope.Tier)) {
+		t.Errorf("value partition = %q, want it to name both the project and the tier a role is granted", partition)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestARecordNameShorterThanItsPartitionIsRefused(t *testing.T) {
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	table, _ := newRecords(t)
 	sealer, _ := newSealer()
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := envvars.Store{Records: table, Cipher: sealer}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
@@ -99,7 +99,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 
 	at := records.SealScope{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Env:     "staging",
 		Folder:  "/web",
 		Name:    "STRIPE_API_KEY",
@@ -126,7 +126,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 func TestAValueAlreadySealedUnderTheStoredEncryptionContextStillOpens(t *testing.T) {
 	sealer, _ := newSealer()
 
-	at := records.SealScope{Project: "shop", Class: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+	at := records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
 	sealed := fakeCipherMarker + "class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
 		base64.StdEncoding.EncodeToString([]byte("sk_live_secret"))
 	opened, err := sealer.Open(context.Background(), at, []byte(sealed))
@@ -140,7 +140,7 @@ func TestABindingSealsUnderItsOwnName(t *testing.T) {
 
 	at := records.SealScope{
 		Project: "shop",
-		Class:   edge.ClassPreview,
+		Tier:    environment.TierPreview,
 		Env:     "*",
 		Folder:  "/",
 		Binding: "orders",
@@ -158,11 +158,11 @@ func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 	sealer, _ := newSealer()
 
 	for name, at := range map[string]records.SealScope{
-		"no project":     {Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "K"},
-		"no class":       {Project: "shop", Env: "*", Folder: "/", Name: "K"},
-		"no environment": {Project: "shop", Class: edge.ClassProduction, Folder: "/", Name: "K"},
-		"no folder":      {Project: "shop", Class: edge.ClassProduction, Env: "*", Name: "K"},
-		"no key":         {Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/"},
+		"no project":     {Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "K"},
+		"no tier":        {Project: "shop", Env: "*", Folder: "/", Name: "K"},
+		"no environment": {Project: "shop", Tier: environment.TierProduction, Folder: "/", Name: "K"},
+		"no folder":      {Project: "shop", Tier: environment.TierProduction, Env: "*", Name: "K"},
+		"no key":         {Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := sealer.Seal(context.Background(), at, []byte("v")); err == nil {
@@ -229,12 +229,12 @@ func TestATableDeletedMidTeardownHasNoRecords(t *testing.T) {
 
 func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 	for _, name := range []records.Name{
-		stackrecords.ProjectsRecord(edge.ClassProduction),
-		stackrecords.BootstrapRecord(edge.ClassProduction),
-		stackrecords.WildcardRecord(edge.ClassPreview),
-		stackrecords.EdgeStacksRecord(edge.ClassPreview),
-		stackrecords.StacksRecord(edge.ClassProduction, "shop"),
-		stackrecords.EnvironmentsRecord(edge.ClassPreview, "shop"),
+		stackrecords.ProjectsRecord(environment.TierProduction),
+		stackrecords.BootstrapRecord(environment.TierProduction),
+		stackrecords.WildcardRecord(environment.TierPreview),
+		stackrecords.EdgeStacksRecord(environment.TierPreview),
+		stackrecords.StacksRecord(environment.TierProduction, "shop"),
+		stackrecords.EnvironmentsRecord(environment.TierPreview, "shop"),
 	} {
 		partition, err := awsports.Partition(name)
 		if err != nil {
@@ -247,24 +247,24 @@ func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 }
 
 func TestTheSchemaRecordSitsOnTheSameKeyEveryLayoutWrote(t *testing.T) {
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		partition, err := awsports.Partition(stackrecords.SchemaRecord(class))
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		partition, err := awsports.Partition(stackrecords.SchemaRecord(tier))
 		if err != nil {
-			t.Fatalf("Partition(%s) err = %v", stackrecords.SchemaRecord(class), err)
+			t.Fatalf("Partition(%s) err = %v", stackrecords.SchemaRecord(tier), err)
 		}
 		if partition != records.RootSchema {
 			t.Errorf("the %s schema record partitions on %q, want %q: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records",
-				class, partition, records.RootSchema)
+				tier, partition, records.RootSchema)
 		}
 	}
 }
 
 func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
-	shop, err := awsports.Partition(stackrecords.StackRecord(edge.ClassProduction, "shop", naming.InfraStack("shop")))
+	shop, err := awsports.Partition(stackrecords.StackRecord(environment.TierProduction, "shop", naming.InfraStack("shop")))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
-	web, err := awsports.Partition(stackrecords.StackRecord(edge.ClassProduction, "web", naming.InfraStack("web")))
+	web, err := awsports.Partition(stackrecords.StackRecord(environment.TierProduction, "web", naming.InfraStack("web")))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
@@ -278,7 +278,7 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	table, ddb := newRecords(t)
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := envvars.Store{Records: table, Cipher: mustSealer()}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",

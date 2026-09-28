@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -25,7 +26,7 @@ type Gate struct {
 }
 
 type BootstrapStatus struct {
-	Class       edge.Class
+	Tier        environment.Tier
 	Present     bool
 	Stacks      []provider.BootstrapStack
 	Features    []string
@@ -36,12 +37,12 @@ type BootstrapStatus struct {
 	VendorState any
 }
 
-func (g Gate) Status(ctx context.Context, class edge.Class) (BootstrapStatus, error) {
-	described, err := g.Bootstrap.Describe(ctx, class)
+func (g Gate) Status(ctx context.Context, tier environment.Tier) (BootstrapStatus, error) {
+	described, err := g.Bootstrap.Describe(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
 	}
-	status := BootstrapStatus{Class: class, Present: described.Present, Stacks: described.Stacks,
+	status := BootstrapStatus{Tier: tier, Present: described.Present, Stacks: described.Stacks,
 		Unfinished: described.Unfinished, VendorState: described.VendorState}
 	var present []string
 	for _, stack := range described.Stacks {
@@ -55,7 +56,7 @@ func (g Gate) Status(ctx context.Context, class edge.Class) (BootstrapStatus, er
 		}
 	}
 	status.Features = bootstrapplan.InCatalogueOrder(g.Bootstrap.Catalogue(), present)
-	if status.AutoHeal, err = g.autoHeal(ctx, class); err != nil {
+	if status.AutoHeal, err = g.autoHeal(ctx, tier); err != nil {
 		return BootstrapStatus{}, err
 	}
 	return status, nil
@@ -113,8 +114,8 @@ type featureChange struct {
 
 func (g Gate) resolveFeatureChange(status BootstrapStatus, req ApplyRequest) (featureChange, error) {
 	catalogue := g.Bootstrap.Catalogue()
-	class := status.Class
-	if err := RefuseSchemaAhead(status.Schema, status.Present, class); err != nil {
+	tier := status.Tier
+	if err := RefuseSchemaAhead(status.Schema, status.Present, tier); err != nil {
 		return featureChange{}, err
 	}
 	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
@@ -165,9 +166,9 @@ func (g Gate) refuseRemovingEdgeFeature(catalogue []provider.Feature, named, rem
 		strings.Join(named, ", "), edgeFeature, edgeFeature)
 }
 
-func (c featureChange) request(class edge.Class, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
+func (c featureChange) request(tier environment.Tier, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
 	return provider.BootstrapRequest{
-		Class:              class,
+		Tier:               tier,
 		Features:           c.requested,
 		Remove:             c.ordered,
 		RefuseReplacements: !req.AcceptReplacements,
@@ -176,8 +177,8 @@ func (c featureChange) request(class edge.Class, req ApplyRequest, writer provid
 	}
 }
 
-func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (provider.Plan, error) {
-	status, err := g.Status(ctx, class)
+func (g Gate) Plan(ctx context.Context, tier environment.Tier, req ApplyRequest) (provider.Plan, error) {
+	status, err := g.Status(ctx, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -189,15 +190,15 @@ func (g Gate) PlanFrom(ctx context.Context, status BootstrapStatus, req ApplyReq
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	class := status.Class
-	plan, err := g.Bootstrap.Plan(ctx, change.request(class, req, g.WrittenBy))
+	tier := status.Tier
+	plan, err := g.Bootstrap.Plan(ctx, change.request(tier, req, g.WrittenBy))
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return plan, g.noteDependents(ctx, class, plan.Groups)
+	return plan, g.noteDependents(ctx, tier, plan.Groups)
 }
 
-func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []provider.ChangeGroup) error {
+func (g Gate) noteDependents(ctx context.Context, tier environment.Tier, groups []provider.ChangeGroup) error {
 	var dropped []string
 	for _, group := range groups {
 		if group.Action == provider.ActionDelete && group.Feature != "" {
@@ -207,7 +208,7 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []pro
 	if len(dropped) == 0 {
 		return nil
 	}
-	recorded, err := g.RecordedFeatures(ctx, class)
+	recorded, err := g.RecordedFeatures(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -224,8 +225,8 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []pro
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, req ApplyRequest, progress progress.Progress) error {
-	status, err := g.Status(ctx, class)
+func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.Tier, req ApplyRequest, progress progress.Progress) error {
+	status, err := g.Status(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -233,10 +234,10 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 	if err != nil {
 		return err
 	}
-	if err := g.admitRemovals(ctx, class, change.removing, req.Force); err != nil {
+	if err := g.admitRemovals(ctx, tier, change.removing, req.Force); err != nil {
 		return err
 	}
-	drawn, err := g.Bootstrap.Plan(ctx, change.request(class, req, g.WrittenBy))
+	drawn, err := g.Bootstrap.Plan(ctx, change.request(tier, req, g.WrittenBy))
 	if err != nil {
 		return err
 	}
@@ -248,21 +249,21 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 	if req.AutoHeal != nil {
 		autoHeal = *req.AutoHeal
 	}
-	if err := g.Bootstrap.Apply(ctx, change.request(class, req, g.WrittenBy), progress); err != nil {
+	if err := g.Bootstrap.Apply(ctx, change.request(tier, req, g.WrittenBy), progress); err != nil {
 		return err
 	}
-	if err := g.RecordBootstrap(ctx, class, stackrecords.BootstrapSettings{AutoHeal: autoHeal}); err != nil {
+	if err := g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{AutoHeal: autoHeal}); err != nil {
 		return err
 	}
-	return stackrecords.EnsureSchema(ctx, g.Records, class)
+	return stackrecords.EnsureSchema(ctx, g.Records, tier)
 }
 
-func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class, progress progress.Progress) error {
-	if err := g.RefuseIfInUse(ctx, class); err != nil {
+func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.Tier, progress progress.Progress) error {
+	if err := g.RefuseIfInUse(ctx, tier); err != nil {
 		return err
 	}
 	if len(shown.Groups) > 0 {
-		current, err := g.Bootstrap.PlanRemove(ctx, class)
+		current, err := g.Bootstrap.PlanRemove(ctx, tier)
 		if err != nil {
 			return err
 		}
@@ -270,25 +271,25 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class,
 			return err
 		}
 	}
-	if err := g.Bootstrap.Remove(ctx, class, progress); err != nil {
+	if err := g.Bootstrap.Remove(ctx, tier, progress); err != nil {
 		return err
 	}
-	return records.Forget(ctx, g.Records, stackrecords.BootstrapRecord(class))
+	return records.Forget(ctx, g.Records, stackrecords.BootstrapRecord(tier))
 }
 
-func (g Gate) RefuseIfInUse(ctx context.Context, class edge.Class) error {
-	users, err := g.BootstrapUsers(ctx, class)
+func (g Gate) RefuseIfInUse(ctx context.Context, tier environment.Tier) error {
+	users, err := g.BootstrapUsers(ctx, tier)
 	if err != nil {
 		return err
 	}
-	return users.Refuse(class)
+	return users.Refuse(tier)
 }
 
-func (g Gate) admitRemovals(ctx context.Context, class edge.Class, removing []string, force bool) error {
+func (g Gate) admitRemovals(ctx context.Context, tier environment.Tier, removing []string, force bool) error {
 	if len(removing) == 0 || force {
 		return nil
 	}
-	recorded, err := g.RecordedFeatures(ctx, class)
+	recorded, err := g.RecordedFeatures(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -301,14 +302,14 @@ func (g Gate) admitRemovals(ctx context.Context, class edge.Class, removing []st
 		strings.Join(removing, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
-func (g Gate) RecordedFeatures(ctx context.Context, class edge.Class) (map[string][]string, error) {
-	projects, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
+func (g Gate) RecordedFeatures(ctx context.Context, tier environment.Tier) (map[string][]string, error) {
+	projects, err := g.Records.List(ctx, stackrecords.ProjectsRecord(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
 	for _, record := range projects {
-		rest, under := record.Name.Under(stackrecords.ProjectsRecord(class))
+		rest, under := record.Name.Under(stackrecords.ProjectsRecord(tier))
 		if !under || len(rest) != 1 || len(record.Bytes) == 0 {
 			continue
 		}
@@ -335,20 +336,20 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) EnsureReady(ctx context.Context, class edge.Class, required []string, heal bool, progress progress.Progress) (BootstrapStatus, error) {
-	status, err := g.Status(ctx, class)
+func (g Gate) EnsureReady(ctx context.Context, tier environment.Tier, required []string, heal bool, progress progress.Progress) (BootstrapStatus, error) {
+	status, err := g.Status(ctx, tier)
 	if err != nil {
 		return BootstrapStatus{}, err
 	}
-	command := provider.BootstrapCommand(class)
-	if err := CheckSchema(status.Schema, status.Present, class); err != nil {
+	command := provider.BootstrapCommand(tier)
+	if err := CheckSchema(status.Schema, status.Present, tier); err != nil {
 		return status, err
 	}
 	if err := status.lacking(required, command); err != nil {
 		return status, err
 	}
 	if heal && g.heal(ctx, status, required, progress) {
-		if status, err = g.Status(ctx, class); err != nil {
+		if status, err = g.Status(ctx, tier); err != nil {
 			return BootstrapStatus{}, err
 		}
 	}
@@ -385,7 +386,7 @@ func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []strin
 		return false
 	}
 	err := g.Bootstrap.Apply(ctx, provider.BootstrapRequest{
-		Class:              status.Class,
+		Tier:               status.Tier,
 		Features:           status.Features,
 		RefuseReplacements: true,
 		Heal:               true,
@@ -397,7 +398,7 @@ func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []strin
 		return false
 	}
 	if err != nil {
-		warn(progress, fmt.Sprintf("Could not refresh the %s bootstrap, so this run continues against the one in place: %s", status.Class, err))
+		warn(progress, fmt.Sprintf("Could not refresh the %s bootstrap, so this run continues against the one in place: %s", status.Tier, err))
 		return false
 	}
 	return true
@@ -411,32 +412,32 @@ func denied(refused refusal.Refusal) string {
 	return said + ": " + refused.Message
 }
 
-func (g Gate) autoHeal(ctx context.Context, class edge.Class) (bool, error) {
-	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
+func (g Gate) autoHeal(ctx context.Context, tier environment.Tier) (bool, error) {
+	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(tier))
 	if err != nil {
-		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
+		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
 	if len(recorded.Bytes) == 0 {
 		return false, nil
 	}
 	var state stackrecords.BootstrapSettings
 	if err := json.Unmarshal(recorded.Bytes, &state); err != nil {
-		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
+		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
 	return state.AutoHeal, nil
 }
 
-func (g Gate) RecordBootstrap(ctx context.Context, class edge.Class, state stackrecords.BootstrapSettings) error {
-	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
+func (g Gate) RecordBootstrap(ctx context.Context, tier environment.Tier, state stackrecords.BootstrapSettings) error {
+	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(tier))
 	if err != nil {
-		return fmt.Errorf("read the %s bootstrap record: %w", class, err)
+		return fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
 	recorded.Bytes, err = json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("record the %s bootstrap: %w", class, err)
+		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
 	}
 	if _, err := g.Records.Write(ctx, recorded); err != nil {
-		return fmt.Errorf("record the %s bootstrap: %w", class, err)
+		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
 	}
 	return nil
 }
@@ -446,14 +447,14 @@ type BootstrapUsers struct {
 	Wildcard string
 }
 
-func (g Gate) BootstrapUsers(ctx context.Context, class edge.Class) (BootstrapUsers, error) {
-	recorded, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
+func (g Gate) BootstrapUsers(ctx context.Context, tier environment.Tier) (BootstrapUsers, error) {
+	recorded, err := g.Records.List(ctx, stackrecords.ProjectsRecord(tier))
 	if err != nil {
 		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
 	for _, record := range recorded {
-		rest, under := record.Name.Under(stackrecords.ProjectsRecord(class))
+		rest, under := record.Name.Under(stackrecords.ProjectsRecord(tier))
 		if !under || rest[0] == "" {
 			continue
 		}
@@ -462,21 +463,21 @@ func (g Gate) BootstrapUsers(ctx context.Context, class edge.Class) (BootstrapUs
 	slices.Sort(projects)
 	users := BootstrapUsers{Projects: slices.Compact(projects)}
 
-	wildcard, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.WildcardRecord(class))
+	wildcard, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.WildcardRecord(tier))
 	if err != nil {
-		return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
+		return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 	}
 	if len(wildcard.Bytes) > 0 {
 		var recorded stackrecords.Wildcard
 		if err := json.Unmarshal(wildcard.Bytes, &recorded); err != nil {
-			return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
+			return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 		}
 		users.Wildcard = recorded.BaseDomain
 	}
 	return users, nil
 }
 
-func (u BootstrapUsers) Refuse(class edge.Class) error {
+func (u BootstrapUsers) Refuse(tier environment.Tier) error {
 	if len(u.Projects) == 0 && u.Wildcard == "" {
 		return nil
 	}
@@ -484,7 +485,7 @@ func (u BootstrapUsers) Refuse(class edge.Class) error {
 	if len(u.Projects) > 0 {
 		reasons = append(reasons, fmt.Sprintf(
 			"%d project(s) are still deployed into it: %s — run `%s` in each one first",
-			len(u.Projects), strings.Join(u.Projects, ", "), destroyCommand(class)))
+			len(u.Projects), strings.Join(u.Projects, ", "), destroyCommand(tier)))
 	}
 	if u.Wildcard != "" {
 		reasons = append(reasons, fmt.Sprintf(
@@ -492,7 +493,7 @@ func (u BootstrapUsers) Refuse(class edge.Class) error {
 			edge.PreviewWildcard(u.Wildcard)))
 	}
 	return refusal.Refuse(refusal.CodeNotReady, "the %s bootstrap is still in use, so `%s` will not remove it: %s",
-		class, bootstrapDestroyCommand(class), strings.Join(reasons, "; "))
+		tier, bootstrapDestroyCommand(tier), strings.Join(reasons, "; "))
 }
 
 type compatibility int
@@ -533,32 +534,32 @@ func (c compatibility) explain(deployed, required int, command string) error {
 	}
 }
 
-func CheckSchema(deployed int, present bool, class edge.Class) error {
-	return checkCompat(deployed, present, provider.BootstrapSchema).explain(deployed, provider.BootstrapSchema, provider.BootstrapCommand(class))
+func CheckSchema(deployed int, present bool, tier environment.Tier) error {
+	return checkCompat(deployed, present, provider.BootstrapSchema).explain(deployed, provider.BootstrapSchema, provider.BootstrapCommand(tier))
 }
 
-func RefuseSchemaAhead(deployed int, present bool, class edge.Class) error {
+func RefuseSchemaAhead(deployed int, present bool, tier environment.Tier) error {
 	if checkCompat(deployed, present, provider.BootstrapSchema) != needsCLIUpgrade {
 		return nil
 	}
-	return schemaAhead(deployed, class)
+	return schemaAhead(deployed, tier)
 }
 
-func schemaAhead(deployed int, class edge.Class) error {
+func schemaAhead(deployed int, tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI, or run `%s` and bootstrap it afresh — there is no way to write an older shape over a newer one",
-		deployed, provider.BootstrapSchema, bootstrapDestroyCommand(class))
+		deployed, provider.BootstrapSchema, bootstrapDestroyCommand(tier))
 }
 
-func bootstrapDestroyCommand(class edge.Class) string {
-	if class == edge.ClassPreview {
+func bootstrapDestroyCommand(tier environment.Tier) string {
+	if tier == environment.TierPreview {
 		return "ocel bootstrap destroy preview"
 	}
 	return "ocel bootstrap destroy production"
 }
 
-func destroyCommand(class edge.Class) string {
-	if class == edge.ClassPreview {
+func destroyCommand(tier environment.Tier) string {
+	if tier == environment.TierPreview {
 		return "ocel destroy preview"
 	}
 	return "ocel destroy production"

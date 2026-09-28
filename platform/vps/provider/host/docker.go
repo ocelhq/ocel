@@ -225,7 +225,7 @@ const (
 var engineFloor = strconv.Itoa(engineFloorMajor) + "." + strconv.Itoa(engineFloorMinor)
 
 func (r Reading) runnableEngine(named string) error {
-	command := provider.BootstrapCommand(r.Class)
+	command := provider.BootstrapCommand(r.Tier)
 	current := r.Engine
 	switch current.Kind {
 	case "":

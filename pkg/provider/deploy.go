@@ -1,14 +1,14 @@
 package provider
 
 import (
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type DeploySpec struct {
 	Slug    string
-	Class   edge.Class
+	Tier    environment.Tier
 	Env     string
 	Label   string
 	Pointer string

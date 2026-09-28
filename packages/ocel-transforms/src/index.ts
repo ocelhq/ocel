@@ -1,5 +1,5 @@
 export type {
-  EnvClass,
+  EnvTier,
   Gate,
   GateContext,
   ProviderName,

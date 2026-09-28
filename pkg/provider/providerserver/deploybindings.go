@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -87,8 +87,8 @@ func RefuseMismatchedBinding(binding provider.Binding, declaredName string, decl
 }
 
 func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []string) error {
-	elsewhere := r.publishingClasses(ctx, missing)
-	coordinate := describeCoordinate(string(r.spec.Class), bindingEnvironment(r.spec))
+	elsewhere := r.publishingTiers(ctx, missing)
+	coordinate := describeCoordinate(string(r.spec.Tier), bindingEnvironment(r.spec))
 
 	var b strings.Builder
 	fmt.Fprintf(&b,
@@ -96,10 +96,10 @@ func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
 		quoteAll(missing), thatName(len(missing)), coordinate)
 	for _, name := range missing {
-		if classes := elsewhere[name]; len(classes) > 0 {
+		if tiers := elsewhere[name]; len(tiers) > 0 {
 			fmt.Fprintf(&b,
 				"\n\n%q is published to %s instead. A publisher writes to one coordinate: point one at %s as well",
-				name, strings.Join(classes, " and "), r.spec.Class)
+				name, strings.Join(tiers, " and "), r.spec.Tier)
 		}
 	}
 	if len(published) == 0 {
@@ -110,19 +110,19 @@ func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []
 	return refusal.Refuse(refusal.CodeNotReady, "%s", b.String())
 }
 
-func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map[string][]string {
+func (r *deployRun) publishingTiers(ctx context.Context, missing []string) map[string][]string {
 	found := map[string][]string{}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if class == r.spec.Class {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if tier == r.spec.Tier {
 			continue
 		}
-		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.spec.Slug, Class: class}, bindingEnvironment(r.spec))
+		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.spec.Slug, Tier: tier}, bindingEnvironment(r.spec))
 		if err != nil {
 			continue
 		}
 		for _, name := range missing {
 			if slices.Contains(names, name) {
-				found[name] = append(found[name], string(class))
+				found[name] = append(found[name], string(tier))
 			}
 		}
 	}
@@ -141,16 +141,16 @@ func (r *deployRun) warnShadowed(progress progress.Progress, resources []provide
 		progress.Warn(fmt.Sprintf(
 			"A binding named %q is already published to %s, and this deploy provisions %s beside it. "+
 				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
-			resource.Declared, describeCoordinate(string(r.spec.Class), bindingEnvironment(r.spec)), resource.Name,
+			resource.Declared, describeCoordinate(string(r.spec.Tier), bindingEnvironment(r.spec)), resource.Name,
 			resource.Declared, string(resource.Type), resource.Declared, "@"+resource.Declared))
 	}
 }
 
-func describeCoordinate(class, environment string) string {
+func describeCoordinate(tier, environment string) string {
 	if environment == "" {
-		return class
+		return tier
 	}
-	return class + "/" + environment
+	return tier + "/" + environment
 }
 
 func thatName(n int) string {

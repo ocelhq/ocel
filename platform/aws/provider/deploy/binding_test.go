@@ -75,7 +75,7 @@ func TestVarsReadPolicyReachesOneValuePartitionPerProject(t *testing.T) {
 		VarsKeyARN:     productionVarsKeyARN,
 		ValuesTableARN: valuesTableARN,
 		Slug:           "shop",
-		VarsClass:      varsClass,
+		VarsTier:       varsTier,
 	})
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)

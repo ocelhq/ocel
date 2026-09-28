@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func storelessRef() provider.ArtifactRef {
-	return provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"}
+	return provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"}
 }
 
 func TestTheStorelessStoreRefusesAWriteItCannotHonour(t *testing.T) {
@@ -64,10 +64,10 @@ func TestTheStorelessStoreSweepsAnyPrefixWithoutComplaint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for _, prefix := range []string{"", "shop/prod/", "shop/nothing-was-ever-written-here/"} {
-			if err := (NoArtifacts{}).RemovePrefix(ctx, class, prefix, nil); err != nil {
-				t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", class, prefix, err)
+			if err := (NoArtifacts{}).RemovePrefix(ctx, tier, prefix, nil); err != nil {
+				t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", tier, prefix, err)
 			}
 		}
 	}

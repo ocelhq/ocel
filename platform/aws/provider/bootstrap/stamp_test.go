@@ -15,8 +15,8 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("same bytes same digest", func(t *testing.T) {
 		t.Parallel()
 
-		body := coreStackTemplate(defaultNamespace, ClassProduction, "")
-		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, "")) {
+		body := coreStackTemplate(defaultNamespace, TierProduction, "")
+		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, TierProduction, "")) {
 			t.Fatal("rendering the same template twice must produce the same digest")
 		}
 	})
@@ -24,7 +24,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("different bytes different digest", func(t *testing.T) {
 		t.Parallel()
 
-		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, "")) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassPreview, "")) {
+		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, TierProduction, "")) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, TierPreview, "")) {
 			t.Fatal("two different template bodies must not share a digest")
 		}
 	})
@@ -41,7 +41,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("parameter values are not in the body", func(t *testing.T) {
 		t.Parallel()
 
-		in := featureInputs{ns: defaultNamespace, class: ClassProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
+		in := featureInputs{ns: defaultNamespace, tier: TierProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
 		other := in
 		other.refs = stackRefs{assetBucket: "bucket-two", assetBucketARN: "arn:two"}
 		if cfn.TemplateDigest(imageOptimizationTemplate(in).body) != cfn.TemplateDigest(imageOptimizationTemplate(other).body) {

@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -29,8 +30,8 @@ type Provider struct {
 	aws        aws.Config
 	namespace  bootstrap.Namespace
 
-	deployed memo[edge.Class, bootstrap.Deployed]
-	params   memo[classEdge, bootstrap.ClassParams]
+	deployed memo[environment.Tier, bootstrap.Deployed]
+	params   memo[tierEdge, bootstrap.TierParams]
 	account  memo[struct{}, string]
 
 	stacks *deploy.Stacks

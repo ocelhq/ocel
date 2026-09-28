@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -26,8 +26,8 @@ func heardAll(t *testing.T, progress *fake.Progress, want ...string) {
 func TestABootstrapRemovalSaysWhatItRemovedAndWhatItKeptAndWhy(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	box.answer = func(command string) (session.Result, bool) {
 		if strings.HasPrefix(command, "rmdir "+quoted("/usr/local/lib/ocel")+" ") {
 			return session.Result{Stdout: dirNonEmpty + "\n"}, true
@@ -36,7 +36,7 @@ func TestABootstrapRemovalSaysWhatItRemovedAndWhatItKeptAndWhy(t *testing.T) {
 	}
 	progress := &fake.Progress{}
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	heardAll(t, progress,
@@ -56,15 +56,15 @@ func TestABootstrapRemovalSaysWhatItRemovedAndWhatItKeptAndWhy(t *testing.T) {
 func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
-	box.installed[class] = slices.DeleteFunc(box.installed[class], func(item Item) bool {
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
+	box.installed[tier] = slices.DeleteFunc(box.installed[tier], func(item Item) bool {
 		return item.Kind == KindUnit && item.Name == BackupsTimer
 	})
 	progress := &fake.Progress{}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	heardAll(t, progress,
@@ -76,14 +76,14 @@ func TestAnApplySaysWhatItInstalledAndLeavesWhatWasCurrentToDebug(t *testing.T) 
 func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	installed := bootstrapped(t, class)
+	tier := environment.TierProduction
+	installed := bootstrapped(t, tier)
 	for at, item := range installed {
-		if (item.Kind == KindDir && item.Name == RecordsDir(class)) || (item.Kind == KindUnit && item.Name == dockerUnit) {
+		if (item.Kind == KindDir && item.Name == RecordsDir(tier)) || (item.Kind == KindUnit && item.Name == dockerUnit) {
 			installed[at].Mode = 0o700
 		}
 	}
-	box := machine(map[edge.Class][]Item{class: installed})
+	box := machine(map[environment.Tier][]Item{tier: installed})
 	box.answer = func(command string) (session.Result, bool) {
 		if command != "cat ~/.ssh/authorized_keys 2>/dev/null" {
 			return session.Result{}, false
@@ -93,7 +93,7 @@ func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 	progress := &fake.Progress{}
 
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite", Heal: true}, progress); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Heal: true}, progress); err != nil {
 		t.Fatalf("heal = %v", err)
 	}
 	heardAll(t, progress,

@@ -89,8 +89,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction)},
-			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview)},
+			{"production", featureTemplate(FeatureCloudflareEdge, TierProduction)},
+			{"preview", featureTemplate(FeatureCloudflareEdge, TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -142,7 +142,7 @@ func TestTagPublisher(t *testing.T) {
 	})
 
 	t.Run("filter confines it to tag records", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureCloudflareEdge, ClassProduction))
+		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureCloudflareEdge, TierProduction))
 		filters := tmpl.Resources["TagPublisherStream"].Properties.FilterCriteria.Filters
 		if len(filters) != 1 {
 			t.Fatalf("FilterCriteria.Filters = %+v, want exactly one pattern", filters)
@@ -179,8 +179,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction)},
-			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview)},
+			{"production", featureTemplate(FeatureCloudflareEdge, TierProduction)},
+			{"preview", featureTemplate(FeatureCloudflareEdge, TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				for name, res := range parsePublisherTemplate(t, tc.template).Resources {
@@ -202,8 +202,8 @@ func TestTagPublisher(t *testing.T) {
 			seedParam  string
 			otherParam string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction), cloudflareNames(ClassProduction).isrWriterSeedParam, cloudflareNames(ClassPreview).isrWriterSeedParam},
-			{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview), cloudflareNames(ClassPreview).isrWriterSeedParam, cloudflareNames(ClassProduction).isrWriterSeedParam},
+			{"production", featureTemplate(FeatureCloudflareEdge, TierProduction), cloudflareNames(TierProduction).isrWriterSeedParam, cloudflareNames(TierPreview).isrWriterSeedParam},
+			{"preview", featureTemplate(FeatureCloudflareEdge, TierPreview), cloudflareNames(TierPreview).isrWriterSeedParam, cloudflareNames(TierProduction).isrWriterSeedParam},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)

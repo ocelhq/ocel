@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-func TestAClassDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
+func TestATierDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 	t.Parallel()
 
-	empty := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{}}
-	beside := Reading{Arch: ArchAMD64, Class: edge.ClassPreview, Observed: map[string]string{}}
+	empty := Reading{Arch: ArchAMD64, Tier: environment.TierProduction, Observed: map[string]string{}}
+	beside := Reading{Arch: ArchAMD64, Tier: environment.TierPreview, Observed: map[string]string{}}
 	taken := removing(empty, beside, appsPresent{containers: true, volumes: true})
 
 	containers, volumes := -1, -1
@@ -33,25 +33,25 @@ func TestAClassDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 		t.Errorf("the volumes are taken at %d and the containers at %d, and the engine refuses a volume a container still mounts", volumes, containers)
 	}
 	command := taken[volumes].command()
-	if !strings.Contains(command, "docker volume rm") || !strings.Contains(command, "label=ocel.class=production") {
-		t.Errorf("the volumes are taken by %q, which is bounded by no class", command)
+	if !strings.Contains(command, "docker volume rm") || !strings.Contains(command, "label=ocel.tier=production") {
+		t.Errorf("the volumes are taken by %q, which is bounded by no tier", command)
 	}
 }
 
-func TestAClassProbeAsksForVolumesUnderItsOwnLabel(t *testing.T) {
+func TestATierProbeAsksForVolumesUnderItsOwnLabel(t *testing.T) {
 	t.Parallel()
 
-	probe := appsProbe(edge.ClassPreview)
-	if !strings.Contains(probe, "docker volume ls") || !strings.Contains(probe, "label=ocel.class=preview") {
+	probe := appsProbe(environment.TierPreview)
+	if !strings.Contains(probe, "docker volume ls") || !strings.Contains(probe, "label=ocel.tier=preview") {
 		t.Errorf("the probe reads %q and never learns whether preview kept a volume", probe)
 	}
 }
 
-func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThem(t *testing.T) {
+func TestATierDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThem(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	box.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "echo volumes") {
 			return session.Result{Stdout: "containers\nvolumes\n"}, true
@@ -59,10 +59,10 @@ func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThe
 		return session.Result{}, false
 	}
 	progress := &said{}
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
-		t.Fatalf("Remove() = %v, and a class that kept a volume can never be destroyed", err)
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress); err != nil {
+		t.Fatalf("Remove() = %v, and a tier that kept a volume can never be destroyed", err)
 	}
-	if taken := "Removed the resource volumes labelled " + classSelector(class); !slices.Contains(progress.lines, taken) {
+	if taken := "Removed the resource volumes labelled " + tierSelector(tier); !slices.Contains(progress.lines, taken) {
 		t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 	}
 	containers := box.at("xargs -r docker rm --force")

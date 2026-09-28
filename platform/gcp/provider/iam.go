@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -97,31 +97,31 @@ func (c *clients) bindProjectRole(ctx context.Context, member, role string, cond
 	return fmt.Errorf("update the %s binding of %s on project %s: %w", role, member, c.project, refused)
 }
 
-func (c *clients) keyPolicy(ctx context.Context, class edge.Class) (*iampb.Policy, error) {
+func (c *clients) keyPolicy(ctx context.Context, tier environment.Tier) (*iampb.Policy, error) {
 	client, err := c.KMS()
 	if err != nil {
 		return nil, err
 	}
-	key := keyPath(c, string(class))
+	key := keyPath(c, string(tier))
 	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: key})
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read the %s key: %w", class, err)
+		return nil, fmt.Errorf("read the %s key: %w", tier, err)
 	}
 	policy, err := dialled(ctx, func() (*iampb.Policy, error) {
 		return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: key})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read who may use the %s key: %w", class, err)
+		return nil, fmt.Errorf("read who may use the %s key: %w", tier, err)
 	}
 	return policy, nil
 }
 
-func (c *clients) keyRolesGranted(ctx context.Context, class edge.Class, member string, roles []string) (bool, error) {
-	policy, err := c.keyPolicy(ctx, class)
+func (c *clients) keyRolesGranted(ctx context.Context, tier environment.Tier, member string, roles []string) (bool, error) {
+	policy, err := c.keyPolicy(ctx, tier)
 	if err != nil || policy == nil {
 		return false, err
 	}
@@ -135,8 +135,8 @@ func (c *clients) keyRolesGranted(ctx context.Context, class edge.Class, member 
 	return true, nil
 }
 
-func (c *clients) bindKeyRoles(ctx context.Context, class edge.Class, member string, roles, wanted []string) (bool, error) {
-	policy, err := c.keyPolicy(ctx, class)
+func (c *clients) bindKeyRoles(ctx context.Context, tier environment.Tier, member string, roles, wanted []string) (bool, error) {
+	policy, err := c.keyPolicy(ctx, tier)
 	if err != nil || policy == nil {
 		return false, err
 	}
@@ -150,9 +150,9 @@ func (c *clients) bindKeyRoles(ctx context.Context, class edge.Class, member str
 	}
 	policy.Bindings = bindings
 	if _, err := dialled(ctx, func() (*iampb.Policy, error) {
-		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: keyPath(c, string(class)), Policy: policy})
+		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: keyPath(c, string(tier)), Policy: policy})
 	}); err != nil {
-		return false, fmt.Errorf("set the roles %s has on the %s key to %v: %w", member, class, wanted, err)
+		return false, fmt.Errorf("set the roles %s has on the %s key to %v: %w", member, tier, wanted, err)
 	}
 	return true, nil
 }

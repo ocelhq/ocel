@@ -191,7 +191,7 @@ func boundaryScopes(condition map[string]any) bool {
 		}
 		arns = append(arns, arn)
 	}
-	return slices.Equal(arns, []string{appBoundaryARNFor(defaultNamespace, ClassProduction), appBoundaryARNFor(defaultNamespace, ClassPreview)})
+	return slices.Equal(arns, []string{appBoundaryARNFor(defaultNamespace, TierProduction), appBoundaryARNFor(defaultNamespace, TierPreview)})
 }
 
 func conditionScopes(actions []string, condition map[string]any) bool {

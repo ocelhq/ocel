@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -28,7 +28,7 @@ func (vm machine) deploying(t *testing.T) *vps.Provider {
 	return p
 }
 
-func bootstrapped(t *testing.T, vm machine, class edge.Class) *vps.Provider {
+func bootstrapped(t *testing.T, vm machine, tier environment.Tier) *vps.Provider {
 	t.Helper()
 	p := vm.provider(t)
 	t.Cleanup(func() { closing(t, p) })
@@ -38,15 +38,15 @@ func bootstrapped(t *testing.T, vm machine, class edge.Class) *vps.Provider {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	described, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
-		t.Fatalf("Describe(%s) = %v", class, err)
+		t.Fatalf("Describe(%s) = %v", tier, err)
 	}
 	if described.Present && !described.Unfinished && described.Stacks[0].DigestCurrent {
 		return p
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply(%s) = %v", class, err)
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) = %v", tier, err)
 	}
 	return p
 }
@@ -59,16 +59,16 @@ func dirties(t *testing.T, vm machine) {
 	})
 }
 
-func sealedAt(class edge.Class, name string) records.SealScope {
-	return records.SealScope{Project: "shop", Class: class, Env: "*", Folder: "/", Name: name}
+func sealedAt(tier environment.Tier, name string) records.SealScope {
+	return records.SealScope{Project: "shop", Tier: tier, Env: "*", Folder: "/", Name: name}
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 	vm := liveMachine(t)
-	class := edge.ClassProduction
-	bootstrapped(t, vm, class)
+	tier := environment.TierProduction
+	bootstrapped(t, vm, tier)
 
-	key := host.SealKeyPath(class)
+	key := host.SealKeyPath(tier)
 	if posture := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%a %U %s' "+key)); posture != "400 root 32" {
 		t.Errorf("%s is %q, want `400 root 32`: 32 bytes of this machine's own randomness, readable by root and nothing beside", key, posture)
 	}
@@ -82,12 +82,12 @@ func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 
 func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *testing.T) {
 	vm := liveMachine(t)
-	class := edge.ClassProduction
-	bootstrapped(t, vm, class)
+	tier := environment.TierProduction
+	bootstrapped(t, vm, tier)
 
 	ctx := context.Background()
 	cipher := vm.deploying(t).Cipher()
-	at := sealedAt(class, "DATABASE_URL")
+	at := sealedAt(tier, "DATABASE_URL")
 
 	written, err := cipher.Seal(ctx, at, []byte(sealed))
 	if err != nil {
@@ -105,15 +105,15 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Errorf("the round trip answered %q, want %q", opened, sealed)
 	}
 
-	if moved, err := cipher.Open(ctx, sealedAt(class, "API_KEY"), written); err == nil {
+	if moved, err := cipher.Open(ctx, sealedAt(tier, "API_KEY"), written); err == nil {
 		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the coordinate authenticates nothing", moved)
 	}
 }
 
 func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	vm := liveMachine(t)
-	class := edge.ClassProduction
-	p := bootstrapped(t, vm, class)
+	tier := environment.TierProduction
+	p := bootstrapped(t, vm, tier)
 	dirties(t, vm)
 
 	ctx := context.Background()
@@ -121,7 +121,7 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	described, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,26 +129,26 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 		t.Fatal("Describe() after an apply that finished is not current, so nothing below is about the key")
 	}
 
-	key := host.SealKeyPath(class)
-	if _, err := vm.attempt(deployLogin, "sudo -n "+boxstore.SealHelper+" "+string(class)+" init"); err == nil {
+	key := host.SealKeyPath(tier)
+	if _, err := vm.attempt(deployLogin, "sudo -n "+boxstore.SealHelper+" "+string(tier)+" init"); err == nil {
 		t.Errorf("a second init over an existing key exited 0, and every value sealed to %s went with it", key)
 	}
 
 	vm.ssh(t, "sudo rm -f "+key)
-	vm.ssh(t, "sudo "+boxstore.SealHelper+" "+string(class)+" init")
+	vm.ssh(t, "sudo "+boxstore.SealHelper+" "+string(tier)+" init")
 
-	replaced, err := bootstrap.Describe(ctx, class)
+	replaced, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() over a replaced key = %v", err)
 	}
 	if replaced.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a host whose seal key was replaced current, so drift in what every secret opens to is invisible")
 	}
-	if !strings.Contains(vm.ssh(t, "sudo cat "+host.StampPath(class)), host.SealAlgorithm) {
+	if !strings.Contains(vm.ssh(t, "sudo cat "+host.StampPath(tier)), host.SealAlgorithm) {
 		t.Errorf("the stamp says nothing about how a value is sealed, and %q is what the record claims", host.SealAlgorithm)
 	}
 
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err == nil {
-		t.Error("an apply over a replaced key finished, and the stamp now records a key that opens nothing this class ever sealed")
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err == nil {
+		t.Error("an apply over a replaced key finished, and the stamp now records a key that opens nothing this tier ever sealed")
 	}
 }

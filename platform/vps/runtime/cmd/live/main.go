@@ -35,8 +35,8 @@ func run(argv []string, errs *os.File) int {
 	flags := flag.NewFlagSet("ocel-live", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	listen := flags.String("listen", live.SocketPath, "the unix socket to answer on when systemd hands over none")
-	classRoot := flags.String("class-root", live.ClassRoot, "where each class keeps its seal key")
-	stateRoot := flags.String("state-root", live.StateRoot, "where each class keeps its records")
+	tierRoot := flags.String("tier-root", live.TierRoot, "where each tier keeps its seal key")
+	stateRoot := flags.String("state-root", live.StateRoot, "where each tier keeps its records")
 	proc := flags.String("proc", agent.ProcRoot, "the procfs a caller's cgroup is read from")
 	routingTable := flags.String("routing-table", live.RoutingTable, "routing table to read this box's hostnames from")
 	if err := flags.Parse(argv); err != nil {
@@ -58,7 +58,7 @@ func run(argv []string, errs *os.File) int {
 	server := &agent.Server{
 		Proc:    *proc,
 		Inspect: inspect,
-		Resolve: agent.Store{ClassRoot: *classRoot, StateRoot: *stateRoot, RoutingTable: *routingTable},
+		Resolve: agent.Store{TierRoot: *tierRoot, StateRoot: *stateRoot, RoutingTable: *routingTable},
 		Space:   inspect,
 	}
 	if err := server.Serve(ctx, ln); err != nil {

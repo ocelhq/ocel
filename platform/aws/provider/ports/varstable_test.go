@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -22,9 +22,11 @@ const (
 
 type splitTables struct{}
 
-func (splitTables) Table(context.Context, edge.Class) (string, error) { return fakeStateTable, nil }
+func (splitTables) Table(context.Context, environment.Tier) (string, error) {
+	return fakeStateTable, nil
+}
 
-func (splitTables) ValuesTable(context.Context, edge.Class) (string, error) {
+func (splitTables) ValuesTable(context.Context, environment.Tier) (string, error) {
 	return fakeVarsTable, nil
 }
 
@@ -36,7 +38,7 @@ func newSplitRecords() (awsports.Records, *fakeDynamo) {
 func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 	table, ddb := newSplitRecords()
 	store := envvars.Store{Records: table, Cipher: mustSealer()}
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -51,15 +53,15 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 	table, ddb := newSplitRecords()
 	ctx := context.Background()
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
-	registration, err := envsource.Register(ctx, envvars.Store{Records: table, Cipher: mustSealer()}, edge.ClassProduction, registration)
+	registration, err := envsource.Register(ctx, envvars.Store{Records: table, Cipher: mustSealer()}, environment.TierProduction, registration)
 	if err != nil {
 		t.Fatalf("Register err = %v", err)
 	}
-	listed, err := envsource.Registrations(ctx, table, edge.ClassProduction)
+	listed, err := envsource.Registrations(ctx, table, environment.TierProduction)
 	if err != nil || len(listed) != 1 || listed[0].Project != "shop" {
 		t.Fatalf("Registrations = %+v, %v", listed, err)
 	}
-	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: mustSealer()}, Class: edge.ClassProduction}
+	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: mustSealer()}, Tier: environment.TierProduction}
 	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[envvars.Cell]envsource.Value{{Key: "K"}: {Plaintext: []byte("v")}})); err != nil {
 		t.Fatalf("CopyProjectFrom err = %v", err)
 	}
@@ -73,7 +75,7 @@ func TestDeployStateStaysInTheStateTable(t *testing.T) {
 	store, ddb := newSplitRecords()
 
 	if _, err := store.Write(context.Background(), records.Record{
-		Name:  records.Name{records.RootStacks, string(edge.ClassProduction), "shop"},
+		Name:  records.Name{records.RootStacks, string(environment.TierProduction), "shop"},
 		Bytes: []byte("{}"),
 	}); err != nil {
 		t.Fatalf("Write err = %v", err)
@@ -86,11 +88,11 @@ func TestDeployStateStaysInTheStateTable(t *testing.T) {
 
 type keylessBootstrap struct{}
 
-func (keylessBootstrap) Key(context.Context, edge.Class) (string, error) { return "", nil }
+func (keylessBootstrap) Key(context.Context, environment.Tier) (string, error) { return "", nil }
 
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 	sealer := awsports.Cipher{Keys: keylessBootstrap{}}
-	at := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+	at := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {
@@ -107,7 +109,7 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	sealer := awsports.Cipher{}
-	at := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+	at := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {

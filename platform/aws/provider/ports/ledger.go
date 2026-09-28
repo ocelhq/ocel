@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 )
 
-func Ledger(dynamo DynamoAPI, tables Tables, class edge.Class, slug string) *ledger.Ledger {
-	return ledger.New(ledgerRecords{Records{Dynamo: dynamo, Tables: tables}}, class, slug)
+func Ledger(dynamo DynamoAPI, tables Tables, tier environment.Tier, slug string) *ledger.Ledger {
+	return ledger.New(ledgerRecords{Records{Dynamo: dynamo, Tables: tables}}, tier, slug)
 }
 
 type ledgerRecords struct{ Records }

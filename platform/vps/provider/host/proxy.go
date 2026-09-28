@@ -439,7 +439,7 @@ func (s boxContainer) networksPresent() string {
 func joinedFact(joined userNetwork) string { return "network:" + joined.name + "=" }
 
 func rejoining(name string) string {
-	return "for net in $(docker network ls --quiet --filter " + quoted("label="+LabelClass) + "); do\n" +
+	return "for net in $(docker network ls --quiet --filter " + quoted("label="+LabelTier) + "); do\n" +
 		"docker network connect \"$net\" " + quoted(name) + " >/dev/null\n" +
 		"done\n"
 }

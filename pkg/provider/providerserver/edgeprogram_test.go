@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -134,8 +135,8 @@ func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	if spec.Program == nil {
 		t.Fatal("the stack has no program, and the relay edge answers every request from an entry worker")
 	}
-	if spec.Program.Name != fake.ProgramName("shop", edge.ClassProduction) {
-		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", edge.ClassProduction))
+	if spec.Program.Name != fake.ProgramName("shop", environment.TierProduction) {
+		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", environment.TierProduction))
 	}
 	if spec.Program.Worker.Vars[fake.ProgramPreviewAppsVar] != "web" {
 		t.Errorf("Vars[%s] = %q, want the manifest's app names",
@@ -247,7 +248,7 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	state := readStack(t, vendor, edge.ClassPreview, "shop")
+	state := readStack(t, vendor, environment.TierPreview, "shop")
 	if !state.Edge.ServedOnGlobalPreview("preview.acme.com") {
 		t.Errorf("the stack records %q, want the wildcard every preview of it is served on", state.Edge.GlobalPreview)
 	}
@@ -270,7 +271,7 @@ func TestPreviewDeployOnItsOwnWildcardServesFromItsOwnWorker(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	state := readStack(t, vendor, edge.ClassPreview, "shop")
+	state := readStack(t, vendor, environment.TierPreview, "shop")
 	if state.Edge.GlobalPreview != "" {
 		t.Errorf("the stack records %q, want nothing: this project serves its previews on a wildcard of its own", state.Edge.GlobalPreview)
 	}

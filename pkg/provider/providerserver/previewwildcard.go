@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -57,7 +58,7 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 }
 
 func (w *wildcards) save(ctx context.Context) error {
-	name := stackrecords.WildcardRecord(edge.ClassPreview)
+	name := stackrecords.WildcardRecord(environment.TierPreview)
 	record, err := records.ReadOrEmpty(ctx, w.records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -72,7 +73,7 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	unit := UnitStage(naming.UnitEdge, string(edge.ClassPreview),
+	unit := UnitStage(naming.UnitEdge, string(environment.TierPreview),
 		"Serving every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain()), progressv1.Phase_PHASE_PROVISION)
 	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
@@ -118,7 +119,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 
 	progress.Say("Reconciling the shared preview entry on " + wildcard)
 	program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
-		Class:             edge.ClassPreview,
+		Tier:              environment.TierPreview,
 		PreviewBaseDomain: base,
 	})
 	if err != nil {
@@ -384,7 +385,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	unit := UnitStage(naming.UnitEdge, string(edge.ClassPreview), "Releasing the global preview domain", progressv1.Phase_PHASE_DESTROY)
+	unit := UnitStage(naming.UnitEdge, string(environment.TierPreview), "Releasing the global preview domain", progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
@@ -426,5 +427,5 @@ func (w *wildcards) release(ctx context.Context, progress progress.Progress) err
 			return err
 		}
 	}
-	return records.Forget(ctx, w.records, stackrecords.WildcardRecord(edge.ClassPreview))
+	return records.Forget(ctx, w.records, stackrecords.WildcardRecord(environment.TierPreview))
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/user"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -38,8 +39,8 @@ const (
 	tokenPageSize = 50
 )
 
-func cacheStoreNameFor(namespace string, class edge.Class) (string, error) {
-	return accountNameFor("edge cache store", namespace, class, "edge-cache")
+func cacheStoreNameFor(namespace string, tier environment.Tier) (string, error) {
+	return accountNameFor("edge cache store", namespace, tier, "edge-cache")
 }
 
 func adoptedValues(cacheBucket string) map[string]string {
@@ -117,8 +118,8 @@ type cacheStoreState struct {
 	tokenPresent  bool
 }
 
-func (s cacheStore) read(ctx context.Context, accountID string, class edge.Class) (cacheStoreState, error) {
-	name, err := cacheStoreNameFor(s.namespace, class)
+func (s cacheStore) read(ctx context.Context, accountID string, tier environment.Tier) (cacheStoreState, error) {
+	name, err := cacheStoreNameFor(s.namespace, tier)
 	if err != nil {
 		return cacheStoreState{}, err
 	}
@@ -179,8 +180,8 @@ func (s cacheStore) bootstrap(ctx context.Context, accountID string, state cache
 	}, nil
 }
 
-func (s cacheStore) teardown(ctx context.Context, accountID string, class edge.Class) error {
-	name, err := cacheStoreNameFor(s.namespace, class)
+func (s cacheStore) teardown(ctx context.Context, accountID string, tier environment.Tier) error {
+	name, err := cacheStoreNameFor(s.namespace, tier)
 	if err != nil {
 		return err
 	}

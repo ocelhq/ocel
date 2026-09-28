@@ -3,7 +3,7 @@ package aws
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -18,12 +18,12 @@ func (p *Provider) forget() {
 type forgetting struct {
 	provider.Bootstrap
 	forget  func()
-	key     func(context.Context, edge.Class) (string, error)
+	key     func(context.Context, environment.Tier) (string, error)
 	records records.Store
 }
 
 func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
-	sealing, err := s.key(ctx, req.Class)
+	sealing, err := s.key(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
@@ -34,15 +34,15 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 	if sealing == "" {
 		return nil
 	}
-	now, err := s.key(ctx, req.Class)
+	now, err := s.key(ctx, req.Tier)
 	if err != nil || now == sealing {
 		return err
 	}
-	return envsource.ForgetDigestKey(ctx, s.records, req.Class)
+	return envsource.ForgetDigestKey(ctx, s.records, req.Tier)
 }
 
-func (s forgetting) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
-	if err := s.Bootstrap.Remove(ctx, class, progress); err != nil {
+func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+	if err := s.Bootstrap.Remove(ctx, tier, progress); err != nil {
 		return err
 	}
 	s.forget()

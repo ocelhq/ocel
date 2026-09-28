@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -116,16 +116,16 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -220,15 +220,15 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 		t.Errorf("the switchboard publishes %s, and nothing but the front proxy is reached from off the box", published)
 	}
 
-	described, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !described.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a box whose proxy has just been installed drifted, %s\n%s",
-			stillMoving(t, bootstrap, class, described.VendorState), vm.proxySaid(t))
+			stillMoving(t, bootstrap, tier, described.VendorState), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,14 +243,14 @@ func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T
 	if vm.running(t, caddy.Container) {
 		t.Fatal("the proxy survived being removed, so healing it cannot be proven here")
 	}
-	torn, err := bootstrap.Describe(ctx, class)
+	torn, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if torn.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a box whose proxy is gone current, and a proxy nothing notices is one nothing repairs")
 	}
-	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: torn.VendorState}
+	healing := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: torn.VendorState}
 	writing, err := bootstrap.Plan(ctx, healing)
 	if err != nil {
 		t.Fatal(err)
@@ -283,16 +283,16 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -332,16 +332,16 @@ func TestLiveTheProxysConfigIsStatedAndItsLogContainsNoQueryString(t *testing.T)
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -378,18 +378,18 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
-	removal, err := bootstrap.PlanRemove(ctx, class)
+	removal, err := bootstrap.PlanRemove(ctx, tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -404,7 +404,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 		}
 	}
 
-	if err := bootstrap.Remove(ctx, class, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, named := range []string{caddy.Container, host.SwitchboardContainer} {
@@ -417,7 +417,7 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 	}
 	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, vars.RoutingTable} {
 		if vm.exists(t, gone) {
-			t.Errorf("%s still exists after a destroy took the last class on this host", gone)
+			t.Errorf("%s still exists after a destroy took the last tier on this host", gone)
 		}
 	}
 	if !vm.running(t, workload) {

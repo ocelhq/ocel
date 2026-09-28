@@ -11,7 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -68,7 +68,7 @@ func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 	t.Helper()
 	coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: coord.Stack()},
+		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: coord.Stack()},
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{

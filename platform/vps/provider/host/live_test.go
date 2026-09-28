@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -40,7 +40,7 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 		}
 	}
 	if strings.Contains(service, "User=") {
-		t.Errorf("the service unit reads:\n%s\nand names a user: the agent reads the class key, which is root's alone", service)
+		t.Errorf("the service unit reads:\n%s\nand names a user: the agent reads the tier key, which is root's alone", service)
 	}
 	if !strings.HasPrefix(live.SocketPath, live.SocketDir+"/") || live.SocketDir == ConnectorRun || strings.HasPrefix(live.SocketDir, ConnectorRun+"/") {
 		t.Errorf("the socket is at %s, under %s, which %s owns and could rename out from under every container", live.SocketPath, live.SocketDir, deployUser)
@@ -106,23 +106,23 @@ func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *
 	}
 }
 
-func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *testing.T) {
+func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingTierKeepsThem(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	for _, name := range []string{LiveService, LiveSocketUnit, LiveBinary, liveUnitFile, liveSocketFile} {
 		if kept := removalOf(removing(current, beside, appsPresent{}), name); kept.action == provider.ActionDelete {
-			t.Errorf("destroying one class takes %s, and the sibling class's containers still read their values through it", name)
+			t.Errorf("destroying one tier takes %s, and the sibling tier's containers still read their values through it", name)
 		}
-		if gone := removalOf(removing(current, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.action != provider.ActionDelete {
-			t.Errorf("destroying the last class plans %s as %q", name, gone.action)
+		if gone := removalOf(removing(current, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.action != provider.ActionDelete {
+			t.Errorf("destroying the last tier plans %s as %q", name, gone.action)
 		}
 	}
 
-	box := machine(map[edge.Class][]Item{production: bootstrapped(t, production)})
+	box := machine(map[environment.Tier][]Item{production: bootstrapped(t, production)})
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
@@ -141,12 +141,12 @@ func TestTheDeployLoginIsToldItHasNoHandInTheAgent(t *testing.T) {
 	t.Parallel()
 
 	var named bool
-	for _, grant := range Grants(edge.ClassProduction) {
+	for _, grant := range Grants(environment.TierProduction) {
 		if !strings.Contains(grant.Name, live.SocketPath) {
 			continue
 		}
 		named = true
-		for _, want := range []string{LiveBinary, LiveService, deployUser, "read-only", "class key"} {
+		for _, want := range []string{LiveBinary, LiveService, deployUser, "read-only", "tier key"} {
 			if !strings.Contains(grant.Detail, want) {
 				t.Errorf("the grant reads %q and never says %q", grant.Detail, want)
 			}

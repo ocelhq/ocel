@@ -6,18 +6,18 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
 func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T) {
 	a := live(t)
-	class := edge.ClassProduction
-	boot := a.emptied(t, class)
+	tier := environment.TierProduction
+	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
-	fresh, err := boot.Describe(ctx, class)
+	fresh, err := boot.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() of an account nothing has bootstrapped = %v", err)
 	}
@@ -25,7 +25,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		t.Fatal("Describe() claims a bootstrap on an account nothing has written to")
 	}
 
-	req := provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, VendorState: fresh.VendorState}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, VendorState: fresh.VendorState}
 	plan, err := boot.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -39,7 +39,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
 	}
-	origin, err := defaultNamespace.OriginSecretParamFor(string(class))
+	origin, err := defaultNamespace.OriginSecretParamFor(string(tier))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		t.Fatalf("Apply() = %v", err)
 	}
 
-	installed, err := boot.Describe(ctx, class)
+	installed, err := boot.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
@@ -78,7 +78,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(tier))
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}
@@ -110,7 +110,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		}
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, VendorState: installed.VendorState})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, VendorState: installed.VendorState})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -128,21 +128,21 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 
 func TestLiveApplyingTheImageOptimizerDeploysItsOwnStackBesideTheCore(t *testing.T) {
 	a := live(t)
-	class := edge.ClassProduction
-	boot := a.emptied(t, class)
+	tier := environment.TierProduction
+	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
 	feature := bootstrap.FeatureImageOptimization
-	req := provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{feature}}
 	if err := boot.Apply(ctx, req, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", feature, err)
 	}
 
-	name := defaultNamespace.FeatureStackName(feature, string(class))
+	name := defaultNamespace.FeatureStackName(feature, string(tier))
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
 		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}
-	installed, err := boot.Describe(ctx, class)
+	installed, err := boot.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after Apply(%s) = %v", feature, err)
 	}
@@ -150,7 +150,7 @@ func TestLiveApplyingTheImageOptimizerDeploysItsOwnStackBesideTheCore(t *testing
 	if !stack.Present || !stack.DigestCurrent {
 		t.Errorf("Describe() = %+v, want the feature stack present at the digest applied", stack)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(tier))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestLiveApplyingTheImageOptimizerDeploysItsOwnStackBesideTheCore(t *testing
 		t.Errorf("the account reads back features %v, want %s among them", deployed.Features.Names(), feature)
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, VendorState: installed.VendorState})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{feature}, VendorState: installed.VendorState})
 	if err != nil {
 		t.Fatalf("a second Plan(%s) = %v", feature, err)
 	}

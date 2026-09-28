@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -77,17 +77,17 @@ func (s *sink) Write(p []byte) (int, error) {
 }
 
 func manifestOf(keys ...string) vars.Manifest {
-	manifest := vars.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Class: "production"}
+	manifest := vars.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "production"}
 	for _, key := range keys {
 		manifest.Keys = append(manifest.Keys, live.Key{Key: key})
 	}
 	return manifest
 }
 
-func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) {
+func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheTierKey(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://live")
 	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
 
@@ -100,17 +100,17 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) 
 	}
 }
 
-func TestAPreviewReadsItsEnvironmentsValueOverTheClassWideOne(t *testing.T) {
+func TestAPreviewReadsItsEnvironmentsValueOverTheTierWideOne(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassPreview}
-	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}}, "class-wide")
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
+	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}}, "tier-wide")
 	fakes.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
 
 	manifest := manifestOf("MARK")
-	manifest.Class, manifest.Environment = "preview", "pr-7"
+	manifest.Tier, manifest.Environment = "preview", "pr-7"
 	if got := resolved(t, Over(manifest, fakes.records, fakes.sealer)); got["MARK"] != "pr-7-only" {
-		t.Errorf("resolved MARK=%q, want the preview environment's own value to shadow the class-wide one", got["MARK"])
+		t.Errorf("resolved MARK=%q, want the preview environment's own value to shadow the tier-wide one", got["MARK"])
 	}
 }
 
@@ -130,7 +130,7 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	fakes.publish(t, scope, "", "db--main", &bindingsv1.Binding{
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}},
@@ -179,7 +179,7 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
 	seeded := stores{records: ports.Records{Clients: clients}, sealer: ports.Cipher{Clients: clients}}
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	seeded.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 
 	manifest := manifestOf("DATABASE_URL")
@@ -193,6 +193,6 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 		t.Fatalf("FromManifest() = %v", err)
 	}
 	if got := resolved(t, values); got["DATABASE_URL"] != "postgres://through-kms" {
-		t.Errorf("resolved %v, want the value read out of the Firestore database and opened by the class key the manifest names", got)
+		t.Errorf("resolved %v, want the value read out of the Firestore database and opened by the tier key the manifest names", got)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -56,7 +57,7 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	record, err := records.ReadOrEmpty(ctx, p.Records(), stackrecords.EdgeStackRecord(edge.ClassProduction, slug))
+	record, err := records.ReadOrEmpty(ctx, p.Records(), stackrecords.EdgeStackRecord(environment.TierProduction, slug))
 	if err != nil {
 		t.Fatalf("read the edge stack record current on this box: %v", err)
 	}
@@ -109,7 +110,7 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 		t.Fatalf("Open(%q) = %v", boxedge.Kind, err)
 	}
 	stack, err := opened.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: domainSlug,
+		Version: "test", Tier: environment.TierProduction, Slug: domainSlug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -330,7 +331,7 @@ func TestLiveASecondProjectDeclaringAServedHostnameIsNamedAsAClaimAtPreflight(t 
 		t.Errorf("%s reads as %v to a second project on the same box, want it claimed: the proxy's route table is box-wide, so deploying over it would take a live site off the air",
 			hostname, claims[0].GetStatus())
 	}
-	if want := boxedge.Surface(domainSlug, edge.ClassProduction); claims[0].GetOwner() != want {
+	if want := boxedge.Surface(domainSlug, environment.TierProduction); claims[0].GetOwner() != want {
 		t.Errorf("the claim on %s names %q, want %q: the refusal has to name who owns it or there is nothing to act on",
 			hostname, claims[0].GetOwner(), want)
 	}

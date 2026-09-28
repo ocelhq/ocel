@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
@@ -15,7 +15,7 @@ type Manifest struct {
 	Region      string         `json:"region"`
 	Namespace   string         `json:"namespace"`
 	Slug        string         `json:"slug"`
-	Class       string         `json:"class"`
+	Tier        string         `json:"tier"`
 	Environment string         `json:"environment,omitempty"`
 	Endpoint    string         `json:"endpoint,omitempty"`
 	Keys        []live.Key     `json:"keys"`
@@ -33,17 +33,17 @@ func Render(m Manifest) ([]byte, error) {
 		{"region", m.Region},
 		{"namespace", m.Namespace},
 		{"project slug", m.Slug},
-		{"environment class", m.Class},
+		{"environment tier", m.Tier},
 	} {
 		if component.value == "" {
 			return nil, fmt.Errorf("the live-value manifest names %d keys but no %s", len(m.Keys)+len(m.Bindings), component.name)
 		}
 	}
-	switch edge.Class(m.Class) {
-	case edge.ClassProduction, edge.ClassPreview:
+	switch environment.Tier(m.Tier) {
+	case environment.TierProduction, environment.TierPreview:
 	default:
-		return nil, fmt.Errorf("the live-value manifest names class %q, and a value is sealed under the key of %s or %s",
-			m.Class, edge.ClassProduction, edge.ClassPreview)
+		return nil, fmt.Errorf("the live-value manifest names tier %q, and a value is sealed under the key of %s or %s",
+			m.Tier, environment.TierProduction, environment.TierPreview)
 	}
 	return json.Marshal(m)
 }

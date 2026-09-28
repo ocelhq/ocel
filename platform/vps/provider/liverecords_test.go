@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -14,10 +14,10 @@ import (
 func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 
 	store := vm.deploying(t).Records()
-	name := stackrecords.ProjectRecord(edge.ClassProduction, "records-induction")
+	name := stackrecords.ProjectRecord(environment.TierProduction, "records-induction")
 	ctx := context.Background()
 
 	record, err := records.ReadOrEmpty(ctx, store, name)
@@ -41,7 +41,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 
 	const victim = "/tmp/records-victim"
 	vm.ssh(t, "sudo install -m 0644 -o root -g root /etc/hostname "+victim)
@@ -50,7 +50,7 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 		t.Fatalf("%s reads %q before the helper is driven at all, so nothing it reads afterwards is a claim about what the helper did", victim, owner)
 	}
 
-	tier := host.RecordsDir(edge.ClassProduction)
+	tier := host.RecordsDir(environment.TierProduction)
 	lock := tier + "/.lock"
 	vm.sshAs(t, deployLogin, "rm -f "+quote(lock)+" && ln -sf "+victim+" "+quote(lock))
 	if target := strings.TrimSpace(vm.ssh(t, "sudo readlink "+quote(lock))); target != victim {
@@ -79,7 +79,7 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 func TestLiveARecordAHelperCouldNotHandOverIsARecordItNeverFlipped(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 
 	const failing = "/tmp/records-failing"
 	vm.ssh(t, "sudo install -d -m 0755 "+failing)

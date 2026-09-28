@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -26,13 +26,13 @@ func isrWriteSecretHash(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func checkISRWriterAgrees(class edge.Class, stores ObjectStores, w ISRWriterAccess) error {
+func checkISRWriterAgrees(tier environment.Tier, stores ObjectStores, w ISRWriterAccess) error {
 	adopted, writer := isrEntriesAdopted(stores), isrWriterConfigured(w)
 	switch {
 	case adopted && !writer:
-		return fmt.Errorf("this bootstrap adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `%s`", provider.BootstrapCommand(class))
+		return fmt.Errorf("this bootstrap adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `%s`", provider.BootstrapCommand(tier))
 	case !adopted && writer:
-		return fmt.Errorf("this bootstrap adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `%s`", provider.BootstrapCommand(class))
+		return fmt.Errorf("this bootstrap adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `%s`", provider.BootstrapCommand(tier))
 	}
 	return nil
 }

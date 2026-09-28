@@ -16,7 +16,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -193,7 +193,7 @@ func wrappedAsADeployDoes(ctx context.Context, daemon images.DockerHost, client 
 
 func TestLiveAnImageIsMovedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
 
@@ -234,7 +234,7 @@ func TestLiveAnImageIsMovedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testi
 
 func TestLiveARedeployOfAnUnchangedAppSendsTheImageNoSecondTime(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
 

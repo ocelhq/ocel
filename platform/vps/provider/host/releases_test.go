@@ -48,16 +48,16 @@ func releases(t *testing.T, root, path, scope string, args ...string) (string, i
 	}
 }
 
-func promote(t *testing.T, root, scope, class, ref string) {
+func promote(t *testing.T, root, scope, tier, ref string) {
 	t.Helper()
-	if _, code := releases(t, root, "", scope, "promote", class, ref); code != 0 {
+	if _, code := releases(t, root, "", scope, "promote", tier, ref); code != 0 {
 		t.Fatalf("promote %s exited %d", ref, code)
 	}
 }
 
-func window(t *testing.T, root, scope, class string) []string {
+func window(t *testing.T, root, scope, tier string) []string {
 	t.Helper()
-	contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(scope), class))
+	contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(scope), tier))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestAPromoteRenamesAndLeavesNothingHalfWritten(t *testing.T) {
 	}
 }
 
-func TestConcurrentPromotesOfOneClassLoseNoUpdate(t *testing.T) {
+func TestConcurrentPromotesOfOneTierLoseNoUpdate(t *testing.T) {
 	t.Parallel()
 
 	script := filepath.Join(t.TempDir(), "releases")
@@ -287,7 +287,7 @@ func TestAPromoteReclaimsTheStagingFilesOfHelpersNoLongerRunning(t *testing.T) {
 	}
 }
 
-func TestForgettingAClassLeavesTheBoxAsItWasBeforeTheFirstPromote(t *testing.T) {
+func TestForgettingATierLeavesTheBoxAsItWasBeforeTheFirstPromote(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
@@ -297,12 +297,12 @@ func TestForgettingAClassLeavesTheBoxAsItWasBeforeTheFirstPromote(t *testing.T) 
 	}
 	for _, left := range []string{filepath.Join(root, "shop", "web"), filepath.Join(root, "shop")} {
 		if _, err := os.Stat(left); !os.IsNotExist(err) {
-			t.Errorf("%s remains after the last class was forgotten (%v), and a teardown reclaims the bytes its own deploys wrote", left, err)
+			t.Errorf("%s remains after the last tier was forgotten (%v), and a teardown reclaims the bytes its own deploys wrote", left, err)
 		}
 	}
 }
 
-func TestForgettingOneClassLeavesTheOthersInPlace(t *testing.T) {
+func TestForgettingOneTierLeavesTheOthersInPlace(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
@@ -312,17 +312,17 @@ func TestForgettingOneClassLeavesTheOthersInPlace(t *testing.T) {
 		t.Fatalf("forget exited %d", code)
 	}
 	if got := window(t, root, "shop/web", "production"); len(got) != 1 || got[0] != "ocel/shop/web:live" {
-		t.Errorf("forgetting preview left production listing %v, and one class's teardown is never another's", got)
+		t.Errorf("forgetting preview left production listing %v, and one tier's teardown is never another's", got)
 	}
 }
 
-func TestForgettingAClassTheHostNeverServedIsRefused(t *testing.T) {
+func TestForgettingATierTheHostNeverServedIsRefused(t *testing.T) {
 	t.Parallel()
 
 	root := releasesDir(t)
-	for _, class := range []string{"", "../../etc", "PRODUCTION", "prod;rm -rf /"} {
-		if _, code := releases(t, root, "", "shop/web", "forget", class); code != 2 {
-			t.Errorf("forget %q exited %d, want a refusal", class, code)
+	for _, tier := range []string{"", "../../etc", "PRODUCTION", "prod;rm -rf /"} {
+		if _, code := releases(t, root, "", "shop/web", "forget", tier); code != 2 {
+			t.Errorf("forget %q exited %d, want a refusal", tier, code)
 		}
 	}
 }

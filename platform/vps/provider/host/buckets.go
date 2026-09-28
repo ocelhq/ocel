@@ -16,13 +16,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type BucketSpec struct {
 	Store    string
-	Class    edge.Class
+	Tier     environment.Tier
 	Endpoint string
 	Region   string
 
@@ -308,7 +308,7 @@ func (h *Host) ApplyOrigins(ctx context.Context, spec BucketSpec) error {
 }
 
 type BucketRef struct {
-	Class   edge.Class
+	Tier    environment.Tier
 	Project string
 	Store   string
 	Bucket  string
@@ -322,7 +322,7 @@ type BucketRef struct {
 func (r BucketRef) spec() BucketSpec {
 	return BucketSpec{
 		Store:       r.Store,
-		Class:       r.Class,
+		Tier:        r.Tier,
 		Endpoint:    r.Endpoint,
 		Region:      r.Region,
 		AccessKeyID: r.AccessKeyID,

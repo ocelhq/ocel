@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -156,18 +157,18 @@ func TestNoPortIsNilForProviderserverToCallThrough(t *testing.T) {
 	}
 }
 
-func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
+func TestAnArtifactThatNamesNoTierOrNoStoreIsTheCallersMistake(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	p := testProvider(t)
-	classless := provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "bundle.zip"}
-	storeless := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
+	tierless := provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "bundle.zip"}
+	storeless := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
 
 	for name, refused := range map[string]error{
-		"Put with no class":  p.Artifacts().Put(ctx, classless, bytes.NewReader(nil)),
-		"Has with no class":  errorOf(p.Artifacts().Has(ctx, classless)),
-		"Open with no class": errorOf(p.Artifacts().Open(ctx, classless)),
+		"Put with no tier":   p.Artifacts().Put(ctx, tierless, bytes.NewReader(nil)),
+		"Has with no tier":   errorOf(p.Artifacts().Has(ctx, tierless)),
+		"Open with no tier":  errorOf(p.Artifacts().Open(ctx, tierless)),
 		"Put with no store":  p.Artifacts().Put(ctx, storeless, bytes.NewReader(nil)),
 		"Has with no store":  errorOf(p.Artifacts().Has(ctx, storeless)),
 		"Open with no store": errorOf(p.Artifacts().Open(ctx, storeless)),
@@ -179,7 +180,7 @@ func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
 	}
 }
 
-func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
+func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -191,7 +192,7 @@ func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
 	} {
 		var rejection refusal.Refusal
 		if !errors.As(refused, &rejection) || rejection.Code != refusal.CodeInvalid {
-			t.Errorf("%s() at a coordinate naming no class = %v, want an %s refusal: each class is sealed under a key of its own, so a classless value names no key",
+			t.Errorf("%s() at a coordinate naming no tier = %v, want an %s refusal: each tier is sealed under a key of its own, so a value naming no tier names no key",
 				name, refused, refusal.CodeInvalid)
 		}
 	}

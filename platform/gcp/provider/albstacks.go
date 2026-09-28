@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/secretmanager/v1"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -86,7 +86,7 @@ func (s albStacks) opened(
 	if err != nil {
 		return nil, provider.StackSpec{}, err
 	}
-	passphrase, err := s.passphrase(ctx, clients, target.Class)
+	passphrase, err := s.passphrase(ctx, clients, target.Tier)
 	if err != nil {
 		return nil, provider.StackSpec{}, err
 	}
@@ -103,7 +103,7 @@ func (s albStacks) config(
 	project := naming.PulumiProject(target.Prefix())
 	config := pulumi.Config{
 		Backend: pulumi.Backend{
-			URL:        naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Class), project),
+			URL:        naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Tier), project),
 			Passphrase: passphrase,
 			Project:    project,
 			Env: map[string]string{
@@ -119,19 +119,19 @@ func (s albStacks) config(
 		config.Refresh = refreshesTheFront
 	}
 	return config, provider.StackSpec{
-		Ref:  provider.StackRef{Project: project, Class: target.Class, Name: naming.InfraStack(target.Name())},
+		Ref:  provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(target.Name())},
 		Kind: provider.StackInfra,
 	}
 }
 
 func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }
 
-func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.Class) (string, error) {
+func (s albStacks) passphrase(ctx context.Context, clients *clients, tier environment.Tier) (string, error) {
 	secrets, err := clients.Secrets()
 	if err != nil {
 		return "", err
 	}
-	secret := clients.PassphraseSecret(class)
+	secret := clients.PassphraseSecret(tier)
 	name := "projects/" + clients.project + "/secrets/" + secret + "/versions/latest"
 	version, err := attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
 		return secrets.Projects.Secrets.Versions.Access(name).Context(ctx).Do(call...)
@@ -139,8 +139,8 @@ func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.
 	if err != nil {
 		if absent(err) {
 			return "", refusal.Refuse(refusal.CodeNotReady,
-				"the %s edge keeps the state of the load balancer it provisions sealed under the %s secret, and this project has none for class %s: run `ocel bootstrap` for this class first",
-				alb.Kind, secret, class)
+				"the %s edge keeps the state of the load balancer it provisions sealed under the %s secret, and this project has none for tier %s: run `ocel bootstrap` for this tier first",
+				alb.Kind, secret, tier)
 		}
 		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", alb.Kind, err)
 	}

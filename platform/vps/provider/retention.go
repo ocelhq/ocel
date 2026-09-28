@@ -12,5 +12,5 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref provider.StackRef, a
 }
 
 func (p *Provider) ForgetReleases(ctx context.Context, ref provider.StackRef, app string, _ progress.Progress) error {
-	return p.host.Forget(ctx, ref.Class, ref.Project, app)
+	return p.host.Forget(ctx, ref.Tier, ref.Project, app)
 }

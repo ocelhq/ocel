@@ -6,7 +6,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/progress"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -20,7 +20,7 @@ type Hooks struct {
 	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress progress.Progress) error
 	WarmFunctions       func(ctx context.Context, targets []string, progress progress.Progress) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
-	EnsureImageRegistry func(ctx context.Context, class edge.Class, repositories []string) (RegistryTarget, error)
+	EnsureImageRegistry func(ctx context.Context, tier environment.Tier, repositories []string) (RegistryTarget, error)
 	OpenRegistryImages  func(ctx context.Context, target RegistryTarget) (ImageStore, error)
 	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)

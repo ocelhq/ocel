@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 )
@@ -40,25 +41,25 @@ var cloudFrontEdgeFeature = feature{
 }
 
 func cloudFrontEdgeTemplate(in featureInputs) featureStack {
-	edgeClass := edge.Class(in.class)
+	edgeTier := environment.Tier(in.tier)
 	return featureStack{
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap feature (%s, %s) - what a CloudFront front needs in this account before any deployment is fronted with it: the key value store one entry per hostname is written into, the resolver function every distribution runs, the cache and response-headers policies they answer by, and the origin access control they read the asset bucket through."
 Resources:
 %s%s%s%s%s%sOutputs:
 %s`,
-			FeatureCloudFrontEdge, in.class,
-			routesStoreResource(in.ns, edgeClass),
-			resolverResource(in.ns, edgeClass),
-			emptyBodyResource(in.ns, edgeClass),
-			cachePolicyResource(in.ns, edgeClass),
-			headersPolicyResource(in.ns, edgeClass),
-			assetAccessResource(in.ns, edgeClass),
+			FeatureCloudFrontEdge, in.tier,
+			routesStoreResource(in.ns, edgeTier),
+			resolverResource(in.ns, edgeTier),
+			emptyBodyResource(in.ns, edgeTier),
+			cachePolicyResource(in.ns, edgeTier),
+			headersPolicyResource(in.ns, edgeTier),
+			assetAccessResource(in.ns, edgeTier),
 			cloudFrontEdgeOutputs()),
 	}
 }
 
-func routesStoreResource(ns Namespace, class edge.Class) string {
+func routesStoreResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeRoutes:
     Type: AWS::CloudFront::KeyValueStore
     Metadata:
@@ -66,10 +67,10 @@ func routesStoreResource(ns Namespace, class edge.Class) string {
     Properties:
       Name: %q
       Comment: "Ocel: one entry per hostname naming the release that answers on it. Written at promote, read by the resolver on every request."
-`, ns.EdgeRoutesStoreName(class))
+`, ns.EdgeRoutesStoreName(tier))
 }
 
-func resolverResource(ns Namespace, class edge.Class) string {
+func resolverResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeResolver:
     Type: AWS::CloudFront::Function
     Metadata:
@@ -83,10 +84,10 @@ func resolverResource(ns Namespace, class edge.Class) string {
         KeyValueStoreAssociations:
           - KeyValueStoreARN: !GetAtt EdgeRoutes.Arn
       FunctionCode: |
-%s`, ns.EdgeResolverName(class), indent(string(resolver.Code()), 8))
+%s`, ns.EdgeResolverName(tier), indent(string(resolver.Code()), 8))
 }
 
-func emptyBodyResource(ns Namespace, class edge.Class) string {
+func emptyBodyResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeEmptyBody:
     Type: AWS::CloudFront::Function
     Metadata:
@@ -98,10 +99,10 @@ func emptyBodyResource(ns Namespace, class edge.Class) string {
         Comment: "Ocel: empties the sentinel byte an origin marks a bodiless response with, and drops the mark."
         Runtime: cloudfront-js-2.0
       FunctionCode: |
-%s`, ns.EdgeEmptyBodyName(class), indent(string(resolver.EmptyBodyCode()), 8))
+%s`, ns.EdgeEmptyBodyName(tier), indent(string(resolver.EmptyBodyCode()), 8))
 }
 
-func cachePolicyResource(ns Namespace, class edge.Class) string {
+func cachePolicyResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeCachePolicy:
     Type: AWS::CloudFront::CachePolicy
     Metadata:
@@ -127,10 +128,10 @@ func cachePolicyResource(ns Namespace, class edge.Class) string {
             QueryStringBehavior: allExcept
             QueryStrings:
               - %s
-`, ns.edgeCachePolicyName(class), edgeCacheMaxTTL, edgeCacheKeyHeader, edgeRSCQueryParameter)
+`, ns.edgeCachePolicyName(tier), edgeCacheMaxTTL, edgeCacheKeyHeader, edgeRSCQueryParameter)
 }
 
-func headersPolicyResource(ns Namespace, class edge.Class) string {
+func headersPolicyResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeHeadersPolicy:
     Type: AWS::CloudFront::ResponseHeadersPolicy
     Metadata:
@@ -148,12 +149,12 @@ func headersPolicyResource(ns Namespace, class edge.Class) string {
           Items:
             - Header: %q
             - Header: %q
-`, ns.edgeHeadersPolicyName(class),
+`, ns.edgeHeadersPolicyName(tier),
 		fmt.Sprintf("Ocel: marks every response the %q edge served, so a probe can tell which front answered, and drops cache tags.", KindCloudFront),
 		edge.HeaderEdge, KindCloudFront, EdgeCacheTagHeader, edge.HeaderEmptyBody)
 }
 
-func assetAccessResource(ns Namespace, class edge.Class) string {
+func assetAccessResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeAssetAccess:
     Type: AWS::CloudFront::OriginAccessControl
     Metadata:
@@ -165,7 +166,7 @@ func assetAccessResource(ns Namespace, class edge.Class) string {
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
-`, ns.edgeAssetAccessName(class),
+`, ns.edgeAssetAccessName(tier),
 		fmt.Sprintf("Ocel: signs the %q edge's reads of the asset bucket, so the bucket stays closed to everyone else.", KindCloudFront))
 }
 

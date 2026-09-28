@@ -112,11 +112,11 @@ type Hostname struct {
 	App  string
 }
 
-func Hostnames(cfg *projectconfig.Config, class string) []Hostname {
+func Hostnames(cfg *projectconfig.Config, tier string) []Hostname {
 	var hosts []Hostname
 	seen := map[string]bool{}
 	add := func(domains map[string][]string, app string) {
-		for _, host := range domains[class] {
+		for _, host := range domains[tier] {
 			if seen[host] {
 				continue
 			}

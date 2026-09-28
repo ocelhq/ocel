@@ -39,8 +39,8 @@ type shapedType struct {
 	properties func(map[string]any) map[string]any
 }
 
-func Shape(ns Namespace, class string, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
-	in := featureInputs{ns: ns, class: class, artifactBucket: shapedArtifactBucket}
+func Shape(ns Namespace, tier string, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
+	in := featureInputs{ns: ns, tier: tier, artifactBucket: shapedArtifactBucket}
 	for _, option := range options {
 		option(&in)
 	}
@@ -48,7 +48,7 @@ func Shape(ns Namespace, class string, features []string, options ...ShapeOption
 	for _, name := range features {
 		in.alongside[name] = true
 	}
-	bodies := []string{coreStackTemplate(ns, class, coreVarsKey(in.alongside, in.varsKey)), runtimeLayerTemplate(ns, class, shapedLayerPlacements())}
+	bodies := []string{coreStackTemplate(ns, tier, coreVarsKey(in.alongside, in.varsKey)), runtimeLayerTemplate(ns, tier, shapedLayerPlacements())}
 	for _, name := range features {
 		f, known := featureNamed(name)
 		if !known {

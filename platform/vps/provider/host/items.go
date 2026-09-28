@@ -13,7 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -26,7 +26,7 @@ const (
 )
 
 const (
-	classRoot    = live.ClassRoot
+	tierRoot     = live.TierRoot
 	stateRoot    = live.StateRoot
 	releasesRoot = stateRoot + "/releases"
 
@@ -43,19 +43,19 @@ const rootOwner = "root"
 
 const stateOwner = deployUser
 
-func ClassDir(class edge.Class) string { return classRoot + "/" + string(class) }
+func TierDir(tier environment.Tier) string { return tierRoot + "/" + string(tier) }
 
-func StampPath(class edge.Class) string { return ClassDir(class) + "/" + stampFile }
+func StampPath(tier environment.Tier) string { return TierDir(tier) + "/" + stampFile }
 
-func SealKeyPath(class edge.Class) string { return ClassDir(class) + "/" + sealKeyFile }
+func SealKeyPath(tier environment.Tier) string { return TierDir(tier) + "/" + sealKeyFile }
 
-func sudoersSeal(class edge.Class) string { return sudoersSealPrefix + string(class) }
+func sudoersSeal(tier environment.Tier) string { return sudoersSealPrefix + string(tier) }
 
-func StateDir(class edge.Class) string { return stateRoot + "/" + string(class) }
+func StateDir(tier environment.Tier) string { return stateRoot + "/" + string(tier) }
 
 func ReleasesDir() string { return releasesRoot }
 
-func RecordsDir(class edge.Class) string { return StateDir(class) + "/records" }
+func RecordsDir(tier environment.Tier) string { return StateDir(tier) + "/records" }
 
 type Item struct {
 	Kind    string
@@ -63,7 +63,7 @@ type Item struct {
 	Mode    fs.FileMode
 	Owner   string
 	Content []byte
-	Class   edge.Class
+	Tier    environment.Tier
 	Watch   []string
 	Slow    bool
 	Note    string
@@ -72,33 +72,33 @@ type Item struct {
 	rendered *Item
 }
 
-func ClassItems(class edge.Class) []Item {
+func TierItems(tier environment.Tier) []Item {
 	return []Item{
-		dir(classRoot, 0o755, rootOwner, ""),
-		dir(ClassDir(class), 0o755, rootOwner, ""),
+		dir(tierRoot, 0o755, rootOwner, ""),
+		dir(TierDir(tier), 0o755, rootOwner, ""),
 	}
 }
 
-func StorageItems(class edge.Class, keys []byte) []Item {
+func StorageItems(tier environment.Tier, keys []byte) []Item {
 	return []Item{
 		dir(boxstore.Dir, 0o755, rootOwner, ""),
 		{Kind: KindFile, Name: boxstore.RecordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "deploy records"},
 		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "release window"},
 		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
 		principal(),
-		{Kind: KindFile, Name: sudoersSeal(class), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(class), Note: "sudo for the seal helper"},
+		{Kind: KindFile, Name: sudoersSeal(tier), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(tier), Note: "sudo for the seal helper"},
 		dir(stateRoot, 0o750, stateOwner, ""),
 		dir(releasesRoot, 0o750, stateOwner, ""),
 		dir(sshDir, 0o700, stateOwner, ""),
 		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "keys allowed to deploy"},
-		dir(StateDir(class), 0o750, stateOwner, ""),
-		dir(RecordsDir(class), 0o750, stateOwner, ""),
-		sealKey(class),
+		dir(StateDir(tier), 0o750, stateOwner, ""),
+		dir(RecordsDir(tier), 0o750, stateOwner, ""),
+		sealKey(tier),
 	}
 }
 
-func Items(class edge.Class, keys []byte, arch string, front Front) []Item {
-	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), EnvSourceSyncItems(class, arch), ProxyItems(arch, front), BackupItems())
+func Items(tier environment.Tier, keys []byte, arch string, front Front) []Item {
+	return slices.Concat(TierItems(tier), StorageItems(tier, keys), EngineItems(), LiveItems(arch), EnvSourceSyncItems(tier, arch), ProxyItems(arch, front), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {

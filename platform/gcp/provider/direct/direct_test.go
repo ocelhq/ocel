@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -46,7 +47,7 @@ const webService = "ocel-shop-prod-web"
 func fronting(t *testing.T, pins *pinRecorder) edge.EdgeStack {
 	t.Helper()
 	front := direct.New(fake.NewRecords(), pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
@@ -184,7 +185,7 @@ func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
 
 	pins := &pinRecorder{}
 	front := direct.New(staleAt{Store: fake.NewRecords(), at: "pointers"}, pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
@@ -220,7 +221,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 
 	pins := &pinRecorder{}
 	front := direct.New(honouring{fake.NewRecords()}, pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}

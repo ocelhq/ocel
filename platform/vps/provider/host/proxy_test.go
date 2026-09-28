@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -153,18 +153,18 @@ func TestAHostWithNoEngineRunsNoProxyAtAll(t *testing.T) {
 func TestAProxyThatIsGoneIsPlannedBackAndARunningOneIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	whole := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
+	whole := Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: digests(Items(tier, keys, ArchAMD64, Front{}))}
 	for _, change := range planned(whole) {
 		if change.Kind == KindContainer && change.Action != provider.ActionKeep {
 			t.Errorf("a re-run over a host whose proxy serves plans %q for it, and a bootstrap that reinstalls what is running is one nobody dares re-run", change.Action)
 		}
 	}
 
-	torn := digests(Items(class, keys, ArchAMD64, Front{}))
+	torn := digests(Items(tier, keys, ArchAMD64, Front{}))
 	delete(torn, frontItem().ID())
-	gone := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: torn}), frontItem().ID())
+	gone := planFor(planned(Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: torn}), frontItem().ID())
 	if gone.Action != provider.ActionCreate {
 		t.Errorf("a host whose proxy container was removed plans %q for it, want it written back: the proxy is state this host keeps rather than a deploy's side effect", gone.Action)
 	}
@@ -172,10 +172,10 @@ func TestAProxyThatIsGoneIsPlannedBackAndARunningOneIsLeftAlone(t *testing.T) {
 		t.Error("pulling the proxy image is planned as quick work, and a plan that lies about its cost is one nobody waits through")
 	}
 
-	stopped := digests(Items(class, keys, ArchAMD64, Front{}))
+	stopped := digests(Items(tier, keys, ArchAMD64, Front{}))
 	stopped[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner,
 		contentSum([]byte(strings.Replace(string(frontItem().Content), "state=running", "state=exited", 1))))
-	idle := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: stopped}
+	idle := Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: stopped}
 	if idle.current(frontItem()) {
 		t.Fatal("a proxy container that has exited reads as serving, and nothing would ever start it")
 	}
@@ -436,16 +436,16 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCalledDrift(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	deployed := digests(Items(class, keys, ArchAMD64, Front{}))
+	deployed := digests(Items(tier, keys, ArchAMD64, Front{}))
 	for _, seeded := range []Item{routingTableItem(), proxyConfigItem()} {
 		routed := seeded
 		routed.Content = []byte("every route this box serves")
 		if routed.Digest() != seeded.Digest() {
 			t.Fatalf("%s digests differently once a deploy has written routes into it, and every deploy would then read as drift", seeded.Name)
 		}
-		read := Reading{Class: class, Keys: keys, Arch: ArchAMD64, Observed: deployed}
+		read := Reading{Tier: tier, Keys: keys, Arch: ArchAMD64, Observed: deployed}
 		if !read.current(routed) {
 			t.Fatalf("a box whose deploys have written routes into %s reads as drifted, and the item is keyed on content the deploy loop is built to replace", seeded.Name)
 		}
@@ -561,7 +561,7 @@ func fileContents(t *testing.T, path string) string {
 func TestTheDeployLoginIsToldItOwnsTheRoutingTable(t *testing.T) {
 	t.Parallel()
 
-	owned := slices.ContainsFunc(grants(edge.ClassProduction, ArchAMD64), func(grant Grant) bool {
+	owned := slices.ContainsFunc(grants(environment.TierProduction, ArchAMD64), func(grant Grant) bool {
 		return grant.Name == "owns "+live.RoutingTable
 	})
 	if !owned {
@@ -634,21 +634,21 @@ func TestABootstrapOverABoxWithOnlyItsTableKeepsEveryRoute(t *testing.T) {
 func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ArchAMD64, Front{})
 	observed := digests(items)
 	observed[proxyConfigItem().ID()] = digest(KindProxyConfig, ProxyConfig, 0o600, rootOwner, "")
 	observed[routingTableItem().ID()] = digest(KindRoutingTable, live.RoutingTable, 0o600, rootOwner, "")
-	observed[KindDir+" "+RecordsDir(class)] = digest(KindDir, RecordsDir(class), 0o700, stateOwner, "")
-	read := Reading{Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+	observed[KindDir+" "+RecordsDir(tier)] = digest(KindDir, RecordsDir(tier), 0o700, stateOwner, "")
+	read := Reading{Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
 
 	work, left, err := healable(read)
 	if err != nil {
 		t.Fatalf("heal over a box whose proxy config is as the deploy left it = %v, want every other item still healed", err)
 	}
-	if len(work) != 1 || work[0].Name != RecordsDir(class) {
+	if len(work) != 1 || work[0].Name != RecordsDir(tier) {
 		t.Errorf("healable() = %v, want only the record tier", ids(work))
 	}
 	for _, said := range []string{proxyConfigItem().ID(), routingTableItem().ID()} {
@@ -664,14 +664,14 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ArchAMD64, Front{})
 	observed := digests(items)
 	for _, gone := range []Item{frontItem(), proxyConfigItem(), routingTableItem()} {
 		delete(observed, gone.ID())
 	}
-	read := Reading{Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+	read := Reading{Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
 
 	work, left, err := healable(read)
@@ -726,14 +726,14 @@ func TestHealNeverWritesOverTheConfigTheProxyIsServingFrom(t *testing.T) {
 func TestAReplacementRefusingApplyWritesOcelsOwnProxyBackWithoutAsking(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	observed := digests(Items(class, keys, ArchAMD64, Front{}))
+	observed := digests(Items(tier, keys, ArchAMD64, Front{}))
 	observed[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner, contentSum([]byte("state=exited\n")))
 	observed[networkItem().ID()] = digest(KindNetwork, ProxyNetwork, 0, rootOwner, contentSum([]byte("moved\n")))
 
-	read := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: observed}
-	if err := refuseReplacements(read, Items(class, keys, ArchAMD64, Front{})); err != nil {
+	read := Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: observed}
+	if err := refuseReplacements(read, Items(tier, keys, ArchAMD64, Front{})); err != nil {
 		t.Errorf("a replacement-refusing apply over a host whose proxy has moved = %v, want it written back: the proxy has ocel's own name and nothing of the user's", err)
 	}
 }
@@ -741,23 +741,23 @@ func TestAReplacementRefusingApplyWritesOcelsOwnProxyBackWithoutAsking(t *testin
 func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	installed := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, switchboard.ControlDir, switchboard.FrontDir, ProxyConfig, live.RoutingTable, live.RoutingDir}
 
 	for _, taken := range removing(installed, beside, appsPresent{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == provider.ActionDelete {
-			t.Errorf("destroying one class takes %s, and the sibling class still installed on this host deploys through it", taken.path)
+			t.Errorf("destroying one tier takes %s, and the sibling tier still installed on this host deploys through it", taken.path)
 		}
 	}
 
-	last := removing(installed, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(installed, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, path := range proxied {
 		gone := removalOf(last, path)
 		if gone.action != provider.ActionDelete {
-			t.Errorf("destroying the last class plans %s as %q, want it taken: what ocel wrote is what ocel takes back", path, gone.action)
+			t.Errorf("destroying the last tier plans %s as %q, want it taken: what ocel wrote is what ocel takes back", path, gone.action)
 		}
 	}
 	if reason := removalOf(last, caddy.Container).reason; reason == "" {
@@ -778,7 +778,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 		}
 	}
 	if kept := removalOf(last, dockerEngine); kept.action != provider.ActionKeep {
-		t.Errorf("destroying the last class plans the engine as %q, want it kept with every container it runs", kept.action)
+		t.Errorf("destroying the last tier plans the engine as %q, want it kept with every container it runs", kept.action)
 	}
 }
 
@@ -820,8 +820,8 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		"a pin root nothing was ever pinned under":  false,
 		"a pin root containing the pair you placed": true,
 	} {
-		class := edge.ClassProduction
-		rig := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+		tier := environment.TierProduction
+		rig := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 		rig.answer = func(command string) (session.Result, bool) {
 			if !strings.HasPrefix(command, "rmdir "+quoted(caddy.PinsDir)+" ") {
 				return session.Result{}, false
@@ -833,7 +833,7 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		}
 
 		var said []string
-		if err := NewBootstrap(rig.host(), testVendor, "shop").Remove(context.Background(), class, saying(&said)); err != nil {
+		if err := NewBootstrap(rig.host(), testVendor, "shop").Remove(context.Background(), tier, saying(&said)); err != nil {
 			t.Fatalf("destroying over %s = %v", what, err)
 		}
 
@@ -894,7 +894,7 @@ func TestRemovingTheProxyNamesOcelsOwnContainerAndNeverAsksTheEngineWhatElseItRu
 func TestNothingButWhatOcelWroteIsEverOcelsToTake(t *testing.T) {
 	t.Parallel()
 
-	rig := machine(map[edge.Class][]Item{edge.ClassProduction: bootstrapped(t, edge.ClassProduction)})
+	rig := machine(map[environment.Tier][]Item{environment.TierProduction: bootstrapped(t, environment.TierProduction)})
 	for _, kind := range []string{KindEngine, KindUnit} {
 		_, err := rig.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: provider.ActionDelete})
 		if err == nil {
@@ -965,14 +965,14 @@ func TestTheHelperHasNoDependenceOnWhatTheProxyImageHappensToShip(t *testing.T) 
 func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	rig := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	rig := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	rig.facts.Arch = "riscv64"
 
-	if _, err := NewBootstrap(rig.host(), testVendor, "shop").PlanRemove(context.Background(), class); err != nil {
+	if _, err := NewBootstrap(rig.host(), testVendor, "shop").PlanRemove(context.Background(), tier); err != nil {
 		t.Fatalf("PlanRemove() over a host ocel builds no flip helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
 	}
-	if _, err := rig.host().Read(context.Background(), class); err == nil {
+	if _, err := rig.host().Read(context.Background(), tier); err == nil {
 		t.Error("a host reporting an architecture ocel builds no helper for is bootstrapped anyway, and the file the release loop execs would be for another machine")
 	}
 }
@@ -980,8 +980,8 @@ func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 func TestWhatTheDeployLoginIsGrantedIsTheSameWhicheverArchitectureTheBoxRuns(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	if !slices.Equal(grants(class, ArchAMD64), grants(class, ArchARM64)) {
+	tier := environment.TierProduction
+	if !slices.Equal(grants(tier, ArchAMD64), grants(tier, ArchARM64)) {
 		t.Error("`ocel permissions deploy` prints one thing on an amd64 box and another on an arm64 one, and what a login is granted does not depend on what the box runs")
 	}
 }
@@ -1103,11 +1103,11 @@ func TestAProxyThatNeverComesUpFailsTheWriteWithWhatTheEngineSaysAboutIt(t *test
 func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	rig := bootstrappedOn(t, class)
-	for at, item := range rig.installed[class] {
+	tier := environment.TierProduction
+	rig := bootstrappedOn(t, tier)
+	for at, item := range rig.installed[tier] {
 		if item.Kind == KindEngine {
-			rig.installed[class][at].Content = []byte("engine=" + string(engineUnserved) + "\n")
+			rig.installed[tier][at].Content = []byte("engine=" + string(engineUnserved) + "\n")
 		}
 	}
 	rig.after = func(b *bench, command string) {
@@ -1116,7 +1116,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 		}
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		items := b.installed[class]
+		items := b.installed[tier]
 		for at, item := range items {
 			if item.Kind == KindContainer {
 				items[at].Content = []byte("state=exited\n")
@@ -1126,7 +1126,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 
 	progress := &said{}
 	if err := NewBootstrap(rig.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := progress.at("Installed container " + caddy.Container); at < 0 {
@@ -1185,9 +1185,9 @@ func TestTheProxyIsNeverStartedAgainstABindSourceDockerWouldInvent(t *testing.T)
 func TestAProxyConfiguredAsWrittenButNotRunningIsPlannedBackAndNeverCalledUpToDate(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 
 	for _, between := range []string{"created", "restarting", "exited", "paused"} {
@@ -1199,7 +1199,7 @@ func TestAProxyConfiguredAsWrittenButNotRunningIsPlannedBackAndNeverCalledUpToDa
 		observed[frontItem().ID()] = digest(KindContainer, caddy.Container, 0, rootOwner, contentSum(idle))
 
 		read := Reading{
-			Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+			Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
 			Stamp: Stamp{
 				Schema: provider.BootstrapSchema, State: StateComplete,
@@ -1305,13 +1305,13 @@ func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
 func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusingTheBox(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	table, config := string(mustWrite(t, routed())), olderRendering(t, routed())
-	rig := bootstrappedWith(t, class, &table, &config)
+	rig := bootstrappedWith(t, tier, &table, &config)
 	boot := NewBootstrap(rig.host(), testVendor, "shop")
-	request := provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}
+	request := provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}
 
-	if _, err := boot.Describe(context.Background(), class); err != nil {
+	if _, err := boot.Describe(context.Background(), tier); err != nil {
 		t.Fatalf("Describe() over a box an older ocel rendered = %v: an upgrade that changes the rendering is not a hand edit, and refusing it locks every existing box out of `ocel doctor`", err)
 	}
 	plan, err := boot.Plan(context.Background(), request)

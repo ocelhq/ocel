@@ -37,8 +37,8 @@ var healAllowed = map[string]bool{
 }
 
 func isCoreStack(ns Namespace, stackName string) bool {
-	core, _ := ns.StackNameFor(ClassProduction)
-	preview, _ := ns.StackNameFor(ClassPreview)
+	core, _ := ns.StackNameFor(TierProduction)
+	preview, _ := ns.StackNameFor(TierPreview)
 	return stackName == core || stackName == preview
 }
 
@@ -128,8 +128,8 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRequest, progress progress.Progress) (bool, error) {
-	target, err := specFor(ns, class)
+func Heal(ctx context.Context, apis APIs, ns Namespace, tier string, req HealRequest, progress progress.Progress) (bool, error) {
+	target, err := specFor(ns, tier)
 	if err != nil {
 		return false, err
 	}
@@ -137,7 +137,7 @@ func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRe
 }
 
 func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress progress.Progress) (bool, error) {
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.tier)
 	if err != nil {
 		return false, err
 	}
@@ -163,7 +163,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress
 			if i < 0 {
 				continue
 			}
-			done, err := healStack(ctx, apis, target.ns, target.class, stale[i], deployed, refs, req.Writer, progress)
+			done, err := healStack(ctx, apis, target.ns, target.tier, stale[i], deployed, refs, req.Writer, progress)
 			if err != nil {
 				if RefusedWrite(err) {
 					return healed, ErrHealNotPermitted
@@ -177,7 +177,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Progress) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, tier string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Progress) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
@@ -193,7 +193,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 
 	stack, err := f.staged(ctx, apis.Store, featureInputs{
 		ns:             ns,
-		class:          class,
+		tier:           tier,
 		artifactBucket: deployed.ArtifactBucket,
 		refs:           refs,
 		alongside:      deployed.Features,

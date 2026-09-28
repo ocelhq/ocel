@@ -45,7 +45,7 @@ var domainCmd = &cobra.Command{
 		"`add`, `rm`, `ls` and `status` are project-scoped and read domains.production, which is the declaration: " +
 		"no command edits it. `use` and `release` take --preview and act on the bootstrap, where " +
 		"one shared entry worker on one wildcard serves every project bootstrapped into the preview " +
-		"class, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
+		"tier, at \"<project>--<preview>[--<app>].<domain>\". A project that declares its own " +
 		"domains.preview keeps it and ignores this one.",
 	Args: cobra.NoArgs,
 }
@@ -137,7 +137,7 @@ func firstArg(args []string) string {
 
 func init() {
 	for _, c := range []*cobra.Command{domainUseCmd, domainReleaseCmd} {
-		c.Flags().BoolVar(&domainOpts.preview, "preview", false, "Act on the preview class (required)")
+		c.Flags().BoolVar(&domainOpts.preview, "preview", false, "Act on the preview tier (required)")
 	}
 	domainLsCmd.Flags().BoolVar(&domainOpts.preview, "preview", false, "List the global preview domain and the projects served on it instead of this project's own hostnames")
 	cmddeps.Yes(domainReleaseCmd, &domainOpts.yes)
@@ -152,7 +152,7 @@ func init() {
 	rootCmd.AddCommand(domainCmd)
 }
 
-func requirePreviewClass(command string, preview bool) error {
+func requirePreviewTier(command string, preview bool) error {
 	if preview {
 		return nil
 	}
@@ -169,7 +169,7 @@ func globalPreviewBaseDomain(wildcard string) (string, error) {
 }
 
 func runDomainUse(ctx context.Context, deps cmddeps.Deps, cwd, wildcard string, opts domainOptions, stdout, stderr io.Writer) (err error) {
-	if err := requirePreviewClass("ocel domain use", opts.preview); err != nil {
+	if err := requirePreviewTier("ocel domain use", opts.preview); err != nil {
 		return err
 	}
 	base, err := globalPreviewBaseDomain(wildcard)
@@ -302,7 +302,7 @@ func renderBoundHostnames(out io.Writer, resp *contractv1.GetHostnameStatusRespo
 }
 
 func runDomainRelease(ctx context.Context, deps cmddeps.Deps, cwd string, opts domainOptions, stdout, stderr io.Writer, stdin io.Reader) (err error) {
-	if err := requirePreviewClass("ocel domain release", opts.preview); err != nil {
+	if err := requirePreviewTier("ocel domain release", opts.preview); err != nil {
 		return err
 	}
 	cfg, err := projectconfig.Resolve(ctx, cwd, explicitConfigPath())
@@ -515,7 +515,7 @@ func renderCertificateRecords(out io.Writer, cert *contractv1.CertificateState) 
 
 func renderGlobalDomainProjects(out io.Writer, projects []string) {
 	if len(projects) == 0 {
-		fmt.Fprintln(out, "No project is bootstrapped into the preview class yet.")
+		fmt.Fprintln(out, "No project is bootstrapped into the preview tier yet.")
 		return
 	}
 	fmt.Fprintf(out, "Projects served (%d):\n", len(projects))

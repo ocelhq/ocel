@@ -11,7 +11,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	"github.com/ocelhq/ocel/pkg/envvars"
@@ -19,14 +19,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func (h *Service) envSourceSync(store envvars.Store, class edge.Class) (*envsource.Sync, error) {
+func (h *Service) envSourceSync(store envvars.Store, tier environment.Tier) (*envsource.Sync, error) {
 	backend, err := h.Source.Read()
 	if err != nil {
 		return nil, err
 	}
 	return &envsource.Sync{
 		Store: store,
-		Class: class,
+		Tier:  tier,
 		Login: envsource.Login{ProveIdentity: backend.ProveIdentity},
 	}, nil
 }
@@ -50,7 +50,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 		}
 		return &envvarsv1.SyncEnvSourceResponse{Status: &envvarsv1.EnvSourceStatus{EnvSource: descriptor.ID()}}, nil
 	}
-	envSync, err := h.envSourceSync(store, scope.Class)
+	envSync, err := h.envSourceSync(store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +62,11 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	if !slices.Contains(folders, "") {
 		folders = append(slices.Clone(folders), "")
 	}
-	previous, wasRegistered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	previous, wasRegistered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	registration, err := envsource.Register(ctx, store, scope.Class, envsource.Registration{Project: scope.Project, Descriptor: descriptor, Folders: folders})
+	registration, err := envsource.Register(ctx, store, scope.Tier, envsource.Registration{Project: scope.Project, Descriptor: descriptor, Folders: folders})
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -83,7 +83,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 			if wasRegistered {
 				restored = &previous
 			}
-			if restoreErr := envsource.RestoreRegistration(ctx, store, scope.Class, registration, restored); restoreErr != nil {
+			if restoreErr := envsource.RestoreRegistration(ctx, store, scope.Tier, registration, restored); restoreErr != nil {
 				err = errors.Join(err, fmt.Errorf("restore the env source this deploy replaced, so the next sync reads %s instead: %w", descriptor.ID(), restoreErr))
 			}
 		}
@@ -93,18 +93,18 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 }
 
 func switchToBuiltin(ctx context.Context, store envvars.Store, scope envvars.Scope) error {
-	_, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	_, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
 	if err != nil || !registered {
 		return err
 	}
 	if err := envsource.ClearProvenance(ctx, store, scope); err != nil {
 		return err
 	}
-	return envsource.ForgetProject(ctx, store, scope.Class, scope.Project)
+	return envsource.ForgetProject(ctx, store, scope.Tier, scope.Project)
 }
 
 func (h *Service) syncRegistered(ctx context.Context, store envvars.Store, scope envvars.Scope) (*envvarsv1.SyncEnvSourceResponse, error) {
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -114,9 +114,9 @@ func (h *Service) syncRegistered(ctx context.Context, store envvars.Store, scope
 	}
 	if registration.Descriptor.Kind == envsource.Exec {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%s in %s reads from exec, whose command runs where ocel deploys: deploy again to read it", scope.Project, scope.Class))
+			"%s in %s reads from exec, whose command runs where ocel deploys: deploy again to read it", scope.Project, scope.Tier))
 	}
-	envSync, err := h.envSourceSync(store, scope.Class)
+	envSync, err := h.envSourceSync(store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (h *Service) DescribeEnvSource(ctx context.Context, req *envvarsv1.Describe
 	if err != nil {
 		return nil, err
 	}
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -180,7 +180,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSo
 	if err != nil {
 		return nil, err
 	}
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -191,24 +191,24 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSo
 		}
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"%s in %s reads from %s, which ocel may not write into: set write to \"values\" on the tier's env source to let ocel create and update its values, or to \"missing\" to let it create a key it lacks",
-			at.GetKey(), scope.Class, current.ID()))
+			at.GetKey(), scope.Tier, current.ID()))
 	}
 	cell := envvars.Cell{Folder: at.GetFolder(), Key: at.GetKey()}
 	if !slices.Contains(registration.Folders, cell.Folder) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"%s is not a folder %s reads from %s in %s: ocel writes a value only in the root or in the folder of one of %s's apps",
-			cell.Folder, scope.Project, registration.Descriptor.ID(), scope.Class, scope.Project))
+			cell.Folder, scope.Project, registration.Descriptor.ID(), scope.Tier, scope.Project))
 	}
 	if slices.Contains(registration.Credentials(), cell) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"%s is what ocel logs in to %s with, so ocel stores it itself: set it with `%s`",
-			at.GetKey(), registration.Descriptor.ID(), envsource.SetCommand(scope.Class, at.GetKey())))
+			at.GetKey(), registration.Descriptor.ID(), envsource.SetCommand(scope.Tier, at.GetKey())))
 	}
 	copied, err := copiedFrom(ctx, store, scope, cell, registration.Descriptor.ID())
 	if err != nil {
 		return nil, err
 	}
-	envSync, err := h.envSourceSync(store, scope.Class)
+	envSync, err := h.envSourceSync(store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSo
 		return nil, envSourceError(registration.Descriptor, err)
 	}
 	url := func() string {
-		status, _ := envsource.StatusOf(ctx, store, scope.Class, registration)
+		status, _ := envsource.StatusOf(ctx, store, scope.Tier, registration)
 		return parenthesized(status.URLs[cell.Folder])
 	}
 	creating := copied == nil
@@ -242,11 +242,11 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSo
 	case errors.Is(err, envsource.ErrNotInFolder):
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"%s no longer keeps %s in %s itself, so ocel wrote nothing: if it was deleted there, run `%s` and set it again; if it is imported from another folder, change it where it lives%s",
-			source.ID(), at.GetKey(), folderName(cell.Folder), syncCommand(scope.Class), url()))
+			source.ID(), at.GetKey(), folderName(cell.Folder), syncCommand(scope.Tier), url()))
 	case errors.Is(err, envsource.ErrChangedSinceRead):
 		return nil, connect.NewError(connect.CodeAborted, fmt.Errorf(
 			"%s changed in %s since ocel last read it, so ocel wrote nothing over it: run `%s` to read it, then set it again",
-			at.GetKey(), source.ID(), syncCommand(scope.Class)))
+			at.GetKey(), source.ID(), syncCommand(scope.Tier)))
 	case errors.Is(err, envsource.ErrExists):
 		return nil, refuseOverwrite(source.ID(), at.GetKey(), url())
 	case err != nil:
@@ -292,15 +292,15 @@ func folderName(folder string) string {
 	return folder
 }
 
-func syncCommand(class edge.Class) string {
-	if class == edge.ClassPreview {
+func syncCommand(tier environment.Tier) string {
+	if tier == environment.TierPreview {
 		return "ocel env sync --preview"
 	}
 	return "ocel env sync"
 }
 
 func envSourceStatus(ctx context.Context, store envvars.Store, scope envvars.Scope, registration envsource.Registration) (*envvarsv1.EnvSourceStatus, error) {
-	status, err := envsource.StatusOf(ctx, store, scope.Class, registration)
+	status, err := envsource.StatusOf(ctx, store, scope.Tier, registration)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -326,7 +326,7 @@ func refuseEnvSourceOwned(ctx context.Context, store envvars.Store, scope envvar
 	if at.Environment != "" {
 		return nil
 	}
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Class, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
 	if err != nil {
 		return provider.RefusalError(err)
 	}
@@ -346,7 +346,7 @@ func refuseEnvSourceOwned(ctx context.Context, store envvars.Store, scope envvar
 			return nil
 		}
 	}
-	status, err := envsource.StatusOf(ctx, store, scope.Class, registration)
+	status, err := envsource.StatusOf(ctx, store, scope.Tier, registration)
 	if err != nil {
 		return provider.RefusalError(err)
 	}
@@ -355,12 +355,12 @@ func refuseEnvSourceOwned(ctx context.Context, store envvars.Store, scope envvar
 		copiedOn = "its next sync, within a minute"
 	}
 	perEnvironment := ""
-	if scope.Class == edge.ClassPreview {
+	if scope.Tier == environment.TierPreview {
 		perEnvironment = " A value for one preview environment is still yours to set with --environment <name>."
 	}
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"%s is read from %s, which owns every value %s sets for all of %s: change it there%s, and ocel copies it on %s.%s",
-		at, owner, scope.Project, scope.Class, parenthesized(status.URLs[at.Folder]), copiedOn, perEnvironment))
+		at, owner, scope.Project, scope.Tier, parenthesized(status.URLs[at.Folder]), copiedOn, perEnvironment))
 }
 
 func refuseAuthWithoutLogin(descriptor envsource.Descriptor, login envsource.Login) error {

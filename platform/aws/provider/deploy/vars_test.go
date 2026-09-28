@@ -56,7 +56,7 @@ func TestVarsDecryptPolicy(t *testing.T) {
 			t.Errorf("Resource = %q, want the bootstrap's own key ARN", st.Resource)
 		}
 		if strings.Contains(raw, previewVarsKeyARN) {
-			t.Errorf("policy = %s, must not reach another class's key", raw)
+			t.Errorf("policy = %s, must not reach another tier's key", raw)
 		}
 	})
 }

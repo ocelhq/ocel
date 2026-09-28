@@ -8,22 +8,22 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheClassRemovesIt(t *testing.T) {
+func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testing.T) {
 	a := live(t)
-	class := edge.ClassProduction
-	boot := a.emptied(t, class)
+	tier := environment.TierProduction
+	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
-	req := provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{provider.FeatureVarsKey}}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter, Features: []string{provider.FeatureVarsKey}}
 	if err := boot.Apply(ctx, req, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", provider.FeatureVarsKey, err)
 	}
 
-	name := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, string(class))
+	name := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, string(tier))
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
 		t.Fatalf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}
@@ -34,7 +34,7 @@ func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheClassRemovesIt(t *testi
 			t.Errorf("%s has no %s, so no scheduled env source is kept current", name, want)
 		}
 	}
-	group, err := defaultNamespace.StackNameFor(string(class))
+	group, err := defaultNamespace.StackNameFor(string(tier))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,14 +46,14 @@ func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheClassRemovesIt(t *testi
 		t.Errorf("%s names function %s, but Lambda has no such function", name, function)
 	}
 
-	if err := boot.Remove(ctx, class, nil); err != nil {
-		t.Fatalf("Remove(%s) = %v", class, err)
+	if err := boot.Remove(ctx, tier, nil); err != nil {
+		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
 	if status := a.stackStatus(t, name); status != "" && status != "DELETE_COMPLETE" {
-		t.Errorf("%s is in state %q after the class is removed, want it gone", name, status)
+		t.Errorf("%s is in state %q after the tier is removed, want it gone", name, status)
 	}
 	if function != "" && a.functionExists(function) {
-		t.Errorf("the env source sync %s outlived the class it synced", function)
+		t.Errorf("the env source sync %s outlived the tier it synced", function)
 	}
 }
 

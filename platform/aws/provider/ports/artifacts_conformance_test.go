@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -84,33 +84,33 @@ func (f *fakeS3) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput, _ .
 }
 
 func artifacts() ports.Artifacts {
-	return ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{}}
+	return ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{}}
 }
 
-type classBuckets struct {
+type tierBuckets struct {
 	cacheless bool
 	cache     ports.S3API
 }
 
-func (b classBuckets) Buckets(_ context.Context, class edge.Class) (ports.Buckets, error) {
+func (b tierBuckets) Buckets(_ context.Context, tier environment.Tier) (ports.Buckets, error) {
 	buckets := ports.Buckets{
-		Functions: "ocel-artifacts-" + string(class),
-		Assets:    "ocel-assets-" + string(class),
+		Functions: "ocel-artifacts-" + string(tier),
+		Assets:    "ocel-assets-" + string(tier),
 	}
 	if !b.cacheless {
-		buckets.Caches = []ports.CacheBucket{{Name: "ocel-cache-" + string(class), S3: b.cache}}
+		buckets.Caches = []ports.CacheBucket{{Name: "ocel-cache-" + string(tier), S3: b.cache}}
 	}
 	return buckets, nil
 }
 
 func cacheRef() provider.ArtifactRef {
-	return provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreCache, Key: "shop/prod/web/cache.json"}
+	return provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreCache, Key: "shop/prod/web/cache.json"}
 }
 
 func everyStoreRef() []provider.ArtifactRef {
 	return []provider.ArtifactRef{
-		{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
-		{Class: edge.ClassProduction, Bucket: provider.StoreAssets, Key: "shop/prod/web/static/app.js"},
+		{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+		{Tier: environment.TierProduction, Bucket: provider.StoreAssets, Key: "shop/prod/web/static/app.js"},
 		cacheRef(),
 	}
 }
@@ -123,7 +123,7 @@ func TestAStoreThisAccountHasNoBucketForRefusesRatherThanWritingNowhere(t *testi
 	t.Parallel()
 
 	store := artifacts()
-	store.Stores = classBuckets{cacheless: true}
+	store.Stores = tierBuckets{cacheless: true}
 	if err := store.Put(context.Background(), cacheRef(), bytes.NewReader([]byte("x"))); err == nil {
 		t.Fatal("Put() into a store this account has no bucket for succeeded, so the artifact went nowhere")
 	}
@@ -140,7 +140,7 @@ func TestAPrefixSweepReachesEveryStoreTheAccountKeeps(t *testing.T) {
 		}
 	}
 	var progress fake.Progress
-	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", &progress); err != nil {
+	if err := store.RemovePrefix(ctx, environment.TierProduction, "shop/prod/", &progress); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 	if want := []string{"INFO Removed the production artifacts under shop/prod/ from 3 buckets"}; !slices.Equal(progress.Lines(), want) {
@@ -160,15 +160,15 @@ func TestACacheStoreOffTheAccountsEndpointIsSweptThroughItsOwnClient(t *testing.
 
 	ctx := context.Background()
 	elsewhere := newFakeS3()
-	store := ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{cache: elsewhere}}
+	store := ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{cache: elsewhere}}
 	ref := cacheRef()
 	if err := store.Put(ctx, ref, bytes.NewReader([]byte("x"))); err != nil {
 		t.Fatal(err)
 	}
-	if _, stored := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Class), ref.Key)]; !stored {
+	if _, stored := elsewhere.objects[elsewhere.at("ocel-cache-"+string(ref.Tier), ref.Key)]; !stored {
 		t.Fatal("Put() wrote the cache artifact through the account's own client, not the store's")
 	}
-	if err := store.RemovePrefix(ctx, edge.ClassProduction, "shop/prod/", nil); err != nil {
+	if err := store.RemovePrefix(ctx, environment.TierProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 	if len(elsewhere.objects) != 0 {
@@ -185,8 +185,8 @@ func (goneS3) ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3
 func TestASweepOfACacheStoreAlreadyTornDownIsNoWork(t *testing.T) {
 	t.Parallel()
 
-	store := ports.Artifacts{S3: newFakeS3(), Stores: classBuckets{cache: goneS3{newFakeS3()}}}
-	if err := store.RemovePrefix(context.Background(), edge.ClassProduction, "shop/prod/", nil); err != nil {
+	store := ports.Artifacts{S3: newFakeS3(), Stores: tierBuckets{cache: goneS3{newFakeS3()}}}
+	if err := store.RemovePrefix(context.Background(), environment.TierProduction, "shop/prod/", nil); err != nil {
 		t.Fatalf("RemovePrefix() over a cache bucket already gone = %v, want the destroy to continue", err)
 	}
 }

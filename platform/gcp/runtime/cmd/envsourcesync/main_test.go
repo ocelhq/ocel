@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -22,13 +22,13 @@ func complete() map[string]string {
 		provider.NamespaceEnvVar: "ocel",
 		ports.ProjectEnvVar:      "acme-prod",
 		ports.RegionEnvVar:       "europe-west1",
-		ports.ClassEnvVar:        "production",
+		ports.TierEnvVar:         "production",
 	}
 }
 
 func TestTheSyncRefusesToStartWithoutWhereItReadsAndWrites(t *testing.T) {
 	t.Parallel()
-	for _, missing := range []string{provider.NamespaceEnvVar, ports.ProjectEnvVar, ports.RegionEnvVar, ports.ClassEnvVar} {
+	for _, missing := range []string{provider.NamespaceEnvVar, ports.ProjectEnvVar, ports.RegionEnvVar, ports.TierEnvVar} {
 		values := complete()
 		delete(values, missing)
 		if _, err := newSync(env(values)); err == nil || !strings.Contains(err.Error(), missing) {
@@ -37,12 +37,12 @@ func TestTheSyncRefusesToStartWithoutWhereItReadsAndWrites(t *testing.T) {
 	}
 }
 
-func TestTheSyncRefusesAClassNoBootstrapInstalls(t *testing.T) {
+func TestTheSyncRefusesATierNoBootstrapInstalls(t *testing.T) {
 	t.Parallel()
 	values := complete()
-	values[ports.ClassEnvVar] = "staging"
+	values[ports.TierEnvVar] = "staging"
 	if _, err := newSync(env(values)); err == nil || !strings.Contains(err.Error(), "production or preview") {
-		t.Errorf("newSync() = %v, want the classes it takes named", err)
+		t.Errorf("newSync() = %v, want the tiers it takes named", err)
 	}
 }
 
@@ -55,23 +55,23 @@ func TestTheSyncRefusesANamespaceNoBootstrapCouldHaveNamed(t *testing.T) {
 	}
 }
 
-func TestTheSyncReadsItsClassFromThatProjectsRecordsAndLogsInAsItsOwnAccount(t *testing.T) {
+func TestTheSyncReadsItsTierFromThatProjectsRecordsAndLogsInAsItsOwnAccount(t *testing.T) {
 	t.Parallel()
 	values := complete()
-	values[ports.ClassEnvVar] = "preview"
+	values[ports.TierEnvVar] = "preview"
 	sync, err := newSync(env(values))
 	if err != nil {
 		t.Fatalf("newSync() = %v", err)
 	}
-	if sync.Class != edge.ClassPreview {
-		t.Errorf("Class = %q, want preview", sync.Class)
+	if sync.Tier != environment.TierPreview {
+		t.Errorf("Tier = %q, want preview", sync.Tier)
 	}
 	records, isFirestore := sync.Store.Records.(ports.Records)
 	if !isFirestore || records.Clients.Project != "acme-prod" || records.Clients.Region != "europe-west1" || records.Clients.Namespace != "ocel" {
 		t.Errorf("Records = %+v, want the ocel database of acme-prod in europe-west1", sync.Store.Records)
 	}
 	if _, isKMS := sync.Store.Cipher.(ports.Cipher); !isKMS {
-		t.Errorf("Cipher = %T, want the class key in KMS", sync.Store.Cipher)
+		t.Errorf("Cipher = %T, want the tier key in KMS", sync.Store.Cipher)
 	}
 	if sync.Login.ProveIdentity == nil {
 		t.Error("Login has no ProveIdentity, so an Infisical env source with identity auth can never log in from here")

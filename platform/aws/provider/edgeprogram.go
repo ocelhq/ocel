@@ -8,16 +8,16 @@ import (
 )
 
 func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
-	deployed, err := p.bootstrapped(ctx, req.Class)
+	deployed, err := p.bootstrapped(ctx, req.Tier)
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
-	params, err := p.classParams(ctx, req.Class, req.Kind)
+	params, err := p.tierParams(ctx, req.Tier, req.Kind)
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
 	program := deploy.EdgeProgram{
-		Class:             req.Class,
+		Tier:              req.Tier,
 		Kind:              req.Kind,
 		Namespace:         string(p.namespace),
 		Slug:              req.Slug,

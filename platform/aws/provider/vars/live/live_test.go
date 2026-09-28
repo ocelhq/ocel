@@ -42,7 +42,7 @@ func TestRender(t *testing.T) {
 	t.Run("a manifest with no key ARN says how to make one", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := Render(Manifest{Slug: "shop", Table: "ocel-vars", Class: "production", Keys: []live.Key{{Key: "DB_PASSWORD"}}})
+		_, err := Render(Manifest{Slug: "shop", Table: "ocel-vars", Tier: "production", Keys: []live.Key{{Key: "DB_PASSWORD"}}})
 		if err == nil {
 			t.Fatal("Render = nil, want a manifest with live values and no key refused")
 		}
@@ -74,7 +74,7 @@ func TestRenderParse(t *testing.T) {
 			Slug:   "shop",
 			Table:  "ocel-vars",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
-			Class:  "production",
+			Tier:   "production",
 			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
@@ -90,7 +90,7 @@ func TestRenderParse(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse: %v", err)
 		}
-		if got.Slug != want.Slug || got.Table != want.Table || got.KeyARN != want.KeyARN || got.Class != want.Class {
+		if got.Slug != want.Slug || got.Table != want.Table || got.KeyARN != want.KeyARN || got.Tier != want.Tier {
 			t.Errorf("Parse = %+v, want %+v", got, want)
 		}
 		if len(got.Keys) != 2 || got.Keys[0] != want.Keys[0] || got.Keys[1] != want.Keys[1] {
@@ -104,7 +104,7 @@ func TestRenderParse(t *testing.T) {
 		want := postgresBinding()
 		want.Granted = 3
 		raw, err := Render(Manifest{
-			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "production",
+			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Tier: "production",
 			Bindings: []live.Binding{want},
 		})
 		if err != nil {
@@ -125,7 +125,7 @@ func TestRenderParse(t *testing.T) {
 	t.Run("refuses a binding type no binding type is called", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := Parse([]byte(`{"slug":"shop","table":"t","keyArn":"k","class":"production","bindings":[{"name":"x","key":"K","type":"ocel:postgres"}]}`)); err == nil {
+		if _, err := Parse([]byte(`{"slug":"shop","table":"t","keyArn":"k","tier":"production","bindings":[{"name":"x","key":"K","type":"ocel:postgres"}]}`)); err == nil {
 			t.Fatal("Parse absorbed a binding type it does not know")
 		}
 	})
@@ -134,14 +134,14 @@ func TestRenderParse(t *testing.T) {
 		t.Parallel()
 
 		raw, err := Render(Manifest{
-			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "production",
+			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Tier: "production",
 			Keys: []live.Key{{Key: "DB_PASSWORD"}},
 		})
 		if err != nil {
 			t.Fatalf("Render: %v", err)
 		}
 		if strings.Contains(string(raw), "environment") {
-			t.Errorf("rendered %s, which names an environment for a class that has only one", raw)
+			t.Errorf("rendered %s, which names an environment for a tier that has only one", raw)
 		}
 
 		got, err := Parse(raw)
@@ -157,7 +157,7 @@ func TestRenderParse(t *testing.T) {
 		t.Parallel()
 
 		raw, err := Render(Manifest{
-			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "preview",
+			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Tier: "preview",
 			Environment: "pr-42",
 			Keys:        []live.Key{{Key: "DB_PASSWORD"}},
 		})
@@ -169,7 +169,7 @@ func TestRenderParse(t *testing.T) {
 			t.Fatalf("Parse: %v", err)
 		}
 		if got.Environment != "pr-42" {
-			t.Errorf("environment = %q, want pr-42 — without it the runtime reads class-wide and the override is dead", got.Environment)
+			t.Errorf("environment = %q, want pr-42 — without it the runtime reads tier-wide and the override is dead", got.Environment)
 		}
 	})
 }

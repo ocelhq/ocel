@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
@@ -28,14 +28,14 @@ type Seal struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
-func sealKey(class edge.Class) Item {
-	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class, Note: "seals secret values"}
+func sealKey(tier environment.Tier) Item {
+	return Item{Kind: KindSealKey, Name: SealKeyPath(tier), Mode: sealKeyMode, Owner: rootOwner, Tier: tier, Note: "seals secret values"}
 }
 
-func sealSudoers(class edge.Class) []byte {
+func sealSudoers(tier environment.Tier) []byte {
 	allowed := make([]string, 0, 2)
 	for _, verb := range []string{"seal", "open"} {
-		allowed = append(allowed, boxstore.SealHelper+" "+string(class)+" "+verb+" *")
+		allowed = append(allowed, boxstore.SealHelper+" "+string(tier)+" "+verb+" *")
 	}
 	return []byte(deployUser + " ALL=(root) NOPASSWD: " + strings.Join(allowed, ", ") + "\n")
 }
@@ -45,7 +45,7 @@ func (i Item) mint() string {
 	return "if [ -e " + name + " ]; then chown " + rootOwner + ":" + rootOwner + " " + name +
 		fmt.Sprintf(" && chmod %04o ", i.Mode) + name + "; else " +
 		`command -v python3 >/dev/null 2>&1 || { echo 'the seal helper needs python3' >&2; exit 1; }
-` + quoted(boxstore.SealHelper) + " " + quoted(string(i.Class)) + " init; fi"
+` + quoted(boxstore.SealHelper) + " " + quoted(string(i.Tier)) + " init; fi"
 }
 
 func NewCipher(h *Host) *boxstore.Cipher { return boxstore.NewCipher(sshSeal{host: h}) }

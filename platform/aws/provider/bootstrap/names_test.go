@@ -4,80 +4,80 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func namesOf(t *testing.T, n Namespace) map[string]string {
 	t.Helper()
-	production, err := n.StackNameFor(ClassProduction)
+	production, err := n.StackNameFor(TierProduction)
 	if err != nil {
 		t.Fatalf("production stack name: %v", err)
 	}
-	preview, err := n.StackNameFor(ClassPreview)
+	preview, err := n.StackNameFor(TierPreview)
 	if err != nil {
 		t.Fatalf("preview stack name: %v", err)
 	}
-	edgeUser, err := n.EdgeUserNameFor(ClassProduction)
+	edgeUser, err := n.EdgeUserNameFor(TierProduction)
 	if err != nil {
 		t.Fatalf("edge user name: %v", err)
 	}
-	edgeUserPreview, err := n.EdgeUserNameFor(ClassPreview)
+	edgeUserPreview, err := n.EdgeUserNameFor(TierPreview)
 	if err != nil {
 		t.Fatalf("preview edge user name: %v", err)
 	}
-	originSecret, err := n.OriginSecretParamFor(ClassProduction)
+	originSecret, err := n.OriginSecretParamFor(TierProduction)
 	if err != nil {
 		t.Fatalf("origin secret param: %v", err)
 	}
-	originSecretPreview, err := n.OriginSecretParamFor(ClassPreview)
+	originSecretPreview, err := n.OriginSecretParamFor(TierPreview)
 	if err != nil {
 		t.Fatalf("preview origin secret param: %v", err)
 	}
-	edgeParams, err := n.EdgeParamPrefix(ClassProduction, KindCloudflare)
+	edgeParams, err := n.EdgeParamPrefix(TierProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("edge param prefix: %v", err)
 	}
-	edgeParamsPreview, err := n.EdgeParamPrefix(ClassPreview, KindCloudflare)
+	edgeParamsPreview, err := n.EdgeParamPrefix(TierPreview, KindCloudflare)
 	if err != nil {
 		t.Fatalf("preview edge param prefix: %v", err)
 	}
-	queue, dlq := n.revalidateQueueNames(ClassProduction)
-	previewQueue, previewDLQ := n.revalidateQueueNames(ClassPreview)
+	queue, dlq := n.revalidateQueueNames(TierProduction)
+	previewQueue, previewDLQ := n.revalidateQueueNames(TierPreview)
 	return map[string]string{
 		"core stack":            production,
 		"preview core stack":    preview,
-		"feature stack":         n.FeatureStackName(FeatureImageOptimization, ClassProduction),
-		"preview feature stack": n.FeatureStackName(FeatureImageOptimization, ClassPreview),
+		"feature stack":         n.FeatureStackName(FeatureImageOptimization, TierProduction),
+		"preview feature stack": n.FeatureStackName(FeatureImageOptimization, TierPreview),
 		"passphrase param":      n.PassphraseParamName(),
 		"edge user":             edgeUser,
 		"preview edge user":     edgeUserPreview,
-		"app boundary":          n.AppBoundaryNameFor(ClassProduction),
-		"preview app boundary":  n.AppBoundaryNameFor(ClassPreview),
+		"app boundary":          n.AppBoundaryNameFor(TierProduction),
+		"preview app boundary":  n.AppBoundaryNameFor(TierPreview),
 		"origin secret":         originSecret,
 		"preview origin secret": originSecretPreview,
 		"edge param prefix":     edgeParams,
 		"preview edge params":   edgeParamsPreview,
-		"vars key alias":        n.varsKeyAliasFor(ClassProduction),
-		"edge invoke role":      n.EdgeInvokeRoleName(edge.ClassProduction),
-		"preview invoke role":   n.EdgeInvokeRoleName(edge.ClassPreview),
-		"not found api":         n.EdgeNotFoundAPIName(edge.ClassProduction),
-		"routes store":          n.EdgeRoutesStoreName(edge.ClassProduction),
-		"preview routes store":  n.EdgeRoutesStoreName(edge.ClassPreview),
-		"resolver":              n.EdgeResolverName(edge.ClassPreview),
-		"empty body function":   n.EdgeEmptyBodyName(edge.ClassProduction),
-		"cache policy":          n.edgeCachePolicyName(edge.ClassProduction),
-		"headers policy":        n.edgeHeadersPolicyName(edge.ClassProduction),
-		"asset access":          n.edgeAssetAccessName(edge.ClassProduction),
+		"vars key alias":        n.varsKeyAliasFor(TierProduction),
+		"edge invoke role":      n.EdgeInvokeRoleName(environment.TierProduction),
+		"preview invoke role":   n.EdgeInvokeRoleName(environment.TierPreview),
+		"not found api":         n.EdgeNotFoundAPIName(environment.TierProduction),
+		"routes store":          n.EdgeRoutesStoreName(environment.TierProduction),
+		"preview routes store":  n.EdgeRoutesStoreName(environment.TierPreview),
+		"resolver":              n.EdgeResolverName(environment.TierPreview),
+		"empty body function":   n.EdgeEmptyBodyName(environment.TierProduction),
+		"cache policy":          n.edgeCachePolicyName(environment.TierProduction),
+		"headers policy":        n.edgeHeadersPolicyName(environment.TierProduction),
+		"asset access":          n.edgeAssetAccessName(environment.TierProduction),
 		"revalidate queue":      queue,
 		"revalidate dlq":        dlq,
 		"preview queue":         previewQueue,
 		"preview dlq":           previewDLQ,
 		"cache policy name":     n.PolicyName("edge-cache"),
-		"schedule group":        n.envSourceSyncScheduleGroupName(ClassProduction),
-		"preview schedules":     n.envSourceSyncScheduleGroupName(ClassPreview),
-		"schedule":              n.envSourceSyncScheduleName(ClassProduction),
-		"preview schedule":      n.envSourceSyncScheduleName(ClassPreview),
+		"schedule group":        n.envSourceSyncScheduleGroupName(TierProduction),
+		"preview schedules":     n.envSourceSyncScheduleGroupName(TierPreview),
+		"schedule":              n.envSourceSyncScheduleName(TierProduction),
+		"preview schedule":      n.envSourceSyncScheduleName(TierPreview),
 	}
 }
 

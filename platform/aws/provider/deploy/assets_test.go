@@ -109,7 +109,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		}
 	})
 
-	t.Run("stamps content type and cache control per path class", func(t *testing.T) {
+	t.Run("stamps content type and cache control per path tier", func(t *testing.T) {
 		t.Parallel()
 		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{

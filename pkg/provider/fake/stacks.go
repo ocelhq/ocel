@@ -187,7 +187,7 @@ func (r *Stacks) Destroyed() []string {
 }
 
 func stackKey(ref provider.StackRef) string {
-	return ref.Project + "/" + string(ref.Class) + "/" + ref.Name.String()
+	return ref.Project + "/" + string(ref.Tier) + "/" + ref.Name.String()
 }
 
 func propertiesFor(t provider.BindingType, name string) map[string]string {

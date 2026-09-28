@@ -60,7 +60,7 @@ func fixtureBindings() []*bindingsv1.Binding {
 func fixtureDeploy() Deploy {
 	return Deploy{
 		Slug:        "proj-123",
-		Environment: Environment{Class: "preview", Identity: "e2e-42"},
+		Environment: Environment{Tier: "preview", Identity: "e2e-42"},
 		PromotionID: "prm_1",
 		Tag:         "v9",
 	}
@@ -157,7 +157,7 @@ func TestDerive(t *testing.T) {
 		if got.Slug != "proj-123" || got.PromotionID != "prm_1" || got.Tag != "v9" {
 			t.Errorf("record = %+v, want the deploy's slug, promotion and tag", got)
 		}
-		if (got.Environment != Environment{Class: "preview", Identity: "e2e-42"}) {
+		if (got.Environment != Environment{Tier: "preview", Identity: "e2e-42"}) {
 			t.Errorf("environment = %+v, want the named preview", got.Environment)
 		}
 	})

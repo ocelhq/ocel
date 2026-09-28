@@ -2,15 +2,15 @@ package bootstrap
 
 import "github.com/ocelhq/ocel/pkg/edge"
 
-func namesFor(class string, kind edge.Kind) edgeNames {
-	names, err := edgeNamesFor(defaultNamespace, class, kind)
+func namesFor(tier string, kind edge.Kind) edgeNames {
+	names, err := edgeNamesFor(defaultNamespace, tier, kind)
 	if err != nil {
-		panic("no edge parameter names for class " + class + " and kind " + string(kind))
+		panic("no edge parameter names for tier " + tier + " and kind " + string(kind))
 	}
 	return names
 }
 
-func cloudflareNames(class string) edgeNames { return namesFor(class, KindCloudflare) }
+func cloudflareNames(tier string) edgeNames { return namesFor(tier, KindCloudflare) }
 
 func fixtureRefs() stackRefs {
 	return stackRefs{
@@ -34,22 +34,22 @@ func everyFeature() FeatureSet {
 	return set
 }
 
-func featureTemplate(name, class string) string {
-	return featureTemplateWith(name, class, everyFeature())
+func featureTemplate(name, tier string) string {
+	return featureTemplateWith(name, tier, everyFeature())
 }
 
-func featureTemplateWith(name, class string, alongside FeatureSet) string {
-	return featureStackFor(name, class, alongside).body
+func featureTemplateWith(name, tier string, alongside FeatureSet) string {
+	return featureStackFor(name, tier, alongside).body
 }
 
-func featureStackFor(name, class string, alongside FeatureSet) featureStack {
+func featureStackFor(name, tier string, alongside FeatureSet) featureStack {
 	f, ok := featureNamed(name)
 	if !ok {
 		panic("no feature named " + name)
 	}
 	return f.template(featureInputs{
 		ns:        defaultNamespace,
-		class:     class,
+		tier:      tier,
 		code:      fixturePayloads(),
 		refs:      fixtureRefs(),
 		alongside: alongside,

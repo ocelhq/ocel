@@ -38,25 +38,25 @@ type TeardownAPIs struct {
 	Buckets cfn.BucketEmptierAPI
 }
 
-func SiblingClassOf(class string) (string, error) {
-	switch class {
-	case ClassProduction:
-		return ClassPreview, nil
-	case ClassPreview:
-		return ClassProduction, nil
+func SiblingTierOf(tier string) (string, error) {
+	switch tier {
+	case TierProduction:
+		return TierPreview, nil
+	case TierPreview:
+		return TierProduction, nil
 	default:
-		return "", fmt.Errorf("bootstrap: unknown class %q", class)
+		return "", fmt.Errorf("bootstrap: unknown tier %q", tier)
 	}
 }
 
-func ClassParamNames(ns Namespace, class string) ([]string, error) {
-	secret, err := ns.OriginSecretParamFor(class)
+func TierParamNames(ns Namespace, tier string) ([]string, error) {
+	secret, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
 		return nil, err
 	}
 	var params []string
 	for _, kind := range edgeKinds() {
-		names, err := edgeNamesFor(ns, class, kind)
+		names, err := edgeNamesFor(ns, tier, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -65,8 +65,8 @@ func ClassParamNames(ns Namespace, class string) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (bool, error) {
-	sibling, err := SiblingClassOf(class)
+func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (bool, error) {
+	sibling, err := SiblingTierOf(tier)
 	if err != nil {
 		return false, err
 	}
@@ -81,10 +81,10 @@ func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespac
 	return out != nil, nil
 }
 
-func featureStackNames(ns Namespace, names []string, class string) []string {
+func featureStackNames(ns Namespace, names []string, tier string) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
-		out = append(out, ns.FeatureStackName(name, class))
+		out = append(out, ns.FeatureStackName(name, tier))
 	}
 	return out
 }
@@ -101,13 +101,13 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, names []string, progress progress.Progress) error {
+func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier string, names []string, progress progress.Progress) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
 	}
 	for _, name := range order {
-		stackName := ns.FeatureStackName(name, class)
+		stackName := ns.FeatureStackName(name, tier)
 		out, err := cfn.StackOutputs(ctx, stacks, stackName)
 		if err != nil {
 			return err
@@ -123,18 +123,18 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 	return nil
 }
 
-func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress progress.Progress) error {
+func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier string, progress progress.Progress) error {
 	progress = ensureProgress(progress)
 
-	stackName, err := ns.StackNameFor(class)
+	stackName, err := ns.StackNameFor(tier)
 	if err != nil {
 		return err
 	}
-	userName, err := ns.EdgeUserNameFor(class)
+	userName, err := ns.EdgeUserNameFor(tier)
 	if err != nil {
 		return err
 	}
-	params, err := ClassParamNames(ns, class)
+	params, err := TierParamNames(ns, tier)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	if err != nil {
 		return err
 	}
-	deployed, _, err := readBootstrap(ctx, apis.CFN, ns, class)
+	deployed, _, err := readBootstrap(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return err
 	}
@@ -169,20 +169,20 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		}
 	}
 
-	installed, err := installedFeatures(ctx, apis.CFN, ns, class)
+	installed, err := installedFeatures(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return err
 	}
 	present := installed.Names()
 	if len(present) > 0 {
-		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
-		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, progress); err != nil {
+		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, tier), ", ")))
+		if err := deleteFeatureStacks(ctx, apis.CFN, ns, tier, present, progress); err != nil {
 			return err
 		}
 	}
 
-	progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
-	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, progress); err != nil {
+	progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(tier)))
+	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, tier, progress); err != nil {
 		return err
 	}
 
@@ -200,13 +200,13 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		}
 	}
 
-	progress.Say(fmt.Sprintf("Deleting the %s bootstrap's stored parameters (SSM)", class))
-	shared, err := SiblingSharesPassphrase(ctx, apis.CFN, ns, class)
+	progress.Say(fmt.Sprintf("Deleting the %s bootstrap's stored parameters (SSM)", tier))
+	shared, err := SiblingSharesPassphrase(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return err
 	}
 	if shared {
-		progress.Say(fmt.Sprintf("Keeping the Pulumi passphrase in %s: the %s bootstrap is still installed and its Pulumi state is encrypted under it", ns.PassphraseParamName(), siblingName(class)))
+		progress.Say(fmt.Sprintf("Keeping the Pulumi passphrase in %s: the %s bootstrap is still installed and its Pulumi state is encrypted under it", ns.PassphraseParamName(), siblingName(tier)))
 	} else {
 		params = append(params, ns.PassphraseParamName())
 	}
@@ -218,8 +218,8 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	return nil
 }
 
-func siblingName(class string) string {
-	sibling, err := SiblingClassOf(class)
+func siblingName(tier string) string {
+	sibling, err := SiblingTierOf(tier)
 	if err != nil {
 		return ""
 	}

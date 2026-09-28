@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -21,10 +21,10 @@ func preflightConfig() Config {
 
 func preflightSpec() provider.DeploySpec {
 	return provider.DeploySpec{
-		Slug:  "shop",
-		Class: edge.ClassProduction,
-		Env:   "prod",
-		Apps:  []provider.AppEntry{{App: "web"}, {App: "docs"}},
+		Slug: "shop",
+		Tier: environment.TierProduction,
+		Env:  "prod",
+		Apps: []provider.AppEntry{{App: "web"}, {App: "docs"}},
 	}
 }
 

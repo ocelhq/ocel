@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 )
 
@@ -64,7 +64,7 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	found, err := store.GetDereferenced(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: name}}, true)
 	switch {
 	case errors.Is(err, envvars.ErrNotFound), errors.Is(err, envvars.ErrDangling):
-		return "", &CredentialError{Variable: name, Unset: true, Reason: fmt.Sprintf("has no value in %s: set it with `%s`", scope.Class, SetCommand(scope.Class, name))}
+		return "", &CredentialError{Variable: name, Unset: true, Reason: fmt.Sprintf("has no value in %s: set it with `%s`", scope.Tier, SetCommand(scope.Tier, name))}
 	case err != nil:
 		return "", fmt.Errorf("read %s: %w", name, err)
 	}
@@ -74,7 +74,7 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	if found.Project == scope.Project {
 		return found.Plaintext, nil
 	}
-	registration, registered, err := Registered(ctx, store.Records, scope.Class, found.Project)
+	registration, registered, err := Registered(ctx, store.Records, scope.Tier, found.Project)
 	if err != nil {
 		return "", err
 	}
@@ -84,9 +84,9 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	return found.Plaintext, nil
 }
 
-func SetCommand(class edge.Class, name string) string {
+func SetCommand(tier environment.Tier, name string) string {
 	command := "ocel env set " + name + "=<VALUE>"
-	if class == edge.ClassPreview {
+	if tier == environment.TierPreview {
 		command += " --preview"
 	}
 	return command

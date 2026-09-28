@@ -12,7 +12,7 @@ type Resource struct {
 
 type Request struct {
 	Provider  string     `json:"provider"`
-	EnvClass  string     `json:"envClass"`
+	EnvTier   string     `json:"envTier"`
 	Env       string     `json:"env"`
 	Resources []Resource `json:"resources"`
 }

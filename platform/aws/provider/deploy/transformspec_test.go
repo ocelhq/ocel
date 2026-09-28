@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -54,7 +54,7 @@ func specUnderTransform() provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
-			Class:   edge.ClassProduction,
+			Tier:    environment.TierProduction,
 			Name:    naming.AppStack("production", "api", naming.NewRelease("dep1", "fp1")),
 		},
 		Kind: provider.StackApp,
@@ -124,8 +124,8 @@ func TestAnAppStackOffersOnlyTheFunctionsItProvisions(t *testing.T) {
 	if pass.seen.Provider != transformProvider {
 		t.Errorf("the transform was told provider %q, want %q", pass.seen.Provider, transformProvider)
 	}
-	if pass.seen.Env != "production" || pass.seen.EnvClass != string(edge.ClassProduction) {
-		t.Errorf("the transform was told env %q class %q, want the spec's own coordinate", pass.seen.Env, pass.seen.EnvClass)
+	if pass.seen.Env != "production" || pass.seen.EnvTier != string(environment.TierProduction) {
+		t.Errorf("the transform was told env %q tier %q, want the spec's own coordinate", pass.seen.Env, pass.seen.EnvTier)
 	}
 }
 

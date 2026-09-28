@@ -5,7 +5,7 @@ import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate
 function request(overrides: Partial<EvaluateRequest> = {}): EvaluateRequest {
   return {
     provider: "aws",
-    envClass: "production",
+    envTier: "production",
     env: "production",
     resources: [{ type: "function", name: "api", app: "web" }],
     ...overrides,
@@ -176,7 +176,7 @@ describe("evaluate", () => {
       module(
         "./preview.transform.ts",
         defineTransform({
-          if: (ctx) => ctx.envClass === "preview",
+          if: (ctx) => ctx.envTier === "preview",
           aws: { function: { lambda: { memorySize: 128 } } },
         }),
       ),
@@ -191,13 +191,13 @@ describe("evaluate", () => {
       module(
         "./env.transform.ts",
         defineTransform((inputs) => {
-          seen = [inputs.envClass, inputs.env];
+          seen = [inputs.envTier, inputs.env];
           return { aws: {} };
         }),
       ),
     ];
 
-    evaluate(request({ envClass: "preview", env: "pr-12" }), modules);
+    evaluate(request({ envTier: "preview", env: "pr-12" }), modules);
 
     expect(seen).toEqual(["preview", "pr-12"]);
   });

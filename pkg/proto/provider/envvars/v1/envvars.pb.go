@@ -2922,15 +2922,15 @@ var File_provider_envvars_v1_envvars_proto protoreflect.FileDescriptor
 
 const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
-	"!provider/envvars/v1/envvars.proto\x12\x13provider.envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xb4\x04\n" +
+	"!provider/envvars/v1/envvars.proto\x12\x13provider.envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xb2\x04\n" +
 	"\n" +
 	"Coordinate\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x90\x02\n" +
 	"\x06folder\x18\x02 \x01(\tB\xf7\x01\xbaH\xf3\x01\xba\x01\x90\x01\n" +
 	"\x1eenvvars.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'r]2[^(/([^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.[^/#.[:cntrl:]][^/#[:cntrl:]]*|\\.\\.[^/#[:cntrl:]]+))*$R\x06folder\x12+\n" +
-	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\xae\x01\n" +
-	"\venvironment\x18\x04 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\x85\x02\n" +
+	"\x03key\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\xac\x01\n" +
+	"\venvironment\x18\x04 \x01(\tB\x89\x01\xbaH\x85\x01\xba\x01n\n" +
+	"\x1denvvars.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"\x85\x02\n" +
 	"\rValueMetadata\x12?\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2\x1f.provider.envvars.v1.CoordinateR\n" +
@@ -3014,32 +3014,32 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"coordinate\x18\x02 \x01(\v2\x1f.provider.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\"U\n" +
 	"\x14ListVersionsResponse\x12=\n" +
-	"\bversions\x18\x01 \x03(\v2!.provider.envvars.v1.VersionEntryR\bversions\"\xac\x04\n" +
+	"\bversions\x18\x01 \x03(\v2!.provider.envvars.v1.VersionEntryR\bversions\"\xaa\x04\n" +
 	"\x11SetBindingRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd9\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa7\x01\xbaH\xa3\x01\xba\x01\x9f\x01\n" +
-	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
-	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12=\n" +
+	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xac\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x89\x01\xbaH\x85\x01\xba\x01n\n" +
+	"\x1denvvars.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12=\n" +
 	"\abinding\x18\x04 \x01(\v2\x1b.common.bindings.v1.BindingB\x06\xbaH\x03\xc8\x01\x01R\abinding\x12\x14\n" +
 	"\x05owner\x18\x05 \x01(\tR\x05owner\".\n" +
 	"\x12SetBindingResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\"\x89\x04\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\"\x87\x04\n" +
 	"\x14RemoveBindingRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd9\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa7\x01\xbaH\xa3\x01\xba\x01\x9f\x01\n" +
-	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
-	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12-\n" +
+	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xac\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x89\x01\xbaH\x85\x01\xba\x01n\n" +
+	"\x1denvvars.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12-\n" +
 	"\x04name\x18\x04 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x04name\"1\n" +
 	"\x15RemoveBindingResponse\x12\x18\n" +
-	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xd9\x03\n" +
+	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xd7\x03\n" +
 	"\x13ListBindingsRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd9\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa7\x01\xbaH\xa3\x01\xba\x01\x9f\x01\n" +
-	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
-	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"W\n" +
+	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xac\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x89\x01\xbaH\x85\x01\xba\x01n\n" +
+	"\x1denvvars.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"W\n" +
 	"\x14ListBindingsResponse\x12?\n" +
 	"\bbindings\x18\x01 \x03(\v2#.provider.envvars.v1.BindingSummaryR\bbindings\"\xe5\x01\n" +
 	"\x0eBindingSummary\x12\x12\n" +

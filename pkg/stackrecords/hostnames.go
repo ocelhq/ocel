@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 )
@@ -169,7 +170,7 @@ func (s *EdgeState) Forget(hostname string) {
 }
 
 func ReadWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
-	name := WildcardRecord(edge.ClassPreview)
+	name := WildcardRecord(environment.TierPreview)
 	record, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
@@ -188,7 +189,7 @@ func ProjectsServedOnPreview(ctx context.Context, store records.Store, baseDomai
 	if baseDomain == "" {
 		return nil, nil
 	}
-	under := EdgeStacksRecord(edge.ClassPreview)
+	under := EdgeStacksRecord(environment.TierPreview)
 	recorded, err := store.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)

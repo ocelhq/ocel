@@ -87,10 +87,10 @@ func ValidateBindingName(environment, name string) error {
 }
 
 func ValidateBindingEnvironment(environment string) error {
-	if environment == ClassWideEnvironment {
+	if environment == TierWideEnvironment {
 		return fmt.Errorf(
-			"%q is reserved: it names the pair that binds class-wide. Leave the environment off to publish there, which serves every preview including the ephemeral ones",
-			ClassWideEnvironment)
+			"%q is reserved: it names the pair that binds tier-wide. Leave the environment off to publish there, which serves every preview including the ephemeral ones",
+			TierWideEnvironment)
 	}
 	return refuseControl("environment name", environment)
 }
@@ -225,7 +225,7 @@ func (s Store) claimRefusal(scope Scope, name, by, asking string) error {
 	return fmt.Errorf(
 		"binding %s in %s is already published by %s, and %s is asking to write it: one binding name belongs to one publisher, and taking it would hand every app consuming that name another resource's values. "+
 			"Give one of them another name, or remove the published one first: %w",
-		name, scope.Class, describeOwner(by), describeOwner(asking), ErrClaimed)
+		name, scope.Tier, describeOwner(by), describeOwner(asking), ErrClaimed)
 }
 
 func describeOwner(owner string) string {
@@ -486,11 +486,11 @@ func (s Store) PublishedNames(ctx context.Context, scope Scope, environment stri
 }
 
 func bindsTo(at, environment string) bool {
-	return at == canonicalEnvironment(environment) || at == ClassWideEnvironment
+	return at == canonicalEnvironment(environment) || at == TierWideEnvironment
 }
 
 func shadowing(environment string) []string {
-	if environment == "" || environment == ClassWideEnvironment {
+	if environment == "" || environment == TierWideEnvironment {
 		return []string{""}
 	}
 	return []string{environment, ""}
@@ -498,7 +498,7 @@ func shadowing(environment string) []string {
 
 func describeEnvironment(environment string) string {
 	if environment == "" {
-		return "the class"
+		return "the tier"
 	}
 	return environment
 }
@@ -652,7 +652,7 @@ func decodeBindingValue(name string, recorded records.Record) (bindingValue, err
 func bindingCoordinate(scope Scope, environment, name string) records.SealScope {
 	return records.SealScope{
 		Project: scope.Project,
-		Class:   scope.Class,
+		Tier:    scope.Tier,
 		Env:     canonicalEnvironment(environment),
 		Folder:  rootFolder,
 		Binding: name,

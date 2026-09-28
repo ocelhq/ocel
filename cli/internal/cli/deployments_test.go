@@ -95,10 +95,10 @@ func TestRunDeploymentsLs(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPromotionsLs(context.Background(), deps, root, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runPromotionsLs err = nil, want a class-mismatch error")
+			t.Fatal("runPromotionsLs err = nil, want a tier-mismatch error")
 		}
 		if out := stdout.String(); !strings.Contains(out, "this command needs production infrastructure") {
-			t.Errorf("stdout = %q, want the concrete class-mismatch message", out)
+			t.Errorf("stdout = %q, want the concrete tier-mismatch message", out)
 		}
 	})
 }
@@ -146,11 +146,11 @@ func TestRunDeploymentsPrune(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPromotionsPrune(context.Background(), deps, root, 10)
 		if err == nil {
-			t.Fatal("runPromotionsPrune err = nil, want a class-mismatch failure")
+			t.Fatal("runPromotionsPrune err = nil, want a tier-mismatch failure")
 		}
 		out := stdout.String()
 		if !strings.Contains(out, "this command needs production infrastructure") {
-			t.Errorf("stdout = %q, want the concrete class-mismatch message", out)
+			t.Errorf("stdout = %q, want the concrete tier-mismatch message", out)
 		}
 		if strings.Contains(out, "Reclaimed") {
 			t.Errorf("stdout = %q, want no prune to have been driven against preview infra", out)

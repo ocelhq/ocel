@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Shaped struct {
@@ -15,7 +15,7 @@ type Shaped struct {
 
 type EdgeSite struct {
 	Slug   string
-	Class  edge.Class
+	Tier   environment.Tier
 	Region string
 	Apps   []EdgeApp
 }

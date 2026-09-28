@@ -1,6 +1,6 @@
 import { awsOwnedFields } from "./aws";
 import {
-  type EnvClass,
+  type EnvTier,
   type GateContext,
   reservedTagPrefix,
   ruleKeywords,
@@ -29,7 +29,7 @@ export interface RequestResource {
 /** What a deploy asks the modules about: the environment, and every candidate in it. */
 export interface EvaluateRequest {
   readonly provider: string;
-  readonly envClass: EnvClass;
+  readonly envTier: EnvTier;
   readonly env: string;
   readonly resources: readonly RequestResource[];
 }
@@ -81,7 +81,7 @@ export function evaluate(
 function load(request: EvaluateRequest, module: TransformModule): LoadedModule {
   const rules = module.definition.rules({
     bindings: bindings as TransformBindings,
-    envClass: request.envClass,
+    envTier: request.envTier,
     env: request.env,
   });
   const branches = new Set<string>();
@@ -113,7 +113,7 @@ function evaluateResource(
   const patches: Patches = {};
   const tags: TagMap = {};
   const ctx = Object.freeze<GateContext>({
-    envClass: request.envClass,
+    envTier: request.envTier,
     env: request.env,
     app: resource.app,
   });

@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/api/artifactregistry/v1"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -20,7 +20,7 @@ func againstAProject(t *testing.T) *gcp.Provider {
 	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 }
 
-func readRepository(t *testing.T, p *gcp.Provider, class edge.Class) *artifactregistry.Repository {
+func readRepository(t *testing.T, p *gcp.Provider, tier environment.Tier) *artifactregistry.Repository {
 	t.Helper()
 
 	ctx := context.Background()
@@ -28,7 +28,7 @@ func readRepository(t *testing.T, p *gcp.Provider, class edge.Class) *artifactre
 	if err != nil {
 		t.Fatalf("reach Artifact Registry: %v", err)
 	}
-	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(class)
+	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(tier)
 	repository, err := service.Projects.Locations.Repositories.Get(name).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("Get(%s) after a bootstrap = %v, want the repository the deploy pushes images to", name, err)
@@ -38,10 +38,10 @@ func readRepository(t *testing.T, p *gcp.Provider, class edge.Class) *artifactre
 
 func TestProjectTheImageRepositoryExistsWhereTheDeployPushesTo(t *testing.T) {
 	p := againstAProject(t)
-	class := edge.ClassProduction
-	bootstrapped(t, p, class)
+	tier := environment.TierProduction
+	bootstrapped(t, p, tier)
 
-	repository := readRepository(t, p, class)
+	repository := readRepository(t, p, tier)
 	if repository.Format != "DOCKER" {
 		t.Errorf("the repository stores %s packages, want DOCKER: Cloud Run runs container images", repository.Format)
 	}
@@ -63,23 +63,23 @@ func TestProjectTheImageRepositoryExistsWhereTheDeployPushesTo(t *testing.T) {
 
 func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBootstrap(t *testing.T) {
 	p := againstAProject(t)
-	class := edge.ClassProduction
-	bootstrap := bootstrapped(t, p, class)
+	tier := environment.TierProduction
+	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
 	service, err := artifactregistry.NewService(ctx)
 	if err != nil {
 		t.Fatalf("reach Artifact Registry: %v", err)
 	}
-	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(class)
+	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(tier)
 	if _, err := service.Projects.Locations.Repositories.Patch(name, &artifactregistry.Repository{}).
 		UpdateMask("cleanup_policies").Context(ctx).Do(); err != nil {
 		t.Fatalf("take the cleanup policies off %s: %v", name, err)
 	}
 
-	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"})
 	if err != nil {
-		t.Fatalf("Plan(%s) = %v", class, err)
+		t.Fatalf("Plan(%s) = %v", tier, err)
 	}
 	mending := false
 	for _, group := range plan.Groups {
@@ -93,10 +93,10 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 		t.Errorf("Plan() after the policies were edited away shows %+v, want the repository row reading as an update: a survey that only asks whether a repository exists never mends one", plan.Groups)
 	}
 
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply(%s) = %v", class, err)
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) = %v", tier, err)
 	}
-	if _, named := readRepository(t, p, class).CleanupPolicies["drop-untagged"]; !named {
+	if _, named := readRepository(t, p, tier).CleanupPolicies["drop-untagged"]; !named {
 		t.Error("the repository has no drop-untagged policy after a second bootstrap, and drift nothing mends is drift that stays")
 	}
 }

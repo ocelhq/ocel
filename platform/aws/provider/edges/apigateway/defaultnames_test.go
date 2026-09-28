@@ -8,5 +8,5 @@ import (
 var (
 	defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
 
-	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.ClassProduction)
+	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.TierProduction)
 )

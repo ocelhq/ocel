@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -171,7 +172,7 @@ func (h *Host) routingTable(ctx context.Context) (RoutingTable, error) {
 	return ReadRoutingTable(current.table)
 }
 
-func (h *Host) proxyInspected(ctx context.Context, class edge.Class) (bool, error) {
+func (h *Host) proxyInspected(ctx context.Context, tier environment.Tier) (bool, error) {
 	current, err := h.currentPair(ctx)
 	if err != nil {
 		return false, err
@@ -195,7 +196,7 @@ func (h *Host) proxyInspected(ctx context.Context, class edge.Class) (bool, erro
 	return false, refusal.Refuse(refusal.CodeInvalid,
 		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
-		ProxyConfig, h.named(), declared, ProxyConfig, provider.BootstrapCommand(class), live.RoutingTable)
+		ProxyConfig, h.named(), declared, ProxyConfig, provider.BootstrapCommand(tier), live.RoutingTable)
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {

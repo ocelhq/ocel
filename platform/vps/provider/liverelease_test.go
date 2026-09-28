@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -37,7 +38,7 @@ type release struct {
 func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	t.Helper()
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 	fixtures(t, vm)
 	p := vm.deploying(t)
 	t.Cleanup(func() {
@@ -60,7 +61,7 @@ func liveSpec(t *testing.T, tag string) provider.StackSpec {
 	}
 	sum := sha256.Sum256([]byte(tag))
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
 			App:             liveApp,

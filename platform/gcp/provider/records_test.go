@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -46,7 +46,7 @@ func firestoreAnswering(t *testing.T, queries error) string {
 }
 
 func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheRecordIsMissing(t *testing.T) {
-	name := records.Name{records.RootConformance, string(edge.ClassProduction), "absent"}
+	name := records.Name{records.RootConformance, string(environment.TierProduction), "absent"}
 
 	t.Run("a database that is not there", func(t *testing.T) {
 		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT",

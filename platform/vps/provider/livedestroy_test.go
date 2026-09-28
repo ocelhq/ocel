@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -85,19 +85,19 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 	decoy := vm.imageID(t, decoyImage)
 
-	removal, err := bootstrap.PlanRemove(ctx, class)
+	removal, err := bootstrap.PlanRemove(ctx, tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	if want := "vps/" + vm.user + "@" + vm.addr; leaving.Name != want {
 		t.Errorf("PlanRemove() named the group %q, want %q", leaving.Name, want)
 	}
-	for _, bearing := range []string{host.StateDir(class), host.SealKeyPath(class)} {
+	for _, bearing := range []string{host.StateDir(tier), host.SealKeyPath(tier)} {
 		if reason := planFor(leaving, bearing).Reason; reason == "" {
 			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
 		}
@@ -120,22 +120,22 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 
 	progress := &said{}
-	if err := bootstrap.Remove(ctx, class, progress); err != nil {
+	if err := bootstrap.Remove(ctx, tier, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	stamped := progress.removed("directory " + host.ClassDir(class))
+	stamped := progress.removed("directory " + host.TierDir(tier))
 	if stamped < 0 {
-		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", host.ClassDir(class), strings.Join(progress.lines, "\n"))
+		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", host.TierDir(tier), strings.Join(progress.lines, "\n"))
 	}
 	for _, earlier := range []string{
-		"directory " + host.StateDir(class),
-		"seal key " + host.SealKeyPath(class),
+		"directory " + host.StateDir(tier),
+		"seal key " + host.SealKeyPath(tier),
 		"file " + boxstore.SealHelper,
 		"user " + deployLogin,
 	} {
 		if at := progress.removed(earlier); at < 0 || at > stamped {
-			t.Errorf("Remove() took %s at line %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
+			t.Errorf("Remove() took %s at line %d and the tier directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				earlier, at, stamped)
 		}
 	}
@@ -165,7 +165,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 }
 
-func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testing.T) {
+func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
@@ -173,14 +173,14 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 	defer closing(t, p)
 
 	ctx := context.Background()
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, class := range []edge.Class{production, preview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
-			t.Fatalf("Apply(%s) = %v", class, err)
+	for _, tier := range []environment.Tier{production, preview} {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+			t.Fatalf("Apply(%s) = %v", tier, err)
 		}
 	}
 	vm.runs(t, workload)
@@ -188,7 +188,7 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
 		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
-	sealGrant := func(class edge.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
+	sealGrant := func(tier environment.Tier) string { return "/etc/sudoers.d/ocel-seal-" + string(tier) }
 
 	first, err := bootstrap.PlanRemove(ctx, production)
 	if err != nil {
@@ -201,7 +201,7 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 		}
 	}
 	if planned := planFor(beside, sealGrant(production)); planned.Action != provider.ActionDelete {
-		t.Errorf("destroying %s plans %s as %q, and the grant that opens this class's values is this class's to revoke", production, sealGrant(production), planned.Action)
+		t.Errorf("destroying %s plans %s as %q, and the grant that opens this tier's values is this tier's to revoke", production, sealGrant(production), planned.Action)
 	}
 
 	if err := bootstrap.Remove(ctx, production, nil); err != nil {
@@ -209,18 +209,18 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
 		if !vm.exists(t, singleton) {
-			t.Errorf("%s went with the %s class, and %s is a tenant of this machine that still deploys through it", singleton, production, preview)
+			t.Errorf("%s went with the %s tier, and %s is a tenant of this machine that still deploys through it", singleton, production, preview)
 		}
 	}
 	if vm.exists(t, sealGrant(production)) {
-		t.Errorf("%s still exists after the class it grants over was destroyed, and a grant over nothing is one nobody revokes", sealGrant(production))
+		t.Errorf("%s still exists after the tier it grants over was destroyed, and a grant over nothing is one nobody revokes", sealGrant(production))
 	}
 	if entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); entry == "" {
-		t.Errorf("%s went with the %s class, and the %s sibling deploys as it", deployLogin, production, preview)
+		t.Errorf("%s went with the %s tier, and the %s sibling deploys as it", deployLogin, production, preview)
 	}
-	for _, gone := range []string{host.ClassDir(production), host.StateDir(production)} {
+	for _, gone := range []string{host.TierDir(production), host.StateDir(production)} {
 		if vm.exists(t, gone) {
-			t.Errorf("%s still exists after the class that owns it was destroyed", gone)
+			t.Errorf("%s still exists after the tier that owns it was destroyed", gone)
 		}
 	}
 	described, err := bootstrap.Describe(ctx, preview)
@@ -231,13 +231,13 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 		t.Fatalf("Describe(%s) has %d stacks after its sibling was destroyed, want the one this host installs", preview, len(described.Stacks))
 	}
 	if !described.Present || !described.Stacks[0].DigestCurrent {
-		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a class untouched by a destroy beside it", preview, described.Stacks)
+		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a tier untouched by a destroy beside it", preview, described.Stacks)
 	}
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the first destroy", workload)
 	}
 	if !vm.running(t, caddy.Container) {
-		t.Errorf("%s went with the %s class, and the %s sibling is still served through it", caddy.Container, production, preview)
+		t.Errorf("%s went with the %s tier, and the %s sibling is still served through it", caddy.Container, production, preview)
 	}
 
 	last, err := bootstrap.PlanRemove(ctx, preview)
@@ -247,7 +247,7 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 	alone := onlyGroup(t, last)
 	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
 		if planned := planFor(alone, singleton); planned.Action != provider.ActionDelete {
-			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, planned.Action)
+			t.Errorf("destroying the last tier plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, planned.Action)
 		}
 	}
 	if err := bootstrap.Remove(ctx, preview, nil); err != nil {
@@ -255,15 +255,15 @@ func TestLiveTheSingletonsRemainWhileASiblingClassDoesAndGoWithTheLast(t *testin
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
 		if vm.exists(t, singleton) {
-			t.Errorf("%s still exists after the last class on this host was destroyed", singleton)
+			t.Errorf("%s still exists after the last tier on this host was destroyed", singleton)
 		}
 	}
 	if entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); entry != "" {
-		t.Errorf("%s still exists as %q after the last class went", deployLogin, entry)
+		t.Errorf("%s still exists as %q after the last tier went", deployLogin, entry)
 	}
 
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active docker.service || true")); active != "active" {
-		t.Errorf("docker.service is %q after both classes went, want the engine ocel never prunes", active)
+		t.Errorf("docker.service is %q after both tiers went, want the engine ocel never prunes", active)
 	}
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the last destroy, and removing ocel from a host removed the workloads on it", workload)

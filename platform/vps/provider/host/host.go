@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -58,13 +58,13 @@ type Host struct {
 
 	mu        sync.Mutex
 	principal string
-	tiers     map[edge.Class]bool
+	tiers     map[environment.Tier]bool
 
 	pause func(context.Context, time.Duration) error
 }
 
 func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[edge.Class]bool{}, pause: waited}
+	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[environment.Tier]bool{}, pause: waited}
 	h.front = openFront(front, frontBox{h})
 	return h
 }
@@ -84,20 +84,20 @@ func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }
 
 func (h *Host) PinFor(hostname string) string { return Covering(h.pins, hostname) }
 
-func (h *Host) hasStore(ctx context.Context, class edge.Class) (bool, error) {
+func (h *Host) hasStore(ctx context.Context, tier environment.Tier) (bool, error) {
 	h.mu.Lock()
-	known := h.tiers[class]
+	known := h.tiers[tier]
 	h.mu.Unlock()
 	if known {
 		return true, nil
 	}
-	rendered, err := h.reach(ctx, "ask where "+string(class)+" keeps its records",
-		"if [ -x "+quoted(boxstore.RecordsHelper)+" ] && [ -d "+quoted(RecordsDir(class))+" ]; then echo present; fi", nil)
+	rendered, err := h.reach(ctx, "ask where "+string(tier)+" keeps its records",
+		"if [ -x "+quoted(boxstore.RecordsHelper)+" ] && [ -d "+quoted(RecordsDir(tier))+" ]; then echo present; fi", nil)
 	if err != nil || strings.TrimSpace(rendered) != "present" {
 		return false, err
 	}
 	h.mu.Lock()
-	h.tiers[class] = true
+	h.tiers[tier] = true
 	h.mu.Unlock()
 	return true, nil
 }
@@ -357,7 +357,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		return err == nil, err
 	case KindUnit:
 		if !slices.Contains([]string{LiveService, LiveSocketUnit, BackupsTimer,
-			EnvSourceSyncService(edge.ClassProduction), EnvSourceSyncService(edge.ClassPreview)}, taken.path) {
+			EnvSourceSyncService(environment.TierProduction), EnvSourceSyncService(environment.TierPreview)}, taken.path) {
 			return false, refusal.Refuse(refusal.CodeInvalid,
 				"%s %s is not ocel's to remove", taken.kind, taken.path)
 		}
@@ -380,7 +380,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 }
 
 type Reading struct {
-	Class    edge.Class
+	Tier     environment.Tier
 	Present  bool
 	Keys     []byte
 	Arch     string
@@ -405,7 +405,7 @@ func (r Reading) observed(kind, path string) bool {
 func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
 
 func (r Reading) Items() []Item {
-	return append(Items(r.Class, r.Keys, r.Arch, r.Front), r.recorded...)
+	return append(Items(r.Tier, r.Keys, r.Arch, r.Front), r.recorded...)
 }
 
 func (r Reading) upToDate() bool {
@@ -427,21 +427,21 @@ func (r Reading) upToDate() bool {
 	return true
 }
 
-func (h *Host) Read(ctx context.Context, class edge.Class) (Reading, error) {
+func (h *Host) Read(ctx context.Context, tier environment.Tier) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, class, keys, drawing{ask: h.run})
+	return h.read(ctx, tier, keys, drawing{ask: h.run})
 }
 
-func (h *Host) Observe(ctx context.Context, class edge.Class) (Reading, error) {
+func (h *Host) Observe(ctx context.Context, tier environment.Tier) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {
 		return Reading{}, err
 	}
 	_, denied := h.elevate(ctx)
-	read, err := h.read(ctx, class, keys, drawing{ask: h.reach})
+	read, err := h.read(ctx, tier, keys, drawing{ask: h.reach})
 	if err != nil {
 		return Reading{}, err
 	}
@@ -449,40 +449,40 @@ func (h *Host) Observe(ctx context.Context, class edge.Class) (Reading, error) {
 	return read, nil
 }
 
-func (h *Host) Own(ctx context.Context, class edge.Class) (Reading, error) {
+func (h *Host) Own(ctx context.Context, tier environment.Tier) (Reading, error) {
 	keys, err := h.keys(ctx)
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, class, keys, drawing{ask: h.reach, owner: true})
+	return h.read(ctx, tier, keys, drawing{ask: h.reach, owner: true})
 }
 
-func (h *Host) Survey(ctx context.Context, class edge.Class) (Reading, error) {
-	return h.observing(ctx, class, nil, drawing{ask: h.run})
+func (h *Host) Survey(ctx context.Context, tier environment.Tier) (Reading, error) {
+	return h.observing(ctx, tier, nil, drawing{ask: h.run})
 }
 
-func (h *Host) observing(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
+func (h *Host) observing(ctx context.Context, tier environment.Tier, keys []byte, drawn drawing) (Reading, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		arch = ArchAMD64
 	}
-	return h.surveyed(ctx, class, keys, arch, drawn)
+	return h.surveyed(ctx, tier, keys, arch, drawn)
 }
 
-func (h *Host) observe(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
+func (h *Host) observe(ctx context.Context, tier environment.Tier, keys []byte, drawn drawing) (Reading, error) {
 	arch, err := h.arch(ctx)
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.surveyed(ctx, class, keys, arch, drawn)
+	return h.surveyed(ctx, tier, keys, arch, drawn)
 }
 
-func (h *Host) surveyed(ctx context.Context, class edge.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
-	surveying := Items(class, keys, arch, h.proxyOption)
+func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte, arch string, drawn drawing) (Reading, error) {
+	surveying := Items(tier, keys, arch, h.proxyOption)
 	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
 	}
-	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" has installed", drawn.survey(surveying, StampPath(class), FrontRecordPath), nil)
+	rendered, err := drawn.ask(ctx, "survey what "+string(tier)+" has installed", drawn.survey(surveying, StampPath(tier), FrontRecordPath), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -490,18 +490,18 @@ func (h *Host) surveyed(ctx context.Context, class edge.Class, keys []byte, arch
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Class: class, Keys: keys, Arch: arch, Seal: seal, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
+	return Reading{Tier: tier, Keys: keys, Arch: arch, Seal: seal, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
 }
 
-func (h *Host) read(ctx context.Context, class edge.Class, keys []byte, drawn drawing) (Reading, error) {
-	read, err := h.observe(ctx, class, keys, drawn)
+func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, drawn drawing) (Reading, error) {
+	read, err := h.observe(ctx, tier, keys, drawn)
 	if err != nil {
 		return Reading{}, err
 	}
-	if _, stamped := read.Observed[KindFile+" "+StampPath(class)]; !stamped {
+	if _, stamped := read.Observed[KindFile+" "+StampPath(tier)]; !stamped {
 		return read, nil
 	}
-	stamp, err := h.readStamp(ctx, class, drawn.ask)
+	stamp, err := h.readStamp(ctx, tier, drawn.ask)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -509,21 +509,21 @@ func (h *Host) read(ctx context.Context, class edge.Class, keys []byte, drawn dr
 	return read, nil
 }
 
-func (h *Host) readStamp(ctx context.Context, class edge.Class, ask asking) (Stamp, error) {
-	rendered, err := ask(ctx, "read the stamp", "cat "+quoted(StampPath(class)), nil)
+func (h *Host) readStamp(ctx context.Context, tier environment.Tier, ask asking) (Stamp, error) {
+	rendered, err := ask(ctx, "read the stamp", "cat "+quoted(StampPath(tier)), nil)
 	if err != nil {
 		return Stamp{}, err
 	}
 	var stamp Stamp
 	if err := json.Unmarshal([]byte(rendered), &stamp); err != nil {
 		return Stamp{}, refusal.Refuse(refusal.CodeInvalid,
-			"%s is not a stamp this ocel can read: %s", StampPath(class), err)
+			"%s is not a stamp this ocel can read: %s", StampPath(tier), err)
 	}
 	return stamp, nil
 }
 
-func (h *Host) Stamp(ctx context.Context, class edge.Class, stamp Stamp) error {
-	item, err := stamp.item(class)
+func (h *Host) Stamp(ctx context.Context, tier environment.Tier, stamp Stamp) error {
+	item, err := stamp.item(tier)
 	if err != nil {
 		return err
 	}

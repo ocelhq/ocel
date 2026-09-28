@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -14,7 +14,7 @@ func (vm machine) queries(t *testing.T, binding provider.Binding, statement stri
 	t.Helper()
 	props := binding.Properties
 	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(props[provider.PropertyHost])))
-	return strings.TrimSpace(vm.ssh(t, "sudo docker run --rm --network "+quote(host.AppNetwork(edge.ClassProduction, "shop"))+
+	return strings.TrimSpace(vm.ssh(t, "sudo docker run --rm --network "+quote(host.AppNetwork(environment.TierProduction, "shop"))+
 		" --env "+quote("PGPASSWORD="+props[provider.PropertyPassword])+" "+quote(image)+
 		" psql -h "+quote(props[provider.PropertyHost])+" -p "+quote(props[provider.PropertyPort])+
 		" -U "+quote(props[provider.PropertyUsername])+" -d "+quote(props[provider.PropertyDatabase])+
@@ -23,7 +23,7 @@ func (vm machine) queries(t *testing.T, binding provider.Binding, statement stri
 
 func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBehind(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 	p := vm.deploying(t)
 	ctx := context.Background()
 	in := aPostgres(t, "16")
@@ -43,7 +43,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if published := strings.TrimSpace(vm.ssh(t, "sudo docker port "+quote(name))); published != "" {
 		t.Errorf("the server publishes %q on the box, and a database the machine's own address reaches is one the internet does", published)
 	}
-	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(host.KeptPath(edge.ClassProduction, name))))
+	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(host.KeptPath(environment.TierProduction, name))))
 	if kept == "" || strings.Contains(kept, binding.Properties[provider.PropertyPassword]) {
 		t.Errorf("the box keeps %d bytes for %s, and what it keeps is the password itself or nothing", len(kept), name)
 	}
@@ -94,10 +94,10 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if volumes := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name))); volumes != "" {
 		t.Errorf("the volume %q outlives the stack that declared it, and nothing after this reclaims the disk", volumes)
 	}
-	if vm.exists(t, host.BackupsDir(edge.ClassProduction, name)) {
+	if vm.exists(t, host.BackupsDir(environment.TierProduction, name)) {
 		t.Errorf("the dumps taken of %s outlive the stack that declared it", name)
 	}
-	if vm.exists(t, host.KeptPath(edge.ClassProduction, name)) {
+	if vm.exists(t, host.KeptPath(environment.TierProduction, name)) {
 		t.Errorf("the sealed password for %s outlives the server it opened", name)
 	}
 }

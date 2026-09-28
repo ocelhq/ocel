@@ -6,7 +6,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -136,7 +136,7 @@ func TestTheContainerAProvisionedAppRunsOnIsRecordedAgainstItsStack(t *testing.T
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), p.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), p.Records(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 		t.Fatalf("Deploy() of a container app = %q", result.GetError())
 	}
 
-	releases := ledger.New(vendor.Records(), edge.ClassProduction, "shop")
+	releases := ledger.New(vendor.Records(), environment.TierProduction, "shop")
 	record, found, err := releases.Record(context.Background(), "web", containerTestImage)
 	if err != nil {
 		t.Fatal(err)

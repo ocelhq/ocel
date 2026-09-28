@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -34,41 +34,41 @@ func names(t *testing.T, p *Provider) Names {
 	return named
 }
 
-func TestEachClassPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
+func TestEachTierPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
 	p := pushing(t, "")
 
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		target, err := p.EnsureImageRegistry(context.Background(), class, []string{"web"})
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		target, err := p.EnsureImageRegistry(context.Background(), tier, []string{"web"})
 		if err != nil {
-			t.Fatalf("ImageRegistry(%s) = %v", class, err)
+			t.Fatalf("ImageRegistry(%s) = %v", tier, err)
 		}
 		if target.Server != "europe-west1-docker.pkg.dev" {
-			t.Errorf("ImageRegistry(%s) server = %q, want the region's own Artifact Registry host", class, target.Server)
+			t.Errorf("ImageRegistry(%s) server = %q, want the region's own Artifact Registry host", tier, target.Server)
 		}
-		if want := "acme-prod/" + p.resolved.Repository(class); target.Namespace != want {
-			t.Errorf("ImageRegistry(%s) namespace = %q, want %q", class, target.Namespace, want)
+		if want := "acme-prod/" + p.resolved.Repository(tier); target.Namespace != want {
+			t.Errorf("ImageRegistry(%s) namespace = %q, want %q", tier, target.Namespace, want)
 		}
 		if target.Username != "oauth2accesstoken" {
-			t.Errorf("ImageRegistry(%s) username = %q, want the name Artifact Registry takes a bearer token under", class, target.Username)
+			t.Errorf("ImageRegistry(%s) username = %q, want the name Artifact Registry takes a bearer token under", tier, target.Username)
 		}
 		if target.Password != "ya29.stub" {
-			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy has", class, target.Password)
+			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy has", tier, target.Password)
 		}
 	}
-	if p.resolved.Repository(edge.ClassProduction) == p.resolved.Repository(edge.ClassPreview) {
-		t.Error("both classes push to one repository, and a class keeps its images apart from the other class's")
+	if p.resolved.Repository(environment.TierProduction) == p.resolved.Repository(environment.TierPreview) {
+		t.Error("both tiers push to one repository, and a tier keeps its images apart from the other tier's")
 	}
 }
 
 func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *testing.T) {
 	p := pushing(t, "")
 
-	target, err := p.EnsureImageRegistry(context.Background(), edge.ClassProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(context.Background(), environment.TierProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	coordinate := target.ImageRef("web", "sha256-abc")
-	want := p.resolved.RepositoryPath("europe-west1", edge.ClassProduction) + "/web:sha256-abc"
+	want := p.resolved.RepositoryPath("europe-west1", environment.TierProduction) + "/web:sha256-abc"
 	if coordinate != want {
 		t.Errorf("an image lands at %q, want %q", coordinate, want)
 	}
@@ -86,7 +86,7 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 		t.Errorf("OpenDirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
 	}
 
-	target, err := emulated.EnsureImageRegistry(ctx, edge.ClassProduction, []string{"web"})
+	target, err := emulated.EnsureImageRegistry(ctx, environment.TierProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 	ctx := context.Background()
 	p := pushing(t, "")
 
-	target, err := p.EnsureImageRegistry(ctx, edge.ClassProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(ctx, environment.TierProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -39,7 +39,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 	return provider.ShapeRequest{
 		Deploy: provider.DeploySpec{
 			Slug:  "shop",
-			Class: edge.ClassProduction,
+			Tier:  environment.TierProduction,
 			Env:   "prod",
 			Infra: naming.InfraStack("prod"),
 			Apps: []provider.AppEntry{
@@ -130,7 +130,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 	run("container", containerWork.run)
-	run("container-infra", (&containerInfraWork{class: edge.ClassProduction, boundary: containerCfg.AppBoundaryARN}).run)
+	run("container-infra", (&containerInfraWork{tier: environment.TierProduction, boundary: containerCfg.AppBoundaryARN}).run)
 	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err

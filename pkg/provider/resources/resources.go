@@ -360,7 +360,7 @@ func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding 
 }
 
 func (f *hookStacks) recorded(ctx context.Context, ref provider.StackRef) (stackrecords.Stack, error) {
-	recorded, _, err := stackrecords.Read(ctx, f.records, ref.Class, ref.Project, ref.Name)
+	recorded, _, err := stackrecords.Read(ctx, f.records, ref.Tier, ref.Project, ref.Name)
 	return recorded, err
 }
 

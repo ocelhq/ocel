@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -36,18 +36,18 @@ func (s *said) at(fragment string) int {
 func TestRemoveTakesWhatIsInstalledAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	progress := &said{}
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
-		"Removed directory " + StateDir(class),
-		"Removed seal key " + SealKeyPath(class),
+		"Removed directory " + StateDir(tier),
+		"Removed seal key " + SealKeyPath(tier),
 		"Removed user " + deployUser,
-		"Removed directory " + ClassDir(class),
+		"Removed directory " + TierDir(tier),
 	} {
 		if !slices.Contains(progress.lines, taken) {
 			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
@@ -69,19 +69,19 @@ func TestRemoveTakesWhatIsInstalledAndSaysWhatItTookAndWhatItLeft(t *testing.T) 
 func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	stamp := box.took(quoted(ClassDir(class)))
+	stamp := box.took(quoted(TierDir(tier)))
 	if stamp < 0 {
-		t.Fatalf("Remove() never took %s:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
+		t.Fatalf("Remove() never took %s:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
-	for _, beneath := range []string{StateDir(class), SealKeyPath(class), boxstore.SealHelper, deployUser} {
+	for _, beneath := range []string{StateDir(tier), SealKeyPath(tier), boxstore.SealHelper, deployUser} {
 		if at := box.took(quoted(beneath)); at < 0 || at > stamp {
-			t.Errorf("Remove() took %s at command %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
+			t.Errorf("Remove() took %s at command %d and the tier directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				beneath, at, stamp)
 		}
 	}
@@ -90,10 +90,10 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	box.after = func(b *bench, command string) {
-		if !strings.HasSuffix(command, quoted(classRoot)) {
+		if !strings.HasSuffix(command, quoted(tierRoot)) {
 			return
 		}
 		b.mu.Lock()
@@ -102,7 +102,7 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 	}
 
 	progress := &said{}
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, progress); err != nil {
 		t.Fatalf("Remove() = %v after every removal landed, and a host that is gone must not be reported as one that stayed", err)
 	}
 	if progress.at("ssh-keygen -R") < 0 {
@@ -113,24 +113,24 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 	t.Parallel()
 
-	class, beside := edge.ClassProduction, edge.ClassPreview
-	truncated := func(class edge.Class) Item {
-		return Item{Kind: KindFile, Name: StampPath(class), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
+	tier, beside := environment.TierProduction, environment.TierPreview
+	truncated := func(tier environment.Tier) Item {
+		return Item{Kind: KindFile, Name: StampPath(tier), Mode: 0o644, Owner: rootOwner, Content: []byte(`{"schema": 2, "sta`)}
 	}
-	box := machine(map[edge.Class][]Item{
-		class:  append(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), truncated(class)),
+	box := machine(map[environment.Tier][]Item{
+		tier:   append(Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}), truncated(tier)),
 		beside: {truncated(beside)},
 	})
 
 	bootstrap := NewBootstrap(box.host(), testVendor, "shop")
-	if _, err := bootstrap.PlanRemove(context.Background(), class); err != nil {
+	if _, err := bootstrap.PlanRemove(context.Background(), tier); err != nil {
 		t.Fatalf("PlanRemove() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
 	}
-	if err := bootstrap.Remove(context.Background(), class, nil); err != nil {
+	if err := bootstrap.Remove(context.Background(), tier, nil); err != nil {
 		t.Fatalf("Remove() = %v over a host an apply left half-written", err)
 	}
-	if box.took(quoted(ClassDir(class))) < 0 {
-		t.Errorf("Remove() left %s in place:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
+	if box.took(quoted(TierDir(tier))) < 0 {
+		t.Errorf("Remove() left %s in place:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
 }
 
@@ -158,8 +158,8 @@ func TestTheHostRemovesNothingItCannotNameAsAPathItWrote(t *testing.T) {
 func TestADeployLoginSomethingStillUsesDoesNotStrandTheDestroy(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 	box.answer = func(command string) (session.Result, bool) {
 		if !strings.HasPrefix(command, "userdel ") || strings.Contains(command, " -f ") {
 			return session.Result{}, false
@@ -167,25 +167,25 @@ func TestADeployLoginSomethingStillUsesDoesNotStrandTheDestroy(t *testing.T) {
 		return session.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
 	}
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
 		t.Fatalf("Remove() = %v over a login a lingering session still uses, and every re-run would fail there again", err)
 	}
-	if box.took(quoted(ClassDir(class))) < 0 {
-		t.Errorf("Remove() stopped at the login and left %s in place:\n%s", ClassDir(class), strings.Join(box.taking(), "\n"))
+	if box.took(quoted(TierDir(tier))) < 0 {
+		t.Errorf("Remove() stopped at the login and left %s in place:\n%s", TierDir(tier), strings.Join(box.taking(), "\n"))
 	}
 }
 
-func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) {
+func TestARootOtherTiersShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
-	for _, shared := range []string{stateRoot, boxstore.Dir, classRoot} {
+	for _, shared := range []string{stateRoot, boxstore.Dir, tierRoot} {
 		at := slices.IndexFunc(taken, func(command string) bool {
 			return strings.Contains(command, quoted(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
 		})
@@ -193,7 +193,7 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 			t.Fatalf("Remove() left %s in place on a host that has nothing else:\n%s", shared, strings.Join(taken, "\n"))
 		}
 		if !strings.HasPrefix(taken[at], "rmdir ") {
-			t.Errorf("Remove() takes %s with %q: a class bootstrapped during the destroy loses its seal key to a survey drawn before it existed",
+			t.Errorf("Remove() takes %s with %q: a tier bootstrapped during the destroy loses its seal key to a survey drawn before it existed",
 				shared, taken[at])
 		}
 	}
@@ -202,18 +202,18 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := box.taking()
-	for _, item := range bootstrapped(t, class) {
+	for _, item := range bootstrapped(t, tier) {
 		if item.Kind == KindEngine || item.Kind == KindUnit || gone(taken, item.Name) {
 			continue
 		}
-		t.Errorf("%s remains after the last class on the host was destroyed:\n%s", item.ID(), strings.Join(taken, "\n"))
+		t.Errorf("%s remains after the last tier on the host was destroyed:\n%s", item.ID(), strings.Join(taken, "\n"))
 	}
 }
 
@@ -240,7 +240,7 @@ func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) 
 	t.Parallel()
 
 	box := machine(nil)
-	name := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
+	name := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
 	if err := records.Forget(context.Background(), NewRecords(box.host()), name); err != nil {
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
@@ -254,10 +254,10 @@ func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) 
 func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
 
-	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), class)
+	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -271,7 +271,7 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	if group.Action != provider.ActionDelete {
 		t.Errorf("PlanRemove() plans the group as %q, want a delete", group.Action)
 	}
-	for _, bearing := range []string{StateDir(class), SealKeyPath(class)} {
+	for _, bearing := range []string{StateDir(tier), SealKeyPath(tier)} {
 		at := slices.IndexFunc(group.Changes, func(c provider.Change) bool { return c.Name == bearing })
 		if at < 0 {
 			t.Fatalf("PlanRemove() never plans %s", bearing)
@@ -282,26 +282,26 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	}
 }
 
-func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *testing.T) {
+func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	singletons := []string{
-		stateRoot, boxstore.Dir, boxstore.RecordsHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, classRoot, deployUser,
+		stateRoot, boxstore.Dir, boxstore.RecordsHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, tierRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {
 		if kept := removalOf(removing(current, beside, appsPresent{}), singleton); kept.action == provider.ActionDelete {
-			t.Errorf("destroying one class takes %s, and the sibling class still installed on this host deploys through it", singleton)
+			t.Errorf("destroying one tier takes %s, and the sibling tier still installed on this host deploys through it", singleton)
 		}
 	}
-	last := removing(current, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(current, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, singleton := range singletons {
 		if gone := removalOf(last, singleton); gone.action != provider.ActionDelete {
-			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)
+			t.Errorf("destroying the last tier plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)
 		}
 	}
 }
@@ -310,7 +310,7 @@ func TestPlanRemovalOfAHostWithNothingPlansNothing(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
-	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}

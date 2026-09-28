@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
@@ -25,9 +26,9 @@ func setWorkerBundle(t *testing.T) {
 	t.Setenv(edge.EnvWorkerBundles, string(raw))
 }
 
-func programmed(slug string, class edge.Class) EdgeProgram {
+func programmed(slug string, tier environment.Tier) EdgeProgram {
 	return EdgeProgram{
-		Class:     class,
+		Tier:      tier,
 		Kind:      cloudflare.Kind,
 		Namespace: defaultNamespace,
 		Slug:      slug,
@@ -52,7 +53,7 @@ func programmed(slug string, class edge.Class) EdgeProgram {
 func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 	setWorkerBundle(t)
 
-	entry := programmed("", edge.ClassPreview)
+	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 
 	built, err := entry.Build()
@@ -101,7 +102,7 @@ func TestEdgeProgramForTheSharedPreviewEntry(t *testing.T) {
 func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	setWorkerBundle(t)
 
-	entry := programmed("", edge.ClassPreview)
+	entry := programmed("", environment.TierPreview)
 	entry.PreviewBaseDomain = "preview.acme.com"
 	entry.StoreScriptName = ""
 
@@ -109,7 +110,7 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	if err == nil {
 		t.Fatal("Build succeeded, want a preview entry with no deployments-store worker refused")
 	}
-	if !strings.Contains(err.Error(), provider.BootstrapCommand(edge.ClassPreview)) {
+	if !strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierPreview)) {
 		t.Errorf("error = %q, want it to name the bootstrap that provisions the store", err)
 	}
 }
@@ -117,7 +118,7 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 func TestEdgeProgramForAPreviewProject(t *testing.T) {
 	setWorkerBundle(t)
 
-	project := programmed("proj", edge.ClassPreview)
+	project := programmed("proj", environment.TierPreview)
 	project.PreviewBaseDomain = "preview.acme.com"
 	project.Apps = []string{"web", "admin"}
 
@@ -155,7 +156,7 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 	setWorkerBundle(t)
 
-	project := programmed("proj", edge.ClassPreview)
+	project := programmed("proj", environment.TierPreview)
 	project.Apps = []string{"web", "admin"}
 
 	built, err := project.Build()
@@ -180,7 +181,7 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 func TestEdgeProgramForAProductionProject(t *testing.T) {
 	setWorkerBundle(t)
 
-	built, err := programmed("proj", edge.ClassProduction).Build()
+	built, err := programmed("proj", environment.TierProduction).Build()
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const Kind edge.Kind = "cloudflare"
@@ -169,12 +170,12 @@ func (p *cloudflare) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func (p *cloudflare) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+func (p *cloudflare) Bootstrap(ctx context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	state, err := p.readState(ctx, accountID, class)
+	state, err := p.readState(ctx, accountID, tier)
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -192,16 +193,16 @@ func (p *cloudflare) Bootstrap(ctx context.Context, class edge.Class) (edge.Boot
 	return out, nil
 }
 
-func (p *cloudflare) Teardown(ctx context.Context, class edge.Class) error {
+func (p *cloudflare) Teardown(ctx context.Context, tier environment.Tier) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to tear the Cloudflare edge down", envAccountID)
 	}
-	storeScript, err := storeScriptNameFor(p.namespace, class)
+	storeScript, err := storeScriptNameFor(p.namespace, tier)
 	if err != nil {
 		return err
 	}
-	writerScript, err := isrWriterScriptNameFor(p.namespace, class)
+	writerScript, err := isrWriterScriptNameFor(p.namespace, tier)
 	if err != nil {
 		return err
 	}
@@ -211,7 +212,7 @@ func (p *cloudflare) Teardown(ctx context.Context, class edge.Class) error {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
 		}
 	}
-	if err := p.cacheStore().teardown(ctx, accountID, class); err != nil {
+	if err := p.cacheStore().teardown(ctx, accountID, tier); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
@@ -232,8 +233,8 @@ type offerKeys struct {
 	cred       string
 }
 
-func bootstrapWorkers(namespace string, class edge.Class) ([]bootstrapWorker, error) {
-	storeScript, err := storeScriptNameFor(namespace, class)
+func bootstrapWorkers(namespace string, tier environment.Tier) ([]bootstrapWorker, error) {
+	storeScript, err := storeScriptNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +242,7 @@ func bootstrapWorkers(namespace string, class edge.Class) ([]bootstrapWorker, er
 	if err != nil {
 		return nil, err
 	}
-	writerScript, err := isrWriterScriptNameFor(namespace, class)
+	writerScript, err := isrWriterScriptNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func bootstrapWorkers(namespace string, class edge.Class) ([]bootstrapWorker, er
 	if err != nil {
 		return nil, err
 	}
-	bucket, err := cacheStoreNameFor(namespace, class)
+	bucket, err := cacheStoreNameFor(namespace, tier)
 	if err != nil {
 		return nil, err
 	}

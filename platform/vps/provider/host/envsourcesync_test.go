@@ -7,31 +7,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func TestEachClassRunsItsOwnEnvSourceSyncThatWritesThatClassesRecordsAlone(t *testing.T) {
+func TestEachTierRunsItsOwnEnvSourceSyncThatWritesThatTiersRecordsAlone(t *testing.T) {
 	t.Parallel()
 
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-		unit := itemAt(t, items, KindUnit, "ocel-envsourcesync@"+string(class)+".service")
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+		unit := itemAt(t, items, KindUnit, "ocel-envsourcesync@"+string(tier)+".service")
 		if unit.Owner != rootOwner {
-			t.Errorf("%s is enabled as %s, and the sync reads the class key, which is root's alone", unit.Name, unit.Owner)
+			t.Errorf("%s is enabled as %s, and the sync reads the tier key, which is root's alone", unit.Name, unit.Owner)
 		}
 		for _, item := range items {
 			if item.Kind == KindUnit && strings.HasPrefix(item.Name, "ocel-envsourcesync@") && item.Name != unit.Name {
-				t.Errorf("the %s class enables %s, a sync over another class's records", class, item.Name)
+				t.Errorf("the %s tier enables %s, a sync over another tier's records", tier, item.Name)
 			}
 		}
 	}
 
-	template := string(itemAt(t, Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{}), KindFile, envSourceSyncTemplateFile).Content)
+	template := string(itemAt(t, Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{}), KindFile, envSourceSyncTemplateFile).Content)
 	for _, want := range []string{
-		"ExecStart=" + LiveBinary + " " + live.EnvSourceSyncCommand + " --class %i",
+		"ExecStart=" + LiveBinary + " " + live.EnvSourceSyncCommand + " --tier %i",
 		"ProtectSystem=strict",
 		"ProtectHome=yes",
 		"PrivateTmp=yes",
@@ -45,9 +45,9 @@ func TestEachClassRunsItsOwnEnvSourceSyncThatWritesThatClassesRecordsAlone(t *te
 			t.Errorf("the sync's unit reads:\n%s\nand never says %q", template, want)
 		}
 	}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if want := "ReadWritePaths=" + RecordsDir(class) + "\n"; !strings.Contains(strings.ReplaceAll(template, "%i", string(class)), want) {
-			t.Errorf("the sync's unit reads:\n%s\nand as the %s instance never says %q: it writes that class's records and nothing else", template, class, want)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if want := "ReadWritePaths=" + RecordsDir(tier) + "\n"; !strings.Contains(strings.ReplaceAll(template, "%i", string(tier)), want) {
+			t.Errorf("the sync's unit reads:\n%s\nand as the %s instance never says %q: it writes that tier's records and nothing else", template, tier, want)
 		}
 	}
 	for _, never := range []string{"User=", ConnectorUnit, "docker"} {
@@ -60,12 +60,12 @@ func TestEachClassRunsItsOwnEnvSourceSyncThatWritesThatClassesRecordsAlone(t *te
 func TestTheEnvSourceSyncRestartsWhenTheAgentBinaryOrItsUnitChangesAndIsWrittenAfterBoth(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
+	tier := environment.TierProduction
+	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
 	at := func(kind, name string) int {
 		return slices.IndexFunc(items, func(item Item) bool { return item.Kind == kind && item.Name == name })
 	}
-	service := EnvSourceSyncService(class)
+	service := EnvSourceSyncService(tier)
 	unit := at(KindUnit, service)
 	if unit < 0 {
 		t.Fatalf("nothing in the item set enables %s", service)
@@ -90,18 +90,18 @@ func TestTheEnvSourceSyncRestartsWhenTheAgentBinaryOrItsUnitChangesAndIsWrittenA
 func TestAnApplyOverAHostBootstrappedBeforeTheEnvSourceSyncWritesAndStartsIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	missing := []Item{
 		{Kind: KindFile, Name: envSourceSyncTemplateFile},
-		{Kind: KindUnit, Name: EnvSourceSyncService(class)},
+		{Kind: KindUnit, Name: EnvSourceSyncService(tier)},
 	}
-	older := bootstrappedOn(t, class)
-	older.installed[class] = slices.DeleteFunc(older.installed[class], func(item Item) bool {
+	older := bootstrappedOn(t, tier)
+	older.installed[tier] = slices.DeleteFunc(older.installed[tier], func(item Item) bool {
 		return slices.ContainsFunc(missing, func(gone Item) bool { return gone.ID() == item.ID() })
 	})
 	progress := &said{}
 	if err := NewBootstrap(older.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	for _, item := range missing {
@@ -109,18 +109,18 @@ func TestAnApplyOverAHostBootstrappedBeforeTheEnvSourceSyncWritesAndStartsIt(t *
 			t.Errorf("an apply never wrote %s:\n%s", item.ID(), strings.Join(progress.lines, "\n"))
 		}
 	}
-	if older.at("systemctl restart "+quoted(EnvSourceSyncService(class))) < 0 {
-		t.Errorf("an apply never started %s:\n%s", EnvSourceSyncService(class), strings.Join(older.commands(), "\n"))
+	if older.at("systemctl restart "+quoted(EnvSourceSyncService(tier))) < 0 {
+		t.Errorf("an apply never started %s:\n%s", EnvSourceSyncService(tier), strings.Join(older.commands(), "\n"))
 	}
 }
 
-func TestDestroyingAClassStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheTemplate(t *testing.T) {
+func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheTemplate(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
-	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
+	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 
 	shared := removing(current, beside, appsPresent{})
 	own := removalOf(shared, EnvSourceSyncService(production))
@@ -136,14 +136,14 @@ func TestDestroyingAClassStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesThe
 		}
 	}
 
-	last := removing(current, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(current, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, gone := range []string{EnvSourceSyncService(production), LiveBinary, envSourceSyncTemplateFile} {
 		if removalOf(last, gone).action != provider.ActionDelete {
-			t.Errorf("destroying the last class plans %s as %q", gone, removalOf(last, gone).action)
+			t.Errorf("destroying the last tier plans %s as %q", gone, removalOf(last, gone).action)
 		}
 	}
 
-	box := machine(map[edge.Class][]Item{production: bootstrapped(t, production)})
+	box := machine(map[environment.Tier][]Item{production: bootstrapped(t, production)})
 	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
@@ -161,20 +161,20 @@ func TestDestroyingAClassStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesThe
 func TestTheDeployLoginIsToldTheEnvSourceSyncIsRootsAndWhatItMayWrite(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassPreview
+	tier := environment.TierPreview
 	var named bool
-	for _, grant := range Grants(class) {
-		if !strings.Contains(grant.Name, EnvSourceSyncService(class)) {
+	for _, grant := range Grants(tier) {
+		if !strings.Contains(grant.Name, EnvSourceSyncService(tier)) {
 			continue
 		}
 		named = true
-		for _, want := range []string{LiveBinary, deployUser, RecordsDir(class), "CAP_CHOWN", "CAP_DAC_OVERRIDE", boxstore.SealHelper} {
+		for _, want := range []string{LiveBinary, deployUser, RecordsDir(tier), "CAP_CHOWN", "CAP_DAC_OVERRIDE", boxstore.SealHelper} {
 			if !strings.Contains(grant.Detail, want) {
 				t.Errorf("the grant reads %q and never says %q", grant.Detail, want)
 			}
 		}
 	}
 	if !named {
-		t.Error("`ocel permissions deploy` never mentions the sync that writes this class's values as root")
+		t.Error("`ocel permissions deploy` never mentions the sync that writes this tier's values as root")
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -22,7 +22,7 @@ func aStack(t *testing.T, app provider.AppSpec) provider.StackSpec {
 		t.Fatal(err)
 	}
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Kind: provider.StackApp,
 		App:  &app,
 	}

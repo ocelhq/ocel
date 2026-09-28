@@ -8,9 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -39,7 +39,7 @@ type Config struct {
 	VarsTableARN   string
 	VarsKeyARN     string
 	AppBoundaryARN string
-	Class          edge.Class
+	Tier           environment.Tier
 	VarsReferenced map[envvars.Coordinate]string
 
 	RuntimeLayers map[string]string
@@ -87,12 +87,6 @@ type Config struct {
 
 	DNS      edge.DNSRecords
 	DNSAwait Propagation
-
-	Tier                   environmentv1.Tier
-	Lifecycle              environmentv1.Lifecycle
-	Identity               string
-	SharedClusterEndpoint  string
-	SharedClusterSecretARN string
 
 	ExpiresAt int64
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -25,37 +25,37 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 
 			names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
-				"artifact bucket":   names.Bucket(edge.ClassProduction),
-				"state bucket":      names.StateBucket(edge.ClassPreview),
+				"artifact bucket":   names.Bucket(environment.TierProduction),
+				"state bucket":      names.StateBucket(environment.TierPreview),
 				"record database":   names.Database(),
 				"key ring":          names.KeyRing(),
-				"passphrase secret": names.PassphraseSecret(edge.ClassProduction),
-				"image repository":  names.Repository(edge.ClassProduction),
-				"runtime account":   names.WorkloadAccount(edge.ClassProduction),
+				"passphrase secret": names.PassphraseSecret(environment.TierProduction),
+				"image repository":  names.Repository(environment.TierProduction),
+				"runtime account":   names.WorkloadAccount(environment.TierProduction),
 			} {
 				if !strings.HasPrefix(got, tc.stem) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
 				}
 			}
-			if got, want := names.Bucket(edge.ClassProduction), tc.stem+"-acme-prod-production"; got != want {
+			if got, want := names.Bucket(environment.TierProduction), tc.stem+"-acme-prod-production"; got != want {
 				t.Errorf("Bucket() = %q, want %q", got, want)
 			}
-			if got, want := names.StateBucket(edge.ClassPreview), tc.stem+"-acme-prod-preview-state"; got != want {
+			if got, want := names.StateBucket(environment.TierPreview), tc.stem+"-acme-prod-preview-state"; got != want {
 				t.Errorf("StateBucket() = %q, want %q", got, want)
 			}
-			if got, want := names.PassphraseSecret(edge.ClassProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
+			if got, want := names.PassphraseSecret(environment.TierProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
 				t.Errorf("PassphraseSecret() = %q, want %q", got, want)
 			}
-			if got, want := names.Repository(edge.ClassPreview), tc.stem+"-acme-prod-preview"; got != want {
+			if got, want := names.Repository(environment.TierPreview), tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("Repository() = %q, want %q", got, want)
 			}
-			if got, want := names.RepositoryPath("europe-west1", edge.ClassPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
+			if got, want := names.RepositoryPath("europe-west1", environment.TierPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.WorkloadAccount(edge.ClassProduction), tc.stem+"-production"; got != want {
+			if got, want := names.WorkloadAccount(environment.TierProduction), tc.stem+"-production"; got != want {
 				t.Errorf("WorkloadAccount() = %q, want %q", got, want)
 			}
-			if got, want := names.WorkloadAccountEmail(edge.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
+			if got, want := names.WorkloadAccountEmail(environment.TierProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
 				t.Errorf("WorkloadAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
@@ -122,6 +122,6 @@ func TestTheLongestNamespaceARuntimeAccountLeavesRoomForIsTaken(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
 
 	if _, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
-		t.Fatalf("NewProvider() under a 19 character namespace = %v, want it taken: Google gives a service account id 30 characters and the longest class is 10", err)
+		t.Fatalf("NewProvider() under a 19 character namespace = %v, want it taken: Google gives a service account id 30 characters and the longest tier is 10", err)
 	}
 }

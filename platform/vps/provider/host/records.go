@@ -5,7 +5,7 @@ import (
 	_ "embed"
 	"io"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
@@ -17,12 +17,12 @@ func NewRecords(h *Host) *boxstore.Records { return boxstore.NewRecords(sshRecor
 
 type sshRecords struct{ host *Host }
 
-func (s sshRecords) HasStore(ctx context.Context, class edge.Class) (bool, error) {
-	return s.host.hasStore(ctx, class)
+func (s sshRecords) HasStore(ctx context.Context, tier environment.Tier) (bool, error) {
+	return s.host.hasStore(ctx, tier)
 }
 
-func (s sshRecords) Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error) {
-	command := quoted(boxstore.RecordsHelper) + " " + quoted(string(class))
+func (s sshRecords) Records(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+	command := quoted(boxstore.RecordsHelper) + " " + quoted(string(tier))
 	for _, arg := range argv {
 		command += " " + quoted(arg)
 	}

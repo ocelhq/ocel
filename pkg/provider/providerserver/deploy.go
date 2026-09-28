@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -60,8 +61,8 @@ type deployStages struct {
 }
 
 func (r *deployRun) newStages() deployStages {
-	env, kind := environmentSubject(r.spec.Class, r.spec.Env), string(r.front.Kind())
-	where := environmentPhrase(r.spec.Class, r.spec.Env)
+	env, kind := environmentSubject(r.spec.Tier, r.spec.Env), string(r.front.Kind())
+	where := environmentPhrase(r.spec.Tier, r.spec.Env)
 	routes, infra, app := "Reconciling the routes for %s in %s", "Provisioning %s", "Deploying the %s to %s"
 	if r.dry {
 		routes, infra, app = "Reading the routes for %s in %s", "Planning %s", "Planning the %s for %s"
@@ -107,18 +108,18 @@ func appNoun(entry provider.AppEntry) string {
 	return string(entry.Compute()) + " app"
 }
 
-func environmentSubject(class edge.Class, env string) string {
-	if class == edge.ClassPreview {
+func environmentSubject(tier environment.Tier, env string) string {
+	if tier == environment.TierPreview {
 		return env
 	}
-	return string(edge.ClassProduction)
+	return string(environment.TierProduction)
 }
 
-func environmentPhrase(class edge.Class, env string) string {
-	if class == edge.ClassPreview {
+func environmentPhrase(tier environment.Tier, env string) string {
+	if tier == environment.TierPreview {
 		return "preview " + env
 	}
-	return string(edge.ClassProduction)
+	return string(environment.TierProduction)
 }
 
 func namedList(one, many string, names []string) string {
@@ -226,7 +227,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		edgeSession: &edgeSession{
 			provider: p,
 			front:    front,
-			store:    edgeStateStore{records: p.Records(), name: stackrecords.EdgeStackRecord(spec.Class, spec.Slug)},
+			store:    edgeStateStore{records: p.Records(), name: stackrecords.EdgeStackRecord(spec.Tier, spec.Slug)},
 		},
 		gate:           gate,
 		features:       features,
@@ -237,7 +238,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		spec:           spec,
 		selection:      req.GetEdge(),
 		values:         envvars.Store{Records: p.Records(), Cipher: p.Cipher()},
-		scope:          envvars.Scope{Project: spec.Slug, Class: spec.Class},
+		scope:          envvars.Scope{Project: spec.Slug, Tier: spec.Tier},
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
 		functions:      map[string][]provider.Function{},
@@ -313,13 +314,13 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) err
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Progress) error {
-	_, err := r.gate.EnsureReady(ctx, r.spec.Class, r.features, !r.dry, progress)
+	_, err := r.gate.EnsureReady(ctx, r.spec.Tier, r.features, !r.dry, progress)
 	return err
 }
 
 func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	hosts := r.hostnames()
-	if r.spec.Class == edge.ClassPreview {
+	if r.spec.Tier == environment.TierPreview {
 		wildcard, err := stackrecords.ReadWildcard(ctx, r.provider.Records())
 		if err != nil {
 			return err
@@ -363,7 +364,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
-	name := stackrecords.ProjectRecord(r.spec.Class, r.spec.Slug)
+	name := stackrecords.ProjectRecord(r.spec.Tier, r.spec.Slug)
 	recorded, err := records.ReadOrEmpty(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -386,7 +387,7 @@ const (
 )
 
 func (r *deployRun) hostingMode() hostingMode {
-	if r.spec.Class != edge.ClassPreview {
+	if r.spec.Tier != environment.TierPreview {
 		return hostingProduction
 	}
 	if r.wildcard.BaseDomain != "" && len(r.hostnames()) == 0 {
@@ -410,7 +411,7 @@ func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progress) error {
 	spec := edge.StackSpec{
 		Version:     stackVersion,
-		Class:       r.spec.Class,
+		Tier:        r.spec.Tier,
 		Slug:        r.spec.Slug,
 		PruneRoutes: true,
 		Warn:        progress.Warn,
@@ -431,7 +432,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progres
 		spec.Domains = []string{edge.PreviewWildcard(base)}
 	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, provider.EdgeProgramRequest{
-		Class:             r.spec.Class,
+		Tier:              r.spec.Tier,
 		Slug:              r.spec.Slug,
 		Env:               r.spec.Env,
 		PreviewBaseDomain: base,
@@ -566,7 +567,7 @@ func (r *deployRun) domainApps() map[string]string {
 }
 
 func (r *deployRun) hostnames() []string {
-	tier := environmentTier(r.spec.Class)
+	tier := wireTier(r.spec.Tier)
 	seen := map[string]bool{}
 	hosts := unseen(tierHostnames(r.manifest.GetDomains(), tier), seen)
 	for _, app := range r.manifest.GetApps() {
@@ -601,7 +602,7 @@ func (r *deployRun) previewLabel(slot int) string {
 }
 
 func (r *deployRun) servedHostnames() [][]string {
-	if r.spec.Class == edge.ClassPreview {
+	if r.spec.Tier == environment.TierPreview {
 		served := make([][]string, len(r.spec.Apps))
 		site, names := r.previewSite(), r.appNames()
 		for slot := range served {
@@ -611,7 +612,7 @@ func (r *deployRun) servedHostnames() [][]string {
 		}
 		return served
 	}
-	tier := environmentTier(r.spec.Class)
+	tier := wireTier(r.spec.Tier)
 	own := make([][]string, len(r.spec.Apps))
 	for slot, entry := range r.spec.Apps {
 		own[slot] = tierHostnames(entry.Manifest.GetDomains(), tier)
@@ -622,7 +623,7 @@ func (r *deployRun) servedHostnames() [][]string {
 func (r *deployRun) checkpoint(ctx context.Context) error {
 	r.state.Kind = r.front.Kind()
 	r.state.Edge = r.stack.State()
-	if r.spec.Class == edge.ClassPreview {
+	if r.spec.Tier == environment.TierPreview {
 		r.state.Edge.GlobalPreview = r.globalPreview()
 	}
 	return r.store.write(ctx, r.state)
@@ -802,7 +803,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			r.bindings = result.Bindings
-			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Class, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
+			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
 				Kind:      provider.StackInfra,
 				Bindings:  result.Bindings,
 				WrittenBy: provider.WrittenByVersion(""),
@@ -894,7 +895,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordStagedDeployment(ctx, entry, facts, images, values, result); err != nil {
 				return err
 			}
-			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Class, r.spec.Slug, entry.Stack, stackrecords.Stack{
+			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
 				Kind:       provider.StackApp,
 				App:        entry.App,
 				Release:    entry.Build.Release().String(),
@@ -912,7 +913,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 	if inspectStack == nil {
 		return nil
 	}
-	_, recorded, err := stackrecords.Read(ctx, r.provider.Records(), r.spec.Class, r.spec.Slug, stack)
+	_, recorded, err := stackrecords.Read(ctx, r.provider.Records(), r.spec.Tier, r.spec.Slug, stack)
 	if err != nil || recorded {
 		return err
 	}
@@ -943,7 +944,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 }
 
 func (r *deployRun) ref(stack naming.StackName) provider.StackRef {
-	return provider.StackRef{Project: r.spec.Slug, Class: r.spec.Class, Name: stack}
+	return provider.StackRef{Project: r.spec.Slug, Tier: r.spec.Tier, Name: stack}
 }
 
 func (r *deployRun) publishedBindings() *publishedBindings { return r.published }
@@ -1270,11 +1271,11 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if err := r.checkpoint(ctx); err != nil {
 				return err
 			}
-			if r.spec.Class != edge.ClassPreview {
+			if r.spec.Tier != environment.TierPreview {
 				return nil
 			}
 			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.Records(),
-				r.spec.Class, r.spec.Slug, r.spec.Env, r.spec.Label)
+				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label)
 		})
 	}); err != nil {
 		return nil, err

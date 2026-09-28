@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -58,7 +59,7 @@ func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vp
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	if err := stackrecords.Write(ctx, records, edge.ClassProduction, "shop",
+	if err := stackrecords.Write(ctx, records, environment.TierProduction, "shop",
 		naming.InfraStack(bucket.Ref.Name.Env), stackrecords.Stack{
 			Kind: provider.StackInfra, Bindings: []provider.Binding{binding},
 		}); err != nil {
@@ -70,7 +71,7 @@ func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vp
 		t.Fatal(err)
 	}
 	stack, err := front.Reconcile(ctx, edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: "shop",
+		Version: "test", Tier: environment.TierProduction, Slug: "shop",
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)

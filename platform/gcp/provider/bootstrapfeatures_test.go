@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -109,19 +109,19 @@ func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatNeedsIt(t *testing.T)
 	b := bootstrap{}
 	catalogue := b.Catalogue()
 	read, err := b.described(context.Background(),
-		survey{Names: Names{namespace: "ocel", project: "acme-prod"}, Class: edge.ClassProduction, Project: "acme-prod"})
+		survey{Names: Names{namespace: "ocel", project: "acme-prod"}, Tier: environment.TierProduction, Project: "acme-prod"})
 	if err != nil {
 		t.Fatalf("described = %v", err)
 	}
 
 	fronted := bootstrapplan.ChangeGroups(read, catalogue, provider.BootstrapRequest{
-		Class: edge.ClassProduction, Features: []string{albFeature},
+		Tier: environment.TierProduction, Features: []string{albFeature},
 	})
 	if !slices.ContainsFunc(fronted, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("an %q plan has %v, want a group for %q so the reader sees what it costs before it is provisioned", alb.Kind, fronted, albFeature)
 	}
 
-	plain := bootstrapplan.ChangeGroups(read, catalogue, provider.BootstrapRequest{Class: edge.ClassProduction})
+	plain := bootstrapplan.ChangeGroups(read, catalogue, provider.BootstrapRequest{Tier: environment.TierProduction})
 	if slices.ContainsFunc(plain, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("a plan that asked for no edge has %v, and a load balancer nothing named would be provisioned and bill", plain)
 	}

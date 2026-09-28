@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -65,11 +66,11 @@ func bootstrapOf(t *testing.T, p provider.Provider) provider.Bootstrap {
 }
 
 func under(t *testing.T, rest ...string) records.Name {
-	return in(edge.ClassProduction, t, rest...)
+	return in(environment.TierProduction, t, rest...)
 }
 
-func in(class edge.Class, t *testing.T, rest ...string) records.Name {
-	return append(records.Name{records.RootConformance, string(class), t.Name()}, rest...)
+func in(tier environment.Tier, t *testing.T, rest ...string) records.Name {
+	return append(records.Name{records.RootConformance, string(tier), t.Name()}, rest...)
 }
 
 func RunStore(t *testing.T, store records.Store) {
@@ -178,8 +179,8 @@ func RunStore(t *testing.T, store records.Store) {
 		}
 	})
 
-	t.Run("one class's records are not the other's", func(t *testing.T) {
-		production, preview := in(edge.ClassProduction, t, "isolated"), in(edge.ClassPreview, t, "isolated")
+	t.Run("one tier's records are not the other's", func(t *testing.T) {
+		production, preview := in(environment.TierProduction, t, "isolated"), in(environment.TierPreview, t, "isolated")
 		if _, err := store.Write(ctx, records.Record{Name: production, Bytes: []byte("production")}); err != nil {
 			t.Fatal(err)
 		}
@@ -238,12 +239,12 @@ func RunStore(t *testing.T, store records.Store) {
 	})
 
 	t.Run("every prefix providerserver reads a whole subtree at is one this store can answer", func(t *testing.T) {
-		scope := envvars.Scope{Project: "conformance", Class: edge.ClassProduction}
+		scope := envvars.Scope{Project: "conformance", Tier: environment.TierProduction}
 		for _, name := range []records.Name{
-			stackrecords.ProjectsRecord(edge.ClassProduction),
-			stackrecords.StacksRecord(edge.ClassProduction, scope.Project),
-			stackrecords.EdgeStacksRecord(edge.ClassProduction),
-			stackrecords.LedgerRecord(ledger.Scope(edge.ClassProduction, scope.Project)),
+			stackrecords.ProjectsRecord(environment.TierProduction),
+			stackrecords.StacksRecord(environment.TierProduction, scope.Project),
+			stackrecords.EdgeStacksRecord(environment.TierProduction),
+			stackrecords.LedgerRecord(ledger.Scope(environment.TierProduction, scope.Project)),
 			envvars.ScopedRecordName(scope),
 			envvars.ReferencesRecordName(scope),
 		} {
@@ -261,7 +262,7 @@ func RunCipher(t *testing.T, cipher records.Cipher) {
 
 	at := records.SealScope{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Env:     "*",
 		Folder:  "/",
 		Name:    "DATABASE_URL",
@@ -285,11 +286,11 @@ func RunCipher(t *testing.T, cipher records.Cipher) {
 	}
 
 	for name, moved := range map[string]records.SealScope{
-		"another project":     {Project: "other", Class: at.Class, Env: at.Env, Folder: at.Folder, Name: at.Name},
-		"another class":       {Project: at.Project, Class: edge.ClassPreview, Env: at.Env, Folder: at.Folder, Name: at.Name},
-		"another environment": {Project: at.Project, Class: at.Class, Env: "staging", Folder: at.Folder, Name: at.Name},
-		"another folder":      {Project: at.Project, Class: at.Class, Env: at.Env, Folder: "/apps/web", Name: at.Name},
-		"another key":         {Project: at.Project, Class: at.Class, Env: at.Env, Folder: at.Folder, Name: "API_KEY"},
+		"another project":     {Project: "other", Tier: at.Tier, Env: at.Env, Folder: at.Folder, Name: at.Name},
+		"another tier":        {Project: at.Project, Tier: environment.TierPreview, Env: at.Env, Folder: at.Folder, Name: at.Name},
+		"another environment": {Project: at.Project, Tier: at.Tier, Env: "staging", Folder: at.Folder, Name: at.Name},
+		"another folder":      {Project: at.Project, Tier: at.Tier, Env: at.Env, Folder: "/apps/web", Name: at.Name},
+		"another key":         {Project: at.Project, Tier: at.Tier, Env: at.Env, Folder: at.Folder, Name: "API_KEY"},
 	} {
 		t.Run("a value sealed here does not open at "+name, func(t *testing.T) {
 			if _, err := cipher.Open(ctx, moved, sealed); err == nil {
@@ -334,32 +335,32 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		}
 	})
 
-	t.Run("Describe answers for the class it was asked about", func(t *testing.T) {
-		for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-			described, err := bootstrap.Describe(ctx, class)
+	t.Run("Describe answers for the tier it was asked about", func(t *testing.T) {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			described, err := bootstrap.Describe(ctx, tier)
 			if err != nil {
-				t.Fatalf("Describe(%s) = %v", class, err)
+				t.Fatalf("Describe(%s) = %v", tier, err)
 			}
-			if described.Class != class {
-				t.Errorf("Describe(%s) answered for %s", class, described.Class)
+			if described.Tier != tier {
+				t.Errorf("Describe(%s) answered for %s", tier, described.Tier)
 			}
 			for _, stack := range described.Stacks {
 				if stack.Name == "" {
-					t.Errorf("Describe(%s) returned a stack with no name, and no plan can name it", class)
+					t.Errorf("Describe(%s) returned a stack with no name, and no plan can name it", tier)
 				}
 			}
 		}
 	})
 
 	t.Run("Plan answers for the request Apply would be given", func(t *testing.T) {
-		class := edge.ClassProduction
-		described, err := bootstrap.Describe(ctx, class)
+		tier := environment.TierProduction
+		described, err := bootstrap.Describe(ctx, tier)
 		if err != nil {
-			t.Fatalf("Describe(%s) = %v", class, err)
+			t.Fatalf("Describe(%s) = %v", tier, err)
 		}
-		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class})
+		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier})
 		if err != nil {
-			t.Fatalf("Plan(%s) = %v", class, err)
+			t.Fatalf("Plan(%s) = %v", tier, err)
 		}
 		creates := 0
 		for _, group := range plan.Groups {
@@ -393,11 +394,11 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		if len(wanted) == 0 {
 			t.Skipf("the %q edge installs no feature of this provider, so nothing can be dropped", kind)
 		}
-		class := edge.ClassProduction
+		tier := environment.TierProduction
 		drop := wanted
-		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, Remove: drop})
+		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, Remove: drop})
 		if err != nil {
-			t.Fatalf("Plan(%s, drop %v) = %v", class, drop, err)
+			t.Fatalf("Plan(%s, drop %v) = %v", tier, drop, err)
 		}
 		leaving := map[string]provider.ChangeAction{}
 		for _, group := range plan.Groups {
@@ -418,16 +419,16 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 	})
 
 	t.Run("what Apply installs, Describe reports and Remove takes down", func(t *testing.T) {
-		class := edge.ClassPreview
+		tier := environment.TierPreview
 		raising, err := ordered(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Features: raising}, nil); err != nil {
 			t.Fatalf("Apply() of what the %q edge installs (%v) = %v", kind, raising, err)
 		}
 
-		described, err := bootstrap.Describe(ctx, class)
+		described, err := bootstrap.Describe(ctx, tier)
 		if err != nil {
 			t.Fatalf("Describe() after Apply() = %v", err)
 		}
@@ -437,7 +438,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 			}
 		}
 
-		removal, err := bootstrap.PlanRemove(ctx, class)
+		removal, err := bootstrap.PlanRemove(ctx, tier)
 		if err != nil {
 			t.Fatalf("PlanRemove() = %v", err)
 		}
@@ -458,10 +459,10 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 			}
 		}
 
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
 		}
-		gone, err := bootstrap.Describe(ctx, class)
+		gone, err := bootstrap.Describe(ctx, tier)
 		if err != nil {
 			t.Fatalf("Describe() after Remove() = %v", err)
 		}
@@ -471,7 +472,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 	})
 
 	t.Run("Apply takes a drop in delete order", func(t *testing.T) {
-		class := edge.ClassPreview
+		tier := environment.TierPreview
 		levels, err := bootstrapplan.FeatureLevels(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
@@ -480,10 +481,10 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		for i := len(levels) - 1; i >= 0; i-- {
 			dropping = append(dropping, levels[i]...)
 		}
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, Remove: dropping}, nil); err != nil {
 			t.Fatalf("Apply() dropping what the %q edge installs (%v) = %v", kind, dropping, err)
 		}
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
 		}
 	})
@@ -587,7 +588,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 	t.Helper()
 
 	ctx := context.Background()
-	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	ref := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
 
 	if !facts.StoresArtifacts {
@@ -615,7 +616,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 		if err != nil || !present {
 			t.Errorf("Has() of an artifact just put = %v, %v, want true: a deploy re-uploads every unchanged build without it", present, err)
 		}
-		absent := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		absent := provider.ArtifactRef{Tier: ref.Tier, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
 		present, err = artifacts.Has(ctx, absent)
 		if err != nil {
 			t.Errorf("Has() of a key nothing wrote = %v, want a plain false", err)
@@ -626,7 +627,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 	})
 
 	t.Run("Open of a key nothing wrote refuses rather than answering empty", func(t *testing.T) {
-		absent := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		absent := provider.ArtifactRef{Tier: ref.Tier, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
 		opened, err := artifacts.Open(ctx, absent)
 		if err == nil {
 			opened.Close()
@@ -635,11 +636,11 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 	})
 
 	t.Run("RemovePrefix takes the prefix and nothing beside it", func(t *testing.T) {
-		kept := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
+		kept := provider.ArtifactRef{Tier: ref.Tier, Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
 		if err := artifacts.Put(ctx, kept, bytes.NewReader(body)); err != nil {
 			t.Fatal(err)
 		}
-		if err := artifacts.RemovePrefix(ctx, ref.Class, "conformance/"+t.Name()+"/", nil); err != nil {
+		if err := artifacts.RemovePrefix(ctx, ref.Tier, "conformance/"+t.Name()+"/", nil); err != nil {
 			t.Fatalf("RemovePrefix() = %v", err)
 		}
 		opened, err := artifacts.Open(ctx, kept)
@@ -649,16 +650,16 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 		opened.Close()
 	})
 
-	t.Run("RemovePrefix of one class leaves the other class's artifacts", func(t *testing.T) {
+	t.Run("RemovePrefix of one tier leaves the other tier's artifacts", func(t *testing.T) {
 		key := "conformance/" + t.Name() + "/bundle.zip"
-		production := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: ref.Bucket, Key: key}
-		preview := provider.ArtifactRef{Class: edge.ClassPreview, Bucket: ref.Bucket, Key: key}
+		production := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: ref.Bucket, Key: key}
+		preview := provider.ArtifactRef{Tier: environment.TierPreview, Bucket: ref.Bucket, Key: key}
 		for _, at := range []provider.ArtifactRef{production, preview} {
 			if err := artifacts.Put(ctx, at, bytes.NewReader(body)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := artifacts.RemovePrefix(ctx, edge.ClassPreview, "conformance/"+t.Name()+"/", nil); err != nil {
+		if err := artifacts.RemovePrefix(ctx, environment.TierPreview, "conformance/"+t.Name()+"/", nil); err != nil {
 			t.Fatalf("RemovePrefix() = %v", err)
 		}
 		opened, err := artifacts.Open(ctx, production)
@@ -669,7 +670,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 	})
 
 	t.Run("RemovePrefix of a prefix containing nothing is not an error", func(t *testing.T) {
-		if err := artifacts.RemovePrefix(ctx, ref.Class, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
+		if err := artifacts.RemovePrefix(ctx, ref.Tier, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
 			t.Fatalf("RemovePrefix() of a prefix nothing was written under = %v, want nil", err)
 		}
 	})
@@ -716,10 +717,10 @@ func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, r
 	})
 
 	t.Run("RemovePrefix of any prefix, including one nothing wrote under, is nil", func(t *testing.T) {
-		for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 			for _, prefix := range []string{"conformance/" + t.Name() + "/", "conformance/" + t.Name() + "/nothing-here/"} {
-				if err := artifacts.RemovePrefix(ctx, class, prefix, nil); err != nil {
-					t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", class, prefix, err)
+				if err := artifacts.RemovePrefix(ctx, tier, prefix, nil); err != nil {
+					t.Errorf("RemovePrefix(%s, %q) = %v, want nil: teardown sweeps it on every destroy and every preview reap", tier, prefix, err)
 				}
 			}
 		}
@@ -804,7 +805,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 	ctx := context.Background()
 	ref := provider.StackRef{
 		Project: "conformance",
-		Class:   edge.ClassPreview,
+		Tier:    environment.TierPreview,
 		Name:    naming.InfraStack("conformance"),
 	}
 
@@ -849,7 +850,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		shipping := bare
 		shipping.Uploads = []provider.Upload{{
 			Name:   "conformance",
-			Ref:    provider.ArtifactRef{Class: ref.Class, Bucket: provider.StoreFunctions, Key: uploadKey(t)},
+			Ref:    provider.ArtifactRef{Tier: ref.Tier, Bucket: provider.StoreFunctions, Key: uploadKey(t)},
 			Path:   path,
 			Digest: conformanceArtifactDigest,
 		}}
@@ -967,11 +968,11 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 
 		if store != nil {
 			recorded := stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}
-			if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, recorded); err != nil {
+			if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, recorded); err != nil {
 				t.Fatalf("recording what the release returned, as providerserver does after every Provision() = %v", err)
 			}
 			defer func() {
-				if err := stackrecords.Forget(ctx, store, ref.Class, ref.Project, ref.Name); err != nil {
+				if err := stackrecords.Forget(ctx, store, ref.Tier, ref.Project, ref.Name); err != nil {
 					t.Errorf("forgetting the stack the teardown took = %v", err)
 				}
 			}()

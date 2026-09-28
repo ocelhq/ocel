@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -71,7 +72,7 @@ func TestACertificateYourProxyServesIsKeptAsYours(t *testing.T) {
 
 	front := edgeOver(routedByHand(), fake.NewRecords())
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
-		Slug: slug, Class: edge.ClassProduction, Hostnames: []string{"shop.example.com"}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
 	})[0].Changes {
 		if change.Kind != box.CertificateKind {
 			continue

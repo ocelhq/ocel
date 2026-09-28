@@ -4,12 +4,12 @@ import (
 	"cmp"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const (
-	ClassWideEnvironment = "*"
+	TierWideEnvironment = "*"
 
 	rootFolder = "/"
 
@@ -18,7 +18,7 @@ const (
 
 type Scope struct {
 	Project string
-	Class   edge.Class
+	Tier    environment.Tier
 }
 
 type Cell struct {
@@ -40,7 +40,7 @@ func (c Coordinate) String() string {
 	if c.Folder != "" && c.Folder != rootFolder {
 		out += " in " + c.Folder
 	}
-	if c.Environment != "" && c.Environment != ClassWideEnvironment {
+	if c.Environment != "" && c.Environment != TierWideEnvironment {
 		out += " for " + c.Environment
 	}
 	return out
@@ -56,13 +56,13 @@ func (c Coordinate) canonical() Coordinate {
 
 func canonicalEnvironment(environment string) string {
 	if environment == "" {
-		return ClassWideEnvironment
+		return TierWideEnvironment
 	}
 	return environment
 }
 
 func plainEnvironment(environment string) string {
-	if environment == ClassWideEnvironment {
+	if environment == TierWideEnvironment {
 		return ""
 	}
 	return environment
@@ -76,7 +76,7 @@ func plainFolder(folder string) string {
 }
 
 func ScopedRecordName(scope Scope, rest ...string) records.Name {
-	return append(records.Name{records.RootValues, scope.Project, string(scope.Class)}, rest...)
+	return append(records.Name{records.RootValues, scope.Project, string(scope.Tier)}, rest...)
 }
 
 func cellsName(scope Scope) records.Name { return ScopedRecordName(scope, "cells") }
@@ -116,7 +116,7 @@ func bindingOwnerName(scope Scope, owner, environment string) records.Name {
 }
 
 func ReferencesRecordName(scope Scope) records.Name {
-	return records.Name{records.RootValueRefs, string(scope.Class), scope.Project}
+	return records.Name{records.RootValueRefs, string(scope.Tier), scope.Project}
 }
 
 func refsName(target Scope, at Coordinate) records.Name {

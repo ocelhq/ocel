@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -70,7 +71,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 		t.Fatalf("ServingFactsFor: %v", err)
 	}
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Kind: provider.StackApp,
 		Edge: cfg.Edge,
 		App: &provider.AppSpec{

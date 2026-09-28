@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -22,7 +23,7 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 	if err != nil {
 		return err
 	}
-	if err := destroyReclaimTargets(ctx, p, slug, edge.ClassPreview, targets, progress); err != nil {
+	if err := destroyReclaimTargets(ctx, p, slug, environment.TierPreview, targets, progress); err != nil {
 		return err
 	}
 	return destroyPointerStacks(ctx, p, slug, pointer,
@@ -30,7 +31,7 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 }
 
 func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress progress.Progress) error {
-	entries, err := stackrecords.List(ctx, p.Records(), edge.ClassPreview, slug)
+	entries, err := stackrecords.List(ctx, p.Records(), environment.TierPreview, slug)
 	if err != nil {
 		return err
 	}
@@ -48,19 +49,19 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointe
 	var errs []error
 	for i, entry := range provisioned {
 		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", entry.Name, i+1, len(provisioned)))
-		ref := provider.StackRef{Project: slug, Class: edge.ClassPreview, Name: entry.Name}
+		ref := provider.StackRef{Project: slug, Tier: environment.TierPreview, Name: entry.Name}
 		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
 			continue
 		}
-		if err := stackrecords.Forget(ctx, p.Records(), edge.ClassPreview, slug, entry.Name); err != nil {
+		if err := stackrecords.Forget(ctx, p.Records(), environment.TierPreview, slug, entry.Name); err != nil {
 			errs = append(errs, err)
 		}
 		if entry.Name.IsInfra() {
 			continue
 		}
 		for _, prefix := range reclaimedPrefixes(slug, pointer, entry.Name.App, entry.Name.Release, elsewhere, here) {
-			if err := p.Artifacts().RemovePrefix(ctx, edge.ClassPreview, prefix, progress); err != nil {
+			if err := p.Artifacts().RemovePrefix(ctx, environment.TierPreview, prefix, progress); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}
@@ -171,23 +172,23 @@ func destroyReclaimTargets(
 	ctx context.Context,
 	p provider.Provider,
 	slug string,
-	class edge.Class,
+	tier environment.Tier,
 	targets []ReclaimTarget,
 	progress progress.Progress,
 ) error {
 	var errs []error
 	for i, target := range targets {
 		progress.Say(fmt.Sprintf("Destroying the stack of %s build %s (%d of %d)", target.App, target.Build, i+1, len(targets)))
-		ref := provider.StackRef{Project: slug, Class: class, Name: target.Stack}
+		ref := provider.StackRef{Project: slug, Tier: tier, Name: target.Stack}
 		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
 			continue
 		}
-		if err := stackrecords.Forget(ctx, p.Records(), class, slug, target.Stack); err != nil {
+		if err := stackrecords.Forget(ctx, p.Records(), tier, slug, target.Stack); err != nil {
 			errs = append(errs, err)
 		}
 		for _, prefix := range target.Prefixes {
-			if err := p.Artifacts().RemovePrefix(ctx, class, prefix, progress); err != nil {
+			if err := p.Artifacts().RemovePrefix(ctx, tier, prefix, progress); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}

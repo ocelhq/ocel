@@ -12,7 +12,7 @@ const report = {
   result: {
     schemaVersion: 1,
     slug: "ocelhq",
-    environment: { class: "preview", identity: "pr-7" },
+    environment: { tier: "preview", identity: "pr-7" },
     provider: { name: "aws", region: "eu-west-2" },
     promotionId: "prom_1",
     apps: [{ name: "web", urls: ["https://web.preview.example"] }],

@@ -12,7 +12,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -33,7 +33,7 @@ type Artifacts struct {
 }
 
 type Stores interface {
-	Buckets(ctx context.Context, class edge.Class) (Buckets, error)
+	Buckets(ctx context.Context, tier environment.Tier) (Buckets, error)
 }
 
 type Buckets struct {
@@ -47,21 +47,21 @@ type CacheBucket struct {
 	S3   S3API
 }
 
-func (b Buckets) Buckets(context.Context, edge.Class) (Buckets, error) { return b, nil }
+func (b Buckets) Buckets(context.Context, environment.Tier) (Buckets, error) { return b, nil }
 
-func (a Artifacts) buckets(ctx context.Context, class edge.Class) (Buckets, error) {
-	if class == "" {
+func (a Artifacts) buckets(ctx context.Context, tier environment.Tier) (Buckets, error) {
+	if tier == "" {
 		return Buckets{}, refusal.Refuse(refusal.CodeInvalid,
-			"an artifact names no class, and this account keeps each class's artifacts in the bootstrap that owns them")
+			"an artifact names no tier, and this account keeps each tier's artifacts in the bootstrap that owns them")
 	}
 	if a.Stores == nil {
 		return Buckets{}, nil
 	}
-	return a.Stores.Buckets(ctx, class)
+	return a.Stores.Buckets(ctx, tier)
 }
 
-func (a Artifacts) bucket(ctx context.Context, class edge.Class, store string) (string, S3API, error) {
-	buckets, err := a.buckets(ctx, class)
+func (a Artifacts) bucket(ctx context.Context, tier environment.Tier, store string) (string, S3API, error) {
+	buckets, err := a.buckets(ctx, tier)
 	if err != nil {
 		return "", nil, err
 	}
@@ -86,7 +86,7 @@ func (a Artifacts) bucket(ctx context.Context, class edge.Class, store string) (
 	}
 	if name == "" {
 		return "", nil, refusal.Refuse(refusal.CodeNotReady,
-			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, provider.BootstrapCommand(class))
+			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, provider.BootstrapCommand(tier))
 	}
 	return name, client, nil
 }
@@ -99,7 +99,7 @@ func (a Artifacts) reach(cache CacheBucket) S3API {
 }
 
 func (a Artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
-	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Bucket)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (a Artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Re
 }
 
 func (a Artifacts) Has(ctx context.Context, ref provider.ArtifactRef) (bool, error) {
-	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Bucket)
 	if err != nil {
 		return false, err
 	}
@@ -154,7 +154,7 @@ func absent(err error) bool {
 }
 
 func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
-	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
+	bucket, client, err := a.bucket(ctx, ref.Tier, ref.Bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +171,11 @@ func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress progress.Progress) error {
+func (a Artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Progress) error {
 	if prefix == "" {
 		return refusal.Refuse(refusal.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}
-	buckets, err := a.buckets(ctx, class)
+	buckets, err := a.buckets(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix st
 		if swept == 1 {
 			buckets = "bucket"
 		}
-		progress.Say(fmt.Sprintf("Removed the %s artifacts under %s from %d %s", class, prefix, swept, buckets))
+		progress.Say(fmt.Sprintf("Removed the %s artifacts under %s from %d %s", tier, prefix, swept, buckets))
 	}
 	return errors.Join(errs...)
 }

@@ -3,7 +3,7 @@ package vps
 import (
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -35,8 +35,8 @@ func deployDocument() string {
 func deployGrants() []host.Grant {
 	var grants []host.Grant
 	named := map[string]bool{}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		for _, grant := range host.Grants(class) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, grant := range host.Grants(tier) {
 			if named[grant.Name] {
 				continue
 			}

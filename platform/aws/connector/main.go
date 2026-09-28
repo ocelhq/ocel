@@ -23,6 +23,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -80,7 +81,7 @@ func run(addr, region, config, keyParameter string) error {
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
 		now:       time.Now,
-		read:      map[edge.Class]readDeployment{},
+		read:      map[environment.Tier]readDeployment{},
 	}
 
 	spec := connectorserver.Spec{
@@ -172,7 +173,7 @@ type deployments struct {
 	now       func() time.Time
 
 	mu   sync.Mutex
-	read map[edge.Class]readDeployment
+	read map[environment.Tier]readDeployment
 }
 
 type readDeployment struct {
@@ -180,34 +181,34 @@ type readDeployment struct {
 	at       time.Time
 }
 
-func (d *deployments) resolve(ctx context.Context, class edge.Class) (bootstrap.Deployed, error) {
+func (d *deployments) resolve(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
 	d.mu.Lock()
-	memo, known := d.read[class]
+	memo, known := d.read[tier]
 	d.mu.Unlock()
 	if known && d.now().Sub(memo.at) < deploymentsTTL {
 		return memo.deployed, nil
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(tier))
 	if err != nil {
 		return bootstrap.Deployed{}, err
 	}
 	d.mu.Lock()
-	d.read[class] = readDeployment{deployed: deployed, at: d.now()}
+	d.read[tier] = readDeployment{deployed: deployed, at: d.now()}
 	d.mu.Unlock()
 	return deployed, nil
 }
 
-func (d *deployments) Table(ctx context.Context, class edge.Class) (string, error) {
-	deployed, err := d.resolve(ctx, class)
+func (d *deployments) Table(ctx context.Context, tier environment.Tier) (string, error) {
+	deployed, err := d.resolve(ctx, tier)
 	return deployed.StateTable, err
 }
 
-func (d *deployments) ValuesTable(ctx context.Context, class edge.Class) (string, error) {
-	deployed, err := d.resolve(ctx, class)
+func (d *deployments) ValuesTable(ctx context.Context, tier environment.Tier) (string, error) {
+	deployed, err := d.resolve(ctx, tier)
 	return deployed.VarsTable, err
 }
 
-func (d *deployments) Key(ctx context.Context, class edge.Class) (string, error) {
-	deployed, err := d.resolve(ctx, class)
+func (d *deployments) Key(ctx context.Context, tier environment.Tier) (string, error) {
+	deployed, err := d.resolve(ctx, tier)
 	return deployed.VarsKeyARN, err
 }

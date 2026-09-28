@@ -47,8 +47,8 @@ func runtimeLayerOutputKey(architecture, digest string) string {
 	return runtimeLayerResourceID(architecture) + shortRuntimeDigest(digest) + "Arn"
 }
 
-func runtimeLayerName(ns Namespace, class, architecture, digest string) string {
-	return suffixed(class, string(ns)+"-runtime") + "-" + runtimeArchTokens[architecture] + "-" + shortRuntimeDigest(digest)
+func runtimeLayerName(ns Namespace, tier, architecture, digest string) string {
+	return suffixed(tier, string(ns)+"-runtime") + "-" + runtimeArchTokens[architecture] + "-" + shortRuntimeDigest(digest)
 }
 
 func runtimeLayerArches() map[string]string {
@@ -97,15 +97,15 @@ func placeRuntimeLayers(ctx context.Context, store ObjectStore, bucket string) (
 	return placed, nil
 }
 
-func runtimeLayerTemplateAt(ns Namespace, class, bucket string) (string, error) {
+func runtimeLayerTemplateAt(ns Namespace, tier, bucket string) (string, error) {
 	placed, err := runtimeLayerPlacements(bucket)
 	if err != nil {
 		return "", err
 	}
-	return runtimeLayerTemplate(ns, class, placed), nil
+	return runtimeLayerTemplate(ns, tier, placed), nil
 }
 
-func runtimeLayerTemplate(ns Namespace, class string, code map[string]payloads.Placement) string {
+func runtimeLayerTemplate(ns Namespace, tier string, code map[string]payloads.Placement) string {
 	var resources, outputs strings.Builder
 	for _, architecture := range runtimeArches() {
 		at := code[architecture]
@@ -120,8 +120,8 @@ func runtimeLayerTemplate(ns Namespace, class string, code map[string]payloads.P
         S3Key: %s
       CompatibleArchitectures:
         - %s
-`, id, runtimeLayerName(ns, class, architecture, at.SHA256),
-			fmt.Sprintf("Ocel %s runtime (%s) - payload %s", architecture, class, shortRuntimeDigest(at.SHA256)),
+`, id, runtimeLayerName(ns, tier, architecture, at.SHA256),
+			fmt.Sprintf("Ocel %s runtime (%s) - payload %s", architecture, tier, shortRuntimeDigest(at.SHA256)),
 			at.Bucket, at.Key, architecture)
 		fmt.Fprintf(&outputs, `  %s:
     Description: "Version ARN of the %s runtime, named after the payload it contains so a release only ever boots through the runtime the build that deploys it ships."
@@ -132,11 +132,11 @@ func runtimeLayerTemplate(ns Namespace, class string, code map[string]payloads.P
 Description: %q
 Resources:
 %sOutputs:
-%s`, runtimeStackDescription(class), resources.String(), outputs.String())
+%s`, runtimeStackDescription(tier), resources.String(), outputs.String())
 }
 
-func runtimeStackDescription(class string) string {
-	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", class)
+func runtimeStackDescription(tier string) string {
+	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", tier)
 }
 
 func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progress progress.Progress) error {
@@ -145,8 +145,8 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 	if err != nil {
 		return err
 	}
-	stackName := target.ns.runtimeStackName(target.class)
-	body := runtimeLayerTemplate(target.ns, target.class, code)
+	stackName := target.ns.runtimeStackName(target.tier)
+	body := runtimeLayerTemplate(target.ns, target.tier, code)
 	tags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, body, nil, nil, tags, nil); err != nil {
 		return err
@@ -160,14 +160,14 @@ type RuntimeLayerRequest struct {
 	Writer         provider.WrittenBy
 }
 
-func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, runProgress progress.Progress) (map[string]string, error) {
+func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier string, req RuntimeLayerRequest, runProgress progress.Progress) (map[string]string, error) {
 	runProgress = ensureProgress(runProgress)
-	stackName := ns.runtimeStackName(class)
-	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
+	stackName := ns.runtimeStackName(tier)
+	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, tier)
 	if err != nil || len(missingRuntimeLayers(current)) == 0 {
 		return current, err
 	}
-	target, err := specFor(ns, class)
+	target, err := specFor(ns, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 		}
 	}
 
-	latest, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
+	latest, err := publishedRuntimeLayers(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +199,8 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	return latest, nil
 }
 
-func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (map[string]string, error) {
-	out, err := cfn.StackOutputs(ctx, api, ns.runtimeStackName(class))
+func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (map[string]string, error) {
+	out, err := cfn.StackOutputs(ctx, api, ns.runtimeStackName(tier))
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +232,8 @@ func runtimeStackWrittenElsewhere(err error) bool {
 
 func planRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading, req Request) provider.ChangeGroup {
 	stamp := read.Deployed.RuntimeStack
-	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: read.ns.runtimeStackName(read.class)}
-	body, err := runtimeLayerTemplateAt(read.ns, read.class, read.Deployed.ArtifactBucket)
+	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: read.ns.runtimeStackName(read.tier)}
+	body, err := runtimeLayerTemplateAt(read.ns, read.tier, read.Deployed.ArtifactBucket)
 	if err != nil {
 		group.Action, group.Reason = provider.ActionKeep, err.Error()
 		return group
@@ -254,18 +254,18 @@ func planRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading, req Re
 func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) provider.ChangeGroup {
 	group := provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
-		Name:   read.ns.runtimeStackName(read.class),
+		Name:   read.ns.runtimeStackName(read.tier),
 		Action: provider.ActionDelete,
 	}
-	body, err := runtimeLayerTemplateAt(read.ns, read.class, read.Deployed.ArtifactBucket)
+	body, err := runtimeLayerTemplateAt(read.ns, read.tier, read.Deployed.ArtifactBucket)
 	if err != nil {
 		return group
 	}
 	return planDelete(ctx, stacks, group, body)
 }
 
-func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, progress progress.Progress) error {
-	stackName := ns.runtimeStackName(class)
+func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier string, progress progress.Progress) error {
+	stackName := ns.runtimeStackName(tier)
 	stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 	if err != nil || stack == nil {
 		return err

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -15,7 +15,7 @@ import (
 func noted(box *bench, answer string) {
 	imaged := box.answer
 	box.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(HandedNote(edge.ClassProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
+		if strings.Contains(command, quoted(HandedNote(environment.TierProduction, physical))) && strings.Contains(command, "echo "+handedUnknown) {
 			return session.Result{Stdout: answer}, true
 		}
 		if imaged != nil {
@@ -30,9 +30,9 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 
 	spec := valued()
 	box := runningWith(t, spec)
-	note := HandedNote(spec.Class, spec.Name)
+	note := HandedNote(spec.Tier, spec.Name)
 	wrote := box.at("install -D -m 0600 /dev/stdin " + quoted(note))
-	handed := box.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Class, spec.Name)))
+	handed := box.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Tier, spec.Name)))
 	ran := box.at(quoted("run") + " " + quoted("--detach"))
 	if wrote < 0 || handed < 0 || ran < 0 || wrote < handed || wrote > ran {
 		t.Fatalf("the note was written at %d, the values at %d and the container run at %d: the note is what a later promotion reads once the container is gone, so it is written before there is a container to lose", wrote, handed, ran)
@@ -53,11 +53,11 @@ func TestADeployNotesTheNamesItHandedBeforeTheRunAndATakeDownForgetsThem(t *test
 	if strings.Contains(fed, sensitiveValue) {
 		t.Errorf("the note contains %q, and a note that outlives the container it describes is a value left on disk", sensitiveValue)
 	}
-	if !strings.HasPrefix(note, StateDir(spec.Class)+"/") || strings.HasSuffix(note, envFileSuffix) {
+	if !strings.HasPrefix(note, StateDir(spec.Tier)+"/") || strings.HasSuffix(note, envFileSuffix) {
 		t.Errorf("the note is written at %s, which the sweep of env files would take with the values a deploy left", note)
 	}
 
-	if err := box.host().TakeDown(context.Background(), spec.Class, spec.Name); err != nil {
+	if err := box.host().TakeDown(context.Background(), spec.Tier, spec.Name); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
 	if box.at("rm -f "+quoted(note)) < 0 {
@@ -70,7 +70,7 @@ func TestAPromotionOfAnAppHandedABakedValueWhoseContainerIsGoneIsRefusedByName(t
 
 	box := machine(nil)
 	imaging(box, "false ")
-	noted(box, "known\n"+`{"handed":["API_TOKEN"],"live":{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"}]}}`+"\n")
+	noted(box, "known\n"+`{"handed":["API_TOKEN"],"live":{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}]}}`+"\n")
 	err := box.host().RunContainer(context.Background(), promoted())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
@@ -92,7 +92,7 @@ func TestAPromotionOfAnAppHandedABakedValueWhoseContainerIsGoneIsRefusedByName(t
 func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestItsDeployHanded(t *testing.T) {
 	t.Parallel()
 
-	manifest := `{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
+	manifest := `{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
 	box := machine(nil)
 	imaging(box, "false ")
 	noted(box, "known\n"+`{"handed":[],"live":`+manifest+`}`+"\n")
@@ -106,7 +106,7 @@ func TestAPromotionOfALiveOnlyAppWhoseContainerIsGoneRunsItAgainWithTheManifestI
 	if !strings.Contains(command, quoted("--mount")) || !strings.Contains(command, LiveSocketDir) {
 		t.Errorf("the re-created container runs %q and is handed no socket to read its values through", command)
 	}
-	file := wrote(t, box, EnvFile(spec.Class, spec.Name))
+	file := wrote(t, box, EnvFile(spec.Tier, spec.Name))
 	if !strings.Contains(file, "OCEL_LIVE_MANIFEST="+manifest) || !strings.Contains(file, "OCEL_HEALTH_PATH=/healthz") {
 		t.Errorf("the re-created container is handed %q, want the manifest its deploy noted and the health path the record names", file)
 	}

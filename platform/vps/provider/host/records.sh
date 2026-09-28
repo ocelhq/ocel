@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: records <class> read|write|pair|remove|list [args]" >&2
+	echo "usage: records <tier> read|write|pair|remove|list [args]" >&2
 	exit 2
 }
 
@@ -13,15 +13,15 @@ abort() {
 }
 
 [ $# -ge 2 ] || usage
-class=$1
+tier=$1
 verb=$2
 shift 2
 
-case $class in
-'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
+case $tier in
+'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 esac
 
-dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$class/records"
+dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$tier/records"
 [ ! -L "$dir" ] || abort "$dir is a symlink to $(readlink "$dir"), not the directory ocel bootstrap made"
 [ -d "$dir" ] || abort "$dir is missing; run ocel bootstrap"
 

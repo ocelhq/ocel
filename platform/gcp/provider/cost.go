@@ -48,10 +48,10 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	tree := &pricing.Tree{}
 	region := p.options.Region
 	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)
-	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Class))
+	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Tier))
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
-	for _, item := range bootstrapItems(names, req.Deploy.Class, false) {
+	for _, item := range bootstrapItems(names, req.Deploy.Tier, false) {
 		typ, priced := itemTypes[item.Kind]
 		if !priced {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
@@ -64,7 +64,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
-	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: region}
+	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: region}
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}

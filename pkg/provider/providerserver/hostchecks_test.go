@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -114,8 +114,8 @@ func TestPreflightHandsTheHostCheckPortEveryHostnameItWasAskedAbout(t *testing.T
 		t.Fatalf("the host check was asked %d times, want once per preflight", len(p.asked))
 	}
 	asked := p.asked[0]
-	if asked.Class != edge.ClassProduction {
-		t.Errorf("the host check was asked about %s, want %s", asked.Class, edge.ClassProduction)
+	if asked.Tier != environment.TierProduction {
+		t.Errorf("the host check was asked about %s, want %s", asked.Tier, environment.TierProduction)
 	}
 	if want := []string{"shop.example.com", "www.example.com"}; !slices.Equal(asked.Hostnames, want) {
 		t.Errorf("the host check was handed %v, want %v: the handler used to discard the requested hostnames", asked.Hostnames, want)

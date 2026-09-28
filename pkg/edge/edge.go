@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -80,9 +81,9 @@ type Edge interface {
 
 	Hooks() Hooks
 
-	Bootstrap(ctx context.Context, class Class) (BootstrapOutput, error)
+	Bootstrap(ctx context.Context, tier environment.Tier) (BootstrapOutput, error)
 
-	Teardown(ctx context.Context, class Class) error
+	Teardown(ctx context.Context, tier environment.Tier) error
 
 	Reconcile(ctx context.Context, spec StackSpec, prior StackState) (EdgeStack, error)
 
@@ -94,7 +95,7 @@ type Edge interface {
 
 	DomainOwner(ctx context.Context, hostname string) (string, error)
 
-	ProjectOwner(slug string, class Class) string
+	ProjectOwner(slug string, tier environment.Tier) string
 
 	ProjectRemovals(scope ProjectScope) []PlanGroup
 
@@ -105,7 +106,7 @@ type Edge interface {
 
 type ProjectScope struct {
 	Slug      string
-	Class     Class
+	Tier      environment.Tier
 	Hostnames []string
 	Front     string
 }

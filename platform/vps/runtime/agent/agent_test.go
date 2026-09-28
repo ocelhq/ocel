@@ -136,7 +136,7 @@ func ask(t *testing.T, socket string) (int, string) {
 
 func manifestFor(t *testing.T, slug, environment string) string {
 	t.Helper()
-	rendered, err := vars.Render(vars.Manifest{Slug: slug, Class: "production", Environment: environment, Keys: []live.Key{{Key: "DATABASE_URL"}}})
+	rendered, err := vars.Render(vars.Manifest{Slug: slug, Tier: "production", Environment: environment, Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestTheAgentAnswersACallerWithTheValuesItsOwnContainerWasHandedAndNothingIt
 		t.Errorf("the agent resolved %+v, want the manifest the engine has for the caller's container: nothing the caller sends names a scope", resolve.given)
 	}
 
-	over := source.Over(vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}, socket)
+	over := source.Over(vars.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}, socket)
 	if err := over.Join(over.Prefetch(context.Background())); err != nil {
 		t.Fatalf("the runtime's own fetcher could not read through the socket: %v", err)
 	}
@@ -198,7 +198,7 @@ func (m *measuring) Space(_ context.Context, volume string) (uint64, uint64, err
 func storeManifest(t *testing.T, volume string) string {
 	t.Helper()
 	rendered, err := vars.Render(vars.Manifest{
-		Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}},
+		Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}},
 		Store: &vars.Store{Env: "shop-prod", Volume: volume},
 	})
 	if err != nil {

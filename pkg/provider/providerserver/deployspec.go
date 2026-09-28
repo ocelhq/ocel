@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -22,7 +23,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 	manifest := req.GetManifest()
 	env := req.GetEnvironment()
 
-	class, err := classOf(env.GetTier())
+	tier, err := tierOf(env.GetTier())
 	if err != nil {
 		return provider.DeploySpec{}, err
 	}
@@ -37,10 +38,10 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 
 	spec := provider.DeploySpec{
 		Slug:        slug,
-		Class:       class,
+		Tier:        tier,
 		Env:         name,
 		Label:       env.GetLabel(),
-		Pointer:     pointerFor(class, name),
+		Pointer:     pointerFor(tier, name),
 		PromotionID: promotionID,
 		Tag:         req.GetTag(),
 		Builds:      make(map[string]string, len(manifest.GetApps())),
@@ -152,8 +153,8 @@ func appEntry(app *contractv1.ManifestApp, env string) (provider.AppEntry, error
 	}, nil
 }
 
-func pointerFor(class edge.Class, env string) string {
-	if class == edge.ClassProduction {
+func pointerFor(tier environment.Tier, env string) string {
+	if tier == environment.TierProduction {
 		return edge.DefaultPointer
 	}
 	return env
@@ -172,7 +173,7 @@ func envScope(env *environmentv1.Environment) (string, error) {
 }
 
 func bindingEnvironment(p provider.DeploySpec) string {
-	if p.Class == edge.ClassProduction {
+	if p.Tier == environment.TierProduction {
 		return ""
 	}
 	return p.Env
@@ -192,7 +193,7 @@ func appTags(p provider.DeploySpec, entry provider.AppEntry) map[string]string {
 	coordinate.Kind = naming.KindFunction
 	return coordinate.Tags(naming.Facts{
 		ManagedBy:  "ocel",
-		EnvClass:   string(p.Class),
+		EnvTier:    string(p.Tier),
 		Deployment: entry.Build.DeploymentID(),
 		Promotion:  p.PromotionID,
 	})
@@ -203,16 +204,16 @@ func infraTags(p provider.DeploySpec) map[string]string {
 		"ocel:managed-by": "ocel",
 		"ocel:project":    naming.Sanitize(p.Slug),
 		"ocel:env":        p.Env,
-		"ocel:env-class":  string(p.Class),
+		"ocel:env-tier":   string(p.Tier),
 		"ocel:stack":      p.Infra.String(),
 	}
 	return tags
 }
 
-func classifyStacks(entries []stackrecords.NamedStack, class edge.Class) (infra, apps []naming.StackName, pointers []string) {
+func classifyStacks(entries []stackrecords.NamedStack, tier environment.Tier) (infra, apps []naming.StackName, pointers []string) {
 	for _, entry := range entries {
 		production := entry.Name.Env == stackrecords.ProductionEnv
-		if production != (class == edge.ClassProduction) {
+		if production != (tier == environment.TierProduction) {
 			continue
 		}
 		if !slices.Contains(pointers, entry.Name.Env) {

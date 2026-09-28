@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -31,7 +31,7 @@ func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	coord := routedCoordinate(t)
 	stack := coord.Stack()
 	spec := provider.StackSpec{
-		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref:  provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &provider.AppSpec{
@@ -122,8 +122,8 @@ func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHave(t 
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("appWork() = %v, want a %s refusal naming the bootstrap to re-run", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refused.Message, provider.BootstrapCommand(cfg.Class)) {
-		t.Errorf("the refusal reads %q, want it to name `%s`", refused.Message, provider.BootstrapCommand(cfg.Class))
+	if !strings.Contains(refused.Message, provider.BootstrapCommand(cfg.Tier)) {
+		t.Errorf("the refusal reads %q, want it to name `%s`", refused.Message, provider.BootstrapCommand(cfg.Tier))
 	}
 }
 

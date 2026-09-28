@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -20,12 +21,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func classOf(tier environmentv1.Tier) (edge.Class, error) {
+func tierOf(tier environmentv1.Tier) (environment.Tier, error) {
 	switch tier {
 	case environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_UNSPECIFIED:
-		return edge.ClassProduction, nil
+		return environment.TierProduction, nil
 	case environmentv1.Tier_TIER_PREVIEW:
-		return edge.ClassPreview, nil
+		return environment.TierPreview, nil
 	default:
 		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"there is no %s bootstrap; a bootstrap is either production or preview",
@@ -52,7 +53,7 @@ func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
 }
 
 func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	class, err := classOf(req.GetTier())
+	tier, err := tierOf(req.GetTier())
 	if err != nil {
 		return err
 	}
@@ -68,22 +69,22 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return nil, err
 		}
 		if req.GetConsented() == nil {
-			status, err := gate.Status(ctx, class)
+			status, err := gate.Status(ctx, tier)
 			if err != nil {
 				return nil, provider.RefusalError(err)
 			}
 			if plan, err = gate.PlanFrom(ctx, status, intent); err != nil {
 				return nil, provider.RefusalError(err)
 			}
-			sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(p, req.GetEdge().GetKind())))))
+			sender.send(planEvent(ChangePlanProto(plan, string(tier), string(edgeKind(p, req.GetEdge().GetKind())))))
 		}
 		if req.GetDry() {
 			return okResult(), nil
 		}
-		unit := UnitStage(naming.UnitEnvironment, string(class), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
+		unit := UnitStage(naming.UnitEnvironment, string(tier), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
 		err = inUnit(sender, unit,
 			func(_ *eventStream, progress progress.Progress) error {
-				return gate.Apply(ctx, plan, class, intent, progress)
+				return gate.Apply(ctx, plan, tier, intent, progress)
 			})
 		if err != nil {
 			return nil, err
@@ -103,7 +104,7 @@ func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 }
 
 func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
-	class, err := classOf(req.GetTier())
+	tier, err := tierOf(req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +112,13 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	status, err := gate.Status(ctx, class)
+	status, err := gate.Status(ctx, tier)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	recorded := map[string][]string{}
 	if req.GetWithDependents() {
-		if recorded, err = gate.RecordedFeatures(ctx, class); err != nil {
+		if recorded, err = gate.RecordedFeatures(ctx, tier); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 	}
@@ -235,7 +236,7 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 }
 
 func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*planv1.ChangePlan, error) {
-	class, err := classOf(req.GetTier())
+	tier, err := tierOf(req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -243,14 +244,14 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, err
 	}
-	if err := gate.RefuseIfInUse(ctx, class); err != nil {
+	if err := gate.RefuseIfInUse(ctx, tier); err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	plan, err := gate.Bootstrap.PlanRemove(ctx, class)
+	plan, err := gate.Bootstrap.PlanRemove(ctx, tier)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	return ChangePlanProto(plan, string(class), soleRaisedEdge(plan)), nil
+	return ChangePlanProto(plan, string(tier), soleRaisedEdge(plan)), nil
 }
 
 func soleRaisedEdge(plan provider.Plan) string {
@@ -270,7 +271,7 @@ func soleRaisedEdge(plan provider.Plan) string {
 }
 
 func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	class, err := classOf(req.GetTier())
+	tier, err := tierOf(req.GetTier())
 	if err != nil {
 		return err
 	}
@@ -280,12 +281,12 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
-	unit := UnitStage(naming.UnitEnvironment, string(class), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
+	unit := UnitStage(naming.UnitEnvironment, string(tier), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		if shownErr != nil {
 			return shownErr
 		}
-		return gate.Remove(ctx, shown, class, progress)
+		return gate.Remove(ctx, shown, tier, progress)
 	})
 }
 

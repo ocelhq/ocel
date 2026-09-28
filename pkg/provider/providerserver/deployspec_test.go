@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -118,12 +119,12 @@ func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 		{Name: naming.AppStack("pr-7", "web", release)},
 	}
 
-	infra, apps, pointers := classifyStacks(entries, edge.ClassProduction)
+	infra, apps, pointers := classifyStacks(entries, environment.TierProduction)
 	if len(infra) != 1 || len(apps) != 1 || len(pointers) != 1 {
 		t.Fatalf("production has %v / %v / %v, want only the production stacks", infra, apps, pointers)
 	}
 
-	infra, apps, pointers = classifyStacks(entries, edge.ClassPreview)
+	infra, apps, pointers = classifyStacks(entries, environment.TierPreview)
 	if len(infra) != 1 || len(apps) != 1 {
 		t.Fatalf("preview has %v / %v, want the staging infra and the pr-7 app", infra, apps)
 	}

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -29,7 +29,7 @@ const previewOpenWarning = "is a preview and answers anyone who knows its Cloud 
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
 func warnPreviewOpen(spec provider.StackSpec, service string, progress progress.Progress) {
-	if spec.Ref.Class != edge.ClassPreview || factsOf(spec.Edge).ShieldsOrigin {
+	if spec.Ref.Tier != environment.TierPreview || factsOf(spec.Edge).ShieldsOrigin {
 		return
 	}
 	kind := direct.Kind
@@ -48,7 +48,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	account := names.WorkloadAccountEmail(spec.Ref.Class)
+	account := names.WorkloadAccountEmail(spec.Ref.Tier)
 	own, err := p.runtimeEnv(names, spec)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		service: service,
 		image:   app.Image,
 		env:     values,
-		account: names.WorkloadAccountEmail(spec.Ref.Class),
+		account: names.WorkloadAccountEmail(spec.Ref.Tier),
 		compute: provider.ComputeContainer,
 		health:  app.HealthCheckPath,
 		public:  true,
@@ -178,7 +178,7 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]
 		Region:      p.options.Region,
 		Namespace:   string(names.namespace),
 		Slug:        spec.Ref.Project,
-		Class:       string(spec.Ref.Class),
+		Tier:        string(spec.Ref.Tier),
 		Environment: liveEnvironment(spec.Ref),
 		Endpoint:    p.endpoint,
 		Keys:        liveKeys(app.Values),
@@ -194,7 +194,7 @@ func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]
 }
 
 func liveEnvironment(ref provider.StackRef) string {
-	if ref.Class == edge.ClassProduction {
+	if ref.Tier == environment.TierProduction {
 		return ""
 	}
 	return ref.Name.Env

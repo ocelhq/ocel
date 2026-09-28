@@ -9,7 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -20,9 +20,9 @@ import (
 type hosting struct {
 	*fake.Provider
 
-	mu      sync.Mutex
-	asked   [][]string
-	classes []edge.Class
+	mu    sync.Mutex
+	asked [][]string
+	tiers []environment.Tier
 
 	target  provider.RegistryTarget
 	refusal error
@@ -34,18 +34,18 @@ func (h *hosting) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (h *hosting) EnsureImageRegistry(_ context.Context, class edge.Class, repositories []string) (provider.RegistryTarget, error) {
+func (h *hosting) EnsureImageRegistry(_ context.Context, tier environment.Tier, repositories []string) (provider.RegistryTarget, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.asked = append(h.asked, repositories)
-	h.classes = append(h.classes, class)
+	h.tiers = append(h.tiers, tier)
 	return h.target, h.refusal
 }
 
-func (h *hosting) asking() []edge.Class {
+func (h *hosting) asking() []environment.Tier {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.classes
+	return h.tiers
 }
 
 func (h *hosting) repositories() [][]string {
@@ -120,7 +120,7 @@ func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) 
 	}
 }
 
-func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
+func TestTheProviderIsToldWhichTierTheDeployPushesFor(t *testing.T) {
 	vendor := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
 	client := registryServed(t, vendor)
 
@@ -132,9 +132,9 @@ func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
 	}
 
 	asking := vendor.asking()
-	if len(asking) != 1 || asking[0] != edge.ClassPreview {
-		t.Errorf("the provider resolved a registry for %v, want %v: a class keeps its images apart from the other class's",
-			asking, edge.ClassPreview)
+	if len(asking) != 1 || asking[0] != environment.TierPreview {
+		t.Errorf("the provider resolved a registry for %v, want %v: a tier keeps its images apart from the other tier's",
+			asking, environment.TierPreview)
 	}
 }
 

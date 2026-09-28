@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -298,8 +298,8 @@ func TestEveryProjectNetworkJoinsTheSwitchboardAndNeverTheFrontProxy(t *testing.
 	t.Parallel()
 
 	for what, script := range map[string]string{
-		"joining a network":    joinNetworkScript(edge.ClassProduction, "shop"),
-		"forgetting a network": networkForgetting(edge.ClassProduction, "shop"),
+		"joining a network":    joinNetworkScript(environment.TierProduction, "shop"),
+		"forgetting a network": networkForgetting(environment.TierProduction, "shop"),
 		"recreating the board": switchboardBox(nil, Front{}).writing(1),
 	} {
 		if !strings.Contains(script, quoted(SwitchboardContainer)) {
@@ -339,13 +339,13 @@ func TestTheBoxProbesWhatItServesOnItsOwnHttpsPortWithoutDocker(t *testing.T) {
 func TestTheDeployLoginIsToldItRunsTheSwitchboardAndCannotWriteIt(t *testing.T) {
 	t.Parallel()
 
-	at := slices.IndexFunc(grants(edge.ClassProduction, ArchAMD64), func(grant Grant) bool {
+	at := slices.IndexFunc(grants(environment.TierProduction, ArchAMD64), func(grant Grant) bool {
 		return grant.Name == "runs "+SwitchboardBinary
 	})
 	if at < 0 {
 		t.Fatalf("the deploy grants never name %s, and the deploy login runs it on the box for every loopback probe", SwitchboardBinary)
 	}
-	if detail := grants(edge.ClassProduction, ArchAMD64)[at].Detail; !strings.Contains(detail, "0755") || !strings.Contains(detail, "cannot write it") {
+	if detail := grants(environment.TierProduction, ArchAMD64)[at].Detail; !strings.Contains(detail, "0755") || !strings.Contains(detail, "cannot write it") {
 		t.Errorf("the grant reads %q, want the mode it is written at and that the login cannot write it", detail)
 	}
 }

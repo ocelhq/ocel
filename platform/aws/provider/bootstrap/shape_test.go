@@ -20,7 +20,7 @@ func shapedOf(shaped []pricing.Shaped, typ string) []pricing.Shaped {
 func TestTheCoreShapesItsBucketsTablesAndLayers(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), ClassProduction, nil)
+	shaped, err := Shape(Namespace("ocel"), TierProduction, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestTheCoreShapesItsBucketsTablesAndLayers(t *testing.T) {
 func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), ClassProduction, []string{FeatureISR, FeatureImageOptimization, provider.FeatureVarsKey, FeatureCloudflareEdge})
+	shaped, err := Shape(Namespace("ocel"), TierProduction, []string{FeatureISR, FeatureImageOptimization, provider.FeatureVarsKey, FeatureCloudflareEdge})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 func TestABroughtVarsKeyShapesNoKey(t *testing.T) {
 	t.Parallel()
 
-	shaped, err := Shape(Namespace("ocel"), ClassPreview, []string{provider.FeatureVarsKey}, WithVarsKey("arn:aws:kms:us-east-1:1:key/k"))
+	shaped, err := Shape(Namespace("ocel"), TierPreview, []string{provider.FeatureVarsKey}, WithVarsKey("arn:aws:kms:us-east-1:1:key/k"))
 	if err != nil {
 		t.Fatal(err)
 	}

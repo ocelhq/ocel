@@ -13,6 +13,7 @@ var reachable = []string{
 	repo + "pkg/appbuild",
 	repo + "pkg/constants",
 	repo + "pkg/edge",
+	repo + "pkg/environment",
 	repo + "pkg/progress",
 }
 

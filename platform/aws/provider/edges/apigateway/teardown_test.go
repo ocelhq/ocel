@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -24,7 +25,7 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
-	err = e.Teardown(ctx, edge.ClassProduction)
+	err = e.Teardown(ctx, environment.TierProduction)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Teardown = %v, want a refusal while %s still has a REST API", err, conformanceSlug)
@@ -32,14 +33,14 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 	if !strings.Contains(err.Error(), conformanceSlug) || !strings.Contains(err.Error(), "ocel destroy production") {
 		t.Errorf("refusal = %q, want it to name the project and the command that clears it", err)
 	}
-	if err := e.Teardown(ctx, edge.ClassPreview); err != nil {
-		t.Errorf("Teardown(preview) = %v, want nil: the project's API belongs to the production class", err)
+	if err := e.Teardown(ctx, environment.TierPreview); err != nil {
+		t.Errorf("Teardown(preview) = %v, want nil: the project's API belongs to the production tier", err)
 	}
 
 	if err := stack.Destroy(ctx); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
-	if err := e.Teardown(ctx, edge.ClassProduction); err != nil {
+	if err := e.Teardown(ctx, environment.TierProduction); err != nil {
 		t.Errorf("Teardown after the project's destroy = %v, want nil", err)
 	}
 }
@@ -75,12 +76,12 @@ func TestTeardownLeavesTheRestAPIsAnotherNamespaceFronts(t *testing.T) {
 	w := newWorld()
 	e := bootstrapped(t, w)
 	if _, err := w.gateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
-		Name: aws.String(apiName("other", "shop", edge.ClassProduction, "")),
+		Name: aws.String(apiName("other", "shop", environment.TierProduction, "")),
 	}); err != nil {
 		t.Fatalf("CreateRestApi: %v", err)
 	}
 
-	if err := e.Teardown(ctx, edge.ClassProduction); err != nil {
+	if err := e.Teardown(ctx, environment.TierProduction); err != nil {
 		t.Errorf("Teardown = %v, want nil: shop is fronted by the other namespace's bootstrap, not this one", err)
 	}
 }

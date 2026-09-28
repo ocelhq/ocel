@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -13,7 +14,7 @@ import (
 
 func storeRouted(m *machine, slug string) {
 	m.upstream[host.RouteKey{
-		Owner:   box.Surface(slug, edge.ClassProduction),
+		Owner:   box.Surface(slug, environment.TierProduction),
 		Pointer: edge.DefaultPointer,
 		App:     switchboard.StoreLabel,
 	}] = "shop-prod-store-s3:9000"

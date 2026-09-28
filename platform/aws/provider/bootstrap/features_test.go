@@ -10,18 +10,18 @@ import (
 
 func TestFeatureStackName(t *testing.T) {
 	for _, tc := range []struct {
-		class string
-		want  string
+		tier string
+		want string
 	}{
-		{ClassProduction, "ocel-bootstrap-isr"},
-		{ClassPreview, "ocel-bootstrap-isr-preview"},
+		{TierProduction, "ocel-bootstrap-isr"},
+		{TierPreview, "ocel-bootstrap-isr-preview"},
 	} {
 		f, ok := featureNamed(FeatureISR)
 		if !ok {
 			t.Fatalf("no %s feature in the registry", FeatureISR)
 		}
-		if got := f.stackName(defaultNamespace, tc.class); got != tc.want {
-			t.Errorf("stackName(%q) = %q, want %q", tc.class, got, tc.want)
+		if got := f.stackName(defaultNamespace, tc.tier); got != tc.want {
+			t.Errorf("stackName(%q) = %q, want %q", tc.tier, got, tc.want)
 		}
 	}
 }

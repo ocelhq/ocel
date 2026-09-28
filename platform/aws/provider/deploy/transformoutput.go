@@ -76,7 +76,7 @@ type UnpublishedOutputError struct {
 	Ref         outputRef
 	At          outputSite
 	Published   string
-	Class       string
+	Tier        string
 	Environment string
 	Properties  []string
 }
@@ -86,12 +86,12 @@ func (e *UnpublishedOutputError) Error() string {
 	fmt.Fprintf(&b,
 		"a transform fills %s from %s, and nothing has published a record under %q to %s. "+
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
-		e.At, e.Ref, e.Published, describeCoordinate(e.Class, e.Environment))
+		e.At, e.Ref, e.Published, describeCoordinate(e.Tier, e.Environment))
 	if len(e.Properties) == 0 {
-		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Class, e.Environment))
+		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Tier, e.Environment))
 		return b.String()
 	}
-	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Class, e.Environment), strings.Join(e.Properties, ", "))
+	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Tier, e.Environment), strings.Join(e.Properties, ", "))
 	return b.String()
 }
 

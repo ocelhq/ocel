@@ -9,7 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -37,7 +37,7 @@ func containerInfraOutputs() auto.OutputMap {
 func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	work := &containerInfraWork{class: edge.ClassProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: containerInfraTags(edge.ClassProduction)}
+	work := &containerInfraWork{tier: environment.TierProduction, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: containerInfraTags(environment.TierProduction)}
 	rec := &inputRecorder{}
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
 		t.Fatalf("run the container infrastructure program: %v", err)
@@ -50,12 +50,12 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 	}
 	balancer := recordedOf(t, rec, "aws:lb/loadBalancer:LoadBalancer")
 	if balancer["name"].StringValue() != "ocel-containers-production" || !balancer["internal"].BoolValue() {
-		t.Errorf("load balancer = %v, want an internal front named for the class: nothing on the internet has a route to it", balancer)
+		t.Errorf("load balancer = %v, want an internal front named for the tier: nothing on the internet has a route to it", balancer)
 	}
 	vpcOrigin := recordedOf(t, rec, "aws:cloudfront/vpcOrigin:VpcOrigin")
 	endpoint := vpcOrigin["vpcOriginEndpointConfig"].ObjectValue()
 	if endpoint["arn"].StringValue() == "" || endpoint["name"].StringValue() != "ocel-containers-production" {
-		t.Errorf("vpc origin = %v, want it to name the class front by its ARN: the edge reaches the front through it and nothing else", endpoint)
+		t.Errorf("vpc origin = %v, want it to name the tier front by its ARN: the edge reaches the front through it and nothing else", endpoint)
 	}
 	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != originListenerPort {
 		t.Errorf("vpc origin = %v, want CloudFront to reach the listener on %d over its private path", endpoint, originListenerPort)
@@ -85,6 +85,31 @@ func TestTheContainerInfraProgramProvisionsOneFrontOneClusterAndOneExecutionRole
 	}
 	if groups != 2 {
 		t.Errorf("declared %d security groups, want one for the front and one for the tasks", groups)
+	}
+}
+
+func TestTheContainerSecurityGroupsKeepTheDescriptionsTheyWereCreatedWith(t *testing.T) {
+	t.Parallel()
+
+	work := &containerInfraWork{tier: environment.TierPreview, boundary: "arn:aws:iam::123456789012:policy/ocel-app-boundary", tags: containerInfraTags(environment.TierPreview)}
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("ocel-containers", "preview--infra", rec)); err != nil {
+		t.Fatalf("run the container infrastructure program: %v", err)
+	}
+
+	want := map[string]string{
+		"front-security-group": "Ocel: the load balancer every container app in the preview class answers behind",
+		"tasks-security-group": "Ocel: the tasks every container app in the preview class runs as",
+	}
+	for key, inputs := range rec.recorded {
+		if !strings.HasPrefix(key, "aws:ec2/securityGroup:SecurityGroup::") {
+			continue
+		}
+		for suffix, description := range want {
+			if strings.HasSuffix(key, suffix) && inputs["description"].StringValue() != description {
+				t.Errorf("%s is described %q, want %q: a new description replaces the group, and the replacement cannot take the name the group already holds", suffix, inputs["description"].StringValue(), description)
+			}
+		}
 	}
 }
 
@@ -127,19 +152,19 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	ran := engine.stacks()
-	if len(ran) != 2 || ran[0] != containerInfraRef(edge.ClassProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
+	if len(ran) != 2 || ran[0] != containerInfraRef(environment.TierProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
 		t.Fatalf("the first container deploy ran %v, want the container infrastructure stack before the app stack", ran)
 	}
-	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction)
+	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, environment.TierProduction)
 	if err != nil || !recorded {
-		t.Fatalf("the front is recorded %v (%v), want the edge able to read which VPC origin reaches the class's containers", recorded, err)
+		t.Fatalf("the front is recorded %v (%v), want the edge able to read which VPC origin reaches the tier's containers", recorded, err)
 	}
 	if front != (awsports.ContainerFront{VPCOrigin: fixtureFront, Host: fixtureOrigin}) {
 		t.Errorf("front = %+v, want the shared container infrastructure's VPC origin and host", front)
 	}
 
 	blog := spec
-	blog.Ref = provider.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	if _, err := stacks.Provision(ctx, blog, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(blog) = %v", err)
 	}
@@ -157,13 +182,13 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 		t.Fatalf("Destroy(blog) = %v", err)
 	}
 	destroyed := engine.torn()
-	if len(destroyed) != 3 || destroyed[2] != containerInfraRef(edge.ClassProduction).Name.String() {
+	if len(destroyed) != 3 || destroyed[2] != containerInfraRef(environment.TierProduction).Name.String() {
 		t.Fatalf("destroying the last container stack tore down %v, want the shared container infrastructure to go with it: nothing idle-billing survives the last container", destroyed)
 	}
-	if _, present, err := stackrecords.Read(ctx, cfg.Records, edge.ClassProduction, ContainersSlug, containerInfraRef(edge.ClassProduction).Name); err != nil || present {
+	if _, present, err := stackrecords.Read(ctx, cfg.Records, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || present {
 		t.Errorf("the shared container infrastructure is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
-	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, edge.ClassProduction); err != nil || recorded {
+	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, environment.TierProduction); err != nil || recorded {
 		t.Errorf("the front is still recorded (%v, err %v) after the shared container infrastructure went; a later promote would declare an origin that no longer exists", recorded, err)
 	}
 }
@@ -183,14 +208,14 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if _, err := stacks.Provision(ctx, spec, progress.DiscardProgress()); err == nil {
 		t.Fatal("Provision succeeded with no container output, so a deploy would record a container with no origin")
 	}
-	remaining, err := cfg.Records.List(ctx, consumersRecord(edge.ClassProduction))
+	remaining, err := cfg.Records.List(ctx, consumersRecord(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(remaining) != 0 {
 		t.Errorf("a failed deploy left %d consumer records, so the shared container infrastructure could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != containerInfraRef(edge.ClassProduction).Name.String() {
+	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != containerInfraRef(environment.TierProduction).Name.String() {
 		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the container infrastructure stack it had just provisioned: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
 	}
 

@@ -125,7 +125,7 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewHasItsOwnClassAndWildcard(t *testing.T) {
+func TestShapeOfAPreviewHasItsOwnTierAndWildcard(t *testing.T) {
 	client, _ := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -138,7 +138,7 @@ func TestShapeOfAPreviewHasItsOwnClassAndWildcard(t *testing.T) {
 	golden(t, "shape_preview_cloudfront", set)
 
 	if typeCounts(set)["aws_cloudfront_distribution"] != 2 {
-		t.Errorf("a preview class fronts every preview through one wildcard distribution beside the project's own")
+		t.Errorf("a preview tier fronts every preview through one wildcard distribution beside the project's own")
 	}
 	kinds := map[string]string{}
 	for _, scope := range set.GetScopes() {

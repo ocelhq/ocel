@@ -42,7 +42,7 @@ func TestServiceMap(t *testing.T) {
 		if got.SchemaVersion != servicemap.SchemaVersion {
 			t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, servicemap.SchemaVersion)
 		}
-		if got.Slug != "test-app" || got.Environment.Class != "production" || got.PromotionID != clitest.FakePromotionID || got.Tag != "v9" {
+		if got.Slug != "test-app" || got.Environment.Tier != "production" || got.PromotionID != clitest.FakePromotionID || got.Tag != "v9" {
 			t.Errorf("record = %+v, want the deploy's own context", got)
 		}
 		if got.DeployedAt.IsZero() {

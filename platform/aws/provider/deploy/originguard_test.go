@@ -34,7 +34,7 @@ func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing
 
 	unrotated := &originGuard{Entry: "/", Secret: testOriginSecret}
 	if _, present := unrotated.entryEnv(nil)[edge.OriginSecretPreviousVar]; present {
-		t.Error("a class with no rotation underway hands the entry a predecessor")
+		t.Error("a tier with no rotation underway hands the entry a predecessor")
 	}
 }
 

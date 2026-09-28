@@ -4,7 +4,7 @@ import (
 	_ "embed"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
@@ -27,8 +27,8 @@ const (
 	BackupVolume   = "vol"
 )
 
-func BackupsDir(class edge.Class, container string) string {
-	return StateDir(class) + "/" + backupsDir + "/" + container
+func BackupsDir(tier environment.Tier, container string) string {
+	return StateDir(tier) + "/" + backupsDir + "/" + container
 }
 
 func backupsServiceUnit() []byte {
@@ -86,10 +86,10 @@ func backupRemovals() []removal {
 	}
 }
 
-func dumpCommand(class edge.Class, container, database string) string {
-	return words([]string{BackupsHelper, string(class), "dump", container, database})
+func dumpCommand(tier environment.Tier, container, database string) string {
+	return words([]string{BackupsHelper, string(tier), "dump", container, database})
 }
 
-func restoreCommand(class edge.Class, container, database, file string) string {
-	return words([]string{BackupsHelper, string(class), "restore", container, database, file})
+func restoreCommand(tier environment.Tier, container, database, file string) string {
+	return words([]string{BackupsHelper, string(tier), "restore", container, database, file})
 }

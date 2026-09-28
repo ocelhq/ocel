@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -69,13 +69,13 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fresh, err := bootstrap.Describe(ctx, class)
+	fresh, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() of a machine nothing has bootstrapped = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatal("Describe() claims a bootstrap on a machine nothing has written to")
 	}
 
-	req := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: fresh.VendorState}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: fresh.VendorState}
 	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -123,28 +123,28 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}
-	for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
 		if stamp.Digests[item.ID()] == "" {
 			t.Errorf("the stamp records no digest for %s, and nothing can say whether it drifted", item.ID())
 		}
 	}
 	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /etc/ocel/production")); owner != "root" {
-		t.Errorf("/etc/ocel/production is owned by %q, want root: the class tier is root's alone", owner)
+		t.Errorf("/etc/ocel/production is owned by %q, want root: the tier tier is root's alone", owner)
 	}
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /var/lib/ocel/production/records")); owner != deployLogin {
 		t.Errorf("the record tier is owned by %q, want %s: it is the deploy login's alone", owner, deployLogin)
 	}
 	accountAsDecided(t, vm)
 
-	described, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
 	if !described.Present || !described.Stacks[0].DigestCurrent {
 		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap current at the digest applied, %s\n%s",
-			described.Stacks, stillMoving(t, bootstrap, class, described.VendorState), vm.proxySaid(t))
+			described.Stacks, stillMoving(t, bootstrap, tier, described.VendorState), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -158,7 +158,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		}
 	}
 
-	removal, err := bootstrap.PlanRemove(ctx, class)
+	removal, err := bootstrap.PlanRemove(ctx, tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -167,13 +167,13 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Error("PlanRemove() names the state directory with no reason, and the typed confirmation must say what is unrecoverable")
 	}
 	if last := leaving.Changes[len(leaving.Changes)-1]; last.Name != "/etc/ocel" {
-		t.Errorf("PlanRemove() ends at %s, want the shared root taken after every class tier beneath it", last.Name)
+		t.Errorf("PlanRemove() ends at %s, want the shared root taken after every tier tier beneath it", last.Name)
 	}
 
-	if err := bootstrap.Remove(ctx, class, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	gone, err := bootstrap.Describe(ctx, class)
+	gone, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after Remove() = %v", err)
 	}
@@ -188,7 +188,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
 		t.Errorf("%s still exists as %q after Remove(), and a login nothing deploys as is a login nobody revokes", deployLogin, left)
 	}
-	if err := bootstrap.Remove(ctx, class, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Errorf("a second Remove() = %v, want an already-forgotten target to be a no-op", err)
 	}
 }
@@ -199,23 +199,23 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
 
 	vm.ssh(t, `sudo sed -i 's/"state": "complete"/"state": "applying"/' /etc/ocel/production/stamp.json`)
 
-	described, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() over an unfinished apply = %v", err)
 	}
@@ -225,7 +225,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls an unfinished apply current, so a partially applied host reads as a healthy one")
 	}
-	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatalf("Plan() over an unfinished apply = %v", err)
 	}
@@ -240,27 +240,27 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverIncluded(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
 
-	shown, err := bootstrap.Describe(ctx, class)
+	shown, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
 	vm.ssh(t, "sudo rm -rf /usr/local/lib/ocel")
 
-	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shown.VendorState}, nil)
+	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shown.VendorState}, nil)
 	if err == nil {
 		t.Fatal("Apply() did work the plan the user consented to never included")
 	}
@@ -274,7 +274,7 @@ func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
 	p := liveMachine(t).provider(t)
 	defer closing(t, p)
 
-	name := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
+	name := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
 	if err := records.Forget(context.Background(), p.Records(), name); err != nil {
 		t.Fatalf("Forget() of a record nothing wrote = %v, want cleanup idempotent from the store's point of view", err)
 	}

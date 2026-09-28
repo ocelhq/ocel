@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
@@ -22,7 +22,7 @@ const (
 	LabelProject = "ocel.project"
 	LabelRef     = "ocel.ref"
 	LabelEnv     = "ocel.env"
-	LabelClass   = "ocel.class"
+	LabelTier    = "ocel.tier"
 
 	LabelResource   = "ocel.resource"
 	LabelGeneration = "ocel.generation"
@@ -34,20 +34,20 @@ const (
 	membersFormat    = `{{range .Containers}}{{.Name}}{{"\n"}}{{end}}`
 )
 
-func AppNetwork(class edge.Class, project string) string {
-	return appNetworkPrefix + string(class) + "-" + naming.Sanitize(project)
+func AppNetwork(tier environment.Tier, project string) string {
+	return appNetworkPrefix + string(tier) + "-" + naming.Sanitize(project)
 }
 
-func networkLabels(class edge.Class, project string) []string {
+func networkLabels(tier environment.Tier, project string) []string {
 	return []string{
-		"--label", LabelClass + "=" + string(class),
+		"--label", LabelTier + "=" + string(tier),
 		"--label", LabelProject + "=" + naming.Sanitize(project),
 	}
 }
 
-func networkCreating(class edge.Class, project string) string {
-	network := quoted(AppNetwork(class, project))
-	create := "docker network create " + words(networkLabels(class, project)) + " " + network
+func networkCreating(tier environment.Tier, project string) string {
+	network := quoted(AppNetwork(tier, project))
+	create := "docker network create " + words(networkLabels(tier, project)) + " " + network
 	return "set -e\n" +
 		"if ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if ! said=$(" + create + " 2>&1 >/dev/null) && ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
@@ -57,18 +57,18 @@ func networkCreating(class edge.Class, project string) string {
 		"fi"
 }
 
-func joinNetworkScript(class edge.Class, project string) string {
-	network := quoted(AppNetwork(class, project))
-	return networkCreating(class, project) + "\n" +
+func joinNetworkScript(tier environment.Tier, project string) string {
+	network := quoted(AppNetwork(tier, project))
+	return networkCreating(tier, project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 && " +
 		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(SwitchboardContainer) + "; then\n" +
-		"printf '%s\\n' " + quoted(SwitchboardContainer+" could not join "+AppNetwork(class, project)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(SwitchboardContainer+" could not join "+AppNetwork(tier, project)) + " >&2\n" +
 		"exit 1\n" +
 		"fi"
 }
 
-func networkForgetting(class edge.Class, project string) string {
-	network := quoted(AppNetwork(class, project))
+func networkForgetting(tier environment.Tier, project string) string {
+	network := quoted(AppNetwork(tier, project))
 	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
 		" | grep -qvx " + quoted(SwitchboardContainer) + "; then printf '%s\\n' " + quoted(networkInUse) + "; exit 0; fi\n" +
@@ -78,26 +78,26 @@ func networkForgetting(class edge.Class, project string) string {
 }
 
 func (h *Host) join(ctx context.Context, spec Container, elevation string) error {
-	return h.joining(ctx, spec.App, spec.Class, spec.Project, joinNetworkScript(spec.Class, spec.Project), elevation)
+	return h.joining(ctx, spec.App, spec.Tier, spec.Project, joinNetworkScript(spec.Tier, spec.Project), elevation)
 }
 
-func (h *Host) joining(ctx context.Context, who string, class edge.Class, project, command, elevation string) error {
-	_, said, err := h.spoke(ctx, "put "+who+" on "+AppNetwork(class, project), command, nil, elevation)
+func (h *Host) joining(ctx context.Context, who string, tier environment.Tier, project, command, elevation string) error {
+	_, said, err := h.spoke(ctx, "put "+who+" on "+AppNetwork(tier, project), command, nil, elevation)
 	if err != nil && strings.Contains(said, poolExhausted) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s has no subnet left for %s: %s\n"+
 				"Add `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]` to /etc/docker/daemon.json and restart docker",
-			h.named(), AppNetwork(class, project), said)
+			h.named(), AppNetwork(tier, project), said)
 	}
 	return err
 }
 
-func (h *Host) ForgetNetwork(ctx context.Context, class edge.Class, project string) error {
+func (h *Host) ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "take "+AppNetwork(class, project)+" down", networkForgetting(class, project), nil, elevation)
+	_, err = h.ran(ctx, "take "+AppNetwork(tier, project)+" down", networkForgetting(tier, project), nil, elevation)
 	return err
 }
 
@@ -151,7 +151,7 @@ type Container struct {
 	Project string
 	App     string
 	Image   string
-	Class   edge.Class
+	Tier    environment.Tier
 
 	Env        map[string]string
 	HealthPath string
@@ -191,8 +191,8 @@ func containerRun(spec Container, env handoff) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
-		"--network", AppNetwork(spec.Class, spec.Project),
-		"--label", LabelClass + "=" + string(spec.Class),
+		"--network", AppNetwork(spec.Tier, spec.Project),
+		"--label", LabelTier + "=" + string(spec.Tier),
 		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
 		"--label", LabelApp + "=" + spec.App,
 		"--label", LabelRef + "=" + spec.Image,
@@ -322,7 +322,7 @@ func (h *Host) RunContainer(ctx context.Context, spec Container) (err error) {
 	return err
 }
 
-func (h *Host) TakeDown(ctx context.Context, class edge.Class, name string) error {
+func (h *Host) TakeDown(ctx context.Context, tier environment.Tier, name string) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
@@ -333,7 +333,7 @@ func (h *Host) TakeDown(ctx context.Context, class edge.Class, name string) erro
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "forget what "+name+" was handed", "rm -f "+quoted(HandedNote(class, name)), nil, "")
+	_, err = h.ran(ctx, "forget what "+name+" was handed", "rm -f "+quoted(HandedNote(tier, name)), nil, "")
 	return err
 }
 

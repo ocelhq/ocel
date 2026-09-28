@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: releases <project>/<app> promote <class> <ref> | <project>/<app> forget <class> | <project>/<app> reconcile <repository>" >&2
+	echo "usage: releases <project>/<app> promote <tier> <ref> | <project>/<app> forget <tier> | <project>/<app> reconcile <repository>" >&2
 	exit 2
 }
 
@@ -63,14 +63,14 @@ done
 case "$verb" in
 promote)
 	[ $# -eq 2 ] || usage
-	class=$1
+	tier=$1
 	ref=$2
-	case $class in
-	'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
+	case $tier in
+	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 	esac
 	coordinate "$ref"
 	lock
-	file="$root/$project/$app/$class"
+	file="$root/$project/$app/$tier"
 	: >>"$file"
 	{
 		printf '%s\n' "$ref"
@@ -80,12 +80,12 @@ promote)
 	;;
 forget)
 	[ $# -eq 1 ] || usage
-	class=$1
-	case $class in
-	'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
+	tier=$1
+	case $tier in
+	'' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 	esac
 	lock
-	rm -f "$root/$project/$app/$class"
+	rm -f "$root/$project/$app/$tier"
 	rmdir "$root/$project/$app" 2>/dev/null || true
 	rmdir "$root/$project" 2>/dev/null || true
 	;;

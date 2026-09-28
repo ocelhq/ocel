@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -41,7 +42,7 @@ func fronting(t *testing.T, p *vps.Provider, slug string) front {
 		t.Fatalf("Open(%q) = %v", boxedge.Kind, err)
 	}
 	stack, err := opened.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
+		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -113,7 +114,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	if state := vm.state(t, two.physical); state != "exited" {
 		t.Errorf("the container the rollback rolled off reads as %q, want it stopped and still present", state)
 	}
-	if window := windowOf(t, vm, "rollback", liveApp, edge.ClassProduction); len(window) == 0 || window[0] != fixtureAt("one") {
+	if window := windowOf(t, vm, "rollback", liveApp, environment.TierProduction); len(window) == 0 || window[0] != fixtureAt("one") {
 		t.Errorf("the box's release window reads %v, want %s at its head: rolling back is what this box most recently served, and a window the rollback does not re-head has the release it restored swept off by the next deploy's reconcile while the ledger still offers it", window, fixtureAt("one"))
 	}
 }
@@ -166,7 +167,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if want := boxedge.Surface("domains", edge.ClassProduction); owner != want {
+	if want := boxedge.Surface("domains", environment.TierProduction); owner != want {
 		t.Errorf("DomainOwner(%q) = %q, want %q read back off the configuration the running proxy was given", claimHostname, owner, want)
 	}
 
@@ -195,7 +196,7 @@ var liveSlug atomic.Int64
 
 func TestLiveTheBoxEdgeAnswersTheEdgeContractsLedgerAndDomainObligationsAgainstARealMachine(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 	p := vm.deploying(t)
 	defer closing(t, p)
 
@@ -208,7 +209,7 @@ func TestLiveTheBoxEdgeAnswersTheEdgeContractsLedgerAndDomainObligationsAgainstA
 			}
 			return front, edge.StackSpec{
 				Version: "test",
-				Class:   edge.ClassProduction,
+				Tier:    environment.TierProduction,
 				Slug:    "conformance" + strconv.FormatInt(liveSlug.Add(1), 10),
 			}
 		},

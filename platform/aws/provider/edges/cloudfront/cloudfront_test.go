@@ -18,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -37,17 +38,17 @@ const (
 )
 
 func testSpec() edge.StackSpec {
-	return edge.StackSpec{Version: "v1", Class: edge.ClassProduction, Slug: conformanceSlug}
+	return edge.StackSpec{Version: "v1", Tier: environment.TierProduction, Slug: conformanceSlug}
 }
 
 func productionDistributionName() string {
-	return distributionName(defaultNamespace, conformanceSlug, edge.ClassProduction)
+	return distributionName(defaultNamespace, conformanceSlug, environment.TierProduction)
 }
 
 func bootstrapped(t *testing.T, w *world) *cloudFront {
 	t.Helper()
 	e := w.edge()
-	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
+	if _, err := e.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	return e
@@ -105,10 +106,10 @@ var fakeFront = awsports.ContainerFront{
 	Host:      "internal-ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
 }
 
-func recordFront(t *testing.T, w *world, class edge.Class) {
+func recordFront(t *testing.T, w *world, tier environment.Tier) {
 	t.Helper()
 	records := awsports.Records{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
-	if err := awsports.WriteContainerFront(context.Background(), records, class, fakeFront); err != nil {
+	if err := awsports.WriteContainerFront(context.Background(), records, tier, fakeFront); err != nil {
 		t.Fatalf("WriteContainerFront: %v", err)
 	}
 }
@@ -201,18 +202,18 @@ func TestBootstrap(t *testing.T) {
 
 		w := newWorld()
 		e := bootstrapped(t, w)
-		if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
+		if _, err := e.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap again: %v", err)
 		}
 
 		assertSet(t, "the mutations bootstrap made", w.front.mutations(), nil)
 	})
 
-	t.Run("an unknown class is refused", func(t *testing.T) {
+	t.Run("an unknown tier is refused", func(t *testing.T) {
 		t.Parallel()
 
 		if _, err := newWorld().edge().Bootstrap(context.Background(), "staging"); err == nil {
-			t.Error("Bootstrap(staging) error = nil, want a refusal naming the class")
+			t.Error("Bootstrap(staging) error = nil, want a refusal naming the tier")
 		}
 	})
 }
@@ -224,13 +225,13 @@ func TestTeardownLeavesTheBootstrapSetToCloudFormation(t *testing.T) {
 	e := bootstrapped(t, w)
 	before := len(w.front.mutations())
 
-	if err := e.Teardown(context.Background(), edge.ClassProduction); err != nil {
+	if err := e.Teardown(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 
 	assertSet(t, "the mutations teardown made", w.front.mutations()[before:], nil)
 	if err := e.Teardown(context.Background(), "staging"); err == nil {
-		t.Error("Teardown(staging) error = nil, want a refusal naming the class")
+		t.Error("Teardown(staging) error = nil, want a refusal naming the tier")
 	}
 }
 
@@ -276,10 +277,10 @@ func TestReconcile(t *testing.T) {
 		if len(associated) != 2 {
 			t.Fatalf("function associations = %+v, want the resolver on viewer-request and the empty-body dropper on viewer-response", associated)
 		}
-		if associated[0].EventType != cftypes.EventTypeViewerRequest || aws.ToString(associated[0].FunctionARN) != fakeResolverARN(edge.ClassProduction) {
+		if associated[0].EventType != cftypes.EventTypeViewerRequest || aws.ToString(associated[0].FunctionARN) != fakeResolverARN(environment.TierProduction) {
 			t.Errorf("first association = %+v, want the resolver on viewer-request", associated[0])
 		}
-		if associated[1].EventType != cftypes.EventTypeViewerResponse || aws.ToString(associated[1].FunctionARN) != fakeEmptyBodyARN(edge.ClassProduction) {
+		if associated[1].EventType != cftypes.EventTypeViewerResponse || aws.ToString(associated[1].FunctionARN) != fakeEmptyBodyARN(environment.TierProduction) {
 			t.Errorf("second association = %+v, want the empty-body dropper on viewer-response", associated[1])
 		}
 		if aws.ToString(behavior.CachePolicyId) != ownState(t, stack).CachePolicy {
@@ -390,14 +391,14 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
-	t.Run("a container release is routed through the class front, declared on the distribution as a VPC origin, with no asset bucket in front", func(t *testing.T) {
+	t.Run("a container release is routed through the tier front, declared on the distribution as a VPC origin, with no asset bucket in front", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
 		stagedContainer(t, stack)
-		recordFront(t, w, edge.ClassProduction)
+		recordFront(t, w, environment.TierProduction)
 		w.front.calls = nil
 
 		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
@@ -419,7 +420,7 @@ func TestPromote(t *testing.T) {
 		}
 		distribution := w.front.named(productionDistributionName())
 		if got := containerFrontOf(distribution.config); got != fakeFront {
-			t.Errorf("the distribution declares %+v, want the class front as a VPC origin: the resolver can select it but never rewrite a request to it", got)
+			t.Errorf("the distribution declares %+v, want the tier front as a VPC origin: the resolver can select it but never rewrite a request to it", got)
 		}
 		if w.front.count("UpdateDistribution") != 1 || w.front.count("GetDistribution") == 0 {
 			t.Errorf("CloudFront saw %v, want one update that declares the origin and a wait for it to roll out before the route goes live", w.front.calls)
@@ -442,17 +443,17 @@ func TestPromote(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 		if got := containerFrontOf(w.front.named(productionDistributionName()).config); got != fakeFront {
-			t.Errorf("after a reconcile the distribution declares %+v, want the class front kept: dropping it breaks every container route on the hostname", got)
+			t.Errorf("after a reconcile the distribution declares %+v, want the tier front kept: dropping it breaks every container route on the hostname", got)
 		}
 		if err := again.BindDomain(context.Background(), edge.DomainBinding{Hostname: "www." + boundHost, Certificate: certificateARN}); err != nil {
 			t.Fatalf("BindDomain: %v", err)
 		}
 		if got := containerFrontOf(w.front.named(productionDistributionName()).config); got != fakeFront {
-			t.Errorf("after binding a domain the distribution declares %+v, want the class front kept", got)
+			t.Errorf("after binding a domain the distribution declares %+v, want the tier front kept", got)
 		}
 	})
 
-	t.Run("a container release whose class records no front is refused before the route is written", func(t *testing.T) {
+	t.Run("a container release whose tier records no front is refused before the route is written", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -667,7 +668,7 @@ func TestDestroyGivesUpOnADistributionStillRollingOut(t *testing.T) {
 	w := newWorld()
 	e := w.edge()
 	stack, err := func() (edge.EdgeStack, error) {
-		if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
+		if _, err := e.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 			return nil, err
 		}
 		return e.Reconcile(context.Background(), testSpec(), edge.StackState{})
@@ -731,7 +732,7 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	targets := w.invalidationTargets(ledger.Scope(edge.ClassProduction, conformanceSlug))
+	targets := w.invalidationTargets(ledger.Scope(environment.TierProduction, conformanceSlug))
 	if targets == nil {
 		t.Fatalf("the ledger names no front for the tag invalidator to reach; it contains %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}

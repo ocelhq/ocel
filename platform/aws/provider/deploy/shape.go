@@ -8,7 +8,7 @@ import (
 	"unicode"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -78,7 +78,7 @@ func Shape(ctx context.Context, pass transform.Pass, region string, req provider
 		}
 	}
 	if hasContainers {
-		shape.containerInfra(scopes.Shared, req.Deploy.Class)
+		shape.containerInfra(scopes.Shared, req.Deploy.Tier)
 	}
 	return nil
 }
@@ -153,10 +153,10 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
-func (s costShape) containerInfra(scope string, class edge.Class) {
+func (s costShape) containerInfra(scope string, tier environment.Tier) {
 	s.plain(scope, tfECSCluster, ContainersSlug, map[string]any{})
 	s.plain(scope, tfLoadBalancer, ContainersSlug, map[string]any{"load_balancer_type": "application", "internal": true})
-	s.plain(scope, tfLogGroup, ContainersSlug, map[string]any{"retention_in_days": containerLogRetentionDays, "name": "/ocel/containers/" + string(class)})
+	s.plain(scope, tfLogGroup, ContainersSlug, map[string]any{"retention_in_days": containerLogRetentionDays, "name": "/ocel/containers/" + string(tier)})
 }
 
 func (s costShape) postgres(scope, project, env string, resource provider.Resource) {
@@ -201,7 +201,7 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, project string, r
 	if pass == nil {
 		return collected, nil
 	}
-	request := transform.Request{Provider: transformProvider, EnvClass: string(req.Deploy.Class), Env: req.Deploy.Env}
+	request := transform.Request{Provider: transformProvider, EnvTier: string(req.Deploy.Tier), Env: req.Deploy.Env}
 	var candidates []transformCandidate
 	for _, resource := range req.Resources {
 		if resource.Binding != "" {

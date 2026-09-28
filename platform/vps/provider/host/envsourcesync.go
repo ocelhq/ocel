@@ -3,7 +3,7 @@ package host
 import (
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -12,22 +12,22 @@ const (
 	envSourceSyncTemplateFile = "/etc/systemd/system/" + envSourceSyncTemplate
 	envSourceSyncRestartWait  = "10s"
 
-	unitInstance edge.Class = "%i"
+	unitInstance environment.Tier = "%i"
 )
 
-func EnvSourceSyncService(class edge.Class) string {
-	return strings.Replace(envSourceSyncTemplate, "@", "@"+string(class), 1)
+func EnvSourceSyncService(tier environment.Tier) string {
+	return strings.Replace(envSourceSyncTemplate, "@", "@"+string(tier), 1)
 }
 
 func envSourceSyncUnit() []byte {
 	return []byte(strings.Join([]string{
 		"[Unit]",
-		"Description=keeps the %i class's values in step with the env sources its deploys registered",
+		"Description=keeps the %i tier's values in step with the env sources its deploys registered",
 		"Wants=network-online.target",
 		"After=network-online.target",
 		"",
 		"[Service]",
-		"ExecStart=" + LiveBinary + " " + live.EnvSourceSyncCommand + " --class %i",
+		"ExecStart=" + LiveBinary + " " + live.EnvSourceSyncCommand + " --tier %i",
 		"Restart=on-failure",
 		"RestartSec=" + envSourceSyncRestartWait,
 		"NoNewPrivileges=yes",
@@ -43,11 +43,11 @@ func envSourceSyncUnit() []byte {
 	}, "\n"))
 }
 
-func EnvSourceSyncItems(class edge.Class, architecture string) []Item {
+func EnvSourceSyncItems(tier environment.Tier, architecture string) []Item {
 	template := envSourceSyncUnit()
 	return []Item{
 		{Kind: KindFile, Name: envSourceSyncTemplateFile, Mode: 0o644, Owner: rootOwner, Content: template},
-		{Kind: KindUnit, Name: EnvSourceSyncService(class), Owner: rootOwner, Content: unitWatchFacts(template, liveAgent(architecture)),
+		{Kind: KindUnit, Name: EnvSourceSyncService(tier), Owner: rootOwner, Content: unitWatchFacts(template, liveAgent(architecture)),
 			Watch: []string{envSourceSyncTemplateFile, LiveBinary},
 			Slow:  true, Note: "keeps values in step with env sources"},
 	}

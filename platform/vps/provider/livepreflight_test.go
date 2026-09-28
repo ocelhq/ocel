@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -27,8 +27,8 @@ func liveDeployPreflight(t *testing.T, image string) provider.DeployPreflight {
 	}
 	return provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
-			Slug:  "shop",
-			Class: edge.ClassProduction,
+			Slug: "shop",
+			Tier: environment.TierProduction,
 			Apps: []provider.AppEntry{{
 				App:             liveApp,
 				Stack:           stack,

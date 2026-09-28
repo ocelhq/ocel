@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type iamServer struct {
@@ -155,11 +155,11 @@ func grantedIAM() *iamServer {
 	}
 }
 
-func TestTheRuntimeAccountIsLimitedToReadingThisDatabaseAndOpeningUnderTheClassKeyAlone(t *testing.T) {
+func TestTheRuntimeAccountIsLimitedToReadingThisDatabaseAndOpeningUnderTheTierKeyAlone(t *testing.T) {
 	t.Parallel()
 	server := grantedIAM()
 	b := bootstrap{clients: server.open(t)}
-	read := survey{Class: edge.ClassProduction, Names: b.clients.Names}
+	read := survey{Tier: environment.TierProduction, Names: b.clients.Names}
 	ctx := context.Background()
 
 	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
@@ -184,7 +184,7 @@ func TestTheRuntimeAccountIsLimitedToReadingThisDatabaseAndOpeningUnderTheClassK
 		t.Errorf("the runtime account has %s, and a runtime seals nothing", connectorSealingRole)
 	}
 
-	found, err := b.accountPresence(ctx, edge.ClassProduction, "ocel-production")
+	found, err := b.accountPresence(ctx, environment.TierProduction, "ocel-production")
 	if err != nil {
 		t.Fatalf("accountPresence() = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestAnAccountThatMayNotReadIsSurveyedAsMendable(t *testing.T) {
 	server := grantedIAM()
 	b := bootstrap{clients: server.open(t)}
 
-	found, err := b.accountPresence(context.Background(), edge.ClassProduction, "ocel-production")
+	found, err := b.accountPresence(context.Background(), environment.TierProduction, "ocel-production")
 	if err != nil {
 		t.Fatalf("accountPresence() = %v", err)
 	}
@@ -218,13 +218,13 @@ func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T
 	t.Parallel()
 	server := grantedIAM()
 	b := bootstrap{clients: server.open(t)}
-	read := survey{Class: edge.ClassProduction, Names: b.clients.Names}
+	read := survey{Tier: environment.TierProduction, Names: b.clients.Names}
 	ctx := context.Background()
 	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := b.takeAccount(ctx, edge.ClassProduction, "ocel-production"); err != nil {
+	if err := b.takeAccount(ctx, environment.TierProduction, "ocel-production"); err != nil {
 		t.Fatalf("takeAccount() = %v", err)
 	}
 	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"

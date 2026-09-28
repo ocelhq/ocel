@@ -25,7 +25,7 @@ type InlineRecord struct {
 }
 
 type Ref struct {
-	Env string `json:"$env" doc:"The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own."`
+	Env string `json:"$env" doc:"The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own."`
 }
 
 type Text struct {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -63,7 +63,7 @@ func tearingDown(t *testing.T, clock TagClock, engine pulumi.Engine) *Stacks {
 func teardownRef() provider.StackRef {
 	return provider.StackRef{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Name:    naming.AppStack("production", "web", naming.NewRelease("dep1", "fp1")),
 	}
 }

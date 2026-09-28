@@ -46,7 +46,7 @@ func TestAValueCopiedFromAnEnvSourceNamesItUntilOcelWritesOverIt(t *testing.T) {
 func TestADereferencedValueNamesTheProjectAndProvenanceItLandsOn(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "shared", Class: scope.Class}
+	shared := envvars.Scope{Project: "shared", Tier: scope.Tier}
 	from := envvars.Provenance{EnvSource: "infisical:p/prod", Version: "s1@1"}
 	if _, err := store.SetFromEnvSource(ctx, shared, at("TOKEN"), "shared-token", from, 0); err != nil {
 		t.Fatal(err)

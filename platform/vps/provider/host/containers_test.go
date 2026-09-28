@@ -10,7 +10,7 @@ import (
 	"text/template"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -61,7 +61,7 @@ func TestAReleaseRunsOneLabelledContainerOnTheOneNetworkTargetsResolveAcross(t *
 	for what, wanted := range map[string]string{
 		"the name the drain attributes its in-flight count to": quoted("--name") + " " + quoted(physical),
 		"a reboot that does not take the app down":             quoted("--restart") + " " + quoted(appRestart),
-		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(AppNetwork(aContainer().Class, "shop")),
+		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(AppNetwork(aContainer().Tier, "shop")),
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
 		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),
@@ -111,7 +111,7 @@ func TestTakingAContainerDownStopsItBeforeItIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	box := machine(nil)
-	if err := box.host().TakeDown(context.Background(), edge.ClassProduction, physical); err != nil {
+	if err := box.host().TakeDown(context.Background(), environment.TierProduction, physical); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
 	joined := strings.Join(box.commands(), "\n")
@@ -252,7 +252,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if strings.Contains(command, aManifest) {
 		t.Errorf("the command line contains the manifest, which every login reads out of `ps`; it travels in the env file")
 	}
-	file := wrote(t, box, EnvFile(spec.Class, spec.Name))
+	file := wrote(t, box, EnvFile(spec.Tier, spec.Name))
 	for _, want := range []string{"OCEL_LIVE_MANIFEST=" + aManifest, "OCEL_HEALTH_PATH=/healthz", "API_TOKEN=" + sensitiveValue, "REGION=eu-west-1"} {
 		if !strings.Contains(file, want) {
 			t.Errorf("the env file reads %q and never binds %s", file, want)
@@ -268,7 +268,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if command := ranContainer(t, bakedBox); strings.Contains(command, quoted("--mount")) || strings.Contains(command, quoted("--tmpfs")) {
 		t.Errorf("a container reading nothing live runs %q and is handed the socket or the projection anyway", command)
 	}
-	if file := wrote(t, bakedBox, EnvFile(baked.Class, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
+	if file := wrote(t, bakedBox, EnvFile(baked.Tier, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
 		t.Errorf("a container reading nothing live is handed %q, which names a manifest", file)
 	}
 }
@@ -282,7 +282,7 @@ func TestAChangedManifestReplacesTheContainerLikeAChangedValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	moved := spec
-	moved.Manifest = []byte(`{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"},{"key":"SESSION"}]}`)
+	moved.Manifest = []byte(`{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"},{"key":"SESSION"}]}`)
 	other, err := handing(moved)
 	if err != nil {
 		t.Fatal(err)

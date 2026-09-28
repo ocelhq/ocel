@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -53,11 +53,11 @@ func newSync(ctx context.Context, getenv func(string) string) (*envsource.Sync, 
 	if key == "" {
 		return nil, fmt.Errorf("%s is not set, so no value this sync writes could be encrypted", awsports.VarsKeyEnvVar)
 	}
-	class := edge.Class(getenv(awsports.ClassEnvVar))
-	switch class {
-	case edge.ClassProduction, edge.ClassPreview:
+	tier := environment.Tier(getenv(awsports.TierEnvVar))
+	switch tier {
+	case environment.TierProduction, environment.TierPreview:
 	default:
-		return nil, fmt.Errorf("%s is %q, want %s or %s", awsports.ClassEnvVar, class, edge.ClassProduction, edge.ClassPreview)
+		return nil, fmt.Errorf("%s is %q, want %s or %s", awsports.TierEnvVar, tier, environment.TierProduction, environment.TierPreview)
 	}
 	cfg, err := sdkconfig.Workload(ctx)
 	if err != nil {
@@ -68,7 +68,7 @@ func newSync(ctx context.Context, getenv func(string) string) (*envsource.Sync, 
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(table)},
 			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(key)},
 		},
-		Class: class,
+		Tier: tier,
 		Login: envsource.Login{
 			ProveIdentity: awsports.CallerIdentity{Config: cfg}.Prove,
 			Client:        &http.Client{Timeout: requestTimeout},

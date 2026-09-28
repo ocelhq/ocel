@@ -22,6 +22,7 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -84,7 +85,7 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	name, _ := strings.CutSuffix(aws.ToString(in.StackName), "-"+string(edge.ClassPreview))
+	name, _ := strings.CutSuffix(aws.ToString(in.StackName), "-"+string(environment.TierPreview))
 	var outputs []cfntypes.Output
 	switch name {
 	case coreStackName:

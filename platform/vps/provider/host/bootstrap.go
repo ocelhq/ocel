@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -31,8 +31,8 @@ func NewBootstrap(h *Host, vendor provider.Vendor, project string) Bootstrap {
 
 func (b Bootstrap) Catalogue() []provider.Feature { return nil }
 
-func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
-	read, err := b.host.Observe(ctx, class)
+func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+	read, err := b.host.Observe(ctx, tier)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -48,12 +48,12 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 		return provider.BootstrapDescription{}, err
 	}
 	if read.observed(KindRoutingTable, live.RoutingTable) || read.observed(KindProxyConfig, ProxyConfig) {
-		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
+		if read.rerendering, err = b.host.proxyInspected(ctx, read.Tier); err != nil {
 			return provider.BootstrapDescription{}, err
 		}
 	}
 	return provider.BootstrapDescription{
-		Class:       read.Class,
+		Tier:        read.Tier,
 		Present:     read.Present,
 		Unfinished:  read.unfinished(),
 		VendorState: read,
@@ -126,7 +126,7 @@ func planned(read Reading) []provider.Change {
 func itemPlan(read Reading) provider.Plan {
 	return provider.Plan{Groups: []provider.ChangeGroup{{
 		Kind:    provider.StackGroupKind,
-		Name:    string(read.Class),
+		Name:    string(read.Tier),
 		Changes: planned(read),
 	}}}
 }
@@ -146,14 +146,14 @@ func slowLast(changes []provider.Change) []provider.Change {
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (Reading, error) {
-	if cached, ok := req.VendorState.(Reading); ok && cached.Class == req.Class {
+	if cached, ok := req.VendorState.(Reading); ok && cached.Tier == req.Tier {
 		return cached, nil
 	}
-	return b.read(ctx, req.Class)
+	return b.read(ctx, req.Tier)
 }
 
-func (b Bootstrap) read(ctx context.Context, class edge.Class) (Reading, error) {
-	read, err := b.host.Read(ctx, class)
+func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (Reading, error) {
+	read, err := b.host.Read(ctx, tier)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -168,7 +168,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err != nil {
 		return err
 	}
-	current, err := b.read(ctx, req.Class)
+	current, err := b.read(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
@@ -198,40 +198,40 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		Writer:  req.WrittenBy.String(),
 		Digests: digests(items),
 	}
-	if err := b.write(ctx, current, ClassItems(req.Class), progress); err != nil {
+	if err := b.write(ctx, current, TierItems(req.Tier), progress); err != nil {
 		return err
 	}
-	if err := b.host.Stamp(ctx, req.Class, stamp); err != nil {
+	if err := b.host.Stamp(ctx, req.Tier, stamp); err != nil {
 		return err
 	}
-	if err := b.write(ctx, current, StorageItems(req.Class, current.Keys), progress); err != nil {
+	if err := b.write(ctx, current, StorageItems(req.Tier, current.Keys), progress); err != nil {
 		return err
 	}
 
-	minted, err := b.host.Read(ctx, req.Class)
+	minted, err := b.host.Read(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
 	if minted.Seal.Fingerprint == "" {
 		return refusal.Refuse(refusal.CodeDenied,
 			"%s has no seal key",
-			req.Class)
+			req.Tier)
 	}
-	sealed := Reading{Class: req.Class, Present: true, Seal: minted.Seal, Stamp: current.Stamp}
+	sealed := Reading{Tier: req.Tier, Present: true, Seal: minted.Seal, Stamp: current.Stamp}
 	if err := sealed.adopting(); err != nil {
 		return err
 	}
 	if err := b.write(ctx, current, EngineItems(), progress); err != nil {
 		return err
 	}
-	served, err := b.host.Read(ctx, req.Class)
+	served, err := b.host.Read(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, LiveItems(current.Arch), progress); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, EnvSourceSyncItems(req.Class, current.Arch), progress); err != nil {
+	if err := b.write(ctx, served, EnvSourceSyncItems(req.Tier, current.Arch), progress); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, current.recorded, progress); err != nil {
@@ -247,11 +247,11 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
-	return b.host.Stamp(ctx, req.Class, stamp)
+	return b.host.Stamp(ctx, req.Tier, stamp)
 }
 
 func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
-	read, err := b.host.Own(ctx, req.Class)
+	read, err := b.host.Own(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
@@ -279,16 +279,16 @@ func healing(read Reading, refuse bool) ([]Item, []Item, error) {
 }
 
 func healable(read Reading) ([]Item, []Item, error) {
-	command := provider.BootstrapCommand(read.Class)
+	command := provider.BootstrapCommand(read.Tier)
 	if !read.Present {
 		return nil, nil, refusal.Refuse(refusal.CodeDenied,
-			"the %s class is not bootstrapped on this host\nRun `%s`",
-			read.Class, command)
+			"the %s tier is not bootstrapped on this host\nRun `%s`",
+			read.Tier, command)
 	}
 	if read.unfinished() {
 		return nil, nil, refusal.Refuse(refusal.CodeDenied,
 			"%s records an unfinished apply\nRun `%s` to finish it",
-			StampPath(read.Class), command)
+			StampPath(read.Tier), command)
 	}
 	if err := read.adopting(); err != nil {
 		return nil, nil, err
@@ -375,14 +375,14 @@ func (r Reading) adopting() error {
 	}
 	present := r.Seal.Fingerprint
 	if present == "" {
-		if r.observed(KindSealKey, SealKeyPath(r.Class)) {
+		if r.observed(KindSealKey, SealKeyPath(r.Tier)) {
 			return nil
 		}
 		present = "no key at all"
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s records seal key %s, but %s contains %s\nRestore the recorded key, or `ocel destroy` the class",
-		StampPath(r.Class), recorded, SealKeyPath(r.Class), present)
+		"%s records seal key %s, but %s contains %s\nRestore the recorded key, or `ocel destroy` the tier",
+		StampPath(r.Tier), recorded, SealKeyPath(r.Tier), present)
 }
 
 func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress progress.Progress) error {
@@ -421,8 +421,8 @@ func debug(progress progress.Progress, line string) {
 	}
 }
 
-func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
-	removals, err := b.removals(ctx, class)
+func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
+	removals, err := b.removals(ctx, tier)
 	if err != nil || len(removals) == 0 {
 		return provider.Plan{}, err
 	}
@@ -448,13 +448,13 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, []provider.ChangeGroup{group})}, nil
 }
 
-func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
+func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
 	defer b.host.forgetTiers()
 	forget, err := b.host.forgetting(ctx)
 	if err != nil {
 		return err
 	}
-	removals, err := b.removals(ctx, class)
+	removals, err := b.removals(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -535,16 +535,16 @@ func (r removal) command() string {
 	}
 }
 
-func (b Bootstrap) removals(ctx context.Context, class edge.Class) ([]removal, error) {
-	read, err := b.host.Survey(ctx, class)
+func (b Bootstrap) removals(ctx context.Context, tier environment.Tier) ([]removal, error) {
+	read, err := b.host.Survey(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
-	sibling, err := b.host.Survey(ctx, other(class))
+	sibling, err := b.host.Survey(ctx, other(tier))
 	if err != nil {
 		return nil, err
 	}
-	apps, err := b.host.presentApps(ctx, class)
+	apps, err := b.host.presentApps(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -560,10 +560,10 @@ const (
 
 type appsPresent struct{ containers, networks, volumes bool }
 
-func classSelector(class edge.Class) string { return LabelClass + "=" + string(class) }
+func tierSelector(tier environment.Tier) string { return LabelTier + "=" + string(tier) }
 
-func appsProbe(class edge.Class) string {
-	filter := quoted("label=" + classSelector(class))
+func appsProbe(tier environment.Tier) string {
+	filter := quoted("label=" + tierSelector(tier))
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1; then\n" +
 		"if [ -n \"$(docker ps --all --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo containers; fi\n" +
 		"if [ -n \"$(docker network ls --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo networks; fi\n" +
@@ -571,8 +571,8 @@ func appsProbe(class edge.Class) string {
 		"fi"
 }
 
-func (h *Host) presentApps(ctx context.Context, class edge.Class) (appsPresent, error) {
-	said, err := h.run(ctx, "ask what "+string(class)+" still runs", appsProbe(class), nil)
+func (h *Host) presentApps(ctx context.Context, tier environment.Tier) (appsPresent, error) {
+	said, err := h.run(ctx, "ask what "+string(tier)+" still runs", appsProbe(tier), nil)
 	if err != nil {
 		return appsPresent{}, err
 	}
@@ -583,34 +583,34 @@ func (h *Host) presentApps(ctx context.Context, class edge.Class) (appsPresent, 
 	}, nil
 }
 
-func appsRemoving(class edge.Class, apps appsPresent) []removal {
+func appsRemoving(tier environment.Tier, apps appsPresent) []removal {
 	var taken []removal
 	if apps.containers {
-		taken = append(taken, taking(KindApps, classSelector(class),
+		taken = append(taken, taking(KindApps, tierSelector(tier),
 			""))
 	}
 	if apps.volumes {
-		taken = append(taken, taking(KindResourceVolumes, classSelector(class),
+		taken = append(taken, taking(KindResourceVolumes, tierSelector(tier),
 			"resource data, not recoverable"))
 	}
 	if apps.networks {
-		taken = append(taken, taking(KindAppNetworks, classSelector(class),
+		taken = append(taken, taking(KindAppNetworks, tierSelector(tier),
 			""))
 	}
 	return taken
 }
 
 func removing(read, sibling Reading, apps appsPresent) []removal {
-	beside := sibling.Class
-	last := !sibling.observed(KindDir, ClassDir(beside)) && !sibling.observed(KindDir, StateDir(beside))
+	beside := sibling.Tier
+	last := !sibling.observed(KindDir, TierDir(beside)) && !sibling.observed(KindDir, StateDir(beside))
 
-	beneath := append([]removal{taking(KindUnit, EnvSourceSyncService(read.Class), "")}, appsRemoving(read.Class, apps)...)
+	beneath := append([]removal{taking(KindUnit, EnvSourceSyncService(read.Tier), "")}, appsRemoving(read.Tier, apps)...)
 	beneath = append(beneath,
-		taking(KindDir, StateDir(read.Class), "deploy records"),
-		taking(KindSealKey, SealKeyPath(read.Class), "sealed values become unreadable"),
-		taking(KindFile, sudoersSeal(read.Class), ""),
+		taking(KindDir, StateDir(read.Tier), "deploy records"),
+		taking(KindSealKey, SealKeyPath(read.Tier), "sealed values become unreadable"),
+		taking(KindFile, sudoersSeal(read.Tier), ""),
 	)
-	stamp := []removal{taking(KindDir, ClassDir(read.Class),
+	stamp := []removal{taking(KindDir, TierDir(read.Tier),
 		"")}
 	var above []removal
 	if last {
@@ -630,7 +630,7 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 			taking(KindDir, SwitchboardDir, ""),
 			sharing(boxstore.Dir, ""),
 		)
-		above = []removal{sharing(classRoot, "")}
+		above = []removal{sharing(tierRoot, "")}
 	}
 	ordered := slices.Concat(beneath, stamp, above)
 
@@ -650,9 +650,9 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 	return present
 }
 
-func other(class edge.Class) edge.Class {
-	if class == edge.ClassProduction {
-		return edge.ClassPreview
+func other(tier environment.Tier) environment.Tier {
+	if tier == environment.TierProduction {
+		return environment.TierPreview
 	}
-	return edge.ClassProduction
+	return environment.TierProduction
 }

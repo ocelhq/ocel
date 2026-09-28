@@ -24,8 +24,8 @@ func TestTagInvalidator(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", featureTemplate(FeatureISR, ClassProduction)},
-			{"preview", featureTemplate(FeatureISR, ClassPreview)},
+			{"production", featureTemplate(FeatureISR, TierProduction)},
+			{"preview", featureTemplate(FeatureISR, TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -82,19 +82,19 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("reads the ledger of its own class", func(t *testing.T) {
+	t.Run("reads the ledger of its own tier", func(t *testing.T) {
 		for _, tc := range []struct {
 			name     string
 			template string
-			class    string
+			tier     string
 		}{
-			{"production", featureTemplate(FeatureISR, ClassProduction), ClassProduction},
-			{"preview", featureTemplate(FeatureISR, ClassPreview), ClassPreview},
+			{"production", featureTemplate(FeatureISR, TierProduction), TierProduction},
+			{"preview", featureTemplate(FeatureISR, TierPreview), TierPreview},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				env := parsePublisherTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
-				if env["OCEL_INFRA_CLASS"] != tc.class {
-					t.Errorf("%s = %q, want %q — the class scopes every ledger read to its own bootstrap", "OCEL_INFRA_CLASS", env["OCEL_INFRA_CLASS"], tc.class)
+				if env["OCEL_INFRA_TIER"] != tc.tier {
+					t.Errorf("%s = %q, want %q — the tier scopes every ledger read to its own bootstrap", "OCEL_INFRA_TIER", env["OCEL_INFRA_TIER"], tc.tier)
 				}
 				if env[tagInvalidatorStateTableEnvVar] != paramStateTableName {
 					t.Errorf("%s = %q, want the bootstrap's state table", tagInvalidatorStateTableEnvVar, env[tagInvalidatorStateTableEnvVar])
@@ -104,7 +104,7 @@ func TestTagInvalidator(t *testing.T) {
 	})
 
 	t.Run("role reaches only the stream, the ledger and invalidation", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureISR, ClassProduction))
+		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureISR, TierProduction))
 		role, ok := tmpl.Resources["TagInvalidatorRole"]
 		if !ok {
 			t.Fatal("template is missing the TagInvalidatorRole")
@@ -145,7 +145,7 @@ func TestTagInvalidator(t *testing.T) {
 	})
 
 	t.Run("renders no alarms", func(t *testing.T) {
-		for name, res := range parsePublisherTemplate(t, featureTemplate(FeatureISR, ClassProduction)).Resources {
+		for name, res := range parsePublisherTemplate(t, featureTemplate(FeatureISR, TierProduction)).Resources {
 			if res.Type == "AWS::CloudWatch::Alarm" {
 				t.Errorf("%s is an alarm billed every month in a stack that must be free to leave idle", name)
 			}
@@ -158,8 +158,8 @@ func TestTagInvalidator(t *testing.T) {
 			target    spec
 			stackName string
 		}{
-			{"production", productionBootstrap(defaultNamespace), isrStack(ClassProduction)},
-			{"preview", previewBootstrap(defaultNamespace), isrStack(ClassPreview)},
+			{"production", productionBootstrap(defaultNamespace), isrStack(TierProduction)},
+			{"preview", previewBootstrap(defaultNamespace), isrStack(TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				stacks := newFakeCFN()

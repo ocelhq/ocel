@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -161,15 +162,15 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 
 	t.Run("the account-level bucket binding rides along", func(t *testing.T) {
 		worker := testStoreWorker()
-		worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(edge.ClassProduction)}
+		worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(environment.TierProduction)}
 
 		meta := doMetadataFromMultipart(t, worker, isrWriterWorker, nil)
 		buckets := bindingsByType(meta, "r2_bucket")
 		if len(buckets) != 1 {
 			t.Fatalf("r2_bucket bindings = %v, want 1", buckets)
 		}
-		if buckets[0]["name"] != cacheStoreBinding || buckets[0]["bucket_name"] != cacheStoreName(edge.ClassProduction) {
-			t.Errorf("r2 binding = %v, want name %s bucket %s", buckets[0], cacheStoreBinding, cacheStoreName(edge.ClassProduction))
+		if buckets[0]["name"] != cacheStoreBinding || buckets[0]["bucket_name"] != cacheStoreName(environment.TierProduction) {
+			t.Errorf("r2 binding = %v, want name %s bucket %s", buckets[0], cacheStoreBinding, cacheStoreName(environment.TierProduction))
 		}
 	})
 
@@ -190,7 +191,7 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 func testSpec(endpoint, version string) edge.StackSpec {
 	return edge.StackSpec{
 		Slug:    "acme-web",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Version: version,
 		Program: &edge.ProgramSpec{
 			StoreEndpoint: endpoint,
@@ -201,7 +202,7 @@ func testSpec(endpoint, version string) edge.StackSpec {
 
 func previewSpec(endpoint, version string) edge.StackSpec {
 	spec := testSpec(endpoint, version)
-	spec.Class = edge.ClassPreview
+	spec.Tier = environment.TierPreview
 	program := *spec.Program
 	program.Name = "ocel-preview"
 	program.Worker = testStoreWorker()

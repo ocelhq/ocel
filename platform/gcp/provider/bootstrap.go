@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -35,14 +35,14 @@ const (
 	reasonEmulated     = "emulator serves one implicit database"
 	reasonRingKept     = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
 	reasonShared       = "the %s bootstrap is still installed and shares it"
-	reasonSharedDB     = "the %s bootstrap is still installed and shares it, so only the records this class keeps in it are deleted"
+	reasonSharedDB     = "the %s bootstrap is still installed and shares it, so only the records this tier keeps in it are deleted"
 	reasonKeyScheduled = "Cloud KMS destroys each version once the key's scheduled-destruction period passes, 30 days unless the key sets another"
 	reasonAbsent       = "nothing is provisioned here"
 
 	reasonUngranted = "it exists, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
 	reasonUnpruned  = "it exists with cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
 
-	reasonUnprotected = "it exists with delete protection off, and one call would take every record both classes store with it"
+	reasonUnprotected = "it exists with delete protection off, and one call would take every record both tiers store with it"
 
 	reasonUnlocked = "it is open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
 )
@@ -87,12 +87,12 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap, error) {
 	}, nil
 }
 
-func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
+func (g bootstrapGate) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	return b.Describe(ctx, class)
+	return b.Describe(ctx, tier)
 }
 
 func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
@@ -111,33 +111,33 @@ func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest,
 	return b.Apply(ctx, req, progress)
 }
 
-func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
+func (g bootstrapGate) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return b.PlanRemove(ctx, class)
+	return b.PlanRemove(ctx, tier)
 }
 
-func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
+func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
 		return err
 	}
-	return b.Remove(ctx, class, progress)
+	return b.Remove(ctx, tier, progress)
 }
 
 type bootstrap struct {
 	clients *clients
 	fronts  provider.Edges
 
-	pushBinary    func(ctx context.Context, class edge.Class, name, ref string, binary []byte, path string) error
+	pushBinary    func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	deployService func(ctx context.Context, s serving, progress progress.Progress) (release, error)
 	tearDown      func(ctx context.Context, service string, progress progress.Progress) error
 }
 
-func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
-	read, err := b.survey(ctx, class)
+func (b bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -145,21 +145,21 @@ func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.Boo
 }
 
 func (b bootstrap) described(ctx context.Context, read survey) (provider.BootstrapDescription, error) {
-	items := bootstrapItems(read.Names, read.Class, read.Emulated)
+	items := bootstrapItems(read.Names, read.Tier, read.Emulated)
 	stacks := []provider.BootstrapStack{{
-		Name:          read.Project + "/" + string(read.Class),
+		Name:          read.Project + "/" + string(read.Tier),
 		Present:       read.Present,
 		Schema:        uint32(read.Stamp.Schema),
 		DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
 		WrittenBy:     read.Stamp.Writer,
 	}}
 	for _, feature := range read.Stamp.Features {
-		installed, err := b.frontInstalled(ctx, read.Class, feature)
+		installed, err := b.frontInstalled(ctx, read.Tier, feature)
 		if err != nil {
 			return provider.BootstrapDescription{}, err
 		}
 		stacks = append(stacks, provider.BootstrapStack{
-			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
+			Name:          read.Project + "/" + string(read.Tier) + "/" + feature,
 			Feature:       feature,
 			Present:       installed,
 			Schema:        uint32(read.Stamp.Schema),
@@ -168,7 +168,7 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 		})
 	}
 	return provider.BootstrapDescription{
-		Class:       read.Class,
+		Tier:        read.Tier,
 		Present:     read.Present,
 		Unfinished:  read.Present && read.Stamp.State != stateComplete,
 		VendorState: read,
@@ -177,10 +177,10 @@ func (b bootstrap) described(ctx context.Context, read survey) (provider.Bootstr
 }
 
 func (b bootstrap) surveyFor(ctx context.Context, req provider.BootstrapRequest) (survey, error) {
-	if passed, ok := req.VendorState.(survey); ok && passed.Class == req.Class {
+	if passed, ok := req.VendorState.(survey); ok && passed.Tier == req.Tier {
 		return passed, nil
 	}
-	return b.survey(ctx, req.Class)
+	return b.survey(ctx, req.Tier)
 }
 
 func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
@@ -191,7 +191,7 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err := b.preflight(ctx, read, req.Features); err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.frontsFree(ctx, req.Class, droppedFeatures(read.Stamp.Features, req)); err != nil {
+	if err := b.frontsFree(ctx, req.Tier, droppedFeatures(read.Stamp.Features, req)); err != nil {
 		return provider.Plan{}, err
 	}
 	current, err := b.described(ctx, read)
@@ -199,12 +199,12 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	groups := bootstrapplan.ChangeGroups(current, b.Catalogue(), req)
-	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
+	groups[0].Changes = planned(read, stackItems(read.Names, read.Tier, read.Emulated))
 
 	params := provider.ChangeGroup{
 		Kind:    provider.ParameterGroupKind,
 		Name:    provider.ParameterGroupKind,
-		Changes: planned(read, parameterItems(read.Names, read.Class)),
+		Changes: planned(read, parameterItems(read.Names, read.Tier)),
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
 	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append(groups, params))}, nil
@@ -224,7 +224,7 @@ func planned(read survey, items []item) []provider.Change {
 		case read.mends(item) != "":
 			change.Action, change.Reason = provider.ActionUpdate, read.mends(item)
 		case item.Shared && read.sibling && read.has(item):
-			change.Action, change.Reason, change.Slow = provider.ActionKeep, sharedWith(read.Class), false
+			change.Action, change.Reason, change.Slow = provider.ActionKeep, sharedWith(read.Tier), false
 		case read.Emulated && item.Kind == KindDatabase:
 			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonEmulated, false
 		case read.has(item):
@@ -235,8 +235,8 @@ func planned(read survey, items []item) []provider.Change {
 	return changes
 }
 
-func sharedWith(class edge.Class) string {
-	return fmt.Sprintf(reasonShared, siblingOf(class))
+func sharedWith(tier environment.Tier) string {
+	return fmt.Sprintf(reasonShared, siblingOf(tier))
 }
 
 func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
@@ -248,8 +248,8 @@ func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 
-	items := bootstrapItems(read.Names, req.Class, read.Emulated)
-	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
+	items := bootstrapItems(read.Names, req.Tier, read.Emulated)
+	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(req.Tier)}
 	if err := b.provision(ctx, read, stampItem(items, stampBucket), progress); err != nil {
 		return err
 	}
@@ -340,9 +340,9 @@ func (b bootstrap) make(ctx context.Context, read survey, target item) error {
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, target.Name)
 	case KindService:
-		return b.makeService(ctx, read.Class, target.Name)
+		return b.makeService(ctx, read.Tier, target.Name)
 	case KindSchedule:
-		return b.makeSchedule(ctx, read.Class, target.Name)
+		return b.makeSchedule(ctx, read.Tier, target.Name)
 	default:
 		return refusal.Refuse(refusal.CodeInvalid, "gcp: nothing provisions a %s", target.Kind)
 	}
@@ -357,7 +357,7 @@ func (b bootstrap) stampWith(ctx context.Context, read survey, written stamp, ge
 	if err != nil {
 		return 0, fmt.Errorf("write %s: %w", StampObject, err)
 	}
-	object := client.Bucket(read.Names.Bucket(read.Class)).Object(StampObject).If(onlyWriter(generation))
+	object := client.Bucket(read.Names.Bucket(read.Tier)).Object(StampObject).If(onlyWriter(generation))
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write(append(body, '\n')); err != nil {
 		writer.Close()
@@ -382,13 +382,13 @@ func (b bootstrap) stampRefusal(ctx context.Context, read survey, err error) err
 	}
 	read.Stamp.Writer = b.writerNow(ctx, read)
 	return refusal.Refuse(refusal.CodeBusy,
-		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same class interleaving leave a stack neither of them describes.\n"+
+		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same tier interleaving leave a stack neither of them describes.\n"+
 			"Wait for that run to finish, then try again",
-		writerNamed(read.Stamp.Writer), StampObject, read.Names.Bucket(read.Class))
+		writerNamed(read.Stamp.Writer), StampObject, read.Names.Bucket(read.Tier))
 }
 
 func (b bootstrap) writerNow(ctx context.Context, read survey) string {
-	now, err := b.stamped(ctx, read.Names.Bucket(read.Class))
+	now, err := b.stamped(ctx, read.Names.Bucket(read.Tier))
 	if err != nil || !now.present {
 		return read.Stamp.Writer
 	}
@@ -547,18 +547,18 @@ type accountPurpose struct {
 	displayName string
 	description string
 	ungranted   string
-	grant       func(ctx context.Context, class edge.Class) error
-	forget      func(ctx context.Context, class edge.Class) error
-	granted     func(ctx context.Context, class edge.Class) (bool, error)
+	grant       func(ctx context.Context, tier environment.Tier) error
+	forget      func(ctx context.Context, tier environment.Tier) error
+	granted     func(ctx context.Context, tier environment.Tier) (bool, error)
 }
 
-func (b bootstrap) purposeOf(class edge.Class, name string) accountPurpose {
-	if name == b.clients.EnvSourceSyncAccount(class) {
-		return b.syncPurpose(class)
+func (b bootstrap) purposeOf(tier environment.Tier, name string) accountPurpose {
+	if name == b.clients.EnvSourceSyncAccount(tier) {
+		return b.syncPurpose(tier)
 	}
 	return accountPurpose{
-		displayName: "ocel " + string(class) + " apps",
-		description: "the identity every app ocel deploys in the " + string(class) + " class runs as",
+		displayName: "ocel " + string(tier) + " apps",
+		description: "the identity every app ocel deploys in the " + string(tier) + " tier runs as",
 		ungranted:   reasonUnread,
 		grant:       b.grantReads,
 		forget:      b.forgetReads,
@@ -571,7 +571,7 @@ func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) er
 	if err != nil {
 		return err
 	}
-	purpose := b.purposeOf(read.Class, name)
+	purpose := b.purposeOf(read.Tier, name)
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
@@ -585,7 +585,7 @@ func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) er
 	if err := b.grantRunAs(ctx, name); err != nil {
 		return err
 	}
-	return purpose.grant(ctx, read.Class)
+	return purpose.grant(ctx, read.Tier)
 }
 
 func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
@@ -622,8 +622,8 @@ func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 	return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, refused)
 }
 
-func (b bootstrap) takeAccount(ctx context.Context, class edge.Class, name string) error {
-	if err := b.purposeOf(class, name).forget(ctx, class); err != nil {
+func (b bootstrap) takeAccount(ctx context.Context, tier environment.Tier, name string) error {
+	if err := b.purposeOf(tier, name).forget(ctx, tier); err != nil {
 		return err
 	}
 	service, err := b.clients.Accounts()
@@ -809,17 +809,17 @@ type removal struct {
 	destroyAfter time.Duration
 }
 
-func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
-	read, err := b.survey(ctx, class)
+func (b bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
+	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.frontsFree(ctx, class, read.Stamp.Features); err != nil {
+	if err := b.frontsFree(ctx, tier, read.Stamp.Features); err != nil {
 		return provider.Plan{}, err
 	}
 	stack, params := provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
-		Name:   read.Project + "/" + string(class),
+		Name:   read.Project + "/" + string(tier),
 		Action: provider.ActionDelete,
 	}, provider.ChangeGroup{
 		Kind:   provider.ParameterGroupKind,
@@ -849,14 +849,14 @@ var removalOrder = []Kind{
 }
 
 func removals(read survey) []removal {
-	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(read.Class)}
+	stampBucket := item{Kind: KindBucket, Name: read.Names.Bucket(read.Tier)}
 	rank := func(target item) int {
 		if target.ID() == stampBucket.ID() {
 			return len(removalOrder)
 		}
 		return slices.Index(removalOrder, target.Kind)
 	}
-	items := bootstrapItems(read.Names, read.Class, read.Emulated)
+	items := bootstrapItems(read.Names, read.Tier, read.Emulated)
 	slices.SortStableFunc(items, func(a, b item) int { return rank(a) - rank(b) })
 	out := make([]removal, 0, len(items))
 	for _, target := range items {
@@ -871,16 +871,16 @@ func removing(read survey, target item) removal {
 	case target.Kind == KindKeyRing:
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
 	case target.Kind == KindDatabase && read.sibling:
-		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, siblingOf(read.Class))
+		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, siblingOf(read.Tier))
 	case target.Shared && read.sibling:
-		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Class)
+		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Tier)
 	case target.Kind == KindDatabase && read.Emulated:
 		taking.action, taking.reason = provider.ActionKeep, reasonEmulated
 	case target.Kind == KindDatabase:
 		taking.action = provider.ActionDisableThenDelete
 	case target.Kind == KindKey:
 		taking.reason, taking.item.Slow = reasonKeyScheduled, true
-	case target.Name == read.Names.Bucket(read.Class):
+	case target.Name == read.Names.Bucket(read.Tier):
 		taking.item.Slow = true
 	}
 	if taking.action != provider.ActionKeep && !read.has(taking.item) {
@@ -889,8 +889,8 @@ func removing(read survey, target item) removal {
 	return taking
 }
 
-func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
-	read, err := b.survey(ctx, class)
+func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+	read, err := b.survey(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -898,9 +898,9 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress progre
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s still stores the state of %s, and removing the bucket a stack is recorded in strands what that stack provisioned.\n"+
 				"Run `%s` in every project deployed here first",
-			read.Names.StateBucket(class), read.stateOf, destroyIn(class))
+			read.Names.StateBucket(tier), read.stateOf, destroyIn(tier))
 	}
-	if err := b.frontsFree(ctx, class, read.Stamp.Features); err != nil {
+	if err := b.frontsFree(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
 	if read.Present {
@@ -910,12 +910,12 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress progre
 			return err
 		}
 	}
-	if err := b.tearFronts(ctx, class, read.Stamp.Features); err != nil {
+	if err := b.tearFronts(ctx, tier, read.Stamp.Features); err != nil {
 		return err
 	}
 	for _, taking := range removals(read) {
 		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase {
-			if err := b.takeRecords(ctx, class); err != nil {
+			if err := b.takeRecords(ctx, tier); err != nil {
 				return err
 			}
 		}
@@ -946,8 +946,8 @@ func (r removal) report(progress progress.Progress) {
 	}
 }
 
-func destroyIn(class edge.Class) string {
-	if class == edge.ClassPreview {
+func destroyIn(tier environment.Tier) string {
+	if tier == environment.TierPreview {
 		return "ocel destroy preview"
 	}
 	return "ocel destroy production"
@@ -966,7 +966,7 @@ func (b bootstrap) take(ctx context.Context, read survey, target item) (destroyA
 	case KindRepository:
 		return 0, b.takeRepository(ctx, target.Name)
 	case KindServiceAccount:
-		return 0, b.takeAccount(ctx, read.Class, target.Name)
+		return 0, b.takeAccount(ctx, read.Tier, target.Name)
 	case KindService:
 		return 0, b.takeService(ctx, target.Name)
 	case KindSchedule:
@@ -1078,12 +1078,12 @@ func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
 	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", b.clients.Database()), deleting)
 }
 
-func (b bootstrap) takeRecords(ctx context.Context, class edge.Class) error {
+func (b bootstrap) takeRecords(ctx context.Context, tier environment.Tier) error {
 	client, err := b.clients.Firestore()
 	if err != nil {
 		return err
 	}
-	documents := ports.ClassRecords(client, class).Select().Documents(ctx)
+	documents := ports.TierRecords(client, tier).Select().Documents(ctx)
 	defer documents.Stop()
 	for {
 		kept, err := documents.Next()
@@ -1091,13 +1091,13 @@ func (b bootstrap) takeRecords(ctx context.Context, class edge.Class) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("list the records the %s class keeps: %w", class, err)
+			return fmt.Errorf("list the records the %s tier keeps: %w", tier, err)
 		}
 		if err := done(ctx, func() error {
 			_, err := kept.Ref.Delete(ctx)
 			return err
 		}); err != nil {
-			return fmt.Errorf("delete the %s record %s: %w", class, kept.Ref.ID, err)
+			return fmt.Errorf("delete the %s record %s: %w", tier, kept.Ref.ID, err)
 		}
 	}
 }

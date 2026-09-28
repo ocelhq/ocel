@@ -13,6 +13,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -39,7 +40,7 @@ const (
 )
 
 func previewStackSpec() edge.StackSpec {
-	return edge.StackSpec{Version: "v1", Class: edge.ClassPreview, Slug: conformanceSlug, PruneOnly: true}
+	return edge.StackSpec{Version: "v1", Tier: environment.TierPreview, Slug: conformanceSlug, PruneOnly: true}
 }
 
 func previewWildcardSpec() edge.PreviewWildcardSpec {
@@ -59,7 +60,7 @@ func previewHostname() string {
 func previewBootstrapped(t *testing.T, w *world) *cloudFront {
 	t.Helper()
 	e := w.edge()
-	if _, err := e.Bootstrap(context.Background(), edge.ClassPreview); err != nil {
+	if _, err := e.Bootstrap(context.Background(), environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
 	return e
@@ -81,7 +82,7 @@ func previewing(t *testing.T, w *world) (*cloudFront, edge.EdgeStack) {
 
 func previewRoutes(t *testing.T, w *world) map[string]route {
 	t.Helper()
-	arn := fakeRoutesARN(edge.ClassPreview)
+	arn := fakeRoutesARN(environment.TierPreview)
 	routes := map[string]route{}
 	for key, value := range w.store.itemsOf(arn) {
 		var published route
@@ -134,13 +135,13 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 		if associated.Items[0].EventType != cftypes.EventTypeViewerRequest {
 			t.Errorf("function association = %s, want it on the viewer request", associated.Items[0].EventType)
 		}
-		if arn := aws.ToString(associated.Items[0].FunctionARN); arn != fakeResolverARN(edge.ClassPreview) {
+		if arn := aws.ToString(associated.Items[0].FunctionARN); arn != fakeResolverARN(environment.TierPreview) {
 			t.Errorf("function association = %q, want the preview resolver", arn)
 		}
 		if associated.Items[1].EventType != cftypes.EventTypeViewerResponse {
 			t.Errorf("function association = %s, want it on the viewer response", associated.Items[1].EventType)
 		}
-		if arn := aws.ToString(associated.Items[1].FunctionARN); arn != fakeEmptyBodyARN(edge.ClassPreview) {
+		if arn := aws.ToString(associated.Items[1].FunctionARN); arn != fakeEmptyBodyARN(environment.TierPreview) {
 			t.Errorf("function association = %q, want the preview empty-body dropper", arn)
 		}
 		if origin := aws.ToString(wildcard.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
@@ -295,11 +296,11 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		}
 
 		raised := w.front.named(previewWildcardName(previewBase))
-		targets := w.invalidationTargets(ledger.Scope(edge.ClassPreview, ""))
+		targets := w.invalidationTargets(ledger.Scope(environment.TierPreview, ""))
 		if !slices.Equal(targets, []string{raised.id}) {
 			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", targets, raised.id)
 		}
-		if perProject := w.invalidationTargets(ledger.Scope(edge.ClassPreview, conformanceSlug)); perProject != nil {
+		if perProject := w.invalidationTargets(ledger.Scope(environment.TierPreview, conformanceSlug)); perProject != nil {
 			t.Errorf("project invalidation targets = %v, want a shared front named once rather than per project", perProject)
 		}
 	})
@@ -314,7 +315,7 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		if err := e.DestroyPreviewWildcard(ctx, previewBase); err != nil {
 			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
-		if targets := w.invalidationTargets(ledger.Scope(edge.ClassPreview, "")); len(targets) != 0 {
+		if targets := w.invalidationTargets(ledger.Scope(environment.TierPreview, "")); len(targets) != 0 {
 			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", targets)
 		}
 	})
@@ -337,7 +338,7 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 					Quantity: ptr(int32(1)),
 					Items: []cftypes.FunctionAssociation{{
 						EventType:   cftypes.EventTypeViewerRequest,
-						FunctionARN: aws.String("arn:aws:cloudfront::123456789012:function/" + other.EdgeResolverName(edge.ClassPreview)),
+						FunctionARN: aws.String("arn:aws:cloudfront::123456789012:function/" + other.EdgeResolverName(environment.TierPreview)),
 					}},
 				},
 			},
@@ -397,7 +398,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		e, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 		promotePreview(t, stack, "pr2")
-		arn := fakeRoutesARN(edge.ClassPreview)
+		arn := fakeRoutesARN(environment.TierPreview)
 		w.store.items[arn]["other-project--pr7."+previewBase] = `{"origin":"stale"}`
 		w.store.items[arn]["www.unrelated.example"] = `{"origin":"kept"}`
 		w.store.listPage = 1
@@ -445,11 +446,11 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		}
 	})
 
-	t.Run("a container preview declares the class front on the wildcard distribution, then routes to it", func(t *testing.T) {
+	t.Run("a container preview declares the tier front on the wildcard distribution, then routes to it", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
 		stagedContainer(t, stack)
-		recordFront(t, w, edge.ClassPreview)
+		recordFront(t, w, environment.TierPreview)
 		w.front.calls = nil
 
 		if err := stack.Promote(context.Background(), edge.Promotion{
@@ -465,14 +466,14 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			t.Fatalf("routes have no entry under %q", previewHostname())
 		}
 		if published.Origin != fakeFront.Host || published.Container != "shop-prod-web-container-r3f8a1c90" {
-			t.Errorf("route = %+v, want the class front and the container the rule names", published)
+			t.Errorf("route = %+v, want the tier front and the container the rule names", published)
 		}
 		wildcard := w.front.named(previewWildcardName(previewBase))
 		if wildcard == nil {
 			t.Fatal("no wildcard distribution exists")
 		}
 		if got := containerFrontOf(wildcard.config); got != fakeFront {
-			t.Errorf("the wildcard distribution declares %+v, want the preview class front as a VPC origin", got)
+			t.Errorf("the wildcard distribution declares %+v, want the preview tier front as a VPC origin", got)
 		}
 		if w.front.count("CreateDistribution") != 0 {
 			t.Errorf("a container preview created a distribution of its own: %v", w.front.calls)
@@ -482,7 +483,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			t.Fatalf("ReconcilePreviewWildcard: %v", err)
 		}
 		if got := containerFrontOf(w.front.named(previewWildcardName(previewBase)).config); got != fakeFront {
-			t.Errorf("after a reconcile the wildcard distribution declares %+v, want the class front kept", got)
+			t.Errorf("after a reconcile the wildcard distribution declares %+v, want the tier front kept", got)
 		}
 	})
 

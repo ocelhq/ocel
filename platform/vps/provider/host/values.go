@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -35,8 +35,8 @@ func (h *Host) sweep(ctx context.Context, elevation string) error {
 	return err
 }
 
-func EnvFile(class edge.Class, container string) string {
-	return StateDir(class) + "/" + container + envFileSuffix
+func EnvFile(tier environment.Tier, container string) string {
+	return StateDir(tier) + "/" + container + envFileSuffix
 }
 
 const (
@@ -45,8 +45,8 @@ const (
 	handedUnknown = "unknown"
 )
 
-func HandedNote(class edge.Class, container string) string {
-	return StateDir(class) + "/" + handedDir + "/" + container
+func HandedNote(tier environment.Tier, container string) string {
+	return StateDir(tier) + "/" + handedDir + "/" + container
 }
 
 type Note struct {
@@ -81,17 +81,17 @@ func (h *Host) note(ctx context.Context, spec Container) error {
 		return err
 	}
 	_, err = h.ran(ctx, "note the names "+spec.App+" is handed",
-		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Class, spec.Name)), bytes.NewReader(rendered), "")
+		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Tier, spec.Name)), bytes.NewReader(rendered), "")
 	return err
 }
 
-func handedCommand(class edge.Class, container string) string {
-	note := quoted(HandedNote(class, container))
+func handedCommand(tier environment.Tier, container string) string {
+	note := quoted(HandedNote(tier, container))
 	return "if [ -f " + note + " ]; then echo " + handedKnown + "; cat " + note + "; else echo " + handedUnknown + "; fi"
 }
 
 func (h *Host) handed(ctx context.Context, spec Container) (Note, bool, error) {
-	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Class, spec.Name), nil, "")
+	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Tier, spec.Name), nil, "")
 	if err != nil {
 		return Note{}, false, err
 	}
@@ -160,7 +160,7 @@ func handing(spec Container) (handoff, error) {
 	}
 	delivery := handoff{digest: digest}
 	if len(env) > 0 {
-		delivery.path = EnvFile(spec.Class, spec.Name)
+		delivery.path = EnvFile(spec.Tier, spec.Name)
 	}
 	return delivery, nil
 }

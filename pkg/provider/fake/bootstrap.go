@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -18,7 +19,7 @@ const (
 
 type Bootstrap struct {
 	mu         sync.Mutex
-	applied    map[edge.Class][]string
+	applied    map[environment.Tier][]string
 	stale      map[string]bool
 	writer     string
 	schema     uint32
@@ -31,7 +32,7 @@ type Bootstrap struct {
 
 func NewBootstrap() *Bootstrap {
 	return &Bootstrap{
-		applied: map[edge.Class][]string{},
+		applied: map[environment.Tier][]string{},
 		stale:   map[string]bool{},
 		writer:  "1.0.0",
 		schema:  provider.BootstrapSchema,
@@ -110,32 +111,32 @@ func (b *Bootstrap) Applied() []provider.BootstrapRequest {
 	return slices.Clone(b.requests)
 }
 
-func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (provider.BootstrapDescription, error) {
+func (b *Bootstrap) Describe(_ context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	features, present := b.applied[class]
-	described := provider.BootstrapDescription{Class: class, Present: present, Unfinished: present && b.unfinished}
+	features, present := b.applied[tier]
+	described := provider.BootstrapDescription{Tier: tier, Present: present, Unfinished: present && b.unfinished}
 	if !present {
 		return described, nil
 	}
-	described.Stacks = append(described.Stacks, b.stack(class, ""))
+	described.Stacks = append(described.Stacks, b.stack(tier, ""))
 	for _, feature := range features {
-		described.Stacks = append(described.Stacks, b.stack(class, feature))
+		described.Stacks = append(described.Stacks, b.stack(tier, feature))
 	}
 	return described, nil
 }
 
-func stackNameOf(class edge.Class, feature string) string {
-	name := "fake-" + string(class)
+func stackNameOf(tier environment.Tier, feature string) string {
+	name := "fake-" + string(tier)
 	if feature != "" {
 		name += "-" + feature
 	}
 	return name
 }
 
-func (b *Bootstrap) stack(class edge.Class, feature string) provider.BootstrapStack {
+func (b *Bootstrap) stack(tier environment.Tier, feature string) provider.BootstrapStack {
 	return provider.BootstrapStack{
-		Name:          stackNameOf(class, feature),
+		Name:          stackNameOf(tier, feature),
 		Feature:       feature,
 		Present:       true,
 		Schema:        b.schema,
@@ -145,7 +146,7 @@ func (b *Bootstrap) stack(class edge.Class, feature string) provider.BootstrapSt
 }
 
 func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	described, err := b.Describe(ctx, req.Class)
+	described, err := b.Describe(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -165,7 +166,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 
 func (b *Bootstrap) withDefaultStackNames(described provider.BootstrapDescription) provider.BootstrapDescription {
 	return bootstrapplan.WithDefaultStackNames(described, b.Catalogue(), func(feature string) string {
-		return stackNameOf(described.Class, feature)
+		return stackNameOf(described.Tier, feature)
 	})
 }
 
@@ -176,18 +177,18 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 		return b.refusal
 	}
 	b.requests = append(b.requests, req)
-	b.applied[req.Class] = slices.Clone(req.Features)
+	b.applied[req.Tier] = slices.Clone(req.Features)
 	b.stale = map[string]bool{}
 	if progress != nil {
-		progress.Say("Applied the " + string(req.Class) + " bootstrap")
+		progress.Say("Applied the " + string(req.Tier) + " bootstrap")
 	}
 	return nil
 }
 
-func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Plan, error) {
+func (b *Bootstrap) PlanRemove(_ context.Context, tier environment.Tier) (provider.Plan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	features, present := b.applied[class]
+	features, present := b.applied[tier]
 	if !present {
 		return provider.Plan{}, nil
 	}
@@ -195,14 +196,14 @@ func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Pl
 	for _, feature := range features {
 		plan.Groups = append(plan.Groups, provider.ChangeGroup{
 			Kind:    provider.StackGroupKind,
-			Name:    b.stack(class, feature).Name,
+			Name:    b.stack(tier, feature).Name,
 			Feature: feature,
 			Action:  provider.ActionDelete,
 		})
 	}
 	plan.Groups = append(plan.Groups, provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
-		Name:   b.stack(class, "").Name,
+		Name:   b.stack(tier, "").Name,
 		Action: provider.ActionDelete,
 		Reason: "the core every feature above was built on",
 		Slow:   true,
@@ -232,12 +233,12 @@ func (b *Bootstrap) raisedEdges() []edge.Kind {
 	return []edge.Kind{b.front}
 }
 
-func (b *Bootstrap) Remove(_ context.Context, class edge.Class, progress progress.Progress) error {
+func (b *Bootstrap) Remove(_ context.Context, tier environment.Tier, progress progress.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	delete(b.applied, class)
+	delete(b.applied, tier)
 	if progress != nil {
-		progress.Say("Removed the " + string(class) + " bootstrap")
+		progress.Say("Removed the " + string(tier) + " bootstrap")
 	}
 	return nil
 }

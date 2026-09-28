@@ -9,8 +9,8 @@ import (
 
 const outputAppBoundaryARN = "AppBoundaryArn"
 
-func appBoundaryARNFor(ns Namespace, class string) string {
-	return "arn:aws:iam::" + "${aws:PrincipalAccount}" + ":policy/" + ns.AppBoundaryNameFor(class)
+func appBoundaryARNFor(ns Namespace, tier string) string {
+	return "arn:aws:iam::" + "${aws:PrincipalAccount}" + ":policy/" + ns.AppBoundaryNameFor(tier)
 }
 
 func appBoundaryActions() []string {
@@ -108,7 +108,7 @@ func yamlActions(actions []string) string {
 	return out.String()
 }
 
-func appBoundaryKeyStatement(ns Namespace, class, broughtKey string) string {
+func appBoundaryKeyStatement(ns Namespace, tier, broughtKey string) string {
 	if broughtKey != "" {
 		return fmt.Sprintf(`          - Effect: Allow
             Action:
@@ -121,14 +121,14 @@ func appBoundaryKeyStatement(ns Namespace, class, broughtKey string) string {
             Condition:
               ForAnyValue:StringEquals:
                 kms:ResourceAliases: %s
-`, yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(class))
+`, yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(tier))
 }
 
-func appBoundaryResource(ns Namespace, class, broughtKey string) string {
+func appBoundaryResource(ns Namespace, tier, broughtKey string) string {
 	return fmt.Sprintf(`  AppBoundary:
     Type: AWS::IAM::ManagedPolicy
     Metadata:
-      Description: "The ceiling every app role of this class is made under: a deploy may only mint roles bounded by it, so the widest such role reaches these actions, this class's variable key, the master secrets of clusters deploys create, and no IAM, STS or parameter call."
+      Description: "The ceiling every app role of this tier is made under: a deploy may only mint roles bounded by it, so the widest such role reaches these actions, this tier's variable key, the master secrets of clusters deploys create, and no IAM, STS or parameter call."
     Properties:
       ManagedPolicyName: %s
       Description: "Permissions boundary for the roles Ocel creates for apps in the %s class."
@@ -154,9 +154,9 @@ func appBoundaryResource(ns Namespace, class, broughtKey string) string {
               - ecr:BatchGetImage
               - ecr:GetDownloadUrlForLayer
             Resource: 'arn:aws:ecr:*:*:repository/%s/*'
-`, ns.AppBoundaryNameFor(class), class,
+`, ns.AppBoundaryNameFor(tier), tier,
 		yamlActions(appBoundaryActions()),
-		appBoundaryKeyStatement(ns, class, broughtKey),
+		appBoundaryKeyStatement(ns, tier, broughtKey),
 		yamlActions(appBoundarySecretActions()), appSecretARN, managedSecretClusterTagKey, appClusterARN,
 		registry.Namespace)
 }

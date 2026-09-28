@@ -20,7 +20,7 @@ const (
 	ConfigMount = ConfigDir + "/" + ConfigName
 	DataMount   = "/data"
 	PinsMount   = "/etc/caddy/pins"
-	PinsDir     = live.ClassRoot + "/certs"
+	PinsDir     = live.TierRoot + "/certs"
 	HTTPPort    = proxy.HTTPPort
 	HTTPSPort   = proxy.HTTPSPort
 )

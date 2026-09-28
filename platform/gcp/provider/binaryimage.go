@@ -11,10 +11,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func (p *Provider) pushBinary(ctx context.Context, class edge.Class, name, ref string, binary []byte, path string) error {
+func (p *Provider) pushBinary(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error {
 	base, err := p.based(ctx, staticImage)
 	if err != nil {
 		return err
@@ -23,7 +23,7 @@ func (p *Provider) pushBinary(ctx context.Context, class edge.Class, name, ref s
 	if err != nil {
 		return err
 	}
-	return p.pushImage(ctx, class, name, ref, built, nil)
+	return p.pushImage(ctx, tier, name, ref, built, nil)
 }
 
 func binaryImage(base v1.Image, binary []byte, path string) (v1.Image, error) {

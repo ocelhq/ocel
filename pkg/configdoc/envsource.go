@@ -32,7 +32,7 @@ var (
 
 type EnvSourceConfig struct {
 	Production *EnvSourceDescriptor    `json:"production,omitempty" doc:"Where production's values are read from. Left off, ocel's own store in your account (\"builtin\")."`
-	Preview    *EnvSourceDescriptor    `json:"preview,omitempty" doc:"Where every preview's class-wide values are read from. Left off, ocel's own store in your account (\"builtin\"). A value set for one named preview stays ocel's own."`
+	Preview    *EnvSourceDescriptor    `json:"preview,omitempty" doc:"Where every preview's tier-wide values are read from. Left off, ocel's own store in your account (\"builtin\"). A value set for one named preview stays ocel's own."`
 	Dev        *DevEnvSourceDescriptor `json:"dev,omitempty" doc:"Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads."`
 }
 

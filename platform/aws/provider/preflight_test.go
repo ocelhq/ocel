@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -31,7 +31,7 @@ func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
 		t.Fatalf("preflight behind %s = %v, want the container app refused by name: that edge invokes a function and would fail at promote otherwise", apigateway.Kind, err)
 	}
 	if err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: cloudfront.Kind, Deploy: provider.DeploySpec{Apps: apps}}); err != nil {
-		t.Fatalf("preflight behind %s = %v, want it to pass: that edge reaches an origin by URL with the class's secret", cloudfront.Kind, err)
+		t.Fatalf("preflight behind %s = %v, want it to pass: that edge reaches an origin by URL with the tier's secret", cloudfront.Kind, err)
 	}
 	if err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: cloudflare.Kind, Deploy: provider.DeploySpec{Apps: apps}}); err == nil {
 		t.Fatalf("preflight behind %s passed, want the container app refused: that edge presents no origin secret, so the front would answer it 404", cloudflare.Kind)
@@ -81,8 +81,8 @@ func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t 
 
 func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ClassParams{
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (bootstrap.TierParams, error) {
+		return bootstrap.TierParams{
 			EdgeCredentials: bootstrap.EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: time.Now().Add(-2 * bootstrap.EdgeKeyMaxAge)},
 			OriginSecret:    bootstrap.OriginSecret{Current: "s1", CreatedAt: time.Now().Add(-2 * bootstrap.OriginSecretMaxAge)},
 		}, nil
@@ -91,7 +91,7 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 	}
 	var progress fake.Progress
 	pre := provider.DeployPreflight{
-		Deploy:   provider.DeploySpec{Class: edge.ClassProduction},
+		Deploy:   provider.DeploySpec{Tier: environment.TierProduction},
 		Edge:     cloudflare.Kind,
 		Progress: &progress,
 	}
@@ -106,7 +106,7 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 	if len(lines) != 2 ||
 		!strings.HasPrefix(lines[0], "WARN The production edge signs into this account with access key AKOLD") ||
 		!strings.HasPrefix(lines[1], "WARN The production origin secret") {
-		t.Errorf("preflight said %q, want both ageing credentials warned about, each naming its class", lines)
+		t.Errorf("preflight said %q, want both ageing credentials warned about, each naming its tier", lines)
 	}
 }
 

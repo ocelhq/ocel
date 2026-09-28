@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func env(values map[string]string) func(string) string {
@@ -15,16 +15,16 @@ func env(values map[string]string) func(string) string {
 
 func complete() map[string]string {
 	return map[string]string{
-		"OCEL_VARS_TABLE":  "ocel-bootstrap-VarsTable-1",
-		"OCEL_VARS_KEY":    "arn:aws:kms:us-east-1:111122223333:key/vars",
-		"OCEL_INFRA_CLASS": "production",
+		"OCEL_VARS_TABLE": "ocel-bootstrap-VarsTable-1",
+		"OCEL_VARS_KEY":   "arn:aws:kms:us-east-1:111122223333:key/vars",
+		"OCEL_INFRA_TIER": "production",
 	}
 }
 
 func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *testing.T) {
 	t.Setenv("AWS_REGION", "us-east-1")
 
-	for _, missing := range []string{"OCEL_VARS_TABLE", "OCEL_VARS_KEY", "OCEL_INFRA_CLASS"} {
+	for _, missing := range []string{"OCEL_VARS_TABLE", "OCEL_VARS_KEY", "OCEL_INFRA_TIER"} {
 		t.Run("refuses to start without "+missing, func(t *testing.T) {
 			values := complete()
 			delete(values, missing)
@@ -35,24 +35,24 @@ func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *test
 		})
 	}
 
-	t.Run("refuses a class no bootstrap makes", func(t *testing.T) {
+	t.Run("refuses a tier no bootstrap makes", func(t *testing.T) {
 		values := complete()
-		values["OCEL_INFRA_CLASS"] = "staging"
+		values["OCEL_INFRA_TIER"] = "staging"
 		_, err := newSync(context.Background(), env(values))
 		if err == nil || !strings.Contains(err.Error(), "production or preview") {
-			t.Fatalf("newSync = %v, want the classes it takes named", err)
+			t.Fatalf("newSync = %v, want the tiers it takes named", err)
 		}
 	})
 
-	t.Run("syncs the class it was made for and proves its identity as its own role", func(t *testing.T) {
+	t.Run("syncs the tier it was made for and proves its identity as its own role", func(t *testing.T) {
 		values := complete()
-		values["OCEL_INFRA_CLASS"] = "preview"
+		values["OCEL_INFRA_TIER"] = "preview"
 		sync, err := newSync(context.Background(), env(values))
 		if err != nil {
 			t.Fatalf("newSync = %v", err)
 		}
-		if sync.Class != edge.ClassPreview {
-			t.Errorf("Class = %q, want preview", sync.Class)
+		if sync.Tier != environment.TierPreview {
+			t.Errorf("Tier = %q, want preview", sync.Tier)
 		}
 		if sync.Login.ProveIdentity == nil {
 			t.Error("Login has no ProveIdentity, so an Infisical env source with identity auth can never log in from here")

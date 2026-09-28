@@ -11,7 +11,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -37,8 +37,8 @@ type world struct {
 func newWorld() *world {
 	return &world{
 		outputs: map[string]map[string]string{
-			FrontStack(edge.ClassProduction): front(),
-			FrontStack(edge.ClassPreview):    front(),
+			FrontStack(environment.TierProduction): front(),
+			FrontStack(environment.TierPreview):    front(),
 		},
 		routed:   map[string]map[string]string{},
 		backends: map[string]map[string]bool{"": {notFoundBackend: true}},

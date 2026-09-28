@@ -13,6 +13,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -44,11 +45,11 @@ func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
 
 func (s *stack) slug() string { return s.state.Slug }
 
-func (s *stack) class() edge.Class { return s.state.Class }
+func (s *stack) tier() environment.Tier { return s.state.Tier }
 
 func (s *stack) spec(pointer string) apiSpec {
 	return apiSpec{
-		name:        apiName(s.p.ns, s.slug(), s.class(), pointer),
+		name:        apiName(s.p.ns, s.slug(), s.tier(), pointer),
 		region:      s.own.Region,
 		account:     accountOf(s.own.Role),
 		role:        s.own.Role,
@@ -57,7 +58,7 @@ func (s *stack) spec(pointer string) apiSpec {
 }
 
 func (s *stack) openLedger(c Clients) *ledger.Ledger {
-	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
+	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.tier(), s.slug())
 }
 
 type lazyLedger struct{ s *stack }
@@ -290,7 +291,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Pr
 		if err := s.unroutePreview(ctx, c, pointer); err != nil {
 			return edge.PruneResult{}, err
 		}
-		id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.class(), pointer))
+		id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.tier(), pointer))
 		if err != nil {
 			return edge.PruneResult{}, err
 		}
@@ -305,7 +306,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Pr
 
 func (s *stack) previewHost(pointer string) (string, string) {
 	base := s.state.GlobalPreview
-	if base == "" || s.class() != edge.ClassPreview {
+	if base == "" || s.tier() != environment.TierPreview {
 		return "", ""
 	}
 	if pointerOr(pointer) == edge.DefaultPointer {
@@ -336,7 +337,7 @@ func (s *stack) unroutePreview(ctx context.Context, c Clients, pointer string) e
 
 func (s *stack) unrouteProject(ctx context.Context, c Clients) error {
 	base := s.state.GlobalPreview
-	if base == "" || s.class() != edge.ClassPreview || s.slug() == "" {
+	if base == "" || s.tier() != environment.TierPreview || s.slug() == "" {
 		return nil
 	}
 	return deleteLabelledRules(ctx, c, edge.PreviewWildcard(base), s.slug()+edge.PreviewAppSeparator, "."+base)
@@ -483,9 +484,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	names := []string{apiName(s.p.ns, s.slug(), s.class(), "")}
+	names := []string{apiName(s.p.ns, s.slug(), s.tier(), "")}
 	for _, pointer := range pointers {
-		names = append(names, apiName(s.p.ns, s.slug(), s.class(), pointer))
+		names = append(names, apiName(s.p.ns, s.slug(), s.tier(), pointer))
 	}
 	if err := s.unrouteProject(ctx, c); err != nil {
 		errs = append(errs, err)

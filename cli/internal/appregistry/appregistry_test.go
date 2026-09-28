@@ -180,7 +180,7 @@ func TestAServerlessAppStillAsksTheProviderWhereItsImagesGo(t *testing.T) {
 	}
 }
 
-func TestTheClassTheDeployTargetsReachesTheProvider(t *testing.T) {
+func TestTheTierTheDeployTargetsReachesTheProvider(t *testing.T) {
 	native := hosting()
 
 	if _, _, err := Resolve(context.Background(), project(nil), native, environmentv1.Tier_TIER_PREVIEW); err != nil {

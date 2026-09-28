@@ -48,7 +48,7 @@ the maintainers opens an issue and agrees the change there with a maintainer fir
 contract paths are:
 
 - the `*.go` files directly in `pkg/provider`;
-- `pkg/edge/`, `pkg/progress/` and `platform/edge/contract/`;
+- `pkg/edge/`, `pkg/environment/`, `pkg/progress/` and `platform/edge/contract/`;
 - `proto/`;
 - `packages/`, `sdk/`, `python/` and `crates/`;
 - `AGENTS.md`, `CLAUDE.md`, `.greptile/rules.md` and this file.

@@ -14,7 +14,7 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorserver"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -227,9 +227,9 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	if err != nil {
 		return "", err
 	}
-	ref := names.RepositoryPath(p.options.Region, edge.ClassProduction) +
+	ref := names.RepositoryPath(p.options.Region, environment.TierProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
-	if err := p.pushImage(ctx, edge.ClassProduction, connectorImageName, ref, built, progress); err != nil {
+	if err := p.pushImage(ctx, environment.TierProduction, connectorImageName, ref, built, progress); err != nil {
 		return "", err
 	}
 	return ref, nil
@@ -303,13 +303,13 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progr
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	var errs []error
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		changed, err := clients.bindKeyRoles(ctx, class, member, connectorKeyRoles, wanted)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		changed, err := clients.bindKeyRoles(ctx, tier, member, connectorKeyRoles, wanted)
 		if err != nil && len(wanted) > 0 {
 			return err
 		}
 		if changed && len(wanted) > 0 {
-			ensureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(class) + " KMS key")
+			ensureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(tier) + " KMS key")
 		}
 		errs = append(errs, err)
 	}
@@ -359,13 +359,13 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress progress.Pr
 	if err != nil {
 		return err
 	}
-	packagePath := repositoryPath(clients, clients.Repository(edge.ClassProduction)) +
+	packagePath := repositoryPath(clients, clients.Repository(environment.TierProduction)) +
 		"/packages/" + connectorImageName
 	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
 		packagePath).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the connector images at %s: %w", packagePath, err)
 	}
-	ensureProgress(progress).Say("Deleted the connector's images from repository " + clients.Repository(edge.ClassProduction))
+	ensureProgress(progress).Say("Deleted the connector's images from repository " + clients.Repository(environment.TierProduction))
 	return nil
 }
 

@@ -47,8 +47,8 @@ func TestATransformIsAskedAboutThePostgresABoxIsAboutToStart(t *testing.T) {
 	if _, _, err := patched(t, pass); err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if pass.seen.Provider != "vps" || pass.seen.EnvClass != "production" {
-		t.Errorf("the transform was told %q in %q, want the vps branch in production", pass.seen.Provider, pass.seen.EnvClass)
+	if pass.seen.Provider != "vps" || pass.seen.EnvTier != "production" {
+		t.Errorf("the transform was told %q in %q, want the vps branch in production", pass.seen.Provider, pass.seen.EnvTier)
 	}
 	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0] != (transform.Resource{Type: "postgres", Name: "main"}) {
 		t.Errorf("the transform was offered %v, want the one postgres being provisioned", pass.seen.Resources)

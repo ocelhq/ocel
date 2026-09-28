@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -33,39 +33,39 @@ type Records struct {
 	Clients *Clients
 }
 
-func (r Records) collection(name records.Name) (*firestore.CollectionRef, edge.Class, error) {
-	class, named := stackrecords.ClassOf(name)
+func (r Records) collection(name records.Name) (*firestore.CollectionRef, environment.Tier, error) {
+	tier, named := stackrecords.TierOf(name)
 	if !named {
-		return nil, "", Classless(name)
+		return nil, "", Tierless(name)
 	}
 	client, err := r.Clients.Firestore()
 	if err != nil {
-		return nil, class, err
+		return nil, tier, err
 	}
-	return ClassRecords(client, class), class, nil
+	return TierRecords(client, tier), tier, nil
 }
 
-func ClassRecords(client *firestore.Client, class edge.Class) *firestore.CollectionRef {
-	return client.Collection(recordCollection + string(class))
+func TierRecords(client *firestore.Client, tier environment.Tier) *firestore.CollectionRef {
+	return client.Collection(recordCollection + string(tier))
 }
 
-func (r Records) absent(ctx context.Context, collection *firestore.CollectionRef, class edge.Class) error {
+func (r Records) absent(ctx context.Context, collection *firestore.CollectionRef, tier environment.Tier) error {
 	documents := collection.Select().Limit(1).Documents(ctx)
 	defer documents.Stop()
 	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
-		return r.unbootstrapped(class)
+		return r.unbootstrapped(tier)
 	}
 	return records.ErrNotFound
 }
 
 func (r Records) Read(ctx context.Context, name records.Name) (records.Record, error) {
-	collection, class, err := r.collection(name)
+	collection, tier, err := r.collection(name)
 	if err != nil {
 		return records.Record{}, err
 	}
 	snapshot, err := collection.Doc(documentID(name)).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return records.Record{}, r.absent(ctx, collection, class)
+		return records.Record{}, r.absent(ctx, collection, tier)
 	}
 	if err != nil {
 		return records.Record{}, fmt.Errorf("read %s: %w", name, err)
@@ -74,7 +74,7 @@ func (r Records) Read(ctx context.Context, name records.Name) (records.Record, e
 }
 
 func (r Records) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	collection, class, err := r.collection(record.Name)
+	collection, tier, err := r.collection(record.Name)
 	if err != nil {
 		return "", err
 	}
@@ -90,13 +90,13 @@ func (r Records) Write(ctx context.Context, record records.Record) (records.Revi
 		return writeInto(tx, collection, record, next)
 	})
 	if err != nil {
-		return "", r.writeFailed(record.Name, class, err)
+		return "", r.writeFailed(record.Name, tier, err)
 	}
 	return next, nil
 }
 
 func (r Records) WritePair(ctx context.Context, first, second records.Record) error {
-	collection, class, err := r.collection(first.Name)
+	collection, tier, err := r.collection(first.Name)
 	if err != nil {
 		return err
 	}
@@ -133,13 +133,13 @@ func (r Records) WritePair(ctx context.Context, first, second records.Record) er
 		return nil
 	})
 	if err != nil {
-		return r.writeFailed(first.Name, class, err)
+		return r.writeFailed(first.Name, tier, err)
 	}
 	return nil
 }
 
 func (r Records) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
-	collection, class, err := r.collection(name)
+	collection, tier, err := r.collection(name)
 	if err != nil {
 		return err
 	}
@@ -162,13 +162,13 @@ func (r Records) Remove(ctx context.Context, name records.Name, expected records
 		return tx.Delete(reference)
 	})
 	if err != nil {
-		return r.writeFailed(name, class, err)
+		return r.writeFailed(name, tier, err)
 	}
 	return nil
 }
 
 func (r Records) List(ctx context.Context, under records.Name) ([]records.Record, error) {
-	collection, class, err := r.collection(under)
+	collection, tier, err := r.collection(under)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (r Records) List(ctx context.Context, under records.Name) ([]records.Record
 		}
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return nil, r.unbootstrapped(class)
+				return nil, r.unbootstrapped(tier)
 			}
 			return nil, fmt.Errorf("read everything under %s: %w", under, err)
 		}
@@ -245,20 +245,20 @@ func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef
 	return revisionOf(snapshot), true, nil
 }
 
-func (r Records) writeFailed(name records.Name, class edge.Class, err error) error {
+func (r Records) writeFailed(name records.Name, tier environment.Tier, err error) error {
 	if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
 		return err
 	}
 	if status.Code(err) == codes.NotFound {
-		return r.unbootstrapped(class)
+		return r.unbootstrapped(tier)
 	}
 	return fmt.Errorf("write %s: %w", name, err)
 }
 
-func (r Records) unbootstrapped(class edge.Class) error {
+func (r Records) unbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to store a record.\nRun `%s` to create it, then try again",
-		r.Clients.Database(), provider.BootstrapCommand(class))
+		r.Clients.Database(), provider.BootstrapCommand(tier))
 }
 
 func recordOf(name records.Name, snapshot *firestore.DocumentSnapshot) records.Record {

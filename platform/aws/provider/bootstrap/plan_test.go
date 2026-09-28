@@ -12,22 +12,22 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider.ChangeGroup {
+func planned(t *testing.T, stacks cfn.API, tier string, req Request) []provider.ChangeGroup {
 	t.Helper()
 
 	ctx := context.Background()
-	read, err := Read(ctx, stacks, defaultNamespace, class)
+	read, err := Read(ctx, stacks, defaultNamespace, tier)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
 	deployed := read.Deployed
-	described := provider.BootstrapDescription{Class: edge.Class(class), Present: deployed.Present}
+	described := provider.BootstrapDescription{Tier: environment.Tier(tier), Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
@@ -39,7 +39,7 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 	}
 	groups, err := PlanChanges(ctx, stacks, read, req, bootstrapplan.ChangeGroups(
 		WithDefaultStackNames(defaultNamespace, described), Catalogue(),
-		provider.BootstrapRequest{Class: edge.Class(class), Features: req.Features, Remove: req.Remove}))
+		provider.BootstrapRequest{Tier: environment.Tier(tier), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}
@@ -77,7 +77,7 @@ func (f *fakeCFN) misstamp(stackName string) {
 }
 
 func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
-	groups := planned(t, newFakeCFN(), ClassProduction, everything())
+	groups := planned(t, newFakeCFN(), TierProduction, everything())
 
 	core := groupNamed(t, groups, coreStackName)
 	if core.Action != provider.ActionCreate {
@@ -101,14 +101,14 @@ func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 
 func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack,
 		change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),
 		change(cfntypes.ChangeActionAdd, "Revalidator", "AWS::Lambda::Function", cfntypes.ReplacementFalse))
 	before := stacks.updates
 
-	group := groupNamed(t, planned(t, stacks, ClassProduction, everything()), stack)
+	group := groupNamed(t, planned(t, stacks, TierProduction, everything()), stack)
 	if group.Action != provider.ActionUpdate {
 		t.Fatalf("%s is %q, want it updated where its content is behind", stack, group.Action)
 	}
@@ -132,7 +132,7 @@ func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 
 func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 	stacks.fallBehind(stack)
 	replacing := change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)
 	replacing.Details = []cfntypes.ResourceChangeDetail{{
@@ -144,7 +144,7 @@ func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 	}}
 	stacks.plan(stack, replacing)
 
-	group := groupNamed(t, planned(t, stacks, ClassProduction, everything()), stack)
+	group := groupNamed(t, planned(t, stacks, TierProduction, everything()), stack)
 	if reason := changeNamed(t, group, "RevalidateQueue").Reason; !strings.Contains(reason, "FifoQueue") {
 		t.Errorf("the replacement reads %q, want it to name the property that forces it", reason)
 	}
@@ -152,10 +152,10 @@ func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 
 func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 	stacks.misstamp(stack)
 
-	groups := planned(t, stacks, ClassProduction, everything())
+	groups := planned(t, stacks, TierProduction, everything())
 	group := groupNamed(t, groups, stack)
 	if group.Action != provider.ActionUpdate {
 		t.Errorf("%s is %q, want it updated where only its stamp is behind — the restamp is on the apply path", stack, group.Action)
@@ -213,7 +213,7 @@ func (g *gatedPlans) CreateChangeSet(ctx context.Context, in *cloudformation.Cre
 func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
 	ctx := context.Background()
-	read, err := Read(ctx, stacks, defaultNamespace, ClassProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, TierProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	for _, feature := range append([]string{""}, featureNames()...) {
 		stack := coreStackName
 		if feature != "" {
-			stack = defaultNamespace.FeatureStackName(feature, ClassProduction)
+			stack = defaultNamespace.FeatureStackName(feature, TierProduction)
 		}
 		stacks.fallBehind(stack)
 		groups = append(groups, provider.ChangeGroup{
@@ -241,8 +241,8 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	if len(plan) != len(groups)+1 {
 		t.Fatalf("the plan has %d groups, want %d: every stack asked for, plus the runtime", len(plan), len(groups)+1)
 	}
-	if last := plan[len(plan)-1]; last.Name != runtimeStack(ClassProduction) {
-		t.Errorf("the plan's last group is %s, want the runtime stack %s", last.Name, runtimeStack(ClassProduction))
+	if last := plan[len(plan)-1]; last.Name != runtimeStack(TierProduction) {
+		t.Errorf("the plan's last group is %s, want the runtime stack %s", last.Name, runtimeStack(TierProduction))
 	}
 	for i, group := range plan[:len(groups)] {
 		if group.Name != groups[i].Name {
@@ -265,10 +265,10 @@ func (unplannable) CreateChangeSet(context.Context, *cloudformation.CreateChange
 
 func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 	stacks.fallBehind(stack)
 
-	group := groupNamed(t, planned(t, unplannable{stacks}, ClassProduction, everything()), stack)
+	group := groupNamed(t, planned(t, unplannable{stacks}, TierProduction, everything()), stack)
 	if group.Action != provider.ActionUpdate {
 		t.Fatalf("%s is %q, want it still updated where the diff could not be read", stack, group.Action)
 	}
@@ -282,9 +282,9 @@ func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 
 func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 
-	groups := planned(t, stacks, ClassProduction, Request{
+	groups := planned(t, stacks, TierProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
 		Remove:   []string{FeatureISR},
 	})
@@ -308,10 +308,10 @@ func (f *fakeCFN) setTemplate(stackName, body string) {
 
 func TestPlanListsTheResourcesTheProvisionedStackContainsNotTheOnesThisBuildWouldRender(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 	stacks.setTemplate(stack, leftoverTemplate)
 
-	group := groupNamed(t, planned(t, stacks, ClassProduction, Request{
+	group := groupNamed(t, planned(t, stacks, TierProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
 		Remove:   []string{FeatureISR},
 	}), stack)
@@ -334,9 +334,9 @@ func (unlistable) ListStackResources(context.Context, *cloudformation.ListStackR
 
 func TestPlanFallsBackToTheTemplateWhenItCannotReadTheProvisionedStack(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 
-	group := groupNamed(t, planned(t, unlistable{stacks}, ClassProduction, Request{
+	group := groupNamed(t, planned(t, unlistable{stacks}, TierProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
 		Remove:   []string{FeatureISR},
 	}), stack)
@@ -354,11 +354,11 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore())
 	req := Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, req, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, TierProduction, req, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
-	read, err := Read(ctx, stacks, defaultNamespace, ClassProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, TierProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
-	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(provider.FeatureVarsKey, ClassProduction))
+	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(provider.FeatureVarsKey, TierProduction))
 	for _, change := range group.Changes {
 		if change.Name == "VarsKey" || change.Name == "VarsKeyAlias" {
 			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key or an alias this account brought", change.Name)

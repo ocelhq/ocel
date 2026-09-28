@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type HostVerdict int
@@ -20,6 +20,6 @@ type HostCheck struct {
 }
 
 type HostCheckRequest struct {
-	Class     edge.Class
+	Tier      environment.Tier
 	Hostnames []string
 }

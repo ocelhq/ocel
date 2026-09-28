@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -68,7 +68,7 @@ func (w *watchedRecords) lists() []records.Name {
 
 func statusesIn(t *testing.T, store envvars.Store) []records.Record {
 	t.Helper()
-	found, err := store.Records.List(context.Background(), records.Name{records.RootEnvSourceStatus, string(edge.ClassProduction)})
+	found, err := store.Records.List(context.Background(), records.Name{records.RootEnvSourceStatus, string(environment.TierProduction)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func statusesIn(t *testing.T, store envvars.Store) []records.Record {
 func referenceCredentials(t *testing.T, store envvars.Store, project, owner string) {
 	t.Helper()
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"} {
-		if _, err := store.SetReference(context.Background(), scopeOf(project), classWide("", key), envvars.Target{Project: owner, Cell: envvars.Cell{Key: key}}); err != nil {
+		if _, err := store.SetReference(context.Background(), scopeOf(project), tierWide("", key), envvars.Target{Project: owner, Cell: envvars.Cell{Key: key}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -97,12 +97,12 @@ func TestForgettingAProjectForgetsTheStatusItRegisteredUnderEvenAfterItsCredenti
 	}
 
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"} {
-		if _, err := store.Delete(ctx, scopeOf("shop"), classWide("", key), nil); err != nil {
+		if _, err := store.Delete(ctx, scopeOf("shop"), tierWide("", key), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	setCredentials(t, store, "shop", "client-id", "client-secret")
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	if left := statusesIn(t, store); len(left) != 0 {
@@ -141,7 +141,7 @@ func TestAScheduledSyncMovesAProjectWhoseCredentialMovedToItsNewStatus(t *testin
 	}
 
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"} {
-		if _, err := store.Delete(ctx, scopeOf("shop"), classWide("", key), nil); err != nil {
+		if _, err := store.Delete(ctx, scopeOf("shop"), tierWide("", key), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -149,7 +149,7 @@ func TestAScheduledSyncMovesAProjectWhoseCredentialMovedToItsNewStatus(t *testin
 	if err := sync.CopyScheduled(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	if left := statusesIn(t, store); len(left) != 0 {
@@ -166,7 +166,7 @@ func TestForgettingAProjectReadsNoOtherProjectsRegistration(t *testing.T) {
 		register(t, store, infisicalRegistration(project, "https://infisical.example.com", cloudIdentity, ""))
 	}
 
-	if err := envsource.ForgetProject(context.Background(), store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(context.Background(), store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	for _, under := range watched.lists() {
@@ -194,7 +194,7 @@ func TestASyncUnderWayWhenItsProjectIsForgottenLeavesNoStatusBehind(t *testing.T
 	registration := infisicalRegistration("shop", host, cloudIdentity, "")
 	register(t, store, registration)
 	ctx := context.Background()
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -219,11 +219,11 @@ func TestForgettingAProjectAgainAfterItFailedPartWayLeavesNoStatusBehind(t *test
 	watched := &watchedRecords{Store: store.Records, failRemovesUnder: records.Name{records.RootEnvSourceStatus}}
 	store.Records = watched
 
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err == nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err == nil {
 		t.Fatal("ForgetProject() whose status could not be removed = nil, want the failure")
 	}
 	watched.removeAgain()
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	if left := statusesIn(t, store); len(left) != 0 {

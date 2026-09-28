@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/records"
 )
@@ -26,8 +26,8 @@ type EnvironmentMeta struct {
 	CreatedAt int64  `json:"created_at,omitempty"`
 }
 
-func RecordEnvironmentMeta(ctx context.Context, store records.Store, class edge.Class, slug, env, label string) error {
-	name := EnvironmentRecord(class, slug, env)
+func RecordEnvironmentMeta(ctx context.Context, store records.Store, tier environment.Tier, slug, env, label string) error {
+	name := EnvironmentRecord(tier, slug, env)
 	recorded, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -53,8 +53,8 @@ func RecordEnvironmentMeta(ctx context.Context, store records.Store, class edge.
 	return nil
 }
 
-func EnvironmentMetas(ctx context.Context, store records.Store, class edge.Class, slug string) (map[string]EnvironmentMeta, error) {
-	recorded, err := store.List(ctx, EnvironmentsRecord(class, slug))
+func EnvironmentMetas(ctx context.Context, store records.Store, tier environment.Tier, slug string) (map[string]EnvironmentMeta, error) {
+	recorded, err := store.List(ctx, EnvironmentsRecord(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
@@ -69,8 +69,8 @@ func EnvironmentMetas(ctx context.Context, store records.Store, class edge.Class
 	return meta, nil
 }
 
-func StackNames(ctx context.Context, store records.Store, class edge.Class, slug string) ([]naming.StackName, error) {
-	recorded, err := store.List(ctx, StacksRecord(class, slug))
+func StackNames(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]naming.StackName, error) {
+	recorded, err := store.List(ctx, StacksRecord(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
@@ -86,7 +86,7 @@ func StackNames(ctx context.Context, store records.Store, class edge.Class, slug
 }
 
 func PreviewEnvironments(ctx context.Context, store records.Store, slug string) ([]Environment, error) {
-	stacks, err := StackNames(ctx, store, edge.ClassPreview, slug)
+	stacks, err := StackNames(ctx, store, environment.TierPreview, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func PreviewEnvironments(ctx context.Context, store records.Store, slug string) 
 		persisted[stack.Env] = persisted[stack.Env] || stack.IsInfra()
 	}
 	slices.Sort(identities)
-	meta, err := EnvironmentMetas(ctx, store, edge.ClassPreview, slug)
+	meta, err := EnvironmentMetas(ctx, store, environment.TierPreview, slug)
 	if err != nil {
 		return nil, err
 	}

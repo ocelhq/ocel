@@ -12,7 +12,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envsourcewire"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -113,7 +113,7 @@ func (s *deployFakeProviderServer) SyncEnvSource(_ context.Context, req *envvars
 		}
 		if registration.Descriptor.Kind == envsource.Exec {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-				"%s in %s reads from exec, whose command runs where ocel deploys: deploy again to read it", req.GetSlug(), fakeClass(req.GetTier())))
+				"%s in %s reads from exec, whose command runs where ocel deploys: deploy again to read it", req.GetSlug(), fakeTier(req.GetTier())))
 		}
 	} else {
 		descriptor, read := envsourcewire.Decode(req.GetEnvSource())
@@ -228,15 +228,15 @@ func clearFakeProvenance(tier environmentv1.Tier, slug string) error {
 	return nil
 }
 
-func refuseFakeCredentialUnset(store FakeStore, tier environmentv1.Tier, slug string, descriptor envsource.Descriptor) error {
-	class := edge.Class(fakeClass(tier))
+func refuseFakeCredentialUnset(store FakeStore, requested environmentv1.Tier, slug string, descriptor envsource.Descriptor) error {
+	tier := environment.Tier(fakeTier(requested))
 	var messages []string
 	var refused []*envvarsv1.CredentialRefusal
 	for _, name := range descriptor.CredentialVariables() {
-		if store[FakeCoordinateID(tier, &envvarsv1.Coordinate{Slug: slug, Key: name})].LiveVersion() > 0 {
+		if store[FakeCoordinateID(requested, &envvarsv1.Coordinate{Slug: slug, Key: name})].LiveVersion() > 0 {
 			continue
 		}
-		reason := fmt.Sprintf("has no value in %s: set it with `%s`", class, envsource.SetCommand(class, name))
+		reason := fmt.Sprintf("has no value in %s: set it with `%s`", tier, envsource.SetCommand(tier, name))
 		messages = append(messages, fmt.Sprintf("%s logs in with %s, which %s", descriptor.ID(), name, reason))
 		refused = append(refused, &envvarsv1.CredentialRefusal{Variable: name, Unset: true, Reason: reason})
 	}
@@ -254,7 +254,7 @@ func refuseFakeCredentialUnset(store FakeStore, tier environmentv1.Tier, slug st
 	return wire
 }
 
-func fakeClass(tier environmentv1.Tier) string {
+func fakeTier(tier environmentv1.Tier) string {
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		return "preview"
 	}
@@ -363,5 +363,5 @@ func refuseFakeEnvSourceOwned(store FakeStore, tier environmentv1.Tier, at *envv
 	}
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"%s is read from %s, which owns every value %s sets for all of %s: change it there",
-		at.GetKey(), registration.Descriptor.ID(), at.GetSlug(), fakeClass(tier)))
+		at.GetKey(), registration.Descriptor.ID(), at.GetSlug(), fakeTier(tier)))
 }

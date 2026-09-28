@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -20,7 +21,7 @@ type previewEntry struct {
 }
 
 func (e *Edge) previewRecord() records.Name {
-	return append(stackrecords.EdgeStacksRecord(edge.ClassPreview), string(Kind), "preview-wildcard")
+	return append(stackrecords.EdgeStacksRecord(environment.TierPreview), string(Kind), "preview-wildcard")
 }
 
 func (e *Edge) recordedPreview(ctx context.Context) (previewEntry, error) {
@@ -64,7 +65,7 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			Kind, wildcard)
 	}
 	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
-	front, err := e.raiseServing(ctx, edge.ClassPreview, entry, progress.DiscardProgress())
+	front, err := e.raiseServing(ctx, environment.TierPreview, entry, progress.DiscardProgress())
 	if err != nil {
 		return "", err
 	}
@@ -88,11 +89,11 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	}
 	if len(served) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s still serves the previews of %s on the %s front of class %s, and releasing the host rule would leave every one of them "+
+			"%s still serves the previews of %s on the %s front of tier %s, and releasing the host rule would leave every one of them "+
 				"answering a 404 from the load balancer: take those previews down with `ocel destroy preview` in each project first",
-			wildcard, strings.Join(served, ", "), Kind, edge.ClassPreview)
+			wildcard, strings.Join(served, ", "), Kind, environment.TierPreview)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: edge.ClassPreview})
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: environment.TierPreview})
 	if err != nil {
 		return err
 	}
@@ -103,7 +104,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 		}
 	}
 	if front.provisioned() {
-		if _, err := e.raiseServing(ctx, edge.ClassPreview, previewEntry{}, progress.DiscardProgress()); err != nil {
+		if _, err := e.raiseServing(ctx, environment.TierPreview, previewEntry{}, progress.DiscardProgress()); err != nil {
 			return err
 		}
 	}
@@ -117,7 +118,7 @@ func previewResourceName(baseDomain string, role ...string) string {
 	segments := []naming.Segment{
 		naming.Fixed("ocel"),
 		naming.Fixed(string(Kind)),
-		naming.Fixed(string(edge.ClassPreview)),
+		naming.Fixed(string(environment.TierPreview)),
 		naming.Compressible(naming.SanitizeHost(baseDomain)),
 	}
 	for _, each := range role {

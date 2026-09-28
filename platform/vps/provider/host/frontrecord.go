@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -18,9 +18,9 @@ import (
 const FrontRecordPath = live.StateRoot + "/proxy.json"
 
 type frontRecord struct {
-	Proxy   *Front     `json:"proxy"`
-	Project string     `json:"project,omitempty"`
-	Class   edge.Class `json:"class"`
+	Proxy   *Front           `json:"proxy"`
+	Project string           `json:"project,omitempty"`
+	Tier    environment.Tier `json:"tier"`
 }
 
 func (f Front) recorded() *Front {
@@ -39,9 +39,9 @@ func (r frontRecord) front() Front {
 
 func (r frontRecord) setter() string {
 	if r.Project == "" {
-		return string(r.Class)
+		return string(r.Tier)
 	}
-	return r.Project + "/" + string(r.Class)
+	return r.Project + "/" + string(r.Tier)
 }
 
 func (r frontRecord) item() (Item, error) {
@@ -188,7 +188,7 @@ func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, err
 	if err := json.Unmarshal([]byte(said), &record); err != nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s on %s is not a record this ocel can read: %v\nRemove it and run `%s`",
-			FrontRecordPath, h.named(), err, provider.BootstrapCommand(edge.ClassProduction))
+			FrontRecordPath, h.named(), err, provider.BootstrapCommand(environment.TierProduction))
 	}
 	return &record, nil
 }
@@ -201,7 +201,7 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 	if record == nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
-			FrontRecordPath, h.named(), provider.BootstrapCommand(edge.ClassProduction))
+			FrontRecordPath, h.named(), provider.BootstrapCommand(environment.TierProduction))
 	}
 	return h.proxyOption.agrees(record.front(), record.setter())
 }
@@ -213,7 +213,7 @@ func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) 
 	if err != nil {
 		return Reading{}, err
 	}
-	record := frontRecord{Proxy: b.host.proxyOption.recorded(), Project: b.project, Class: read.Class}
+	record := frontRecord{Proxy: b.host.proxyOption.recorded(), Project: b.project, Tier: read.Tier}
 	switch {
 	case existing != nil:
 		if err := b.host.proxyOption.agrees(existing.front(), existing.setter()); err != nil {

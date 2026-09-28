@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -33,7 +34,7 @@ func aBucket(t *testing.T, name string, public bool) resources.ProvisionRequest 
 		t.Fatal(err)
 	}
 	return resources.ProvisionRequest{
-		Ref: provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref: provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Resource: provider.Resource{
 			Name: name, Type: provider.BindingBucket,
 			Bucket: &provider.BucketSpec{
@@ -70,7 +71,7 @@ func TestADeclaredBucketRunsAStoreOnlyItsProjectReaches(t *testing.T) {
 	runCommand := machine.commands()[machine.at("'docker' 'run'")]
 	for _, want := range []string{
 		"'--network' 'ocel-production-shop'",
-		"ocel.class=production",
+		"ocel.tier=production",
 		"ocel.project=shop",
 		"'--cap-drop' 'ALL'",
 		"@sha256:",
@@ -152,7 +153,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, host.KeptPath(edge.ClassProduction, "prod-infra-store-s3")) {
+	if !strings.Contains(joined, host.KeptPath(environment.TierProduction, "prod-infra-store-s3")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
 	for _, fed := range machine.feeds() {
@@ -160,7 +161,7 @@ func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 			t.Fatalf("the store's root credential was sent to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
-	handed := host.EnvFile(edge.ClassProduction, "prod-infra-store-s3")
+	handed := host.EnvFile(environment.TierProduction, "prod-infra-store-s3")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
 		t.Fatalf("the file the store's credential was handed over in is left on the box:\n%s", joined)
 	}
@@ -303,7 +304,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
-		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
+		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
@@ -316,7 +317,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 func anInfraStack(t *testing.T) provider.StackRef {
 	t.Helper()
 	return provider.StackRef{
-		Project: "shop", Class: edge.ClassProduction, Name: naming.InfraStack("prod"),
+		Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack("prod"),
 	}
 }
 
@@ -396,7 +397,7 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
-		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
+		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)

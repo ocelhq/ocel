@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -68,16 +69,16 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -97,16 +98,16 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -126,7 +127,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
 		if item.Owner != deployLogin || item.Kind == "linux:user" {
 			continue
 		}
@@ -148,7 +149,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	installing := vps.NewProvider(vps.Options{
 		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
 		DeployKey: named,
@@ -157,7 +158,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	closing(t, installing)
@@ -181,7 +182,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, taken := range []edge.Class{edge.ClassPreview, class} {
+	for _, taken := range []environment.Tier{environment.TierPreview, tier} {
 		described, err := reading.Describe(ctx, taken)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", taken, err)
@@ -197,6 +198,6 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 		}
 	}
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
-		t.Errorf("%s still exists as %q after a keyless Remove() of every class", deployLogin, left)
+		t.Errorf("%s still exists as %q after a keyless Remove() of every tier", deployLogin, left)
 	}
 }

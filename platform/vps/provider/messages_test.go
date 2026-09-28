@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/registry"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
@@ -53,7 +53,7 @@ func TestRemovingTheLastBucketSaysWhatItRemovedAndThatTheStoreGoesWithIt(t *test
 
 	progress := &fake.Progress{}
 	err := over(&box{kept: sealedRootKey()}).RemoveResource(context.Background(),
-		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)}, bindingBucket(), progress)
+		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)}, bindingBucket(), progress)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
@@ -68,7 +68,7 @@ func TestABucketWhoseStoreKeepsNoCredentialIsSaidToBeSkipped(t *testing.T) {
 
 	progress := &fake.Progress{}
 	err := over(&box{}).RemoveResource(context.Background(),
-		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)}, bindingBucket(), progress)
+		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)}, bindingBucket(), progress)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestRemovingAPostgresNamesTheContainerAndTheDataItTakes(t *testing.T) {
 
 	progress := &fake.Progress{}
 	err := over(&box{}).RemoveResource(context.Background(),
-		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
+		provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: aStackName(t)},
 		provider.Binding{Type: provider.BindingPostgres, Name: "main"}, progress)
 	if err != nil {
 		t.Fatalf("RemoveResource(postgres) = %v", err)

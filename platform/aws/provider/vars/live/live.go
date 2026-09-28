@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
@@ -18,7 +18,7 @@ type Manifest struct {
 	Slug        string         `json:"slug"`
 	Table       string         `json:"table"`
 	KeyARN      string         `json:"keyArn"`
-	Class       string         `json:"class"`
+	Tier        string         `json:"tier"`
 	Environment string         `json:"environment,omitempty"`
 	Keys        []live.Key     `json:"keys"`
 	Bindings    []live.Binding `json:"bindings,omitempty"`
@@ -33,7 +33,7 @@ func Render(m Manifest) ([]byte, error) {
 	for _, component := range []struct{ name, value string }{
 		{"project slug", m.Slug},
 		{"variable table", m.Table},
-		{"environment class", m.Class},
+		{"environment tier", m.Tier},
 	} {
 		if component.value == "" {
 			return nil, fmt.Errorf("the live-value manifest names %d keys but no %s", len(m.Keys)+len(m.Bindings), component.name)
@@ -41,7 +41,7 @@ func Render(m Manifest) ([]byte, error) {
 	}
 	if m.KeyARN == "" {
 		return nil, fmt.Errorf("the live-value manifest names %d keys but the %s bootstrap has no key to read them through.\nRun `%s` to add one, then deploy again",
-			len(m.Keys)+len(m.Bindings), m.Class, provider.BootstrapVarsKeyCommand(edge.Class(m.Class)))
+			len(m.Keys)+len(m.Bindings), m.Tier, provider.BootstrapVarsKeyCommand(environment.Tier(m.Tier)))
 	}
 	return json.Marshal(m)
 }

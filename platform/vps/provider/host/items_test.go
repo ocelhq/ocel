@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -17,26 +17,26 @@ import (
 
 const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 
-func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing.T) {
+func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
 	}
 	for name, want := range map[string]string{
-		classRoot:                        rootOwner,
-		ClassDir(edge.ClassProduction):   rootOwner,
-		boxstore.Dir:                     rootOwner,
-		boxstore.RecordsHelper:           rootOwner,
-		releasesHelper:                   rootOwner,
-		stateRoot:                        deployUser,
-		releasesRoot:                     deployUser,
-		sshDir:                           deployUser,
-		authorizedKeys:                   deployUser,
-		StateDir(edge.ClassProduction):   deployUser,
-		RecordsDir(edge.ClassProduction): deployUser,
+		tierRoot:                               rootOwner,
+		TierDir(environment.TierProduction):    rootOwner,
+		boxstore.Dir:                           rootOwner,
+		boxstore.RecordsHelper:                 rootOwner,
+		releasesHelper:                         rootOwner,
+		stateRoot:                              deployUser,
+		releasesRoot:                           deployUser,
+		sshDir:                                 deployUser,
+		authorizedKeys:                         deployUser,
+		StateDir(environment.TierProduction):   deployUser,
+		RecordsDir(environment.TierProduction): deployUser,
 	} {
 		if owners[name] != want {
 			t.Errorf("%s is written to %q, want %q: a path with two owners is a path with none", name, owners[name], want)
@@ -51,7 +51,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 	if tableDir == stateRoot || tableDir == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", tableDir)
 	}
-	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == tableDir })
 	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), live.RoutingTable) })
 	if made < 0 || table < 0 || made > table {
@@ -67,7 +67,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
@@ -84,7 +84,7 @@ func TestTheDeployKeysAreTheOnesTheItemContains(t *testing.T) {
 
 	keys := []byte(aKey + "\n")
 	var written Item
-	for _, item := range Items(edge.ClassProduction, keys, ArchAMD64, Front{}) {
+	for _, item := range Items(environment.TierProduction, keys, ArchAMD64, Front{}) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -133,14 +133,14 @@ func TestKeysNamedByAPathThatContainsNoneAreRefused(t *testing.T) {
 func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatExistsIsKept(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	fresh := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: map[string]string{}}), principal().ID())
+	fresh := planFor(planned(Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: map[string]string{}}), principal().ID())
 	if fresh.Action != provider.ActionCreate {
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	installed := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
+	installed := Reading{Arch: ArchAMD64, Tier: tier, Keys: keys, Observed: digests(Items(tier, keys, ArchAMD64, Front{}))}
 	if kept := planFor(planned(installed), principal().ID()); kept.Action != provider.ActionKeep {
 		t.Errorf("a host whose principal is unchanged from what ocel writes plans %q, want it kept", kept.Action)
 	}
@@ -154,9 +154,9 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatExistsIsKept(t *testing.T
 func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	installed := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(installed)}
+	tier := environment.TierProduction
+	installed := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	moved := Reading{Arch: ArchAMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(installed)}
 	for _, change := range planned(moved) {
 		want := provider.ActionKeep
 		switch change.Name {
@@ -171,27 +171,27 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	}
 }
 
-func TestThePrincipalGoesWithTheLastClassAndStaysWhileASiblingRemains(t *testing.T) {
+func TestThePrincipalGoesWithTheLastTierAndStaysWhileASiblingRemains(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
 	installed := digests(Items(production, keys, ArchAMD64, Front{}))
 
-	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
+	alone := removing(Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
 	if taken < 0 {
-		t.Fatal("destroying the last class leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
+		t.Fatal("destroying the last tier leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
 	}
 	if state := slices.IndexFunc(alone, func(r removal) bool { return r.path == stateRoot }); state > taken {
 		t.Error("the principal is removed before its home, and userdel over a home ocel still keeps state in is a home nothing owns")
 	}
 
 	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
-	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsPresent{})
+	shared := removing(Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
 	for _, r := range shared {
 		if r.kind == KindUser {
-			t.Error("destroying one class takes the deploy principal an installed sibling still deploys as")
+			t.Error("destroying one tier takes the deploy principal an installed sibling still deploys as")
 		}
 	}
 }
@@ -199,21 +199,21 @@ func TestThePrincipalGoesWithTheLastClassAndStaysWhileASiblingRemains(t *testing
 func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	installed := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
 	for name, sibling := range map[string]Reading{
-		"the last class on the host": {Class: preview, Observed: map[string]string{}},
-		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
+		"the last tier on the host": {Tier: preview, Observed: map[string]string{}},
+		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
 	} {
 		taken := removing(installed, sibling, appsPresent{})
-		stamp := index(taken, ClassDir(production))
+		stamp := index(taken, TierDir(production))
 		if stamp < 0 {
-			t.Fatalf("destroying %s never takes %s, and the stamp stays on a host that has nothing", name, ClassDir(production))
+			t.Fatalf("destroying %s never takes %s, and the stamp stays on a host that has nothing", name, TierDir(production))
 		}
 		for at, r := range taken {
-			if r.action != provider.ActionDelete || at <= stamp || r.path == classRoot {
+			if r.action != provider.ActionDelete || at <= stamp || r.path == tierRoot {
 				continue
 			}
 			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it has installed", name, r.path)
@@ -224,26 +224,26 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 func TestDestroyOfAHalfWrittenHostNamesWhatExistsAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	half := map[string]string{}
-	for _, item := range ClassItems(production) {
+	for _, item := range TierItems(production) {
 		half[item.ID()] = item.Digest()
 	}
 	taken := removing(
-		Reading{Arch: ArchAMD64, Class: production, Observed: half},
-		Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{},
+		Reading{Arch: ArchAMD64, Tier: production, Observed: half},
+		Reading{Arch: ArchAMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{},
 	)
 	for _, r := range taken {
 		if _, present := half[r.kind+" "+r.path]; !present {
 			t.Errorf("destroy takes %s %s off a host that never had it, and an apply that died halfway needs no mode of its own", r.kind, r.path)
 		}
 	}
-	if last := index(taken, classRoot); last != len(taken)-1 {
-		t.Errorf("destroy of a half-written host takes %s at %d of %d rows, want the shared root taken after the class tier beneath it",
-			classRoot, last, len(taken))
+	if last := index(taken, tierRoot); last != len(taken)-1 {
+		t.Errorf("destroy of a half-written host takes %s at %d of %d rows, want the shared root taken after the tier tier beneath it",
+			tierRoot, last, len(taken))
 	}
-	if index(taken, ClassDir(production)) > index(taken, classRoot) {
-		t.Error("the class directory containing the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")
+	if index(taken, TierDir(production)) > index(taken, tierRoot) {
+		t.Error("the tier directory containing the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")
 	}
 }
 
@@ -374,7 +374,7 @@ func TestASymlinkWhereAnItemsPathShouldBeIsRefusedRatherThanFollowed(t *testing.
 	for name, script := range map[string]string{
 		"a path the survey stats": survey([]Item{dir(pointed, 0o750, stateOwner, "")}),
 		"the seal key's own probe": sealSurvey(Item{
-			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Class: edge.ClassProduction,
+			Kind: KindSealKey, Name: pointed, Mode: sealKeyMode, Owner: rootOwner, Tier: environment.TierProduction,
 		}),
 	} {
 		_, _, err := readSurvey(sh(t, root, script))

@@ -3,26 +3,26 @@ package provider
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Bootstrap interface {
 	Catalogue() []Feature
 
-	Describe(ctx context.Context, class edge.Class) (BootstrapDescription, error)
+	Describe(ctx context.Context, tier environment.Tier) (BootstrapDescription, error)
 
 	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
 	Apply(ctx context.Context, req BootstrapRequest, progress progress.Progress) error
 
-	PlanRemove(ctx context.Context, class edge.Class) (Plan, error)
+	PlanRemove(ctx context.Context, tier environment.Tier) (Plan, error)
 
-	Remove(ctx context.Context, class edge.Class, progress progress.Progress) error
+	Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error
 }
 
 type BootstrapDescription struct {
-	Class   edge.Class
+	Tier    environment.Tier
 	Present bool
 	Stacks  []BootstrapStack
 
@@ -56,7 +56,7 @@ const (
 )
 
 type BootstrapRequest struct {
-	Class edge.Class
+	Tier environment.Tier
 
 	Features []string
 
@@ -75,17 +75,17 @@ const BootstrapSchema = 1
 
 const FeatureVarsKey = "vars-key"
 
-func BootstrapCommand(class edge.Class) string {
-	if class == edge.ClassPreview {
+func BootstrapCommand(tier environment.Tier) string {
+	if tier == environment.TierPreview {
 		return "ocel bootstrap preview"
 	}
 	return "ocel bootstrap production"
 }
 
-func BootstrapFeaturesCommand(class edge.Class) string {
-	return BootstrapCommand(class) + " --features"
+func BootstrapFeaturesCommand(tier environment.Tier) string {
+	return BootstrapCommand(tier) + " --features"
 }
 
-func BootstrapVarsKeyCommand(class edge.Class) string {
-	return BootstrapFeaturesCommand(class) + " " + FeatureVarsKey
+func BootstrapVarsKeyCommand(tier environment.Tier) string {
+	return BootstrapFeaturesCommand(tier) + " " + FeatureVarsKey
 }

@@ -927,7 +927,7 @@ describe("who owns a value under an env source", () => {
     credentialRow({ set: true, version: 1 }),
   ]);
 
-  it("gives the env source every class-wide cell, with the URL for its folder", () => {
+  it("gives the env source every tier-wide cell, with the URL for its folder", () => {
     expect(variantOf(current, at("DATABASE_URL")).owner).toEqual({
       id: infisical.id,
       canCreate: false,
@@ -979,7 +979,7 @@ describe("what an owned cell allows", () => {
   const readOnly = readingFrom(rows);
   const writable = readingFrom(rows, { ...infisical, canCreate: true });
 
-  it("locks every class-wide cell an env source ocel may not write owns", () => {
+  it("locks every tier-wide cell an env source ocel may not write owns", () => {
     expect(locked(variantOf(readOnly, at("DATABASE_URL")))).toBe(true);
     expect(locked(variantOf(readOnly, at("STRIPE_KEY")))).toBe(true);
     expect(locked(variantOf(readOnly, at("STRIPE_KEY", "", "pr-12")))).toBe(false);

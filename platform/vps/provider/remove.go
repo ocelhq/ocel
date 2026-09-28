@@ -15,7 +15,7 @@ func (p *Provider) RemoveResource(ctx context.Context, ref provider.StackRef, bi
 		if progress != nil {
 			progress.Say("Removing postgres " + binding.Name + ", its container " + name + " and its data")
 		}
-		return p.host.RemoveResource(ctx, host.ResourceRef{Class: ref.Class, Project: ref.Project, Resource: binding.Name, Name: name})
+		return p.host.RemoveResource(ctx, host.ResourceRef{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 	case provider.BindingBucket:
 		return p.removeBucket(ctx, ref, binding, progress)
 	default:

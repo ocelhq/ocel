@@ -1,7 +1,7 @@
 package cloudfront
 
 import (
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
@@ -19,7 +19,7 @@ func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
 		BillsEgress: true,
 		Environment: []pricing.Shaped{distribution(site.Slug)},
 	}
-	if site.Class == edge.ClassPreview {
+	if site.Tier == environment.TierPreview {
 		shape.Shared = []pricing.Shaped{distribution(previewWildcardShape)}
 	}
 	return shape, nil

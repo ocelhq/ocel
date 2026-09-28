@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -47,8 +48,8 @@ func apiGatewayEdgeTemplate(in featureInputs) featureStack {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the role API Gateway assumes reads a release's static assets out of it and nothing else.", in.refs.assetBucketARN},
 	})
-	edgeClass := edge.Class(in.class)
-	responder := notFoundAPIResource(in.ns, edgeClass) +
+	edgeTier := environment.Tier(in.tier)
+	responder := notFoundAPIResource(in.ns, edgeTier) +
 		notFoundProxyResource() +
 		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", edgeRootPath) +
 		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", edgeRootPath+edgeProxyPathPart)
@@ -60,8 +61,8 @@ Description: "Ocel bootstrap feature (%s, %s) - what an API Gateway front needs 
 %sResources:
 %s%s%s%sOutputs:
 %s`,
-			FeatureAPIGatewayEdge, in.class, params,
-			invokeRoleResource(in.ns, edgeClass),
+			FeatureAPIGatewayEdge, in.tier, params,
+			invokeRoleResource(in.ns, edgeTier),
 			responder,
 			notFoundDeploymentResource(published),
 			notFoundStageResource(published),
@@ -74,11 +75,11 @@ func notFoundDeploymentID(responder string) string {
 	return "EdgeNotFoundDeployment" + hex.EncodeToString(sum[:6])
 }
 
-func invokeRoleResource(ns Namespace, class edge.Class) string {
+func invokeRoleResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeInvokeRole:
     Type: AWS::IAM::Role
     Metadata:
-      Description: "The role API Gateway assumes to invoke this account's entry functions and to read a release's static assets out of the asset bucket. Every REST API Ocel raises in the %s class names it, so deleting it blanks every deployment this bootstrap fronts."
+      Description: "The role API Gateway assumes to invoke this account's entry functions and to read a release's static assets out of the asset bucket. Every REST API Ocel raises in the %s tier names it, so deleting it blanks every deployment this bootstrap fronts."
     Properties:
       RoleName: %s
       Description: "API Gateway assumes this role to invoke Ocel's entry functions and read a release's static assets."
@@ -100,14 +101,14 @@ func invokeRoleResource(ns Namespace, class edge.Class) string {
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/ocel:env-class': '%s'
+                    'aws:ResourceTag/ocel:env-tier': '%s'
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub '${%s}/*'
-`, class, ns.EdgeInvokeRoleName(class), ns.PolicyName("edge-invoke"), class, paramAssetBucketARN)
+`, tier, ns.EdgeInvokeRoleName(tier), ns.PolicyName("edge-invoke"), tier, paramAssetBucketARN)
 }
 
-func notFoundAPIResource(ns Namespace, class edge.Class) string {
+func notFoundAPIResource(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  EdgeNotFoundApi:
     Type: AWS::ApiGateway::RestApi
     Metadata:
@@ -118,7 +119,7 @@ func notFoundAPIResource(ns Namespace, class edge.Class) string {
       EndpointConfiguration:
         Types:
           - REGIONAL
-`, class, ns.EdgeNotFoundAPIName(class))
+`, tier, ns.EdgeNotFoundAPIName(tier))
 }
 
 func notFoundProxyResource() string {

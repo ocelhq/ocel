@@ -15,7 +15,7 @@ func TestEveryContainerThisHostStartsPullsItsImageAheadOfRunningIt(t *testing.T)
 		command string
 	}{
 		"an app container":     {app.Image, runContainerScript(app, handedTo(app))},
-		"a resource container": {resource.Image, runResourceScript(resource, "0123456789ab", EnvFile(resource.Class, resource.Name))},
+		"a resource container": {resource.Image, runResourceScript(resource, "0123456789ab", EnvFile(resource.Tier, resource.Name))},
 	} {
 		pull := strings.Index(container.command, "docker pull "+quoted(container.image))
 		run := strings.Index(container.command, quoted("--name"))

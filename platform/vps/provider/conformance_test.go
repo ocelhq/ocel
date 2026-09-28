@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
@@ -127,7 +128,7 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	spec := provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
-			Class:   edge.ClassProduction,
+			Tier:    environment.TierProduction,
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind:      provider.StackInfra,

@@ -21,7 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -266,7 +266,7 @@ func serverlessSpecOn(app, image string, framework appbuild.Framework, values ma
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "live",
-			Class:   edge.ClassPreview,
+			Tier:    environment.TierPreview,
 			Name:    naming.AppStack(stackrecords.ProductionEnv, app, liveRelease),
 		},
 		Kind: provider.StackApp,

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
@@ -17,22 +17,22 @@ const (
 	previewWorkerEnv    = "preview"
 )
 
-func workerEnvFor(class edge.Class) (string, error) {
-	switch class {
-	case edge.ClassProduction:
+func workerEnvFor(tier environment.Tier) (string, error) {
+	switch tier {
+	case environment.TierProduction:
 		return productionWorkerEnv, nil
-	case edge.ClassPreview:
+	case environment.TierPreview:
 		return previewWorkerEnv, nil
 	default:
-		return "", fmt.Errorf("stack workers: unknown class %q", class)
+		return "", fmt.Errorf("stack workers: unknown tier %q", tier)
 	}
 }
 
-func conventionWorkerNames(namespace, slug string, class edge.Class, apps []string) ([]string, error) {
-	if namespace == "" || slug == "" || class == "" {
+func conventionWorkerNames(namespace, slug string, tier environment.Tier, apps []string) ([]string, error) {
+	if namespace == "" || slug == "" || tier == "" {
 		return nil, nil
 	}
-	env, err := workerEnvFor(class)
+	env, err := workerEnvFor(tier)
 	if err != nil {
 		return nil, err
 	}

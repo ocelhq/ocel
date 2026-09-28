@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -27,7 +28,7 @@ func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramReques
 	}
 	return provider.EdgeProgram{
 		Spec: &edge.ProgramSpec{
-			Name: ProgramName(req.Slug, req.Class),
+			Name: ProgramName(req.Slug, req.Tier),
 			Worker: edge.Worker{
 				Main: edge.WorkerModule{
 					Name:        "index.js",
@@ -42,9 +43,9 @@ func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramReques
 	}, nil
 }
 
-func ProgramName(slug string, class edge.Class) string {
+func ProgramName(slug string, tier environment.Tier) string {
 	if slug == "" {
 		return ""
 	}
-	return strings.Join([]string{"fake", slug, string(class)}, "--")
+	return strings.Join([]string{"fake", slug, string(tier)}, "--")
 }

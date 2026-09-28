@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -59,14 +59,14 @@ func (a account) boot(t *testing.T) provider.Bootstrap {
 	return boot
 }
 
-func (a account) emptied(t *testing.T, classes ...edge.Class) provider.Bootstrap {
+func (a account) emptied(t *testing.T, tiers ...environment.Tier) provider.Bootstrap {
 	t.Helper()
 	boot := a.boot(t)
 	ctx := context.Background()
 	forget := func() {
-		for _, class := range classes {
-			if err := boot.Remove(ctx, class, nil); err != nil {
-				t.Errorf("Remove(%s) = %v, want the emulator handed back as every other test finds it", class, err)
+		for _, tier := range tiers {
+			if err := boot.Remove(ctx, tier, nil); err != nil {
+				t.Errorf("Remove(%s) = %v, want the emulator handed back as every other test finds it", tier, err)
 			}
 		}
 	}

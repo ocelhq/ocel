@@ -39,8 +39,8 @@ func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket st
 	return payloads.Place(ctx, store, bucket, tagPublisherKeyPrefix, tagPublisherLabel, payloads.TagPublisher())
 }
 
-func tagPublisherResources(ns Namespace, code payloads.Placement, class string) string {
-	writerParam, seedParam := isrWriterParamNames(ns, class)
+func tagPublisherResources(ns Namespace, code payloads.Placement, tier string) string {
+	writerParam, seedParam := isrWriterParamNames(ns, tier)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -142,8 +142,8 @@ func tagPublisherResources(ns Namespace, code payloads.Placement, class string) 
 		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)
 }
 
-func isrWriterParamNames(ns Namespace, class string) (writer, seed string) {
-	names, err := edgeNamesFor(ns, class, KindCloudflare)
+func isrWriterParamNames(ns Namespace, tier string) (writer, seed string) {
+	names, err := edgeNamesFor(ns, tier, KindCloudflare)
 	if err != nil {
 		return "", ""
 	}

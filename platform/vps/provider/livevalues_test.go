@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -26,7 +26,7 @@ const (
 )
 
 func liveScope() envvars.Scope {
-	return envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	return envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 }
 
 func liveStore(p *vps.Provider) envvars.Store {
@@ -132,7 +132,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 		t.Errorf("the app reads PORT as %q: the runtime answers on %s and fronts the app on a loopback port of its own choosing, which outranks anything an env file names", got, appbuild.InjectedPortText)
 	}
 
-	path := host.EnvFile(edge.ClassProduction, physical)
+	path := host.EnvFile(environment.TierProduction, physical)
 	vm.proves(t, path)
 	if vm.exists(t, path) {
 		t.Errorf("%s survived the deploy that wrote it, and it stores every value the deploy resolved in plaintext", path)
@@ -179,7 +179,7 @@ func TestLiveTheEnvFileIsSixHundredForTheDeployLoginForAsLongAsItExists(t *testi
 
 	spec := liveValueSpec(t, "two", resolving(t, p).declared)
 	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.Deployment, spec.App.Image)
-	path := host.EnvFile(edge.ClassProduction, physical)
+	path := host.EnvFile(environment.TierProduction, physical)
 
 	watching := "until=$(( $(date +%s) + 180 ))\n" +
 		"while [ \"$(date +%s)\" -lt \"$until\" ]; do\n" +
@@ -241,7 +241,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 		t.Errorf("the evidence a failed release captured names the container's environment:\n%s", said)
 	}
 
-	path := host.EnvFile(edge.ClassProduction, physical)
+	path := host.EnvFile(environment.TierProduction, physical)
 	vm.proves(t, path)
 	if vm.exists(t, path) {
 		t.Errorf("%s survived a deploy that fell over", path)
@@ -261,7 +261,7 @@ func TestLiveAContainerThatCannotBeStartedTakesItsEnvFileWithIt(t *testing.T) {
 		t.Fatal("ProvisionContainers() over an image this box does not have succeeded")
 	}
 
-	path := host.EnvFile(edge.ClassProduction, physical)
+	path := host.EnvFile(environment.TierProduction, physical)
 	vm.proves(t, path)
 	if vm.exists(t, path) {
 		t.Errorf("%s survived a container start that never happened, and nothing after this deploy takes it back", path)

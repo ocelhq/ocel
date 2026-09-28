@@ -7,12 +7,12 @@ import (
 var (
 	defaultNamespace = Namespace(provider.DefaultNamespace)
 
-	coreStackName, _       = defaultNamespace.StackNameFor(ClassProduction)
-	previewStackName, _    = defaultNamespace.StackNameFor(ClassPreview)
-	edgeUserName, _        = defaultNamespace.EdgeUserNameFor(ClassProduction)
-	previewEdgeUser, _     = defaultNamespace.EdgeUserNameFor(ClassPreview)
-	originSecretParam, _   = defaultNamespace.OriginSecretParamFor(ClassProduction)
-	previewOriginSecret, _ = defaultNamespace.OriginSecretParamFor(ClassPreview)
+	coreStackName, _       = defaultNamespace.StackNameFor(TierProduction)
+	previewStackName, _    = defaultNamespace.StackNameFor(TierPreview)
+	edgeUserName, _        = defaultNamespace.EdgeUserNameFor(TierProduction)
+	previewEdgeUser, _     = defaultNamespace.EdgeUserNameFor(TierPreview)
+	originSecretParam, _   = defaultNamespace.OriginSecretParamFor(TierProduction)
+	previewOriginSecret, _ = defaultNamespace.OriginSecretParamFor(TierPreview)
 
 	passphraseParam = defaultNamespace.PassphraseParamName()
 )

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -54,12 +55,12 @@ func (e *Edge) Hooks() edge.Hooks {
 	}
 }
 
-func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
-	if class == "" {
+func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
+	if tier == "" {
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge provisions one load balancer per class, and this bootstrap names none", Kind)
+			"the %q edge provisions one load balancer per tier, and this bootstrap names none", Kind)
 	}
-	front, err := e.raise(ctx, class, progress.DiscardProgress())
+	front, err := e.raise(ctx, tier, progress.DiscardProgress())
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -71,21 +72,21 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 	}}, nil
 }
 
-func (e *Edge) raise(ctx context.Context, class edge.Class, progress progress.Progress) (Front, error) {
+func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Progress) (Front, error) {
 	var preview previewEntry
-	if class == edge.ClassPreview {
+	if tier == environment.TierPreview {
 		recorded, err := e.recordedPreview(ctx)
 		if err != nil {
 			return Front{}, err
 		}
 		preview = recorded
 	}
-	return e.raiseServing(ctx, class, preview, progress)
+	return e.raiseServing(ctx, tier, preview, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, class edge.Class, preview previewEntry, progress progress.Progress) (Front, error) {
-	names := frontNames(class)
-	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
+func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Progress) (Front, error) {
+	names := frontNames(tier)
+	outputs, err := e.deps.Stacks.Up(ctx, Target{Tier: tier}, frontProgram(frontSpec{
 		Region:  e.deps.Region,
 		Names:   names,
 		Preview: preview,
@@ -96,25 +97,25 @@ func (e *Edge) raiseServing(ctx context.Context, class edge.Class, preview previ
 	front := frontOf(outputs)
 	if !front.provisioned() {
 		return Front{}, fmt.Errorf(
-			"provision the %s load balancer for class %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
-			Kind, class, front)
+			"provision the %s load balancer for tier %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
+			Kind, tier, front)
 	}
 	return front, nil
 }
 
-func (e *Edge) bootstrapInstalled(ctx context.Context, class edge.Class) (bool, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: class})
+func (e *Edge) bootstrapInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: tier})
 	if err != nil {
 		return false, err
 	}
 	return frontOf(outputs).provisioned(), nil
 }
 
-func (e *Edge) boundHostnames(ctx context.Context, class edge.Class) ([]string, error) {
+func (e *Edge) boundHostnames(ctx context.Context, tier environment.Tier) ([]string, error) {
 	if e.deps.Entries == nil {
 		return nil, nil
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: class})
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: tier})
 	if err != nil {
 		return nil, err
 	}
@@ -125,18 +126,18 @@ func (e *Edge) boundHostnames(ctx context.Context, class edge.Class) ([]string, 
 	return e.deps.Entries.Entered(ctx, front.CertificateMap)
 }
 
-func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
-	bound, err := e.boundHostnames(ctx, class)
+func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
+	bound, err := e.boundHostnames(ctx, tier)
 	if err != nil {
 		return err
 	}
 	if len(bound) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the %s front of class %s still serves %s, and Google will not delete a certificate map that has entries: "+
+			"the %s front of tier %s still serves %s, and Google will not delete a certificate map that has entries: "+
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
-			Kind, class, strings.Join(bound, ", "))
+			Kind, tier, strings.Join(bound, ", "))
 	}
-	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, progress.DiscardProgress())
+	return e.deps.Stacks.Destroy(ctx, Target{Tier: tier}, progress.DiscardProgress())
 }
 
 type edgeRecord struct {
@@ -151,8 +152,8 @@ type Host struct {
 	Backend     string `json:"backend,omitempty"`
 }
 
-func Surface(slug string, class edge.Class) string {
-	return naming.Join(naming.FieldSeparator, "ocel", string(Kind), naming.Sanitize(slug), string(class))
+func Surface(slug string, tier environment.Tier) string {
+	return naming.Join(naming.FieldSeparator, "ocel", string(Kind), naming.Sanitize(slug), string(tier))
 }
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -160,19 +161,19 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack names none", Kind)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: spec.Class})
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Tier: spec.Tier})
 	if err != nil {
 		return nil, err
 	}
 	front := frontOf(outputs)
 	if !front.provisioned() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer is provisioned for class %s: the %q edge fronts every project in a class from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this class first",
-			Kind, spec.Class, Kind, BaselineCost)
+			"no %s load balancer is provisioned for tier %s: the %q edge fronts every project in a tier from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this tier first",
+			Kind, spec.Tier, Kind, BaselineCost)
 	}
 	next := prior
 	next.Slug = spec.Slug
-	next.Class = spec.Class
+	next.Tier = spec.Tier
 	s := &stack{e: e, state: next}
 	if err := s.adopt(front); err != nil {
 		return nil, err
@@ -191,8 +192,8 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (e *Edge) claim(class edge.Class, hostname string) records.Name {
-	return append(stackrecords.EdgeStacksRecord(class), string(Kind), "domains", hostname)
+func (e *Edge) claim(tier environment.Tier, hostname string) records.Name {
+	return append(stackrecords.EdgeStacksRecord(tier), string(Kind), "domains", hostname)
 }
 
 func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error) {
@@ -206,8 +207,8 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		}
 		return edge.PreviewEntryOwner, nil
 	}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.claim(class, hostname))
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.claim(tier, hostname))
 		if err != nil {
 			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
@@ -227,19 +228,19 @@ type claim struct {
 	Owner string `json:"owner"`
 }
 
-func (e *Edge) ProjectOwner(slug string, class edge.Class) string { return Surface(slug, class) }
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string { return Surface(slug, tier) }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := make([]edge.PlanChange, 0, len(scope.Hostnames)*3+1)
 	for _, hostname := range scope.Hostnames {
 		changes = append(changes,
 			edge.PlanChange{Kind: "compute.URLMap host rule", Name: hostname, Action: edge.PlanDelete},
-			edge.PlanChange{Kind: "compute.BackendService", Name: backendName(scope.Slug, scope.Class, hostname), Action: edge.PlanDelete},
-			edge.PlanChange{Kind: "certificatemanager.CertificateMapEntry", Name: entryName(scope.Slug, scope.Class, hostname), Action: edge.PlanDelete},
+			edge.PlanChange{Kind: "compute.BackendService", Name: backendName(scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
+			edge.PlanChange{Kind: "certificatemanager.CertificateMapEntry", Name: entryName(scope.Slug, scope.Tier, hostname), Action: edge.PlanDelete},
 		)
 	}
 	changes = append(changes, edge.PlanChange{
-		Kind: "compute.RegionNetworkEndpointGroup", Name: BindingStack(scope.Slug, scope.Class), Action: edge.PlanDelete,
+		Kind: "compute.RegionNetworkEndpointGroup", Name: BindingStack(scope.Slug, scope.Tier), Action: edge.PlanDelete,
 	})
 	return []edge.PlanGroup{
 		{
@@ -252,7 +253,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 			Kind:   edge.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(Kind) + "/front",
 			Action: edge.PlanKeep,
-			Reason: "the load balancer this project was fronted by is one per bootstrap class and every other project in the class is answered by it, " +
+			Reason: "the load balancer this project was fronted by is one per bootstrap tier and every other project in the tier is answered by it, " +
 				"so it stays provisioned and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
 		},
 	}
@@ -278,13 +279,13 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind) + "/front",
 		Action: edge.PlanKeep,
-		Reason: "previews are answered by the same load balancer production is, one per bootstrap class at " + BaselineCost + ", " +
+		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + BaselineCost + ", " +
 			"so releasing a wildcard takes its host rule and leaves the front in place",
 	}
 }
 
-func ledgerFor(store records.Store, class edge.Class, slug string) *ledger.Ledger {
-	return ledger.New(store, class, slug)
+func ledgerFor(store records.Store, tier environment.Tier, slug string) *ledger.Ledger {
+	return ledger.New(store, tier, slug)
 }
 
 var (

@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -125,15 +125,15 @@ func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []
 
 func routeKey(hostname string) string { return strings.ToLower(hostname) }
 
-func routeOwner(ctx context.Context, c Clients, ns bootstrap.Namespace, class edge.Class, hostname string) (string, bool, error) {
+func routeOwner(ctx context.Context, c Clients, ns bootstrap.Namespace, tier environment.Tier, hostname string) (string, bool, error) {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
-		Name: aws.String(ns.EdgeRoutesStoreName(class)),
+		Name: aws.String(ns.EdgeRoutesStoreName(tier)),
 	})
 	if err != nil {
 		if isNotFound(err) {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("read the key value store the %q edge routes %s with: %w", Kind, class, err)
+		return "", false, fmt.Errorf("read the key value store the %q edge routes %s with: %w", Kind, tier, err)
 	}
 	out, err := c.KeyValueStore.GetKey(ctx, &cloudfrontkeyvaluestore.GetKeyInput{
 		KvsARN: store.KeyValueStore.ARN,
@@ -147,7 +147,7 @@ func routeOwner(ctx context.Context, c Clients, ns bootstrap.Namespace, class ed
 	}
 	var stored route
 	if err := json.Unmarshal([]byte(aws.ToString(out.Value)), &stored); err != nil {
-		return "", false, fmt.Errorf("decode the route %s answers on: it is not the JSON the resolver reads, so something other than Ocel wrote it. Remove that key from the %s key value store and promote again: %w", hostname, ns.EdgeRoutesStoreName(class), err)
+		return "", false, fmt.Errorf("decode the route %s answers on: it is not the JSON the resolver reads, so something other than Ocel wrote it. Remove that key from the %s key value store and promote again: %w", hostname, ns.EdgeRoutesStoreName(tier), err)
 	}
 	if stored.Stack == "" {
 		return "", false, nil

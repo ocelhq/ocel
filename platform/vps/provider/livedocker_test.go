@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -81,17 +81,17 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	defer closing(t, p)
 
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	absent, err := bootstrap.Describe(ctx, class)
+	absent, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: absent.VendorState}
+	req := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: absent.VendorState}
 	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() over a machine with no engine = %v", err)
@@ -127,7 +127,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Fatalf("Apply() over a machine with no engine = %v", err)
 	}
 	defer func() {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -142,15 +142,15 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("%s cannot reach the daemon this bootstrap installed: %v", deployLogin, err)
 	}
 
-	described, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !described.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a machine that has just been bootstrapped, engine and all, drifted, %s\n%s",
-			stillMoving(t, bootstrap, class, described.VendorState), vm.proxySaid(t))
+			stillMoving(t, bootstrap, tier, described.VendorState), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,11 +171,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	vm.ssh(t, "sudo systemctl disable --now "+socketName+" "+unitName)
 
-	idle, err := bootstrap.Describe(ctx, class)
+	idle, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stopped := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: idle.VendorState}
+	stopped := provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: idle.VendorState}
 	restarting, err := bootstrap.Plan(ctx, stopped)
 	if err != nil {
 		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
@@ -223,11 +223,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 			unitName, strings.Join(moved, ", "), surviving)
 	}
 
-	shimmed, err := bootstrap.Describe(ctx, class)
+	shimmed, err := bootstrap.Describe(ctx, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reinstalling, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shimmed.VendorState})
+	reinstalling, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shimmed.VendorState})
 	if err != nil {
 		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
 	}
@@ -239,7 +239,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 	got := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, nil),
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, nil),
 		refusal.CodeNotReady)
 	if !strings.Contains(got.Message, engineName) {
 		t.Errorf("an apply that refuses replacements over a docker binary with no unit says %q, want it refused by name: running %s as root over an install that already exists replaces it, and this apply refuses replacements",

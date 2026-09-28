@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -70,11 +70,11 @@ func newSync(getenv func(string) string) (*envsource.Sync, error) {
 	if err != nil {
 		return nil, err
 	}
-	class := edge.Class(getenv(ports.ClassEnvVar))
-	switch class {
-	case edge.ClassProduction, edge.ClassPreview:
+	tier := environment.Tier(getenv(ports.TierEnvVar))
+	switch tier {
+	case environment.TierProduction, environment.TierPreview:
 	default:
-		return nil, fmt.Errorf("%s is %q, want %s or %s", ports.ClassEnvVar, class, edge.ClassProduction, edge.ClassPreview)
+		return nil, fmt.Errorf("%s is %q, want %s or %s", ports.TierEnvVar, tier, environment.TierProduction, environment.TierPreview)
 	}
 	clients := &ports.Clients{
 		Namespace: namespace,
@@ -86,7 +86,7 @@ func newSync(getenv func(string) string) (*envsource.Sync, error) {
 			Records: ports.Records{Clients: clients},
 			Cipher:  ports.Cipher{Clients: clients},
 		},
-		Class: class,
+		Tier: tier,
 		Login: envsource.Login{
 			ProveIdentity: ports.ProveIdentity,
 			Client:        &http.Client{Timeout: requestTimeout},

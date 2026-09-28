@@ -344,8 +344,8 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		})
 	}
 
-	slug, domains, class := s.lastPreflight()
-	if err := stream.Send(fakeProgress("PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " tier=" + class.String())); err != nil {
+	slug, domains, tier := s.lastPreflight()
+	if err := stream.Send(fakeProgress("PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",") + " tier=" + tier.String())); err != nil {
 		return err
 	}
 
@@ -440,7 +440,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 
 func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 	manifest := req.GetManifest()
-	class := strings.ToLower(strings.TrimPrefix(req.GetEnvironment().GetTier().String(), "TIER_"))
+	tier := strings.ToLower(strings.TrimPrefix(req.GetEnvironment().GetTier().String(), "TIER_"))
 
 	infra := &planv1.ChangeGroup{Kind: "stack", Name: "aws/" + manifest.GetSlug() + "--infra", Action: planv1.Change_ACTION_CREATE}
 	values := &planv1.ChangeGroup{Kind: "parameters", Name: "values", Action: planv1.Change_ACTION_CREATE}
@@ -455,7 +455,7 @@ func fakeDeployPlan(req *contractv1.DeployRequest) *planv1.ChangePlan {
 	if len(values.Changes) > 0 {
 		plan.Groups = append(plan.Groups, values)
 	}
-	promotion := &planv1.ChangeGroup{Kind: "promotion", Name: class, Action: planv1.Change_ACTION_CREATE}
+	promotion := &planv1.ChangeGroup{Kind: "promotion", Name: tier, Action: planv1.Change_ACTION_CREATE}
 	for _, app := range manifest.GetApps() {
 		group := &planv1.ChangeGroup{
 			Kind:   "stack",
@@ -645,10 +645,10 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 	if shape == "silent" {
 		return nil
 	}
-	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
-	core := &planv1.ChangeGroup{Kind: "stack", Name: "aws/ocel-" + class + "-core"}
+	tier := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
+	core := &planv1.ChangeGroup{Kind: "stack", Name: "aws/ocel-" + tier + "-core"}
 	plan := &planv1.ChangePlan{
-		Subject:  class,
+		Subject:  tier,
 		EdgeKind: resolvedEdgeKind(req.GetEdge().GetKind()),
 		Groups:   []*planv1.ChangeGroup{core},
 	}
@@ -669,7 +669,7 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 	plan.Groups = append(plan.Groups,
 		&planv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "aws/ocel-" + class + "-image-optimization",
+			Name:    "aws/ocel-" + tier + "-image-optimization",
 			Feature: "image-optimization",
 			Action:  planv1.Change_ACTION_CREATE,
 			Changes: []*planv1.Change{
@@ -678,7 +678,7 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 		},
 		&planv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "aws/ocel-" + class + "-isr",
+			Name:    "aws/ocel-" + tier + "-isr",
 			Feature: "isr",
 			Action:  planv1.Change_ACTION_DELETE,
 			Reason:  "web, api were deployed against it",
@@ -689,24 +689,24 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 		},
 		&planv1.ChangeGroup{
 			Kind:    "stack",
-			Name:    "aws/ocel-" + class + "-secrets",
+			Name:    "aws/ocel-" + tier + "-secrets",
 			Feature: "secrets",
 			Action:  planv1.Change_ACTION_KEEP,
 			Reason:  reasonCurrent,
 		},
 	)
-	if front := fakeEdgeGroup(req, class); front != nil {
+	if front := fakeEdgeGroup(req, tier); front != nil {
 		plan.Groups = append(plan.Groups, front)
 	}
 	return plan
 }
 
-func fakeEdgeGroup(req *contractv1.BootstrapRequest, class string) *planv1.ChangeGroup {
+func fakeEdgeGroup(req *contractv1.BootstrapRequest, tier string) *planv1.ChangeGroup {
 	if resolvedEdgeKind(req.GetEdge().GetKind()) != "cloudflare" {
 		return nil
 	}
 	store := "ocel-deployments-store"
-	if class == "preview" {
+	if tier == "preview" {
 		store += "-preview"
 	}
 	return &planv1.ChangeGroup{
@@ -835,17 +835,17 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 	if err := refuseEdge(); err != nil {
 		return nil, err
 	}
-	class := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
+	tier := strings.ToLower(strings.TrimPrefix(req.GetTier().String(), "TIER_"))
 	if os.Getenv(FakeEmptyRemovalPlanEnvVar) != "" {
-		return &planv1.ChangePlan{Subject: class}, nil
+		return &planv1.ChangePlan{Subject: tier}, nil
 	}
 	return &planv1.ChangePlan{
 		EdgeKind: "cloudflare",
-		Subject:  class,
+		Subject:  tier,
 		Groups: []*planv1.ChangeGroup{
 			{
 				Kind:    "stack",
-				Name:    "aws/ocel-" + class + "-isr",
+				Name:    "aws/ocel-" + tier + "-isr",
 				Feature: "isr",
 				Action:  planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
@@ -854,7 +854,7 @@ func (s *deployFakeProviderServer) PlanRemoveBootstrap(ctx context.Context, req 
 			},
 			{
 				Kind:   "stack",
-				Name:   "aws/ocel-" + class,
+				Name:   "aws/ocel-" + tier,
 				Action: planv1.Change_ACTION_DELETE,
 				Changes: []*planv1.Change{
 					{Kind: "AWS::DynamoDB::Table", Name: "StateTable", Action: planv1.Change_ACTION_DELETE},

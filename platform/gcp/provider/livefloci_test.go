@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -84,13 +84,13 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 	store := live(t).Records()
 
 	for _, segment := range []string{"a#b", "a%b", "a/b", "a%23b"} {
-		name := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name(), segment}
+		name := records.Name{records.RootConformance, string(environment.TierProduction), t.Name(), segment}
 		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte(segment)}); err != nil {
 			t.Fatalf("Write(%s) = %v", name, err)
 		}
 	}
 
-	under := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
+	under := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
 	listed, err := store.List(ctx, under)
 	if err != nil {
 		t.Fatalf("List(%s) = %v", under, err)
@@ -111,7 +111,7 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 
 func TestLiveSealer(t *testing.T) {
 	vendor := live(t)
-	bootstrapped(t, vendor, edge.ClassProduction)
+	bootstrapped(t, vendor, environment.TierProduction)
 
 	conformance.RunCipher(t, vendor.Cipher())
 }
@@ -123,7 +123,7 @@ func TestLiveSealingWhereNoKeyRingExistsSaysWhatToRun(t *testing.T) {
 	var refused refusal.Refusal
 	_, err := elsewhere.Cipher().Seal(context.Background(), records.SealScope{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Env:     "*",
 		Folder:  "/",
 		Name:    "DATABASE_URL",
@@ -136,16 +136,16 @@ func TestLiveSealingWhereNoKeyRingExistsSaysWhatToRun(t *testing.T) {
 	}
 }
 
-func bootstrappedClasses(t *testing.T, p *gcp.Provider) {
+func bootstrappedTiers(t *testing.T, p *gcp.Provider) {
 	t.Helper()
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		bootstrapped(t, p, class)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		bootstrapped(t, p, tier)
 	}
 }
 
 func TestLiveArtifactStore(t *testing.T) {
 	vendor := live(t)
-	bootstrappedClasses(t, vendor)
+	bootstrappedTiers(t, vendor)
 
 	conformance.RunArtifactStore(t, vendor.Facts(), vendor.Artifacts())
 }
@@ -154,7 +154,7 @@ func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {
 	live(t)
 
 	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
-	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/bundle.zip"}
+	ref := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "conformance/bundle.zip"}
 
 	var refused refusal.Refusal
 	err := nowhere.Artifacts().Put(context.Background(), ref, bytes.NewReader([]byte("a build artifact")))
@@ -168,32 +168,32 @@ func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {
 
 func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 	p := live(t)
-	bootstrappedClasses(t, p)
+	bootstrappedTiers(t, p)
 
 	ctx := context.Background()
 	artifacts := p.Artifacts()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	swept, kept := "conformance/"+t.Name()+"/", "conformance/"+t.Name()+"-beside/"
 
 	for _, store := range []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache} {
 		for _, prefix := range []string{swept, kept} {
-			ref := provider.ArtifactRef{Class: class, Bucket: store, Key: prefix + "bundle.zip"}
+			ref := provider.ArtifactRef{Tier: tier, Bucket: store, Key: prefix + "bundle.zip"}
 			if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte(store))); err != nil {
 				t.Fatalf("Put(%s/%s) = %v", store, prefix, err)
 			}
 		}
 	}
 
-	if err := artifacts.RemovePrefix(ctx, class, swept, nil); err != nil {
+	if err := artifacts.RemovePrefix(ctx, tier, swept, nil); err != nil {
 		t.Fatalf("RemovePrefix(%s) = %v", swept, err)
 	}
 
 	for _, store := range []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache} {
-		gone, err := artifacts.Has(ctx, provider.ArtifactRef{Class: class, Bucket: store, Key: swept + "bundle.zip"})
+		gone, err := artifacts.Has(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: swept + "bundle.zip"})
 		if err != nil || gone {
 			t.Errorf("Has(%s/%s) = %v, %v, want it swept: one prefix names the same run in every store", store, swept, gone, err)
 		}
-		left, err := artifacts.Has(ctx, provider.ArtifactRef{Class: class, Bucket: store, Key: kept + "bundle.zip"})
+		left, err := artifacts.Has(ctx, provider.ArtifactRef{Tier: tier, Bucket: store, Key: kept + "bundle.zip"})
 		if err != nil || !left {
 			t.Errorf("Has(%s/%s) = %v, %v, want it left alone", store, kept, left, err)
 		}
@@ -202,19 +202,19 @@ func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 
 func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) {
 	p := live(t)
-	bootstrappedClasses(t, p)
+	bootstrappedTiers(t, p)
 
 	ctx := context.Background()
 	artifacts := p.Artifacts()
-	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	ref := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact"))); err != nil {
 		t.Fatal(err)
 	}
 
 	var refused refusal.Refusal
-	err := artifacts.RemovePrefix(ctx, edge.ClassProduction, "", nil)
+	err := artifacts.RemovePrefix(ctx, environment.TierProduction, "", nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("RemovePrefix(\"\") = %v, want an %s refusal: an empty prefix names every artifact the class keeps", err, refusal.CodeInvalid)
+		t.Fatalf("RemovePrefix(\"\") = %v, want an %s refusal: an empty prefix names every artifact the tier keeps", err, refusal.CodeInvalid)
 	}
 	stored, err := artifacts.Has(ctx, ref)
 	if err != nil || !stored {
@@ -226,7 +226,7 @@ func TestLiveListingUnderANameReturnsTheRecordStoredAtIt(t *testing.T) {
 	ctx := context.Background()
 	store := live(t).Records()
 
-	under := records.Name{records.RootConformance, string(edge.ClassProduction), t.Name()}
+	under := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
 	for _, name := range []records.Name{under, append(slices.Clone(under), "beneath")} {
 		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte(name.String())}); err != nil {
 			t.Fatalf("Write(%s) = %v", name, err)

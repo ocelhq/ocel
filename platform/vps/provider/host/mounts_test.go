@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -131,9 +131,9 @@ func TestAContainerWithAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 	for _, item := range []Item{frontItem(), boardItem()} {
 		moved := bytes.Replace(item.Content, []byte(mountsFact+mountsIntact), []byte(mountsFact+mountsMoved), 1)
@@ -143,7 +143,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 		observed := digests(items)
 		observed[item.ID()] = digest(KindContainer, item.Name, 0, rootOwner, contentSum(moved))
 		read := Reading{
-			Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
+			Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
 			Stamp: Stamp{
 				Schema: provider.BootstrapSchema, State: StateComplete,

@@ -3,23 +3,23 @@ package alb
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func TestAWildcardAndTheDomainUnderneathItGetNamesOfTheirOwn(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	for _, named := range []struct {
 		what string
-		name func(string, edge.Class, string) string
+		name func(string, environment.Tier, string) string
 	}{
 		{"backend service", backendName},
 		{"certificate map entry", entryName},
 		{"serverless neg", negName},
 	} {
-		under := named.name("shop", class, "preview.example.com")
-		wildcard := named.name("shop", class, "*.preview.example.com")
+		under := named.name("shop", tier, "preview.example.com")
+		wildcard := named.name("shop", tier, "*.preview.example.com")
 		if under == wildcard {
 			t.Errorf("the %s for preview.example.com and for *.preview.example.com is %q for both, and the second bind would take over the first's",
 				named.what, under)
@@ -31,16 +31,16 @@ func TestAHostnameTooLongToNameIsShortenedRatherThanRefusedByCompute(t *testing.
 	t.Parallel()
 
 	hostname := "checkout-eu-west-staging.a-very-long-customer-subdomain.example.com"
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	for _, named := range []struct {
 		what string
-		name func(string, edge.Class, string) string
+		name func(string, environment.Tier, string) string
 	}{
 		{"backend service", backendName},
 		{"certificate map entry", entryName},
 		{"serverless neg", negName},
 	} {
-		got := named.name("a-long-project-slug", class, hostname)
+		got := named.name("a-long-project-slug", tier, hostname)
 		if len(got) > maxResourceName {
 			t.Errorf("the %s is named %q, %d characters: Compute refuses a name over %d", named.what, got, len(got), maxResourceName)
 		}

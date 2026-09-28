@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -22,7 +22,7 @@ const (
 	stateTable     = "ocel-state"
 	valuesTable    = "ocel-vars"
 	valuesTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-vars"
-	varsClass      = "production"
+	varsTier       = "production"
 )
 
 func liveConfig() Config {
@@ -32,13 +32,13 @@ func liveConfig() Config {
 		StateTableARN: stateTableARN,
 		VarsTable:     valuesTable,
 		VarsTableARN:  valuesTableARN,
-		Class:         varsClass,
+		Tier:          varsTier,
 	}
 }
 
 func partitionOf(t *testing.T, slug string) string {
 	t.Helper()
-	partition, err := valuePartition(slug, varsClass)
+	partition, err := valuePartition(slug, varsTier)
 	if err != nil {
 		t.Fatalf("valuePartition: %v", err)
 	}
@@ -50,7 +50,7 @@ func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contra
 }
 
 func previewOf(cfg Config, identity string) Config {
-	cfg.Class, cfg.Env = edge.ClassPreview, identity
+	cfg.Tier, cfg.Env = environment.TierPreview, identity
 	return cfg
 }
 
@@ -85,7 +85,7 @@ func TestRenderAppBundle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse the live manifest: %v", err)
 		}
-		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVarsKeyARN || manifest.Class != varsClass {
+		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVarsKeyARN || manifest.Tier != varsTier {
 			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
 		}
 		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
@@ -116,7 +116,7 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 
 		production := liveConfig()
-		production.Class, production.Env = edge.ClassProduction, stackrecords.ProductionEnv
+		production.Tier, production.Env = environment.TierProduction, stackrecords.ProductionEnv
 
 		for _, tc := range []struct {
 			name string
@@ -196,7 +196,7 @@ func TestRenderAppBundle(t *testing.T) {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
 		if want := []string{"identity", "platform"}; !slices.Equal(bundle.Referenced, want) {
-			t.Errorf("Referenced = %v, want %v: the owners behind this app's live cells, at its own environment and class-wide", bundle.Referenced, want)
+			t.Errorf("Referenced = %v, want %v: the owners behind this app's live cells, at its own environment and tier-wide", bundle.Referenced, want)
 		}
 
 		role := appExecutionRole(cfg, "web", nil, nil, bundle, nil, nil, false, nil)
@@ -260,7 +260,7 @@ func TestAppBundle(t *testing.T) {
 func TestVarsReadPolicy(t *testing.T) {
 	t.Run("scopes the table grant to the project's own partition", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass})
+		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsTier: varsTier})
 		if err != nil {
 			t.Fatalf("varsReadPolicy: %v", err)
 		}
@@ -311,7 +311,7 @@ func TestVarsReadPolicy(t *testing.T) {
 
 	t.Run("without a key is the table grant alone", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass})
+		raw, err := varsReadPolicy(executionRole{ValuesTableARN: valuesTableARN, Slug: "shop", VarsTier: varsTier})
 		if err != nil {
 			t.Fatalf("varsReadPolicy: %v", err)
 		}
@@ -325,7 +325,7 @@ func TestVarsReadPolicy(t *testing.T) {
 
 	t.Run("reaches the partitions of the projects this one references", func(t *testing.T) {
 		t.Parallel()
-		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass, VarsReferenced: []string{"platform", "shop", "billing"}})
+		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsTier: varsTier, VarsReferenced: []string{"platform", "shop", "billing"}})
 		if err != nil {
 			t.Fatalf("varsReadPolicy: %v", err)
 		}
@@ -360,7 +360,7 @@ func TestAppExecutionRoleLiveValues(t *testing.T) {
 		if withLive.ValuesTableARN != valuesTableARN {
 			t.Errorf("ValuesTableARN = %q, want the table the values live in", withLive.ValuesTableARN)
 		}
-		if withLive.Slug != "shop" || withLive.VarsClass != varsClass {
+		if withLive.Slug != "shop" || withLive.VarsTier != varsTier {
 			t.Errorf("role = %+v, want the partition it may read named", withLive)
 		}
 

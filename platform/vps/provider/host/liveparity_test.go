@@ -26,8 +26,8 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyAtTheSameCoordinate(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := live.KeyPath(root, bound.Class); got != filepath.Join(root, sealClass, "seal.key") {
-		t.Fatalf("the agent reads the key at %s, and the helper minted it at %s", got, filepath.Join(root, sealClass, "seal.key"))
+	if got := live.KeyPath(root, bound.Tier); got != filepath.Join(root, sealTier, "seal.key") {
+		t.Fatalf("the agent reads the key at %s, and the helper minted it at %s", got, filepath.Join(root, sealTier, "seal.key"))
 	}
 
 	vault := live.Cipher{Root: root}
@@ -71,7 +71,7 @@ func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want the two cells the helper wrote", listed, err)
 	}
-	if dir := live.RecordsDir(dir, helperClass); !strings.HasSuffix(dir, filepath.Join(helperClass, "records")) {
-		t.Errorf("the agent reads records under %s, and the helper keeps them under <root>/<class>/records", dir)
+	if dir := live.RecordsDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "records")) {
+		t.Errorf("the agent reads records under %s, and the helper keeps them under <root>/<tier>/records", dir)
 	}
 }

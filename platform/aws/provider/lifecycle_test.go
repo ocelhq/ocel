@@ -17,7 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -228,8 +228,8 @@ func plain(rendered string) string {
 
 func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *testing.T) {
 	run := lifecycle(t)
-	class := edge.ClassProduction
-	run.account.emptied(t, class)
+	tier := environment.TierProduction
+	run.account.emptied(t, tier)
 	ctx := context.Background()
 
 	fresh := run.must(t, "doctor")
@@ -244,7 +244,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if status := run.account.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Fatalf("%s is in state %q after the CLI applied it, want CREATE_COMPLETE", coreStackName, status)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), defaultNamespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), defaultNamespace, string(tier))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,6 +286,6 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 		}
 	}
 	if run.account.paramExists(t, passphraseParam) {
-		t.Errorf("%s still exists after the last class on this account went", passphraseParam)
+		t.Errorf("%s still exists after the last tier on this account went", passphraseParam)
 	}
 }

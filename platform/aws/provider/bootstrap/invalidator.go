@@ -36,7 +36,7 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 	return payloads.Place(ctx, store, bucket, tagInvalidatorKeyPrefix, tagInvalidatorLabel, payloads.TagInvalidator())
 }
 
-func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string) string {
+func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier string) string {
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -120,6 +120,6 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string
 `+lambdaLogGroupResource("TagInvalidator"), tagInvalidatorDLQRetentionSeconds, ns.PolicyName("tag-invalidator"),
 		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
-		tagInvalidatorStateTableEnvVar, awsports.ClassEnvVar, class,
+		tagInvalidatorStateTableEnvVar, awsports.TierEnvVar, tier,
 		tagInvalidatorBatchSize, tagInvalidatorRetries, tagRecordStreamFilter)
 }

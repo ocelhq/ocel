@@ -21,7 +21,7 @@ func TestWrite(t *testing.T) {
 
 		err := Write(dir, Result{
 			Slug:        "proj-123",
-			Environment: Environment{Class: "preview", Identity: "e2e-42"},
+			Environment: Environment{Tier: "preview", Identity: "e2e-42"},
 			Provider:    Provider{Name: "aws", Region: "eu-west-2"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
@@ -44,7 +44,7 @@ func TestWrite(t *testing.T) {
 		want := map[string]any{
 			"schemaVersion": float64(SchemaVersion),
 			"slug":          "proj-123",
-			"environment":   map[string]any{"class": "preview", "identity": "e2e-42"},
+			"environment":   map[string]any{"tier": "preview", "identity": "e2e-42"},
 			"provider":      map[string]any{"name": "aws", "region": "eu-west-2"},
 			"promotionId":   "dep_abc",
 			"tag":           "v1",

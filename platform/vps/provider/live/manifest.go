@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
@@ -46,7 +46,7 @@ type Store struct {
 
 type Manifest struct {
 	Slug        string         `json:"slug"`
-	Class       string         `json:"class"`
+	Tier        string         `json:"tier"`
 	Environment string         `json:"environment,omitempty"`
 	Keys        []live.Key     `json:"keys,omitempty"`
 	Bindings    []live.Binding `json:"bindings,omitempty"`
@@ -58,7 +58,7 @@ func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
 func (m Manifest) StoreCoordinate() records.SealScope {
 	return records.SealScope{
 		Project: m.Slug,
-		Class:   edge.Class(m.Class),
+		Tier:    environment.Tier(m.Tier),
 		Env:     m.Store.Env,
 		Folder:  StoreSecretFolder,
 		Binding: StoreSecretBinding,
@@ -73,11 +73,11 @@ func Render(m Manifest) ([]byte, error) {
 	if m.Slug == "" {
 		return nil, fmt.Errorf("the live-value manifest names %d keys but no project slug", len(m.Keys)+len(m.Bindings))
 	}
-	switch edge.Class(m.Class) {
-	case edge.ClassProduction, edge.ClassPreview:
+	switch environment.Tier(m.Tier) {
+	case environment.TierProduction, environment.TierPreview:
 	default:
-		return nil, fmt.Errorf("the live-value manifest names class %q, want %s or %s",
-			m.Class, edge.ClassProduction, edge.ClassPreview)
+		return nil, fmt.Errorf("the live-value manifest names tier %q, want %s or %s",
+			m.Tier, environment.TierProduction, environment.TierPreview)
 	}
 	return json.Marshal(m)
 }
