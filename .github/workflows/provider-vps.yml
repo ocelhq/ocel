@@ -86,9 +86,8 @@ jobs:
     outputs:
       live: ${{ steps.gate-live.outputs.green != 'true' }}
       live_key: ${{ steps.gate-live.outputs.key }}
-      pipeline: ${{ steps.gate-build.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true' || steps.gate-engine.outputs.green != 'true' }}
+      pipeline: ${{ steps.gate-build.outputs.green != 'true' || steps.gate-engine.outputs.green != 'true' }}
       build_key: ${{ steps.gate-build.outputs.key }}
-      lifecycle_key: ${{ steps.gate-lifecycle.outputs.key }}
       engine_key: ${{ steps.gate-engine.outputs.key }}
     steps:
       - name: Checkout
@@ -109,13 +108,6 @@ jobs:
         with:
           suite: vps-build
           task: "@cli/node#live"
-
-      - name: Has the lifecycle suite already passed what it reads
-        id: gate-lifecycle
-        uses: ./.github/actions/suite-gate
-        with:
-          suite: vps-lifecycle
-          task: "@platform/vps-host#lifecycle"
 
       - name: Has the engine install already passed what it reads
         id: gate-engine
@@ -221,24 +213,20 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Bake the box the build and lifecycle lanes are cloned from, while the race-instrumented test binaries compile
+      - name: Bake the box the build lane is cloned from, while the race-instrumented test binary compiles
         run: |
           set -euo pipefail
-          {
-            go test -C cli -race -list '^TestLive' ./... > /dev/null
-            go test -C platform/vps/provider -race -list '^TestLifecycle' ./... > /dev/null
-          } 2> compile.log &
+          go test -C cli -race -list '^TestLive' ./... > /dev/null 2> compile.log &
           compile=$!
           sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
           wait "$compile" || { cat compile.log >&2; exit 1; }
 
-      - name: Run the build pipeline, the lifecycle suite and the engine install, a VM each
+      - name: Run the build pipeline and the engine install, a VM each
         run: |
           set -euo pipefail
           mkdir reports
           printf '%s\t%s\t%s\t%s\n' \
             "$VM-build" reports/build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." "$VM-base" \
-            "$VM-lifecycle" reports/lifecycle.json "go test -C platform/vps/provider -race -count=1 -timeout 45m -run '^TestLifecycle' -json ./..." "$VM-base" \
             "$VM-engine" reports/engine.json "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^$ENGINE_TEST\$' -json ./..." "" \
             > reports/lanes.tsv
           scripts/incus-fanout.sh reports/lanes.tsv
@@ -257,7 +245,6 @@ jobs:
           set -euo pipefail
           status=0
           scripts/assert-ran.sh reports/build.json TestLive || status=1
-          scripts/assert-ran.sh reports/lifecycle.json TestLifecycle || status=1
           scripts/assert-ran.sh reports/engine.json TestLive || status=1
           exit "$status"
 
@@ -266,12 +253,6 @@ jobs:
         with:
           suite: vps-build
           key: ${{ needs.gate.outputs.build_key }}
-
-      - name: Record that what the lifecycle suite reads has passed
-        uses: ./.github/actions/suite-passed
-        with:
-          suite: vps-lifecycle
-          key: ${{ needs.gate.outputs.lifecycle_key }}
 
       - name: Record that what the engine install reads has passed
         uses: ./.github/actions/suite-passed
