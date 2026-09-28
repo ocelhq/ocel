@@ -2,8 +2,6 @@ package ports
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -64,7 +62,7 @@ func (s KeyValues) table(ctx context.Context, in keyvalue.Partition) (string, er
 }
 
 func PartitionKey(in keyvalue.Partition) string {
-	return join(append([]string{in.Root}, in.Path...))
+	return join(in.Segments())
 }
 
 func sortKey(path []string) string { return join(path) + segmentSeparator }
@@ -199,7 +197,7 @@ func writingOf(entry keyvalue.Entry) (writing, error) {
 	if err := keyvalue.RefuseNonJSON(entry); err != nil {
 		return writing{}, err
 	}
-	next, err := mintRevision()
+	next, err := keyvalue.NewRevision()
 	if err != nil {
 		return writing{}, err
 	}
@@ -320,7 +318,7 @@ func pathOf(item map[string]ddbtypes.AttributeValue) ([]string, bool) {
 	if !ok || rest == "" {
 		return nil, false
 	}
-	return split(rest), true
+	return keyvalue.SplitSegments(rest, segmentSeparator), true
 }
 
 func entryOf(key keyvalue.Key, item map[string]ddbtypes.AttributeValue) (keyvalue.Entry, error) {
@@ -332,30 +330,7 @@ func entryOf(key keyvalue.Key, item map[string]ddbtypes.AttributeValue) (keyvalu
 	return keyvalue.Entry{Key: key, Value: []byte(value.Value), Revision: keyvalue.Revision(stringAttribute(item, revisionAttribute))}, nil
 }
 
-func join(segments []string) string {
-	escaped := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		escaped = append(escaped, escape(segment))
-	}
-	return strings.Join(escaped, segmentSeparator)
-}
-
-func split(key string) []string {
-	segments := strings.Split(key, segmentSeparator)
-	out := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		out = append(out, unescape(segment))
-	}
-	return out
-}
-
-func escape(segment string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(segment, "%", "%25"), segmentSeparator, "%23")
-}
-
-func unescape(segment string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(segment, "%23", segmentSeparator), "%25", "%")
-}
+func join(segments []string) string { return keyvalue.JoinSegments(segments, segmentSeparator, "") }
 
 func pointKey(key keyvalue.Key) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
@@ -370,12 +345,4 @@ func stringAttribute(item map[string]ddbtypes.AttributeValue, name string) strin
 		return ""
 	}
 	return value.Value
-}
-
-func mintRevision() (keyvalue.Revision, error) {
-	token := make([]byte, 16)
-	if _, err := rand.Read(token); err != nil {
-		return "", fmt.Errorf("mint a revision token: %w", err)
-	}
-	return keyvalue.Revision(hex.EncodeToString(token)), nil
 }

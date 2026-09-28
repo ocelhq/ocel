@@ -78,7 +78,7 @@ func TestLiveStacks(t *testing.T) {
 	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.KeyValues())
 }
 
-func TestLiveKeyValueStore(t *testing.T) {
+func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 	conformance.RunStore(t, live(t).KeyValues())
 }
 
@@ -92,7 +92,7 @@ func TestLiveASchemaTheOlderLayoutWroteIsRefusedRatherThanStampedOver(t *testing
 		t.Fatalf("open Firestore: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
-	older := ports.TierKeyValues(client, environment.TierPreview).Doc("schema#preview")
+	older := ports.OpenTierCollection(client, environment.TierPreview).Doc("schema#preview")
 	if _, err := older.Set(ctx, map[string]any{"body": []byte("2"), "rev": "older"}); err != nil {
 		t.Fatalf("write the schema the older layout kept: %v", err)
 	}

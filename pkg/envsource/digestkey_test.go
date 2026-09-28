@@ -32,7 +32,7 @@ func everyRecord(t *testing.T, store envvars.Store) []byte {
 	var partitions []keyvalue.Partition
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		partitions = append(partitions, envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: tier}))
-		for _, root := range []string{keyvalue.RootEnvSources, keyvalue.RootEnvSourceStatus, keyvalue.RootEnvSourceDigestKey} {
+		for _, root := range []keyvalue.Root{keyvalue.RootEnvSources, keyvalue.RootEnvSourceStatus, keyvalue.RootEnvSourceDigestKey} {
 			partitions = append(partitions, keyvalue.Partition{Tier: tier, Root: root})
 		}
 	}

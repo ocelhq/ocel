@@ -2,10 +2,13 @@ package keyvalue
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -28,29 +31,30 @@ var ErrStale = errors.New("the entry moved since it was read")
 
 var ErrNotFound = errors.New("no such entry")
 
-const (
-	RootSchema          = "schema"
-	RootProjects        = "projects"
-	RootStacks          = "stacks"
-	RootEnvironments    = "environments"
-	RootBootstrap       = "bootstrap"
-	RootEdgeStacks      = "edgestacks"
-	RootWildcard        = "wildcard"
-	RootLedger          = "ledger"
-	RootValues          = "values"
-	RootValueRefs       = "valuerefs"
-	RootConformance     = "conformance"
-	RootEnvSources      = "envsources"
-	RootEnvSourceStatus = "envsourcestatus"
+type Root string
 
-	RootEnvSourceDigestKey = "envsourcedigestkey"
+const (
+	RootSchema             Root = "schema"
+	RootProjects           Root = "projects"
+	RootStacks             Root = "stacks"
+	RootEnvironments       Root = "environments"
+	RootBootstrap          Root = "bootstrap"
+	RootEdgeStacks         Root = "edgestacks"
+	RootWildcard           Root = "wildcard"
+	RootLedger             Root = "ledger"
+	RootValues             Root = "values"
+	RootValueRefs          Root = "valuerefs"
+	RootConformance        Root = "conformance"
+	RootEnvSources         Root = "envsources"
+	RootEnvSourceStatus    Root = "envsourcestatus"
+	RootEnvSourceDigestKey Root = "envsourcedigestkey"
 )
 
-var variableRoots = []string{RootValues, RootValueRefs, RootEnvSources, RootEnvSourceStatus, RootEnvSourceDigestKey}
+var variableRoots = []Root{RootValues, RootValueRefs, RootEnvSources, RootEnvSourceStatus, RootEnvSourceDigestKey}
 
 type Partition struct {
 	Tier environment.Tier
-	Root string
+	Root Root
 	Path []string
 }
 
@@ -58,10 +62,14 @@ func (p Partition) Key(path ...string) Key {
 	return Key{Partition: p, Path: slices.Clone(path)}
 }
 
+func (p Partition) Segments() []string {
+	return append([]string{string(p.Root)}, p.Path...)
+}
+
 func (p Partition) HoldsVariables() bool { return slices.Contains(variableRoots, p.Root) }
 
 func (p Partition) String() string {
-	return string(p.Tier) + ":" + joined(append([]string{p.Root}, p.Path...))
+	return string(p.Tier) + ":" + JoinSegments(p.Segments(), "/", "|")
 }
 
 type Key struct {
@@ -70,17 +78,60 @@ type Key struct {
 }
 
 func (k Key) String() string {
-	return k.Partition.String() + "|" + joined(k.Path)
+	return k.Partition.String() + "|" + JoinSegments(k.Path, "/", "|")
 }
 
-var segmentEscapes = strings.NewReplacer("%", "%25", "/", "%2F", "|", "%7C")
-
-func joined(segments []string) string {
+func JoinSegments(segments []string, separator, reserved string) string {
 	escaped := make([]string, 0, len(segments))
 	for _, segment := range segments {
-		escaped = append(escaped, segmentEscapes.Replace(segment))
+		escaped = append(escaped, escapeSegment(segment, separator+reserved))
 	}
-	return strings.Join(escaped, "/")
+	return strings.Join(escaped, separator)
+}
+
+func SplitSegments(joined, separator string) []string {
+	segments := strings.Split(joined, separator)
+	for i, segment := range segments {
+		segments[i] = unescapeSegment(segment)
+	}
+	return segments
+}
+
+func escapeSegment(segment, reserved string) string {
+	var escaped strings.Builder
+	for i := 0; i < len(segment); i++ {
+		if segment[i] == '%' || strings.IndexByte(reserved, segment[i]) >= 0 {
+			fmt.Fprintf(&escaped, "%%%02X", segment[i])
+			continue
+		}
+		escaped.WriteByte(segment[i])
+	}
+	return escaped.String()
+}
+
+func unescapeSegment(segment string) string {
+	var unescaped strings.Builder
+	for i := 0; i < len(segment); i++ {
+		if segment[i] == '%' && i+2 < len(segment) {
+			if value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8); err == nil {
+				unescaped.WriteByte(byte(value))
+				i += 2
+				continue
+			}
+		}
+		unescaped.WriteByte(segment[i])
+	}
+	return unescaped.String()
+}
+
+const revisionBytes = 16
+
+func NewRevision() (Revision, error) {
+	token := make([]byte, revisionBytes)
+	if _, err := rand.Read(token); err != nil {
+		return "", fmt.Errorf("mint a revision token: %w", err)
+	}
+	return Revision(hex.EncodeToString(token)), nil
 }
 
 func (k Key) Under(prefix ...string) ([]string, bool) {
