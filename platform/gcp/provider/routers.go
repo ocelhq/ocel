@@ -12,9 +12,9 @@ type routers struct{ edges edges }
 func (r routers) Open(kind router.Kind) (router.Router, error) {
 	switch kind {
 	case router.Kind(direct.Kind):
-		return direct.NewRouter(direct.New(r.edges.keyValues, r.edges.pins)), nil
+		return direct.NewRouter(r.edges.openDirect()), nil
 	case router.Kind(alb.Kind):
-		return alb.NewRouter(alb.New(r.edges.albDeps())), nil
+		return alb.NewRouter(r.edges.openALB()), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider routes through %q and %q, not %q", direct.Kind, alb.Kind, kind)
