@@ -54,19 +54,62 @@ func TestVerboseIsAFilterAndNotAFormat(t *testing.T) {
 	}
 }
 
-func TestColourNeedsATerminalThatHasNotOptedOut(t *testing.T) {
+func TestColourNeedsATerminalOrAGitHubActionsLogUnlessTheEnvironmentAskedOtherwise(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		origin Origin
 		want   bool
 	}{
 		{"a terminal", Origin{TTY: true}, true},
-		{"a terminal with NO_COLOR set", Origin{TTY: true, NoColor: true}, false},
+		{"a dumb terminal", Origin{TTY: true, Dumb: true}, false},
 		{"a pipe", Origin{}, false},
+		{"a GitHub Actions log", Origin{GitHubActions: true}, true},
+		{"a terminal asked for no colour", Origin{TTY: true, ColorAsked: ColorNever}, false},
+		{"a GitHub Actions log asked for no colour", Origin{GitHubActions: true, ColorAsked: ColorNever}, false},
+		{"a pipe asked for colour", Origin{ColorAsked: ColorAlways}, true},
+		{"a dumb terminal asked for colour", Origin{TTY: true, Dumb: true, ColorAsked: ColorAlways}, true},
 	} {
 		if got := Resolve(tc.origin).Color; got != tc.want {
 			t.Errorf("%s: Color = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestDetectReadsWhetherTheEnvironmentAskedForColour(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		want ColorChoice
+	}{
+		{"nothing set", nil, ColorAuto},
+		{"NO_COLOR", map[string]string{"NO_COLOR": "1"}, ColorNever},
+		{"FORCE_COLOR", map[string]string{"FORCE_COLOR": "1"}, ColorAlways},
+		{"FORCE_COLOR at a colour depth", map[string]string{"FORCE_COLOR": "3"}, ColorAlways},
+		{"FORCE_COLOR=0", map[string]string{"FORCE_COLOR": "0"}, ColorNever},
+		{"FORCE_COLOR=false", map[string]string{"FORCE_COLOR": "false"}, ColorNever},
+		{"CLICOLOR_FORCE", map[string]string{"CLICOLOR_FORCE": "1"}, ColorAlways},
+		{"CLICOLOR_FORCE=0", map[string]string{"CLICOLOR_FORCE": "0"}, ColorAuto},
+		{"NO_COLOR over FORCE_COLOR", map[string]string{"NO_COLOR": "1", "FORCE_COLOR": "1"}, ColorNever},
+		{"FORCE_COLOR=0 over CLICOLOR_FORCE", map[string]string{"FORCE_COLOR": "0", "CLICOLOR_FORCE": "1"}, ColorNever},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, name := range []string{"NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE"} {
+				t.Setenv(name, tc.env[name])
+			}
+			if got := colorAsked(); got != tc.want {
+				t.Errorf("colorAsked() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestForcedColourReachesAWriterThatIsNoTerminal(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("FORCE_COLOR", "1")
+	t.Setenv("GITHUB_ACTIONS", "")
+
+	if !IsColored(&bytes.Buffer{}) {
+		t.Error("IsColored() = false with FORCE_COLOR set, want true")
 	}
 }
 
@@ -81,6 +124,9 @@ func TestOnlyTheTerminalFactsMoveWhenTheTerminalGoesAway(t *testing.T) {
 
 func TestDetectReadsTheTerminalTheCommandWasGiven(t *testing.T) {
 	t.Setenv("COLUMNS", "40")
+	t.Setenv("FORCE_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("GITHUB_ACTIONS", "")
 
 	p := Detect("json", true, &bytes.Buffer{})
 

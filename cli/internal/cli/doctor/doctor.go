@@ -722,7 +722,7 @@ func newPaint(out io.Writer) paint {
 
 func tint(out io.Writer, attrs ...color.Attribute) *color.Color {
 	c := color.New(attrs...)
-	if runui.IsTerminal(out) && !color.NoColor {
+	if runui.IsColored(out) {
 		c.EnableColor()
 	} else {
 		c.DisableColor()

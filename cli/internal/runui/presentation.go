@@ -3,8 +3,6 @@ package runui
 import (
 	"io"
 	"os"
-
-	"github.com/fatih/color"
 )
 
 type Format string
@@ -14,10 +12,18 @@ const (
 	FormatJSON  Format = "json"
 )
 
+type ColorChoice int
+
+const (
+	ColorAuto ColorChoice = iota
+	ColorNever
+	ColorAlways
+)
+
 type Origin struct {
 	LogFormat     Format
 	Verbose       bool
-	NoColor       bool
+	ColorAsked    ColorChoice
 	TTY           bool
 	Width         int
 	WidthMeasured bool
@@ -43,7 +49,7 @@ func Resolve(o Origin) Presentation {
 	p := Presentation{
 		Format:        FormatHuman,
 		Verbose:       o.Verbose,
-		Color:         o.TTY && !o.NoColor,
+		Color:         o.ColorAsked == ColorAlways || o.ColorAsked == ColorAuto && (o.TTY && !o.Dumb || o.GitHubActions),
 		TTY:           o.TTY,
 		Dumb:          o.Dumb,
 		Width:         o.Width,
@@ -68,11 +74,32 @@ func Detect(logFormat Format, verbose bool, w io.Writer) Presentation {
 	return Resolve(Origin{
 		LogFormat:     logFormat,
 		Verbose:       verbose,
-		NoColor:       color.NoColor || os.Getenv("NO_COLOR") != "",
+		ColorAsked:    colorAsked(),
 		TTY:           IsTerminal(w),
 		Width:         termWidth(w),
 		WidthMeasured: measured,
 		Dumb:          os.Getenv("TERM") == "dumb",
 		GitHubActions: os.Getenv("GITHUB_ACTIONS") == "true",
 	})
+}
+
+func IsColored(w io.Writer) bool {
+	return Detect(FormatHuman, false, w).Color
+}
+
+func colorAsked() ColorChoice {
+	if os.Getenv("NO_COLOR") != "" {
+		return ColorNever
+	}
+	switch os.Getenv("FORCE_COLOR") {
+	case "":
+	case "0", "false":
+		return ColorNever
+	default:
+		return ColorAlways
+	}
+	if force := os.Getenv("CLICOLOR_FORCE"); force != "" && force != "0" {
+		return ColorAlways
+	}
+	return ColorAuto
 }

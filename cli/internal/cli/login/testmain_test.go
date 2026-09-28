@@ -8,6 +8,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	clitest.UnsetColorEnv()
 	done := clitest.IsolateConfigHome()
 	code := m.Run()
 	done()
