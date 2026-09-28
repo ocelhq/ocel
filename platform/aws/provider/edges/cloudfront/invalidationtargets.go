@@ -5,14 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-const invalidationAttempts = 8
+const (
+	invalidationAttempts     = 8
+	invalidationRetryBase    = 100 * time.Millisecond
+	invalidationRetryCeiling = 2 * time.Second
+)
 
 func newInvalidationPartition(tier environment.Tier, slug string) keyvalue.Partition {
 	partition := keyvalue.Partition{Tier: tier, Root: keyvalue.RootRouters, Path: []string{string(Kind)}}
@@ -25,22 +31,36 @@ func newInvalidationPartition(tier environment.Tier, slug string) keyvalue.Parti
 type invalidationTargets struct {
 	keyValues keyvalue.Store
 	partition keyvalue.Partition
+	wait      func(context.Context, time.Duration) error
 }
 
-func (t invalidationTargets) note(ctx context.Context, distribution string) error {
-	return t.set(ctx, distribution, true)
+func (t invalidationTargets) add(ctx context.Context, distribution string) error {
+	return t.rewrite(ctx, distribution, func(targets []string) []string {
+		return append(withoutTarget(targets, distribution), distribution)
+	})
 }
 
-func (t invalidationTargets) forget(ctx context.Context, distribution string) error {
-	return t.set(ctx, distribution, false)
+func (t invalidationTargets) remove(ctx context.Context, distribution string) error {
+	return t.rewrite(ctx, distribution, func(targets []string) []string {
+		return withoutTarget(targets, distribution)
+	})
 }
 
-func (t invalidationTargets) set(ctx context.Context, distribution string, noted bool) error {
+func withoutTarget(targets []string, distribution string) []string {
+	return slices.DeleteFunc(slices.Clone(targets), func(target string) bool { return target == distribution })
+}
+
+func (t invalidationTargets) rewrite(ctx context.Context, distribution string, change func([]string) []string) error {
 	if distribution == "" {
-		return fmt.Errorf("note an invalidation target for %s: it names no front to invalidate", t.partition)
+		return fmt.Errorf("record an invalidation target for %s: it names no front to invalidate", t.partition)
 	}
 	at := t.partition.Key("invalidation")
-	for range invalidationAttempts {
+	for attempt := range invalidationAttempts {
+		if attempt > 0 {
+			if err := t.backoff(ctx, attempt-1); err != nil {
+				return err
+			}
+		}
 		recorded, err := keyvalue.ReadOrEmpty(ctx, t.keyValues, at)
 		if err != nil {
 			return fmt.Errorf("read the invalidation targets for %s: %w", t.partition, err)
@@ -51,15 +71,12 @@ func (t invalidationTargets) set(ctx context.Context, distribution string, noted
 				return fmt.Errorf("read the invalidation targets for %s: %w", t.partition, err)
 			}
 		}
-		kept := slices.DeleteFunc(slices.Clone(targets), func(target string) bool { return target == distribution })
-		if noted {
-			kept = append(kept, distribution)
-		}
-		slices.Sort(kept)
-		if slices.Equal(kept, targets) {
+		changed := change(targets)
+		slices.Sort(changed)
+		if slices.Equal(changed, targets) {
 			return nil
 		}
-		if err := t.write(ctx, recorded, kept); err != nil {
+		if err := t.write(ctx, recorded, changed); err != nil {
 			if errors.Is(err, keyvalue.ErrStale) {
 				continue
 			}
@@ -68,6 +85,14 @@ func (t invalidationTargets) set(ctx context.Context, distribution string, noted
 		return nil
 	}
 	return fmt.Errorf("record the invalidation targets for %s: they moved under %d attempts", t.partition, invalidationAttempts)
+}
+
+func (t invalidationTargets) backoff(ctx context.Context, attempt int) error {
+	delay := jitteredDelay(invalidationRetryBase, invalidationRetryCeiling, attempt, rand.Float64())
+	if t.wait != nil {
+		return t.wait(ctx, delay)
+	}
+	return waitFor(ctx, delay)
 }
 
 func (t invalidationTargets) write(ctx context.Context, recorded keyvalue.Entry, targets []string) error {

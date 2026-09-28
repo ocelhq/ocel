@@ -45,13 +45,13 @@ type routeStore struct {
 	stillActive router.StillActive
 }
 
+func jitteredDelay(base, ceiling time.Duration, attempt int, chance float64) time.Duration {
+	delay := min(time.Duration(float64(base)*math.Pow(2, float64(attempt))), ceiling)
+	return delay + time.Duration(float64(delay)*0.25*(2*chance-1))
+}
+
 func (w routeStore) backoff(ctx context.Context, attempt int) error {
-	delay := time.Duration(float64(routeRetryBase) * math.Pow(2, float64(attempt)))
-	if delay > routeRetryCeiling {
-		delay = routeRetryCeiling
-	}
-	spread := w.chance()
-	delay += time.Duration(float64(delay) * 0.25 * (2*spread - 1))
+	delay := jitteredDelay(routeRetryBase, routeRetryCeiling, attempt, w.chance())
 	if w.wait != nil {
 		return w.wait(ctx, delay)
 	}

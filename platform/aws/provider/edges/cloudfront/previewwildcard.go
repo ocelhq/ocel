@@ -54,7 +54,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	if err := wildcardInvalidationTargets(c, environment.TierPreview, deployed).note(ctx, wildcardFront.id); err != nil {
+	if err := wildcardInvalidationTargets(c, environment.TierPreview, deployed).add(ctx, wildcardFront.id); err != nil {
 		return "", err
 	}
 	return wildcardFront.domainName, nil
@@ -218,7 +218,7 @@ func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients,
 	if !deployed.Present {
 		return nil
 	}
-	return wildcardInvalidationTargets(c, environment.TierPreview, deployed).forget(ctx, distribution)
+	return wildcardInvalidationTargets(c, environment.TierPreview, deployed).remove(ctx, distribution)
 }
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, baseDomain string) error {
