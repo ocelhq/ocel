@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -131,22 +132,22 @@ func row(raw string) (records.Revision, []byte, error) {
 
 type Cipher struct{ Root string }
 
-func (Cipher) Seal(context.Context, records.SealScope, []byte) ([]byte, error) {
+func (Cipher) Seal(context.Context, environment.Tier, seal.AssociatedData, []byte) ([]byte, error) {
 	return nil, errors.New("the box seals values only through its helper")
 }
 
-func (s Cipher) Open(_ context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
-	if at.Tier == "" {
-		return nil, fmt.Errorf("%s names no tier", at.Name)
+func (s Cipher) Open(_ context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	if tier == "" {
+		return nil, fmt.Errorf("a value bound to %s names no tier", bound.Bytes())
 	}
-	key, err := os.ReadFile(KeyPath(s.Root, at.Tier))
+	key, err := os.ReadFile(KeyPath(s.Root, tier))
 	if err != nil {
-		return nil, fmt.Errorf("read the %s seal key: %w", at.Tier, err)
+		return nil, fmt.Errorf("read the %s seal key: %w", tier, err)
 	}
-	return Open(key, at, sealed)
+	return Open(key, bound, sealed)
 }
 
-func Open(key []byte, at records.SealScope, sealed []byte) ([]byte, error) {
+func Open(key []byte, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
 	if len(key) != sealKeyBytes {
 		return nil, fmt.Errorf("the seal key is %d bytes, want %d", len(key), sealKeyBytes)
 	}
@@ -161,9 +162,9 @@ func Open(key []byte, at records.SealScope, sealed []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	plaintext, err := gcm.Open(nil, sealed[:sealNonce], sealed[sealNonce:], at.AAD())
+	plaintext, err := gcm.Open(nil, sealed[:sealNonce], sealed[sealNonce:], bound.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("%s was not sealed at this coordinate", at.Name)
+		return nil, fmt.Errorf("the value was not sealed under this key bound to %s", bound.Bytes())
 	}
 	return plaintext, nil
 }
@@ -249,6 +250,6 @@ func decodeSegment(segment string) (string, error) {
 }
 
 var (
-	_ records.Store  = Records{}
-	_ records.Cipher = Cipher{}
+	_ records.Store = Records{}
+	_ seal.Cipher   = Cipher{}
 )

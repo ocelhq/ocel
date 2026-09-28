@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 type EnvironmentReader struct {
 	Records     records.Store
-	Cipher      records.Cipher
+	Cipher      seal.Cipher
 	Scope       Scope
 	Environment string
 }

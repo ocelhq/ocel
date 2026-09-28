@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -113,7 +114,7 @@ func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtif
 
 func (p *Provider) Records() records.Store { return p.records }
 
-func (p *Provider) Cipher() records.Cipher { return p.cipher }
+func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 
 func (p *Provider) Credentials() provider.Credentials { return credentials{p} }
 

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Store interface {
@@ -103,18 +101,3 @@ func Forget(ctx context.Context, store Store, name Name) error {
 }
 
 const forgetAttempts = 5
-
-type Cipher interface {
-	Seal(ctx context.Context, at SealScope, plaintext []byte) ([]byte, error)
-
-	Open(ctx context.Context, at SealScope, sealed []byte) ([]byte, error)
-}
-
-type SealScope struct {
-	Project string
-	Tier    environment.Tier
-	Env     string
-	Folder  string
-	Binding string
-	Name    string
-}

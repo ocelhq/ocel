@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -90,11 +91,11 @@ type keylessBootstrap struct{}
 
 func (keylessBootstrap) Key(context.Context, environment.Tier) (string, error) { return "", nil }
 
+var sealedAt = seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_API_KEY"}}
+
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 	sealer := awsports.Cipher{Keys: keylessBootstrap{}}
-	at := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
-
-	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
+	_, err := sealer.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal when this bootstrap made no key")
 	}
@@ -109,9 +110,7 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	sealer := awsports.Cipher{}
-	at := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
-
-	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
+	_, err := sealer.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal where nothing has a key at all")
 	}

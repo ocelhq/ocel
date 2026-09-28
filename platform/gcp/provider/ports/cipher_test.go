@@ -2,16 +2,20 @@ package ports
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"net"
 	"sync"
 	"testing"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const (
@@ -40,7 +44,64 @@ func (k *recordingKMS) Decrypt(_ context.Context, req *kmspb.DecryptRequest) (*k
 	return &kmspb.DecryptResponse{Plaintext: []byte("sk_live_secret")}, nil
 }
 
-func servingKMS(t *testing.T) (*Clients, *recordingKMS) {
+type aeadKMS struct {
+	kmspb.UnimplementedKeyManagementServiceServer
+
+	mu   sync.Mutex
+	keys map[string]cipher.AEAD
+}
+
+func (k *aeadKMS) key(name string) (cipher.AEAD, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if gcm, ok := k.keys[name]; ok {
+		return gcm, nil
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(secret)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	k.keys[name] = gcm
+	return gcm, nil
+}
+
+func (k *aeadKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
+	gcm, err := k.key(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return &kmspb.EncryptResponse{Ciphertext: gcm.Seal(nonce, nonce, req.GetPlaintext(), req.GetAdditionalAuthenticatedData())}, nil
+}
+
+func (k *aeadKMS) Decrypt(_ context.Context, req *kmspb.DecryptRequest) (*kmspb.DecryptResponse, error) {
+	gcm, err := k.key(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	sealed := req.GetCiphertext()
+	if len(sealed) < gcm.NonceSize() {
+		return nil, status.Error(codes.InvalidArgument, "Decryption failed: the ciphertext is invalid")
+	}
+	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], req.GetAdditionalAuthenticatedData())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "Decryption failed: the ciphertext is invalid")
+	}
+	return &kmspb.DecryptResponse{Plaintext: opened}, nil
+}
+
+func serving(t *testing.T, kms kmspb.KeyManagementServiceServer) *Clients {
 	t.Helper()
 	isolated(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -48,19 +109,35 @@ func servingKMS(t *testing.T) (*Clients, *recordingKMS) {
 		t.Fatal(err)
 	}
 	server := grpc.NewServer()
-	fake := &recordingKMS{}
-	kmspb.RegisterKeyManagementServiceServer(server, fake)
+	kmspb.RegisterKeyManagementServiceServer(server, kms)
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
-	return &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://" + listener.Addr().String()}, fake
+	return &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://" + listener.Addr().String()}
 }
 
-var sealedAt = records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+func servingKMS(t *testing.T) (*Clients, *recordingKMS) {
+	t.Helper()
+	fake := &recordingKMS{}
+	return serving(t, fake), fake
+}
+
+func TestCipherConformance(t *testing.T) {
+	conformance.RunCipher(t, Cipher{Clients: serving(t, &aeadKMS{keys: map[string]cipher.AEAD{}})})
+}
+
+var sealedAt = seal.AssociatedData{
+	{Name: "project", Value: "shop"},
+	{Name: "class", Value: "production"},
+	{Name: "environment", Value: "staging"},
+	{Name: "folder", Value: "/web"},
+	{Name: "binding", Value: ""},
+	{Name: "key", Value: "STRIPE_API_KEY"},
+}
 
 func TestAValueIsSealedUnderItsTierKeyAndBoundToItsCoordinateBytes(t *testing.T) {
 	clients, fake := servingKMS(t)
 
-	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), sealedAt, []byte("sk_live_secret")); err != nil {
+	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret")); err != nil {
 		t.Fatalf("Seal() = %v", err)
 	}
 	if len(fake.encrypted) != 1 {
@@ -77,7 +154,7 @@ func TestAValueIsSealedUnderItsTierKeyAndBoundToItsCoordinateBytes(t *testing.T)
 func TestAValueAlreadySealedUnderItsTierKeyAndCoordinateBytesStillOpens(t *testing.T) {
 	clients, _ := servingKMS(t)
 
-	opened, err := (Cipher{Clients: clients}).Open(context.Background(), sealedAt, []byte("sealed"))
+	opened, err := (Cipher{Clients: clients}).Open(context.Background(), environment.TierProduction, sealedAt, []byte("sealed"))
 	if err != nil || string(opened) != "sk_live_secret" {
 		t.Fatalf("Open() = %q, %v, want the value sealed under %s at %q to open", opened, err, sealedKey, boundBytes)
 	}

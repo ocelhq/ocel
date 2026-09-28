@@ -21,8 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -209,15 +209,12 @@ func (s *liveStores) once(name string, mint func() (storeCredential, error)) (st
 	return credential, nil
 }
 
-func storeCoordinate(ref provider.StackRef) records.SealScope {
-	return records.SealScope{
-		Project: ref.Project, Tier: ref.Tier, Env: storeRef(ref).Name.String(),
-		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
-	}
+func storeSecretAssociatedData(ref provider.StackRef) seal.AssociatedData {
+	return live.StoreSecretAssociatedData(ref.Project, ref.Tier, storeRef(ref).Name.String())
 }
 
 func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, name string) (storeCredential, error) {
-	at := storeCoordinate(ref)
+	bound := storeSecretAssociatedData(ref)
 	sealed, err := p.host.Kept(ctx, ref.Tier, name)
 	if err != nil {
 		return storeCredential{}, err
@@ -227,7 +224,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 		if err != nil {
 			return storeCredential{}, err
 		}
-		candidate, err := p.cipher.Seal(ctx, at, []byte(minted))
+		candidate, err := p.cipher.Seal(ctx, ref.Tier, bound, []byte(minted))
 		if err != nil {
 			return storeCredential{}, err
 		}
@@ -235,7 +232,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 			return storeCredential{}, err
 		}
 	}
-	opened, err := p.cipher.Open(ctx, at, sealed)
+	opened, err := p.cipher.Open(ctx, ref.Tier, bound, sealed)
 	if err != nil {
 		return storeCredential{}, err
 	}
@@ -660,7 +657,7 @@ func (p *Provider) storeRoot(ctx context.Context, ref provider.StackRef, store s
 	if len(sealed) == 0 {
 		return storeCredential{}, nil
 	}
-	opened, err := p.cipher.Open(ctx, storeCoordinate(ref), sealed)
+	opened, err := p.cipher.Open(ctx, ref.Tier, storeSecretAssociatedData(ref), sealed)
 	if err != nil {
 		return storeCredential{}, err
 	}

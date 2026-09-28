@@ -2,15 +2,6 @@ package records
 
 import "strings"
 
-func (c SealScope) AAD() []byte {
-	var bound strings.Builder
-	for _, part := range []string{c.Project, string(c.Tier), c.Env, c.Folder, c.Binding, c.Name} {
-		bound.WriteString(Escape(part))
-		bound.WriteByte('/')
-	}
-	return []byte(bound.String())
-}
-
 func Escape(value string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(value, "%", "%25"), "/", "%2F")
 }

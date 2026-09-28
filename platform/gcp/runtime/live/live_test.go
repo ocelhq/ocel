@@ -14,13 +14,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/seal"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type stores struct {
 	records records.Store
-	sealer  records.Cipher
+	sealer  seal.Cipher
 }
 
 func fakeStores() stores {

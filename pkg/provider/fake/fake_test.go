@@ -119,36 +119,6 @@ func TestRecordsListIsScopedToThePrefix(t *testing.T) {
 	}
 }
 
-func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	cipher := fake.NewCipher()
-	at := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "production", Name: "DATABASE_URL"}
-
-	sealed, err := cipher.Seal(ctx, at, []byte("postgres://"))
-	if err != nil {
-		t.Fatalf("Seal() error = %v", err)
-	}
-	if bytes.Contains(sealed, []byte("postgres://")) {
-		t.Fatal("Seal() left the plaintext in the sealed bytes")
-	}
-
-	opened, err := cipher.Open(ctx, at, sealed)
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	if string(opened) != "postgres://" {
-		t.Errorf("Open() = %q", opened)
-	}
-
-	elsewhere := at
-	elsewhere.Name = "OTHER_URL"
-	if _, err := cipher.Open(ctx, elsewhere, sealed); err == nil {
-		t.Fatal("Open() at another coordinate succeeded, want the coordinate to bind the value")
-	}
-}
-
 func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 	t.Parallel()
 

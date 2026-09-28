@@ -31,8 +31,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -432,19 +432,19 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 }
 
 type countingCipher struct {
-	records.Cipher
+	seal.Cipher
 
 	mu     sync.Mutex
 	opened int
 }
 
-func (c *countingCipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
-	if at.Binding != "" {
+func (c *countingCipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	if slices.ContainsFunc(bound, func(f seal.Field) bool { return f.Name == "binding" && f.Value != "" }) {
 		c.mu.Lock()
 		c.opened++
 		c.mu.Unlock()
 	}
-	return c.Cipher.Open(ctx, at, sealed)
+	return c.Cipher.Open(ctx, tier, bound, sealed)
 }
 
 func (c *countingCipher) count() int {
@@ -458,7 +458,7 @@ type sealCounting struct {
 	cipher *countingCipher
 }
 
-func (s sealCounting) Cipher() records.Cipher { return s.cipher }
+func (s sealCounting) Cipher() seal.Cipher { return s.cipher }
 
 func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 	builtProject(t)

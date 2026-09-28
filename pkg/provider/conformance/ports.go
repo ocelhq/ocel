@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -255,21 +256,22 @@ func RunStore(t *testing.T, store records.Store) {
 	})
 }
 
-func RunCipher(t *testing.T, cipher records.Cipher) {
+func RunCipher(t *testing.T, cipher seal.Cipher) {
 	t.Helper()
 
 	ctx := context.Background()
 
-	at := records.SealScope{
-		Project: "shop",
-		Tier:    environment.TierProduction,
-		Env:     "*",
-		Folder:  "/",
-		Name:    "DATABASE_URL",
+	tier := environment.TierProduction
+	bound := seal.AssociatedData{
+		{Name: "project", Value: "shop"},
+		{Name: "environment", Value: "*"},
+		{Name: "folder", Value: "/"},
+		{Name: "binding", Value: ""},
+		{Name: "key", Value: "DATABASE_URL"},
 	}
 	plaintext := []byte("postgres://example")
 
-	sealed, err := cipher.Seal(ctx, at, plaintext)
+	sealed, err := cipher.Seal(ctx, tier, bound, plaintext)
 	if err != nil {
 		t.Fatalf("Seal() = %v", err)
 	}
@@ -277,24 +279,25 @@ func RunCipher(t *testing.T, cipher records.Cipher) {
 		t.Fatal("Seal() returned the plaintext inside its output")
 	}
 
-	opened, err := cipher.Open(ctx, at, sealed)
+	opened, err := cipher.Open(ctx, tier, bound, sealed)
 	if err != nil {
-		t.Fatalf("Open() at the coordinate sealed = %v", err)
+		t.Fatalf("Open() under the tier and associated data sealed = %v", err)
 	}
 	if !bytes.Equal(opened, plaintext) {
 		t.Fatalf("Open() = %q, want %q", opened, plaintext)
 	}
 
-	for name, moved := range map[string]records.SealScope{
-		"another project":     {Project: "other", Tier: at.Tier, Env: at.Env, Folder: at.Folder, Name: at.Name},
-		"another tier":        {Project: at.Project, Tier: environment.TierPreview, Env: at.Env, Folder: at.Folder, Name: at.Name},
-		"another environment": {Project: at.Project, Tier: at.Tier, Env: "staging", Folder: at.Folder, Name: at.Name},
-		"another folder":      {Project: at.Project, Tier: at.Tier, Env: at.Env, Folder: "/apps/web", Name: at.Name},
-		"another key":         {Project: at.Project, Tier: at.Tier, Env: at.Env, Folder: at.Folder, Name: "API_KEY"},
-	} {
-		t.Run("a value sealed here does not open at "+name, func(t *testing.T) {
-			if _, err := cipher.Open(ctx, moved, sealed); err == nil {
-				t.Fatal("Open() at a coordinate the value was not sealed at succeeded, so the coordinate is not authenticated")
+	t.Run("a value sealed under one tier does not open under another", func(t *testing.T) {
+		if _, err := cipher.Open(ctx, environment.TierPreview, bound, sealed); err == nil {
+			t.Fatal("Open() under another tier succeeded, so one tier's key opens another's values")
+		}
+	})
+	for i, field := range bound {
+		t.Run("a value sealed here does not open with another "+field.Name, func(t *testing.T) {
+			moved := slices.Clone(bound)
+			moved[i].Value = field.Value + "moved"
+			if _, err := cipher.Open(ctx, tier, moved, sealed); err == nil {
+				t.Fatalf("Open() with %s %q succeeded, so the associated data is not authenticated", field.Name, moved[i].Value)
 			}
 		})
 	}

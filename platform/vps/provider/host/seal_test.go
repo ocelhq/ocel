@@ -11,13 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
@@ -35,7 +37,7 @@ func sealDir(t *testing.T) string {
 	return root
 }
 
-func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int) {
+func rootedHelper(t *testing.T, root string) string {
 	t.Helper()
 	script := filepath.Join(t.TempDir(), "seal")
 	rooted := bytes.Replace(sealScript, []byte(`SEAL_ROOT = "/etc/ocel"`), []byte("SEAL_ROOT = "+strconv.Quote(root)), 1)
@@ -45,7 +47,12 @@ func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int
 	if err := os.WriteFile(script, rooted, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("python3", append([]string{script, sealTier}, args...)...)
+	return script
+}
+
+func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int) {
+	t.Helper()
+	cmd := exec.Command("python3", append([]string{rootedHelper(t, root), sealTier}, args...)...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -60,6 +67,29 @@ func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int
 		t.Fatalf("run the seal helper: %v\n%s", err, stderr.String())
 		return "", 0
 	}
+}
+
+type scratchHelper struct{ script string }
+
+func (h scratchHelper) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
+	return boxstore.LocalTransport{Elevation: []string{"python3", h.script}}.Seal(ctx, what, argv[1:], stdin)
+}
+
+func TestTheBoxCipherSealsAsEveryCipherMust(t *testing.T) {
+	t.Parallel()
+
+	root := sealDir(t)
+	if err := os.MkdirAll(filepath.Join(root, string(environment.TierPreview)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := rootedHelper(t, root)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if out, err := exec.Command("python3", script, string(tier), "init").CombinedOutput(); err != nil {
+			t.Fatalf("init %s: %v\n%s", tier, err, out)
+		}
+	}
+
+	conformance.RunCipher(t, boxstore.NewCipher(scratchHelper{script: script}))
 }
 
 func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
@@ -98,12 +128,13 @@ func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
 	}
 }
 
-var bound = records.SealScope{
-	Project: "shop",
-	Tier:    sealTier,
-	Env:     "*",
-	Folder:  "/a%2Fb",
-	Name:    "DATABASE_URL",
+var bound = seal.AssociatedData{
+	{Name: "project", Value: "shop"},
+	{Name: "class", Value: sealTier},
+	{Name: "environment", Value: "*"},
+	{Name: "folder", Value: "/a%2Fb"},
+	{Name: "binding", Value: ""},
+	{Name: "key", Value: "DATABASE_URL"},
 }
 
 var aCoordinate = sealFlags(bound)
@@ -115,20 +146,20 @@ func (a *argvTaken) Seal(_ context.Context, _ string, argv []string, _ io.Reader
 	return "", nil
 }
 
-func sealArgv(verb string, at records.SealScope) ([]string, error) {
+func sealArgv(verb string, tier environment.Tier, bound seal.AssociatedData) ([]string, error) {
 	taken := &argvTaken{}
 	cipher := boxstore.NewCipher(taken)
 	var err error
 	if verb == "open" {
-		_, err = cipher.Open(context.Background(), at, nil)
+		_, err = cipher.Open(context.Background(), tier, bound, nil)
 	} else {
-		_, err = cipher.Seal(context.Background(), at, nil)
+		_, err = cipher.Seal(context.Background(), tier, bound, nil)
 	}
 	return taken.argv, err
 }
 
-func sealFlags(at records.SealScope) []string {
-	argv, err := sealArgv("seal", at)
+func sealFlags(bound seal.AssociatedData) []string {
+	argv, err := sealArgv("seal", sealTier, bound)
 	if err != nil {
 		panic(err)
 	}
@@ -160,16 +191,17 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Errorf("open answered %q, want %q", got, plaintext)
 	}
 
-	for name, moved := range map[string]records.SealScope{
-		"another project":     {Project: "other", Tier: bound.Tier, Env: bound.Env, Folder: bound.Folder, Name: bound.Name},
-		"another environment": {Project: bound.Project, Tier: bound.Tier, Env: "staging", Folder: bound.Folder, Name: bound.Name},
-		"another folder":      {Project: bound.Project, Tier: bound.Tier, Env: bound.Env, Folder: "/a/b", Name: bound.Name},
-		"another key":         {Project: bound.Project, Tier: bound.Tier, Env: bound.Env, Folder: bound.Folder, Name: "API_KEY"},
-		"another binding":     {Project: bound.Project, Tier: bound.Tier, Env: bound.Env, Folder: bound.Folder, Binding: "db", Name: bound.Name},
-	} {
+	for i, field := range bound {
+		moved := slices.Clone(bound)
+		moved[i].Value = field.Value + "moved"
 		if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(moved)...)...); code == 0 {
-			t.Errorf("a value sealed here opened at %s, so the coordinate authenticates nothing", name)
+			t.Errorf("a value sealed here opened with another %s, so the associated data authenticates nothing", field.Name)
 		}
+	}
+	reordered := slices.Clone(bound)
+	reordered[0], reordered[len(reordered)-1] = reordered[len(reordered)-1], reordered[0]
+	if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(reordered)...)...); code == 0 {
+		t.Error("a value sealed here opened with its fields handed in another order, so the order authenticates nothing")
 	}
 }
 
@@ -207,7 +239,14 @@ func TestTheSealHelperStillOpensAValueSealedUnderTheKeyAndCoordinateItWasSealedW
 	if err := os.WriteFile(filepath.Join(root, "production", "seal.key"), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	at := records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+	at := seal.AssociatedData{
+		{Name: "project", Value: "shop"},
+		{Name: "class", Value: "production"},
+		{Name: "environment", Value: "staging"},
+		{Name: "folder", Value: "/web"},
+		{Name: "binding", Value: ""},
+		{Name: "key", Value: "STRIPE_API_KEY"},
+	}
 	sealed := "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg78hOZr+SZv+OoHsggDIp1z"
 
 	opened, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(at)...)...)
@@ -248,7 +287,7 @@ func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], bound.AAD())
+	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], bound.Bytes())
 	if err != nil {
 		t.Fatalf("what the helper sealed does not open as %s over the key it minted: %v", SealAlgorithm, err)
 	}
@@ -512,15 +551,12 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	t.Parallel()
 
-	at := records.SealScope{
-		Project: "shop",
-		Tier:    environment.TierProduction,
-		Env:     "*",
-		Folder:  "/apps/web",
-		Binding: "db",
-		Name:    "DATABASE_URL",
-	}
-	argv, err := sealArgv("open", at)
+	argv, err := sealArgv("open", environment.TierProduction, seal.AssociatedData{
+		{Name: "project", Value: "shop"},
+		{Name: "folder", Value: "/apps/web"},
+		{Name: "binding", Value: ""},
+		{Name: "key", Value: "DATABASE_URL"},
+	})
 	if err != nil {
 		t.Fatalf("sealArgv() = %v", err)
 	}
@@ -528,41 +564,22 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 		t.Errorf("the provider runs %q, want the helper it installed and nothing beside", argv[0])
 	}
 	command := words(argv)
-	if strings.Contains(command, SealKeyPath(at.Tier)) {
+	if strings.Contains(command, SealKeyPath(environment.TierProduction)) {
 		t.Errorf("the provider names the key on the command line: %q", command)
 	}
-	if argv[1] != string(at.Tier) || argv[2] != "open" {
-		t.Errorf("the provider runs %q, want the tier it seals under and the verb it asks for", argv)
+	want := []string{
+		boxstore.SealHelper, string(environment.TierProduction), "open",
+		"--project", "shop", "--folder", "/apps/web", "--binding", "", "--key", "DATABASE_URL",
 	}
-	for flag, want := range map[string]string{
-		"--project": at.Project,
-		"--env":     at.Env,
-		"--folder":  at.Folder,
-		"--binding": at.Binding,
-		"--name":    at.Name,
-	} {
-		if handed(argv, flag) != want {
-			t.Errorf("the provider runs %q, which hands %s %q, so the coordinate would authenticate less than it names",
-				argv, flag, handed(argv, flag))
-		}
+	if !slices.Equal(argv, want) {
+		t.Errorf("the provider runs %q, want %q: the tier it seals under, the verb, then every field it is bound to in order", argv, want)
 	}
-}
-
-func handed(argv []string, flag string) string {
-	for i, arg := range argv {
-		if arg == flag && i+1 < len(argv) {
-			return argv[i+1]
-		}
-	}
-	return ""
 }
 
 func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 	t.Parallel()
 
-	argv, err := sealArgv("seal", records.SealScope{
-		Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "DATABASE_URL",
-	})
+	argv, err := sealArgv("seal", environment.TierProduction, bound)
 	if err != nil {
 		t.Fatalf("sealArgv() = %v", err)
 	}
@@ -579,38 +596,36 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 func TestAValueSealedToNoTierIsRefusedRatherThanSealedToWhateverTierExists(t *testing.T) {
 	t.Parallel()
 
-	_, err := sealArgv("seal", records.SealScope{Project: "shop", Name: "DATABASE_URL"})
+	_, err := sealArgv("seal", "", bound)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("sealing at a coordinate naming no tier = %v, want a refusal: a key is minted per tier", err)
+		t.Fatalf("sealing under no tier = %v, want a refusal: a key is minted per tier", err)
 	}
 }
 
-func TestACoordinateMissingAnyPartButTheBindingIsRefused(t *testing.T) {
+func TestTheSealHelperRefusesAFieldItIsHandedTwice(t *testing.T) {
 	t.Parallel()
 
-	whole := records.SealScope{
-		Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Binding: "db", Name: "DATABASE_URL",
+	root := sealDir(t)
+	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
+		t.Fatalf("init exited %d", code)
 	}
-	for name, blanked := range map[string]func(*records.SealScope){
-		"project": func(at *records.SealScope) { at.Project = "" },
-		"env":     func(at *records.SealScope) { at.Env = "" },
-		"folder":  func(at *records.SealScope) { at.Folder = "" },
-		"name":    func(at *records.SealScope) { at.Name = "" },
-	} {
-		at := whole
-		blanked(&at)
-		_, err := sealArgv("seal", at)
-		var refused refusal.Refusal
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-			t.Errorf("sealing at a coordinate naming no %s = %v, want a refusal: the coordinate is what a value is bound to", name, err)
-		}
+	if _, code := sealHelperAt(t, root, encoded("v"), "seal", "--key", "A", "--key", "B"); code == 0 {
+		t.Error("the helper sealed a value bound to key twice, and a field named twice is two callers' fields read as one")
 	}
+}
 
-	at := whole
-	at.Binding = ""
-	if _, err := sealArgv("seal", at); err != nil {
-		t.Errorf("sealing a value that belongs to no binding = %v, want the seal every plain value takes", err)
+func TestTheSealHelperRefusesAFlagThatNamesNoField(t *testing.T) {
+	t.Parallel()
+
+	root := sealDir(t)
+	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
+		t.Fatalf("init exited %d", code)
+	}
+	for _, flag := range []string{"key", "--", "--Key", "--a/b"} {
+		if _, code := sealHelperAt(t, root, encoded("v"), "seal", flag, "v"); code == 0 {
+			t.Errorf("the helper sealed a value handed %q, which names no field", flag)
+		}
 	}
 }
 

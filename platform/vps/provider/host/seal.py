@@ -11,7 +11,6 @@ KEY_MODE = 0o400
 NONCE_BYTES = 12
 TAG_BYTES = 16
 
-COORDINATE = ("project", "tier", "env", "folder", "binding", "name")
 SEAL_ROOT = "/etc/ocel"
 
 
@@ -44,7 +43,7 @@ def cipher(lib, key, nonce, body, aad, sealing):
             abort("libcrypto refused an AES-256-GCM key of %d bytes" % len(key))
         moved = ctypes.c_int(0)
         if aad and update(ctypes.c_void_p(ctx), None, ctypes.byref(moved), aad, len(aad)) != 1:
-            abort("libcrypto refused the coordinate")
+            abort("libcrypto refused the associated data")
         out = ctypes.create_string_buffer(len(body) + 16)
         if body and update(ctypes.c_void_p(ctx), out, ctypes.byref(moved), body, len(body)) != 1:
             abort("libcrypto refused the body")
@@ -87,28 +86,31 @@ def open_(key, aad, sealed):
         moved = ctypes.c_int(0)
         rest = ctypes.create_string_buffer(16)
         if lib.EVP_DecryptFinal_ex(ctypes.c_void_p(ctx), rest, ctypes.byref(moved)) != 1:
-            abort("value was not sealed at this coordinate")
+            abort("value was not sealed under this key and associated data")
         return plaintext + rest.raw[: moved.value]
     finally:
         lib.EVP_CIPHER_CTX_free(ctypes.c_void_p(ctx))
 
 
-def additional(at):
-    return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in at).encode()
+def additional(values):
+    return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in values).encode()
 
 
-def coordinate(tier, args):
-    at = dict.fromkeys(COORDINATE, "")
+def bound(args):
+    fields = []
+    named = set()
     while args:
         flag = args.pop(0)
         field = flag[2:] if flag.startswith("--") else ""
-        if field not in at or field == "tier":
-            abort("%s is not a coordinate flag" % flag)
+        if not re.fullmatch("[a-z]+", field):
+            abort("%s names no field" % flag)
+        if field in named:
+            abort("%s was given twice" % flag)
         if not args:
             abort("%s was given no value" % flag)
-        at[field] = args.pop(0)
-    at["tier"] = tier
-    return additional([at[field] for field in COORDINATE])
+        named.add(field)
+        fields.append(args.pop(0))
+    return additional(fields)
 
 
 def key_of(path):
@@ -148,7 +150,7 @@ def mint(path):
 
 def main(argv):
     if len(argv) < 2:
-        abort("usage: seal <tier> init|seal|open [coordinate flags]")
+        abort("usage: seal <tier> init|seal|open [--<field> <value>]...")
     tier, verb, rest = argv[0], argv[1], list(argv[2:])
     if not re.fullmatch("[a-z0-9-]+", tier):
         abort("%s is not a valid tier" % tier)
@@ -156,13 +158,13 @@ def main(argv):
 
     if verb == "init":
         if rest:
-            abort("init takes no coordinate")
+            abort("init takes no fields")
         mint(path)
         return
     if verb not in ("seal", "open"):
         abort("unknown verb %s" % verb)
 
-    aad = coordinate(tier, rest)
+    aad = bound(rest)
     key = key_of(path)
     fed = sys.stdin.buffer.read().strip()
     try:

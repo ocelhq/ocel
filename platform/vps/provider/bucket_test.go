@@ -344,7 +344,7 @@ func TestTheCoordinateTheRuntimeOpensTheStoreAtIsTheOneTheDeploySealedAt(t *test
 	if manifest.Store == nil {
 		t.Fatal("the app binding a bucket was handed no store")
 	}
-	if opened, want := manifest.StoreCoordinate(), vps.StoreCoordinate(provisioned.Ref); opened != want {
+	if opened, want := manifest.StoreSecretAssociatedData(), vps.StoreSecretAssociatedData(provisioned.Ref); !slices.Equal(opened, want) {
 		t.Errorf("the runtime would open the store's credential at %+v and the deploy sealed it at %+v:"+
 			" a resource is provisioned on its environment's infra stack and an app runs on its own, so a coordinate"+
 			" naming the asking stack opens nothing", opened, want)

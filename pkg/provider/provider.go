@@ -5,6 +5,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 type Provider interface {
@@ -15,7 +16,7 @@ type Provider interface {
 	Stacks() Stacks
 	Artifacts() ArtifactStore
 	Records() records.Store
-	Cipher() records.Cipher
+	Cipher() seal.Cipher
 	Credentials() Credentials
 	Edges() Edges
 	DNS() DNS

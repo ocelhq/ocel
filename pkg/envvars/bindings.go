@@ -171,7 +171,7 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 }
 
 func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair BindingWrite) (int64, error) {
-	sealed, err := s.Cipher.Seal(ctx, bindingCoordinate(scope, environment, name), pair.Value)
+	sealed, err := s.Cipher.Seal(ctx, scope.Tier, bindingAssociatedData(scope, environment, name), pair.Value)
 	if err != nil {
 		return 0, err
 	}
@@ -344,7 +344,7 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 			continue
 		}
 		if err := forEachConcurrently(ctx, len(names), func(ctx context.Context, i int) error {
-			plaintext, err := s.Cipher.Open(ctx, bindingCoordinate(scope, out[i].Environment, names[i]), sealed[i])
+			plaintext, err := s.Cipher.Open(ctx, scope.Tier, bindingAssociatedData(scope, out[i].Environment, names[i]), sealed[i])
 			if err != nil {
 				return fmt.Errorf("open binding %s's value: %w", names[i], err)
 			}
@@ -647,15 +647,4 @@ func decodeBindingValue(name string, recorded records.Record) (bindingValue, err
 		return bindingValue{}, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
 	return value, nil
-}
-
-func bindingCoordinate(scope Scope, environment, name string) records.SealScope {
-	return records.SealScope{
-		Project: scope.Project,
-		Tier:    scope.Tier,
-		Env:     canonicalEnvironment(environment),
-		Folder:  rootFolder,
-		Binding: name,
-		Name:    bindingValueKey,
-	}
 }

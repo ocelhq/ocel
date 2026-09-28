@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 const (
@@ -40,14 +41,14 @@ func digestKeyRecord(tier environment.Tier) records.Name {
 	return records.Name{records.RootEnvSourceDigestKey, string(tier)}
 }
 
-func digestKeyScope(tier environment.Tier) records.SealScope {
-	return records.SealScope{
-		Project: everyProject,
-		Tier:    tier,
-		Env:     envvars.TierWideEnvironment,
-		Folder:  digestKeyFolder,
-		Binding: digestKeyBinding,
-		Name:    digestKeyName,
+func digestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
+	return seal.AssociatedData{
+		{Name: "project", Value: everyProject},
+		{Name: "class", Value: string(tier)},
+		{Name: "environment", Value: envvars.TierWideEnvironment},
+		{Name: "folder", Value: digestKeyFolder},
+		{Name: "binding", Value: digestKeyBinding},
+		{Name: "key", Value: digestKeyName},
 	}
 }
 
@@ -64,7 +65,7 @@ func EnsureDigestKey(ctx context.Context, store envvars.Store, tier environment.
 		if _, err := rand.Read(secret); err != nil {
 			return DigestKey{}, err
 		}
-		sealed, err := store.Cipher.Seal(ctx, digestKeyScope(tier), secret)
+		sealed, err := store.Cipher.Seal(ctx, tier, digestKeyAssociatedData(tier), secret)
 		if err != nil {
 			return DigestKey{}, fmt.Errorf("seal the %s env source digest key: %w", tier, err)
 		}
@@ -88,12 +89,12 @@ func ForgetDigestKey(ctx context.Context, store records.Store, tier environment.
 	return records.Forget(ctx, store, digestKeyRecord(tier))
 }
 
-func openDigestKey(ctx context.Context, cipher records.Cipher, tier environment.Tier, recorded records.Record) (DigestKey, error) {
+func openDigestKey(ctx context.Context, cipher seal.Cipher, tier environment.Tier, recorded records.Record) (DigestKey, error) {
 	var kept sealedDigestKey
 	if err := json.Unmarshal(recorded.Bytes, &kept); err != nil {
 		return DigestKey{}, fmt.Errorf("read %s: %w", recorded.Name, err)
 	}
-	secret, err := cipher.Open(ctx, digestKeyScope(tier), kept.Sealed)
+	secret, err := cipher.Open(ctx, tier, digestKeyAssociatedData(tier), kept.Sealed)
 	if err != nil {
 		return DigestKey{}, fmt.Errorf("open the %s env source digest key: %w", tier, err)
 	}

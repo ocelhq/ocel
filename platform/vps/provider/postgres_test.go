@@ -11,8 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -392,5 +394,27 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 	}
 	if !strings.Contains(kept, "chown") {
 		t.Errorf("what root kept is left root's, and the deploy login that owns the state directory can no longer open it:\n%s", kept)
+	}
+}
+
+func TestAPostgresPasswordSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+	t.Parallel()
+	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := base64.StdEncoding.DecodeString("sWIUf1KP5yMtoAEKeAiQrTiLmDAiPkJahkrUAWvrQ25qoaoA4yTuUTVvRA==")
+	if err != nil {
+		t.Fatal(err)
+	}
+	infra, err := naming.ParseStackName("prod--infra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: infra}
+
+	opened, err := live.Open(key, vps.PostgresSecretAssociatedData(ref, "main"), sealed)
+	if err != nil || string(opened) != "s3cr3t-postgres" {
+		t.Fatalf("Open() = %q, %v, want the password sealed at shop/production/prod--infra/resources/main/password/ to open: every box's Postgres password is bound to those bytes", opened, err)
 	}
 }

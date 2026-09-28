@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -121,7 +122,7 @@ func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
 
 func (p *Provider) Records() records.Store { return recordStore{p: p} }
 
-func (p *Provider) Cipher() records.Cipher { return cipher{p: p} }
+func (p *Provider) Cipher() seal.Cipher { return cipher{p: p} }
 
 func (p *Provider) Credentials() provider.Credentials {
 	return Credentials{

@@ -232,7 +232,7 @@ func (f *fakeKMS) Encrypt(_ context.Context, in *kms.EncryptInput, _ ...func(*km
 	defer f.mu.Unlock()
 	f.keyIDs = append(f.keyIDs, aws.ToString(in.KeyId))
 	f.contexts = append(f.contexts, in.EncryptionContext)
-	blob := fakeCipherMarker + sealedContext(in.EncryptionContext) + "|" + base64.StdEncoding.EncodeToString(in.Plaintext)
+	blob := fakeCipherMarker + aws.ToString(in.KeyId) + "#" + sealedContext(in.EncryptionContext) + "|" + base64.StdEncoding.EncodeToString(in.Plaintext)
 	return &kms.EncryptOutput{CiphertextBlob: []byte(blob)}, nil
 }
 
@@ -244,6 +244,13 @@ func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*km
 	sealed, plaintext, ok := strings.Cut(strings.TrimPrefix(blob, fakeCipherMarker), "|")
 	if !ok {
 		return nil, errors.New("fakeKMS: malformed ciphertext")
+	}
+	key, sealed, ok := strings.Cut(sealed, "#")
+	if !ok {
+		return nil, errors.New("fakeKMS: malformed ciphertext")
+	}
+	if key != aws.ToString(in.KeyId) {
+		return nil, fmt.Errorf("fakeKMS: key %q did not seal this blob (%q did)", aws.ToString(in.KeyId), key)
 	}
 	if presented := sealedContext(in.EncryptionContext); presented != sealed {
 		return nil, fmt.Errorf("fakeKMS: encryption context %q does not match the one this blob was sealed under (%q)", presented, sealed)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 const (
@@ -34,7 +35,7 @@ var (
 
 type Store struct {
 	Records records.Store
-	Cipher  records.Cipher
+	Cipher  seal.Cipher
 	Now     func() time.Time
 }
 
@@ -106,7 +107,7 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 		return Metadata{}, ErrStaleVersion
 	}
 
-	sealed, err := s.Cipher.Seal(ctx, coordinateOf(scope, at), []byte(plaintext))
+	sealed, err := s.Cipher.Seal(ctx, scope.Tier, cellAssociatedData(scope, at), []byte(plaintext))
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -184,7 +185,7 @@ func (s Store) open(ctx context.Context, scope Scope, at Coordinate, cell stored
 	if err != nil {
 		return "", err
 	}
-	plaintext, err := s.Cipher.Open(ctx, coordinateOf(from, sourceAt), source.Sealed)
+	plaintext, err := s.Cipher.Open(ctx, from.Tier, cellAssociatedData(from, sourceAt), source.Sealed)
 	if err != nil {
 		return "", err
 	}
@@ -303,7 +304,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	plaintexts := make([]string, len(opening))
 	if err := forEachConcurrently(ctx, len(opening), func(ctx context.Context, slot int) error {
 		i := opening[slot]
-		plaintext, err := s.Cipher.Open(ctx, coordinateOf(from[i], sourceCells[i]), sealed[i].Sealed)
+		plaintext, err := s.Cipher.Open(ctx, from[i].Tier, cellAssociatedData(from[i], sourceCells[i]), sealed[i].Sealed)
 		if err != nil {
 			return err
 		}
@@ -486,17 +487,6 @@ func metadataOf(at Coordinate, cell storedValue) Metadata {
 		Size:       cell.Size,
 		Target:     cell.Target,
 		Provenance: cell.Provenance,
-	}
-}
-
-func coordinateOf(scope Scope, at Coordinate) records.SealScope {
-	at = at.canonical()
-	return records.SealScope{
-		Project: scope.Project,
-		Tier:    scope.Tier,
-		Env:     at.Environment,
-		Folder:  at.Folder,
-		Name:    at.Key,
 	}
 }
 

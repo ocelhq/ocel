@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,21 +27,21 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyAtTheSameCoordinate(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := live.KeyPath(root, bound.Tier); got != filepath.Join(root, sealTier, "seal.key") {
+	if got := live.KeyPath(root, sealTier); got != filepath.Join(root, sealTier, "seal.key") {
 		t.Fatalf("the agent reads the key at %s, and the helper minted it at %s", got, filepath.Join(root, sealTier, "seal.key"))
 	}
 
 	vault := live.Cipher{Root: root}
-	opened, err := vault.Open(context.Background(), bound, raw)
+	opened, err := vault.Open(context.Background(), sealTier, bound, raw)
 	if err != nil {
 		t.Fatalf("Open() of what the helper sealed = %v", err)
 	}
 	if string(opened) != "postgres://example" {
 		t.Errorf("Open() = %q, want what was sealed", opened)
 	}
-	moved := bound
-	moved.Env = "staging"
-	if _, err := vault.Open(context.Background(), moved, raw); err == nil {
+	moved := slices.Clone(bound)
+	moved[2].Value = "staging"
+	if _, err := vault.Open(context.Background(), sealTier, moved, raw); err == nil {
 		t.Error("a value the helper sealed for one environment opened natively for another")
 	}
 }

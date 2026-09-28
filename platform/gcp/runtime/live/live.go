@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/seal"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -65,7 +66,7 @@ func FromManifest(raw []byte) (*live.Values, error) {
 	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, store records.Store, sealer records.Cipher) *live.Values {
+func Over(manifest vars.Manifest, store records.Store, sealer seal.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: envvars.EnvironmentReader{
 			Records:     store,

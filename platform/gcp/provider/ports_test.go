@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -187,12 +187,12 @@ func TestSealingAValueThatNamesNoTierIsTheCallersMistake(t *testing.T) {
 	p := testProvider(t)
 
 	for name, refused := range map[string]error{
-		"Seal": errorOf(p.Cipher().Seal(ctx, records.SealScope{}, nil)),
-		"Open": errorOf(p.Cipher().Open(ctx, records.SealScope{}, nil)),
+		"Seal": errorOf(p.Cipher().Seal(ctx, "", seal.AssociatedData{{Name: "key", Value: "K"}}, nil)),
+		"Open": errorOf(p.Cipher().Open(ctx, "", seal.AssociatedData{{Name: "key", Value: "K"}}, nil)),
 	} {
 		var rejection refusal.Refusal
 		if !errors.As(refused, &rejection) || rejection.Code != refusal.CodeInvalid {
-			t.Errorf("%s() at a coordinate naming no tier = %v, want an %s refusal: each tier is sealed under a key of its own, so a value naming no tier names no key",
+			t.Errorf("%s() under no tier = %v, want an %s refusal: each tier is sealed under a key of its own, so a value naming no tier names no key",
 				name, refused, refusal.CodeInvalid)
 		}
 	}
