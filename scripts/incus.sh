@@ -207,10 +207,11 @@ cmd_save() {
 
 cmd_load() {
     local dir=$1 image=$2
-    local meta root="$dir/image.root"
+    local meta root=()
     meta=$(find "$dir" -maxdepth 1 -name 'image*' ! -name image.root -print -quit)
-    [ -n "$meta" ] && [ -e "$root" ] || die "$dir holds no saved VM image"
-    incus image import "$meta" "$root" --alias "$image"
+    [ -n "$meta" ] || die "$dir holds no saved VM image"
+    [ -e "$dir/image.root" ] && root=("$dir/image.root")
+    incus image import "$meta" "${root[@]}" --alias "$image"
 }
 
 cmd_restore() {
