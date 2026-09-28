@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	tierCollectionPrefix = "records-"
+	tierCollectionPrefix = "keyvalues-"
 	segmentSeparator     = "#"
 	segmentCeiling       = "$"
 	keySeparator         = "|"

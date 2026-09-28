@@ -116,7 +116,7 @@ func helperDir(t *testing.T) string {
 		t.Skip("no flock on this machine, and the helper takes its lock with it")
 	}
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, helperTier, "records"), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, helperTier, "keyvalues"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -124,7 +124,7 @@ func helperDir(t *testing.T) string {
 
 func keyValuesDir(t *testing.T, root string) string {
 	t.Helper()
-	return filepath.Join(root, helperTier, "records")
+	return filepath.Join(root, helperTier, "keyvalues")
 }
 
 func helper(t *testing.T, root, stdin string, args ...string) (string, int) {

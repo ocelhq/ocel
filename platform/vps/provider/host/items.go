@@ -55,7 +55,7 @@ func StateDir(tier environment.Tier) string { return stateRoot + "/" + string(ti
 
 func ReleasesDir() string { return releasesRoot }
 
-func KeyValuesDir(tier environment.Tier) string { return StateDir(tier) + "/records" }
+func KeyValuesDir(tier environment.Tier) string { return StateDir(tier) + "/keyvalues" }
 
 type Item struct {
 	Kind    string

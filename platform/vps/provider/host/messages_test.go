@@ -98,7 +98,7 @@ func TestAHealSaysWhatItRewroteAndWhatItLeftAsItIs(t *testing.T) {
 	}
 	heardAll(t, progress,
 		"INFO Left systemd unit docker.service as it is: a refresh rewrites only what deploys own",
-		"INFO Installed directory /var/lib/ocel/production/records",
+		"INFO Installed directory /var/lib/ocel/production/keyvalues",
 	)
 }
 

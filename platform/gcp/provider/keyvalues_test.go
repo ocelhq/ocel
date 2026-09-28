@@ -24,7 +24,7 @@ type answeringFirestore struct {
 }
 
 func (a answeringFirestore) BatchGetDocuments(*firestorepb.BatchGetDocumentsRequest, firestorepb.Firestore_BatchGetDocumentsServer) error {
-	return status.Error(codes.NotFound, `"projects/acme-prod/databases/ocel/documents/records-production/x" not found`)
+	return status.Error(codes.NotFound, `"projects/acme-prod/databases/ocel/documents/keyvalues-production/x" not found`)
 }
 
 func (a answeringFirestore) RunQuery(*firestorepb.RunQueryRequest, firestorepb.Firestore_RunQueryServer) error {

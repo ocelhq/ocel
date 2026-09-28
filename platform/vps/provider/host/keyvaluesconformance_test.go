@@ -28,7 +28,7 @@ type helperHere struct {
 func newHelperHere(t *testing.T) helperHere {
 	t.Helper()
 	root := helperDir(t)
-	if err := os.MkdirAll(filepath.Join(root, string(environment.TierPreview), "records"), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, string(environment.TierPreview), "keyvalues"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	return helperHere{t: t, root: root}

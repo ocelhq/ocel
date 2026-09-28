@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
 import {
   boxLane,
+  entryFile,
   heldProbe,
   hostnamesWithoutUrl,
   projectListing,
-  recordFile,
   slugsOf,
   ssh,
   stampRewritten,
@@ -47,38 +47,36 @@ describe("hostnamesWithoutUrl", () => {
   });
 });
 
-describe("recordFile", () => {
-  it("names the record a slug of plain characters is kept in", () => {
-    expect(recordFile("j-local-ada-node")).toBe("j-local-ada-node.rec");
+describe("entryFile", () => {
+  it("names the entry a slug of plain characters is kept in", () => {
+    expect(entryFile("j-local-ada-node")).toBe("j-local-ada-node.json");
   });
 
-  it("percent-encodes what the records tier cannot keep in a file name", () => {
-    expect(recordFile("j-local-ada/node")).toBe("j-local-ada%2Fnode.rec");
+  it("percent-encodes what the key-value tier cannot keep in a file name", () => {
+    expect(entryFile("j-local-ada/node")).toBe("j-local-ada%2Fnode.json");
   });
 
-  it("encodes a leading dot so no record hides itself", () => {
-    expect(recordFile(".hidden")).toBe("%2Ehidden.rec");
+  it("encodes a leading dot so no entry hides itself", () => {
+    expect(entryFile(".hidden")).toBe("%2Ehidden.json");
   });
 });
 
 describe("slugsOf", () => {
-  it("names one project per record the box stores", () => {
-    expect(slugsOf("/records/projects/production/j-local-ada-node.rec\n")).toEqual([
-      "j-local-ada-node",
-    ]);
+  it("names one project per entry the box stores", () => {
+    expect(slugsOf("/keyvalues/projects/j-local-ada-node.json\n")).toEqual(["j-local-ada-node"]);
   });
 
-  it("ignores anything that is not a record", () => {
-    expect(slugsOf("\nno-records-here\n")).toEqual([]);
+  it("ignores anything that is not an entry", () => {
+    expect(slugsOf("\nno-entries-here\n")).toEqual([]);
   });
 
-  it("reads back a slug the records tier percent-encoded", () => {
-    expect(slugsOf("j-local-ada%2Fnode.rec")).toEqual(["j-local-ada/node"]);
+  it("reads back a slug the key-value tier percent-encoded", () => {
+    expect(slugsOf("j-local-ada%2Fnode.json")).toEqual(["j-local-ada/node"]);
   });
 
-  it("refuses to read a box with no records tier as a box storing nothing", () => {
-    expect(() => slugsOf("no-records-tier\n")).toThrow(
-      /\/var\/lib\/ocel\/production\/records does not exist/,
+  it("refuses to read a box with no key-value tier as a box storing nothing", () => {
+    expect(() => slugsOf("no-keyvalues-tier\n")).toThrow(
+      /\/var\/lib\/ocel\/production\/keyvalues does not exist/,
     );
   });
 });
@@ -92,13 +90,13 @@ describe("heldProbe", () => {
 });
 
 describe("projectListing", () => {
-  it("asks whether the records tier exists, since forgetting the last project prunes its directory", () => {
-    expect(projectListing("j-")).toStartWith("test -d '/var/lib/ocel/production/records' &&");
+  it("asks whether the key-value tier exists, since forgetting the last project prunes its directory", () => {
+    expect(projectListing("j-")).toStartWith("test -d '/var/lib/ocel/production/keyvalues' &&");
   });
 
-  it("lists the harness records under the projects directory", () => {
+  it("lists the harness projects' entries under the projects partition", () => {
     expect(projectListing("j-")).toContain(
-      "ls -1d '/var/lib/ocel/production/records/projects/production'/j-*.rec",
+      "ls -1d '/var/lib/ocel/production/keyvalues/projects'/j-*.json",
     );
   });
 });

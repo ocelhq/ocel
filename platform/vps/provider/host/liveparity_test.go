@@ -75,7 +75,7 @@ func TestWhatTheKeyValueHelperWritesTheBoxReadsNatively(t *testing.T) {
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want the two cells the helper wrote", listed, err)
 	}
-	if dir := live.KeyValuesDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "records")) {
-		t.Errorf("the agent reads entries under %s, and the helper keeps them under <root>/<tier>/records", dir)
+	if dir := live.KeyValuesDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "keyvalues")) {
+		t.Errorf("the agent reads entries under %s, and the helper keeps them under <root>/<tier>/keyvalues", dir)
 	}
 }

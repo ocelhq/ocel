@@ -25,7 +25,7 @@ const (
 )
 
 func KeyValuesDir(root string, tier environment.Tier) string {
-	return filepath.Join(root, string(tier), "records")
+	return filepath.Join(root, string(tier), "keyvalues")
 }
 
 var errReadOnly = errors.New("the box's entries are read-only here")
