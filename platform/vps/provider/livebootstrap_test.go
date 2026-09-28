@@ -101,7 +101,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		"/var/lib/ocel/production/records",
 		"/var/lib/ocel/.ssh/authorized_keys",
 		"/usr/local/lib/ocel",
-		"/usr/local/lib/ocel/records",
+		"/usr/local/lib/ocel/keyvalues",
 		deployLogin,
 	} {
 		if planned := planFor(group, want); planned.Action != provider.ActionCreate {

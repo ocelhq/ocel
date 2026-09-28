@@ -41,7 +41,7 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 | --- | --- |
 | `ocel-deploy` login, `/var/lib/ocel/.ssh/authorized_keys` | Every deploy logs in as this account. The keys are copied from the login you bootstrap with, or taken from `deployKey`. |
 | `/etc/ocel/<tier>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
-| `/var/lib/ocel/<tier>/records`, `/usr/local/lib/ocel/records` | What is deployed, per tier. |
+| `/var/lib/ocel/<tier>/records`, `/usr/local/lib/ocel/keyvalues` | What is deployed, per tier. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
 | Docker | Installed once with Docker's install script, pinned by sha256. A Docker 28.0 or later that `docker.service` already runs is used as it is. Either way, upgrading it is yours. Bootstrap refuses a Docker older than 28.0, the snap package, a rootless Docker, and a masked `docker.service`, and says what to change. Docker stays after `ocel destroy`, and so do its containers. |
 | `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and tier set it. A deploy whose `proxy` option disagrees is refused. |

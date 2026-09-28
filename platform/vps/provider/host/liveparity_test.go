@@ -46,7 +46,7 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyUnderTheSameAssociatedData(t *
 	}
 }
 
-func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
+func TestWhatTheKeyValueHelperWritesTheBoxReadsNatively(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
@@ -61,21 +61,21 @@ func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
 		helperWrite(t, dir, name, "", "body of "+name)
 	}
 	store := live.KeyValues{Root: dir}
-	record, err := store.Read(context.Background(), shop.Key("cells", "/", "DATABASE_URL", "*"))
+	entry, err := store.Read(context.Background(), shop.Key("cells", "/", "DATABASE_URL", "*"))
 	if err != nil {
 		t.Fatalf("Read() of what the helper wrote = %v", err)
 	}
-	if string(record.Value) != asJSON("body of "+names[0]) {
-		t.Errorf("Read() = %q, want what the helper wrote", record.Value)
+	if string(entry.Value) != asJSON("body of "+names[0]) {
+		t.Errorf("Read() = %q, want what the helper wrote", entry.Value)
 	}
-	if revision, _ := helperRead(t, dir, names[0]); string(record.Revision) != revision {
-		t.Errorf("Read() returns revision %q, and the helper says %q", record.Revision, revision)
+	if revision, _ := helperRead(t, dir, names[0]); string(entry.Revision) != revision {
+		t.Errorf("Read() returns revision %q, and the helper says %q", entry.Revision, revision)
 	}
 	listed, err := store.List(context.Background(), shop, "cells")
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want the two cells the helper wrote", listed, err)
 	}
-	if dir := live.RecordsDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "records")) {
-		t.Errorf("the agent reads records under %s, and the helper keeps them under <root>/<tier>/records", dir)
+	if dir := live.KeyValuesDir(dir, helperTier); !strings.HasSuffix(dir, filepath.Join(helperTier, "records")) {
+		t.Errorf("the agent reads entries under %s, and the helper keeps them under <root>/<tier>/records", dir)
 	}
 }

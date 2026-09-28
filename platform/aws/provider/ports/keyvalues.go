@@ -71,7 +71,7 @@ func sortKey(path []string) string { return join(path) + segmentSeparator }
 
 func unbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
-		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", provider.BootstrapCommand(tier))
+		"this account has no Ocel bootstrap, so there is nowhere to keep an entry.\nRun `%s` to create it, then try again", provider.BootstrapCommand(tier))
 }
 
 func tableGone(err error) bool {

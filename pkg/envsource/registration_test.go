@@ -27,7 +27,7 @@ func infisicalRegistration(project, host string, auth envsource.InfisicalAuth, f
 func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T) {
 	t.Parallel()
 	store, _ := storeFixture()
-	records := store.KeyValues
+	keyValues := store.KeyValues
 	ctx := context.Background()
 	for _, registration := range []envsource.Registration{
 		infisicalRegistration("shop", "https://infisical.example.com", universal, "/web", "", "/web"),
@@ -38,7 +38,7 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 		}
 	}
 
-	shop, registered, err := envsource.Registered(ctx, records, environment.TierProduction, "shop")
+	shop, registered, err := envsource.Registered(ctx, keyValues, environment.TierProduction, "shop")
 	if err != nil || !registered {
 		t.Fatalf("Registered() = %v, %v", registered, err)
 	}
@@ -48,11 +48,11 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 	if want := []envvars.Cell{{Key: "INFISICAL_CLIENT_ID"}, {Key: "INFISICAL_CLIENT_SECRET"}}; !slices.Equal(shop.Credentials(), want) {
 		t.Fatalf("Credentials() = %v, want %v", shop.Credentials(), want)
 	}
-	if _, registered, _ := envsource.Registered(ctx, records, environment.TierPreview, "shop"); registered {
+	if _, registered, _ := envsource.Registered(ctx, keyValues, environment.TierPreview, "shop"); registered {
 		t.Fatal("a production registration was read back in preview")
 	}
 
-	all, err := envsource.Registrations(ctx, records, environment.TierProduction)
+	all, err := envsource.Registrations(ctx, keyValues, environment.TierProduction)
 	if err != nil || len(all) != 2 || all[0].Project != "admin" || all[1].Project != "shop" {
 		t.Fatalf("Registrations() = %+v, %v, want admin then shop", all, err)
 	}
@@ -60,7 +60,7 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
-	if _, registered, err := envsource.Registered(ctx, records, environment.TierProduction, "shop"); err != nil || registered {
+	if _, registered, err := envsource.Registered(ctx, keyValues, environment.TierProduction, "shop"); err != nil || registered {
 		t.Fatalf("Registered() after ForgetProject = %v, %v, want nothing", registered, err)
 	}
 }

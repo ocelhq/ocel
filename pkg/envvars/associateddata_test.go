@@ -27,7 +27,7 @@ func newFixtureKeyCipher(t *testing.T) *fake.Cipher {
 
 var shop = envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: environment.TierProduction})
 
-func newRecordsHolding(t *testing.T, rows map[string]keyvalue.Key) *fake.KeyValues {
+func newKeyValuesHolding(t *testing.T, rows map[string]keyvalue.Key) *fake.KeyValues {
 	t.Helper()
 	store := fake.NewKeyValues()
 	for body, name := range rows {
@@ -42,7 +42,7 @@ func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyI
 	t.Parallel()
 
 	store := envvars.Store{
-		KeyValues: newRecordsHolding(t, map[string]keyvalue.Key{
+		KeyValues: newKeyValuesHolding(t, map[string]keyvalue.Key{
 			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+VgAViEpXXIk4f9gdIkzfy1DSDSCljR35ULyG/f4QqTpm7DEoFaNMcm+"}`: shop.Key("cells", "/web", "STRIPE_API_KEY", "staging"),
 		}),
 		Cipher: newFixtureKeyCipher(t),
@@ -60,7 +60,7 @@ func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testi
 	t.Parallel()
 
 	store := envvars.Store{
-		KeyValues: newRecordsHolding(t, map[string]keyvalue.Key{
+		KeyValues: newKeyValuesHolding(t, map[string]keyvalue.Key{
 			`{"version":1,"updatedAt":1790580978,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`:               shop.Key("bindings", "orders", "records", "*"),
 			`{"version":1,"sealed":"kH20mriYvg2PFri7a1XPVAmM0y9YqXkDfsjQMCWX6gyemVuOD8Ro1RkBDEdPnJpRyqOs/YGNHQ=="}`: shop.Key("bindings", "orders", "values", "*"),
 		}),

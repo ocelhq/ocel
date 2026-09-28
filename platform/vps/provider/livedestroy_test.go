@@ -186,7 +186,7 @@ func TestLiveTheSingletonsRemainWhileASiblingTierDoesAndGoWithTheLast(t *testing
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
-	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
+	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/keyvalues",
 		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
 	sealGrant := func(tier environment.Tier) string { return "/etc/sudoers.d/ocel-seal-" + string(tier) }
 

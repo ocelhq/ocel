@@ -298,7 +298,7 @@ func (s KeyValues) writeFailed(key keyvalue.Key, err error) error {
 
 func (s KeyValues) unbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
-		"this project keeps no %q Firestore database, so there is nowhere to store a record.\nRun `%s` to create it, then try again",
+		"this project keeps no %q Firestore database, so there is nowhere to store an entry.\nRun `%s` to create it, then try again",
 		s.Clients.Database(), provider.BootstrapCommand(tier))
 }
 

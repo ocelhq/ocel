@@ -91,8 +91,8 @@ func (h *Host) hasStore(ctx context.Context, tier environment.Tier) (bool, error
 	if known {
 		return true, nil
 	}
-	rendered, err := h.reach(ctx, "ask where "+string(tier)+" keeps its records",
-		"if [ -x "+quoted(boxstore.RecordsHelper)+" ] && [ -d "+quoted(RecordsDir(tier))+" ]; then echo present; fi", nil)
+	rendered, err := h.reach(ctx, "ask where "+string(tier)+" keeps its entries",
+		"if [ -x "+quoted(boxstore.KeyValuesHelper)+" ] && [ -d "+quoted(KeyValuesDir(tier))+" ]; then echo present; fi", nil)
 	if err != nil || strings.TrimSpace(rendered) != "present" {
 		return false, err
 	}

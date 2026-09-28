@@ -10,8 +10,8 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
-//go:embed records.sh
-var recordsScript []byte
+//go:embed keyvalues.sh
+var keyValuesScript []byte
 
 func NewKeyValues(h *Host) *boxstore.KeyValues { return boxstore.NewKeyValues(sshKeyValues{host: h}) }
 
@@ -22,7 +22,7 @@ func (s sshKeyValues) HasStore(ctx context.Context, tier environment.Tier) (bool
 }
 
 func (s sshKeyValues) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
-	command := quoted(boxstore.RecordsHelper) + " " + quoted(string(tier))
+	command := quoted(boxstore.KeyValuesHelper) + " " + quoted(string(tier))
 	for _, arg := range argv {
 		command += " " + quoted(arg)
 	}
@@ -34,11 +34,11 @@ func (s sshKeyValues) KeyValues(ctx context.Context, tier environment.Tier, stdi
 	switch result.Code {
 	case 0:
 		return result.Stdout, nil
-	case boxstore.ExitNoRecord:
+	case boxstore.ExitNotFound:
 		return "", keyvalue.ErrNotFound
 	case boxstore.ExitStale:
 		return "", keyvalue.ErrStale
 	default:
-		return "", unelevated(refused, s.host.refuse("records "+argv[0], result, elevation))
+		return "", unelevated(refused, s.host.refuse("keyvalues "+argv[0], result, elevation))
 	}
 }

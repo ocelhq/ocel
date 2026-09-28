@@ -915,7 +915,7 @@ func (b bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 	}
 	for _, taking := range removals(read) {
 		if taking.action == provider.ActionKeep && taking.item.Kind == KindDatabase {
-			if err := b.takeRecords(ctx, tier); err != nil {
+			if err := b.takeKeyValues(ctx, tier); err != nil {
 				return err
 			}
 		}
@@ -1078,7 +1078,7 @@ func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
 	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", b.clients.Database()), deleting)
 }
 
-func (b bootstrap) takeRecords(ctx context.Context, tier environment.Tier) error {
+func (b bootstrap) takeKeyValues(ctx context.Context, tier environment.Tier) error {
 	client, err := b.clients.Firestore()
 	if err != nil {
 		return err
@@ -1091,13 +1091,13 @@ func (b bootstrap) takeRecords(ctx context.Context, tier environment.Tier) error
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("list the records the %s tier keeps: %w", tier, err)
+			return fmt.Errorf("list the entries the %s tier keeps: %w", tier, err)
 		}
 		if err := done(ctx, func() error {
 			_, err := kept.Ref.Delete(ctx)
 			return err
 		}); err != nil {
-			return fmt.Errorf("delete the %s record %s: %w", tier, kept.Ref.ID, err)
+			return fmt.Errorf("delete the %s entry %s: %w", tier, kept.Ref.ID, err)
 		}
 	}
 }

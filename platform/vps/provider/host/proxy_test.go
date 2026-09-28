@@ -640,7 +640,7 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 	observed := digests(items)
 	observed[proxyConfigItem().ID()] = digest(KindProxyConfig, ProxyConfig, 0o600, rootOwner, "")
 	observed[routingTableItem().ID()] = digest(KindRoutingTable, live.RoutingTable, 0o600, rootOwner, "")
-	observed[KindDir+" "+RecordsDir(tier)] = digest(KindDir, RecordsDir(tier), 0o700, stateOwner, "")
+	observed[KindDir+" "+KeyValuesDir(tier)] = digest(KindDir, KeyValuesDir(tier), 0o700, stateOwner, "")
 	read := Reading{Tier: tier, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
 
@@ -648,7 +648,7 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 	if err != nil {
 		t.Fatalf("heal over a box whose proxy config is as the deploy left it = %v, want every other item still healed", err)
 	}
-	if len(work) != 1 || work[0].Name != RecordsDir(tier) {
+	if len(work) != 1 || work[0].Name != KeyValuesDir(tier) {
 		t.Errorf("healable() = %v, want only the record tier", ids(work))
 	}
 	for _, said := range []string{proxyConfigItem().ID(), routingTableItem().ID()} {

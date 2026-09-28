@@ -21,26 +21,26 @@ type LocalTransport struct {
 }
 
 func (LocalTransport) HasStore(_ context.Context, tier environment.Tier) (bool, error) {
-	if _, err := os.Stat(RecordsHelper); err != nil {
+	if _, err := os.Stat(KeyValuesHelper); err != nil {
 		return false, nil
 	}
-	info, err := os.Stat(live.RecordsDir(live.StateRoot, tier))
+	info, err := os.Stat(live.KeyValuesDir(live.StateRoot, tier))
 	return err == nil && info.IsDir(), nil
 }
 
 func (LocalTransport) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
-	stdout, stderr, code, err := runCommand(ctx, stdin, RecordsHelper, append([]string{string(tier)}, argv...)...)
+	stdout, stderr, code, err := runCommand(ctx, stdin, KeyValuesHelper, append([]string{string(tier)}, argv...)...)
 	switch {
 	case err != nil:
-		return "", refusal.Refuse(refusal.CodeDenied, "run the records helper on this host: %s", err)
+		return "", refusal.Refuse(refusal.CodeDenied, "run the key-value helper on this host: %s", err)
 	case code == 0:
 		return stdout, nil
-	case code == ExitNoRecord:
+	case code == ExitNotFound:
 		return "", keyvalue.ErrNotFound
 	case code == ExitStale:
 		return "", keyvalue.ErrStale
 	default:
-		return "", refusal.Refuse(refusal.CodeDenied, "records %s on this host: %s", argv[0], describeFailure(stderr, code))
+		return "", refusal.Refuse(refusal.CodeDenied, "keyvalues %s on this host: %s", argv[0], describeFailure(stderr, code))
 	}
 }
 

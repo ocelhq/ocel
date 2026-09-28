@@ -267,7 +267,7 @@ func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) 
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
 	for _, command := range box.commands() {
-		if strings.HasPrefix(command, quoted(boxstore.RecordsHelper)+" ") {
+		if strings.HasPrefix(command, quoted(boxstore.KeyValuesHelper)+" ") {
 			t.Errorf("Forget() ran %q against a host that has no helper at all", command)
 		}
 	}
@@ -312,7 +312,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 	current := Reading{Arch: ArchAMD64, Tier: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 	beside := Reading{Arch: ArchAMD64, Tier: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	singletons := []string{
-		stateRoot, boxstore.Dir, boxstore.RecordsHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, tierRoot, deployUser,
+		stateRoot, boxstore.Dir, boxstore.KeyValuesHelper, boxstore.SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, tierRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {

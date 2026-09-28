@@ -38,12 +38,12 @@ func newHelperHere(t *testing.T) helperHere {
 func (h helperHere) HasStore(context.Context, environment.Tier) (bool, error) { return true, nil }
 
 func (h helperHere) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
-	script := filepath.Join(h.t.TempDir(), "records")
-	if err := os.WriteFile(script, recordsScript, 0o755); err != nil {
+	script := filepath.Join(h.t.TempDir(), "keyvalues")
+	if err := os.WriteFile(script, keyValuesScript, 0o755); err != nil {
 		return "", err
 	}
 	cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{script, string(tier)}, argv...)...)
-	cmd.Env = append(os.Environ(), "OCEL_RECORDS_ROOT="+h.root)
+	cmd.Env = append(os.Environ(), "OCEL_STATE_ROOT="+h.root)
 	cmd.Stdin = stdin
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -52,12 +52,12 @@ func (h helperHere) KeyValues(ctx context.Context, tier environment.Tier, stdin 
 	switch {
 	case err == nil:
 		return string(rendered), nil
-	case errors.As(err, &exit) && exit.ExitCode() == boxstore.ExitNoRecord:
+	case errors.As(err, &exit) && exit.ExitCode() == boxstore.ExitNotFound:
 		return "", keyvalue.ErrNotFound
 	case errors.As(err, &exit) && exit.ExitCode() == boxstore.ExitStale:
 		return "", keyvalue.ErrStale
 	default:
-		return "", refusal.Refuse(refusal.CodeDenied, "records %s: %v: %s", argv[0], err, stderr.String())
+		return "", refusal.Refuse(refusal.CodeDenied, "keyvalues %s: %v: %s", argv[0], err, stderr.String())
 	}
 }
 
@@ -80,7 +80,7 @@ func TestAnEntryOnTheBoxIsAJSONFileHoldingTheValueAsWritten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(live.RecordsDir(here.root, environment.TierProduction), path+live.EntrySuffix))
+	raw, err := os.ReadFile(filepath.Join(live.KeyValuesDir(here.root, environment.TierProduction), path+live.EntrySuffix))
 	if err != nil {
 		t.Fatalf("read the entry's file: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestASchemaTheOlderLayoutWroteIsRefusedRatherThanStampedOver(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := filepath.Join(live.RecordsDir(here.root, tier), path)
+	at := filepath.Join(live.KeyValuesDir(here.root, tier), path)
 	if err := os.MkdirAll(filepath.Dir(at), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestASchemaTheOlderLayoutWroteIsRefusedRatherThanStampedOver(t *testing.T) 
 	var refused refusal.Refusal
 	err = stackrecords.EnsureSchema(context.Background(), boxstore.NewKeyValues(here), tier)
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "older ocel") {
-		t.Fatalf("EnsureSchema() over a schema the older layout wrote = %v, want a refusal saying an older ocel wrote it: a build that reads it as unwritten stamps its own schema beside records it cannot see", err)
+		t.Fatalf("EnsureSchema() over a schema the older layout wrote = %v, want a refusal saying an older ocel wrote it: a build that reads it as unwritten stamps its own schema beside entries it cannot see", err)
 	}
 	if _, err := os.Stat(at + live.EntrySuffix); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("EnsureSchema() left %s%s behind (%v), want the older schema the only one there", at, live.EntrySuffix, err)

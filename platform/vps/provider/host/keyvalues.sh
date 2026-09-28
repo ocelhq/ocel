@@ -3,12 +3,12 @@ set -eu
 umask 077
 
 usage() {
-	echo "usage: records <tier> read|write|pair|remove|list [args]" >&2
+	echo "usage: keyvalues <tier> read|write|pair|remove|list [args]" >&2
 	exit 2
 }
 
 abort() {
-	echo "records: $1" >&2
+	echo "keyvalues: $1" >&2
 	exit 2
 }
 
@@ -21,7 +21,7 @@ case $tier in
 '' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 esac
 
-dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$tier/records"
+dir="${OCEL_STATE_ROOT:-/var/lib/ocel}/$tier/records"
 [ ! -L "$dir" ] || abort "$dir is a symlink to $(readlink "$dir"), not the directory ocel bootstrap made"
 [ -d "$dir" ] || abort "$dir is missing; run ocel bootstrap"
 

@@ -146,7 +146,7 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for what, allowed := range entitledPaths() {
 			for _, path := range allowed {
-				for _, refused := range []string{TierDir(tier), RecordsDir(tier), SealKeyPath(tier)} {
+				for _, refused := range []string{TierDir(tier), KeyValuesDir(tier), SealKeyPath(tier)} {
 					if path == refused || strings.HasPrefix(path, refused+"/") {
 						t.Errorf("%s is entitled to %q, which sits under %s: the key that opens every sealed value and the records it sealed are what that path contains",
 							what, path, refused)

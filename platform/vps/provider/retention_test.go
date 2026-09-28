@@ -98,7 +98,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 		switch {
 		case strings.Contains(command, "echo present"):
 			return session.Result{Stdout: "present\n"}, true
-		case strings.Contains(command, "/usr/local/lib/ocel/records"):
+		case strings.Contains(command, "/usr/local/lib/ocel/keyvalues"):
 			return session.Result{Code: 1, Stderr: "refused"}, true
 		}
 		return session.Result{}, false
