@@ -73,7 +73,7 @@ const DECOY_FINGERPRINT = [
   "true",
 ].join("; ");
 const LEFT_BEHIND = [
-  ...OCEL_PATHS.map((held) => `sudo test -e '${held}' && echo '${held}'`),
+  ...OCEL_PATHS.map(heldProbe),
   `getent passwd ${DEPLOY_LOGIN} >/dev/null && echo 'the login ${DEPLOY_LOGIN}'`,
   ...OCEL_CONTAINERS.map(
     (named) => `sudo docker inspect ${named} >/dev/null 2>&1 && echo 'the container ${named}'`,
@@ -122,6 +122,10 @@ export function recordFile(slug: string): string {
     return plain ? char : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
   }).join("");
   return `${encoded}.rec`;
+}
+
+export function heldProbe(held: string): string {
+  return `sudo test -e '${held}' && echo "${held}$(sudo find '${held}' -mindepth 1 -maxdepth 3 -printf ' %P' 2>/dev/null | head -c 400)"`;
 }
 
 export function projectListing(prefix: string): string {
