@@ -3,12 +3,15 @@ package envvars_test
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 const keySealedWith = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
@@ -33,7 +36,7 @@ func holding(t *testing.T, rows map[string]records.Name) *fake.Records {
 	return store
 }
 
-func TestACellSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyInThatOrder(t *testing.T) {
 	t.Parallel()
 
 	store := envvars.Store{
@@ -51,7 +54,7 @@ func TestACellSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *te
 	}
 }
 
-func TestABindingSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testing.T) {
 	t.Parallel()
 
 	store := envvars.Store{
@@ -66,5 +69,50 @@ func TestABindingSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t 
 	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
 		t.Fatalf("ResolveBinding() = %q, %v, want the value sealed at shop/production/*/%%2F/orders/PROPERTIES/ to open: every stored binding is bound to those bytes", resolved.Value, err)
+	}
+}
+
+type sealCounted struct {
+	*fake.Cipher
+	sealed int
+}
+
+func (c *sealCounted) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
+	c.sealed++
+	return c.Cipher.Seal(ctx, tier, bound, plaintext)
+}
+
+func TestAValueThatNamesNoProjectOrKeyIsRefusedBeforeItIsSealed(t *testing.T) {
+	t.Parallel()
+
+	for name, write := range map[string]func(envvars.Store) error{
+		"a cell with no project": func(store envvars.Store) error {
+			_, err := store.Set(context.Background(), envvars.Scope{Tier: environment.TierProduction}, at("KEY"), "value", nil)
+			return err
+		},
+		"a cell with no key": func(store envvars.Store) error {
+			_, err := store.Set(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, at(""), "value", nil)
+			return err
+		},
+		"a binding with no project": func(store envvars.Store) error {
+			_, err := store.SetBinding(context.Background(), envvars.Scope{Tier: environment.TierProduction}, "", envvars.OwnerOcel, "orders",
+				envvars.BindingWrite{Record: []byte(`{}`), Value: []byte(`{}`)})
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cipher := &sealCounted{Cipher: fake.NewCipher()}
+			store := envvars.Store{Records: fake.NewRecords(), Cipher: cipher}
+
+			err := write(store)
+			var refused refusal.Refusal
+			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+				t.Fatalf("write = %v, want an invalid refusal: a value bound to an empty project or key shares its binding with every other value missing it", err)
+			}
+			if cipher.sealed != 0 {
+				t.Fatalf("the cipher sealed %d value(s) before the write was refused", cipher.sealed)
+			}
+		})
 	}
 }

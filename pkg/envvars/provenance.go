@@ -45,7 +45,11 @@ func (s Store) GetDereferenced(ctx context.Context, scope Scope, at Coordinate, 
 	if !reveal {
 		return out, nil
 	}
-	plaintext, err := s.Cipher.Open(ctx, from.Tier, cellAssociatedData(from, sourceAt), source.Sealed)
+	bound, err := newCellAssociatedData(from, sourceAt)
+	if err != nil {
+		return Dereferenced{}, err
+	}
+	plaintext, err := s.Cipher.Open(ctx, from.Tier, bound, source.Sealed)
 	if err != nil {
 		return Dereferenced{}, err
 	}
