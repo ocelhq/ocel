@@ -1,6 +1,13 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { awsBindingStore, awsStore, type Cli, taggedNamespaces } from "./store";
+import {
+  awsBindingStore,
+  awsStore,
+  type Cli,
+  partitionKey,
+  sortKey,
+  taggedNamespaces,
+} from "./store";
 
 const TABLES: Record<string, string> = {
   StateTableName: "ocel-state",
@@ -10,9 +17,11 @@ const TABLES: Record<string, string> = {
 
 const STATE_TABLE = TABLES.StateTableName as string;
 
+const VARS_TABLE = TABLES.VarsTableName as string;
+
 function page(slugs: string[], next?: string): string {
   return JSON.stringify({
-    Items: slugs.map((slug) => ({ sk: { S: `${slug}#` } })),
+    Items: slugs.map((slug) => ({ sk: { S: sortKey([slug]) }, value: { S: "{}" } })),
     ...(next ? { NextToken: next } : {}),
   });
 }
@@ -109,6 +118,24 @@ describe("deployedSlugs", () => {
     assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1-node", "j-1-hello"]);
     assert.equal(calls.filter((args) => args[0] === "dynamodb").length, 4);
   });
+
+  it("queries the projects and edge stacks partitions by their root alone, as the tier's own table keys them", async () => {
+    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
+    await awsStore(undefined, cli).deployedSlugs();
+    const keyed = calls
+      .filter((args) => args[0] === "dynamodb")
+      .map((args) => JSON.parse(args[args.indexOf("--expression-attribute-values") + 1] ?? "{}"));
+    assert.deepEqual(keyed, [{ ":pk": { S: "projects" } }, { ":pk": { S: "edgestacks" } }]);
+  });
+
+  it("reads a slug back from a sort key whose segment the store escaped", async () => {
+    const { cli } = cliOver((args) =>
+      describeStacks(args)
+        ? tableAsked(args)
+        : JSON.stringify({ Items: [{ sk: { S: "j-1%23odd%25#" } }] }),
+    );
+    assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1#odd%"]);
+  });
 });
 
 describe("exists", () => {
@@ -121,9 +148,7 @@ describe("exists", () => {
     assert.equal(queried.length, 1);
     assert.ok(queried[0]?.includes("pk = :pk AND begins_with(sk, :sk)"));
     assert.ok(
-      queried[0]?.includes(
-        JSON.stringify({ ":pk": { S: "projects#production" }, ":sk": { S: "j-1-node" } }),
-      ),
+      queried[0]?.includes(JSON.stringify({ ":pk": { S: "projects" }, ":sk": { S: "j-1-node#" } })),
     );
   });
 
@@ -185,7 +210,7 @@ function bindingsPage(items: Array<{ sk: string; body: Record<string, unknown> }
   return JSON.stringify({
     Items: items.map(({ sk, body }) => ({
       sk: { S: sk },
-      body: { B: b64(JSON.stringify(body)) },
+      value: { S: JSON.stringify(body) },
     })),
   });
 }
@@ -205,21 +230,38 @@ describe("awsBindingStore", () => {
   const owner =
     "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders";
 
-  it("asks for the state table the provider writes binding values into", async () => {
+  it("asks for the vars table the provider writes binding values into", async () => {
     const { cli, calls } = cliOver((args) =>
       describeStacks(args) ? tableAsked(args) : bindingsPage([]),
     );
     await awsBindingStore(undefined, cli).records(SLUG);
-    assert.deepEqual(outputsAsked(calls), ["StateTableName"]);
-    assert.ok(calls.find((args) => args[0] === "dynamodb")?.includes(STATE_TABLE));
+    assert.deepEqual(outputsAsked(calls), ["VarsTableName"]);
+    const queried = calls.find((args) => args[0] === "dynamodb");
+    assert.ok(queried?.includes(VARS_TABLE));
+    assert.ok(
+      queried?.includes(
+        JSON.stringify({ ":pk": { S: `values#${SLUG}` }, ":sk": { S: "bindings#" } }),
+      ),
+    );
   });
 
-  it("refuses when the stack publishes no state table name", async () => {
+  it("refuses when the stack publishes no vars table name", async () => {
     const { cli } = cliOver(() => "None");
     await assert.rejects(
       awsBindingStore(undefined, cli).records(SLUG),
-      /publishes no StateTableName output, so no binding can be read/,
+      /publishes no VarsTableName output, so no binding can be read/,
     );
+  });
+
+  it("refuses an item with no JSON value rather than read it as no binding", async () => {
+    const { cli } = cliOver((args) =>
+      describeStacks(args)
+        ? tableAsked(args)
+        : JSON.stringify({
+            Items: [{ sk: { S: "bindings#orders#values#*#" }, body: { B: "e30=" } }],
+          }),
+    );
+    await assert.rejects(awsBindingStore(undefined, cli).values(SLUG), /no JSON value/);
   });
 
   it("parses a postgres record and a custom record, redacted and stamped with the owner", async () => {
@@ -293,7 +335,7 @@ describe("awsBindingStore", () => {
     assert.ok(
       queried?.includes(
         JSON.stringify({
-          ":pk": { S: `values#${SLUG}#production` },
+          ":pk": { S: `values#${SLUG}` },
           ":sk": { S: `bindingowners#${owner}#` },
         }),
       ),
@@ -303,6 +345,22 @@ describe("awsBindingStore", () => {
   it("reports no index for an owner that never published there", async () => {
     const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : bindingsPage([])));
     assert.equal(await awsBindingStore(undefined, cli).ownerIndex(SLUG, owner), undefined);
+  });
+});
+
+describe("the keys the store is read by", () => {
+  it("joins a partition's root and path with # as the Go store does", () => {
+    assert.equal(partitionKey("projects"), "projects");
+    assert.equal(partitionKey("values", "j-1-node"), "values#j-1-node");
+  });
+
+  it("ends a sort key with the separator, so no key prefixes a longer one", () => {
+    assert.equal(sortKey(["bindings", "orders", "records", "*"]), "bindings#orders#records#*#");
+  });
+
+  it("escapes a segment's # and % byte by byte, and nothing else", () => {
+    assert.equal(partitionKey("values", "a#b%c/d"), "values#a%23b%25c/d");
+    assert.equal(sortKey(["café#"]), "café%23#");
   });
 });
 
