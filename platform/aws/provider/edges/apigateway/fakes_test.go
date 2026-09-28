@@ -168,7 +168,9 @@ type fakeGateway struct {
 	deleteRefused   int
 	deleteDomainErr error
 
-	beforeRule func(*fakeGateway, int32)
+	beforeRule     func(*fakeGateway, int32)
+	beforeGetStage func()
+	stageDeadline  time.Time
 }
 
 func newFakeGateway() *fakeGateway {
@@ -517,6 +519,13 @@ func (f *fakeGateway) CreateDeployment(_ context.Context, in *apigateway.CreateD
 
 func (f *fakeGateway) GetStage(_ context.Context, in *apigateway.GetStageInput, _ ...func(*apigateway.Options)) (*apigateway.GetStageOutput, error) {
 	f.mu.Lock()
+	before := f.beforeGetStage
+	f.beforeGetStage = nil
+	f.mu.Unlock()
+	if before != nil {
+		before()
+	}
+	f.mu.Lock()
 	defer f.mu.Unlock()
 	name := aws.ToString(in.StageName)
 	f.record("GetStage " + name)
@@ -527,9 +536,10 @@ func (f *fakeGateway) GetStage(_ context.Context, in *apigateway.GetStageInput, 
 	return &apigateway.GetStageOutput{StageName: in.StageName, Variables: api.variables}, nil
 }
 
-func (f *fakeGateway) UpdateStage(_ context.Context, in *apigateway.UpdateStageInput, _ ...func(*apigateway.Options)) (*apigateway.UpdateStageOutput, error) {
+func (f *fakeGateway) UpdateStage(ctx context.Context, in *apigateway.UpdateStageInput, _ ...func(*apigateway.Options)) (*apigateway.UpdateStageOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.stageDeadline, _ = ctx.Deadline()
 	f.record("UpdateStage " + aws.ToString(in.RestApiId))
 	if f.stageErr != nil {
 		return nil, f.stageErr
