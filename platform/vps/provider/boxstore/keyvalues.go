@@ -183,11 +183,11 @@ func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...st
 }
 
 func encodeEntry(entry keyvalue.Entry) (string, []byte, error) {
-	path, err := live.PathOf(entry.Key)
-	if err != nil {
+	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return "", nil, err
 	}
-	if err := keyvalue.RefuseNonJSON(entry); err != nil {
+	path, err := live.PathOf(entry.Key)
+	if err != nil {
 		return "", nil, err
 	}
 	var line bytes.Buffer

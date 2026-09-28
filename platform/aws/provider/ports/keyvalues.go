@@ -191,10 +191,7 @@ type writing struct {
 }
 
 func writingOf(entry keyvalue.Entry) (writing, error) {
-	if err := keyvalue.RefuseMalformedKey(entry.Key); err != nil {
-		return writing{}, err
-	}
-	if err := keyvalue.RefuseNonJSON(entry); err != nil {
+	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return writing{}, err
 	}
 	next, err := keyvalue.NewRevision()
