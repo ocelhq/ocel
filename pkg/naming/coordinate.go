@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Kind string
@@ -129,9 +131,9 @@ func (c Coordinate) Description(detail string) string {
 
 const EnvTierTagKey = "ocel:env-tier"
 
-type Facts struct {
+type TagValues struct {
 	ManagedBy  string
-	EnvTier    string
+	EnvTier    environment.Tier
 	BuildID    string
 	Deployment string
 	Promotion  string
@@ -139,21 +141,21 @@ type Facts struct {
 	ExpiresAt  string
 }
 
-func (c Coordinate) Tags(f Facts) map[string]string {
+func (c Coordinate) Tags(v TagValues) map[string]string {
 	tags := map[string]string{
-		"ocel:managed-by": f.ManagedBy,
+		"ocel:managed-by": v.ManagedBy,
 		"ocel:project":    c.Project,
 		"ocel:env":        c.Env,
-		EnvTierTagKey:     f.EnvTier,
+		EnvTierTagKey:     string(v.EnvTier),
 		"ocel:app":        c.App,
 		"ocel:release":    c.Release.String(),
-		"ocel:build":      f.BuildID,
-		"ocel:deployment": f.Deployment,
-		"ocel:promotion":  f.Promotion,
+		"ocel:build":      v.BuildID,
+		"ocel:deployment": v.Deployment,
+		"ocel:promotion":  v.Promotion,
 		"ocel:component":  c.Kind.Component(),
-		"ocel:route":      f.Route,
+		"ocel:route":      v.Route,
 		"ocel:stack":      c.Stack().String(),
-		"ocel:expires-at": f.ExpiresAt,
+		"ocel:expires-at": v.ExpiresAt,
 	}
 	for key, value := range tags {
 		if value == "" {

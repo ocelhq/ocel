@@ -239,7 +239,7 @@ func TestResourceIDsReadAsEnglish(t *testing.T) {
 
 func TestTagsDropEmptyFacts(t *testing.T) {
 	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "index", Release: NewRelease("b", "")}
-	tags := c.Tags(Facts{ManagedBy: "ocel-cli/1.2.3", EnvTier: "production", BuildID: "b"})
+	tags := c.Tags(TagValues{ManagedBy: "ocel-cli/1.2.3", EnvTier: "production", BuildID: "b"})
 	if _, ok := tags["ocel:expires-at"]; ok {
 		t.Error("an absent fact must not become an empty tag")
 	}
@@ -253,7 +253,7 @@ func TestTagsDropEmptyFacts(t *testing.T) {
 
 func TestTheTierADeployServesIsTaggedAsItsEnvTier(t *testing.T) {
 	c := Coordinate{Project: "shop", Env: "pr-7", App: "web", Kind: KindFunction, Name: "index", Release: NewRelease("b", "")}
-	tags := c.Tags(Facts{EnvTier: "preview"})
+	tags := c.Tags(TagValues{EnvTier: "preview"})
 	if tags["ocel:env-tier"] != "preview" {
 		t.Errorf("ocel:env-tier = %q, want %q: IAM conditions scope an edge's grants to one tier by this tag", tags["ocel:env-tier"], "preview")
 	}
