@@ -3,11 +3,11 @@ import { role } from "../lib/type";
 import { cn } from "../lib/utils";
 import { plural } from "../model";
 import { useValue } from "../signals";
-import { dirty, discard, outcome, save, saving } from "../store";
+import { discard, outcome, save, saving, pending as unsaved } from "../store";
 import { Button } from "./ui/button";
 
 export function SaveBar({ actions, note }: { actions?: ReactNode; note?: string | null }) {
-  const pending = useValue(dirty).length;
+  const pending = useValue(unsaved);
   const busy = useValue(saving);
   const said = useValue(outcome);
   const text = [said?.text, note].filter(Boolean).join(" ");

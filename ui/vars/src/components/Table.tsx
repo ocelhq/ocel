@@ -16,19 +16,18 @@ import {
   WarningIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { type DragEvent, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import { type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { glyph, role } from "../lib/type";
 import { cn } from "../lib/utils";
 import {
-  abilityOf,
   addressKey,
-  type Bundle,
   baselineOf,
   type Class,
   editable,
   envSourceGroup,
   folderName,
   type Group,
+  type HiddenKey,
   isDirty,
   type KeyLine,
   locked,
@@ -44,7 +43,6 @@ import {
   type UndeclaredKey,
   undeclaredOf,
   type Variant,
-  variableGroupTally,
 } from "../model";
 import { useValue } from "../signals";
 import {
@@ -53,11 +51,7 @@ import {
   applyDrop,
   askRemoval,
   baselines,
-  bundleFolderKey,
-  bundleOpen,
-  bundleStates,
   catalogue,
-  collapsed,
   copyLoading,
   copyValue,
   dismiss,
@@ -74,6 +68,7 @@ import {
   missingVariableGroupCells,
   openCopy,
   openDrawer,
+  optionalGroups,
   pickEnvironment,
   problems,
   reveal,
@@ -91,8 +86,7 @@ import {
   spotlight,
   spotlighted,
   state,
-  toggleBundle,
-  toggleBundleFolder,
+  switchVariableGroup,
   toggleGroup,
   toggleRevealVisible,
   toggleSelected,
@@ -102,6 +96,7 @@ import {
 } from "../store";
 import { Chip, ChipButton } from "./Chip";
 import { Fault } from "./Fault";
+import { OptionalGroups } from "./OptionalGroups";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import {
@@ -115,7 +110,6 @@ import {
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Switch } from "./ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 function hasFile(event: DragEvent): boolean {
@@ -191,10 +185,7 @@ export function Table() {
   const revealed = useValue(shown);
   const can = useValue(ability);
   const unfilledLens = useValue(unfilledOnly);
-  const total =
-    list.keys.length +
-    list.bundles.reduce((sum, bundle) => sum + bundle.keys, 0) +
-    list.groups.reduce((sum, group) => sum + group.keys, 0);
+  const total = list.keys.length + list.groups.reduce((sum, group) => sum + group.keys, 0);
   return (
     <TooltipProvider>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target; every action in it is a button */}
@@ -264,14 +255,12 @@ export function Table() {
                 <KeyRow line={line} flat={list.flat} depth={0} key={addressKey(line.variant.at)} />
               ))}
             </tbody>
-            {list.bundles.map((bundle) => (
-              <BundleSection bundle={bundle} key={bundle.group.key} />
-            ))}
             {list.credentials.length > 0 && <CredentialSection lines={list.credentials} />}
             <UndeclaredSection />
           </table>
         </div>
-        {total === 0 && <Empty />}
+        {list.hidden.length > 0 && <HiddenByGroups hidden={list.hidden} />}
+        {total === 0 && list.hidden.length === 0 && <Empty />}
         <footer
           className={cn(
             note,
@@ -436,116 +425,6 @@ function UndeclaredRow({ found }: { found: UndeclaredKey }) {
   );
 }
 
-function BundleSection({ bundle }: { bundle: Bundle }) {
-  const current = useValue(state);
-  const unknown = current?.values === "unknown";
-  const shut = unknown || !abilityOf(current).write;
-  const states = useValue(bundleStates);
-  const on = bundleOpen(states, bundle);
-  const shutFolders = useValue(collapsed);
-  const { members, present, missing } = variableGroupTally(states.get(bundle.group.key) ?? []);
-  const total = members === 0 ? bundle.keys : members;
-  return (
-    <tbody data-slot="bundle" data-group={bundle.group.key} data-open={on}>
-      <tr className="border-b border-border">
-        <th
-          scope="rowgroup"
-          colSpan={columns}
-          className={cn("py-2.5 pr-4 text-left font-normal", indent[0])}
-        >
-          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <Switch
-              data-slot="group-switch"
-              checked={on}
-              disabled={shut}
-              title={
-                unknown
-                  ? "the console cannot read these values"
-                  : shut
-                    ? "your role cannot change these values"
-                    : undefined
-              }
-              aria-label={`${on ? "switch off" : "switch on"} ${bundle.group.key}`}
-              onCheckedChange={(next) => toggleBundle(bundle.group.key, next)}
-            />
-            <span className={pathName}>{bundle.group.key}</span>
-            {bundle.group.description && (
-              <span className={cn(note, "min-w-0 truncate")}>{bundle.group.description}</span>
-            )}
-            <span className="flex-1" />
-            <span
-              data-slot="group-summary"
-              className={cn(
-                role.meta,
-                "shrink-0 tabular-nums",
-                on && missing > 0 ? "text-warn" : "text-muted-foreground",
-              )}
-            >
-              {unknown
-                ? "unknown"
-                : !on
-                  ? `off · ${plural(total, "key")}`
-                  : missing > 0
-                    ? `${plural(missing, "key")} to fill`
-                    : `${present} of ${total} set`}
-            </span>
-          </span>
-        </th>
-      </tr>
-      {on &&
-        bundle.root.map((line) => (
-          <KeyRow line={line} flat={false} depth={1} key={addressKey(line.variant.at)} />
-        ))}
-      {on &&
-        bundle.folders.map((within) => {
-          const shut = shutFolders.has(bundleFolderKey(bundle.group.key, within.folder));
-          return (
-            <Fragment key={within.folder}>
-              <tr
-                data-slot="bundle-folder"
-                className="cursor-pointer border-b border-border hover:bg-muted/40"
-                onClick={() => toggleBundleFolder(bundle.group.key, within.folder)}
-              >
-                <th
-                  scope="rowgroup"
-                  colSpan={columns}
-                  className={cn("py-2 pr-4 text-left font-normal", indent[1])}
-                >
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <button
-                      type="button"
-                      aria-expanded={!shut}
-                      aria-label={`${shut ? "expand" : "collapse"} ${within.folder} in ${bundle.group.key}`}
-                      className="-m-1 inline-flex size-6 shrink-0 items-center justify-center p-1 text-muted-foreground"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleBundleFolder(bundle.group.key, within.folder);
-                      }}
-                    >
-                      <CaretRightIcon
-                        className={cn(glyph.control, "transition-transform", !shut && "rotate-90")}
-                      />
-                    </button>
-                    <FolderIcon
-                      weight="fill"
-                      className={cn(glyph.control, "shrink-0 text-amber")}
-                    />
-                    <span className={pathName}>{within.folder}</span>
-                    <span className={note}>{plural(within.lines.length, "key")}</span>
-                  </span>
-                </th>
-              </tr>
-              {!shut &&
-                within.lines.map((line) => (
-                  <KeyRow line={line} flat={false} depth={2} key={addressKey(line.variant.at)} />
-                ))}
-            </Fragment>
-          );
-        })}
-    </tbody>
-  );
-}
-
 function Toolbar() {
   const current = useValue(state)!;
   const picker = useRef<HTMLInputElement>(null);
@@ -589,6 +468,7 @@ function Toolbar() {
           ))}
         </SelectContent>
       </Select>
+      <OptionalGroups />
       {unfilledCount > 0 && (
         <Button
           variant={unfilledLens ? "secondary" : "ghost"}
@@ -668,6 +548,38 @@ function Toolbar() {
           {loading ? "Reading…" : `Copy from ${current.other}`}
         </Button>
       )}
+    </div>
+  );
+}
+
+function HiddenByGroups({ hidden }: { hidden: HiddenKey[] }) {
+  const current = useValue(state)!;
+  const can = useValue(ability);
+  const byGroup = new Map<string, string[]>();
+  for (const found of hidden)
+    byGroup.set(found.group, [...(byGroup.get(found.group) ?? []), found.key]);
+  const switchable = can.write && current.values !== "unknown";
+  return (
+    <div data-slot="hidden-by-groups" className="flex flex-col gap-1.5 px-4 py-3">
+      {[...byGroup].map(([group, keys]) => (
+        <p key={group} className={cn(prose, "flex flex-wrap items-center gap-x-3 gap-y-1")}>
+          <span>
+            <span className={cn(datum, "text-foreground")}>{names(keys)}</span>{" "}
+            {keys.length === 1 ? "is" : "are"} in <span className="text-foreground">{group}</span>,
+            which is off
+          </span>
+          {switchable && (
+            <Button
+              variant="outline"
+              size="xs"
+              data-action="switch-on-group"
+              onClick={() => switchVariableGroup(group, true)}
+            >
+              Switch on {group}
+            </Button>
+          )}
+        </p>
+      ))}
     </div>
   );
 }
@@ -772,6 +684,7 @@ function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: nu
   const groupMissing = useValue(missingVariableGroupCells).has(key);
   const open = editable(variant);
   const missing = variant.missing || line.needed || groupMissing;
+  const optional = useValue(optionalGroups).some((group) => group.group.key === row.group);
   return (
     <>
       <tr
@@ -810,6 +723,11 @@ function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: nu
                 <ChipButton onClick={() => revealGroup(variant.at.folder)}>
                   {folderName(variant.at.folder)}
                 </ChipButton>
+              )}
+              {optional && (
+                <Chip tone="muted" data-slot="group" title={`in the optional group ${row.group}`}>
+                  {row.group}
+                </Chip>
               )}
               {missing && (
                 <Chip tone="warn" data-slot="missing">

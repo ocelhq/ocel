@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   blockedVariableGroupColumns,
+  catalogueOf,
   type MatrixCell,
   type MatrixRow,
   missingVariableGroupCellsOf,
+  optionalGroupsOf,
   type State,
   type VariableGroupPending,
   variableGroupBlockLine,
@@ -359,5 +361,87 @@ describe("variableGroupSwitchable", () => {
       ["github", true],
       ["github", true],
     ]);
+  });
+});
+
+describe("optionalGroupsOf", () => {
+  const summary = (current: State, over: Partial<VariableGroupPending> = {}) =>
+    optionalGroupsOf(
+      current,
+      variableGroupStatesOf(current, "", pending(over)),
+      catalogueOf(current, []).variants,
+      over.removals ?? new Set(),
+    );
+
+  it("reads a group nobody has filled or switched on as off", () => {
+    expect(summary(github)).toEqual([
+      {
+        group: github.matrix.groups![0],
+        on: "off",
+        onIn: [],
+        keys: 2,
+        missing: 0,
+        stored: 0,
+        removing: 0,
+      },
+    ]);
+  });
+
+  it("counts each key still to fill once, however many folders inherit it", () => {
+    const [group] = summary(github, {
+      switchedOn: new Set(["github  ", "github /web "]),
+    });
+    expect([group?.on, group?.missing]).toEqual(["on", 2]);
+  });
+
+  it("counts the stored values switching the group off would remove", () => {
+    const stored = stateOf(
+      [
+        row(
+          "GITHUB_ID",
+          [cell({ state: "required", set: true, version: 1 }), cell({ folder: "/web" })],
+          {
+            group: "github",
+          },
+        ),
+        row(
+          "GITHUB_SECRET",
+          [cell({ state: "required", set: true, version: 1 }), cell({ folder: "/web" })],
+          {
+            group: "github",
+          },
+        ),
+      ],
+      [{ key: "github", required: false }],
+    );
+    const [group] = summary(stored);
+    expect([group?.on, group?.stored, group?.missing]).toEqual(["on", 2, 0]);
+  });
+
+  it("reads a group on in one folder and off at the root as mixed, naming where it is on", () => {
+    const mixed = stateOf(
+      [
+        row(
+          "GITHUB_ID",
+          [cell({ state: "required" }), cell({ folder: "/web", set: true, version: 1 })],
+          {
+            group: "github",
+          },
+        ),
+      ],
+      [{ key: "github", required: false }],
+    );
+    const [group] = summary(mixed);
+    expect([group?.on, group?.onIn]).toEqual(["mixed", ["/web"]]);
+  });
+
+  it("counts the values a switched-off group has staged for removal", () => {
+    const [group] = summary(github, { removals: new Set(["GITHUB_ID  ", "OTHER  "]) });
+    expect(group?.removing).toBe(1);
+  });
+
+  it("leaves required groups out, since nothing can switch them off", () => {
+    const required = stateOf(github.matrix.rows, [{ key: "github", required: true }]);
+    expect(summary(required)).toEqual([]);
   });
 });

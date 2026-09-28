@@ -4,7 +4,6 @@ import {
   abilityOf,
   addressKey,
   applyDotenv,
-  type Bundle,
   baselineOf,
   blockedVariableGroupColumns,
   type CopyPlan,
@@ -17,6 +16,7 @@ import {
   missingSet,
   missingVariableGroupCellsOf,
   names,
+  optionalGroupsOf,
   type Problem,
   planCopy,
   plural,
@@ -28,6 +28,7 @@ import {
   saveSummary,
   stillMissingOf,
   unfilledLensCount,
+  type VariableGroupMember,
   type VariableGroupPending,
   type VariableGroupState,
   type Version,
@@ -110,6 +111,15 @@ export const environments = computed(() => (state.value ? environmentsOf(state.v
 
 export const dirty = computed(() => dirtyEntries(catalogue.value, drafts.value, baselines.value));
 
+export const pending = computed(
+  () =>
+    dirty.value.length +
+    [...variableGroupRemovals.value].filter((key) => {
+      const variant = variants.value.get(key);
+      return variant?.set === true && !variant.reference && !variant.owner;
+    }).length,
+);
+
 export const missing = computed(() => missingSet(state.value?.recovery));
 
 export const unfilledLens = computed(() =>
@@ -136,43 +146,45 @@ export const missingVariableGroupCells = computed(() =>
   missingVariableGroupCellsOf(variableGroupStates.value),
 );
 
-export const bundleStates = computed(() => {
-  const at = environment.value;
-  const out = new Map<string, VariableGroupState[]>();
-  for (const derived of variableGroupStates.value) {
-    if (derived.environment !== at) continue;
-    const existing = out.get(derived.group.key);
-    if (existing) existing.push(derived);
-    else out.set(derived.group.key, [derived]);
-  }
-  return out as ReadonlyMap<string, readonly VariableGroupState[]>;
-});
+export const variableGroupStatesHere = computed(() =>
+  variableGroupStates.value.filter((derived) => derived.environment === environment.value),
+);
 
-export function bundleOpen(
-  states: ReadonlyMap<string, readonly VariableGroupState[]>,
-  bundle: Bundle,
-): boolean {
-  const groupStates = states.get(bundle.group.key);
-  return groupStates === undefined || groupStates.length === 0 || groupStates.some(variableGroupOn);
-}
+export const offVariableGroupColumns = computed(
+  () =>
+    new Set(
+      variableGroupStatesHere.value
+        .filter((derived) => !variableGroupOn(derived))
+        .map((derived) =>
+          variableGroupColumnKey(derived.group.key, derived.folder, derived.environment),
+        ),
+    ) as ReadonlySet<string>,
+);
 
-export const collapsed = signal<ReadonlySet<string>>(new Set());
+export const optionalGroups = computed(() =>
+  optionalGroupsOf(
+    state.value ?? emptyState,
+    variableGroupStatesHere.value,
+    variants.value,
+    variableGroupRemovals.value,
+  ),
+);
 
-export function bundleFolderKey(group: string, folder: string): string {
-  return `${group} ${folder}`;
-}
-
-export function toggleBundleFolder(group: string, folder: string): void {
-  const next = new Set(collapsed.value);
-  const key = bundleFolderKey(group, folder);
-  if (!next.delete(key)) next.add(key);
-  collapsed.value = next;
-}
-
-export function toggleBundle(group: string, on: boolean): void {
-  for (const derived of bundleStates.value.get(group) ?? []) {
-    toggleVariableGroup(group, derived.folder, on);
-  }
+export function switchVariableGroup(group: string, on: boolean): void {
+  const mine = variableGroupStatesHere.value.filter((derived) => derived.group.key === group);
+  const rooted = mine.some((derived) => derived.folder === "");
+  const touched = mine.flatMap((derived) => {
+    const inheritsRoot = (member: VariableGroupMember) =>
+      rooted && derived.folder !== "" && member.addresses.some((address) => address.folder === "");
+    const applied = applyVariableGroup(
+      group,
+      derived.folder,
+      on,
+      (member) => !inheritsRoot(member),
+    );
+    return applied ? [applied] : [];
+  });
+  if (on) settleOn(touched);
 }
 
 export const listing = computed(() =>
@@ -180,27 +192,17 @@ export const listing = computed(() =>
     environment: environment.value,
     query: search.value,
     unfilledOnly: unfilledOnly.value,
+    off: offVariableGroupColumns.value,
   }),
 );
 
 export const visible = computed(() => {
   const shown = listing.value;
-  const states = bundleStates.value;
   const lines = [
     ...shown.keys,
     ...shown.groups
       .filter((group) => expanded.value.has(group.folder))
       .flatMap((group) => group.lines),
-    ...shown.bundles
-      .filter((bundle) => bundleOpen(states, bundle))
-      .flatMap((bundle) => [
-        ...bundle.root,
-        ...bundle.folders
-          .filter(
-            (within) => !collapsed.value.has(bundleFolderKey(bundle.group.key, within.folder)),
-          )
-          .flatMap((within) => within.lines),
-      ]),
   ];
   return lines.filter((line) => editable(line.variant)).map((line) => line.variant);
 });
@@ -349,6 +351,8 @@ export function setDraft(at: Address, value: string): void {
 
 export function discard(): void {
   drafts.value = new Map();
+  variableGroupRemovals.value = new Set();
+  variableGroupsOn.value = new Set();
   problems.value = new Map();
   outcome.value = null;
 }
@@ -550,11 +554,37 @@ export async function save(): Promise<void> {
 }
 
 export function toggleVariableGroup(group: string, folder: string, on: boolean): void {
+  const applied = applyVariableGroup(group, folder, on, () => true);
+  if (on && applied) settleOn([applied]);
+}
+
+interface Offered {
+  derived: VariableGroupState;
+  members: VariableGroupMember[];
+}
+
+function settleOn(offered: readonly Offered[]): void {
+  search.value = "";
+  unfilledOnly.value = false;
+  const members = offered.flatMap((step) => step.members);
+  for (const member of members) expand(member.at.folder);
+  const first =
+    offered.flatMap((step) => step.derived.missing).find((member) => members.includes(member)) ??
+    members[0];
+  if (first) focusing.value = addressKey(first.at);
+}
+
+function applyVariableGroup(
+  group: string,
+  folder: string,
+  on: boolean,
+  offer: (member: VariableGroupMember) => boolean,
+): Offered | undefined {
   const current = state.value;
-  if (!current) return;
+  if (!current) return undefined;
   const at = environment.value;
   const derived = variableGroupStateOf(current, group, folder, at, variableGroupPending());
-  if (!derived) return;
+  if (!derived) return undefined;
   const column = variableGroupColumnKey(group, folder, at);
   const switchedOn = new Set(variableGroupsOn.value);
   const removals = new Set(variableGroupRemovals.value);
@@ -566,13 +596,9 @@ export function toggleVariableGroup(group: string, folder: string, on: boolean):
     }
     variableGroupsOn.value = switchedOn;
     variableGroupRemovals.value = removals;
-    for (const member of derived.members) remember(member.at);
-    search.value = "";
-    unfilledOnly.value = false;
-    expand(folder);
-    const first = derived.missing[0] ?? derived.members[0];
-    if (first) focusing.value = addressKey(first.at);
-    return;
+    const offered = derived.members.filter(offer);
+    for (const member of offered) remember(member.at);
+    return { derived, members: offered };
   }
   switchedOn.delete(column);
   for (const member of derived.members) {
@@ -586,6 +612,7 @@ export function toggleVariableGroup(group: string, folder: string, on: boolean):
   variableGroupsOn.value = switchedOn;
   variableGroupRemovals.value = removals;
   drafts.value = remaining;
+  return { derived, members: [] };
 }
 
 export function askRemoval(cells: readonly Address[]): void {
