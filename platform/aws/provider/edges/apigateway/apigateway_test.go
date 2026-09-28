@@ -63,9 +63,7 @@ func TestTheAPIGatewayEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 }
 
 func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
-	previews := func(t *testing.T) routerconformance.Fixture {
-		w := newWorld()
-		e, stack := previewing(t, w)
+	fixture := func(w *world, e *apiGateway, stack edge.EdgeStack) routerconformance.Fixture {
 		state := stack.State()
 		return routerconformance.Fixture{
 			Router: Router{p: e},
@@ -76,7 +74,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 				w.gateway.mu.Lock()
 				defer w.gateway.mu.Unlock()
 				for _, api := range w.gateway.apis {
-					if api.name == name {
+					if api.name == name && api.variables[entryVariable] != unsetVariable {
 						return strings.TrimPrefix(api.variables[entryVariable], "fn-")
 					}
 				}
@@ -89,14 +87,37 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 			},
 		}
 	}
-	routerconformance.Run(t, routerconformance.Suite{
-		New:      previews,
-		Previews: previews,
-		Pointer:  previewPoint,
-		Hostname: "shop.example.com",
-		Record: func(app, build string) router.DeploymentRecord {
-			return router.DeploymentRecord{App: app, Build: build, Entry: "/", EntryFunction: "fn-" + build}
-		},
+	previews := func(t *testing.T) routerconformance.Fixture {
+		w := newWorld()
+		e, stack := previewing(t, w)
+		return fixture(w, e, stack)
+	}
+	record := func(app, build string) router.DeploymentRecord {
+		return router.DeploymentRecord{App: app, Build: build, Entry: "/", EntryFunction: "fn-" + build}
+	}
+	t.Run("on a preview pointer", func(t *testing.T) {
+		routerconformance.Run(t, routerconformance.Suite{
+			New:      previews,
+			Previews: previews,
+			Pointer:  previewPoint,
+			Hostname: "shop.example.com",
+			Record:   record,
+		})
+	})
+	t.Run("on the production pointer", func(t *testing.T) {
+		routerconformance.Run(t, routerconformance.Suite{
+			New: func(t *testing.T) routerconformance.Fixture {
+				w := newWorld()
+				e := bootstrapped(t, w)
+				stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+				if err != nil {
+					t.Fatalf("Reconcile: %v", err)
+				}
+				return fixture(w, e, stack)
+			},
+			Hostname: "shop.example.com",
+			Record:   record,
+		})
 	})
 }
 

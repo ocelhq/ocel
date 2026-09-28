@@ -122,11 +122,23 @@ func moveStage(ctx context.Context, c Clients, id, promotionID string, patch []a
 		PatchOperations: patch,
 	}); err != nil {
 		if promotionID == "" {
-			return fmt.Errorf("move the %s stage of REST API %s back off a promotion the ledger refused: %w", stageName, id, err)
+			return fmt.Errorf("move the %s stage of REST API %s off every promotion: %w", stageName, id, err)
 		}
 		return fmt.Errorf("move the %s stage of REST API %s onto promotion %s: %w", stageName, id, promotionID, err)
 	}
 	return nil
+}
+
+func (s *stack) unsetStage(ctx context.Context, c Clients) error {
+	id, found, err := s.findAPIFor(ctx, c, "", s.spec("").name)
+	if err != nil || !found {
+		return err
+	}
+	err = moveStage(ctx, c, id, "", variablePatch(unsetVariables()))
+	if isNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 func variablePatch(variables map[string]string) []agtypes.PatchOperation {

@@ -90,7 +90,7 @@ func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progre
 		return err
 	}
 	if pointerOr(pointer) == router.DefaultPointer {
-		return nil
+		return s.unsetStage(ctx, c)
 	}
 	if err := s.unroutePreview(ctx, c, pointer); err != nil {
 		return err
