@@ -34,7 +34,7 @@ func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	if cmd.Dir != moduleRoot {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, moduleRoot)
 	}
-	if want := []string{"go", "run", "./" + constants.ProjectStateDirName + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
+	if want := []string{"go", "run", "-trimpath=false", "./" + constants.ProjectStateDirName + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
 		t.Errorf("Args = %q, want %q", cmd.Args, want)
 	}
 	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", constants.DevServerTokenEnvName + "=opensesame"} {
@@ -142,6 +142,32 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	}
 	if want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
 		t.Errorf("variable source = %q, want it to end with %q", variables[0].GetSource(), want)
+	}
+}
+
+func TestRunNamesTheDeclaringFileByItsPathWhenGOFLAGSTrimsPaths(t *testing.T) {
+	t.Setenv("GOFLAGS", "-trimpath")
+	configDir := repoFixture(t, filepath.Join("sdk", "go"))
+	roots, err := Roots(configDir, nil)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	collected, server := declareCollector(t)
+	prepared, err := Prepare(configDir, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), configDir, prepared, server, &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+
+	infra := filepath.Join(configDir, constants.DefaultDiscoveryDirName, "infra.go")
+	for _, request := range collected.declared() {
+		if file, _, _ := strings.Cut(request.GetSource(), ".go:"); file+".go" != infra {
+			t.Errorf("source = %q, want the line in %s", request.GetSource(), infra)
+		}
 	}
 }
 
