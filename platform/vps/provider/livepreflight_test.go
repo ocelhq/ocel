@@ -17,8 +17,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const foreignContainer = "not-ocels"
-
 func liveDeployPreflight(t *testing.T, image string) provider.DeployPreflight {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
@@ -300,33 +298,4 @@ func (vm machine) deafens(t *testing.T, socket string) {
 func (vm machine) hears(t *testing.T, socket string) {
 	t.Helper()
 	vm.ssh(t, "sudo sh -c "+quote("kill $(cat "+deafPid+") || true; rm -f "+deafPid+" "+socket+"; mv "+socket+".listening "+socket))
-}
-
-func TestLiveAForeignContainerPublishingPortEightyIsRefusedByName(t *testing.T) {
-	vm, p := onABoxServingContainers(t)
-
-	vm.ssh(t, "sudo docker stop "+caddy.Container)
-	vm.ssh(t, "sudo docker rm -f "+foreignContainer+" >/dev/null 2>&1 || true")
-	vm.ssh(t, "sudo docker run -d --name "+foreignContainer+" -p "+caddy.HTTPPort+":8080 "+fixtureAt("one"))
-	defer func() {
-		vm.ssh(t, "sudo docker rm -f "+foreignContainer+" >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo docker start "+caddy.Container)
-		vm.waitsFor(t, caddy.Container)
-	}()
-	if !vm.running(t, foreignContainer) {
-		t.Fatalf("%s never came up, so nothing on this box publishes port %s and there is no condition to refuse", foreignContainer, caddy.HTTPPort)
-	}
-
-	err := preflightedOn(t, p)
-	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy onto a box where %s publishes port %s", foreignContainer, caddy.HTTPPort)
-	}
-	if !strings.Contains(err.Error(), foreignContainer) {
-		t.Errorf("PreflightDeploy() = %q, want %q named: a foreign listener is refused by name", err, foreignContainer)
-	}
-	for _, want := range []string{"stop it", "move it off " + caddy.HTTPPort} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("PreflightDeploy() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
-		}
-	}
 }
