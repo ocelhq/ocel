@@ -46,7 +46,7 @@ func TestCtrlCDuringALinkLeavesItsTranscriptWithNoLiveLineAndExitsInterrupted(t 
 		console http.HandlerFunc
 		shown   string
 	}{
-		{name: "while the console is loading", console: stalled, shown: "[check] 0/1"},
+		{name: "while the console is loading", console: stalled, shown: "Loading your organizations"},
 		{name: "at a prompt", console: twoOrganizations, shown: "Select an organization"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
