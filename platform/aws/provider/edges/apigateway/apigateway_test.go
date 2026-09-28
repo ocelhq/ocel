@@ -43,7 +43,7 @@ func bootstrapped(t *testing.T, w *world) *apiGateway {
 	return e
 }
 
-func TestConformance(t *testing.T) {
+func TestTheAPIGatewayEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
 			return bootstrapped(t, newWorld()), testSpec()

@@ -22,7 +22,7 @@ const conformanceModule = `
 	export default defineTransform({ aws: everything })
 `
 
-func TestSurfaceConformance(t *testing.T) {
+func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	t.Parallel()
 
 	rendered := map[string]map[string]resourceRef{

@@ -124,7 +124,7 @@ func serveRecordingKMS(t *testing.T) (*Clients, *recordingKMS) {
 	return serveKMS(t, fake), fake
 }
 
-func TestCipherConformance(t *testing.T) {
+func TestTheCipherSealsAsEveryCipherMust(t *testing.T) {
 	conformance.RunCipher(t, Cipher{Clients: serveKMS(t, &aeadKMS{keys: map[string]cipher.AEAD{}})})
 }
 
