@@ -8,8 +8,8 @@ const TABLE = "ocel-state";
 const TIER = "production";
 const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
 const RELEASE = "r0a1b2c3d";
-const PROJECT = "ledger#acme";
-const WILDCARD = "ledger";
+const PROJECT = "routers#cloudfront#acme";
+const WILDCARD = "routers#cloudfront";
 
 class FakeDynamo {
   reads: any[] = [];
@@ -78,7 +78,7 @@ beforeEach(() => {
   cloudfront = new FakeCloudFront();
 });
 
-it("invalidates every distribution the ledger names for the project", async () => {
+it("invalidates every distribution the CloudFront router names for the project", async () => {
   const failed = await invalidateAll(invalidator(dynamo, cloudfront), raises(["products"]));
 
   expect(failed).toEqual([]);
@@ -237,7 +237,7 @@ it("gives up on a distribution that stays congested and fails its records", asyn
   expect(failed).toEqual(["seq-1"]);
 });
 
-it("invalidates nothing when the ledger names no target", async () => {
+it("invalidates nothing when the CloudFront router names no target", async () => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   const empty = new FakeDynamo();
 
@@ -247,7 +247,7 @@ it("invalidates nothing when the ledger names no target", async () => {
   expect(cloudfront.calls).toEqual([]);
 });
 
-it("says so when the ledger names no target", async () => {
+it("says so when the CloudFront router names no target", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
   await invalidateAll(invalidator(new FakeDynamo(), cloudfront), raises(["products"]));

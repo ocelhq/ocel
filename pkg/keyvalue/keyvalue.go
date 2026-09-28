@@ -42,6 +42,7 @@ const (
 	RootEdgeStacks         Root = "edgestacks"
 	RootWildcard           Root = "wildcard"
 	RootLedger             Root = "ledger"
+	RootRouters            Root = "routers"
 	RootValues             Root = "values"
 	RootValueRefs          Root = "valuerefs"
 	RootConformance        Root = "conformance"

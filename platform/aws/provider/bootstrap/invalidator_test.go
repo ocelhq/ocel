@@ -83,7 +83,7 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("reads the ledger of its own tier", func(t *testing.T) {
+	t.Run("reads the state table of its own tier", func(t *testing.T) {
 		for _, tc := range []struct {
 			name     string
 			template string
@@ -95,7 +95,7 @@ func TestTagInvalidator(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				env := parsePublisherTemplate(t, tc.template).Resources["TagInvalidator"].Properties.Environment.Variables
 				if env["OCEL_INFRA_TIER"] != string(tc.tier) {
-					t.Errorf("%s = %q, want %q — the tier scopes every ledger read to its own bootstrap", "OCEL_INFRA_TIER", env["OCEL_INFRA_TIER"], tc.tier)
+					t.Errorf("%s = %q, want %q — the tier scopes every state table read to its own bootstrap", "OCEL_INFRA_TIER", env["OCEL_INFRA_TIER"], tc.tier)
 				}
 				if env[tagInvalidatorStateTableEnvVar] != paramStateTableName {
 					t.Errorf("%s = %q, want the bootstrap's state table", tagInvalidatorStateTableEnvVar, env[tagInvalidatorStateTableEnvVar])
@@ -104,7 +104,7 @@ func TestTagInvalidator(t *testing.T) {
 		}
 	})
 
-	t.Run("role reaches only the stream, the ledger and invalidation", func(t *testing.T) {
+	t.Run("role reaches only the stream, the state table and invalidation", func(t *testing.T) {
 		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureISR, environment.TierProduction))
 		role, ok := tmpl.Resources["TagInvalidatorRole"]
 		if !ok {
@@ -140,7 +140,7 @@ func TestTagInvalidator(t *testing.T) {
 			"cloudfront:UpdateDistribution", "cloudfront:CreateDistribution", "s3:GetObject",
 		} {
 			if slices.Contains(actions, forbidden) {
-				t.Errorf("role grants %s; the invalidator reads the stream and the ledger, and invalidates, nothing else", forbidden)
+				t.Errorf("role grants %s; the invalidator reads the stream and the state table, and invalidates, nothing else", forbidden)
 			}
 		}
 	})

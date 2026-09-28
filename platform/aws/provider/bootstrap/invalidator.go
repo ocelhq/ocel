@@ -48,7 +48,7 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environ
   TagInvalidatorRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: "Execution role for this bootstrap's tag invalidator: the state table's stream, the ledger items naming which distributions to reach, and invalidation on those distributions."
+      Description: "Execution role for this bootstrap's tag invalidator: the state table's stream, the items naming which distributions the CloudFront router reaches, and invalidation on those distributions."
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -84,7 +84,7 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environ
   TagInvalidator:
     Type: AWS::Lambda::Function
     Properties:
-      Description: "Ocel tag invalidator - turns tag raises read off the state table stream into cache-tag invalidations on the distributions the ledger names."
+      Description: "Ocel tag invalidator - turns tag raises read off the state table stream into cache-tag invalidations on the distributions the CloudFront router names."
       Runtime: %s
       Architectures:
         - %s

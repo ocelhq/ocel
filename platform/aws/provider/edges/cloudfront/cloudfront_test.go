@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -757,9 +756,9 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	targets := w.invalidationTargets(ledger.Partition(environment.TierProduction, conformanceSlug))
+	targets := w.invalidationTargets(invalidationPartition(environment.TierProduction, conformanceSlug))
 	if targets == nil {
-		t.Fatalf("the ledger names no front for the tag invalidator to reach; it contains %v", slices.Sorted(maps.Keys(w.dynamo.items)))
+		t.Fatalf("the CloudFront router names no front for the tag invalidator to reach; it contains %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}
 	if want := ownState(t, stack).Distribution; !slices.Equal(targets, []string{want}) {
 		t.Errorf("invalidation targets = %v, want the distribution this reconcile fronts the project with (%q)", targets, want)

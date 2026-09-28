@@ -134,7 +134,7 @@ async function invalidateOne(
       if (codeOf(result.reason) === goneFront) {
         live.delete(distribution);
         console.warn(
-          `ocel: ${distribution} no longer answers an invalidation, so this raise skips it; the ledger still names it`,
+          `ocel: ${distribution} no longer answers an invalidation, so this raise skips it; the CloudFront router still names it`,
           result.reason,
         );
         return;
