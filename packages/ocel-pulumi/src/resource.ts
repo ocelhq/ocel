@@ -33,11 +33,11 @@ export interface DescribedPostgresResource {
 export type CustomProperties = Record<string, Input<unknown>>;
 
 /**
- * Where a binding lands: an ocel class, one preview environment, the project
+ * Where a binding lands: an ocel tier, one preview environment, the project
  * containing both, and the Pulumi resource this one hangs under.
  */
 export interface BindOptions {
-  class?: "production" | "preview";
+  tier?: "production" | "preview";
   environment?: string;
   project?: string;
   parent?: Resource;
@@ -74,7 +74,7 @@ function bindingProvider<I extends BindingInputs>(
     name: inputs.name,
     owner: inputs.owner,
     project: inputs.project,
-    class: inputs.class,
+    tier: inputs.tier,
     environment: inputs.environment,
     digest: digestOf(inputs),
   });
@@ -131,7 +131,7 @@ export const customProvider = bindingProvider<CustomInputs>(
  * `"bindings": { "postgres": { "orders": "@pulumi-pg-orders" } }` in `ocel.json`
  * — and the resource is the postgres fields read off whatever provisioned it,
  * each of them an output this update resolves.
- * `class` defaults to production, `environment` names one preview environment,
+ * `tier` defaults to production, `environment` names one preview environment,
  * and `project` is the directory containing `ocel.json`, which is the
  * directory Pulumi runs the program from unless it is given.
  */
@@ -148,7 +148,7 @@ export function postgres(
  * binding, as a side effect of this update.
  *
  * The name is the one a transform reads — `bind.custom("network", …)` here,
- * `bindings.custom.network.subnetIds` in a transform module. `class` defaults to
+ * `bindings.custom.network.subnetIds` in a transform module. `tier` defaults to
  * production, `environment` names one preview environment, and `project` is the
  * directory containing `ocel.json`, which is the directory Pulumi runs the
  * program from unless it is given.
@@ -167,7 +167,7 @@ function declare(
 ): void {
   const target: Target = {
     project: opts?.project ?? process.cwd(),
-    class: opts?.class ?? "production",
+    tier: opts?.tier ?? "production",
     environment: opts?.environment,
   };
   checkTarget(target);
@@ -189,10 +189,10 @@ function declare(
 class BindingResource extends dynamic.Resource {}
 
 function idFor(inputs: BindingInputs): string {
-  return [inputs.class, inputs.environment, inputs.name].filter(Boolean).join("/");
+  return [inputs.tier, inputs.environment, inputs.name].filter(Boolean).join("/");
 }
 
-const identity = ["name", "owner", "project", "class", "environment"] as const;
+const identity = ["name", "owner", "project", "tier", "environment"] as const;
 
 function replacesFor(olds: BindingState, news: BindingInputs): string[] {
   return identity.filter((field) => olds[field] !== news[field]);

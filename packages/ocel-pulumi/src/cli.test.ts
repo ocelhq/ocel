@@ -17,7 +17,7 @@ vi.mock("node:module", () => {
 
 const run = vi.mocked(spawnSync);
 
-const target = { project: "/repo/app", class: "production" } as const;
+const target = { project: "/repo/app", tier: "production" } as const;
 
 beforeEach(() => {
   vi.clearAllMocks();

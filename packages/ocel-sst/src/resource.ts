@@ -29,9 +29,9 @@ export interface DescribedPostgresResource {
   grants?: Grant[];
 }
 
-/** Where a binding lands: an ocel class, one preview environment, and the project containing both. */
+/** Where a binding lands: an ocel tier, one preview environment, and the project containing both. */
 export interface BindOptions {
-  class?: "production" | "preview";
+  tier?: "production" | "preview";
   environment?: string;
   project?: string;
 }
@@ -67,7 +67,7 @@ function bindingProvider<I extends BindingInputs>(
     name: inputs.name,
     owner: inputs.owner,
     project: inputs.project,
-    class: inputs.class,
+    tier: inputs.tier,
     environment: inputs.environment,
     digest: digestOf(inputs),
   });
@@ -123,7 +123,7 @@ export const customProvider = bindingProvider<CustomInputs>(
  * declared resource to — `postgres("sst-pg-orders", …)` here, and
  * `"bindings": { "postgres": { "orders": "@sst-pg-orders" } }` in `ocel.json` —
  * and the resource is either an SST component, whose own binding description is
- * passed through, or the postgres fields written out by hand. `class` defaults to production, `environment` names one preview
+ * passed through, or the postgres fields written out by hand. `tier` defaults to production, `environment` names one preview
  * environment, and `project` is the directory containing `ocel.json`, which is
  * the SST config root unless it is given.
  */
@@ -135,7 +135,7 @@ export function postgres(
   const util = host();
   const target: Target = {
     project: opts?.project ?? configRoot(),
-    class: opts?.class ?? "production",
+    tier: opts?.tier ?? "production",
     environment: opts?.environment,
   };
   checkTarget(target);
@@ -164,7 +164,7 @@ export type CustomProperties = Record<string, Input<unknown>>;
  * binding, as a side effect of this apply.
  *
  * The name is the one a transform reads — `bind.custom("network", …)` here,
- * `bindings.custom.network.subnetIds` in a transform module. `class` defaults to
+ * `bindings.custom.network.subnetIds` in a transform module. `tier` defaults to
  * production, `environment` names one preview environment, and `project` is the
  * directory containing `ocel.json`, which is the SST config root unless it is
  * given.
@@ -173,7 +173,7 @@ export function custom(name: string, properties: CustomProperties, opts?: BindOp
   const util = host();
   const target: Target = {
     project: opts?.project ?? configRoot(),
-    class: opts?.class ?? "production",
+    tier: opts?.tier ?? "production",
     environment: opts?.environment,
   };
   checkTarget(target);
@@ -188,10 +188,10 @@ export function custom(name: string, properties: CustomProperties, opts?: BindOp
 }
 
 function idFor(inputs: BindingInputs): string {
-  return [inputs.class, inputs.environment, inputs.name].filter(Boolean).join("/");
+  return [inputs.tier, inputs.environment, inputs.name].filter(Boolean).join("/");
 }
 
-const identity = ["name", "owner", "project", "class", "environment"] as const;
+const identity = ["name", "owner", "project", "tier", "environment"] as const;
 
 function replacesFor(olds: BindingState, news: BindingInputs): string[] {
   return identity.filter((field) => olds[field] !== news[field]);
