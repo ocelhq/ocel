@@ -5,8 +5,6 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Kind string
@@ -56,16 +54,11 @@ func (c Compatibility) IsZero() bool {
 
 type Facts struct {
 	Supported             []Need
-	FlipBound             router.FlipBound
 	Compatibility         Compatibility
 	RunsCode              bool
-	AddressesItself       bool
 	ServesUnbound         bool
-	SignsOriginForwards   bool
 	ShieldsOrigin         bool
 	InvalidatesByCacheTag bool
-	RoutesPreviewsByLabel bool
-	CachesRecords         bool
 	CredentialScope       string
 }
 
@@ -109,12 +102,6 @@ type ProjectScope struct {
 type EdgeStack interface {
 	State() StackState
 
-	Ledger() Ledger
-
-	Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error
-
-	RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error)
-
 	BindDomain(ctx context.Context, binding DomainBinding) error
 
 	UnbindDomain(ctx context.Context, hostname string) error
@@ -127,16 +114,6 @@ type DomainBinding struct {
 	Certificate string
 	App         string
 	Say         func(string)
-}
-
-type Ledger interface {
-	SchemaVersion(ctx context.Context) (int, error)
-
-	PutStaged(ctx context.Context, record router.DeploymentRecord) error
-
-	History(ctx context.Context, pointer string) ([]router.HistoryEntry, error)
-
-	Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error)
 }
 
 type CredentialIdentity struct {

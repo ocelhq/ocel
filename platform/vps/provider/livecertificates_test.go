@@ -78,7 +78,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 
 	site := fronting(t, p, "certified")
 	one := provisioned(t, p, "one")
-	promotes(t, site.stack, "p-one", "one", one, 1)
+	promotes(t, site.routes, "p-one", "one", one, 1)
 
 	at := caddy.PinsDir + "/live"
 	placedOnTheBox(t, vm, at, []string{caddy.Container, liveHostname}, 90*24*time.Hour)

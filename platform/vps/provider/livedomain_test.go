@@ -115,7 +115,7 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	promotes(t, stack, "p-one", "one", provisioned(t, p, "one"), 1)
+	promotes(t, routed(t, p, stack), "p-one", "one", provisioned(t, p, "one"), 1)
 	recorded(t, p, domainSlug, stack.State())
 
 	return vm, p, overTheContract(t, p), liveHostname

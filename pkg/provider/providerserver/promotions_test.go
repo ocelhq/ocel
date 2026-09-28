@@ -281,6 +281,8 @@ type memoryLedger struct{ keptN int }
 
 func (*memoryLedger) SchemaVersion(context.Context) (int, error) { return edge.StoreSchemaVersion, nil }
 
+func (*memoryLedger) EnsureSchema(context.Context) error { return nil }
+
 func (*memoryLedger) PutStaged(context.Context, router.DeploymentRecord) error { return nil }
 
 func (*memoryLedger) History(context.Context, string) ([]router.HistoryEntry, error) {

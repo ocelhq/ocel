@@ -265,7 +265,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	promotes(t, stack, "p-one", "one", provisioned(t, d, "one"), 1)
+	promotes(t, routed(t, d, stack), "p-one", "one", provisioned(t, d, "one"), 1)
 	recorded(t, d, frontedSlug, stack.State())
 
 	bindsBehind(t, d, front)
@@ -280,7 +280,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	vm.loads(t, frontedHostname)
 	vm.awaitAnswers(t, "of one before the flip", counting("one", 0))
 	flipping := vm.clock(t)
-	promotes(t, stack, "p-two", "two", two, 2)
+	promotes(t, routed(t, d, stack), "p-two", "two", two, 2)
 	flipped := vm.clock(t)
 	vm.awaitAnswers(t, "of two after the flip", counting("two", flipped))
 	heard := vm.stopsLoad(t)

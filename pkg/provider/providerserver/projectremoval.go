@@ -27,9 +27,8 @@ import (
 )
 
 type projectRemoval struct {
+	sharedStack
 	provider provider.Provider
-	front    edge.Edge
-	stack    edge.EdgeStack
 	store    edgeStateStore
 	state    stackrecords.EdgeState
 	cutover  dnsCutover
@@ -71,15 +70,19 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
+	paired, err := sharedRouter(vendor, front)
+	if err != nil {
+		return nil, err
+	}
 	removal := &projectRemoval{
-		provider: vendor,
-		front:    front,
-		cutover:  newDNSCutover(front, writer, req.GetEdge().GetDns().GetZone(), vendor.Liveness()),
-		store:    store,
-		state:    state,
-		slug:     req.GetSlug(),
-		tier:     tier,
-		scope:    scope,
+		sharedStack: sharedStack{front: front, router: paired},
+		provider:    vendor,
+		cutover:     newDNSCutover(front, writer, req.GetEdge().GetDns().GetZone(), vendor.Liveness()),
+		store:       store,
+		state:       state,
+		slug:        req.GetSlug(),
+		tier:        tier,
+		scope:       scope,
 	}
 	if !removal.state.Edge.Empty() {
 		if removal.stack, err = front.Open(removal.state.Edge); err != nil {
@@ -292,7 +295,7 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progre
 	}
 	for _, pointer := range r.pointers() {
 		runProgress.Say(fmt.Sprintf("Removing the %s routing pointer from the %s edge", pointer, r.front.Kind()))
-		if _, err := r.stack.RemovePointer(ctx, pointer, runProgress); err != nil {
+		if _, err := r.removePointer(ctx, pointer, runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
 	}
@@ -319,7 +322,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Pro
 		return nil
 	}
 	progress.Say(fmt.Sprintf("Destroying the %s edge stack of %s", r.front.Kind(), r.slug))
-	if err := r.stack.Destroy(ctx); err != nil {
+	if err := r.destroyStack(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}
 	r.state = stackrecords.EdgeState{}

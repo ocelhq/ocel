@@ -123,8 +123,6 @@ func (s *stack) State() edge.StackState {
 	return current
 }
 
-func (s *stack) Ledger() edge.Ledger { return s }
-
 func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 	s := &stack{p: p, state: state}
 	if err := state.Private.Into(&s.own); err != nil {

@@ -42,7 +42,6 @@ func (e *Edge) Facts() edge.Facts {
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
 		InvalidatesByCacheTag: true,
 		ShieldsOrigin:         true,
-		RoutesPreviewsByLabel: true,
 		CredentialScope:       e.deps.Project,
 	}
 }

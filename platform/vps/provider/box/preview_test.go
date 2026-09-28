@@ -114,23 +114,27 @@ func TestABoxAlreadyServingOnePreviewBaseRefusesASecondRatherThanSwappingIt(t *t
 	}
 }
 
-func previewStack(t *testing.T, m *machine) edge.EdgeStack {
+func previewStack(t *testing.T, m *machine) boxStack {
+	t.Helper()
+	return previewStackOn(t, edgeOver(m, fake.NewKeyValues()))
+}
+
+func previewStackOn(t *testing.T, front *box.Edge) boxStack {
 	t.Helper()
 
-	front := edgeOver(m, fake.NewKeyValues())
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+	stackEdge, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierPreview, Slug: slug,
 	}, edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	return stack
+	return stackOn(front, stackEdge)
 }
 
-func previewed(t *testing.T, stack edge.EdgeStack, pointer string, apps ...string) {
+func previewed(t *testing.T, stack boxStack, pointer string, apps ...string) {
 	t.Helper()
 
 	builds := map[string]string{}
@@ -138,9 +142,9 @@ func previewed(t *testing.T, stack edge.EdgeStack, pointer string, apps ...strin
 		staged(t, stack, app, "b1", slug+"-"+app+"-"+pointer)
 		builds[app] = "b1"
 	}
-	if err := stack.Promote(context.Background(), router.Promotion{
+	if err := stack.Flip(context.Background(), router.Flip{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,
-	}, pointer, progress.DiscardProgress()); err != nil {
+	}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -214,7 +218,7 @@ func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
 	previewed(t, stack, "pr-7", "api", "web")
 	previewed(t, stack, "pr-9", "api", "web")
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	for _, claim := range claimedOn(t, m) {
@@ -238,9 +242,9 @@ func TestAPreviewHostnameDnsWillNotResolveIsRefusedRatherThanClaimed(t *testing.
 	over := strings.Repeat("b", edge.PreviewLabelMaxLen)
 	staged(t, stack, "web", "b1", slug+"-web-1")
 
-	err := stack.Promote(context.Background(), router.Promotion{
+	err := stack.Flip(context.Background(), router.Flip{Pointer: over, Promotion: router.Promotion{
 		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}, over, progress.DiscardProgress())
+	}}, progress.DiscardProgress())
 	if err == nil {
 		t.Fatalf("a preview whose hostname has a %d-character label was claimed on this box: DNS caps a label at %d, so the name resolves nowhere and its acme order can never succeed. The check lives in the CLI's preflight alone, and a caller that skips preflight reaches this",
 			len(slug)+len(edge.PreviewAppSeparator)+len(over), edge.PreviewLabelMaxLen)
@@ -290,16 +294,17 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 		t.Errorf("a production promotion claimed %v", claimed)
 	}
 
-	pointed, err := front.Reconcile(context.Background(), edge.StackSpec{
+	pointedEdge, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
+	pointed := stackOn(front, pointedEdge)
 	staged(t, pointed, "web", "b2", "shop-web-2222")
-	if err := pointed.Promote(context.Background(), router.Promotion{
+	if err := pointed.Flip(context.Background(), router.Flip{Pointer: "pr-7", Promotion: router.Promotion{
 		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
-	}, "pr-7", progress.DiscardProgress()); err != nil {
+	}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)
 	}
 	if claimed := claimedOn(t, m); len(claimed) != 0 {
@@ -314,7 +319,7 @@ func callsATeardownMakes(t *testing.T) []string {
 	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "api", "web")
 	m.visited = nil
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	reached := slices.DeleteFunc(m.reached(), func(call string) bool { return call == "ApplyOrigins" })
@@ -336,7 +341,7 @@ func TestATeardownThatFellOverLeavesThePointersHistoryInPlaceForTheNextRun(t *te
 			previewed(t, stack, "pr-7", "api", "web")
 			m.refuseOn(call, errors.New("the box answered nothing over its ssh session"))
 
-			if _, err := stack.RemovePointer(context.Background(), "pr-7", progress.DiscardProgress()); err == nil {
+			if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err == nil {
 				t.Fatalf("a teardown whose %s refused reported success, and a step a teardown never makes is a step this table names for nothing", call)
 			}
 			history, err := stack.Ledger().History(context.Background(), "pr-7")
@@ -356,7 +361,7 @@ func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothin
 	m := aMachine()
 	stack := previewStack(t, m)
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
 	}
 }
@@ -369,7 +374,7 @@ func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t
 	previewed(t, stack, "pr-7", "web")
 	front := edgeOver(m, fake.NewKeyValues())
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
@@ -396,13 +401,14 @@ func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheEdgeContractNamesForIt(t 
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
-	stack, err := front.Reconcile(ctx, edge.StackSpec{
+	stackEdge, err := front.Reconcile(ctx, edge.StackSpec{
 		Version: "test", Tier: environment.TierPreview, Slug: slug,
 		Domains: []string{edge.PreviewWildcard(previewBase)},
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
+	stack := stackOn(front, stackEdge)
 	previewed(t, stack, "pr-7", "web")
 
 	var claimed []string
@@ -430,19 +436,21 @@ func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
-	reconciled, err := front.Reconcile(ctx, edge.StackSpec{
+	reconciledEdge, err := front.Reconcile(ctx, edge.StackSpec{
 		Version: "test", Tier: environment.TierPreview, Slug: slug,
 		Domains: []string{edge.PreviewWildcard(previewBase)},
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
+	reconciled := stackOn(front, reconciledEdge)
 	previewed(t, reconciled, "pr-7", "web")
 
-	opened, err := front.Open(reconciled.State())
+	openedEdge, err := front.Open(reconciled.State())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	opened := stackOn(front, openedEdge)
 	previewed(t, opened, "pr-9", "web")
 
 	var claimed []string

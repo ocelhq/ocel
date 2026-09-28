@@ -95,6 +95,10 @@ type apiGateway struct {
 }
 
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
+	return newAPIGateway(ns, open)
+}
+
+func newAPIGateway(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) *apiGateway {
 	return &apiGateway{ns: ns, open: open, delete: NewDeletion()}
 }
 
@@ -130,9 +134,7 @@ func (p *apiGateway) Kind() edge.Kind { return Kind }
 
 func (p *apiGateway) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:           []edge.Need{edge.NeedStreaming},
-		FlipBound:           router.FlipBound{Typical: propagationBound},
-		SignsOriginForwards: true,
+		Supported: []edge.Need{edge.NeedStreaming},
 	}
 }
 

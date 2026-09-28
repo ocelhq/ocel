@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -48,8 +47,6 @@ func (s *stack) State() edge.StackState {
 	state.Private = edge.Own(s.own)
 	return state
 }
-
-func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
 
 func (s *stack) slug() string { return s.state.Slug }
 
@@ -106,7 +103,7 @@ func (s *stack) routes(c Clients) routeStore {
 
 type lazyLedger struct{ s *stack }
 
-var _ edge.Ledger = (*lazyLedger)(nil)
+var _ router.Ledger = (*lazyLedger)(nil)
 
 func (l *lazyLedger) resolve(ctx context.Context) (*ledger.Ledger, error) {
 	c, err := l.s.clients(ctx)
@@ -146,6 +143,14 @@ func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (rout
 		return router.PruneResult{}, err
 	}
 	return resolved.Prune(ctx, keepN, pointer)
+}
+
+func (l *lazyLedger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
+	resolved, err := l.resolve(ctx)
+	if err != nil || !l.s.provisioned() {
+		return router.PruneResult{}, err
+	}
+	return resolved.RemovePointer(ctx, pointer)
 }
 
 func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, error) {
@@ -200,20 +205,6 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 		return front{id: s.own.Distribution, domainName: s.state.Front}, true, nil
 	}
 	return findDistribution(ctx, c, name)
-}
-
-func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	c, err := s.clients(ctx)
-	if err != nil {
-		return err
-	}
-	if err := s.publish(ctx, c, promotion, pointer); err != nil {
-		return err
-	}
-	if err := s.openLedger(c).Promote(ctx, promotion, pointer, progress); err != nil {
-		return errors.Join(err, s.republish(ctx, c, pointer))
-	}
-	return nil
 }
 
 func (s *stack) publish(ctx context.Context, c Clients, promotion router.Promotion, pointer string) error {
@@ -414,22 +405,6 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSe
 		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s contains something else. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	return secret, nil
-}
-
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
-	c, err := s.clients(ctx)
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	if !s.provisioned() {
-		return router.PruneResult{}, nil
-	}
-	if host := s.previewHost(pointer); host != "" {
-		if err := s.routes(c).apply(ctx, nil, []string{host}); err != nil {
-			return router.PruneResult{}, err
-		}
-	}
-	return s.openLedger(c).RemovePointer(ctx, pointer)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

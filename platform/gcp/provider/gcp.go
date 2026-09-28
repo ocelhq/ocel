@@ -14,8 +14,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -80,11 +82,15 @@ func NewProvider(options Options) (*Provider, error) {
 
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
-		Vendor:          Vendor,
-		Bindings:        resources.ServedBindingTypes(p.resourceHooks()),
-		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
-		Edges:           slices.Clone(supportedEdges),
-		DefaultEdge:     direct.Kind,
+		Vendor:      Vendor,
+		Bindings:    resources.ServedBindingTypes(p.resourceHooks()),
+		Computes:    []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
+		Edges:       slices.Clone(supportedEdges),
+		DefaultEdge: direct.Kind,
+		Pairings: []provider.Pairing{
+			{Edge: direct.Kind, Router: router.Kind(direct.Kind), Computes: provider.Computes()},
+			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
+		},
 		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,
 	}
@@ -134,7 +140,11 @@ func (p *Provider) Credentials() provider.Credentials {
 	}
 }
 
-func (p *Provider) Edges() provider.Edges {
+func (p *Provider) Edges() provider.Edges { return p.edges() }
+
+func (p *Provider) Routers() provider.Routers { return routers{edges: p.edges()} }
+
+func (p *Provider) edges() edges {
 	return edges{
 		namespace: p.namespace,
 		keyValues: p.KeyValues(),

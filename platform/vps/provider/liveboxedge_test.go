@@ -32,6 +32,7 @@ func (vm machine) state(t *testing.T, container string) string {
 type front struct {
 	edge     edge.Edge
 	stack    edge.EdgeStack
+	routes   router.Stack
 	hostname string
 }
 
@@ -52,7 +53,7 @@ func fronting(t *testing.T, p *vps.Provider, slug string) front {
 	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain(%s): %v", hostname, err)
 	}
-	return front{edge: opened, stack: stack, hostname: hostname}
+	return front{edge: opened, stack: stack, routes: routed(t, p, stack), hostname: hostname}
 }
 
 func (f front) serves(t *testing.T, vm machine, path string) string {
@@ -61,7 +62,7 @@ func (f front) serves(t *testing.T, vm machine, path string) string {
 		" http://"+caddy.Container+path))
 }
 
-func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, staged release, at int64) {
+func promotes(t *testing.T, stack router.Stack, id, tag string, staged release, at int64) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -75,9 +76,9 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, staged release
 	}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", tag, err)
 	}
-	if err := stack.Promote(ctx, router.Promotion{
+	if err := stack.Flip(ctx, router.Flip{Promotion: router.Promotion{
 		PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag},
-	}, "", progress.DiscardProgress()); err != nil {
+	}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", id, err)
 	}
 }
@@ -87,16 +88,15 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 	defer closing(t, p)
 
 	f := fronting(t, p, "rollback")
-	stack := f.stack
 
 	one := provisioned(t, p, "one")
-	promotes(t, stack, "p-one", "one", one, 1)
+	promotes(t, f.routes, "p-one", "one", one, 1)
 	if served := f.serves(t, vm, "/"); served != "one" {
 		t.Fatalf("the proxy served %q after the first promotion, want the release it was pointed at", served)
 	}
 
 	two := provisioned(t, p, "two")
-	promotes(t, stack, "p-two", "two", two, 2)
+	promotes(t, f.routes, "p-two", "two", two, 2)
 	if served := f.serves(t, vm, "/"); served != "two" {
 		t.Fatalf("the proxy served %q after the second promotion, want the release it was pointed at", served)
 	}
@@ -104,7 +104,7 @@ func TestLiveARetiredContainerIsStoppedRatherThanRemovedAndARollbackRunsItAgain(
 		t.Fatalf("the retired container reads as %q, want it stopped and still present: this release loop stops what it retires and never removes it, so the release it rolled off can still be read for logs and an exit code after the flip", state)
 	}
 
-	promotes(t, stack, "p-rollback", "one", one, 3)
+	promotes(t, f.routes, "p-rollback", "one", one, 3)
 
 	if state := vm.state(t, one.physical); state != "running" {
 		t.Errorf("the container the rollback re-points at reads as %q, want it running: nothing provisions on this path, so a promote that does not make the containers running is a ledger edit and not a restored site. The rollback runs the image again under that name rather than starting the container that was there", state)
@@ -125,16 +125,15 @@ func TestLiveARollbackRunsTheSameImageDigestTheBoxAlreadyHad(t *testing.T) {
 	defer closing(t, p)
 
 	f := fronting(t, p, "retained")
-	stack := f.stack
 
 	one := provisioned(t, p, "one")
-	promotes(t, stack, "p-one", "one", one, 1)
+	promotes(t, f.routes, "p-one", "one", one, 1)
 	retained := vm.imageID(t, fixtureAt("one"))
 
 	two := provisioned(t, p, "two")
-	promotes(t, stack, "p-two", "two", two, 2)
+	promotes(t, f.routes, "p-two", "two", two, 2)
 
-	promotes(t, stack, "p-rollback", "one", one, 3)
+	promotes(t, f.routes, "p-rollback", "one", one, 3)
 
 	if again := vm.inspects(t, "image", fixtureAt("one"), "{{.Id}}"); again != retained {
 		t.Errorf("the image the rollback ran is %q, want the %q this box already retained: a rollback re-points at a retained digest, and a coordinate that resolves to a different image is one this box rebuilt or fetched behind the rollback", again, retained)
@@ -153,7 +152,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 	ctx := context.Background()
 
 	one := provisioned(t, p, "one")
-	promotes(t, stack, "p-one", "one", one, 1)
+	promotes(t, f.routes, "p-one", "one", one, 1)
 
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: claimHostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
@@ -222,19 +221,18 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	defer closing(t, p)
 
 	f := fronting(t, p, "swept")
-	stack := f.stack
 
 	one := provisioned(t, p, "one")
-	promotes(t, stack, "p-one", "one", one, 1)
+	promotes(t, f.routes, "p-one", "one", one, 1)
 	two := provisioned(t, p, "two")
-	promotes(t, stack, "p-two", "two", two, 2)
+	promotes(t, f.routes, "p-two", "two", two, 2)
 
 	vm.ssh(t, "sudo docker rm --force "+quote(one.physical)+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker rmi "+quote(fixtureAt("one")))
 
-	err := stack.Promote(context.Background(), router.Promotion{
+	err := f.routes.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
 		PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"},
-	}, "", progress.DiscardProgress())
+	}}, progress.DiscardProgress())
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer has succeeded, and docker run would then reach for a registry with no credentials on this path")
 	}

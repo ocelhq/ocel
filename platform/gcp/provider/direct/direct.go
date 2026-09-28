@@ -7,10 +7,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -30,8 +28,7 @@ func (e *Edge) Kind() edge.Kind { return Kind }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:       []edge.Need{edge.NeedStreaming},
-		AddressesItself: true,
+		Supported: []edge.Need{edge.NeedStreaming},
 	}
 }
 
@@ -119,16 +116,6 @@ func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
 	return ledger.New(s.e.keyValues, s.state.Tier, s.state.Slug)
-}
-
-func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
-
-func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	return pin.Promote(ctx, s.openLedger(), s.e.pins, promotion, pointer, progress)
-}
-
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
-	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) BindDomain(context.Context, edge.DomainBinding) error {

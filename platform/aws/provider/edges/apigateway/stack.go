@@ -14,7 +14,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -42,8 +41,6 @@ func (s *stack) State() edge.StackState {
 	return state
 }
 
-func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
-
 func (s *stack) slug() string { return s.state.Slug }
 
 func (s *stack) tier() environment.Tier { return s.state.Tier }
@@ -64,7 +61,7 @@ func (s *stack) openLedger(c Clients) *ledger.Ledger {
 
 type lazyLedger struct{ s *stack }
 
-var _ edge.Ledger = (*lazyLedger)(nil)
+var _ router.Ledger = (*lazyLedger)(nil)
 
 func (l *lazyLedger) resolve(ctx context.Context) (*ledger.Ledger, error) {
 	c, err := l.s.p.clientsFor(ctx)
@@ -104,6 +101,14 @@ func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (rout
 		return router.PruneResult{}, err
 	}
 	return resolved.Prune(ctx, keepN, pointer)
+}
+
+func (l *lazyLedger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
+	resolved, err := l.resolve(ctx)
+	if err != nil {
+		return router.PruneResult{}, err
+	}
+	return resolved.RemovePointer(ctx, pointer)
 }
 
 func (s *stack) reconcileAPI(ctx context.Context, c Clients, pointer string) (string, error) {
@@ -160,31 +165,6 @@ func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string)
 		}
 	}
 	return findAPI(ctx, c, name)
-}
-
-func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	c, err := s.p.clientsFor(ctx)
-	if err != nil {
-		return err
-	}
-	id, err := s.ensureAPI(ctx, c, pointer)
-	if err != nil {
-		return err
-	}
-	patch, err := s.stagePatch(ctx, c, promotion)
-	if err != nil {
-		return err
-	}
-	if err := moveStage(ctx, c, id, promotion.PromotionID, patch); err != nil {
-		return err
-	}
-	if err := s.routePreview(ctx, c, pointer, id); err != nil {
-		return err
-	}
-	if err := s.openLedger(c).Promote(ctx, promotion, pointer, progress); err != nil {
-		return errors.Join(err, s.restage(ctx, c, pointer, id))
-	}
-	return nil
 }
 
 func moveStage(ctx context.Context, c Clients, id, promotionID string, patch []agtypes.PatchOperation) error {
@@ -281,28 +261,6 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion router.Prom
 		entryVariable:  record.EntryFunction,
 		assetsVariable: assets,
 	}), nil
-}
-
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
-	c, err := s.p.clientsFor(ctx)
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	if pointerOr(pointer) != router.DefaultPointer {
-		if err := s.unroutePreview(ctx, c, pointer); err != nil {
-			return router.PruneResult{}, err
-		}
-		id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.tier(), pointer))
-		if err != nil {
-			return router.PruneResult{}, err
-		}
-		if found {
-			if err := s.p.deletion().drain(ctx, c, []string{id}); err != nil {
-				return router.PruneResult{}, err
-			}
-		}
-	}
-	return s.openLedger(c).RemovePointer(ctx, pointer)
 }
 
 func (s *stack) previewHost(pointer string) (string, string) {

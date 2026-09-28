@@ -53,6 +53,7 @@ func RunPorts(t *testing.T, p provider.Provider) {
 	})
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, p.Credentials()) })
 	t.Run("Edges", func(t *testing.T) { RunEdges(t, facts, p.Edges()) })
+	t.Run("Routers", func(t *testing.T) { RunRouters(t, facts, p.Edges(), p.Routers()) })
 	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, p.DNS()) })
 }
 

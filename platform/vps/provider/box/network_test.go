@@ -17,9 +17,9 @@ func TestDestroyingAStackTakesTheProjectsNetworkAfterItsRoutes(t *testing.T) {
 
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
-	if err := stack.Promote(context.Background(), router.Promotion{
+	if err := stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}, "", progress.DiscardProgress()); err != nil {
+	}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if err := stack.Destroy(context.Background()); err != nil {

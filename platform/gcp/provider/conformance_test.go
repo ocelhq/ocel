@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/router"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -59,7 +60,8 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 }
 
 func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
-	registry := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges()
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	registry := p.Edges()
 
 	front, err := registry.Open(direct.Kind)
 	if err != nil {
@@ -69,7 +71,11 @@ func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !front.Facts().AddressesItself {
+	routes, err := p.Routers().Open(router.Kind(direct.Kind))
+	if err != nil {
+		t.Fatalf("Routers().Open(%q) = %v", direct.Kind, err)
+	}
+	if !routes.Facts().AddressesItself {
 		t.Error("Facts() says the origin does not address itself, and a deploy would then demand a hostname " +
 			"the direct edge has no way to bind")
 	}

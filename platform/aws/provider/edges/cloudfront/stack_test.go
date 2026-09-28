@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing.T) {
@@ -23,7 +24,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	live := routeOn(t, w, stack, boundHost)
@@ -32,7 +33,7 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	preview := promotion()
 	preview.PromotionID = "p2"
 	preview.Builds = map[string]string{"web": "d2.f2"}
-	if err := stack.Promote(context.Background(), preview, "pr-7", progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: "pr-7", Promotion: preview}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote onto a preview pointer: %v", err)
 	}
 
@@ -61,11 +62,11 @@ func TestRemovePointerLeavesTheHostnameServing(t *testing.T) {
 			stack := reconciled(t, w)
 			bound(t, stack)
 			staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-			if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
+			if err := routes(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
 				t.Fatalf("Promote: %v", err)
 			}
 
-			if _, err := stack.RemovePointer(context.Background(), tc.pointer, progress.DiscardProgress()); err != nil {
+			if _, err := removePointer(context.Background(), stack, tc.pointer, progress.DiscardProgress()); err != nil {
 				t.Fatalf("RemovePointer: %v", err)
 			}
 
@@ -87,7 +88,7 @@ func TestDomainOwnerAsksTheRouteStoreBeforeListingTheAccount(t *testing.T) {
 	}
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	listed := w.front.count("ListDistributions")
@@ -506,7 +507,7 @@ func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheInstalledBootst
 	}
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	arn := ownState(t, stack).KeyValueStore
@@ -536,7 +537,7 @@ func TestARemovalRunsThroughWhenTheBootstrapItWasFrontedByIsGone(t *testing.T) {
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err != nil {
 		t.Errorf("UnbindDomain with no bootstrap installed = %v, want the hostname let go: there is no store left to withdraw it from", err)
 	}
-	if _, err := orphaned.RemovePointer(context.Background(), "", progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(context.Background(), orphaned, "", progress.DiscardProgress()); err != nil {
 		t.Errorf("RemovePointer with no bootstrap installed = %v, want no complaint: there is no ledger left to read", err)
 	}
 	if err := orphaned.Destroy(context.Background()); err != nil {
@@ -568,7 +569,7 @@ func TestBindDomainAfterAPromotionServesThePromotedRelease(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 

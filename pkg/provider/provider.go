@@ -19,6 +19,7 @@ type Provider interface {
 	Cipher() seal.Cipher
 	Credentials() Credentials
 	Edges() Edges
+	Routers() Routers
 	DNS() DNS
 	Certificates() Certificates
 	Connector() Connector
@@ -32,6 +33,7 @@ type Facts struct {
 	Computes          []Compute
 	Edges             []edge.Kind
 	DefaultEdge       edge.Kind
+	Pairings          []Pairing
 	DNSKinds          []DNSKind
 	RendersTransforms bool
 	StoresArtifacts   bool

@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
-	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 type stack struct {
@@ -30,15 +29,6 @@ func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
 	return ledgerFor(s.e.deps.KeyValues, s.state.Tier, s.state.Slug)
-}
-
-func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
-
-func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	if err := pin.Promote(ctx, s.openLedger(), s.e.deps.Pins, promotion, pointer, progress); err != nil {
-		return err
-	}
-	return s.released(ctx, promotion, progress)
 }
 
 func (s *stack) released(ctx context.Context, promotion router.Promotion, progress progress.Progress) error {
@@ -85,10 +75,6 @@ func (s *stack) released(ctx context.Context, promotion router.Promotion, progre
 	s.recorded.Hosts = hosts
 	s.keep()
 	return nil
-}
-
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
-	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) adopt(front Front) error {

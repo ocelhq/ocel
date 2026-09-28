@@ -12,8 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
@@ -45,17 +47,69 @@ func (p *pinRecorder) calls() []string {
 
 const webService = "ocel-shop-prod-web"
 
-func fronting(t *testing.T, pins *pinRecorder) edge.EdgeStack {
+func TestTheDirectRouterIsARouter(t *testing.T) {
+	routerconformance.Run(t, routerconformance.Suite{
+		New: func(t *testing.T) routerconformance.Fixture {
+			store, pins := fake.NewKeyValues(), &pinRecorder{}
+			front := direct.New(store, pins)
+			stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
+			if err != nil {
+				t.Fatalf("Reconcile(shop) = %v", err)
+			}
+			state := stack.State()
+			records := ledger.New(store, state.Tier, state.Slug)
+			return routerconformance.Fixture{
+				Router: direct.NewRouter(front),
+				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
+				Prior:  router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state},
+				Serving: func(pointer string) string {
+					history, err := records.History(context.Background(), pointer)
+					if err != nil {
+						t.Fatalf("History(%q) = %v", pointer, err)
+					}
+					calls := pins.calls()
+					for _, entry := range history {
+						build := entry.Builds[routerconformance.App]
+						if entry.Active && len(calls) > 0 && calls[len(calls)-1] == webService+"@rev-"+build {
+							return build
+						}
+					}
+					return ""
+				},
+				FailNextFlip: func(err error) {
+					pins.mu.Lock()
+					defer pins.mu.Unlock()
+					pins.refuse = err
+				},
+			}
+		},
+		Hostname: "shop.example.com",
+		Record: func(app, build string) router.DeploymentRecord {
+			return router.DeploymentRecord{App: app, Build: build, Physical: webService, Revisions: map[string]string{webService: "rev-" + build}}
+		},
+	})
+}
+
+func fronting(t *testing.T, pins *pinRecorder) router.Stack {
 	t.Helper()
-	front := direct.New(fake.NewKeyValues(), pins)
+	return frontingOn(t, fake.NewKeyValues(), pins)
+}
+
+func frontingOn(t *testing.T, store keyvalue.Store, pins *pinRecorder) router.Stack {
+	t.Helper()
+	front := direct.New(store, pins)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
-	return stack
+	routes, err := direct.NewRouter(front).Open(router.StackState{Edge: stack.State()})
+	if err != nil {
+		t.Fatalf("Open the router = %v", err)
+	}
+	return routes
 }
 
-func staged(t *testing.T, stack edge.EdgeStack, identity, revision string) {
+func staged(t *testing.T, stack router.Stack, identity, revision string) {
 	t.Helper()
 	err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
 		App:       "web",
@@ -68,12 +122,12 @@ func staged(t *testing.T, stack edge.EdgeStack, identity, revision string) {
 	}
 }
 
-func promoted(t *testing.T, stack edge.EdgeStack, id, identity string) error {
+func promoted(t *testing.T, stack router.Stack, id, identity string) error {
 	t.Helper()
-	return stack.Promote(context.Background(), router.Promotion{
+	return stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
 		PromotionID: id,
 		Builds:      map[string]string{"web": identity},
-	}, "", progress.DiscardProgress())
+	}}, progress.DiscardProgress())
 }
 
 func TestARollbackPinsCloudRunBackToTheRevisionThePromotionRecorded(t *testing.T) {
@@ -113,7 +167,7 @@ func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
 	progress := &fake.Progress{}
 
 	promotion := router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
-	if err := stack.Promote(context.Background(), promotion, "", progress); err != nil {
+	if err := stack.Flip(context.Background(), router.Flip{Promotion: promotion}, progress); err != nil {
 		t.Fatalf("Promote(p1) = %v", err)
 	}
 	want := "INFO Pinning all of web's traffic to revision web-00001-abc of Cloud Run service " + webService
@@ -185,11 +239,7 @@ func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
 	t.Parallel()
 
 	pins := &pinRecorder{}
-	front := direct.New(staleAt{Store: fake.NewKeyValues(), at: "pointers"}, pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
-	if err != nil {
-		t.Fatalf("Reconcile(shop) = %v", err)
-	}
+	stack := frontingOn(t, staleAt{Store: fake.NewKeyValues(), at: "pointers"}, pins)
 	staged(t, stack, "b1", "web-00001-abc")
 
 	var refused refusal.Refusal
@@ -221,11 +271,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 	t.Parallel()
 
 	pins := &pinRecorder{}
-	front := direct.New(honouring{fake.NewKeyValues()}, pins)
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
-	if err != nil {
-		t.Fatalf("Reconcile(shop) = %v", err)
-	}
+	stack := frontingOn(t, honouring{fake.NewKeyValues()}, pins)
 	staged(t, stack, "b1", "web-00001-abc")
 	staged(t, stack, "b2", "web-00002-def")
 	if err := promoted(t, stack, "p1", "b1"); err != nil {
@@ -235,7 +281,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 	defer cancel()
 	pins.interrupt, pins.refuse = cancel, context.Canceled
 
-	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
+	if err := stack.Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}}, progress.DiscardProgress()); err == nil {
 		t.Fatal("Promote(p2) interrupted at its pin = nil")
 	}
 	history, err := stack.Ledger().History(context.Background(), "")

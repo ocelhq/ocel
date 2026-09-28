@@ -30,7 +30,11 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	history, err := session.stack.Ledger().History(ctx, "")
+	ledger, err := session.ledger()
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	history, err := ledger.History(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -42,7 +46,11 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	history, err := session.stack.Ledger().History(ctx, "")
+	ledger, err := session.ledger()
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	history, err := ledger.History(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -51,7 +59,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		return nil, provider.RefusalError(err)
 	}
 
-	flip := session.front.Facts().FlipBound
+	flip := session.router.Facts().FlipBound
 	promoted := router.Promotion{
 		PromotionID: target.PromotionID,
 		Ts:          time.Now().Unix(),
@@ -59,7 +67,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Tag:         target.Tag,
 		Flip:        &flip,
 	}
-	if err := session.stack.Promote(ctx, promoted, "", progress.DiscardProgress()); err != nil {
+	if err := session.flip(ctx, router.Flip{Promotion: promoted}, progress.DiscardProgress()); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
@@ -120,7 +128,11 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
+		ledger, err := session.ledger()
+		if err != nil {
+			return err
+		}
+		pruned, err := ledger.Prune(ctx, int(req.GetKeepN()), pointer)
 		if err != nil {
 			return err
 		}

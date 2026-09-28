@@ -79,11 +79,11 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
-	if err := stack.Ledger().PutStaged(ctx, record); err != nil {
+	if err := routes(stack).Ledger().PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}
-	if err := stack.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: promotion}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -351,7 +351,7 @@ func TestRemovePointerTakesTheRuleAndTheAPI(t *testing.T) {
 	api := w.gateway.named(previewAPIName)
 	w.gateway.calls = nil
 
-	if _, err := stack.RemovePointer(ctx, previewPoint, progress.DiscardProgress()); err != nil {
+	if _, err := removePointer(ctx, stack, previewPoint, progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
