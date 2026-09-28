@@ -3,8 +3,10 @@ package runui
 import (
 	"cmp"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/fatih/color"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -16,58 +18,97 @@ const (
 	identityGap  = "  "
 	identityName = "ocel"
 	pathSep      = " › "
+	partySep     = " · "
 	accentColor  = 6
 	pillText     = 0
 )
 
 func identityLines(present Presentation, ev *streamv1.IdentityEvent) []string {
-	head := identityHeadline(ev)
-	if head == "" {
-		return nil
+	var out []string
+	if head := identityHeadline(present, ev); head != "" {
+		out = append(out, identityPill(present).Render(identityName)+identityGap+muted(present, Version)+head)
 	}
-	pill, faint := identityStyles(present)
-	return []string{pill.Render(identityName) + identityGap + faint.Render(Version) + head}
+	rows := partyRows(present, ev)
+	if len(out) > 0 && len(rows) > 0 {
+		out = append(out, "")
+	}
+	return append(out, rows...)
 }
 
-func signedIn(ev *streamv1.IdentityEvent) string {
-	var parties []string
+func partyRows(present Presentation, ev *streamv1.IdentityEvent) []string {
+	var parties []*streamv1.Party
+	width := 0
 	for _, party := range []*streamv1.Party{ev.GetOrigin(), ev.GetEdge()} {
-		if party.GetVendor()+party.GetPrincipal()+party.GetAccount()+party.GetLocation() == "" {
-			continue
+		if isNamedParty(party) {
+			parties = append(parties, party)
+			width = max(width, utf8.RuneCountInString(vendorName(party)))
 		}
-		text := cmp.Or(party.GetVendor(), "your provider")
-		if principal := party.GetPrincipal(); principal != "" {
-			text += " as " + principal
-		}
-		if where := nonEmpty(party.GetAccount(), party.GetLocation()); len(where) > 0 {
-			text += " (" + strings.Join(where, ", ") + ")"
-		}
-		parties = append(parties, text)
 	}
-	if len(parties) == 0 {
+	rows := make([]string, 0, len(parties))
+	for _, party := range parties {
+		vendor := vendorName(party)
+		row := blockIndent + colorFor(present, color.Bold).Sprint(vendor)
+		if detail := partyDetail(present, party); detail != "" {
+			row += strings.Repeat(" ", width-utf8.RuneCountInString(vendor)) + identityGap + detail
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func targetLine(present Presentation, party *streamv1.Party) string {
+	if !isNamedParty(party) {
 		return ""
 	}
-	return "Signed in to " + strings.Join(parties, " and ")
+	text := blockIndent + muted(present, "on ") + colorFor(present, color.Bold).Sprint(vendorName(party))
+	if detail := partyDetail(present, party); detail != "" {
+		text += " " + detail
+	}
+	return text
 }
 
-func identityStyles(present Presentation) (pill, faint lipgloss.Style) {
-	if !present.Color {
-		return lipgloss.NewStyle(), lipgloss.NewStyle()
+func partyDetail(present Presentation, party *streamv1.Party) string {
+	parts := nonEmpty(party.GetAccount(), party.GetLocation())
+	if principal := party.GetPrincipal(); principal != "" {
+		parts = append(parts, muted(present, "as ")+principal)
 	}
-	pill = lipgloss.NewStyle().
+	return strings.Join(parts, muted(present, partySep))
+}
+
+func isNamedParty(party *streamv1.Party) bool {
+	return party.GetVendor()+party.GetPrincipal()+party.GetAccount()+party.GetLocation() != ""
+}
+
+func vendorName(party *streamv1.Party) string {
+	return cmp.Or(party.GetVendor(), "your provider")
+}
+
+func identityPill(present Presentation) lipgloss.Style {
+	if !present.Color {
+		return lipgloss.NewStyle()
+	}
+	return lipgloss.NewStyle().
 		Background(lipgloss.ANSIColor(accentColor)).
 		Foreground(lipgloss.ANSIColor(pillText)).
 		Bold(true).
 		Padding(0, 1)
-	return pill, lipgloss.NewStyle().Faint(true)
 }
 
-func identityHeadline(ev *streamv1.IdentityEvent) string {
-	named := nonEmpty(ev.GetProject(), tierName(ev.GetTier()))
+func identityHeadline(present Presentation, ev *streamv1.IdentityEvent) string {
+	var named []string
+	if project := ev.GetProject(); project != "" {
+		named = append(named, colorFor(present, color.Bold).Sprint(project))
+	}
+	if tier := tierName(ev.GetTier()); tier != "" {
+		if ev.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
+			tier = colorFor(present, color.FgYellow, color.Bold).Sprint(tier)
+		}
+		named = append(named, tier)
+	}
 	if len(named) == 0 {
 		return ""
 	}
-	return identityGap + strings.Join(named, pathSep)
+	return identityGap + strings.Join(named, muted(present, pathSep))
 }
 
 func nonEmpty(values ...string) []string {

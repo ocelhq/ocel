@@ -1060,7 +1060,7 @@ func TestAppsThatDeployedBesideAFailedOneAreNamedAsNotPromoted(t *testing.T) {
 	}
 }
 
-func TestTheIdentityBannerIsSetApartByABlankLineAndWhoTheRunSignedInAsFollowsIt(t *testing.T) {
+func TestTheIdentityHeaderNamesEachAccountTheRunSignedInToAndIsSetApartByBlankLines(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
@@ -1074,10 +1074,33 @@ func TestTheIdentityBannerIsSetApartByABlankLineAndWhoTheRunSignedInAsFollowsIt(
 
 	want := "ocel  dev  acme › production\n" +
 		"\n" +
-		"INFO  [check] Signed in to aws as deploy (123456789012, us-east-1)\n" +
+		"  aws  123456789012 · us-east-1 · as deploy\n" +
+		"\n" +
 		"INFO  [check] the credentials for 123456789012 are valid\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestTheSummaryNamesTheAccountTheRunWasSignedInTo(t *testing.T) {
+	t.Parallel()
+
+	for _, success := range []bool{true, false} {
+		run, out, _ := groupedRun(t, Presentation{})
+		run.Phase(progressv1.Phase_PHASE_CHECK).Identity(&streamv1.IdentityEvent{
+			Project: "acme",
+			Tier:    environmentv1.Tier_TIER_PRODUCTION,
+			Origin:  &streamv1.Party{Vendor: "aws", Account: "123456789012", Principal: "deploy", Location: "us-east-1"},
+		})
+		var err error
+		if !success {
+			err = errors.New("the stack is locked")
+		}
+		run.End(&err)
+
+		if want := "\n  on aws 123456789012 · us-east-1 · as deploy\n"; !strings.Contains(out.String(), want) {
+			t.Errorf("success=%v: got\n%s\nwant it to contain %q", success, out.String(), want)
+		}
 	}
 }
 

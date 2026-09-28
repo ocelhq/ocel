@@ -439,7 +439,7 @@ export default {
 		if !strings.Contains(out, "Deployed") {
 			t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
 		}
-		for _, want := range []string{"ocel  dev  test-app › production", "INFO  [check] Signed in to aws (123456789012, us-east-1) and edge (abcd1234)"} {
+		for _, want := range []string{"ocel  dev  test-app › production", "  aws   123456789012 · us-east-1\n  edge  abcd1234"} {
 			if !strings.Contains(out, want+"\n") {
 				t.Errorf("stdout missing %q with no terminal attached:\n%s", want, out)
 			}
