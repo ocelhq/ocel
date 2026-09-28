@@ -11,7 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-const unwindWindow = 60 * time.Second
+const (
+	unwindWindow    = 60 * time.Second
+	restoreAttempts = 8
+)
 
 type appRouter struct {
 	stack router.Stack
@@ -31,14 +34,6 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 		}
 		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: stillActive(l, pointer, promoted.PromotionID)}
 	}
-	active, found, err := l.readActive(ctx, pointer)
-	if err != nil {
-		return err
-	}
-	var displaced *router.Promotion
-	if found {
-		displaced = &active
-	}
 	if err := l.Promote(ctx, promoted, pointer, progress); err != nil {
 		return err
 	}
@@ -46,7 +41,7 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 		err := routed.stack.Flip(ctx, flips[i], progress)
 		var unserved router.Unserved
 		if errors.As(err, &unserved) {
-			return errors.Join(err, unwind(ctx, l, pointer, promoted.PromotionID, displaced, routers[:i]))
+			return errors.Join(err, unwind(ctx, l, pointer, promoted.PromotionID, routers[:i]))
 		}
 		if err != nil {
 			return err
@@ -55,7 +50,7 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 	return nil
 }
 
-func unwind(ctx context.Context, l projectLedger, pointer, promotionID string, displaced *router.Promotion, flipped []appRouter) error {
+func unwind(ctx context.Context, l projectLedger, pointer, promotionID string, flipped []appRouter) error {
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
 	defer stop()
 	if err := l.Unpromote(ctx, promotionID, pointer); err != nil {
@@ -63,36 +58,45 @@ func unwind(ctx context.Context, l projectLedger, pointer, promotionID string, d
 	}
 	var errs []error
 	for _, routed := range flipped {
-		if err := restore(ctx, l, pointer, displaced, routed); err != nil {
+		if err := restore(ctx, l, pointer, routed); err != nil {
 			errs = append(errs, fmt.Errorf("a router still serves promotion %s on %s, which the ledger no longer names: %w", promotionID, pointerName(pointer), err))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func restore(ctx context.Context, l projectLedger, pointer string, displaced *router.Promotion, routed appRouter) error {
-	if displaced == nil {
-		active, err := l.ActivePromotionID(ctx, pointer)
-		if err != nil || active != "" {
+func restore(ctx context.Context, l projectLedger, pointer string, routed appRouter) error {
+	for range restoreAttempts {
+		active, found, err := l.ReadActive(ctx, pointer)
+		if err != nil {
 			return err
 		}
-		return routed.stack.RemovePointer(ctx, pointer, progress.DiscardProgress())
+		if !found {
+			if err := routed.stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
+				return err
+			}
+			named, err := l.ActivePromotionID(ctx, pointer)
+			if err != nil || named == "" {
+				return err
+			}
+			continue
+		}
+		records, err := l.records(ctx, active, routed.apps)
+		if err != nil {
+			return err
+		}
+		err = routed.stack.Flip(ctx, router.Flip{
+			Pointer:     pointer,
+			Promotion:   active,
+			Records:     records,
+			StillActive: stillActive(l, pointer, active.PromotionID),
+		}, progress.DiscardProgress())
+		var moved movedPromotion
+		if !errors.As(err, &moved) {
+			return err
+		}
 	}
-	records, err := l.records(ctx, *displaced, routed.apps)
-	if err != nil {
-		return err
-	}
-	err = routed.stack.Flip(ctx, router.Flip{
-		Pointer:     pointer,
-		Promotion:   *displaced,
-		Records:     records,
-		StillActive: stillActive(l, pointer, displaced.PromotionID),
-	}, progress.DiscardProgress())
-	var moved movedPromotion
-	if errors.As(err, &moved) {
-		return nil
-	}
-	return err
+	return fmt.Errorf("another deploy moved %s on each of %d attempts to serve what the ledger names there", pointerName(pointer), restoreAttempts)
 }
 
 func stillActive(l projectLedger, pointer, promotionID string) func(context.Context) error {

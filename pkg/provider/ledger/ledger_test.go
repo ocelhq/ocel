@@ -609,3 +609,27 @@ func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
 		t.Errorf("the pointer names %q, want the winner's p9", active)
 	}
 }
+
+func TestReadActiveReadsThePromotionThePointerNamesAndNothingOnceItNamesNone(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	for _, id := range []string{"p1", "p2"} {
+		promotion := router.Promotion{PromotionID: id, Builds: map[string]string{"web": "web-" + id}}
+		if err := l.Promote(ctx, promotion, "", progress.DiscardProgress()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	active, found, err := l.ReadActive(ctx, "")
+	if err != nil || !found || active.PromotionID != "p2" || active.Builds["web"] != "web-p2" {
+		t.Fatalf("ReadActive = %+v, %v, %v, want p2 and the build it promoted", active, found, err)
+	}
+	for _, id := range []string{"p2", "p1"} {
+		if err := l.Unpromote(ctx, id, ""); err != nil {
+			t.Fatalf("Unpromote(%s) = %v", id, err)
+		}
+	}
+	if active, found, err := l.ReadActive(ctx, ""); err != nil || found {
+		t.Errorf("ReadActive once every promotion was taken back = %+v, %v, %v, want nothing", active, found, err)
+	}
+}

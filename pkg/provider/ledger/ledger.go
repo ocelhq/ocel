@@ -528,6 +528,26 @@ func (l *Ledger) deletePromotions(ctx context.Context, pointer string, rows []pr
 	return nil
 }
 
+func (l *Ledger) ReadActive(ctx context.Context, pointer string) (router.Promotion, bool, error) {
+	name := pointerOr(pointer)
+	active, err := l.pointerAt(ctx, name)
+	if err != nil || active == "" {
+		return router.Promotion{}, false, err
+	}
+	recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.promotionKey(name, active))
+	if err != nil {
+		return router.Promotion{}, false, fmt.Errorf("read promotion %s: %w", active, err)
+	}
+	if len(recorded.Value) == 0 {
+		return router.Promotion{}, false, fmt.Errorf("read promotion %s: %s points at it, and the ledger records no such promotion", active, name)
+	}
+	var row promotionRecord
+	if err := json.Unmarshal(recorded.Value, &row); err != nil {
+		return router.Promotion{}, false, fmt.Errorf("decode promotion %s: %w", active, err)
+	}
+	return row.Promotion, true, nil
+}
+
 func (l *Ledger) ActivePromotionID(ctx context.Context, pointer string) (string, error) {
 	return l.pointerAt(ctx, pointerOr(pointer))
 }
