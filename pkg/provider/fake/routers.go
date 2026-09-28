@@ -52,9 +52,7 @@ func (e *Edge) routerFacts() router.Facts {
 }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
-	state := prior.Edge
-	state.Slug, state.Tier = spec.Slug, spec.Tier
-	return r.Open(router.NewStackState(state))
+	return r.Open(prior.WithSpec(spec))
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {

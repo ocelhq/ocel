@@ -9,8 +9,6 @@ import (
 
 type Router struct{ p *cloudflare }
 
-var _ router.Router = Router{}
-
 func NewRouter(namespace string) Router { return Router{p: newCloudflare(namespace)} }
 
 func (r Router) Kind() router.Kind { return router.Kind(Kind) }
@@ -27,9 +25,7 @@ func (r Router) Facts() router.Facts {
 }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
-	state := prior.Edge
-	state.Slug, state.Tier = spec.Slug, spec.Tier
-	return r.Open(router.NewStackState(state))
+	return r.Open(prior.WithSpec(spec))
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {
