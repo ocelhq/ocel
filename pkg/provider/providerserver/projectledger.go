@@ -83,7 +83,7 @@ func (l projectLedger) openEnvelope(ctx context.Context, record router.Deploymen
 	return string(opened), nil
 }
 
-func (l projectLedger) active(ctx context.Context, pointer string) (router.Promotion, bool, error) {
+func (l projectLedger) readActive(ctx context.Context, pointer string) (router.Promotion, bool, error) {
 	history, err := l.History(ctx, pointer)
 	if err != nil {
 		return router.Promotion{}, false, err

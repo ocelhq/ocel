@@ -31,9 +31,13 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 		}
 		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: stillActive(l, pointer, promoted.PromotionID)}
 	}
-	displaced, err := displacedBy(ctx, l, pointer)
+	active, found, err := l.readActive(ctx, pointer)
 	if err != nil {
 		return err
+	}
+	var displaced *router.Promotion
+	if found {
+		displaced = &active
 	}
 	if err := l.Promote(ctx, promoted, pointer, progress); err != nil {
 		return err
@@ -49,14 +53,6 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 		}
 	}
 	return nil
-}
-
-func displacedBy(ctx context.Context, l projectLedger, pointer string) (*router.Promotion, error) {
-	active, found, err := l.active(ctx, pointer)
-	if err != nil || !found {
-		return nil, err
-	}
-	return &active, nil
 }
 
 func unwind(ctx context.Context, l projectLedger, pointer, promotionID string, displaced *router.Promotion, flipped []appRouter) error {
