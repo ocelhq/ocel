@@ -73,8 +73,8 @@ func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int
 
 type scratchHelper struct{ script string }
 
-func (h scratchHelper) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
-	return boxstore.LocalTransport{Elevation: []string{"python3", h.script}}.Seal(ctx, what, argv[1:], stdin)
+func (h scratchHelper) Seal(ctx context.Context, what string, tier environment.Tier, argv []string, stdin io.Reader) (string, error) {
+	return boxstore.LocalTransport{Elevation: []string{"python3", h.script}}.Seal(ctx, what, tier, argv[1:], stdin)
 }
 
 func TestTheBoxCipherSealsAsEveryCipherMust(t *testing.T) {
@@ -143,7 +143,7 @@ var boundFlags = sealFlags(bound)
 
 type argvTaken struct{ argv []string }
 
-func (a *argvTaken) Seal(_ context.Context, _ string, argv []string, _ io.Reader) (string, error) {
+func (a *argvTaken) Seal(_ context.Context, _ string, _ environment.Tier, argv []string, _ io.Reader) (string, error) {
 	a.argv = argv
 	return "", nil
 }
@@ -675,23 +675,25 @@ func TestTheSealHelperReadsItsRootFromNoEnvironmentVariable(t *testing.T) {
 	}
 }
 
-func sealingBench(helper []byte) *bench {
+func newSealFailingBench(helper []byte, failed session.Result) *bench {
 	b := machine(map[environment.Tier][]Item{environment.TierProduction: {
 		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: helper},
 	}})
 	b.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, quoted(boxstore.SealHelper)+" "+quoted(string(environment.TierProduction))) {
-			return session.Result{Code: 2, Stderr: "seal: --class is not a coordinate flag\n"}, true
+			return failed, true
 		}
 		return session.Result{}, false
 	}
 	return b
 }
 
+var olderHelper = []byte("#!/usr/bin/env python3\n")
+
 func TestASealTheBoxsOwnHelperCannotRunSaysToBootstrapWhenThatHelperIsNotThisBuilds(t *testing.T) {
 	t.Parallel()
 
-	b := sealingBench([]byte("#!/usr/bin/env python3\n"))
+	b := newSealFailingBench(olderHelper, session.Result{Code: 2, Stderr: "seal: --class is not a coordinate flag\n"})
 	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
 
 	var refused refusal.Refusal
@@ -707,13 +709,35 @@ func TestASealTheBoxsOwnHelperCannotRunSaysToBootstrapWhenThatHelperIsNotThisBui
 func TestASealTheBoxsOwnHelperCannotRunIsReportedAsItsHelperSaidWhenThatHelperIsThisBuilds(t *testing.T) {
 	t.Parallel()
 
-	b := sealingBench(sealScript)
+	b := newSealFailingBench(sealScript, session.Result{Code: 2, Stderr: "seal: libcrypto refused the associated data\n"})
 	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
 
-	if err == nil || !strings.Contains(err.Error(), "is not a coordinate flag") {
+	if err == nil || !strings.Contains(err.Error(), "libcrypto refused the associated data") {
 		t.Fatalf("Seal() = %v, want the helper's own reason", err)
 	}
 	if strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierProduction)) {
 		t.Errorf("Seal() through the helper this build installs said %q, and a bootstrap would reinstall the same helper", err)
+	}
+}
+
+func TestASealSudoRefusesStaysDeniedWhenTheBoxsHelperIsNotThisBuilds(t *testing.T) {
+	t.Parallel()
+
+	b := newSealFailingBench(olderHelper, session.Result{Code: 1, Stderr: "sudo: a password is required\n"})
+	answerHelper := b.answer
+	b.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "id -u") {
+			return session.Result{Stdout: "1000\n"}, true
+		}
+		return answerHelper(command)
+	}
+	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Fatalf("Seal() that sudo refused = %v, want a denied refusal: the helper never ran, so nothing it said shows it is stale", err)
+	}
+	if strings.Contains(refused.Message, provider.BootstrapCommand(environment.TierProduction)) {
+		t.Errorf("Seal() that sudo refused said %q, and the helper never ran to be found stale", refused.Message)
 	}
 }

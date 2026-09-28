@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
@@ -21,7 +22,7 @@ func TestTheLocalTransportRunsTheSealHelperUnderItsElevationAndBareWithoutOne(t 
 		{name: "elevated", elevation: []string{"echo", "sudo", "-n"}, want: "sudo -n echo seal production open\n"},
 	} {
 		said, err := boxstore.LocalTransport{Elevation: tc.elevation}.Seal(context.Background(), "open a value",
-			[]string{"echo", "seal", "production", "open"}, nil)
+			environment.TierProduction, []string{"echo", "seal", "production", "open"}, nil)
 		if err != nil {
 			t.Fatalf("%s: Seal() = %v", tc.name, err)
 		}

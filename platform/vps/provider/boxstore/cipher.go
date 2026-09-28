@@ -13,7 +13,7 @@ import (
 )
 
 type SealTransport interface {
-	Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error)
+	Seal(ctx context.Context, what string, tier environment.Tier, argv []string, stdin io.Reader) (string, error)
 }
 
 type Cipher struct{ over SealTransport }
@@ -38,7 +38,7 @@ func (s *Cipher) through(ctx context.Context, verb string, tier environment.Tier
 		argv = append(argv, "--"+field.Name, field.Value)
 	}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
-	rendered, err := s.over.Seal(ctx, verb+" a value bound to "+string(bound.Bytes()), argv, bytes.NewReader(fed))
+	rendered, err := s.over.Seal(ctx, verb+" a value bound to "+string(bound.Bytes()), tier, argv, bytes.NewReader(fed))
 	if err != nil {
 		return nil, err
 	}

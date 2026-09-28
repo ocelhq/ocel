@@ -44,7 +44,7 @@ func (LocalTransport) Records(ctx context.Context, tier environment.Tier, stdin 
 	}
 }
 
-func (l LocalTransport) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
+func (l LocalTransport) Seal(ctx context.Context, what string, _ environment.Tier, argv []string, stdin io.Reader) (string, error) {
 	elevated := append(append([]string{}, l.Elevation...), argv...)
 	stdout, stderr, code, err := runCommand(ctx, stdin, elevated[0], elevated[1:]...)
 	switch {
