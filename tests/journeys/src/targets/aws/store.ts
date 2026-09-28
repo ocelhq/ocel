@@ -8,7 +8,35 @@ const TIMEOUT_MS = 60_000;
 
 const RETRYING = { AWS_RETRY_MODE: "adaptive", AWS_MAX_ATTEMPTS: "6" };
 
-const PRODUCTION_PARTITIONS = ["projects#production", "edgestacks#production"];
+const SEGMENT_SEPARATOR = "#";
+
+const DEPLOYED_ROOTS = ["projects", "edgestacks"];
+
+function escapeSegment(segment: string): string {
+  return segment.replace(
+    /[%#]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`,
+  );
+}
+
+function joinSegments(segments: string[]): string {
+  return segments.map(escapeSegment).join(SEGMENT_SEPARATOR);
+}
+
+export function partitionKey(root: string, ...path: string[]): string {
+  return joinSegments([root, ...path]);
+}
+
+export function sortKey(path: string[]): string {
+  return `${joinSegments(path)}${SEGMENT_SEPARATOR}`;
+}
+
+function pathOf(sk: string): string[] {
+  if (!sk.endsWith(SEGMENT_SEPARATOR) || sk === SEGMENT_SEPARATOR) {
+    return [];
+  }
+  return sk.slice(0, -1).split(SEGMENT_SEPARATOR).map(decodeURIComponent);
+}
 
 export type Cli = (args: string[]) => Promise<string>;
 
@@ -41,10 +69,6 @@ export function said(error: unknown): string {
 
 function noSuchStack(error: unknown): boolean {
   return /does not exist/i.test(said(error));
-}
-
-function slugOf(sk: string): string {
-  return sk.endsWith("#") ? sk.slice(0, -1) : sk;
 }
 
 type Page = { Items?: Array<Record<string, unknown>>; NextToken?: string };
@@ -135,11 +159,12 @@ export function awsStore(
 ): Store {
   const stack = bootstrapStackOf(namespace);
 
-  async function query(table: string, partition: string, slug?: string): Promise<string[]> {
+  async function query(table: string, root: string, slug?: string): Promise<string[]> {
     const found: string[] = [];
-    for (const item of await queryPartition(cli, table, partition, slug)) {
-      const one = slugOf((item.sk as { S?: string } | undefined)?.S ?? "");
-      if (one !== "") {
+    const within = slug === undefined ? undefined : sortKey([slug]);
+    for (const item of await queryPartition(cli, table, partitionKey(root), within)) {
+      const [one, ...deeper] = pathOf((item.sk as { S?: string } | undefined)?.S ?? "");
+      if (one !== undefined && deeper.length === 0) {
         found.push(one);
       }
     }
@@ -157,8 +182,8 @@ export function awsStore(
         return [];
       }
       const found = new Set<string>();
-      for (const partition of PRODUCTION_PARTITIONS) {
-        for (const slug of await query(table, partition)) {
+      for (const root of DEPLOYED_ROOTS) {
+        for (const slug of await query(table, root)) {
           found.add(slug);
         }
       }
@@ -170,8 +195,8 @@ export function awsStore(
       if (!table) {
         return false;
       }
-      for (const partition of PRODUCTION_PARTITIONS) {
-        if ((await query(table, partition, slug)).includes(slug)) {
+      for (const root of DEPLOYED_ROOTS) {
+        if ((await query(table, root, slug)).includes(slug)) {
           return true;
         }
       }
@@ -192,8 +217,6 @@ export function awsStore(
     },
   };
 }
-
-const BINDING_CLASS = "production";
 
 const BINDING_TYPES = ["postgres", "bucket", "custom"] as const;
 
@@ -217,25 +240,28 @@ export type BindingStore = {
   ownerIndex(slug: string, owner: string): Promise<string[] | undefined>;
 };
 
+const VARS_TABLE_OUTPUT = "VarsTableName";
+
 function bindingsPartition(slug: string): string {
-  return `values#${slug}#${BINDING_CLASS}`;
+  return partitionKey("values", slug);
 }
 
-type RawItem = { sk: string; body: string };
+type RawItem = { path: string[]; body: string };
 
 async function queryItems(
   cli: Cli,
   table: string,
   pk: string,
-  skPrefix: string,
+  under: string[],
 ): Promise<RawItem[]> {
   const found: RawItem[] = [];
-  for (const item of await queryPartition(cli, table, pk, skPrefix)) {
-    const sk = (item.sk as { S?: string } | undefined)?.S;
-    const body = (item.body as { B?: string } | undefined)?.B;
-    if (sk && body) {
-      found.push({ sk, body: Buffer.from(body, "base64").toString("utf8") });
+  for (const item of await queryPartition(cli, table, pk, sortKey(under))) {
+    const sk = (item.sk as { S?: string } | undefined)?.S ?? "";
+    const body = (item.value as { S?: string } | undefined)?.S;
+    if (body === undefined) {
+      throw new Error(`${pk} holds an item at ${sk} with no JSON value, so ocel did not write it`);
     }
+    found.push({ path: pathOf(sk), body });
   }
   return found;
 }
@@ -252,24 +278,24 @@ export function awsBindingStore(
   const stack = bootstrapStackOf(namespace);
 
   async function bindingTableOrThrow(): Promise<string> {
-    const name = await bootstrapTable(cli, stack, STATE_TABLE_OUTPUT, "no binding can be read");
+    const name = await bootstrapTable(cli, stack, VARS_TABLE_OUTPUT, "no binding can be read");
     if (!name) {
       throw new Error(
-        `the ${stack} stack publishes no ${STATE_TABLE_OUTPUT} output, so no binding can be read`,
+        `the ${stack} stack publishes no ${VARS_TABLE_OUTPUT} output, so no binding can be read`,
       );
     }
     return name;
   }
 
   async function bindingItems(slug: string): Promise<RawItem[]> {
-    return queryItems(cli, await bindingTableOrThrow(), bindingsPartition(slug), "bindings#");
+    return queryItems(cli, await bindingTableOrThrow(), bindingsPartition(slug), ["bindings"]);
   }
 
   return {
     async records(slug) {
       const records: BindingRecordItem[] = [];
       for (const item of await bindingItems(slug)) {
-        const [, , kind] = item.sk.split("#");
+        const [, , kind] = item.path;
         if (kind !== "records") {
           continue;
         }
@@ -293,7 +319,7 @@ export function awsBindingStore(
     async values(slug) {
       const values: BindingValueItem[] = [];
       for (const item of await bindingItems(slug)) {
-        const [, name, kind] = item.sk.split("#");
+        const [, name, kind] = item.path;
         if (kind !== "values" || !name) {
           continue;
         }
@@ -304,12 +330,10 @@ export function awsBindingStore(
     },
 
     async ownerIndex(slug, owner) {
-      const items = await queryItems(
-        cli,
-        await bindingTableOrThrow(),
-        bindingsPartition(slug),
-        `bindingowners#${owner}#`,
-      );
+      const items = await queryItems(cli, await bindingTableOrThrow(), bindingsPartition(slug), [
+        "bindingowners",
+        owner,
+      ]);
       const [item] = items;
       if (!item) {
         return undefined;
