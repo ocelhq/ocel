@@ -619,16 +619,16 @@ func TestABootstrapChecksThePermissionsTheEnvSourceSyncNeeds(t *testing.T) {
 			t.Errorf("a bootstrap does not check %s, and the apply would fail at the env source sync", permission)
 		}
 	}
-	if !slices.Contains(rolesFor(edge.TierBootstrap), "roles/cloudscheduler.admin") {
-		t.Errorf("the bootstrap tier grants %v, want roles/cloudscheduler.admin among them", rolesFor(edge.TierBootstrap))
+	if !slices.Contains(rolesFor(edge.PurposeBootstrap), "roles/cloudscheduler.admin") {
+		t.Errorf("bootstrap credentials are granted %v, want roles/cloudscheduler.admin among them", rolesFor(edge.PurposeBootstrap))
 	}
 	for _, role := range []string{"roles/cloudscheduler.admin", "roles/run.admin", "roles/iam.serviceAccountUser", "roles/artifactregistry.writer"} {
 		if !slices.Contains(rolesCovering(nil), role) {
 			t.Errorf("a refusal over a missing permission names %v, want %s among them: it covers what the env source sync checks", rolesCovering(nil), role)
 		}
 	}
-	if slices.Contains(rolesFor(edge.TierDeploy), "roles/cloudscheduler.admin") {
-		t.Error("the deploy tier grants roles/cloudscheduler.admin, and a deploy creates no schedule")
+	if slices.Contains(rolesFor(edge.PurposeDeploy), "roles/cloudscheduler.admin") {
+		t.Error("deploy credentials are granted roles/cloudscheduler.admin, and a deploy creates no schedule")
 	}
 	if !slices.Contains(BootstrapAPIs, "cloudscheduler.googleapis.com") {
 		t.Errorf("a bootstrap checks %v are on, want cloudscheduler.googleapis.com among them", BootstrapAPIs)

@@ -127,7 +127,7 @@ func actionsOf(t *testing.T, document string) map[string]bool {
 	return actions
 }
 
-func renderedTiers(t *testing.T) (string, string) {
+func renderedCredentials(t *testing.T) (string, string) {
 	t.Helper()
 	bootstrapDoc, err := BootstrapCredentialPermissions(defaultNamespace)
 	if err != nil {
@@ -140,9 +140,9 @@ func renderedTiers(t *testing.T) (string, string) {
 	return bootstrapDoc, deployDoc
 }
 
-func bothTiers(t *testing.T) map[string]string {
+func bothCredentials(t *testing.T) map[string]string {
 	t.Helper()
-	bootstrapDoc, deployDoc := renderedTiers(t)
+	bootstrapDoc, deployDoc := renderedCredentials(t)
 	return map[string]string{"bootstrap": bootstrapDoc, "deploy": deployDoc}
 }
 
@@ -218,8 +218,8 @@ func taggedOrNamedScopes(condition map[string]any) bool {
 	return false
 }
 
-func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
-	for tier, document := range bothTiers(t) {
+func TestNoCredentialMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
 			actions := stringsOf(t, statement.Action, "Action")
 			for _, action := range actions {
@@ -232,8 +232,8 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 					}
 					if !boundaryScopes(statement.Condition) {
 						t.Errorf(
-							"the %s tier grants %s on %q without pinning iam:PermissionsBoundary, so it can mint a role that reaches further than the credential itself",
-							tier, action, resource,
+							"the %s credential grants %s on %q without pinning iam:PermissionsBoundary, so it can mint a role that reaches further than the credential itself",
+							purpose, action, resource,
 						)
 					}
 				}
@@ -242,15 +242,15 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 	}
 }
 
-func TestNoTierRepointsTheTrustPolicyOfAnAppRole(t *testing.T) {
+func TestNoCredentialRepointsTheTrustPolicyOfAnAppRole(t *testing.T) {
 	deployActions := actionsOf(t, mustRender(t, DeployCredentialPermissions))
 	if deployActions["iam:UpdateAssumeRolePolicy"] {
-		t.Error("the deploy tier grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever has the credential")
+		t.Error("the deploy credential grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever has the credential")
 	}
 }
 
-func TestBootstrapTierIsAStrictSupersetOfDeployTier(t *testing.T) {
-	bootstrapDoc, deployDoc := renderedTiers(t)
+func TestTheBootstrapCredentialIsAStrictSupersetOfTheDeployCredential(t *testing.T) {
+	bootstrapDoc, deployDoc := renderedCredentials(t)
 	bootstrapGrants, deployGrants := grantsOf(t, bootstrapDoc), grantsOf(t, deployDoc)
 
 	var missing []string
@@ -261,7 +261,7 @@ func TestBootstrapTierIsAStrictSupersetOfDeployTier(t *testing.T) {
 	}
 	slices.Sort(missing)
 	if len(missing) > 0 {
-		t.Errorf("the deploy tier grants what the bootstrap tier does not: %s", strings.Join(missing, ", "))
+		t.Errorf("the deploy credential grants what the bootstrap credential does not: %s", strings.Join(missing, ", "))
 	}
 
 	extra := 0
@@ -271,25 +271,25 @@ func TestBootstrapTierIsAStrictSupersetOfDeployTier(t *testing.T) {
 		}
 	}
 	if extra == 0 {
-		t.Error("the bootstrap tier grants nothing the deploy tier lacks, so the two tiers are the same credential")
+		t.Error("the bootstrap credential grants nothing the deploy credential lacks, so the two are the same credential")
 	}
 }
 
-func TestDeployTierWithholdsWhatDefinesTheBootstrapTier(t *testing.T) {
-	bootstrapDoc, deployDoc := renderedTiers(t)
+func TestTheDeployCredentialWithholdsWhatDefinesTheBootstrapCredential(t *testing.T) {
+	bootstrapDoc, deployDoc := renderedCredentials(t)
 	bootstrapActions, deployActions := actionsOf(t, bootstrapDoc), actionsOf(t, deployDoc)
 
 	for _, action := range bootstrapOnlyActions {
 		if deployActions[action] {
-			t.Errorf("the deploy tier grants %s, which is what a bootstrap credential is for", action)
+			t.Errorf("the deploy credential grants %s, which is what a bootstrap credential is for", action)
 		}
 		if !bootstrapActions[action] {
-			t.Errorf("the bootstrap tier no longer grants %s, so no Ocel credential may call %s at all", action, action)
+			t.Errorf("the bootstrap credential no longer grants %s, so no Ocel credential may call %s at all", action, action)
 		}
 	}
 }
 
-func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
+func TestTheDeployCredentialPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	r := defaultNamespace.ScopedARNs()
 	unconditional := conditionJSON(t, nil)
@@ -300,7 +300,7 @@ func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
 		"cloudformation:DescribeStackEvents",
 	} {
 		if !grants[grant{action: action, resource: r.runtimeStack, condition: unconditional}] {
-			t.Errorf("the deploy tier does not grant %s on %s, so a deploy onto an account an older build bootstrapped cannot publish the runtime its functions boot through", action, r.runtimeStack)
+			t.Errorf("the deploy credential does not grant %s on %s, so a deploy onto an account an older build bootstrapped cannot publish the runtime its functions boot through", action, r.runtimeStack)
 		}
 	}
 	for _, action := range []string{
@@ -310,7 +310,7 @@ func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
 	} {
 		for _, resource := range []string{r.runtimeStack, r.runtimeChangeSet} {
 			if !grants[grant{action: action, resource: resource, condition: unconditional}] {
-				t.Errorf("the deploy tier does not grant %s on %s, so the runtime it publishes is planned and never executed", action, resource)
+				t.Errorf("the deploy credential does not grant %s on %s, so the runtime it publishes is planned and never executed", action, resource)
 			}
 		}
 	}
@@ -320,12 +320,12 @@ func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
 			continue
 		}
 		if g.resource != r.runtimeStack && g.resource != r.runtimeChangeSet {
-			t.Errorf("the deploy tier grants %s on %s, which is a bootstrap stack a deploy never writes", g.action, g.resource)
+			t.Errorf("the deploy credential grants %s on %s, which is a bootstrap stack a deploy never writes", g.action, g.resource)
 		}
 	}
 }
 
-func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
+func TestTheDeployCredentialOwnsTheLogGroupsItCreates(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
 	want := map[string]string{
 		"logs:CreateLogGroup":      conditionJSON(t, taggedOnCreate()),
@@ -338,43 +338,43 @@ func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
 	for _, resource := range []string{appLogGroupARN, functionLogGroupARN} {
 		got := logsGrantsOn(grants, resource)
 		if !maps.Equal(got, want) {
-			t.Errorf("the deploy tier grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", got, resource, want)
+			t.Errorf("the deploy credential grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", got, resource, want)
 		}
 	}
 }
 
-func TestEveryTierListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
-	for tier, document := range bothTiers(t) {
+func TestEveryCredentialListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
 		if !grants[grant{action: "logs:DescribeLogGroups", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
-			t.Errorf("the %s tier does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", tier, UnscopedResource)
+			t.Errorf("the %s credential does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", purpose, UnscopedResource)
 		}
 		for g := range grants {
 			if g.action == "logs:DescribeLogGroups" && g.resource != UnscopedResource {
-				t.Errorf("the %s tier grants logs:DescribeLogGroups on %s, an ARN IAM never matches for an action with no resource type", tier, g.resource)
+				t.Errorf("the %s credential grants logs:DescribeLogGroups on %s, an ARN IAM never matches for an action with no resource type", purpose, g.resource)
 			}
 		}
 	}
 }
 
-func TestEveryTierScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
+func TestEveryCredentialScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
 	unscopable := []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"}
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
 		if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: appTaskDefinitionARN, condition: conditionJSON(t, taggedOnCreate())}] {
-			t.Errorf("the %s tier does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", tier, appTaskDefinitionARN)
+			t.Errorf("the %s credential does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", purpose, appTaskDefinitionARN)
 		}
 		for _, action := range unscopable {
 			if !grants[grant{action: action, resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
-				t.Errorf("the %s tier does not grant %s on %q, the only resource IAM evaluates it against, so a container release cannot read back or reclaim its task definition", tier, action, UnscopedResource)
+				t.Errorf("the %s credential does not grant %s on %q, the only resource IAM evaluates it against, so a container release cannot read back or reclaim its task definition", purpose, action, UnscopedResource)
 			}
 		}
 		for g := range grants {
 			if g.action == "ecs:RegisterTaskDefinition" && g.resource != appTaskDefinitionARN {
-				t.Errorf("the %s tier grants ecs:RegisterTaskDefinition on %s, which reaches past the task definitions a deploy registers", tier, g.resource)
+				t.Errorf("the %s credential grants ecs:RegisterTaskDefinition on %s, which reaches past the task definitions a deploy registers", purpose, g.resource)
 			}
 			if slices.Contains(unscopable, g.action) && g.resource != UnscopedResource {
-				t.Errorf("the %s tier grants %s on %s, an ARN IAM never matches for an action with no resource type", tier, g.action, g.resource)
+				t.Errorf("the %s credential grants %s on %s, an ARN IAM never matches for an action with no resource type", purpose, g.action, g.resource)
 			}
 		}
 	}
@@ -400,16 +400,16 @@ func conditionJSON(t *testing.T, condition map[string]any) string {
 }
 
 func TestOnlyTheEdgeUserIsMintedAndItHasNoManagedPolicy(t *testing.T) {
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
 			if g.action == "iam:AttachUserPolicy" {
-				t.Errorf("the %s tier grants iam:AttachUserPolicy, which turns a minted user into whatever policy it names", tier)
+				t.Errorf("the %s credential grants iam:AttachUserPolicy, which turns a minted user into whatever policy it names", purpose)
 			}
 			if !strings.HasPrefix(g.action, "iam:") || !strings.Contains(g.action, "User") && !strings.Contains(g.action, "AccessKey") {
 				continue
 			}
 			if g.resource != defaultNamespace.ScopedARNs().edgeUser {
-				t.Errorf("the %s tier grants %s on %q, which is not the edge user", tier, g.action, g.resource)
+				t.Errorf("the %s credential grants %s on %q, which is not the edge user", purpose, g.action, g.resource)
 			}
 		}
 	}
@@ -423,28 +423,28 @@ func TestOnlyTheEdgeUserIsMintedAndItHasNoManagedPolicy(t *testing.T) {
 		"iam:DeleteAccessKey",
 	} {
 		if !bootstrapActions[action] {
-			t.Errorf("the bootstrap tier does not grant %s, which minting the edge user needs", action)
+			t.Errorf("the bootstrap credential does not grant %s, which minting the edge user needs", action)
 		}
 	}
 }
 
-func TestCredentialTiersNameActionsRatherThanGlobbingThem(t *testing.T) {
-	for tier, document := range bothTiers(t) {
+func TestCredentialsNameActionsRatherThanGlobbingThem(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
 			service, verb, ok := strings.Cut(g.action, ":")
 			if !ok || service == "" || strings.Contains(service, "*") {
-				t.Errorf("the %s tier grants %q, which names no service", tier, g.action)
+				t.Errorf("the %s credential grants %q, which names no service", purpose, g.action)
 				continue
 			}
 			if verb == "" || strings.HasPrefix(verb, "*") {
-				t.Errorf("the %s tier grants %q, whose leading wildcard matches verbs nobody enumerated", tier, g.action)
+				t.Errorf("the %s credential grants %q, whose leading wildcard matches verbs nobody enumerated", purpose, g.action)
 			}
 		}
 	}
 }
 
 func TestEveryMutatingGrantHasAnOcelScope(t *testing.T) {
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
 			actions := stringsOf(t, statement.Action, "Action")
 			mutating := slices.DeleteFunc(slices.Clone(actions), func(action string) bool {
@@ -459,8 +459,8 @@ func TestEveryMutatingGrantHasAnOcelScope(t *testing.T) {
 			for _, resource := range stringsOf(t, statement.Resource, "Resource") {
 				if !namesSomething(resource) {
 					t.Errorf(
-						"the %s tier grants %s on %q, which names nothing Ocel owns and has no scoping condition",
-						tier, strings.Join(mutating, ", "), resource,
+						"the %s credential grants %s on %q, which names nothing Ocel owns and has no scoping condition",
+						purpose, strings.Join(mutating, ", "), resource,
 					)
 				}
 			}
@@ -468,8 +468,8 @@ func TestEveryMutatingGrantHasAnOcelScope(t *testing.T) {
 	}
 }
 
-func TestNoTierTagsAKeyItDoesNotAlreadyOwn(t *testing.T) {
-	for tier, document := range bothTiers(t) {
+func TestNoCredentialTagsAKeyItDoesNotAlreadyOwn(t *testing.T) {
+	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
 			actions := stringsOf(t, statement.Action, "Action")
 			tagging := slices.DeleteFunc(slices.Clone(actions), func(action string) bool {
@@ -480,8 +480,8 @@ func TestNoTierTagsAKeyItDoesNotAlreadyOwn(t *testing.T) {
 			}
 			if !conditionNames(statement.Condition, "aws:ResourceTag/"+VarsKeyComponentTagKey) {
 				t.Errorf(
-					"the %s tier grants %s on %s with no aws:ResourceTag condition, so it may tag a key ocel never made and then open what that key seals",
-					tier, strings.Join(tagging, ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "),
+					"the %s credential grants %s on %s with no aws:ResourceTag condition, so it may tag a key ocel never made and then open what that key seals",
+					purpose, strings.Join(tagging, ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "),
 				)
 			}
 		}
@@ -510,8 +510,8 @@ func mustRender(t *testing.T, render func(Namespace) (string, error)) string {
 	return document
 }
 
-func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
-	bootstrapDoc, deployDoc := renderedTiers(t)
+func TestTheBootstrapCredentialOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
+	bootstrapDoc, deployDoc := renderedCredentials(t)
 	bootstrapGrants, deployGrants := grantsOf(t, bootstrapDoc), grantsOf(t, deployDoc)
 	scope := "arn:aws:logs:*:*:log-group:/aws/lambda/" + defaultNamespace.CoreStackName() + "*"
 	unconditional := conditionJSON(t, nil)
@@ -524,11 +524,11 @@ func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
 		"logs:UntagResource":       unconditional,
 	}
 	if got := logsGrantsOn(bootstrapGrants, scope); !maps.Equal(got, want) {
-		t.Errorf("the bootstrap tier grants %v on %s, want exactly %v, so a bootstrap stack either cannot create, bound and reclaim its functions' log groups or reaches beyond them", got, scope, want)
+		t.Errorf("the bootstrap credential grants %v on %s, want exactly %v, so a bootstrap stack either cannot create, bound and reclaim its functions' log groups or reaches beyond them", got, scope, want)
 	}
 	for _, resource := range []string{appLogGroupARN, functionLogGroupARN} {
 		if got, deploy := logsGrantsOn(bootstrapGrants, resource), logsGrantsOn(deployGrants, resource); !maps.Equal(got, deploy) {
-			t.Errorf("the bootstrap tier grants %v on %s, want the deploy tier's %v, so bootstrapping widens what a deploy may do to a log group", got, resource, deploy)
+			t.Errorf("the bootstrap credential grants %v on %s, want the deploy credential's %v, so bootstrapping widens what a deploy may do to a log group", got, resource, deploy)
 		}
 	}
 	for g := range bootstrapGrants {
@@ -539,17 +539,17 @@ func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
 		case scope, appLogGroupARN, functionLogGroupARN:
 		case UnscopedResource:
 			if g.action != "logs:DescribeLogGroups" {
-				t.Errorf("the bootstrap tier grants %s on %q, which reaches every log group in the account", g.action, g.resource)
+				t.Errorf("the bootstrap credential grants %s on %q, which reaches every log group in the account", g.action, g.resource)
 			}
 		default:
-			t.Errorf("the bootstrap tier grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
+			t.Errorf("the bootstrap credential grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
 		}
 	}
 }
 
-func TestEveryTierReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t *testing.T) {
+func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t *testing.T) {
 	bootstrapARNs := defaultNamespace.ScopedARNs()
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
 			switch {
 			case strings.HasPrefix(g.action, "s3:"):
@@ -557,24 +557,24 @@ func TestEveryTierReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t 
 					continue
 				}
 				if !strings.HasPrefix(g.resource, "arn:aws:s3:::"+appScopePrefix) {
-					t.Errorf("the %s tier grants %s on %s, a bucket name a deploy never creates: S3 evaluates no Ocel tag on a bucket, so the name prefix is the only scope", tier, g.action, g.resource)
+					t.Errorf("the %s credential grants %s on %s, a bucket name a deploy never creates: S3 evaluates no Ocel tag on a bucket, so the name prefix is the only scope", purpose, g.action, g.resource)
 				}
 			case strings.HasPrefix(g.action, "rds:") && !readOnly(g.action):
 				for _, kind := range []string{"cluster:", "db:", "subgrp:"} {
 					if strings.Contains(g.resource, ":"+kind) && !strings.Contains(g.resource, ":"+kind+appScopePrefix) {
-						t.Errorf("the %s tier grants %s on %s, an identifier a deploy never mints", tier, g.action, g.resource)
+						t.Errorf("the %s credential grants %s on %s, an identifier a deploy never mints", purpose, g.action, g.resource)
 					}
 				}
 			case strings.HasPrefix(g.action, "secretsmanager:"):
 				if g.condition != conditionJSON(t, managedByAnAppCluster()) {
-					t.Errorf("the %s tier grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", tier, g.action, g.resource, g.condition)
+					t.Errorf("the %s credential grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", purpose, g.action, g.resource, g.condition)
 				}
 			}
 		}
 	}
 }
 
-func TestTheBootstrapTierTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *testing.T) {
+func TestTheBootstrapCredentialTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
 	want := conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}})
 	for g := range grantsOf(t, mustRender(t, BootstrapCredentialPermissions)) {
@@ -582,63 +582,63 @@ func TestTheBootstrapTierTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *test
 			continue
 		}
 		if g.condition != want {
-			t.Errorf("the bootstrap tier grants %s on %s under %s, want it pinned to the bootstrap's own functions through lambda:FunctionArn", g.action, g.resource, g.condition)
+			t.Errorf("the bootstrap credential grants %s on %s under %s, want it pinned to the bootstrap's own functions through lambda:FunctionArn", g.action, g.resource, g.condition)
 		}
 	}
 }
 
-func TestOnlyTheBootstrapTierDeletesThePulumiPassphraseAndOnlyByItsExactPath(t *testing.T) {
+func TestOnlyTheBootstrapCredentialDeletesThePulumiPassphraseAndOnlyByItsExactPath(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
 	if _, path, _ := strings.Cut(r.passphraseParam, ":parameter"); strings.ContainsAny(path, "*?") {
 		t.Fatalf("the passphrase ARN %q names a parameter pattern, and the one delete grant on it must name the path exactly", r.passphraseParam)
 	}
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		for g := range grantsOf(t, document) {
 			if !strings.HasPrefix(g.action, "ssm:Delete") || !iamResourceMatches(g.resource, r.passphraseParam) {
 				continue
 			}
-			if tier != "bootstrap" {
-				t.Errorf("the %s tier grants %s on %s, which reaches %s: only the credential that can already destroy every Pulumi state in the account may take what encrypts it", tier, g.action, g.resource, r.passphraseParam)
+			if purpose != "bootstrap" {
+				t.Errorf("the %s credential grants %s on %s, which reaches %s: only the credential that can already destroy every Pulumi state in the account may take what encrypts it", purpose, g.action, g.resource, r.passphraseParam)
 				continue
 			}
 			if g.action != "ssm:DeleteParameter" || g.resource != r.passphraseParam || g.condition != conditionJSON(t, nil) {
-				t.Errorf("the bootstrap tier grants %s on %s under %s, want ssm:DeleteParameter on exactly %s: a wider grant reaches the passphrase by accident from a tree it was meant to prune", g.action, g.resource, g.condition, r.passphraseParam)
+				t.Errorf("the bootstrap credential grants %s on %s under %s, want ssm:DeleteParameter on exactly %s: a wider grant reaches the passphrase by accident from a tree it was meant to prune", g.action, g.resource, g.condition, r.passphraseParam)
 			}
 		}
 	}
 	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
 	for _, resource := range []string{r.edgeParam, r.originParam, r.stackRecord, r.passphraseParam} {
 		if !bootstrapGrants[grant{action: "ssm:DeleteParameter", resource: resource, condition: conditionJSON(t, nil)}] {
-			t.Errorf("the bootstrap tier cannot delete %s, which a teardown reclaims", resource)
+			t.Errorf("the bootstrap credential cannot delete %s, which a teardown reclaims", resource)
 		}
 	}
 }
 
-func TestEveryTierMayGrantLambdaTheVarsKeyAndNoOther(t *testing.T) {
+func TestEveryCredentialMayGrantLambdaTheVarsKeyAndNoOther(t *testing.T) {
 	want := conditionJSON(t, map[string]any{
 		"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
 		"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
 	})
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
 		if !grants[grant{action: "kms:CreateGrant", resource: AnyKeyARN, condition: want}] {
-			t.Errorf("the %s tier does not grant kms:CreateGrant on a vars key for an AWS service, so Lambda cannot seal a function's environment under it", tier)
+			t.Errorf("the %s credential does not grant kms:CreateGrant on a vars key for an AWS service, so Lambda cannot seal a function's environment under it", purpose)
 		}
 		for g := range grants {
 			if g.action == "kms:CreateGrant" && g.condition != want {
-				t.Errorf("the %s tier grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", tier, g.condition)
+				t.Errorf("the %s credential grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", purpose, g.condition)
 			}
 		}
 	}
 }
 
-func TestEveryTierPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
+func TestEveryCredentialPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
-	for tier, document := range bothTiers(t) {
+	for purpose, document := range bothCredentials(t) {
 		grants := grantsOf(t, document)
 		for _, action := range []string{"lambda:PublishLayerVersion", "lambda:DeleteLayerVersion", "lambda:GetLayerVersion"} {
 			if !grants[grant{action: action, resource: r.runtimeLayerVersion, condition: conditionJSON(t, nil)}] {
-				t.Errorf("the %s tier does not grant %s on %s, so the runtime stack cannot publish or reclaim a layer version", tier, action, r.runtimeLayerVersion)
+				t.Errorf("the %s credential does not grant %s on %s, so the runtime stack cannot publish or reclaim a layer version", purpose, action, r.runtimeLayerVersion)
 			}
 		}
 		for g := range grants {
@@ -646,7 +646,7 @@ func TestEveryTierPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
 				continue
 			}
 			if g.resource != r.runtimeLayer && g.resource != r.runtimeLayerVersion {
-				t.Errorf("the %s tier grants %s on %s, which reaches layers Ocel never published", tier, g.action, g.resource)
+				t.Errorf("the %s credential grants %s on %s, which reaches layers Ocel never published", purpose, g.action, g.resource)
 			}
 		}
 	}

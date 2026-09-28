@@ -9,7 +9,7 @@ import (
 type Credentials interface {
 	Whoami(ctx context.Context) (Principal, error)
 
-	Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error)
+	Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error)
 }
 
 type Principal struct {

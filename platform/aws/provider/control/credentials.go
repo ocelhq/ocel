@@ -54,19 +54,19 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	}, nil
 }
 
-func (c Credentials) Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	var (
 		document string
 		err      error
 	)
-	switch tier {
-	case edge.TierBootstrap:
+	switch purpose {
+	case edge.PurposeBootstrap:
 		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace)
-	case edge.TierDeploy:
+	case edge.PurposeDeploy:
 		document, err = bootstrap.DeployCredentialPermissions(c.Namespace)
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
-			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")
+			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")
 	}
 	if err != nil {
 		return edge.CredentialDocument{}, err

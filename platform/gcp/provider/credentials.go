@@ -149,20 +149,20 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 	return said.Email, resp.StatusCode, nil
 }
 
-func (c Credentials) Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
-	switch tier {
-	case edge.TierBootstrap, edge.TierDeploy:
+func (c Credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+	switch purpose {
+	case edge.PurposeBootstrap, edge.PurposeDeploy:
 		project, err := c.Project.Project(context.Background())
 		if err != nil {
 			return edge.CredentialDocument{}, err
 		}
 		return edge.CredentialDocument{
-			Heading:  fmt.Sprintf("the roles a %s credential is granted on project %s", tier, project),
-			Document: strings.Join(rolesFor(tier), "\n"),
+			Heading:  fmt.Sprintf("the roles a %s credential is granted on project %s", purpose, project),
+			Document: strings.Join(rolesFor(purpose), "\n"),
 		}, nil
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
-			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")
+			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")
 	}
 }
 

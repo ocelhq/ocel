@@ -251,7 +251,7 @@ func TestAnEnvSourceSyncThatFailsOrIsThrottledIsNeverRunLateOverTheNextMinutes(t
 	}
 }
 
-func TestTheBootstrapTierConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherFunction(t *testing.T) {
+func TestTheBootstrapCredentialConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherFunction(t *testing.T) {
 	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
 	actions := []string{
 		"lambda:PutFunctionEventInvokeConfig", "lambda:GetFunctionEventInvokeConfig",
@@ -265,18 +265,18 @@ func TestTheBootstrapTierConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherFunctio
 				reached = reached || (g.action == action && matchesIAMPattern(g.resource, function))
 			}
 			if !reached {
-				t.Errorf("the bootstrap tier grants no %s on %s, so CloudFormation cannot configure how the %s sync is invoked", action, function, class)
+				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot configure how the %s sync is invoked", action, function, class)
 			}
 		}
 	}
 	for g := range bootstrapGrants {
 		if slices.Contains(actions, g.action) && g.resource != defaultNamespace.ScopedARNs().bootstrapFunction {
-			t.Errorf("the bootstrap tier grants %s on %s, beyond the functions a bootstrap names", g.action, g.resource)
+			t.Errorf("the bootstrap credential grants %s on %s, beyond the functions a bootstrap names", g.action, g.resource)
 		}
 	}
 	for g := range grantsOf(t, mustRender(t, DeployCredentialPermissions)) {
 		if slices.Contains(actions, g.action) {
-			t.Errorf("the deploy tier grants %s on %s; a deploy never configures the env source sync", g.action, g.resource)
+			t.Errorf("the deploy credential grants %s on %s; a deploy never configures the env source sync", g.action, g.resource)
 		}
 	}
 }
@@ -321,7 +321,7 @@ func TestTheEnvSourceSyncReachesOnlyTheVarsTableTheKeyAndItsLogs(t *testing.T) {
 	}
 }
 
-func TestTheBootstrapTierReachesTheEnvSourceSyncScheduleThroughItsGroupAndNothingElse(t *testing.T) {
+func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAndNothingElse(t *testing.T) {
 	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
 	reaches := func(action, arn string) bool {
 		for g := range bootstrapGrants {
@@ -339,13 +339,13 @@ func TestTheBootstrapTierReachesTheEnvSourceSyncScheduleThroughItsGroupAndNothin
 			"scheduler:ListTagsForResource", "scheduler:TagResource", "scheduler:UntagResource",
 		} {
 			if !reaches(action, groupARN) {
-				t.Errorf("the bootstrap tier grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule group", action, groupARN, class)
+				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule group", action, groupARN, class)
 			}
 		}
 		scheduleARN := "arn:aws:scheduler:us-east-1:111122223333:schedule/" + group + "/" + defaultNamespace.envSourceSyncScheduleName(class)
 		for _, action := range []string{"scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule", "scheduler:UpdateSchedule"} {
 			if !reaches(action, scheduleARN) {
-				t.Errorf("the bootstrap tier grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule", action, scheduleARN, class)
+				t.Errorf("the bootstrap credential grants no %s on %s, so CloudFormation cannot make or remove the %s sync's schedule", action, scheduleARN, class)
 			}
 		}
 	}
@@ -355,7 +355,7 @@ func TestTheBootstrapTierReachesTheEnvSourceSyncScheduleThroughItsGroupAndNothin
 			continue
 		}
 		if !strings.HasPrefix(g.resource, "arn:aws:scheduler:*:*:schedule-group/"+core) && !strings.HasPrefix(g.resource, "arn:aws:scheduler:*:*:schedule/"+core) {
-			t.Errorf("the bootstrap tier grants %s on %s, beyond the schedule groups a bootstrap names", g.action, g.resource)
+			t.Errorf("the bootstrap credential grants %s on %s, beyond the schedule groups a bootstrap names", g.action, g.resource)
 		}
 	}
 	passed := false
@@ -363,16 +363,16 @@ func TestTheBootstrapTierReachesTheEnvSourceSyncScheduleThroughItsGroupAndNothin
 		if g.action == "iam:PassRole" && strings.Contains(g.condition, `"iam:PassedToService":"scheduler.amazonaws.com"`) {
 			passed = g.resource == defaultNamespace.ScopedARNs().bootstrapRole
 			if !passed {
-				t.Errorf("the bootstrap tier passes %s to Scheduler, want only the roles a bootstrap stack makes", g.resource)
+				t.Errorf("the bootstrap credential passes %s to Scheduler, want only the roles a bootstrap stack makes", g.resource)
 			}
 		}
 	}
 	if !passed {
-		t.Error("the bootstrap tier passes no role to Scheduler, so the schedule cannot name the role it invokes through")
+		t.Error("the bootstrap credential passes no role to Scheduler, so the schedule cannot name the role it invokes through")
 	}
 	for g := range grantsOf(t, mustRender(t, DeployCredentialPermissions)) {
 		if strings.HasPrefix(g.action, "scheduler:") {
-			t.Errorf("the deploy tier grants %s on %s; a deploy never makes a schedule", g.action, g.resource)
+			t.Errorf("the deploy credential grants %s on %s; a deploy never makes a schedule", g.action, g.resource)
 		}
 	}
 }

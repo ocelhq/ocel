@@ -926,22 +926,22 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 	}
 }
 
-func deployTier(ns Namespace) []GrantStatement {
+func deployGrants(ns Namespace) []GrantStatement {
 	r := ns.ScopedARNs()
 	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r))
 }
 
-func bootstrapTier(ns Namespace) []GrantStatement {
+func bootstrapGrants(ns Namespace) []GrantStatement {
 	r := ns.ScopedARNs()
 	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r), bootstrapProvisioning(ns, r), edgePrincipal(r))
 }
 
 func DeployCredentialPermissions(ns Namespace) (string, error) {
-	return credentialPolicy("deploy", deployTier(ns))
+	return credentialPolicy("deploy", deployGrants(ns))
 }
 
 func BootstrapCredentialPermissions(ns Namespace) (string, error) {
-	return credentialPolicy("bootstrap", bootstrapTier(ns))
+	return credentialPolicy("bootstrap", bootstrapGrants(ns))
 }
 
 func PolicyStatements(grants []GrantStatement) []map[string]any {
@@ -960,10 +960,10 @@ func PolicyStatements(grants []GrantStatement) []map[string]any {
 	return statements
 }
 
-func credentialPolicy(tier string, grants []GrantStatement) (string, error) {
+func credentialPolicy(purpose string, grants []GrantStatement) (string, error) {
 	out, err := json.MarshalIndent(map[string]any{"Version": "2012-10-17", "Statement": PolicyStatements(grants)}, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("render the %s credential policy: %w", tier, err)
+		return "", fmt.Errorf("render the %s credential policy: %w", purpose, err)
 	}
 	return string(out), nil
 }

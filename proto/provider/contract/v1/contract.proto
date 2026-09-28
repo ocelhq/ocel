@@ -365,16 +365,16 @@ message BootstrapStatus {
   bool unfinished = 9;
 }
 
-enum CredentialTier {
-  CREDENTIAL_TIER_UNSPECIFIED = 0;
+enum CredentialPurpose {
+  CREDENTIAL_PURPOSE_UNSPECIFIED = 0;
 
-  CREDENTIAL_TIER_BOOTSTRAP = 1;
+  CREDENTIAL_PURPOSE_BOOTSTRAP = 1;
 
-  CREDENTIAL_TIER_DEPLOY = 2;
+  CREDENTIAL_PURPOSE_DEPLOY = 2;
 }
 
 message CredentialPermissionsRequest {
-  CredentialTier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  CredentialPurpose purpose = 1 [(buf.validate.field).enum.defined_only = true];
 
   EdgeSelection edge = 2;
 }

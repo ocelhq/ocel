@@ -10,5 +10,5 @@ type Hooks struct {
 	ListBoundHostnames            func(ctx context.Context, class Class) ([]string, error)
 	VerifyCredentials             func(ctx context.Context) (CredentialIdentity, error)
 	CheckCodeEntitlement          func(ctx context.Context) (CodeEntitlement, error)
-	DescribeCredentialPermissions func(tier CredentialTier) (CredentialDocument, error)
+	DescribeCredentialPermissions func(purpose CredentialPurpose) (CredentialDocument, error)
 }

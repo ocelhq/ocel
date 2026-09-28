@@ -40,16 +40,16 @@ func deployPermissions() []string {
 	return slices.Concat(accountPermissions, zonePermissions)
 }
 
-func credentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+func credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	var permissions []string
-	switch tier {
-	case edge.TierBootstrap:
+	switch purpose {
+	case edge.PurposeBootstrap:
 		permissions = bootstrapPermissions()
-	case edge.TierDeploy:
+	case edge.PurposeDeploy:
 		permissions = deployPermissions()
 	default:
 		return edge.CredentialDocument{}, fmt.Errorf(
-			"cloudflare: the token permissions are listed for the bootstrap tier or the deploy tier, not %q", string(tier))
+			"cloudflare: the token permissions are listed for bootstrap or deploy credentials, not %q", string(purpose))
 	}
 	return edge.CredentialDocument{
 		Heading:  credentialHeading,

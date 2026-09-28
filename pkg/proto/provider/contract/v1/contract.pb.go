@@ -28,52 +28,52 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type CredentialTier int32
+type CredentialPurpose int32
 
 const (
-	CredentialTier_CREDENTIAL_TIER_UNSPECIFIED CredentialTier = 0
-	CredentialTier_CREDENTIAL_TIER_BOOTSTRAP   CredentialTier = 1
-	CredentialTier_CREDENTIAL_TIER_DEPLOY      CredentialTier = 2
+	CredentialPurpose_CREDENTIAL_PURPOSE_UNSPECIFIED CredentialPurpose = 0
+	CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP   CredentialPurpose = 1
+	CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY      CredentialPurpose = 2
 )
 
-// Enum value maps for CredentialTier.
+// Enum value maps for CredentialPurpose.
 var (
-	CredentialTier_name = map[int32]string{
-		0: "CREDENTIAL_TIER_UNSPECIFIED",
-		1: "CREDENTIAL_TIER_BOOTSTRAP",
-		2: "CREDENTIAL_TIER_DEPLOY",
+	CredentialPurpose_name = map[int32]string{
+		0: "CREDENTIAL_PURPOSE_UNSPECIFIED",
+		1: "CREDENTIAL_PURPOSE_BOOTSTRAP",
+		2: "CREDENTIAL_PURPOSE_DEPLOY",
 	}
-	CredentialTier_value = map[string]int32{
-		"CREDENTIAL_TIER_UNSPECIFIED": 0,
-		"CREDENTIAL_TIER_BOOTSTRAP":   1,
-		"CREDENTIAL_TIER_DEPLOY":      2,
+	CredentialPurpose_value = map[string]int32{
+		"CREDENTIAL_PURPOSE_UNSPECIFIED": 0,
+		"CREDENTIAL_PURPOSE_BOOTSTRAP":   1,
+		"CREDENTIAL_PURPOSE_DEPLOY":      2,
 	}
 )
 
-func (x CredentialTier) Enum() *CredentialTier {
-	p := new(CredentialTier)
+func (x CredentialPurpose) Enum() *CredentialPurpose {
+	p := new(CredentialPurpose)
 	*p = x
 	return p
 }
 
-func (x CredentialTier) String() string {
+func (x CredentialPurpose) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (CredentialTier) Descriptor() protoreflect.EnumDescriptor {
+func (CredentialPurpose) Descriptor() protoreflect.EnumDescriptor {
 	return file_provider_contract_v1_contract_proto_enumTypes[0].Descriptor()
 }
 
-func (CredentialTier) Type() protoreflect.EnumType {
+func (CredentialPurpose) Type() protoreflect.EnumType {
 	return &file_provider_contract_v1_contract_proto_enumTypes[0]
 }
 
-func (x CredentialTier) Number() protoreflect.EnumNumber {
+func (x CredentialPurpose) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use CredentialTier.Descriptor instead.
-func (CredentialTier) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use CredentialPurpose.Descriptor instead.
+func (CredentialPurpose) EnumDescriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{0}
 }
 
@@ -2328,7 +2328,7 @@ func (x *BootstrapStatus) GetUnfinished() bool {
 
 type CredentialPermissionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tier          CredentialTier         `protobuf:"varint,1,opt,name=tier,proto3,enum=provider.contract.v1.CredentialTier" json:"tier,omitempty"`
+	Purpose       CredentialPurpose      `protobuf:"varint,1,opt,name=purpose,proto3,enum=provider.contract.v1.CredentialPurpose" json:"purpose,omitempty"`
 	Edge          *EdgeSelection         `protobuf:"bytes,2,opt,name=edge,proto3" json:"edge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2364,11 +2364,11 @@ func (*CredentialPermissionsRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *CredentialPermissionsRequest) GetTier() CredentialTier {
+func (x *CredentialPermissionsRequest) GetPurpose() CredentialPurpose {
 	if x != nil {
-		return x.Tier
+		return x.Purpose
 	}
-	return CredentialTier_CREDENTIAL_TIER_UNSPECIFIED
+	return CredentialPurpose_CREDENTIAL_PURPOSE_UNSPECIFIED
 }
 
 func (x *CredentialPermissionsRequest) GetEdge() *EdgeSelection {
@@ -4909,9 +4909,9 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tdowngrade\x18\b \x01(\bR\tdowngrade\x12\x1e\n" +
 	"\n" +
 	"unfinished\x18\t \x01(\bR\n" +
-	"unfinished\"\x9b\x01\n" +
-	"\x1cCredentialPermissionsRequest\x12B\n" +
-	"\x04tier\x18\x01 \x01(\x0e2$.provider.contract.v1.CredentialTierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x127\n" +
+	"unfinished\"\xa4\x01\n" +
+	"\x1cCredentialPermissionsRequest\x12K\n" +
+	"\apurpose\x18\x01 \x01(\x0e2'.provider.contract.v1.CredentialPurposeB\b\xbaH\x05\x82\x01\x02\x10\x01R\apurpose\x127\n" +
 	"\x04edge\x18\x02 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"^\n" +
 	"\x1dCredentialPermissionsResponse\x12=\n" +
 	"\x06groups\x18\x01 \x03(\v2%.provider.contract.v1.CredentialGroupR\x06groups\"G\n" +
@@ -5118,11 +5118,11 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"configJson\x129\n" +
 	"\acompute\x18\x04 \x01(\tB\x1f\xbaH\x1c\xd8\x01\x01r\x17R\n" +
 	"serverlessR\tcontainerR\acompute\"\x18\n" +
-	"\x16RemoveConnectorRequest*l\n" +
-	"\x0eCredentialTier\x12\x1f\n" +
-	"\x1bCREDENTIAL_TIER_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19CREDENTIAL_TIER_BOOTSTRAP\x10\x01\x12\x1a\n" +
-	"\x16CREDENTIAL_TIER_DEPLOY\x10\x02*\xb2\x01\n" +
+	"\x16RemoveConnectorRequest*x\n" +
+	"\x11CredentialPurpose\x12\"\n" +
+	"\x1eCREDENTIAL_PURPOSE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cCREDENTIAL_PURPOSE_BOOTSTRAP\x10\x01\x12\x1d\n" +
+	"\x19CREDENTIAL_PURPOSE_DEPLOY\x10\x02*\xb2\x01\n" +
 	"\vRefusalCode\x12\x1c\n" +
 	"\x18REFUSAL_CODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14REFUSAL_CODE_INVALID\x10\x01\x12\x1a\n" +
@@ -5178,7 +5178,7 @@ func file_provider_contract_v1_contract_proto_rawDescGZIP() []byte {
 var file_provider_contract_v1_contract_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_provider_contract_v1_contract_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
 var file_provider_contract_v1_contract_proto_goTypes = []any{
-	(CredentialTier)(0),                     // 0: provider.contract.v1.CredentialTier
+	(CredentialPurpose)(0),                  // 0: provider.contract.v1.CredentialPurpose
 	(RefusalCode)(0),                        // 1: provider.contract.v1.RefusalCode
 	(HostTrustReason)(0),                    // 2: provider.contract.v1.HostTrustReason
 	(HostCheck_Verdict)(0),                  // 3: provider.contract.v1.HostCheck.Verdict
@@ -5307,7 +5307,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	32,  // 39: provider.contract.v1.DescribeBootstrapResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
 	74,  // 40: provider.contract.v1.BootstrapStatus.tier:type_name -> common.environment.v1.Tier
 	31,  // 41: provider.contract.v1.BootstrapStatus.stacks:type_name -> provider.contract.v1.BootstrapStack
-	0,   // 42: provider.contract.v1.CredentialPermissionsRequest.tier:type_name -> provider.contract.v1.CredentialTier
+	0,   // 42: provider.contract.v1.CredentialPermissionsRequest.purpose:type_name -> provider.contract.v1.CredentialPurpose
 	38,  // 43: provider.contract.v1.CredentialPermissionsRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	35,  // 44: provider.contract.v1.CredentialPermissionsResponse.groups:type_name -> provider.contract.v1.CredentialGroup
 	37,  // 45: provider.contract.v1.EdgeSelection.dns:type_name -> provider.contract.v1.Dns

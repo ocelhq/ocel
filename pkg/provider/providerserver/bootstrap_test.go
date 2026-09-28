@@ -549,35 +549,35 @@ func TestDescribeBootstrapReportsADowngrade(t *testing.T) {
 	}
 }
 
-func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
+func TestGetCredentialPermissionsRendersEitherPurpose(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	client, _ := contractServed(t, "1.2.3")
 
-	for tier, want := range map[contractv1.CredentialTier]string{
-		contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP: string(edge.TierBootstrap),
-		contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:    string(edge.TierDeploy),
+	for purpose, want := range map[contractv1.CredentialPurpose]string{
+		contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP: string(edge.PurposeBootstrap),
+		contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY:    string(edge.PurposeDeploy),
 	} {
-		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Tier: tier})
+		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Purpose: purpose})
 		if err != nil {
-			t.Fatalf("GetCredentialPermissions(%v) error = %v", tier, err)
+			t.Fatalf("GetCredentialPermissions(%v) error = %v", purpose, err)
 		}
 		groups := permissions.GetGroups()
 		if len(groups) != 1 {
-			t.Fatalf("GetCredentialPermissions(%v) rendered %d groups, want only the vendor's", tier, len(groups))
+			t.Fatalf("GetCredentialPermissions(%v) rendered %d groups, want only the vendor's", purpose, len(groups))
 		}
 		if got := groups[0].GetHeading(); got != "fake credentials" {
-			t.Errorf("GetCredentialPermissions(%v) heading = %q, want the vendor's own heading", tier, got)
+			t.Errorf("GetCredentialPermissions(%v) heading = %q, want the vendor's own heading", purpose, got)
 		}
 		if !strings.Contains(groups[0].GetDocument(), want) {
-			t.Errorf("GetCredentialPermissions(%v) = %q, want it to render the %s tier", tier, groups[0].GetDocument(), want)
+			t.Errorf("GetCredentialPermissions(%v) = %q, want it to render the %s purpose", purpose, groups[0].GetDocument(), want)
 		}
 	}
 
 	_, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("GetCredentialPermissions() naming no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
+		t.Fatalf("GetCredentialPermissions() naming no purpose: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 }
 
@@ -588,8 +588,8 @@ func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
 	client := servedProvider(t, "1.2.3", documentingProvider{Provider: vendor})
 
 	permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
-		Tier: contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY,
-		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+		Purpose: contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		Edge:    &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 	if err != nil {
 		t.Fatalf("GetCredentialPermissions() error = %v", err)
@@ -601,8 +601,8 @@ func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
 	if got := groups[1].GetHeading(); got != documentedHeading {
 		t.Errorf("GetCredentialPermissions() second heading = %q, want %q", got, documentedHeading)
 	}
-	if got := groups[1].GetDocument(); got != string(edge.TierDeploy) {
-		t.Errorf("GetCredentialPermissions() second document = %q, want the edge asked for the %s tier", got, edge.TierDeploy)
+	if got := groups[1].GetDocument(); got != string(edge.PurposeDeploy) {
+		t.Errorf("GetCredentialPermissions() second document = %q, want the edge asked for the %s purpose", got, edge.PurposeDeploy)
 	}
 }
 
@@ -634,8 +634,8 @@ type documentingEdge struct {
 
 func (e documentingEdge) Hooks() edge.Hooks {
 	hooks := e.Edge.Hooks()
-	hooks.DescribeCredentialPermissions = func(tier edge.CredentialTier) (edge.CredentialDocument, error) {
-		return edge.CredentialDocument{Heading: documentedHeading, Document: string(tier)}, nil
+	hooks.DescribeCredentialPermissions = func(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+		return edge.CredentialDocument{Heading: documentedHeading, Document: string(purpose)}, nil
 	}
 	return hooks
 }

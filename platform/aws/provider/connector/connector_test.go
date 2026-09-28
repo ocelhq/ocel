@@ -104,7 +104,7 @@ func TestTheFunctionReadsItsKeyParameterAndNothingElseInTheStore(t *testing.T) {
 	if read.Outputs[outputPublicKey].Value != publicKey {
 		t.Errorf("the stack publishes %v as the public key, want the one the install registered so Describe can hand it back", read.Outputs[outputPublicKey].Value)
 	}
-	for _, statement := range tier(defaultNamespace, sealingKeys) {
+	for _, statement := range grants(defaultNamespace, sealingKeys) {
 		if !slices.Contains(statement.Actions, "ssm:GetParameter") {
 			continue
 		}
@@ -187,7 +187,7 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 	t.Parallel()
 
 	granted := map[string]bool{}
-	for _, statement := range tier(defaultNamespace, sealingKeys) {
+	for _, statement := range grants(defaultNamespace, sealingKeys) {
 		for _, action := range statement.Actions {
 			granted[action] = true
 		}
@@ -205,7 +205,7 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 		"dynamodb:CreateTable",
 	} {
 		if granted[action] {
-			t.Errorf("the connector tier grants %s, and a connector reads and writes variables rather than deploying", action)
+			t.Errorf("the connector credential grants %s, and a connector reads and writes variables rather than deploying", action)
 		}
 	}
 	for _, action := range []string{
@@ -218,7 +218,7 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 		"sts:GetCallerIdentity",
 	} {
 		if !granted[action] {
-			t.Errorf("the connector tier withholds %s, which the ports the connector serves call", action)
+			t.Errorf("the connector credential withholds %s, which the ports the connector serves call", action)
 		}
 	}
 }
@@ -301,7 +301,7 @@ func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T)
 		}
 	}
 
-	for _, statement := range tier(defaultNamespace, sealingKeys) {
+	for _, statement := range grants(defaultNamespace, sealingKeys) {
 		if !slices.Contains(statement.Actions, "kms:Decrypt") {
 			continue
 		}
