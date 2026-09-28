@@ -132,11 +132,7 @@ func (s *edgeSession) checkpoint(ctx context.Context) error {
 }
 
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
-	ledger, err := s.ledger()
-	if err != nil {
-		return false, err
-	}
-	history, err := ledger.History(ctx, router.DefaultPointer)
+	history, err := s.readHistory(ctx, router.DefaultPointer)
 	if err != nil {
 		return false, err
 	}

@@ -1219,11 +1219,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 			record.Env = env
 		}
 	}
-	ledger, err := r.ledger()
-	if err != nil {
-		return err
-	}
-	return ledger.PutStaged(ctx, record)
+	return r.putStaged(ctx, record)
 }
 
 func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*router.Code, error) {
