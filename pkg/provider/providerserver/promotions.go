@@ -30,11 +30,7 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	ledger, err := session.ledger()
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	history, err := ledger.History(ctx, "")
+	history, err := session.readHistory(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -46,11 +42,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	ledger, err := session.ledger()
-	if err != nil {
-		return nil, provider.RefusalError(err)
-	}
-	history, err := ledger.History(ctx, "")
+	history, err := session.readHistory(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -128,11 +120,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		ledger, err := session.ledger()
-		if err != nil {
-			return err
-		}
-		pruned, err := ledger.Prune(ctx, int(req.GetKeepN()), pointer)
+		pruned, err := session.prune(ctx, int(req.GetKeepN()), pointer)
 		if err != nil {
 			return err
 		}
