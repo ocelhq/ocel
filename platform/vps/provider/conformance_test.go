@@ -73,6 +73,13 @@ func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
 	}
 }
 
+func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
+	t.Parallel()
+
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
+}
+
 func TestVPSProvider(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 

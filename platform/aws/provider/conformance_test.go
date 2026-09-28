@@ -28,6 +28,13 @@ func TestAWSProvider(t *testing.T) {
 	})
 }
 
+func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
+	t.Parallel()
+
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
+}
+
 func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	t.Parallel()
 

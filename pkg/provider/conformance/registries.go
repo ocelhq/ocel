@@ -3,6 +3,7 @@ package conformance
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -142,13 +143,16 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 		}
 	})
 
-	t.Run("a router this provider does not have is refused as invalid", func(t *testing.T) {
-		missing := router.Kind("no-such-router")
+	t.Run("a router this provider does not have is refused as invalid, naming no router", func(t *testing.T) {
+		missing := router.Kind("no-such-edge")
 		opened, err := routers.Open(missing)
 		if err == nil {
 			t.Fatalf("Open(%q) = %v, want a refusal", missing, opened)
 		}
 		requireInvalid(t, err, "Open")
+		if strings.Contains(strings.ToLower(err.Error()), "rout") {
+			t.Errorf("Open(%q) = %v; a router is never user-facing, so no error names one", missing, err)
+		}
 	})
 }
 

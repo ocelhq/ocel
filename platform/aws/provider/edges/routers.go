@@ -27,7 +27,7 @@ func (r Routers) Open(kind router.Kind) (router.Router, error) {
 	construct, ok := routerConstructors[kind]
 	if !ok {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"this provider routes through no %q; it routes through %s", kind, supportedList())
+			"this provider cannot front deployments with the %q edge; it supports %s", kind, supportedList())
 	}
 	return construct(r.Deps), nil
 }

@@ -26,7 +26,7 @@ func (r Routers) Open(kind router.Kind) (router.Router, error) {
 	shared := r.edges.Edge(edge.Kind(kind))
 	if shared == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the reference provider routes through no %q; it routes through %s", kind, kindList(r.edges.kinds()))
+			"the reference provider serves no edge %q; it serves %s", kind, kindList(r.edges.kinds()))
 	}
 	return Router{edge: shared}, nil
 }

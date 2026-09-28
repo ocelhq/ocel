@@ -17,5 +17,5 @@ func (r routers) Open(kind router.Kind) (router.Router, error) {
 		return alb.NewRouter(r.edges.openALB()), nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
-		"this provider routes through %q and %q, not %q", direct.Kind, alb.Kind, kind)
+		"this provider cannot front deployments with the %q edge; it fronts them with %q or %q", kind, direct.Kind, alb.Kind)
 }
