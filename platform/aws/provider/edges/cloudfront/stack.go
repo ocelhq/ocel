@@ -176,19 +176,6 @@ func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, re
 	return routes.apply(ctx, puts, nil)
 }
 
-func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (router.Promotion, bool, error) {
-	history, err := s.openLedger(c).History(ctx, pointer)
-	if err != nil {
-		return router.Promotion{}, false, err
-	}
-	for _, entry := range history {
-		if entry.Active {
-			return entry.Promotion, true, nil
-		}
-	}
-	return router.Promotion{}, false, nil
-}
-
 func (s *stack) servedHostnames(pointer string) []string {
 	if host := s.previewHost(pointer); host != "" {
 		return []string{host}
@@ -359,7 +346,7 @@ func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) err
 	if !s.provisioned() {
 		return nil
 	}
-	active, found, err := s.activePromotion(ctx, c, router.DefaultPointer)
+	active, found, err := s.openLedger(c).ReadActive(ctx, router.DefaultPointer)
 	if err != nil || !found {
 		return err
 	}

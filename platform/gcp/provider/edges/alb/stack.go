@@ -187,15 +187,11 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	if app == "" {
 		return "", nil
 	}
-	history, err := s.openLedger().History(ctx, "")
-	if err != nil {
+	active, found, err := s.openLedger().ReadActive(ctx, "")
+	if err != nil || !found {
 		return "", err
 	}
-	at := slices.IndexFunc(history, func(entry router.HistoryEntry) bool { return entry.Active })
-	if at < 0 {
-		return "", nil
-	}
-	identity, released := history[at].Builds[app]
+	identity, released := active.Builds[app]
 	if !released {
 		return "", nil
 	}
