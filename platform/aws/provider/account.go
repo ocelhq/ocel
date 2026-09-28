@@ -11,28 +11,29 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-type classEdge struct {
-	class edge.Class
-	kind  edge.Kind
+type tierEdge struct {
+	tier environment.Tier
+	kind edge.Kind
 }
 
 func (p *Provider) Region() string { return p.aws.Region }
 
-func (p *Provider) bootstrapped(ctx context.Context, class edge.Class) (bootstrap.Deployed, error) {
-	return p.deployed.resolve(class, func() (bootstrap.Deployed, error) {
-		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, string(class))
+func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
+	return p.deployed.resolve(tier, func() (bootstrap.Deployed, error) {
+		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, string(tier))
 	})
 }
 
-func (p *Provider) classParams(ctx context.Context, class edge.Class, kind edge.Kind) (bootstrap.ClassParams, error) {
-	return p.params.resolve(classEdge{class: class, kind: kind}, func() (bootstrap.ClassParams, error) {
+func (p *Provider) tierParams(ctx context.Context, tier environment.Tier, kind edge.Kind) (bootstrap.TierParams, error) {
+	return p.params.resolve(tierEdge{tier: tier, kind: kind}, func() (bootstrap.TierParams, error) {
 		if kind == "" {
-			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(class))
+			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(tier))
 		}
-		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(class), kind)
+		return bootstrap.ReadTierParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(tier), kind)
 	})
 }
 

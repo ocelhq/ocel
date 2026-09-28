@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
 func complete() Manifest {
-	return Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
+	return Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
 }
 
 func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
@@ -34,7 +34,7 @@ func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
 func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	t.Parallel()
 	manifest := complete()
-	manifest.Class, manifest.Environment = "preview", "pr-7"
+	manifest.Tier, manifest.Environment = "preview", "pr-7"
 	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION", Folder: "/web"})
 	rendered, err := Render(manifest)
 	if err != nil {
@@ -44,7 +44,7 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() = %v", err)
 	}
-	if parsed.Slug != "shop" || parsed.Class != "preview" || parsed.Environment != "pr-7" ||
+	if parsed.Slug != "shop" || parsed.Tier != "preview" || parsed.Environment != "pr-7" ||
 		len(parsed.Keys) != 2 || parsed.Keys[1].Folder != "/web" {
 		t.Errorf("Parse(Render()) = %+v, want %+v", parsed, manifest)
 	}
@@ -53,9 +53,9 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 func TestAManifestMissingWhatScopesTheStoreIsRefused(t *testing.T) {
 	t.Parallel()
 	for name, sabotage := range map[string]func(*Manifest){
-		"slug":                      func(m *Manifest) { m.Slug = "" },
-		"class":                     func(m *Manifest) { m.Class = "" },
-		"a class nothing is called": func(m *Manifest) { m.Class = "staging" },
+		"slug":                     func(m *Manifest) { m.Slug = "" },
+		"tier":                     func(m *Manifest) { m.Tier = "" },
+		"a tier nothing is called": func(m *Manifest) { m.Tier = "staging" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			manifest := complete()
@@ -93,7 +93,7 @@ func aKey(t *testing.T) []byte {
 	return key
 }
 
-var bound = records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
+var bound = records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
 
 func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
 	t.Parallel()
@@ -140,21 +140,21 @@ func TestAValueAlreadySealedOnTheBoxStillOpensUnderTheKeyAndCoordinateItWasSeale
 	if err := os.WriteFile(filepath.Join(root, "production", "seal.key"), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	at := records.SealScope{Project: "shop", Class: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+	at := records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
 	opened, err := Cipher{Root: root}.Open(context.Background(), at, sealed)
 	if err != nil || string(opened) != "sk_live_secret" {
 		t.Fatalf("Open() = %q, %v, want the value sealed at shop/production/staging/%%2Fweb//STRIPE_API_KEY/ to open: every value on a box is bound to those bytes", opened, err)
 	}
 }
 
-func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
+func TestTheSealerReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	key := aKey(t)
-	if err := os.MkdirAll(filepath.Dir(KeyPath(root, bound.Class)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(KeyPath(root, bound.Tier)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(KeyPath(root, bound.Class), key, 0o400); err != nil {
+	if err := os.WriteFile(KeyPath(root, bound.Tier), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
 	vault := Cipher{Root: root}
@@ -163,9 +163,9 @@ func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
 		t.Fatalf("Open() = %q, %v", opened, err)
 	}
 	preview := bound
-	preview.Class = edge.ClassPreview
+	preview.Tier = environment.TierPreview
 	if _, err := vault.Open(context.Background(), preview, sealFor(t, key, preview, "hunter2")); err == nil {
-		t.Error("a preview value opened under the production key, and each class is sealed to its own")
+		t.Error("a preview value opened under the production key, and each tier is sealed to its own")
 	}
 	if _, err := vault.Seal(context.Background(), bound, []byte("x")); err == nil {
 		t.Error("the box-side sealer sealed something, and sealing is the helper's under sudo alone")
@@ -174,11 +174,11 @@ func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
 
 func writeRecord(t *testing.T, root string, name records.Name, body string) {
 	t.Helper()
-	class, encoded, err := Located(name)
+	tier, encoded, err := Located(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(RecordsDir(root, class), encoded+recordSuffix)
+	path := filepath.Join(RecordsDir(root, tier), encoded+recordSuffix)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}

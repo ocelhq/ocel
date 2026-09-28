@@ -13,6 +13,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -30,7 +31,7 @@ func previewAPIs(t *testing.T, w *world, pointers ...string) []string {
 	t.Helper()
 	var ids []string
 	for _, pointer := range pointers {
-		api := w.gateway.named(apiName(defaultNamespace, conformanceSlug, edge.ClassPreview, pointer))
+		api := w.gateway.named(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, pointer))
 		if api == nil {
 			t.Fatalf("no REST API for %s; the gateway saw %v", pointer, w.gateway.mutations())
 		}

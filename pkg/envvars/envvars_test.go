@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -15,7 +15,7 @@ import (
 
 func fixture() (envvars.Store, envvars.Scope) {
 	return envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
-		envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+		envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 }
 
 func at(key string) envvars.Coordinate {
@@ -116,11 +116,11 @@ func TestAValueOverTheCapIsRefused(t *testing.T) {
 	}
 }
 
-func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
+func TestAnEnvironmentValueShadowsTheTierWideOne(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "class-wide", nil); err != nil {
+	if _, err := store.Set(ctx, scope, at("KEY"), "tier-wide", nil); err != nil {
 		t.Fatal(err)
 	}
 	scoped := envvars.Coordinate{Cell: envvars.Cell{Key: "KEY"}, Environment: "pr-7"}
@@ -134,17 +134,17 @@ func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
 		t.Fatalf("the environment's reader saw %q, %v, want the environment's own value", seen["KEY"], err)
 	}
 
-	classWide := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
-	seen, err = classWide.Values(ctx, []envvars.Cell{{Key: "KEY"}})
-	if err != nil || seen["KEY"] != "class-wide" {
-		t.Fatalf("the class-wide reader saw %q, %v", seen["KEY"], err)
+	tierWide := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	seen, err = tierWide.Values(ctx, []envvars.Cell{{Key: "KEY"}})
+	if err != nil || seen["KEY"] != "tier-wide" {
+		t.Fatalf("the tier-wide reader saw %q, %v", seen["KEY"], err)
 	}
 }
 
 func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -162,7 +162,7 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 		t.Fatalf("the reference's metadata names %v, want the target it points at", revealed.Target)
 	}
 
-	deeper := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	deeper := envvars.Scope{Project: "web", Tier: environment.TierProduction}
 	_, err = store.SetReference(ctx, deeper, at("DATABASE_URL"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "DATABASE_URL"}})
 	if !errors.Is(err, envvars.ErrWouldDeepen) {
 		t.Fatalf("a reference to a reference = %v, want ErrWouldDeepen", err)
@@ -172,8 +172,8 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
-	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
+	consumer := envvars.Scope{Project: "web", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 func TestSettingAValueOverAReferenceIsRefused(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 	}
 	target := envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}
 	for _, project := range []string{"web", "worker"} {
-		consumer := envvars.Scope{Project: project, Class: edge.ClassProduction}
+		consumer := envvars.Scope{Project: project, Tier: environment.TierProduction}
 		if _, err := store.SetReference(ctx, consumer, at("KEY"), target); err != nil {
 			t.Fatal(err)
 		}
@@ -233,7 +233,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 		t.Fatalf("References() = %+v, want them sorted", found)
 	}
 
-	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	consumer := envvars.Scope{Project: "web", Tier: environment.TierProduction}
 	if _, err := store.Delete(ctx, consumer, at("KEY"), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestRevealAnswersOnlyTheCellsThatHaveValues(t *testing.T) {
 func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	consumer := envvars.Scope{Project: "web", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
@@ -305,7 +305,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 		t.Fatalf("References() after the consuming project was purged = %+v, %v, want nothing reading it", found, err)
 	}
 
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
 	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestPurgeTakesEveryRecordAProjectOwns(t *testing.T) {
 	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatal(err)
 	}
-	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	consumer := envvars.Scope{Project: "web", Tier: environment.TierProduction}
 	if _, err := store.SetReference(ctx, consumer, at("KEY"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -421,11 +421,11 @@ func TestABindingIsRemovedAndItsNameFreed(t *testing.T) {
 	}
 }
 
-func TestABindingPublishedToAnEnvironmentShadowsTheClassWidePair(t *testing.T) {
+func TestABindingPublishedToAnEnvironmentShadowsTheTierWidePair(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte(`{"class":true}`), Value: []byte("class-wide")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte(`{"tier":true}`), Value: []byte("tier-wide")}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", envvars.BindingWrite{Record: []byte(`{"env":true}`), Value: []byte("pr-7 only")}); err != nil {
@@ -437,8 +437,8 @@ func TestABindingPublishedToAnEnvironmentShadowsTheClassWidePair(t *testing.T) {
 		t.Fatalf("ResolveBinding() in the environment = %q, %v", published.Value, err)
 	}
 	published, err = store.ResolveBinding(ctx, scope, "", "db")
-	if err != nil || string(published.Value) != "class-wide" {
-		t.Fatalf("ResolveBinding() class-wide = %q, %v", published.Value, err)
+	if err != nil || string(published.Value) != "tier-wide" {
+		t.Fatalf("ResolveBinding() tier-wide = %q, %v", published.Value, err)
 	}
 
 	summaries, err := store.ListBindings(ctx, scope, "pr-7")
@@ -468,7 +468,7 @@ func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -498,15 +498,15 @@ func TestAnUnpublishedBindingIsNotFound(t *testing.T) {
 	}
 }
 
-func TestTheClassWideEnvironmentIsReserved(t *testing.T) {
+func TestTheTierWideEnvironmentIsReserved(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
 	if err := envvars.ValidateBindingEnvironment("*"); err == nil {
-		t.Fatal("the class-wide token was accepted as an environment name")
+		t.Fatal("the tier-wide token was accepted as an environment name")
 	}
 	if _, err := store.SetBinding(ctx, scope, "*", "neon", "db", envvars.BindingWrite{}); err == nil {
-		t.Fatal("SetBinding() to the class-wide token succeeded, want it refused")
+		t.Fatal("SetBinding() to the tier-wide token succeeded, want it refused")
 	}
 	if _, err := store.SetBinding(ctx, scope, "", "", "db", envvars.BindingWrite{}); err == nil {
 		t.Fatal("SetBinding() with no publisher succeeded, want it refused")
@@ -548,7 +548,7 @@ func (c *counted) Open(ctx context.Context, at records.SealScope, sealed []byte)
 func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Tier: environment.TierProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)

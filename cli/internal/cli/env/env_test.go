@@ -231,7 +231,7 @@ func TestRunEnvSet(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		err := runEnvSet(context.Background(), streamedDeps(&stderr), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runEnvSet against preview infrastructure err = nil, want a class-mismatch refusal")
+			t.Fatal("runEnvSet against preview infrastructure err = nil, want a tier-mismatch refusal")
 		}
 	})
 

@@ -138,11 +138,11 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this class has no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(spec.Ref.Class))
+			"this tier has no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(spec.Ref.Tier))
 	}
 	if r.cfg.AppBoundaryARN == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, provider.BootstrapCommand(spec.Ref.Class))
+			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, provider.BootstrapCommand(spec.Ref.Tier))
 	}
 	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
@@ -161,7 +161,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 		values.ValuesTableARN = r.cfg.VarsTableARN
 		values.VarsReferenced = bundle.Referenced
 		values.Slug = r.cfg.Slug
-		values.VarsClass = string(r.cfg.Class)
+		values.VarsTier = string(r.cfg.Tier)
 	}
 	return &containerWork{
 		app:        app.App,
@@ -252,7 +252,7 @@ func (r *release) placeRule(ctx context.Context, work *containerWork) error {
 	}
 	if work.priority = rulePriority(work.physical(), taken); work.priority == 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the container front for the %s class has a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Class, work.app)
+			"the container front for the %s tier has a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Tier, work.app)
 	}
 	return nil
 }
@@ -568,7 +568,7 @@ func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, p
 }
 
 func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {
-	infra, present, err := r.readContainerInfra(ctx, spec.Ref.Class)
+	infra, present, err := r.readContainerInfra(ctx, spec.Ref.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -576,9 +576,9 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		return provider.Plan{Groups: []provider.ChangeGroup{
 			{
 				Kind:   provider.StackGroupKind,
-				Name:   containerInfraRef(spec.Ref.Class).Name.String(),
+				Name:   containerInfraRef(spec.Ref.Tier).Name.String(),
 				Action: provider.ActionCreate,
-				Reason: "the first container deploy in the " + string(spec.Ref.Class) + " class provisions the load balancer and cluster every container app in it shares",
+				Reason: "the first container deploy in the " + string(spec.Ref.Tier) + " tier provisions the load balancer and cluster every container app in it shares",
 				Slow:   true,
 			},
 			{

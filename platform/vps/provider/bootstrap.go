@@ -3,7 +3,7 @@ package vps
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -31,9 +31,9 @@ func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return e.Bootstrap.Apply(ctx, req, progress)
 }
 
-func (e elevating) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
+func (e elevating) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}
-	return e.Bootstrap.Remove(ctx, class, progress)
+	return e.Bootstrap.Remove(ctx, tier, progress)
 }

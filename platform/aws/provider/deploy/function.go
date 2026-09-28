@@ -325,7 +325,7 @@ type executionRole struct {
 
 	ValuesTableARN string
 	Slug           string
-	VarsClass      string
+	VarsTier       string
 	VarsReferenced []string
 
 	BindingPolicies []bindingPolicy
@@ -337,7 +337,7 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, byte
 		role.ValuesTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = cfg.Slug
-		role.VarsClass = string(cfg.Class)
+		role.VarsTier = string(cfg.Tier)
 	}
 	return role
 }

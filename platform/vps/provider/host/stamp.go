@@ -3,7 +3,7 @@ package host
 import (
 	"encoding/json"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -19,14 +19,14 @@ type Stamp struct {
 	Digests map[string]string `json:"digests"`
 }
 
-func (s Stamp) item(class edge.Class) (Item, error) {
+func (s Stamp) item(tier environment.Tier) (Item, error) {
 	written, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return Item{}, err
 	}
 	return Item{
 		Kind:    KindFile,
-		Name:    StampPath(class),
+		Name:    StampPath(tier),
 		Mode:    0o644,
 		Owner:   rootOwner,
 		Content: append(written, '\n'),

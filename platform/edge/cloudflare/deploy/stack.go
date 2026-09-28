@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
@@ -26,26 +27,26 @@ const secretBytes = 32
 
 const longestAccountName = 63
 
-func storeScriptNameFor(namespace string, class edge.Class) (string, error) {
-	return accountNameFor("deployments store", namespace, class, "deployments-store")
+func storeScriptNameFor(namespace string, tier environment.Tier) (string, error) {
+	return accountNameFor("deployments store", namespace, tier, "deployments-store")
 }
 
-func isrWriterScriptNameFor(namespace string, class edge.Class) (string, error) {
-	return accountNameFor("isr writer", namespace, class, "isr-writer")
+func isrWriterScriptNameFor(namespace string, tier environment.Tier) (string, error) {
+	return accountNameFor("isr writer", namespace, tier, "isr-writer")
 }
 
-func accountNameFor(what, namespace string, class edge.Class, stem string) (string, error) {
+func accountNameFor(what, namespace string, tier environment.Tier, stem string) (string, error) {
 	if namespace == "" {
-		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this class depends on", what)
+		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this tier depends on", what)
 	}
 	var name string
-	switch class {
-	case edge.ClassProduction:
+	switch tier {
+	case environment.TierProduction:
 		name = namespace + "-" + stem
-	case edge.ClassPreview:
+	case environment.TierPreview:
 		name = namespace + "-" + stem + "-preview"
 	default:
-		return "", fmt.Errorf("%s: unknown class %q", what, class)
+		return "", fmt.Errorf("%s: unknown tier %q", what, tier)
 	}
 	if len(name) > longestAccountName {
 		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name allows at most %d; shorten the bootstrap namespace %q", what, name, len(name), longestAccountName, namespace)
@@ -230,7 +231,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	next.Endpoint = endpoint
 	next.Secret = id.secret
 	next.OwnerToken = id.ownerToken
-	next.Class = spec.Class
+	next.Tier = spec.Tier
 	return opened(next)
 }
 
@@ -338,7 +339,7 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 		apps = deployed
 	}
 
-	conventional, err := conventionWorkerNames(p.namespace, state.Slug, state.Class, apps)
+	conventional, err := conventionWorkerNames(p.namespace, state.Slug, state.Tier, apps)
 	if err != nil {
 		return nil, err
 	}

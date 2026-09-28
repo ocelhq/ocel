@@ -7,19 +7,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
-func (p *Provider) Buckets(ctx context.Context, class edge.Class) (awsports.Buckets, error) {
-	deployed, err := p.bootstrapped(ctx, class)
+func (p *Provider) Buckets(ctx context.Context, tier environment.Tier) (awsports.Buckets, error) {
+	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil {
 		return awsports.Buckets{}, err
 	}
 	buckets := awsports.Buckets{Functions: deployed.ArtifactBucket, Assets: deployed.AssetBucket}
 	for _, kind := range bootstrap.EdgeKindsFor(deployed.Features.Names()) {
-		params, err := p.classParams(ctx, class, kind)
+		params, err := p.tierParams(ctx, tier, kind)
 		if err != nil {
 			return buckets, err
 		}

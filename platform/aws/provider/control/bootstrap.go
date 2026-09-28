@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -83,18 +84,18 @@ func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 
 func (b Bootstrap) Catalogue() []provider.Feature { return bootstrap.Catalogue() }
 
-func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapDescription, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
+func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(tier))
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	description := described(class, read.Deployed)
+	description := described(tier, read.Deployed)
 	description.VendorState = read
 	return description, nil
 }
 
-func described(class edge.Class, deployed bootstrap.Deployed) provider.BootstrapDescription {
-	described := provider.BootstrapDescription{Class: class, Present: deployed.Present}
+func described(tier environment.Tier, deployed bootstrap.Deployed) provider.BootstrapDescription {
+	described := provider.BootstrapDescription{Tier: tier, Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
@@ -114,7 +115,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
-		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
+		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -122,7 +123,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, string(req.Class), adoptions, b.request(req))
+	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, string(req.Tier), adoptions, b.request(req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -136,10 +137,10 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {
-	if prior, passed := req.VendorState.(bootstrap.Reading); passed && prior.Class() == string(req.Class) {
+	if prior, passed := req.VendorState.(bootstrap.Reading); passed && prior.Tier() == string(req.Tier) {
 		return prior, nil
 	}
-	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Class))
+	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Tier))
 }
 
 func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
@@ -160,7 +161,7 @@ func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest)
 		if adopt == nil {
 			continue
 		}
-		adoption, err := adopt(ctx, req.Class)
+		adoption, err := adopt(ctx, req.Tier)
 		if err != nil {
 			return nil, fmt.Errorf("read what the %s edge hands this account to store: %w", kind, err)
 		}
@@ -172,7 +173,7 @@ func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest)
 func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest) ([]provider.ChangeGroup, error) {
 	var groups []provider.ChangeGroup
 	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
-		group, err := b.installedEdgeGroup(ctx, req.Class, kind)
+		group, err := b.installedEdgeGroup(ctx, req.Tier, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +182,7 @@ func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest
 		}
 	}
 	for _, kind := range bootstrap.EdgeKindsFor(bootstrap.Removing(req.Features, req.Remove)) {
-		group, err := b.severedEdge(ctx, req.Class, kind)
+		group, err := b.severedEdge(ctx, req.Tier, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -192,12 +193,12 @@ func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest
 	return groups, nil
 }
 
-func (b Bootstrap) installedEdgeGroup(ctx context.Context, class edge.Class, kind edge.Kind) (*provider.ChangeGroup, error) {
+func (b Bootstrap) installedEdgeGroup(ctx context.Context, tier environment.Tier, kind edge.Kind) (*provider.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
 	}
-	planned, err := plannedBootstrap(ctx, front, class)
+	planned, err := plannedBootstrap(ctx, front, tier)
 	if err != nil || len(planned) == 0 {
 		return nil, err
 	}
@@ -208,30 +209,30 @@ func (b Bootstrap) installedEdgeGroup(ctx context.Context, class edge.Class, kin
 	return &group, nil
 }
 
-func plannedBootstrap(ctx context.Context, front edge.Edge, class edge.Class) ([]edge.PlanChange, error) {
+func plannedBootstrap(ctx context.Context, front edge.Edge, tier environment.Tier) ([]edge.PlanChange, error) {
 	plan := front.Hooks().PlanBootstrap
 	if plan == nil {
 		return nil, nil
 	}
-	planned, err := plan(ctx, class)
+	planned, err := plan(ctx, tier)
 	if err != nil {
 		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
 	}
 	return planned, nil
 }
 
-func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.Kind) (*provider.ChangeGroup, error) {
+func (b Bootstrap) severedEdge(ctx context.Context, tier environment.Tier, kind edge.Kind) (*provider.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
 	}
-	group, err := b.removedEdgeGroup(ctx, class, front)
+	group, err := b.removedEdgeGroup(ctx, tier, front)
 	if err != nil {
 		return nil, err
 	}
 	feature := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
 	if group == nil {
-		planned, err := plannedBootstrap(ctx, front, class)
+		planned, err := plannedBootstrap(ctx, front, tier)
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +272,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
-	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Class), b.request(req), progress)
+	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Tier), b.request(req), progress)
 	if bootstrap.RefusedWrite(err) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
@@ -279,7 +280,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 }
 
 func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
-	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Class), bootstrap.HealRequest{
+	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Tier), bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
 	}, progress)
@@ -289,12 +290,12 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	return err
 }
 
-func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
+func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(tier))
 	if err != nil {
 		return err
 	}
-	fronts, err := b.installedEdges(ctx, class, read.Deployed)
+	fronts, err := b.installedEdges(ctx, tier, read.Deployed)
 	if err != nil {
 		return err
 	}
@@ -302,7 +303,7 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress progre
 		if progress != nil {
 			progress.Say(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
 		}
-		if err := front.Teardown(ctx, class); err != nil {
+		if err := front.Teardown(ctx, tier); err != nil {
 			return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 		}
 	}
@@ -311,7 +312,7 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress progre
 		SSM:     b.SSM,
 		IAM:     b.IAM,
 		Buckets: b.Buckets,
-	}, b.Namespace, string(class), progress)
+	}, b.Namespace, string(tier), progress)
 }
 
 func (b Bootstrap) apis() bootstrap.APIs {

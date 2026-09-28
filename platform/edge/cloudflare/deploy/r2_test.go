@@ -21,6 +21,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/user"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const testAccountID = "acct-123"
@@ -189,9 +190,9 @@ func offerValues(t *testing.T, out edge.BootstrapOutput) map[string]string {
 	return nil
 }
 
-func storeBootstrap(t *testing.T, ctx context.Context, s cacheStore, class edge.Class) (edge.BootstrapOutput, error) {
+func storeBootstrap(t *testing.T, ctx context.Context, s cacheStore, tier environment.Tier) (edge.BootstrapOutput, error) {
 	t.Helper()
-	state, err := s.read(ctx, testAccountID, class)
+	state, err := s.read(ctx, testAccountID, tier)
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -208,7 +209,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		tokens := &fakeTokens{value: "token-value"}
 		store := newTestStore(buckets, tokens, &fakeGroups{})
 
-		out, err := storeBootstrap(t, t.Context(), store, edge.ClassProduction)
+		out, err := storeBootstrap(t, t.Context(), store, environment.TierProduction)
 		if err != nil {
 			t.Fatalf("bootstrap: %v", err)
 		}
@@ -220,8 +221,8 @@ func TestCacheStoreBootstrap(t *testing.T) {
 			t.Fatalf("created %d buckets, want 1", len(buckets.created))
 		}
 		bucket := buckets.created[0].Name.Value
-		if bucket != cacheStoreName(edge.ClassProduction) {
-			t.Errorf("created bucket %q, want %q", bucket, cacheStoreName(edge.ClassProduction))
+		if bucket != cacheStoreName(environment.TierProduction) {
+			t.Errorf("created bucket %q, want %q", bucket, cacheStoreName(environment.TierProduction))
 		}
 
 		if len(tokens.minted) != 1 {
@@ -262,32 +263,32 @@ func TestCacheStoreBootstrap(t *testing.T) {
 	t.Run("production and preview each get their own bucket and token", func(t *testing.T) {
 		t.Parallel()
 
-		names := map[edge.Class]string{}
-		for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
+		names := map[environment.Tier]string{}
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 			buckets := &fakeBuckets{}
 			tokens := &fakeTokens{value: "token-value"}
-			out, err := storeBootstrap(t, t.Context(), newTestStore(buckets, tokens, &fakeGroups{}), class)
+			out, err := storeBootstrap(t, t.Context(), newTestStore(buckets, tokens, &fakeGroups{}), tier)
 			if err != nil {
-				t.Fatalf("bootstrap %s: %v", class, err)
+				t.Fatalf("bootstrap %s: %v", tier, err)
 			}
-			names[class] = offerValues(t, out)[edge.OfferKeyBucket]
-			if got := tokens.minted[0].Name.Value; got != names[class] {
-				t.Errorf("%s minted token %q, want it named for its own bucket %q", class, got, names[class])
+			names[tier] = offerValues(t, out)[edge.OfferKeyBucket]
+			if got := tokens.minted[0].Name.Value; got != names[tier] {
+				t.Errorf("%s minted token %q, want it named for its own bucket %q", tier, got, names[tier])
 			}
 		}
-		if names[edge.ClassProduction] == names[edge.ClassPreview] {
-			t.Errorf("production and preview share the bucket %q; each class needs its own", names[edge.ClassProduction])
+		if names[environment.TierProduction] == names[environment.TierPreview] {
+			t.Errorf("production and preview share the bucket %q; each tier needs its own", names[environment.TierProduction])
 		}
 	})
 
 	t.Run("an existing bucket and token are reused rather than remade", func(t *testing.T) {
 		t.Parallel()
 
-		name := cacheStoreName(edge.ClassProduction)
+		name := cacheStoreName(environment.TierProduction)
 		buckets := &fakeBuckets{existing: map[string]bool{name: true}}
 		tokens := &fakeTokens{existing: []shared.Token{{ID: "already-minted", Name: name}}}
 
-		out, err := storeBootstrap(t, t.Context(), newTestStore(buckets, tokens, &fakeGroups{}), edge.ClassProduction)
+		out, err := storeBootstrap(t, t.Context(), newTestStore(buckets, tokens, &fakeGroups{}), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("bootstrap: %v", err)
 		}
@@ -312,7 +313,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 
 		tokens := &fakeTokens{value: "token-value", newErr: &cf.Error{StatusCode: http.StatusForbidden}}
 
-		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), environment.TierProduction)
 		if err == nil {
 			t.Fatal("expected an error when the operator's token cannot mint")
 		}
@@ -328,7 +329,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 
 		tokens := &fakeTokens{value: "token-value", verifyFails: 2}
 
-		out, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
+		out, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("a 403 while a freshly minted token propagates is not fatal: %v", err)
 		}
@@ -345,7 +346,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 
 		tokens := &fakeTokens{value: "token-value", verifyFails: tokenPropagationAttempts + 5}
 
-		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), environment.TierProduction)
 		if err == nil {
 			t.Fatal("expected an error once the attempt budget is spent")
 		}
@@ -357,10 +358,10 @@ func TestCacheStoreBootstrap(t *testing.T) {
 	t.Run("a minted but unusable token names the recovery path", func(t *testing.T) {
 		t.Parallel()
 
-		name := cacheStoreName(edge.ClassProduction)
+		name := cacheStoreName(environment.TierProduction)
 		tokens := &fakeTokens{value: "token-value", verifyFails: tokenPropagationAttempts}
 
-		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), edge.ClassProduction)
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, tokens, &fakeGroups{}), environment.TierProduction)
 		if err == nil {
 			t.Fatal("expected an error when the minted token never becomes usable")
 		}
@@ -384,7 +385,7 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		_, err := storeBootstrap(t, ctx, store, edge.ClassProduction)
+		_, err := storeBootstrap(t, ctx, store, environment.TierProduction)
 		if err == nil {
 			t.Fatal("expected an error once the caller has given up")
 		}
@@ -393,12 +394,12 @@ func TestCacheStoreBootstrap(t *testing.T) {
 		}
 	})
 
-	t.Run("a class with no cache store is an error", func(t *testing.T) {
+	t.Run("a tier with no cache store is an error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, &fakeTokens{}, &fakeGroups{}), edge.Class("staging"))
+		_, err := storeBootstrap(t, t.Context(), newTestStore(&fakeBuckets{}, &fakeTokens{}, &fakeGroups{}), environment.Tier("staging"))
 		if err == nil {
-			t.Fatal("expected an error for a class with no cache store")
+			t.Fatal("expected an error for a tier with no cache store")
 		}
 	})
 }
@@ -409,7 +410,7 @@ func TestCacheStoreTeardown(t *testing.T) {
 	t.Run("it empties the bucket, deletes it and revokes the token", func(t *testing.T) {
 		t.Parallel()
 
-		name := cacheStoreName(edge.ClassProduction)
+		name := cacheStoreName(environment.TierProduction)
 		buckets := &fakeBuckets{existing: map[string]bool{name: true}}
 		tokens := &fakeTokens{existing: []shared.Token{{ID: "token-id", Name: name}}}
 		objects := &fakeObjects{pages: [][]string{{"prod/a"}, {"prod/b"}}}
@@ -423,7 +424,7 @@ func TestCacheStoreTeardown(t *testing.T) {
 			return objects
 		}
 
-		if err := store.teardown(t.Context(), testAccountID, edge.ClassProduction); err != nil {
+		if err := store.teardown(t.Context(), testAccountID, environment.TierProduction); err != nil {
 			t.Fatalf("teardown: %v", err)
 		}
 		if !slices.Equal(objects.deleted, []string{"prod/a", "prod/b"}) {
@@ -440,16 +441,16 @@ func TestCacheStoreTeardown(t *testing.T) {
 		}
 	})
 
-	t.Run("it takes only its own class", func(t *testing.T) {
+	t.Run("it takes only its own tier", func(t *testing.T) {
 		t.Parallel()
 
-		production := cacheStoreName(edge.ClassProduction)
-		preview := cacheStoreName(edge.ClassPreview)
+		production := cacheStoreName(environment.TierProduction)
+		preview := cacheStoreName(environment.TierPreview)
 		buckets := &fakeBuckets{existing: map[string]bool{production: true, preview: true}}
 		tokens := &fakeTokens{existing: []shared.Token{{ID: "prod-token", Name: production}, {ID: "preview-token", Name: preview}}}
 		store := newTestStore(buckets, tokens, &fakeGroups{})
 
-		if err := store.teardown(t.Context(), testAccountID, edge.ClassPreview); err != nil {
+		if err := store.teardown(t.Context(), testAccountID, environment.TierPreview); err != nil {
 			t.Fatalf("teardown: %v", err)
 		}
 		if !slices.Equal(buckets.deleted, []string{preview}) {
@@ -466,7 +467,7 @@ func TestCacheStoreTeardown(t *testing.T) {
 		buckets := &fakeBuckets{deleteErr: &cf.Error{StatusCode: http.StatusNotFound}}
 		store := newTestStore(buckets, &fakeTokens{}, &fakeGroups{})
 
-		if err := store.teardown(t.Context(), testAccountID, edge.ClassProduction); err != nil {
+		if err := store.teardown(t.Context(), testAccountID, environment.TierProduction); err != nil {
 			t.Fatalf("teardown: %v", err)
 		}
 	})
@@ -474,7 +475,7 @@ func TestCacheStoreTeardown(t *testing.T) {
 	t.Run("objects R2 refuses to delete are named, and the bucket stays", func(t *testing.T) {
 		t.Parallel()
 
-		name := cacheStoreName(edge.ClassProduction)
+		name := cacheStoreName(environment.TierProduction)
 		buckets := &fakeBuckets{existing: map[string]bool{name: true}}
 		tokens := &fakeTokens{existing: []shared.Token{{ID: "token-id", Name: name}}}
 		store := newTestStore(buckets, tokens, &fakeGroups{})
@@ -485,7 +486,7 @@ func TestCacheStoreTeardown(t *testing.T) {
 			}
 		}
 
-		err := store.teardown(t.Context(), testAccountID, edge.ClassProduction)
+		err := store.teardown(t.Context(), testAccountID, environment.TierProduction)
 		if err == nil {
 			t.Fatal("teardown = nil, want the refused objects reported")
 		}
@@ -499,12 +500,12 @@ func TestCacheStoreTeardown(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown class removes nothing", func(t *testing.T) {
+	t.Run("an unknown tier removes nothing", func(t *testing.T) {
 		t.Parallel()
 
 		buckets := &fakeBuckets{}
-		if err := newTestStore(buckets, &fakeTokens{}, &fakeGroups{}).teardown(t.Context(), testAccountID, edge.Class("nonsense")); err == nil {
-			t.Fatal("teardown(unknown class) = nil, want an error")
+		if err := newTestStore(buckets, &fakeTokens{}, &fakeGroups{}).teardown(t.Context(), testAccountID, environment.Tier("nonsense")); err == nil {
+			t.Fatal("teardown(unknown tier) = nil, want an error")
 		}
 		if len(buckets.deleted) != 0 {
 			t.Errorf("deleted buckets = %v, want none", buckets.deleted)

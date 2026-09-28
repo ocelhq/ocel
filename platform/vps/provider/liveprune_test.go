@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -36,13 +37,13 @@ func prunedAndRestarted(t *testing.T, front string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: edge.ClassProduction, WrittenBy: "live-suite"}, nil); err != nil {
-		t.Fatalf("Apply(%s) behind %s = %v", edge.ClassProduction, front, err)
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: environment.TierProduction, WrittenBy: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) behind %s = %v", environment.TierProduction, front, err)
 	}
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
-		if err := bootstrap.Remove(ctx, edge.ClassProduction, nil); err != nil {
-			t.Errorf("Remove(%s) = %v", edge.ClassProduction, err)
+		if err := bootstrap.Remove(ctx, environment.TierProduction, nil); err != nil {
+			t.Errorf("Remove(%s) = %v", environment.TierProduction, err)
 		}
 	})
 
@@ -52,7 +53,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stack, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Class: edge.ClassProduction, Slug: frontedSlug}, edge.StackState{})
+	stack, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Tier: environment.TierProduction, Slug: frontedSlug}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -73,7 +74,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 	}
 
 	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
-		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
+		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network started again from what bootstrap left", err)
 	}
@@ -89,7 +90,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 		t.Errorf("%s answered %q for %s after a deploy onto the restored switchboard, want two", front, served, frontedHostname)
 	}
 
-	checks, err := d.CheckHost(ctx, provider.HostCheckRequest{Class: edge.ClassProduction})
+	checks, err := d.CheckHost(ctx, provider.HostCheckRequest{Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}

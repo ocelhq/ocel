@@ -40,7 +40,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 	t.Run("mints once and records when", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt)
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -55,7 +55,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 			t.Errorf("stored = %+v, want the mint time recorded and no predecessor", first)
 		}
 
-		outcome, err = ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt.Add(24*time.Hour))
+		outcome, err = ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt.Add(24*time.Hour))
 		if err != nil {
 			t.Fatalf("ensureOriginSecret (second run): %v", err)
 		}
@@ -66,7 +66,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 			t.Errorf("second bootstrap stored %q, want %q kept", again.Current, first.Current)
 		}
 
-		if _, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassPreview, secretMintedAt); err != nil {
+		if _, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierPreview, secretMintedAt); err != nil {
 			t.Fatalf("ensureOriginSecret (preview): %v", err)
 		}
 		if preview := storedOriginSecret(t, ssmc, previewOriginSecret); preview.Current == first.Current {
@@ -78,7 +78,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 		winner, _ := json.Marshal(OriginSecret{Current: "the-other-bootstraps-secret", CreatedAt: secretMintedAt})
 		ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: string(winner)}
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt)
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret lost a race instead of converging: %v", err)
 		}
@@ -90,9 +90,9 @@ func TestEnsureOriginSecret(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a class it has no parameter for", func(t *testing.T) {
+	t.Run("refuses a tier it has no parameter for", func(t *testing.T) {
 		if _, err := ensureOriginSecret(context.Background(), newFakeSSM(), defaultNamespace, "staging", secretMintedAt); err == nil {
-			t.Error("an unknown class minted a secret, want the class refused")
+			t.Error("an unknown tier minted a secret, want the tier refused")
 		}
 	})
 
@@ -100,7 +100,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 		ssmc := newFakeSSM()
 		ssmc.params[originSecretParam] = "5e884898da28047151d0e56f8dc6292773603d0d"
 
-		_, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt)
+		_, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt)
 		if err == nil || !strings.Contains(err.Error(), originSecretParam) {
 			t.Fatalf("err = %v, want the parameter named so the operator can delete it", err)
 		}
@@ -121,7 +121,7 @@ func TestOriginSecretRotation(t *testing.T) {
 	t.Run("a secret younger than the maximum age is kept", func(t *testing.T) {
 		ssmc := minted(t)
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt.Add(OriginSecretMaxAge-time.Second))
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt.Add(OriginSecretMaxAge-time.Second))
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -134,7 +134,7 @@ func TestOriginSecretRotation(t *testing.T) {
 		ssmc := minted(t)
 		rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, rotatedAt)
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, rotatedAt)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -155,7 +155,7 @@ func TestOriginSecretRotation(t *testing.T) {
 		rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 		recordOriginSecret(t, ssmc, originSecretParam, OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt})
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, rotatedAt.Add(OriginSecretGrace))
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, rotatedAt.Add(OriginSecretGrace))
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -173,7 +173,7 @@ func TestOriginSecretRotation(t *testing.T) {
 		rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 		recordOriginSecret(t, ssmc, originSecretParam, OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt})
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, rotatedAt.Add(OriginSecretGrace-time.Hour))
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, rotatedAt.Add(OriginSecretGrace-time.Hour))
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -186,7 +186,7 @@ func TestOriginSecretRotation(t *testing.T) {
 		ssmc := newFakeSSM()
 		recordOriginSecret(t, ssmc, originSecretParam, OriginSecret{Current: "s2", CreatedAt: secretMintedAt, Previous: "s1", RotatedAt: secretMintedAt.Add(OriginSecretMaxAge - time.Hour)})
 
-		_, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt.Add(OriginSecretMaxAge))
+		_, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt.Add(OriginSecretMaxAge))
 		if err == nil || !strings.Contains(err.Error(), "re-deploy every project") {
 			t.Fatalf("err = %v, want a refusal that says what to do", err)
 		}
@@ -199,7 +199,7 @@ func TestOriginSecretRotation(t *testing.T) {
 		ssmc := newFakeSSM()
 		recordOriginSecret(t, ssmc, originSecretParam, OriginSecret{Current: "s2", CreatedAt: secretMintedAt, Previous: "s1", RotatedAt: secretMintedAt})
 
-		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt.Add(OriginSecretMaxAge))
+		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, secretMintedAt.Add(OriginSecretMaxAge))
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -232,10 +232,10 @@ func TestOriginSecretPresentedToARelease(t *testing.T) {
 func TestStaleOriginSecretNotice(t *testing.T) {
 	aging := OriginSecret{Current: "s1", CreatedAt: secretMintedAt}
 
-	if notice := StaleOriginSecretNotice(aging, secretMintedAt.Add(OriginSecretMaxAge-time.Second), ClassProduction); notice != "" {
+	if notice := StaleOriginSecretNotice(aging, secretMintedAt.Add(OriginSecretMaxAge-time.Second), TierProduction); notice != "" {
 		t.Errorf("notice = %q, want none for a secret within its age", notice)
 	}
-	notice := StaleOriginSecretNotice(aging, secretMintedAt.Add(OriginSecretMaxAge+24*time.Hour), ClassProduction)
+	notice := StaleOriginSecretNotice(aging, secretMintedAt.Add(OriginSecretMaxAge+24*time.Hour), TierProduction)
 	for _, want := range []string{"91 days", "ocel bootstrap"} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("notice = %q, want it to contain %q", notice, want)
@@ -247,7 +247,7 @@ func TestStaleOriginSecretNotice(t *testing.T) {
 
 	rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 	rotating := OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}
-	notice = StaleOriginSecretNotice(rotating, rotatedAt.Add(2*24*time.Hour), ClassProduction)
+	notice = StaleOriginSecretNotice(rotating, rotatedAt.Add(2*24*time.Hour), TierProduction)
 	for _, want := range []string{"2 days ago", rotatedAt.Add(OriginSecretGrace).Format(time.DateOnly)} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("notice = %q, want it to contain %q", notice, want)
@@ -258,7 +258,7 @@ func TestStaleOriginSecretNotice(t *testing.T) {
 			t.Errorf("notice = %q, which contains the secret itself", notice)
 		}
 	}
-	if notice := StaleOriginSecretNotice(OriginSecret{}, secretMintedAt, ClassProduction); notice != "" {
+	if notice := StaleOriginSecretNotice(OriginSecret{}, secretMintedAt, TierProduction); notice != "" {
 		t.Errorf("notice = %q, want none when no secret is recorded", notice)
 	}
 }
@@ -282,7 +282,7 @@ func TestPlanOriginSecret(t *testing.T) {
 			if tc.existing != nil {
 				recordOriginSecret(t, ssmc, originSecretParam, *tc.existing)
 			}
-			change, err := planOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, tc.now)
+			change, err := planOriginSecret(context.Background(), ssmc, defaultNamespace, TierProduction, tc.now)
 			if err != nil {
 				t.Fatalf("planOriginSecret: %v", err)
 			}
@@ -302,43 +302,43 @@ func TestBootstrapParamsIncludeTheOriginSecret(t *testing.T) {
 	raw, _ := json.Marshal(OriginSecret{Current: "origin-2", CreatedAt: rotatedAt, Previous: "origin-1", RotatedAt: rotatedAt})
 	params[originSecretParam] = string(raw)
 
-	got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
+	got, err := ReadTierParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, TierProduction, KindCloudflare)
 	if err != nil {
-		t.Fatalf("ReadClassParams: %v", err)
+		t.Fatalf("ReadTierParams: %v", err)
 	}
 	if got.OriginSecret.Current != "origin-2" || got.OriginSecret.Previous != "origin-1" || !got.OriginSecret.RotatedAt.Equal(rotatedAt) {
 		t.Errorf("OriginSecret = %+v, want the rotation bootstrap recorded", got.OriginSecret)
 	}
 
-	core, err := ReadCoreParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction)
+	core, err := ReadCoreParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, TierProduction)
 	if err != nil {
 		t.Fatalf("ReadCoreParams: %v", err)
 	}
 	if core.OriginSecret != got.OriginSecret {
-		t.Errorf("ReadCoreParams = %+v, want the same record ReadClassParams reads", core.OriginSecret)
+		t.Errorf("ReadCoreParams = %+v, want the same record ReadTierParams reads", core.OriginSecret)
 	}
 
 	params[originSecretParam] = "origin-1"
-	bare, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
+	bare, err := ReadTierParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, TierProduction, KindCloudflare)
 	if err != nil {
-		t.Fatalf("ReadClassParams over a bare value = %v, want the read itself to succeed: a teardown presents no secret", err)
+		t.Fatalf("ReadTierParams over a bare value = %v, want the read itself to succeed: a teardown presents no secret", err)
 	}
 	if bare.OriginSecretErr == nil || !strings.Contains(bare.OriginSecretErr.Error(), originSecretParam) || !strings.Contains(bare.OriginSecretErr.Error(), "ocel bootstrap") {
 		t.Errorf("OriginSecretErr = %v; want the failure kept, naming the parameter and the bootstrap that replaces it, so a deploy never bakes in something the front will not present", bare.OriginSecretErr)
 	}
 
 	delete(params, originSecretParam)
-	absent, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
+	absent, err := ReadTierParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, TierProduction, KindCloudflare)
 	if err != nil {
-		t.Fatalf("ReadClassParams without the secret: %v", err)
+		t.Fatalf("ReadTierParams without the secret: %v", err)
 	}
 	if absent.OriginSecret.Present() {
 		t.Errorf("OriginSecret = %+v, want none when the parameter is absent", absent.OriginSecret)
 	}
 
-	names, err := ClassParamNames(defaultNamespace, ClassProduction)
+	names, err := TierParamNames(defaultNamespace, TierProduction)
 	if err != nil {
-		t.Fatalf("ClassParamNames: %v", err)
+		t.Fatalf("TierParamNames: %v", err)
 	}
 	if !slices.Contains(names, originSecretParam) {
 		t.Errorf("teardown deletes %v, want the origin secret among them", names)

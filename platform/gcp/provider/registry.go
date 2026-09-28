@@ -3,13 +3,13 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const registryUser = "oauth2accesstoken"
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ []string) (provider.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tier, _ []string) (provider.RegistryTarget, error) {
 	if p.emulated() {
 		return provider.RegistryTarget{}, nil
 	}
@@ -23,7 +23,7 @@ func (p *Provider) EnsureImageRegistry(ctx context.Context, class edge.Class, _ 
 	}
 	return provider.RegistryTarget{
 		Server:    p.options.Region + dockerRegistryHost,
-		Namespace: names.project + "/" + names.Repository(class),
+		Namespace: names.project + "/" + names.Repository(tier),
 		Username:  registryUser,
 		Password:  token,
 	}, nil

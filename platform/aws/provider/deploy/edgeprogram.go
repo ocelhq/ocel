@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type EdgeProgram struct {
-	Class             edge.Class
+	Tier              environment.Tier
 	Kind              edge.Kind
 	Namespace         string
 	Slug              string
@@ -44,7 +45,7 @@ func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
 		if p.StoreScriptName == "" {
 			return provider.EdgeProgram{}, refusal.Refuse(refusal.CodeNotReady,
 				"no deployments-store worker found for the preview bootstrap, and the shared preview entry reads every deployment through it; re-run `%s` to provision it",
-				provider.BootstrapCommand(edge.ClassPreview))
+				provider.BootstrapCommand(environment.TierPreview))
 		}
 		generic = withService(generic, storeServiceBinding, p.StoreScriptName)
 		generic = withVar(generic, envPreview, "1")
@@ -53,7 +54,7 @@ func (p EdgeProgram) Build() (provider.EdgeProgram, error) {
 		spec.Worker = generic
 		return provider.EdgeProgram{Spec: spec, Values: p.Values}, nil
 	}
-	if p.Class == edge.ClassPreview {
+	if p.Tier == environment.TierPreview {
 		spec.Name = previewWorkerName(p.Namespace, p.Slug)
 		spec.PruneWorkerStem = previewWorkerStem(p.Namespace, p.Slug)
 		spec.Worker = withPreviewVars(generic, p.PreviewBaseDomain, p.Apps)

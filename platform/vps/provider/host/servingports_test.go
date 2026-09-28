@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
@@ -66,7 +66,7 @@ func freshBox() *bench {
 }
 
 func withDocker() *bench {
-	rig := machine(map[edge.Class][]Item{edge.ClassProduction: EngineItems()})
+	rig := machine(map[environment.Tier][]Item{environment.TierProduction: EngineItems()})
 	rig.answer = func(command string) (session.Result, bool) {
 		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
@@ -78,10 +78,10 @@ const behindYourOwnProxy = "See https://ocel.dev/docs/providers/vps#behind-your-
 func refusedBeforeWriting(t *testing.T, rig *bench, front Front, want string) {
 	t.Helper()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	boot := NewBootstrap(rig.fronted(front), testVendor, "shop")
-	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
-	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		if refused := refusalOf(t, err, refusal.CodeNotReady); refused.Message != want {
 			t.Errorf("%s refused with\n%s\nwant\n%s", step, refused.Message, want)
@@ -141,13 +141,13 @@ func TestABootstrapOverASocketNoProcessCanBeNamedForSaysWhereItIsBound(t *testin
 func TestABootstrapWhoseServingPortsAreFreeOrOcelsOwnGoesAhead(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	for name, rig := range map[string]*bench{
 		"a fresh box":                   freshBox(),
-		"a box ocel's own proxy fronts": bootstrappedOn(t, class),
+		"a box ocel's own proxy fronts": bootstrappedOn(t, tier),
 	} {
 		portsOwnedOn(rig, map[string]string{caddy.HTTPPort: caddy.Container + "\n", "443": caddy.Container + "\n"})
-		if _, err := NewBootstrap(rig.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Class: class}); err != nil {
+		if _, err := NewBootstrap(rig.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Tier: tier}); err != nil {
 			t.Errorf("%s: Plan() = %v, want the bootstrap let through", name, err)
 		}
 	}
@@ -159,7 +159,7 @@ func TestABootstrapBehindYourOwnProxyLeavesWhatOwnsTheServingPortsAlone(t *testi
 	rig := freshBox()
 	portsOwnedOn(rig, nil, socketOwner{80, "nginx"}, socketOwner{443, "nginx"})
 	if _, err := NewBootstrap(rig.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
-		provider.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
+		provider.BootstrapRequest{Tier: environment.TierProduction}); err != nil {
 		t.Fatalf("Plan() = %v, want a box routed by hand free to keep its own proxy on 80 and 443", err)
 	}
 	if slices.ContainsFunc(rig.commands(), func(command string) bool { return strings.HasPrefix(command, ownersCommand) }) {

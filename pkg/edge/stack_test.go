@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func TestNameUnderStem(t *testing.T) {
@@ -100,7 +102,7 @@ func TestStackState(t *testing.T) {
 	populated := func() StackState {
 		state := StackState{
 			Slug:          "shop",
-			Class:         ClassProduction,
+			Tier:          environment.TierProduction,
 			Endpoint:      "https://store.example",
 			Secret:        "s3cr3t",
 			OwnerToken:    "owner",
@@ -175,7 +177,7 @@ func TestStackState(t *testing.T) {
 		}
 		for name, change := range map[string]func(*StackState){
 			"a slug":           func(s *StackState) { s.Slug = "other" },
-			"a class":          func(s *StackState) { s.Class = ClassPreview },
+			"a tier":           func(s *StackState) { s.Tier = environment.TierPreview },
 			"a secret":         func(s *StackState) { s.Secret = "rotated" },
 			"a front":          func(s *StackState) { s.Front = "d456.cloudfront.net" },
 			"a host front":     func(s *StackState) { s.PublishFront("shop.app.com", "moved.example.net") },

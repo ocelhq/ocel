@@ -196,7 +196,7 @@ export default {
 		want string
 	}{
 		{
-			name: "a class mismatch refuses without deploying",
+			name: "a tier mismatch refuses without deploying",
 			env:  map[string]string{clitest.FakeInfraTierEnvVar: "preview", clitest.FakeInfraPresentEnvVar: "1"},
 			want: "this command needs production infrastructure",
 		},

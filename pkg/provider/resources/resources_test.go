@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -78,7 +78,7 @@ func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRe
 func infraRef() provider.StackRef {
 	return provider.StackRef{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Name:    naming.InfraStack("prod"),
 	}
 }
@@ -187,7 +187,7 @@ func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 	stacks := resources.NewHookStacks(store, fake.NewArtifacts(), own.hooks())
 	ref := infraRef()
 
-	if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind: provider.StackInfra,
 		Bindings: []provider.Binding{
 			{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: "shop-uploads"}},
@@ -242,7 +242,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	own := &buckets{}
 	ref := infraRef()
 
-	if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:     provider.StackInfra,
 		Bindings: []provider.Binding{{Type: provider.BindingBucket, Name: "uploads"}},
 	}); err != nil {
@@ -300,7 +300,7 @@ func TestPlanKeepsWhatExistsAndDeletesWhatThePlanDropped(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewRecords()
 	ref := infraRef()
-	if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind: provider.StackInfra,
 		Bindings: []provider.Binding{
 			{Type: provider.BindingBucket, Name: "uploads"},
@@ -345,7 +345,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewRecords()
 	ref := infraRef()
-	if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:     provider.StackInfra,
 		Bindings: []provider.Binding{{Type: provider.BindingBucket, Name: "uploads"}},
 	}); err != nil {
@@ -399,7 +399,7 @@ func (w *withFunctions) RemoveFunctions(_ context.Context, _ provider.StackRef, 
 func appRef() provider.StackRef {
 	return provider.StackRef{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 }
@@ -415,7 +415,7 @@ func recordFunctions(t *testing.T, store records.Store, ref provider.StackRef, n
 	for _, name := range names {
 		stack.Functions = append(stack.Functions, function(ref, name))
 	}
-	if err := stackrecords.Write(context.Background(), store, ref.Class, ref.Project, ref.Name, stack); err != nil {
+	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name, stack); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -530,7 +530,7 @@ func recordContainers(t *testing.T, store records.Store, ref provider.StackRef, 
 	for _, name := range names {
 		stack.Containers = append(stack.Containers, container(ref, name))
 	}
-	if err := stackrecords.Write(context.Background(), store, ref.Class, ref.Project, ref.Name, stack); err != nil {
+	if err := stackrecords.Write(context.Background(), store, ref.Tier, ref.Project, ref.Name, stack); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1098,7 +1098,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasRetaining(t *testing.T)
 	ctx := context.Background()
 	store := fake.NewRecords()
 	ref := appRef()
-	if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 	}); err != nil {
@@ -1133,7 +1133,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 			ctx := context.Background()
 			store := fake.NewRecords()
 			ref := appRef()
-			if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+			if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 				Kind:       provider.StackApp,
 				Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 			}); err != nil {
@@ -1182,7 +1182,7 @@ func TestATeardownThatStoppedReconcilingWarnsWhatItLeftInPlace(t *testing.T) {
 			ctx := context.Background()
 			store := fake.NewRecords()
 			ref := appRef()
-			if err := stackrecords.Write(ctx, store, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+			if err := stackrecords.Write(ctx, store, ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 				Kind:       provider.StackApp,
 				Containers: []provider.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 			}); err != nil {

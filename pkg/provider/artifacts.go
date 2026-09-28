@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -15,13 +16,13 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress progress.Progress) error
+	RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Progress) error
 }
 
 type ArtifactRef struct {
-	Class  edge.Class `json:"class,omitempty"`
-	Bucket string     `json:"bucket,omitempty"`
-	Key    string     `json:"key,omitempty"`
+	Tier   environment.Tier `json:"tier,omitempty"`
+	Bucket string           `json:"bucket,omitempty"`
+	Key    string           `json:"key,omitempty"`
 }
 
 const (

@@ -28,7 +28,7 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *contractv1.Manifest
 	if err := deployresult.Write(cfg.Dir, deployresult.Result{
 		Slug: cfg.Slug,
 		Environment: deployresult.Environment{
-			Class:    environmentClassKey(env.GetTier()),
+			Tier:     environmentTierKey(env.GetTier()),
 			Identity: env.GetIdentity(),
 		},
 		Provider:    providerOf(cfg),
@@ -65,7 +65,7 @@ func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest,
 	record := servicemap.Derive(servicemap.Deploy{
 		Slug: cfg.Slug,
 		Environment: servicemap.Environment{
-			Class:    environmentClassKey(env.GetTier()),
+			Tier:     environmentTierKey(env.GetTier()),
 			Identity: env.GetIdentity(),
 		},
 		PromotionID: promotionID,
@@ -78,7 +78,7 @@ func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest,
 	return nil
 }
 
-func environmentClassKey(tier environmentv1.Tier) string {
+func environmentTierKey(tier environmentv1.Tier) string {
 	switch tier {
 	case environmentv1.Tier_TIER_PRODUCTION:
 		return "production"

@@ -20,7 +20,7 @@ type SSMBatchAPI interface {
 	GetParameters(ctx context.Context, in *ssm.GetParametersInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersOutput, error)
 }
 
-type ClassParams struct {
+type TierParams struct {
 	Passphrase string
 
 	EdgeCredentials    EdgeCredentials
@@ -38,22 +38,22 @@ type ClassParams struct {
 	OriginSecretErr error
 }
 
-func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string) (ClassParams, error) {
-	origin, err := ns.OriginSecretParamFor(class)
+func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier string) (TierParams, error) {
+	origin, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
-		return ClassParams{}, err
+		return TierParams{}, err
 	}
 	passphraseParam := ns.PassphraseParamName()
 	found, err := getParameters(ctx, api, []string{passphraseParam, origin})
 	if err != nil {
-		return ClassParams{}, err
+		return TierParams{}, err
 	}
 	passphrase, ok := found[passphraseParam]
 	if !ok {
-		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
+		return TierParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
 	secret, secretErr := originSecretIn(found, origin)
-	return ClassParams{
+	return TierParams{
 		Passphrase:         passphrase,
 		OriginSecret:       secret,
 		OriginSecretErr:    secretErr,
@@ -70,17 +70,17 @@ func originSecretIn(found map[string]string, name string) (OriginSecret, error) 
 	secret, err := OriginSecretOf(raw)
 	if err != nil {
 		return OriginSecret{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s contains something other than the origin secret bootstrap writes (%v): delete the parameter and re-run `ocel bootstrap` to mint a fresh one, then re-deploy every project in the class", name, err)
+			"%s contains something other than the origin secret bootstrap writes (%v): delete the parameter and re-run `ocel bootstrap` to mint a fresh one, then re-deploy every project in the tier", name, err)
 	}
 	return secret, nil
 }
 
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
 
-func ReadClassParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string, kind edge.Kind) (ClassParams, error) {
-	names, err := edgeNamesFor(ns, class, kind)
+func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier string, kind edge.Kind) (TierParams, error) {
+	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
-		return ClassParams{}, err
+		return TierParams{}, err
 	}
 	passphraseParam := ns.PassphraseParamName()
 	wanted := []string{
@@ -96,14 +96,14 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class s
 
 	found, err := getParameters(ctx, api, wanted)
 	if err != nil {
-		return ClassParams{}, err
+		return TierParams{}, err
 	}
 
-	var p ClassParams
+	var p TierParams
 
 	passphrase, ok := found[passphraseParam]
 	if !ok {
-		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
+		return TierParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
 	p.Passphrase = passphrase
 
@@ -125,17 +125,17 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class s
 
 	if raw, ok := found[names.cacheStoreParam]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.CacheStore); err != nil {
-			return ClassParams{}, fmt.Errorf("parse cache store: %w", err)
+			return TierParams{}, fmt.Errorf("parse cache store: %w", err)
 		}
 	}
 	if raw, ok := found[names.deploymentsStoreParam]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.DeploymentsStore); err != nil {
-			return ClassParams{}, fmt.Errorf("parse deployments store: %w", err)
+			return TierParams{}, fmt.Errorf("parse deployments store: %w", err)
 		}
 	}
 	if raw, ok := found[names.isrWriterParam]; ok {
 		if err := json.Unmarshal([]byte(raw), &p.ISRWriter); err != nil {
-			return ClassParams{}, fmt.Errorf("parse isr writer: %w", err)
+			return TierParams{}, fmt.Errorf("parse isr writer: %w", err)
 		}
 	}
 	p.ISRWriterSeed = found[names.isrWriterSeedParam]
@@ -151,8 +151,8 @@ type TeardownParams struct {
 	ISRWriter  ISRWriter
 }
 
-func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string, kind edge.Kind) (TeardownParams, error) {
-	names, err := edgeNamesFor(ns, class, kind)
+func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier string, kind edge.Kind) (TeardownParams, error) {
+	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return TeardownParams{}, err
 	}

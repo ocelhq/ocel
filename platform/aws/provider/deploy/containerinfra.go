@@ -15,7 +15,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -68,7 +68,7 @@ type containerInfra struct {
 }
 
 type containerInfraWork struct {
-	class    edge.Class
+	tier     environment.Tier
 	boundary string
 	tags     map[string]string
 	outputs  auto.OutputMap
@@ -76,33 +76,33 @@ type containerInfraWork struct {
 
 const cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 
-func containerInfraRef(class edge.Class) provider.StackRef {
-	return provider.StackRef{Project: ContainersSlug, Class: class, Name: naming.InfraStack(string(class))}
+func containerInfraRef(tier environment.Tier) provider.StackRef {
+	return provider.StackRef{Project: ContainersSlug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
 
-func containerInfraName(class edge.Class, parts ...string) string {
-	return naming.Join(naming.WordSeparator, append([]string{ContainersSlug, string(class)}, parts...)...)
+func containerInfraName(tier environment.Tier, parts ...string) string {
+	return naming.Join(naming.WordSeparator, append([]string{ContainersSlug, string(tier)}, parts...)...)
 }
 
-func containerInfraTags(class edge.Class) map[string]string {
+func containerInfraTags(tier environment.Tier) map[string]string {
 	return map[string]string{
 		"ocel:managed-by": "ocel",
 		"ocel:project":    ContainersSlug,
-		"ocel:env-class":  string(class),
-		"ocel:stack":      containerInfraRef(class).Name.String(),
+		"ocel:env-tier":   string(tier),
+		"ocel:stack":      containerInfraRef(tier).Name.String(),
 	}
 }
 
-func consumersRecord(class edge.Class) records.Name {
-	return append(stackrecords.StacksRecord(class, ContainersSlug), consumersKey)
+func consumersRecord(tier environment.Tier) records.Name {
+	return append(stackrecords.StacksRecord(tier, ContainersSlug), consumersKey)
 }
 
 func consumerRecord(ref provider.StackRef) records.Name {
-	return append(consumersRecord(ref.Class), ref.Project, ref.Name.String())
+	return append(consumersRecord(ref.Tier), ref.Project, ref.Name.String())
 }
 
-func leaseRecord(class edge.Class) records.Name {
-	return append(stackrecords.StacksRecord(class, ContainersSlug), leaseKey)
+func leaseRecord(tier environment.Tier) records.Name {
+	return append(stackrecords.StacksRecord(tier, ContainersSlug), leaseKey)
 }
 
 type lease struct {
@@ -130,20 +130,20 @@ func writeLease(ctx context.Context, store records.Store, record records.Record,
 	return err
 }
 
-func (r *Stacks) containerInfraFor(ctx context.Context, class edge.Class) (*release, error) {
-	return r.at(ctx, containerInfraRef(class), "")
+func (r *Stacks) containerInfraFor(ctx context.Context, tier environment.Tier) (*release, error) {
+	return r.at(ctx, containerInfraRef(tier), "")
 }
 
-func (r *Stacks) readContainerInfra(ctx context.Context, class edge.Class) (containerInfra, bool, error) {
-	owner, err := r.containerInfraFor(ctx, class)
+func (r *Stacks) readContainerInfra(ctx context.Context, tier environment.Tier) (containerInfra, bool, error) {
+	owner, err := r.containerInfraFor(ctx, tier)
 	if err != nil {
 		return containerInfra{}, false, err
 	}
-	_, present, err := stackrecords.Read(ctx, owner.cfg.Records, class, ContainersSlug, containerInfraRef(class).Name)
+	_, present, err := stackrecords.Read(ctx, owner.cfg.Records, tier, ContainersSlug, containerInfraRef(tier).Name)
 	if err != nil || !present {
 		return containerInfra{}, false, err
 	}
-	outputs, err := owner.automation.Outputs(ctx, containerInfraRef(class), nil)
+	outputs, err := owner.automation.Outputs(ctx, containerInfraRef(tier), nil)
 	if err != nil {
 		return containerInfra{}, false, err
 	}
@@ -157,49 +157,49 @@ func (r *Stacks) readContainerInfra(ctx context.Context, class edge.Class) (cont
 func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress progress.Progress) (containerInfra, error) {
 	r.containerInfraLock.Lock()
 	defer r.containerInfraLock.Unlock()
-	class := ref.Class
-	infra, present, err := r.readContainerInfra(ctx, class)
+	tier := ref.Tier
+	infra, present, err := r.readContainerInfra(ctx, tier)
 	if err != nil {
 		return containerInfra{}, err
 	}
-	owner, err := r.containerInfraFor(ctx, class)
+	owner, err := r.containerInfraFor(ctx, tier)
 	if err != nil {
 		return containerInfra{}, err
 	}
 	if present {
-		if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, infra.front()); err != nil {
+		if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, tier, infra.front()); err != nil {
 			return containerInfra{}, err
 		}
 		return infra, r.claimContainerInfra(ctx, ref)
 	}
 	if progress != nil {
-		progress.Say("Provisioning the shared container infrastructure for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
+		progress.Say("Provisioning the shared container infrastructure for the " + string(tier) + " tier: one load balancer and one cluster every container app in it runs behind")
 	}
 	work := &containerInfraWork{
-		class:    class,
+		tier:     tier,
 		boundary: owner.cfg.AppBoundaryARN,
-		tags:     containerInfraTags(class),
+		tags:     containerInfraTags(tier),
 	}
 	spec := provider.StackSpec{
-		Ref:         containerInfraRef(class),
+		Ref:         containerInfraRef(tier),
 		Kind:        provider.StackInfra,
-		Tags:        containerInfraTags(class),
+		Tags:        containerInfraTags(tier),
 		VendorState: work,
 	}
-	if err := stackrecords.Write(ctx, owner.cfg.Records, class, ContainersSlug, containerInfraRef(class).Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, owner.cfg.Records, tier, ContainersSlug, containerInfraRef(tier).Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: provider.WrittenByVersion(""),
 	}); err != nil {
 		return containerInfra{}, err
 	}
 	if _, err := owner.automation.Run(ctx, spec, progress); err != nil {
-		return containerInfra{}, fmt.Errorf("provision the shared container infrastructure for the %s class: %w", class, err)
+		return containerInfra{}, fmt.Errorf("provision the shared container infrastructure for the %s tier: %w", tier, err)
 	}
 	decoded, err := decodeContainerInfra(work.outputs)
 	if err != nil {
 		return containerInfra{}, err
 	}
-	if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, decoded.front()); err != nil {
+	if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, tier, decoded.front()); err != nil {
 		return containerInfra{}, err
 	}
 	return decoded, r.claimContainerInfra(ctx, ref)
@@ -210,13 +210,13 @@ func (s containerInfra) front() awsports.ContainerFront {
 }
 
 func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef) error {
-	owner, err := r.containerInfraFor(ctx, ref.Class)
+	owner, err := r.containerInfraFor(ctx, ref.Tier)
 	if err != nil {
 		return err
 	}
 	store := owner.cfg.Records
 	for range leaseAttempts {
-		leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
+		leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Tier))
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 		if state.Destroying {
 			return errors.Join(
 				refusal.Refuse(refusal.CodeBusy,
-					"the shared container infrastructure for the %s class is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will provision a fresh one", ref.Class),
+					"the shared container infrastructure for the %s tier is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will provision a fresh one", ref.Tier),
 				records.Forget(ctx, store, consumerRecord(ref)))
 		}
 		record, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
@@ -247,7 +247,7 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 		}
 	}
 	return refusal.Refuse(refusal.CodeBusy,
-		"the shared container infrastructure for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
+		"the shared container infrastructure for the %s tier changed hands %d times while %s was claiming it; re-run this deploy", ref.Tier, leaseAttempts, ref.Name)
 }
 
 func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store, ref provider.StackRef, progress progress.Progress) error {
@@ -263,7 +263,7 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store,
 	if len(consumer.Bytes) == 0 {
 		return nil
 	}
-	leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Class))
+	leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Tier))
 	if err != nil {
 		return err
 	}
@@ -274,11 +274,11 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store,
 	if err := records.Forget(ctx, store, consumerRecord(ref)); err != nil {
 		return err
 	}
-	owner, err := r.containerInfraFor(ctx, ref.Class)
+	owner, err := r.containerInfraFor(ctx, ref.Tier)
 	if err != nil {
 		return err
 	}
-	remaining, err := store.List(ctx, consumersRecord(ref.Class))
+	remaining, err := store.List(ctx, consumersRecord(ref.Tier))
 	if err != nil {
 		return err
 	}
@@ -290,22 +290,22 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store,
 		if errors.Is(err, records.ErrStale) {
 			return nil
 		}
-		return fmt.Errorf("mark the shared container infrastructure for the %s class as going down: %w", ref.Class, err)
+		return fmt.Errorf("mark the shared container infrastructure for the %s tier as going down: %w", ref.Tier, err)
 	}
 	if progress != nil {
-		progress.Say("Taking down the shared container infrastructure for the " + string(ref.Class) + " class: the last container app in it is gone")
+		progress.Say("Taking down the shared container infrastructure for the " + string(ref.Tier) + " tier: the last container app in it is gone")
 	}
-	stack := containerInfraRef(ref.Class)
+	stack := containerInfraRef(ref.Tier)
 	if err := owner.automation.Destroy(ctx, stack, progress); err != nil {
-		return fmt.Errorf("take down the shared container infrastructure for the %s class: %w", ref.Class, err)
+		return fmt.Errorf("take down the shared container infrastructure for the %s tier: %w", ref.Tier, err)
 	}
-	if err := stackrecords.Forget(ctx, store, ref.Class, ContainersSlug, stack.Name); err != nil {
+	if err := stackrecords.Forget(ctx, store, ref.Tier, ContainersSlug, stack.Name); err != nil {
 		return err
 	}
-	if err := records.Forget(ctx, store, awsports.ContainerFrontRecord(ref.Class)); err != nil {
+	if err := records.Forget(ctx, store, awsports.ContainerFrontRecord(ref.Tier)); err != nil {
 		return err
 	}
-	return records.Forget(ctx, store, leaseRecord(ref.Class))
+	return records.Forget(ctx, store, leaseRecord(ref.Tier))
 }
 
 func (w *containerInfraWork) run(ctx *pulumi.Context) error {
@@ -323,10 +323,10 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	for key, value := range w.tags {
 		tags[key] = pulumi.String(value)
 	}
-	class := w.class
+	tier := w.tier
 
 	cluster, err := ecs.NewCluster(ctx, naming.ResourceID(naming.KindService, "cluster"), &ecs.ClusterArgs{
-		Name: pulumi.String(containerInfraName(class)),
+		Name: pulumi.String(containerInfraName(tier)),
 		Tags: tags,
 	})
 	if err != nil {
@@ -338,8 +338,8 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		return fmt.Errorf("look up the addresses CloudFront reaches an origin from: %w", err)
 	}
 	front, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "front", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(containerInfraName(class, "front")),
-		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(class) + " class answers behind"),
+		Name:        pulumi.String(containerInfraName(tier, "front")),
+		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(tier) + " class answers behind"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
 			Protocol:      pulumi.String("tcp"),
@@ -358,8 +358,8 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	tasks, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "tasks", "security-group"), &ec2.SecurityGroupArgs{
-		Name:        pulumi.String(containerInfraName(class, "tasks")),
-		Description: pulumi.String("Ocel: the tasks every container app in the " + string(class) + " class runs as"),
+		Name:        pulumi.String(containerInfraName(tier, "tasks")),
+		Description: pulumi.String("Ocel: the tasks every container app in the " + string(tier) + " class runs as"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
 			Protocol:       pulumi.String("tcp"),
@@ -379,7 +379,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	}
 
 	balancer, err := lb.NewLoadBalancer(ctx, naming.ResourceID(naming.KindService, "front"), &lb.LoadBalancerArgs{
-		Name:             pulumi.String(containerInfraName(class)),
+		Name:             pulumi.String(containerInfraName(tier)),
 		LoadBalancerType: pulumi.String("application"),
 		Internal:         pulumi.Bool(true),
 		SecurityGroups:   pulumi.StringArray{front.ID()},
@@ -409,7 +409,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 
 	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, naming.ResourceID(naming.KindService, "front", "vpc-origin"), &cloudfront.VpcOriginArgs{
 		VpcOriginEndpointConfig: &cloudfront.VpcOriginVpcOriginEndpointConfigArgs{
-			Name:                 pulumi.String(containerInfraName(class)),
+			Name:                 pulumi.String(containerInfraName(tier)),
 			Arn:                  balancer.Arn,
 			HttpPort:             pulumi.Int(originListenerPort),
 			HttpsPort:            pulumi.Int(originTLSPort),
@@ -431,8 +431,8 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	}
 
 	execution, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, "execution"), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(containerInfraName(class, "exec") + naming.WordSeparator),
-		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(class) + " class"),
+		NamePrefix:          pulumi.String(containerInfraName(tier, "exec") + naming.WordSeparator),
+		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(tier) + " tier"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
 		PermissionsBoundary: pulumi.String(w.boundary),
 		Tags:                tags,
@@ -448,7 +448,7 @@ func (w *containerInfraWork) run(ctx *pulumi.Context) error {
 	}
 
 	logs, err := cloudwatch.NewLogGroup(ctx, naming.ResourceID(naming.KindService, "logs"), &cloudwatch.LogGroupArgs{
-		Name:            pulumi.String("/ocel/containers/" + string(class)),
+		Name:            pulumi.String("/ocel/containers/" + string(tier)),
 		RetentionInDays: pulumi.Int(containerLogRetentionDays),
 		Tags:            tags,
 	})

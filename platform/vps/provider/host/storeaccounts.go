@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -33,7 +33,7 @@ func CheckStoreSecret(secret string) error {
 
 type StoreAccount struct {
 	Store    string
-	Class    edge.Class
+	Tier     environment.Tier
 	Endpoint string
 	Region   string
 

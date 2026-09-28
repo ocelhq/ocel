@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -17,7 +18,7 @@ import (
 )
 
 func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
-	class, err := classOf(req.GetRequiredTier())
+	tier, err := tierOf(req.GetRequiredTier())
 	if err != nil {
 		return nil, err
 	}
@@ -53,29 +54,29 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, provider.RefusalError(err)
 	}
 
-	status, err := gate.Status(ctx, class)
+	status, err := gate.Status(ctx, tier)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	resp.Bootstrap = BootstrapStatusProto(status, h.session.writer, req.GetRequiredTier(), required)
 
 	if status.Present {
-		resp.InfraTier, resp.InfrastructurePresent = tierOf(class), true
-		if err := checkCompat(status.Schema, true, provider.BootstrapSchema).explain(status.Schema, provider.BootstrapSchema, provider.BootstrapCommand(class)); err != nil {
+		resp.InfraTier, resp.InfrastructurePresent = wireTier(tier), true
+		if err := checkCompat(status.Schema, true, provider.BootstrapSchema).explain(status.Schema, provider.BootstrapSchema, provider.BootstrapCommand(tier)); err != nil {
 			return nil, provider.RefusalError(err)
 		}
-		resp.KnownSlugs, err = slugsBesides(ctx, gate, class, req.GetSlug())
+		resp.KnownSlugs, err = slugsBesides(ctx, gate, tier, req.GetSlug())
 		if err != nil {
 			return nil, provider.RefusalError(err)
 		}
-		resp.DomainClaims, err = h.domainClaims(ctx, p, class, req)
+		resp.DomainClaims, err = h.domainClaims(ctx, p, tier, req)
 		if err != nil {
 			return nil, provider.RefusalError(err)
 		}
 		if req.GetCheckHosts() {
-			resp.HostChecks = h.hostChecks(ctx, p, class, req.GetHostCheckDomains())
+			resp.HostChecks = h.hostChecks(ctx, p, tier, req.GetHostCheckDomains())
 		}
-		if class == edge.ClassPreview {
+		if tier == environment.TierPreview {
 			resp.PreviewWildcard, err = recordedPreviewWildcard(ctx, p)
 			if err != nil {
 				return nil, provider.RefusalError(err)
@@ -84,12 +85,12 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 
-	sibling, err := gate.Status(ctx, siblingOf(class))
+	sibling, err := gate.Status(ctx, siblingOf(tier))
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	if sibling.Present {
-		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
+		resp.InfraTier, resp.InfrastructurePresent = wireTier(sibling.Tier), true
 	}
 	return resp, nil
 }
@@ -136,7 +137,7 @@ func (h *handlers) edgeIdentity(
 	return nil
 }
 
-func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, class edge.Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
+func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier environment.Tier, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
 	if len(req.GetDomains()) == 0 {
 		return nil, nil
 	}
@@ -144,13 +145,13 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, class 
 	if err != nil {
 		return nil, err
 	}
-	ours, err := boundHere(ctx, p.Records(), class, req.GetSlug())
+	ours, err := boundHere(ctx, p.Records(), tier, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
 	var mine string
 	if slug := req.GetSlug(); slug != "" {
-		mine = front.ProjectOwner(slug, class)
+		mine = front.ProjectOwner(slug, tier)
 	}
 	claims := make([]*contractv1.DomainClaim, 0, len(req.GetDomains()))
 	for _, hostname := range req.GetDomains() {
@@ -171,22 +172,22 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, class 
 	return claims, nil
 }
 
-func boundHere(ctx context.Context, store records.Store, class edge.Class, slug string) ([]string, error) {
+func boundHere(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
-	state, err := (edgeStateStore{records: store, name: stackrecords.EdgeStackRecord(class, slug)}).read(ctx)
+	state, err := (edgeStateStore{records: store, name: stackrecords.EdgeStackRecord(tier, slug)}).read(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return state.Edge.Bound, nil
 }
 
-func slugsBesides(ctx context.Context, gate Gate, class edge.Class, slug string) ([]string, error) {
+func slugsBesides(ctx context.Context, gate Gate, tier environment.Tier, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
-	recorded, err := gate.RecordedFeatures(ctx, class)
+	recorded, err := gate.RecordedFeatures(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -200,15 +201,15 @@ func slugsBesides(ctx context.Context, gate Gate, class edge.Class, slug string)
 	return slugs, nil
 }
 
-func siblingOf(class edge.Class) edge.Class {
-	if class == edge.ClassPreview {
-		return edge.ClassProduction
+func siblingOf(tier environment.Tier) environment.Tier {
+	if tier == environment.TierPreview {
+		return environment.TierProduction
 	}
-	return edge.ClassPreview
+	return environment.TierPreview
 }
 
-func tierOf(class edge.Class) environmentv1.Tier {
-	if class == edge.ClassPreview {
+func wireTier(tier environment.Tier) environmentv1.Tier {
+	if tier == environment.TierPreview {
 		return environmentv1.Tier_TIER_PREVIEW
 	}
 	return environmentv1.Tier_TIER_PRODUCTION

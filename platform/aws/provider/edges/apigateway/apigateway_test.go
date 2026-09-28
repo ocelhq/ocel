@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -26,17 +27,17 @@ const (
 )
 
 func testSpec() edge.StackSpec {
-	return edge.StackSpec{Version: "v1", Class: edge.ClassProduction, Slug: conformanceSlug}
+	return edge.StackSpec{Version: "v1", Tier: environment.TierProduction, Slug: conformanceSlug}
 }
 
 func productionAPIName() string {
-	return apiName(defaultNamespace, conformanceSlug, edge.ClassProduction, "")
+	return apiName(defaultNamespace, conformanceSlug, environment.TierProduction, "")
 }
 
 func bootstrapped(t *testing.T, w *world) *apiGateway {
 	t.Helper()
 	e := w.edge()
-	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
+	if _, err := e.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	return e
@@ -51,7 +52,7 @@ func TestConformance(t *testing.T) {
 		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
 			w := newWorld()
 			e := w.edge()
-			if _, err := e.Bootstrap(context.Background(), edge.ClassPreview); err != nil {
+			if _, err := e.Bootstrap(context.Background(), environment.TierPreview); err != nil {
 				t.Fatalf("Bootstrap(preview): %v", err)
 			}
 			return e, previewStackSpec(), previewWildcardSpec()
@@ -606,15 +607,15 @@ func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) 
 func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	t.Parallel()
 
-	slugged := apiName(defaultNamespace, "shop-pr1", edge.ClassProduction, "")
-	pointed := apiName(defaultNamespace, "shop", edge.ClassProduction, "pr1")
+	slugged := apiName(defaultNamespace, "shop-pr1", environment.TierProduction, "")
+	pointed := apiName(defaultNamespace, "shop", environment.TierProduction, "pr1")
 	if slugged == pointed {
 		t.Errorf("apiName is %q for both a slug and a pointer that end the same; two projects would share one API", slugged)
 	}
-	if got := apiName(defaultNamespace, "shop", edge.ClassProduction, ""); got != "ocel--shop--production" {
+	if got := apiName(defaultNamespace, "shop", environment.TierProduction, ""); got != "ocel--shop--production" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
-	if name := defaultNamespace.EdgeNotFoundAPIName(edge.ClassProduction); deploy.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
+	if name := defaultNamespace.EdgeNotFoundAPIName(environment.TierProduction); deploy.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }
@@ -703,18 +704,18 @@ func TestTeardownLeavesTheCoreStacksResourcesToCloudFormation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		t.Run(string(class), func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			t.Parallel()
 
 			w := newWorld()
 			e := w.edge()
-			if _, err := e.Bootstrap(ctx, class); err != nil {
+			if _, err := e.Bootstrap(ctx, tier); err != nil {
 				t.Fatalf("Bootstrap: %v", err)
 			}
 			w.gateway.calls = nil
 
-			if err := e.Teardown(ctx, class); err != nil {
+			if err := e.Teardown(ctx, tier); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
 			if got := w.gateway.mutations(); len(got) != 0 {
@@ -723,15 +724,15 @@ func TestTeardownLeavesTheCoreStacksResourcesToCloudFormation(t *testing.T) {
 		})
 	}
 
-	t.Run("an unknown class is refused rather than reported done", func(t *testing.T) {
+	t.Run("an unknown tier is refused rather than reported done", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
-		if err := w.edge().Teardown(ctx, edge.Class("staging")); err == nil {
+		if err := w.edge().Teardown(ctx, environment.Tier("staging")); err == nil {
 			t.Fatal("Teardown(staging) reported success having removed nothing")
 		}
 		if len(w.gateway.calls) != 0 {
-			t.Errorf("an unknown class called %v, want nothing", w.gateway.calls)
+			t.Errorf("an unknown tier called %v, want nothing", w.gateway.calls)
 		}
 	})
 }
@@ -741,7 +742,7 @@ func TestBootstrapWritesNothing(t *testing.T) {
 
 	ctx := context.Background()
 	w := newWorld()
-	out, err := w.edge().Bootstrap(ctx, edge.ClassProduction)
+	out, err := w.edge().Bootstrap(ctx, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
@@ -956,7 +957,7 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 
 func TestALedgerOpenedOnStateThatNamesNoTableRefuses(t *testing.T) {
 	ctx := context.Background()
-	stack, err := newWorld().edge().Open(edge.StackState{Slug: conformanceSlug, Class: edge.ClassProduction})
+	stack, err := newWorld().edge().Open(edge.StackState{Slug: conformanceSlug, Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

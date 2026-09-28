@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -47,7 +47,7 @@ func sweepSpec(t *testing.T, tag string) provider.StackSpec {
 	}
 	sum := sha256.Sum256([]byte(tag))
 	return provider.StackSpec{
-		Ref:  provider.StackRef{Project: sweepProject, Class: edge.ClassProduction, Name: stack},
+		Ref:  provider.StackRef{Project: sweepProject, Tier: environment.TierProduction, Name: stack},
 		Kind: provider.StackApp,
 		App: &provider.AppSpec{
 			App:             sweepApp,
@@ -66,10 +66,10 @@ func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	}
 }
 
-func windowOf(t *testing.T, vm machine, project, app string, class edge.Class) []string {
+func windowOf(t *testing.T, vm machine, project, app string, tier environment.Tier) []string {
 	t.Helper()
 	listed := strings.TrimSpace(vm.sshAs(t, deployLogin,
-		"cat "+host.ReleasesDir()+"/"+project+"/"+app+"/"+string(class)))
+		"cat "+host.ReleasesDir()+"/"+project+"/"+app+"/"+string(tier)))
 	if listed == "" {
 		return nil
 	}
@@ -95,14 +95,14 @@ func TestLiveTheWindowKeepsThreeAndMovesARepeatedRefToTheHead(t *testing.T) {
 	for _, tag := range []string{"r1", "r2", "r3", "r4"} {
 		sweepsUp(t, p, tag)
 	}
-	window := windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
+	window := windowOf(t, vm, sweepProject, sweepApp, environment.TierProduction)
 	want := []string{sweepAt("r4"), sweepAt("r3"), sweepAt("r2")}
 	if strings.Join(window, ",") != strings.Join(want, ",") {
 		t.Fatalf("the box's window reads %v, want %v: three deep, most recently served first", window, want)
 	}
 
 	sweepsUp(t, p, "r2")
-	window = windowOf(t, vm, sweepProject, sweepApp, edge.ClassProduction)
+	window = windowOf(t, vm, sweepProject, sweepApp, environment.TierProduction)
 	want = []string{sweepAt("r2"), sweepAt("r4"), sweepAt("r3")}
 	if strings.Join(window, ",") != strings.Join(want, ",") {
 		t.Errorf("the box's window reads %v, want %v: a ref already in the window moves to the head and evicts nothing", window, want)

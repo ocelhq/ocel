@@ -7,18 +7,18 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func functionStackDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackSpec {
+func functionStackDeclaring(tier environment.Tier, env string, values provider.AppValues) provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
-			Class:   class,
+			Tier:    tier,
 			Name:    naming.StackName{Env: env, App: "api"},
 		},
 		Kind: provider.StackApp,
@@ -51,7 +51,7 @@ func functionRevisionEnv(t *testing.T, server *runServer, spec provider.StackSpe
 
 func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
+	p, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{
 		Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
@@ -72,7 +72,7 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 		t.Fatalf("%s = %q, which the runtime cannot read: %v", live.EnvVar, env[live.EnvVar], err)
 	}
 	if manifest.Project != "acme-prod" || manifest.Region != "europe-west1" || manifest.Namespace != "ocel" ||
-		manifest.Slug != "shop" || manifest.Class != "production" || manifest.Environment != "" {
+		manifest.Slug != "shop" || manifest.Tier != "production" || manifest.Environment != "" {
 		t.Errorf("manifest = %+v, want the same database, key ring and cells a container is pointed at", manifest)
 	}
 	if len(manifest.Keys) != 2 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Keys[1].Key != "SESSION_SECRET" || manifest.Keys[1].Folder != "/web" {
@@ -85,7 +85,7 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 
 func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{
 		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -93,14 +93,14 @@ func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Class != "preview" || manifest.Environment != "pr-7" {
-		t.Errorf("manifest = %+v, want the preview's environment so its own value shadows the class-wide one", manifest)
+	if manifest.Tier != "preview" || manifest.Environment != "pr-7" {
+		t.Errorf("manifest = %+v, want the preview's environment so its own value shadows the tier-wide one", manifest)
 	}
 }
 
 func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 

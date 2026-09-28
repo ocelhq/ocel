@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -27,12 +28,12 @@ var _ edge.EdgeStack = (*stack)(nil)
 func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
-	return ledger.New(s.e.records, s.state.Class, s.state.Slug)
+	return ledger.New(s.e.records, s.state.Tier, s.state.Slug)
 }
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
-func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Class) }
+func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Tier) }
 
 func (s *stack) routeKey(pointer, app string) host.RouteKey {
 	return host.RouteKey{Owner: s.surface(), Pointer: named(pointer), App: app}
@@ -173,16 +174,16 @@ func (s *stack) rerun(ctx context.Context, release promotable, progress progress
 		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
 	}
 	if err := s.e.machine.RunContainer(ctx, host.Container{
-		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Class: s.state.Class,
+		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Tier: s.state.Tier,
 		HealthPath: record.HealthPath, Declared: declaredBy(record),
 	}); err != nil {
 		return err
 	}
-	return s.e.machine.Promote(ctx, s.state.Class, s.state.Slug, release.app, record.Image)
+	return s.e.machine.Promote(ctx, s.state.Tier, s.state.Slug, release.app, record.Image)
 }
 
 func (s *stack) previewSite() edge.PreviewSite {
-	if s.state.Class != edge.ClassPreview {
+	if s.state.Tier != environment.TierPreview {
 		return edge.PreviewSite{}
 	}
 	if s.state.GlobalPreview == "" && s.state.PreviewBase != "" {
@@ -280,7 +281,7 @@ func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {
 }
 
 func (s *stack) applyOrigins(ctx context.Context) error {
-	return s.e.origins(ctx, s.state.Slug, s.state.Class)
+	return s.e.origins(ctx, s.state.Slug, s.state.Tier)
 }
 
 func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {
@@ -320,7 +321,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err := s.e.machine.UnrouteSurface(ctx, s.surface()); err != nil {
 		errs = append(errs, err)
 	}
-	if err := s.e.machine.ForgetNetwork(ctx, s.state.Class, s.state.Slug); err != nil {
+	if err := s.e.machine.ForgetNetwork(ctx, s.state.Tier, s.state.Slug); err != nil {
 		errs = append(errs, err)
 	}
 	if err := s.openLedger().Destroy(ctx); err != nil {

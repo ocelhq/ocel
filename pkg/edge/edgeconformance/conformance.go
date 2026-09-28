@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -16,7 +17,7 @@ type Suite struct {
 	New       func(t *testing.T) (edge.Edge, edge.StackSpec)
 	Hostname  string
 	Previews  func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec)
-	Bootstrap func(t *testing.T) (edge.Edge, edge.Class)
+	Bootstrap func(t *testing.T) (edge.Edge, environment.Tier)
 }
 
 func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, pointer string) {
@@ -81,7 +82,7 @@ func Run(t *testing.T, suite Suite) {
 
 		groups := e.ProjectRemovals(edge.ProjectScope{
 			Slug:      spec.Slug,
-			Class:     spec.Class,
+			Tier:      spec.Tier,
 			Hostnames: []string{suite.Hostname},
 			Front:     "front.example.net",
 		})
@@ -282,7 +283,7 @@ func Run(t *testing.T, suite Suite) {
 		}
 		binds(t, stack, suite.Hostname)
 
-		mine := e.ProjectOwner(spec.Slug, spec.Class)
+		mine := e.ProjectOwner(spec.Slug, spec.Tier)
 		if mine == "" {
 			t.Skip("this edge names no project-wide surface, so a hostname it serves is owned by something finer than the project")
 		}
@@ -292,7 +293,7 @@ func Run(t *testing.T, suite Suite) {
 		}
 		if owner != mine {
 			t.Errorf("DomainOwner(%q) = %q after this project bound it, but ProjectOwner(%q, %q) = %q. The preflight guard refuses a hostname whose owner is not the name this call mints, so two spellings of one surface refuse a project its own hostname whenever a bind wrote the route and stopped before the record",
-				suite.Hostname, owner, spec.Slug, spec.Class, mine)
+				suite.Hostname, owner, spec.Slug, spec.Tier, mine)
 		}
 	})
 
@@ -607,15 +608,15 @@ func runBootstrap(t *testing.T, suite Suite) {
 			t.Skip("this edge cannot be bootstrapped from the conformance suite alone")
 		}
 		ctx := context.Background()
-		e, class := suite.Bootstrap(t)
+		e, tier := suite.Bootstrap(t)
 
-		first, err := e.Bootstrap(ctx, class)
+		first, err := e.Bootstrap(ctx, tier)
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		checkOffers(t, "first Bootstrap", first)
 
-		second, err := e.Bootstrap(ctx, class)
+		second, err := e.Bootstrap(ctx, tier)
 		if err != nil {
 			t.Fatalf("Bootstrap again: %v", err)
 		}
@@ -628,7 +629,7 @@ func runBootstrap(t *testing.T, suite Suite) {
 		}
 
 		if adopt := e.Hooks().PlanAdoption; adopt != nil {
-			adoption, err := adopt(ctx, class)
+			adoption, err := adopt(ctx, tier)
 			if err != nil {
 				t.Fatalf("PlanAdoption: %v", err)
 			}
@@ -642,14 +643,14 @@ func runBootstrap(t *testing.T, suite Suite) {
 			}
 		}
 
-		if err := e.Teardown(ctx, class); err != nil {
+		if err := e.Teardown(ctx, tier); err != nil {
 			t.Fatalf("Teardown: %v", err)
 		}
-		if err := e.Teardown(ctx, class); err != nil {
+		if err := e.Teardown(ctx, tier); err != nil {
 			t.Fatalf("Teardown again: %v", err)
 		}
 
-		again, err := e.Bootstrap(ctx, class)
+		again, err := e.Bootstrap(ctx, tier)
 		if err != nil {
 			t.Fatalf("Bootstrap after Teardown: %v", err)
 		}

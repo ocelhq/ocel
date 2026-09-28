@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -35,7 +36,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 	if err != nil {
 		return nil, err
 	}
-	session, err := h.openEdgeSession(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return nil, err
 	}

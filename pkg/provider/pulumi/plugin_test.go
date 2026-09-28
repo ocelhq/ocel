@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi-go-provider/infer"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
@@ -77,7 +77,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 
 	ref := provider.StackRef{
 		Project: "probe",
-		Class:   edge.ClassPreview,
+		Tier:    environment.TierPreview,
 		Name:    naming.InfraStack("probe"),
 	}
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}

@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -26,7 +27,7 @@ const previewSweepPage = 50
 func previewWildcardName(baseDomain string) string {
 	return naming.Fit(maxDistributionNameLen, naming.FieldSeparator,
 		naming.Fixed(sharedNamespace),
-		naming.Fixed(string(edge.ClassPreview)),
+		naming.Fixed(string(environment.TierPreview)),
 		naming.Compressible(baseDomain),
 	)
 }
@@ -54,7 +55,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	if err := bootstrapLedger(c, edge.ClassPreview, deployed).NoteInvalidationTarget(ctx, wildcardFront.id); err != nil {
+	if err := bootstrapLedger(c, environment.TierPreview, deployed).NoteInvalidationTarget(ctx, wildcardFront.id); err != nil {
 		return "", err
 	}
 	return wildcardFront.domainName, nil
@@ -88,8 +89,8 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, spec distribu
 	return existing, nil
 }
 
-func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *ledger.Ledger {
-	return awsports.Ledger(c.Dynamo, awsports.Table(deployed.StateTable), class, "")
+func bootstrapLedger(c Clients, tier environment.Tier, deployed bootstrap.Deployed) *ledger.Ledger {
+	return awsports.Ledger(c.Dynamo, awsports.Table(deployed.StateTable), tier, "")
 }
 
 func cloudFrontCertificate(wildcard, certificate string) error {
@@ -121,14 +122,14 @@ func convergeWildcard(ctx context.Context, c Clients, spec distributionSpec, id,
 }
 
 func (p *cloudFront) previewWildcardSpec(ctx context.Context, c Clients, baseDomain string) (distributionSpec, bootstrap.Deployed, error) {
-	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
+	deployed, err := p.bootstrap(ctx, c, environment.TierPreview)
 	if err != nil {
 		return distributionSpec{}, bootstrap.Deployed{}, err
 	}
 	if !deployed.Present {
 		return distributionSpec{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
-	set, err := edgeSetOf(deployed, edge.ClassPreview)
+	set, err := edgeSetOf(deployed, environment.TierPreview)
 	if err != nil {
 		return distributionSpec{}, bootstrap.Deployed{}, err
 	}
@@ -174,7 +175,7 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	return errors.Join(errs...)
 }
 
-var previewResolverSuffix = bootstrap.Namespace("").EdgeResolverName(edge.ClassPreview)
+var previewResolverSuffix = bootstrap.Namespace("").EdgeResolverName(environment.TierPreview)
 
 func (p *cloudFront) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, baseDomain string) error {
 	config, _, err := configOf(ctx, c, id)
@@ -208,19 +209,19 @@ func resolverNamespaceOf(config *cftypes.DistributionConfig) string {
 }
 
 func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
-	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
+	deployed, err := p.bootstrap(ctx, c, environment.TierPreview)
 	if err != nil {
 		return err
 	}
 	if !deployed.Present {
 		return nil
 	}
-	return bootstrapLedger(c, edge.ClassPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
+	return bootstrapLedger(c, environment.TierPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
 }
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, baseDomain string) error {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
-		Name: aws.String(ns.EdgeRoutesStoreName(edge.ClassPreview)),
+		Name: aws.String(ns.EdgeRoutesStoreName(environment.TierPreview)),
 	})
 	if err != nil {
 		if isNotFound(err) {

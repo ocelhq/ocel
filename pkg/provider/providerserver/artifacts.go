@@ -18,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -147,7 +146,7 @@ func (r *deployRun) stageArtifact(
 
 	return provider.Upload{
 		Name:   name,
-		Ref:    provider.ArtifactRef{Class: r.spec.Class, Bucket: provider.StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
+		Ref:    provider.ArtifactRef{Tier: r.spec.Tier, Bucket: provider.StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
 		Path:   path,
 		Digest: sum,
 	}, nil
@@ -275,11 +274,4 @@ func copyInto(entry io.Writer, path string) error {
 	_, err = io.Copy(entry, file)
 	file.Close()
 	return err
-}
-
-func environmentTier(class edge.Class) environmentv1.Tier {
-	if class == edge.ClassPreview {
-		return environmentv1.Tier_TIER_PREVIEW
-	}
-	return environmentv1.Tier_TIER_PRODUCTION
 }

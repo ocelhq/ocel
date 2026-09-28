@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -38,12 +39,12 @@ func TestTheAlbEdgeIsAnEdge(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
 			front, _ := fronting(t)
-			return front, edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}
+			return front, edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}
 		},
 		Hostname: "shop.example.com",
 		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
 			front, _ := fronting(t)
-			return front, edge.StackSpec{Slug: "shop", Class: edge.ClassPreview, PruneOnly: true}, previewWildcard()
+			return front, edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true}, previewWildcard()
 		},
 	})
 }
@@ -52,14 +53,14 @@ func reconciled(t *testing.T) (*Edge, *world, edge.EdgeStack) {
 	t.Helper()
 	front, w := fronting(t)
 	stack, err := front.Reconcile(context.Background(),
-		edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
+		edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
 	return front, w, stack
 }
 
-func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheClassUrlMap(t *testing.T) {
+func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheTierUrlMap(t *testing.T) {
 	t.Parallel()
 
 	_, w, stack := reconciled(t)
@@ -69,13 +70,13 @@ func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheClassUrlMap(
 		t.Fatalf("BindDomain = %v", err)
 	}
 
-	want := BindingStack("shop", edge.ClassProduction)
+	want := BindingStack("shop", environment.TierProduction)
 	if got := w.raised(); !slices.Contains(got, want) {
-		t.Errorf("the bind raised %v, want %q among them: a hostname's certificate, neg and backend are one stack per project and class", got, want)
+		t.Errorf("the bind raised %v, want %q among them: a hostname's certificate, neg and backend are one stack per project and tier", got, want)
 	}
 	routed := w.hosts("ocel-alb-production-routes")
 	if backend, found := routed["shop.example.com"]; !found || backend == "" {
-		t.Errorf("the class url map routes %v, want shop.example.com onto the backend the bind provisioned", routed)
+		t.Errorf("the tier url map routes %v, want shop.example.com onto the backend the bind provisioned", routed)
 	}
 	if front := stack.State().Fronts["shop.example.com"]; front != frontAddress {
 		t.Errorf("the bind published %q as the front, want the load balancer's address %q for DNS to point at", front, frontAddress)
@@ -89,7 +90,7 @@ func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T)
 	ctx := context.Background()
 	stacks := map[string]edge.EdgeStack{}
 	for _, slug := range []string{"shop", "store"} {
-		stack, err := front.Reconcile(ctx, edge.StackSpec{Slug: slug, Class: edge.ClassProduction}, edge.StackState{})
+		stack, err := front.Reconcile(ctx, edge.StackSpec{Slug: slug, Tier: environment.TierProduction}, edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile(%s) = %v", slug, err)
 		}
@@ -122,7 +123,7 @@ func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T)
 	}
 	for slug, stack := range stacks {
 		bound := slices.Contains(stack.State().Bound, "shop.example.com")
-		if owns := owner == Surface(slug, edge.ClassProduction); owns != bound {
+		if owns := owner == Surface(slug, environment.TierProduction); owns != bound {
 			t.Errorf("%s reads as bound=%t while the claim names %q: what the ledger says and what the url map routes must be one project", slug, bound, owner)
 		}
 	}
@@ -136,14 +137,14 @@ func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T)
 
 	front, w := fronting(t)
 	ctx := context.Background()
-	shop, err := front.Reconcile(ctx, edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
+	shop, err := front.Reconcile(ctx, edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := shop.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain(shop) = %v", err)
 	}
-	store, err := front.Reconcile(ctx, edge.StackSpec{Slug: "store", Class: edge.ClassProduction}, edge.StackState{})
+	store, err := front.Reconcile(ctx, edge.StackSpec{Slug: "store", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T)
 
 	err = store.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, Surface("shop", edge.ClassProduction)) {
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, Surface("shop", environment.TierProduction)) {
 		t.Fatalf("BindDomain(store) = %v, want a refusal naming the project that serves the hostname", err)
 	}
 	if after := w.hosts("ocel-alb-production-routes"); !maps.Equal(before, after) {
@@ -161,7 +162,7 @@ func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T)
 	if len(w.raised()) != raised {
 		t.Errorf("the refused bind raised %v, and a stack for a hostname another project serves is one nothing routes to", w.raised()[raised:])
 	}
-	if owner, _ := front.DomainOwner(ctx, "shop.example.com"); owner != Surface("shop", edge.ClassProduction) {
+	if owner, _ := front.DomainOwner(ctx, "shop.example.com"); owner != Surface("shop", environment.TierProduction) {
 		t.Errorf("the refused bind left the claim naming %q", owner)
 	}
 }
@@ -178,12 +179,12 @@ func TestUnbindingTheLastHostnameTakesTheProjectsStackDownRatherThanLeavingItInP
 		t.Fatalf("UnbindDomain = %v", err)
 	}
 
-	want := BindingStack("shop", edge.ClassProduction)
+	want := BindingStack("shop", environment.TierProduction)
 	if got := w.torn(); !slices.Contains(got, want) {
 		t.Errorf("unbinding the last hostname destroyed %v, want %q among them: bytes a deploy leaves behind after teardown must be zero", got, want)
 	}
 	if routed := w.hosts("ocel-alb-production-routes"); len(routed) != 0 {
-		t.Errorf("the class url map still routes %v after the only hostname was released", routed)
+		t.Errorf("the tier url map still routes %v after the only hostname was released", routed)
 	}
 }
 
@@ -214,15 +215,15 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 	}
 }
 
-func TestAProjectReconciledBeforeItsClassHasALoadBalancerIsToldToBootstrapIt(t *testing.T) {
+func TestAProjectReconciledBeforeItsTierHasALoadBalancerIsToldToBootstrapIt(t *testing.T) {
 	t.Parallel()
 
 	front, w := fronting(t)
-	delete(w.outputs, FrontStack(edge.ClassProduction))
+	delete(w.outputs, FrontStack(environment.TierProduction))
 
 	var refused refusal.Refusal
 	_, err := front.Reconcile(context.Background(),
-		edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
+		edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Reconcile with no front provisioned = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
@@ -248,16 +249,16 @@ func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
 	if published != frontAddress {
-		t.Errorf("ReconcilePreviewWildcard published %q, want the class front's address %q for DNS to point the wildcard at", published, frontAddress)
+		t.Errorf("ReconcilePreviewWildcard published %q, want the tier front's address %q for DNS to point the wildcard at", published, frontAddress)
 	}
 
 	routed := w.hosts("ocel-alb-production-routes")
 	backend := routed[edge.PreviewWildcard(previewBase)]
 	if backend == "" {
-		t.Fatalf("the class url map routes %v, want one host rule for %s: every preview resolves through it and none writes its own",
+		t.Fatalf("the tier url map routes %v, want one host rule for %s: every preview resolves through it and none writes its own",
 			routed, edge.PreviewWildcard(previewBase))
 	}
-	resources := w.declarations(FrontStack(edge.ClassPreview))
+	resources := w.declarations(FrontStack(environment.TierPreview))
 	neg, declared := resources[previewNEGName(previewBase)]
 	if !declared {
 		t.Fatalf("the preview front declares %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(resources))
@@ -313,7 +314,7 @@ func TestAPreviewWildcardWithNoCertificateIsRefusedRatherThanServedOnPlainHttp(t
 	}
 }
 
-func TestRaisingTheClassFrontAgainLeavesTheWildcardRouting(t *testing.T) {
+func TestRaisingTheTierFrontAgainLeavesTheWildcardRouting(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -321,14 +322,14 @@ func TestRaisingTheClassFrontAgainLeavesTheWildcardRouting(t *testing.T) {
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	if _, err := front.Bootstrap(ctx, edge.ClassPreview); err != nil {
+	if _, err := front.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap = %v", err)
 	}
 
-	resources := w.declarations(FrontStack(edge.ClassPreview))
+	resources := w.declarations(FrontStack(environment.TierPreview))
 	if _, declared := resources[previewNEGName(previewBase)]; !declared {
 		t.Errorf("the front raised again declares %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
-			"take every preview in the class down", keys(resources))
+			"take every preview in the tier down", keys(resources))
 	}
 }
 
@@ -345,14 +346,14 @@ func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontInPlace(t *te
 	}
 
 	if routed := w.hosts("ocel-alb-production-routes"); routed[edge.PreviewWildcard(previewBase)] != "" {
-		t.Errorf("the class url map still routes %v after the wildcard was released", routed)
+		t.Errorf("the tier url map still routes %v after the wildcard was released", routed)
 	}
-	resources := w.declarations(FrontStack(edge.ClassPreview))
+	resources := w.declarations(FrontStack(environment.TierPreview))
 	if _, declared := resources[previewNEGName(previewBase)]; declared {
 		t.Errorf("the front still declares %v after the wildcard was released: bytes a release leaves behind must be zero", keys(resources))
 	}
-	if slices.Contains(w.torn(), FrontStack(edge.ClassPreview)) {
-		t.Error("releasing the wildcard destroyed the class front, which every project in the class is answered by")
+	if slices.Contains(w.torn(), FrontStack(environment.TierPreview)) {
+		t.Error("releasing the wildcard destroyed the tier front, which every project in the tier is answered by")
 	}
 	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil || owner != "" {
@@ -368,7 +369,7 @@ func TestAWildcardWhoseFrontFailsToRiseIsOwnedByNothing(t *testing.T) {
 
 	ctx := context.Background()
 	front, w := fronting(t)
-	w.breakUp(FrontStack(edge.ClassPreview), errors.New("the preview front would not rise"))
+	w.breakUp(FrontStack(environment.TierPreview), errors.New("the preview front would not rise"))
 
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err == nil {
 		t.Fatal("ReconcilePreviewWildcard = nil, want the failure the front reported")
@@ -389,7 +390,7 @@ func TestAWildcardWhoseTeardownFailsIsStillOwnedSoTheRetryStillTearsItDown(t *te
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	w.breakUp(FrontStack(edge.ClassPreview), errors.New("the preview front would not rise"))
+	w.breakUp(FrontStack(environment.TierPreview), errors.New("the preview front would not rise"))
 
 	if err := front.DestroyPreviewWildcard(ctx, previewBase); err == nil {
 		t.Fatal("DestroyPreviewWildcard = nil, want the failure the front reported")
@@ -432,7 +433,7 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
 	stack, err := front.Reconcile(ctx,
-		edge.StackSpec{Slug: "shop", Class: edge.ClassPreview, PruneOnly: true},
+		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, PruneOnly: true},
 		edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile = %v", err)
@@ -454,7 +455,7 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 	}
 
 	if after := w.hosts("ocel-alb-production-routes"); !maps.Equal(after, before) {
-		t.Errorf("the promotion left the class url map routing %v, want the %v it found: a preview on the shared wildcard "+
+		t.Errorf("the promotion left the tier url map routing %v, want the %v it found: a preview on the shared wildcard "+
 			"resolves through the one host rule, and a write per preview is what this design exists to avoid", after, before)
 	}
 }
@@ -530,7 +531,7 @@ func reconciledPreview(t *testing.T) (*Edge, *world, edge.EdgeStack) {
 	t.Helper()
 	front, w := fronting(t)
 	stack, err := front.Reconcile(context.Background(),
-		edge.StackSpec{Slug: "shop", Class: edge.ClassPreview}, edge.StackState{})
+		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
@@ -541,7 +542,7 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 	t.Helper()
 	ctx := context.Background()
 	stack, err := front.Reconcile(ctx,
-		edge.StackSpec{Slug: slug, Class: edge.ClassPreview, PruneOnly: true},
+		edge.StackSpec{Slug: slug, Tier: environment.TierPreview, PruneOnly: true},
 		edge.StackState{GlobalPreview: base})
 	if err != nil {
 		t.Fatalf("Reconcile(%s) = %v", slug, err)
@@ -551,7 +552,7 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := stackrecords.EdgeStackRecord(edge.ClassPreview, slug)
+	name := stackrecords.EdgeStackRecord(environment.TierPreview, slug)
 	record, err := records.ReadOrEmpty(ctx, front.deps.Records, name)
 	if err != nil {
 		t.Fatal(err)
@@ -567,7 +568,7 @@ func TestARemovalPlanNamesTheRecurringCostItLeavesBehind(t *testing.T) {
 
 	front, _ := fronting(t)
 	groups := front.ProjectRemovals(edge.ProjectScope{
-		Slug: "shop", Class: edge.ClassProduction, Hostnames: []string{"shop.example.com"},
+		Slug: "shop", Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"},
 	})
 	var kept edge.PlanGroup
 	for _, group := range groups {
@@ -590,7 +591,7 @@ func TestTheFrontIsNotTakenDownWhileAHostnameIsStillEnteredInItsCertificateMap(t
 	w.enter("ocel-alb-production-certs", "shop.example.com")
 
 	var refused refusal.Refusal
-	err := front.Teardown(context.Background(), edge.ClassProduction)
+	err := front.Teardown(context.Background(), environment.TierProduction)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Teardown with a hostname still bound = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -607,10 +608,10 @@ func TestTheFrontComesDownOnceNothingIsBoundToIt(t *testing.T) {
 	t.Parallel()
 
 	front, w := fronting(t)
-	if err := front.Teardown(context.Background(), edge.ClassProduction); err != nil {
+	if err := front.Teardown(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown = %v", err)
 	}
-	if want := FrontStack(edge.ClassProduction); !slices.Contains(w.torn(), want) {
+	if want := FrontStack(environment.TierProduction); !slices.Contains(w.torn(), want) {
 		t.Errorf("the teardown destroyed %v, want %q among them", w.torn(), want)
 	}
 }
@@ -634,9 +635,9 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 		t.Fatalf("Promote = %v", err)
 	}
 
-	want := backendName("shop", edge.ClassProduction, "shop.example.com")
+	want := backendName("shop", environment.TierProduction, "shop.example.com")
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
-		t.Errorf("the class url map routes shop.example.com onto %q, want the project's own backend %q: the bind served the hostname a 404 "+
+		t.Errorf("the tier url map routes shop.example.com onto %q, want the project's own backend %q: the bind served the hostname a 404 "+
 			"because the app had released nothing, and the release that gives it a service is what takes it live", got, want)
 	}
 }
@@ -685,9 +686,9 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 		t.Fatalf("BindDomain = %v", err)
 	}
 
-	want := backendName("shop", edge.ClassProduction, "shop.example.com")
+	want := backendName("shop", environment.TierProduction, "shop.example.com")
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
-		t.Errorf("the class url map routes shop.example.com onto %q, want the project's own backend %q: the release was promoted before the bind, "+
+		t.Errorf("the tier url map routes shop.example.com onto %q, want the project's own backend %q: the release was promoted before the bind, "+
 			"and no later promotion comes to take the hostname live", got, want)
 	}
 }
@@ -712,7 +713,7 @@ func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 	}
 
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
-		t.Errorf("the class url map routes shop.example.com onto %q, want it still on the front's 404: the app it was bound to has "+
+		t.Errorf("the tier url map routes shop.example.com onto %q, want it still on the front's 404: the app it was bound to has "+
 			"still released nothing", got)
 	}
 }
@@ -726,7 +727,7 @@ func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheFrontsNotFoundBackend(t 
 	}
 
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
-		t.Errorf("the class url map routes shop.example.com onto %q, want the front's not-found backend %q: the bind declared no backend "+
+		t.Errorf("the tier url map routes shop.example.com onto %q, want the front's not-found backend %q: the bind declared no backend "+
 			"for an app that has released nothing, and Compute rejects a url map naming a backend that is not there", got, notFoundBackend)
 	}
 }

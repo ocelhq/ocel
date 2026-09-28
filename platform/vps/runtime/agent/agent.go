@@ -22,7 +22,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/images"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -301,7 +301,7 @@ func ManifestIn(env []string) string {
 }
 
 type Store struct {
-	ClassRoot    string
+	TierRoot     string
 	StateRoot    string
 	RoutingTable string
 }
@@ -309,8 +309,8 @@ type Store struct {
 func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error) {
 	reader := envvars.EnvironmentReader{
 		Records:     vars.Records{Root: s.StateRoot},
-		Cipher:      vars.Cipher{Root: s.ClassRoot},
-		Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+		Cipher:      vars.Cipher{Root: s.TierRoot},
+		Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 		Environment: manifest.Environment,
 	}
 	cells := make([]envvars.Cell, 0, len(manifest.Keys))
@@ -364,7 +364,7 @@ func (s Store) storeBase(manifest vars.Manifest) string {
 	if err != nil {
 		return ""
 	}
-	return vars.StoreBase(claims, vars.Surface(manifest.Slug, manifest.Class), manifest.Store.Pointer)
+	return vars.StoreBase(claims, vars.Surface(manifest.Slug, manifest.Tier), manifest.Store.Pointer)
 }
 
 func (s Store) storeSecret(ctx context.Context, manifest vars.Manifest) (string, error) {
@@ -372,7 +372,7 @@ func (s Store) storeSecret(ctx context.Context, manifest vars.Manifest) (string,
 	if err != nil {
 		return "", fmt.Errorf("the manifest's %s is not valid base64", vars.StoreSecretName)
 	}
-	opened, err := (vars.Cipher{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
+	opened, err := (vars.Cipher{Root: s.TierRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
 	if err != nil {
 		return "", err
 	}

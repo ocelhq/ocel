@@ -35,7 +35,7 @@ func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.
 	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
 	req := transform.Request{
 		Provider: transformProvider,
-		EnvClass: string(spec.Ref.Class),
+		EnvTier:  string(spec.Ref.Tier),
 		Env:      stack.Env,
 	}
 	var candidates []transformCandidate
@@ -231,7 +231,7 @@ func readSpecOutputs(ctx context.Context, spec provider.StackSpec, placed []plac
 		if !slices.Contains(names, name) {
 			return nil, &UnpublishedOutputError{
 				Ref: p.Ref, At: p.At, Published: name,
-				Class: string(spec.Ref.Class), Environment: spec.Ref.Name.Env, Properties: names,
+				Tier: string(spec.Ref.Tier), Environment: spec.Ref.Name.Env, Properties: names,
 			}
 		}
 		if !slices.Contains(wanted, name) {

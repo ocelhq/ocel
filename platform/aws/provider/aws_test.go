@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -54,7 +55,7 @@ type stubBootstrap struct{ err error }
 
 func (stubBootstrap) Catalogue() []provider.Feature { return nil }
 
-func (stubBootstrap) Describe(context.Context, edge.Class) (provider.BootstrapDescription, error) {
+func (stubBootstrap) Describe(context.Context, environment.Tier) (provider.BootstrapDescription, error) {
 	return provider.BootstrapDescription{}, nil
 }
 
@@ -66,18 +67,18 @@ func (s stubBootstrap) Apply(context.Context, provider.BootstrapRequest, progres
 	return s.err
 }
 
-func (stubBootstrap) PlanRemove(context.Context, edge.Class) (provider.Plan, error) {
+func (stubBootstrap) PlanRemove(context.Context, environment.Tier) (provider.Plan, error) {
 	return provider.Plan{}, nil
 }
 
-func (s stubBootstrap) Remove(context.Context, edge.Class, progress.Progress) error {
+func (s stubBootstrap) Remove(context.Context, environment.Tier, progress.Progress) error {
 	return s.err
 }
 
-func unkeyed(context.Context, edge.Class) (string, error) { return "", nil }
+func unkeyed(context.Context, environment.Tier) (string, error) { return "", nil }
 
-func keyedAs(keys ...string) func(context.Context, edge.Class) (string, error) {
-	return func(context.Context, edge.Class) (string, error) {
+func keyedAs(keys ...string) func(context.Context, environment.Tier) (string, error) {
+	return func(context.Context, environment.Tier) (string, error) {
 		next := keys[0]
 		keys = keys[1:]
 		return next, nil
@@ -88,33 +89,33 @@ func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string)
 	t.Helper()
 	ctx := context.Background()
 	store := envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()}
-	if _, err := envsource.EnsureDigestKey(ctx, store, req.Class); err != nil {
+	if _, err := envsource.EnsureDigestKey(ctx, store, req.Tier); err != nil {
 		t.Fatal(err)
 	}
 	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: func() {}, key: keyedAs(keys...), records: store.Records}).
 		Apply(ctx, req, nil); err != nil {
 		t.Fatal(err)
 	}
-	_, err := store.Records.Read(ctx, records.Name{records.RootEnvSourceDigestKey, string(req.Class)})
+	_, err := store.Records.Read(ctx, records.Name{records.RootEnvSourceDigestKey, string(req.Tier)})
 	return err
 }
 
 func TestAnApplyThatTakesTheVarsKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
-	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{provider.FeatureVarsKey}}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.FeatureVarsKey}}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("the digest key after the vars key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
 	}
 }
 
 func TestAnApplyThatBringsAnotherVarsKeyForgetsTheDigestKeySealedUnderTheOldOne(t *testing.T) {
-	req := provider.BootstrapRequest{Class: edge.ClassPreview}
+	req := provider.BootstrapRequest{Tier: environment.TierPreview}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, records.ErrNotFound) {
 		t.Fatalf("the digest key after the vars key changed reads %v, want it forgotten", err)
 	}
 }
 
 func TestAnApplyThatKeepsTheVarsKeyKeepsTheDigestKey(t *testing.T) {
-	req := provider.BootstrapRequest{Class: edge.ClassProduction}
+	req := provider.BootstrapRequest{Tier: environment.TierProduction}
 	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/one"); err != nil {
 		t.Fatalf("the digest key after an apply that kept the vars key reads %v, want it kept", err)
 	}
@@ -135,13 +136,13 @@ func forgetOf(t *testing.T, p *Provider) func() {
 
 func primed(t *testing.T, p *Provider, table string) {
 	t.Helper()
-	if _, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{StateTable: table}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ClassParams{Passphrase: table}, nil
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: edges.DefaultKind}, func() (bootstrap.TierParams, error) {
+		return bootstrap.TierParams{Passphrase: table}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -149,14 +150,14 @@ func primed(t *testing.T, p *Provider, table string) {
 
 func resolvedAfter(t *testing.T, p *Provider) (string, string) {
 	t.Helper()
-	deployed, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
+	deployed, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{StateTable: "after"}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	params, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: edges.DefaultKind}, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ClassParams{Passphrase: "after"}, nil
+	params, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: edges.DefaultKind}, func() (bootstrap.TierParams, error) {
+		return bootstrap.TierParams{Passphrase: "after"}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +170,7 @@ func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
 	primed(t, p, "before")
 
 	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
-		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); err != nil {
+		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +185,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	primed(t, p, "before")
 
 	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p), key: unkeyed}).
-		Remove(context.Background(), edge.ClassProduction, nil); err != nil {
+		Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,7 +201,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 
 	refused := errors.New("refused")
 	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p), key: unkeyed}).
-		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); !errors.Is(err, refused) {
+		Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
 
@@ -230,11 +231,11 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 	}
 }
 
-func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
+func TestTierParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	wanted := classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}
-	if _, err := p.params.resolve(wanted, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ClassParams{Passphrase: string(cloudflare.Kind)}, nil
+	wanted := tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}
+	if _, err := p.params.resolve(wanted, func() (bootstrap.TierParams, error) {
+		return bootstrap.TierParams{Passphrase: string(cloudflare.Kind)}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -245,12 +246,12 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 		}
 	}
 
-	params, err := p.classParams(context.Background(), edge.ClassProduction, cloudflare.Kind)
+	params, err := p.tierParams(context.Background(), environment.TierProduction, cloudflare.Kind)
 	if err != nil {
-		t.Fatalf("classParams error = %v", err)
+		t.Fatalf("tierParams error = %v", err)
 	}
 	if params.Passphrase != string(cloudflare.Kind) {
-		t.Fatalf("classParams read the %q namespace after other edges were opened, want %q",
+		t.Fatalf("tierParams read the %q namespace after other edges were opened, want %q",
 			params.Passphrase, cloudflare.Kind)
 	}
 }
@@ -258,14 +259,14 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	refused := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret contains something other than the origin secret bootstrap writes")
-	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ClassParams{OriginSecretErr: refused}, nil
+	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (bootstrap.TierParams, error) {
+		return bootstrap.TierParams{OriginSecretErr: refused}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	pre := provider.DeployPreflight{
-		Deploy: provider.DeploySpec{Class: edge.ClassProduction},
+		Deploy: provider.DeploySpec{Tier: environment.TierProduction},
 		Edge:   cloudflare.Kind,
 	}
 	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refused) {
@@ -275,7 +276,7 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 
 func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
+	if _, err := p.deployed.resolve(environment.TierProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{
 			ArtifactBucket: "functions",
 			AssetBucket:    "assets",
@@ -297,14 +298,14 @@ func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 		},
 		cloudfront.Kind: {Bucket: "cache-cloudfront"},
 	} {
-		if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: kind}, func() (bootstrap.ClassParams, error) {
-			return bootstrap.ClassParams{CacheStore: store}, nil
+		if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: kind}, func() (bootstrap.TierParams, error) {
+			return bootstrap.TierParams{CacheStore: store}, nil
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	buckets, err := p.Buckets(context.Background(), edge.ClassProduction)
+	buckets, err := p.Buckets(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
@@ -333,7 +334,7 @@ func TestBootstrapReadyWithoutAVarsKey(t *testing.T) {
 		VarsTable:      "vars-table",
 	}
 
-	if err := p.requireBootstrapped(deployed, edge.ClassProduction); err != nil {
+	if err := p.requireBootstrapped(deployed, environment.TierProduction); err != nil {
 		t.Errorf("requireBootstrapped() = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
 	}
 }

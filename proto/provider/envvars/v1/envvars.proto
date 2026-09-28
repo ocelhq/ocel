@@ -54,8 +54,8 @@ message Coordinate {
   string environment = 4 [
     (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
     (buf.validate.field).cel = {
-      id: "envvars.environment.class_wide"
-      message: "\"*\" is reserved: it names the value that binds class-wide"
+      id: "envvars.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
       expression: "!this.contains('*')"
     }
   ];
@@ -187,8 +187,8 @@ message SetBindingRequest {
   string environment = 3 [
     (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
     (buf.validate.field).cel = {
-      id: "envvars.environment.class_wide"
-      message: "\"*\" is reserved: it names the value that binds class-wide"
+      id: "envvars.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
       expression: "!this.contains('*')"
     }
   ];
@@ -214,8 +214,8 @@ message RemoveBindingRequest {
   string environment = 3 [
     (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
     (buf.validate.field).cel = {
-      id: "envvars.environment.class_wide"
-      message: "\"*\" is reserved: it names the value that binds class-wide"
+      id: "envvars.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
       expression: "!this.contains('*')"
     }
   ];
@@ -239,8 +239,8 @@ message ListBindingsRequest {
   string environment = 3 [
     (buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$",
     (buf.validate.field).cel = {
-      id: "envvars.environment.class_wide"
-      message: "\"*\" is reserved: it names the value that binds class-wide"
+      id: "envvars.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
       expression: "!this.contains('*')"
     }
   ];

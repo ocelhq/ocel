@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -60,7 +60,7 @@ func shipping(t *testing.T) provider.Upload {
 
 func shippingSpec(upload provider.Upload) provider.StackSpec {
 	return provider.StackSpec{
-		Ref:     provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
+		Ref:     provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
 		Kind:    provider.StackInfra,
 		Uploads: []provider.Upload{upload},
 	}

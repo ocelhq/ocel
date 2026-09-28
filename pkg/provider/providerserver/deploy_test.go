@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -306,7 +307,7 @@ func TestDeployRecordsEveryStackItProvisioned(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), vendor.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.Records(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +426,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := stackrecords.List(context.Background(), base.Records(), edge.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
+	if entries, rerr := stackrecords.List(context.Background(), base.Records(), environment.TierProduction, "shop"); rerr != nil || len(entries) != 0 {
 		t.Errorf("the refused deploy recorded %v, want nothing written for a binding providerserver would not accept", entries)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -27,7 +28,7 @@ type stack struct {
 func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
-	return ledgerFor(s.e.deps.Records, s.state.Class, s.state.Slug)
+	return ledgerFor(s.e.deps.Records, s.state.Tier, s.state.Slug)
 }
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
@@ -122,8 +123,8 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	}
 	if !s.recorded.Front.provisioned() {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer is provisioned for class %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this class first",
-			Kind, s.state.Class, binding.Hostname)
+			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this tier first",
+			Kind, s.state.Tier, binding.Hostname)
 	}
 	service, err := s.serving(ctx, binding.App)
 	if err != nil {
@@ -137,7 +138,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		App:         binding.App,
 		Certificate: binding.Certificate,
 		Service:     service,
-		Backend:     backendName(s.state.Slug, s.state.Class, binding.Hostname),
+		Backend:     backendName(s.state.Slug, s.state.Tier, binding.Hostname),
 	}
 	claimed, err := s.claim(ctx, binding.Hostname)
 	if err != nil {
@@ -189,7 +190,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	return nil
 }
 
-func (s *stack) target() Target { return Target{Class: s.state.Class, Slug: s.state.Slug} }
+func (s *stack) target() Target { return Target{Tier: s.state.Tier, Slug: s.state.Slug} }
 
 func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	target := s.target()
@@ -199,7 +200,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
-		Class:          s.state.Class,
+		Tier:           s.state.Tier,
 		CertificateMap: s.recorded.Front.CertificateMap,
 		Hosts:          hosts,
 	}), progress.DiscardProgress())
@@ -230,12 +231,12 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 }
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
-	name := s.e.claim(s.state.Class, hostname)
+	name := s.e.claim(s.state.Tier, hostname)
 	record, err := records.ReadOrEmpty(ctx, s.e.deps.Records, name)
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
-	owner := Surface(s.state.Slug, s.state.Class)
+	owner := Surface(s.state.Slug, s.state.Tier)
 	if len(record.Bytes) > 0 {
 		var existing claim
 		if err := json.Unmarshal(record.Bytes, &existing); err != nil {
@@ -281,7 +282,7 @@ func claimedBy(hostname, owner string) error {
 }
 
 func (s *stack) disown(ctx context.Context, hostname string) error {
-	if err := records.Forget(ctx, s.e.deps.Records, s.e.claim(s.state.Class, hostname)); err != nil {
+	if err := records.Forget(ctx, s.e.deps.Records, s.e.claim(s.state.Tier, hostname)); err != nil {
 		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, Kind, err)
 	}
 	return nil
@@ -315,12 +316,12 @@ func (s *stack) Destroy(ctx context.Context) error {
 
 const maxResourceName = 63
 
-func resourceName(slug string, class edge.Class, hostname string, role ...string) string {
+func resourceName(slug string, tier environment.Tier, hostname string, role ...string) string {
 	segments := []naming.Segment{
 		naming.Fixed("ocel"),
 		naming.Fixed(string(Kind)),
 		naming.Compressible(slug),
-		naming.Fixed(string(class)),
+		naming.Fixed(string(tier)),
 		naming.Compressible(naming.SanitizeHost(hostname)),
 	}
 	for _, each := range role {
@@ -329,14 +330,14 @@ func resourceName(slug string, class edge.Class, hostname string, role ...string
 	return naming.Fit(maxResourceName, naming.WordSeparator, segments...)
 }
 
-func backendName(slug string, class edge.Class, hostname string) string {
-	return resourceName(slug, class, hostname)
+func backendName(slug string, tier environment.Tier, hostname string) string {
+	return resourceName(slug, tier, hostname)
 }
 
-func entryName(slug string, class edge.Class, hostname string) string {
-	return resourceName(slug, class, hostname, "cert")
+func entryName(slug string, tier environment.Tier, hostname string) string {
+	return resourceName(slug, tier, hostname, "cert")
 }
 
-func negName(slug string, class edge.Class, hostname string) string {
-	return resourceName(slug, class, hostname, "neg")
+func negName(slug string, tier environment.Tier, hostname string) string {
+	return resourceName(slug, tier, hostname, "neg")
 }

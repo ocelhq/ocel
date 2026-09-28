@@ -6,7 +6,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -20,11 +20,11 @@ import (
 )
 
 func envName(env *environmentv1.Environment) (string, error) {
-	class, err := classOf(env.GetTier())
+	tier, err := tierOf(env.GetTier())
 	if err != nil {
 		return "", err
 	}
-	if class == edge.ClassProduction {
+	if tier == environment.TierProduction {
 		return stackrecords.ProductionEnv, nil
 	}
 	identity := env.GetIdentity()
@@ -80,11 +80,11 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 			return refusal.Refuse(refusal.CodeInvalid,
 				"production is not an environment to remove; `ocel destroy production` removes the project's production footprint")
 		}
-		session, err := h.openEdgeSession(ctx, edge.ClassPreview, req.GetSlug(), req.GetEdge())
+		session, err := h.openEdgeSession(ctx, environment.TierPreview, req.GetSlug(), req.GetEdge())
 		if err != nil {
 			return err
 		}
-		progress.Say(fmt.Sprintf("Removing the routing pointer of %s from the %s edge", environmentPhrase(edge.ClassPreview, pointer), session.front.Kind()))
+		progress.Say(fmt.Sprintf("Removing the routing pointer of %s from the %s edge", environmentPhrase(environment.TierPreview, pointer), session.front.Kind()))
 		removed, err := session.stack.RemovePointer(ctx, pointer, progress)
 		if err != nil {
 			return err
@@ -98,7 +98,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 			return err
 		}
-		if err := records.Forget(ctx, session.provider.Records(), stackrecords.EnvironmentRecord(edge.ClassPreview, req.GetSlug(), pointer)); err != nil {
+		if err := records.Forget(ctx, session.provider.Records(), stackrecords.EnvironmentRecord(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(removed) {
@@ -108,16 +108,16 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 	})
 }
 
-func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, environment string) error {
+func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, preview string) error {
 	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
-	scope := envvars.Scope{Project: slug, Class: edge.ClassPreview}
-	published, err := store.ListBindings(ctx, scope, environment)
+	scope := envvars.Scope{Project: slug, Tier: environment.TierPreview}
+	published, err := store.ListBindings(ctx, scope, preview)
 	if err != nil {
-		return fmt.Errorf("read the records kept for preview %s: %w", environment, err)
+		return fmt.Errorf("read the records kept for preview %s: %w", preview, err)
 	}
 	var kept []string
 	for _, record := range published {
-		if record.Environment != environment {
+		if record.Environment != preview {
 			continue
 		}
 		if record.Owner == envvars.OwnerOcel || record.Owner == naming.InlineRecordOwner {
@@ -127,8 +127,8 @@ func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, env
 	if len(kept) == 0 {
 		return nil
 	}
-	if _, err := store.RemoveBindings(ctx, scope, environment, kept); err != nil {
-		return fmt.Errorf("remove the records kept for preview %s: %w", environment, err)
+	if _, err := store.RemoveBindings(ctx, scope, preview, kept); err != nil {
+		return fmt.Errorf("remove the records kept for preview %s: %w", preview, err)
 	}
 	return nil
 }

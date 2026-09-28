@@ -6,7 +6,7 @@ export interface VpsContainerArgs {
   name: string;
   /** The project network the container joins, and the only thing that reaches it. */
   network: string;
-  /** The labels a teardown and a class destroy find the container by. */
+  /** The labels a teardown and a tier destroy find the container by. */
   labels: Record<string, string>;
   /** Ports published on the box. A resource publishes none. */
   publish: string[];
@@ -35,7 +35,7 @@ export interface VpsContainerArgs {
 export interface VpsVolumeArgs {
   /** The volume's name, which a teardown removes it by. */
   name: string;
-  /** The labels a class destroy finds the volume by. */
+  /** The labels a tier destroy finds the volume by. */
   labels: Record<string, string>;
   /** The volume driver. Defaults to the engine's own `local`. */
   driver: string;

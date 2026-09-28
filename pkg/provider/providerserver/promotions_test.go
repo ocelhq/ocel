@@ -11,6 +11,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -19,9 +20,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 )
 
-func seedPromotions(t *testing.T, provider *fake.Provider, class edge.Class, slug, pointer string, ids ...string) *ledger.Ledger {
+func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
-	releases := ledger.New(provider.Records(), class, slug)
+	releases := ledger.New(provider.Records(), tier, slug)
 	if err := releases.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +42,8 @@ func buildIdentity(seq int) string {
 func TestListPromotionsReadsTheLedgerThroughTheEdgeStack(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
-	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
+	deployed(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
 	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})
 	if err != nil {
@@ -72,8 +73,8 @@ func TestListPromotionsIsEmptyForAProjectThatHasNeverDeployed(t *testing.T) {
 func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
-	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
+	deployed(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
 	rolled, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop"})
 	if err != nil {
@@ -120,9 +121,9 @@ func (c *capturingLedger) flipped() (progress.Progress, bool) {
 	return c.progress, c.heard
 }
 
-func capturing(t *testing.T, provider *fake.Provider, class edge.Class, slug, marker string) *capturingLedger {
+func capturing(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, marker string) *capturingLedger {
 	t.Helper()
-	capturer := &capturingLedger{Ledger: ledger.New(provider.Records(), class, slug), marker: marker}
+	capturer := &capturingLedger{Ledger: ledger.New(provider.Records(), tier, slug), marker: marker}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return capturer })
 	return capturer
 }
@@ -131,7 +132,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	const marker = "the flip said this through the reporter it was handed"
-	capturer := capturing(t, provider, edge.ClassProduction, "shop", marker)
+	capturer := capturing(t, provider, environment.TierProduction, "shop", marker)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -169,9 +170,9 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
-	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
-	capturer := capturing(t, provider, edge.ClassProduction, "shop",
+	deployed(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
+	capturer := capturing(t, provider, environment.TierProduction, "shop",
 		"the flip said this into a rollback that streams nothing")
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
@@ -189,8 +190,8 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
-	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1")
+	deployed(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1")
 
 	_, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p9"})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
@@ -201,13 +202,13 @@ func TestRollbackRefusesAPromotionTheHistoryDoesNotContain(t *testing.T) {
 func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
-	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2")
+	deployed(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
-	pointer := records.Name{"ledger", ledger.Scope(edge.ClassProduction, "shop"), "pointers", edge.DefaultPointer}
+	pointer := records.Name{"ledger", ledger.Scope(environment.TierProduction, "shop"), "pointers", edge.DefaultPointer}
 	jostled := &jostle{Store: provider.Records(), at: pointer}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		return ledger.New(jostled, state.Class, state.Slug)
+		return ledger.New(jostled, state.Tier, state.Slug)
 	})
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); connect.CodeOf(err) != connect.CodeAborted {
@@ -246,7 +247,7 @@ func (j *jostle) Write(ctx context.Context, record records.Record) (records.Revi
 func TestAnEdgeWithItsOwnLedgerStillWorks(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
+	deployed(t, provider, environment.TierProduction, "shop")
 
 	own := &memoryLedger{}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return own })
@@ -303,8 +304,8 @@ func (*memoryLedger) Destroy(context.Context) error { return nil }
 func TestRemoveStalePromotionsKeepsTheNewestN(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, edge.ClassProduction, "shop")
-	seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2", "p3")
+	deployed(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2", "p3")
 
 	stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
 		Slug:        "shop",
@@ -343,8 +344,8 @@ func TestAPruneSaysWhichPromotionsItReclaimedAndHowManyItKept(t *testing.T) {
 			t.Parallel()
 			client, provider := contractServed(t, "1.0.0")
 			if tc.seed {
-				deployed(t, provider, edge.ClassProduction, "shop")
-				seedPromotions(t, provider, edge.ClassProduction, "shop", "", "p1", "p2", "p3")
+				deployed(t, provider, environment.TierProduction, "shop")
+				seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2", "p3")
 			}
 
 			stream, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{

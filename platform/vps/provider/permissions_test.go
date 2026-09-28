@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -74,8 +75,8 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, edge.PurposeDeploy).Document
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		for _, grant := range host.Grants(class) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, grant := range host.Grants(tier) {
 			for _, want := range []string{grant.Name, grant.Detail} {
 				if !strings.Contains(document, want) {
 					t.Errorf("the deploy document does not include %q, so it claims less than a bootstrap hands out:\n%s", want, document)
@@ -89,8 +90,8 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	t.Parallel()
 
 	document := rendered(t, edge.PurposeDeploy).Document
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
 				continue
 			}
@@ -101,9 +102,9 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	}
 }
 
-func describedGroup(t *testing.T, class edge.Class) string {
+func describedGroup(t *testing.T, tier environment.Tier) string {
 	t.Helper()
-	for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(tier, nil, host.ArchAMD64, host.Front{}) {
 		if item.Kind != "linux:user" {
 			continue
 		}
@@ -121,11 +122,11 @@ func describedGroup(t *testing.T, class edge.Class) string {
 func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	group := describedGroup(t, class)
+	tier := environment.TierProduction
+	group := describedGroup(t, tier)
 
 	var claim host.Grant
-	for _, grant := range host.Grants(class) {
+	for _, grant := range host.Grants(tier) {
 		if grant.Name == "membership of the "+group+" group" {
 			claim = grant
 		}
@@ -148,7 +149,7 @@ func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing
 	t.Parallel()
 
 	document := rendered(t, edge.PurposeDeploy).Document
-	for _, item := range host.Items(edge.ClassProduction, nil, host.ArchAMD64, host.Front{}) {
+	for _, item := range host.Items(environment.TierProduction, nil, host.ArchAMD64, host.Front{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
 		}
@@ -164,10 +165,10 @@ func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T)
 	t.Parallel()
 
 	document := rendered(t, edge.PurposeDeploy).Document
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if !strings.Contains(document, host.SealKeyPath(class)) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if !strings.Contains(document, host.SealKeyPath(tier)) {
 			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never reads:\n%s",
-				host.SealKeyPath(class), document)
+				host.SealKeyPath(tier), document)
 		}
 	}
 }

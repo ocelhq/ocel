@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -234,7 +235,7 @@ func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	}
 }
 
-func TestPreflightFallsBackToTheSiblingClass(t *testing.T) {
+func TestPreflightFallsBackToTheSiblingTier(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -303,8 +304,8 @@ func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *tes
 
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	seedStack(t, vendor, edge.ClassProduction, "shop", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Bound: []string{"acme.com"}},
+	seedStack(t, vendor, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Bound: []string{"acme.com"}},
 	})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 
@@ -327,8 +328,8 @@ func TestPreflightDoesNotRefuseAHostnameThisProjectAlreadyClaimsButNeverRecorded
 
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	seedStack(t, vendor, edge.ClassProduction, "shop", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction},
+	seedStack(t, vendor, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction},
 	})
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Owns("acme.com", "ocel-shop-production")
 

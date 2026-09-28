@@ -128,7 +128,7 @@ export interface BucketBinding {
 
 /** An ocel variable holding this value, written { "$env": "NAME" }, so the value itself never sits in the config. */
 export interface VariableRef {
-  /** The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
+  /** The ocel variable containing this value, set per tier and environment with ocel env set. The app never reads it as a variable of its own. */
   $env: string;
 }
 
@@ -258,7 +258,7 @@ export type EdgeOptions = Record<string, never>;
 export interface EnvSourceConfig {
   /** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
   dev?: DevEnvSourceDescriptor;
-  /** Where every preview's class-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's own. */
+  /** Where every preview's tier-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's own. */
   preview?: EnvSourceDescriptor;
   /** Where production's values are read from. Left off, ocel's own store in your account ("builtin"). */
   production?: EnvSourceDescriptor;

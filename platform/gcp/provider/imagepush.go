@@ -6,18 +6,18 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func (p *Provider) pushImage(ctx context.Context, class edge.Class, app, ref string, built v1.Image, progress progress.Progress) error {
+func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, ref string, built v1.Image, progress progress.Progress) error {
 	digest, err := built.Digest()
 	if err != nil {
 		return fmt.Errorf("read the digest of the %s image: %w", app, err)
 	}
-	store, err := p.imageStore(ctx, class)
+	store, err := p.imageStore(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -31,11 +31,11 @@ func (p *Provider) pushImage(ctx context.Context, class edge.Class, app, ref str
 	return store.Push(ctx, push, progress)
 }
 
-func (p *Provider) imageStore(ctx context.Context, class edge.Class) (provider.ImageStore, error) {
+func (p *Provider) imageStore(ctx context.Context, tier environment.Tier) (provider.ImageStore, error) {
 	if p.emulated() {
 		return p.OpenDirectImages(ctx)
 	}
-	at, err := p.EnsureImageRegistry(ctx, class, nil)
+	at, err := p.EnsureImageRegistry(ctx, tier, nil)
 	if err != nil {
 		return nil, err
 	}

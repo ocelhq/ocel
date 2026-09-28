@@ -20,7 +20,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -59,7 +59,7 @@ func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, err
 		to  uploadTarget
 	}{
 		{"cache", entryTarget(cfg)},
-		{"fetch-cache", uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, class: cfg.Class}},
+		{"fetch-cache", uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier}},
 	}
 
 	var uploads []prerenderUpload
@@ -131,12 +131,12 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 type uploadTarget struct {
 	up     payloads.ObjectStore
 	bucket string
-	class  edge.Class
+	tier   environment.Tier
 }
 
 func (t uploadTarget) validate() error {
 	if t.bucket == "" {
-		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `%s`", provider.BootstrapCommand(t.class))
+		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `%s`", provider.BootstrapCommand(t.tier))
 	}
 	if t.up == nil {
 		return fmt.Errorf("no asset uploader configured")
@@ -218,9 +218,9 @@ func isPreconditionFailed(err error) bool {
 
 func entryTarget(cfg Config) uploadTarget {
 	if isrEntriesAdopted(cfg.objectStores()) {
-		return uploadTarget{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, class: cfg.Class}
+		return uploadTarget{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, tier: cfg.Tier}
 	}
-	return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, class: cfg.Class}
+	return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, tier: cfg.Tier}
 }
 
 func isrEntriesAdopted(stores ObjectStores) bool {

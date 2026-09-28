@@ -2,8 +2,8 @@ import type { AwsSurfaces } from "./aws";
 import type { TransformBindings } from "./index";
 import type { VpsSurfaces } from "./vps";
 
-/** The environment classes a deploy can target. */
-export type EnvClass = "development" | "preview" | "production";
+/** The environment tiers a deploy can target. */
+export type EnvTier = "development" | "preview" | "production";
 
 /**
  * What a rule's `if` gate is allowed to decide on: the environment being
@@ -11,7 +11,7 @@ export type EnvClass = "development" | "preview" | "production";
  * across apps have no `app`, so `ctx.app === "api"` is false for them.
  */
 export interface GateContext {
-  readonly envClass: EnvClass;
+  readonly envTier: EnvTier;
   readonly env: string;
   readonly app: string | undefined;
 }
@@ -55,7 +55,7 @@ export const ruleKeywords = ["if", "tags"] as const;
 /** What a callback form of `defineTransform` is handed, and nothing besides. */
 export interface TransformInputs {
   readonly bindings: TransformBindings;
-  readonly envClass: EnvClass;
+  readonly envTier: EnvTier;
   readonly env: string;
 }
 

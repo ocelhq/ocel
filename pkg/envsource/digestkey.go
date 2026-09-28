@@ -13,7 +13,7 @@ import (
 	"hash"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
 )
@@ -36,37 +36,37 @@ type sealedDigestKey struct {
 	Sealed []byte `json:"sealed"`
 }
 
-func digestKeyRecord(class edge.Class) records.Name {
-	return records.Name{records.RootEnvSourceDigestKey, string(class)}
+func digestKeyRecord(tier environment.Tier) records.Name {
+	return records.Name{records.RootEnvSourceDigestKey, string(tier)}
 }
 
-func digestKeyScope(class edge.Class) records.SealScope {
+func digestKeyScope(tier environment.Tier) records.SealScope {
 	return records.SealScope{
 		Project: everyProject,
-		Class:   class,
-		Env:     envvars.ClassWideEnvironment,
+		Tier:    tier,
+		Env:     envvars.TierWideEnvironment,
 		Folder:  digestKeyFolder,
 		Binding: digestKeyBinding,
 		Name:    digestKeyName,
 	}
 }
 
-func EnsureDigestKey(ctx context.Context, store envvars.Store, class edge.Class) (DigestKey, error) {
+func EnsureDigestKey(ctx context.Context, store envvars.Store, tier environment.Tier) (DigestKey, error) {
 	for range digestKeyAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store.Records, digestKeyRecord(class))
+		recorded, err := records.ReadOrEmpty(ctx, store.Records, digestKeyRecord(tier))
 		if err != nil {
 			return DigestKey{}, err
 		}
 		if len(recorded.Bytes) > 0 {
-			return openDigestKey(ctx, store.Cipher, class, recorded)
+			return openDigestKey(ctx, store.Cipher, tier, recorded)
 		}
 		secret := make([]byte, digestKeyBytes)
 		if _, err := rand.Read(secret); err != nil {
 			return DigestKey{}, err
 		}
-		sealed, err := store.Cipher.Seal(ctx, digestKeyScope(class), secret)
+		sealed, err := store.Cipher.Seal(ctx, digestKeyScope(tier), secret)
 		if err != nil {
-			return DigestKey{}, fmt.Errorf("seal the %s env source digest key: %w", class, err)
+			return DigestKey{}, fmt.Errorf("seal the %s env source digest key: %w", tier, err)
 		}
 		recorded.Bytes, err = json.Marshal(sealedDigestKey{Sealed: sealed})
 		if err != nil {
@@ -81,34 +81,34 @@ func EnsureDigestKey(ctx context.Context, store envvars.Store, class edge.Class)
 		}
 		return DigestKey{secret: secret}, nil
 	}
-	return DigestKey{}, fmt.Errorf("the %s env source digest key was rewritten under every attempt to read it", class)
+	return DigestKey{}, fmt.Errorf("the %s env source digest key was rewritten under every attempt to read it", tier)
 }
 
-func ForgetDigestKey(ctx context.Context, store records.Store, class edge.Class) error {
-	return records.Forget(ctx, store, digestKeyRecord(class))
+func ForgetDigestKey(ctx context.Context, store records.Store, tier environment.Tier) error {
+	return records.Forget(ctx, store, digestKeyRecord(tier))
 }
 
-func openDigestKey(ctx context.Context, cipher records.Cipher, class edge.Class, recorded records.Record) (DigestKey, error) {
+func openDigestKey(ctx context.Context, cipher records.Cipher, tier environment.Tier, recorded records.Record) (DigestKey, error) {
 	var kept sealedDigestKey
 	if err := json.Unmarshal(recorded.Bytes, &kept); err != nil {
 		return DigestKey{}, fmt.Errorf("read %s: %w", recorded.Name, err)
 	}
-	secret, err := cipher.Open(ctx, digestKeyScope(class), kept.Sealed)
+	secret, err := cipher.Open(ctx, digestKeyScope(tier), kept.Sealed)
 	if err != nil {
-		return DigestKey{}, fmt.Errorf("open the %s env source digest key: %w", class, err)
+		return DigestKey{}, fmt.Errorf("open the %s env source digest key: %w", tier, err)
 	}
 	if len(secret) != digestKeyBytes {
-		return DigestKey{}, fmt.Errorf("the %s env source digest key opened to %d bytes, want %d", class, len(secret), digestKeyBytes)
+		return DigestKey{}, fmt.Errorf("the %s env source digest key opened to %d bytes, want %d", tier, len(secret), digestKeyBytes)
 	}
 	return DigestKey{secret: secret}, nil
 }
 
 func (k DigestKey) version(scope envvars.Scope, at envvars.Cell, read Value) (string, error) {
 	if len(k.secret) != digestKeyBytes {
-		return "", errors.New("an env source value is versioned under its class's digest key, and none was opened")
+		return "", errors.New("an env source value is versioned under its tier's digest key, and none was opened")
 	}
 	mac := hmac.New(sha256.New, k.secret)
-	for _, part := range []string{scope.Project, string(scope.Class), at.Folder, at.Key, string(read.Plaintext)} {
+	for _, part := range []string{scope.Project, string(scope.Tier), at.Folder, at.Key, string(read.Plaintext)} {
 		writeLengthPrefixed(mac, part)
 	}
 	digest := hex.EncodeToString(mac.Sum(nil)[:digestBytes])

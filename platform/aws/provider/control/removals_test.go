@@ -10,6 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
@@ -19,11 +20,11 @@ const (
 	cloudfrontKind edge.Kind = "cloudfront"
 )
 
-func edgeParam(t *testing.T, class, leaf string) string {
+func edgeParam(t *testing.T, tier, leaf string) string {
 	t.Helper()
-	prefix, err := defaultNamespace.EdgeParamPrefix(class, cloudflareKind)
+	prefix, err := defaultNamespace.EdgeParamPrefix(tier, cloudflareKind)
 	if err != nil {
-		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
+		t.Fatalf("EdgeParamPrefix(%s): %v", tier, err)
 	}
 	return prefix + leaf
 }
@@ -32,16 +33,16 @@ func summary(id, kind string) cfntypes.StackResourceSummary {
 	return cfntypes.StackResourceSummary{LogicalResourceId: aws.String(id), ResourceType: aws.String(kind)}
 }
 
-func removingBootstrapper(t *testing.T, class string) Bootstrap {
+func removingBootstrapper(t *testing.T, tier string) Bootstrap {
 	t.Helper()
 
-	b := installedBootstrapper(t, class)
-	stackName, err := defaultNamespace.StackNameFor(class)
+	b := installedBootstrapper(t, tier)
+	stackName, err := defaultNamespace.StackNameFor(tier)
 	if err != nil {
-		t.Fatalf("StackNameFor(%s): %v", class, err)
+		t.Fatalf("StackNameFor(%s): %v", tier, err)
 	}
-	isrStack := defaultNamespace.FeatureStackName(bootstrap.FeatureISR, class)
-	varsKeyStack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, class)
+	isrStack := defaultNamespace.FeatureStackName(bootstrap.FeatureISR, tier)
+	varsKeyStack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, tier)
 	cfn := b.CFN.(*teardownCFN)
 	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
 	cfn.present[varsKeyStack] = bootstrap.Deployed{Present: true}
@@ -95,14 +96,14 @@ func groupNames(plan provider.Plan) string {
 func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	t.Parallel()
 
-	b := removingBootstrapper(t, bootstrap.ClassProduction)
+	b := removingBootstrapper(t, bootstrap.TierProduction)
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 
-	isr := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
+	isr := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.TierProduction))
 	core := groupNamed(plan, "aws/"+coreStackName)
 	if isr == nil || core == nil {
 		t.Fatalf("plan groups = %s, want the isr stack and the core it depends on", groupNames(plan))
@@ -138,7 +139,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	if params == nil || params.Action != provider.ActionDelete {
 		t.Fatalf("plan groups = %s, want the parameters this bootstrap stores", groupNames(plan))
 	}
-	credentials := changeNamed(params, edgeParam(t, bootstrap.ClassProduction, "/credentials"))
+	credentials := changeNamed(params, edgeParam(t, bootstrap.TierProduction, "/credentials"))
 	if credentials == nil || credentials.Kind != "AWS::SSM::Parameter" {
 		t.Errorf("the parameters group's rows = %+v, want the stored handles typed", params.Changes)
 	}
@@ -169,10 +170,10 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingShares(t *testing.T) {
 	t.Parallel()
 
-	b := removingBootstrapper(t, bootstrap.ClassPreview)
+	b := removingBootstrapper(t, bootstrap.TierPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassPreview)
+	plan, err := b.PlanRemove(context.Background(), environment.TierPreview)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingShares(t *testing.T) {
 	if kept == nil || kept.Action != provider.ActionKeep {
 		t.Fatalf("the passphrase row = %+v, want it kept", kept)
 	}
-	if !strings.Contains(kept.Reason, bootstrap.ClassProduction) {
+	if !strings.Contains(kept.Reason, bootstrap.TierProduction) {
 		t.Errorf("reason = %q, want it to name the bootstrap still sharing it", kept.Reason)
 	}
 	if params.Action != provider.ActionDelete {
@@ -192,10 +193,10 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingShares(t *testing.T) {
 func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	b := removingBootstrapper(t, bootstrap.ClassProduction)
+	b := removingBootstrapper(t, bootstrap.TierProduction)
 	delete(b.CFN.(*teardownCFN).present, coreStackName)
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -203,7 +204,7 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 		t.Errorf("plan groups = %s, want no stack planned where none exists", groupNames(plan))
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
-	if changeNamed(params, edgeParam(t, bootstrap.ClassProduction, "/credentials")) == nil {
+	if changeNamed(params, edgeParam(t, bootstrap.TierProduction, "/credentials")) == nil {
 		t.Errorf("plan groups = %s, want the parameters the bootstrap left behind still planned", groupNames(plan))
 	}
 }
@@ -211,10 +212,10 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.T) {
 	t.Parallel()
 
-	b := removingBootstrapper(t, bootstrap.ClassProduction)
+	b := removingBootstrapper(t, bootstrap.TierProduction)
 	b.Edge = &teardownEdge{}
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -225,10 +226,10 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 	}
 }
 
-func frontedBootstrapper(t *testing.T, class string) (Bootstrap, *planningEdge, *planningEdge) {
+func frontedBootstrapper(t *testing.T, tier string) (Bootstrap, *planningEdge, *planningEdge) {
 	t.Helper()
 
-	b := removingBootstrapper(t, class)
+	b := removingBootstrapper(t, tier)
 	installed := b.Edge.(*planningEdge)
 	selected := &planningEdge{
 		teardownEdge: teardownEdge{kind: cloudfrontKind},
@@ -245,9 +246,9 @@ func frontedBootstrapper(t *testing.T, class string) (Bootstrap, *planningEdge, 
 func TestPlanRemovalNamesEveryInstalledEdgeByItsOwnKind(t *testing.T) {
 	t.Parallel()
 
-	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, _, _ := frontedBootstrapper(t, bootstrap.TierProduction)
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -279,7 +280,7 @@ func TestPlanRemovalNamesEveryInstalledEdgeByItsOwnKind(t *testing.T) {
 func TestPlanRemovalLeavesOutAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 	t.Parallel()
 
-	b, selected, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, selected, installed := frontedBootstrapper(t, bootstrap.TierProduction)
 	unused := &planningEdge{
 		teardownEdge: teardownEdge{kind: "relay"},
 		removals:     []edge.PlanChange{{Kind: "Relay::Worker", Name: "ocel-relay", Action: edge.PlanDelete}},
@@ -287,7 +288,7 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 	b.Edges = registryOf(selected, installed, unused)
 	b.Kinds = kindsOf(selected, installed, unused)
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -299,10 +300,10 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	t.Parallel()
 
-	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
-	severed(t, b, bootstrap.ClassProduction)
+	b, _, _ := frontedBootstrapper(t, bootstrap.TierProduction)
+	severed(t, b, bootstrap.TierProduction)
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
@@ -314,10 +315,10 @@ func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	t.Parallel()
 
-	b, _, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
-	severed(t, b, bootstrap.ClassProduction)
+	b, _, installed := frontedBootstrapper(t, bootstrap.TierProduction)
+	severed(t, b, bootstrap.TierProduction)
 
-	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if len(installed.torndown) == 0 {
@@ -325,14 +326,14 @@ func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	}
 }
 
-func severed(t *testing.T, b Bootstrap, class string) {
+func severed(t *testing.T, b Bootstrap, tier string) {
 	t.Helper()
 
-	b.CFN.(*teardownCFN).present[defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
+	b.CFN.(*teardownCFN).present[defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, tier)] =
 		bootstrap.Deployed{Present: true}
-	prefix, err := defaultNamespace.EdgeParamPrefix(class, cloudflareKind)
+	prefix, err := defaultNamespace.EdgeParamPrefix(tier, cloudflareKind)
 	if err != nil {
-		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
+		t.Fatalf("EdgeParamPrefix(%s): %v", tier, err)
 	}
 	params := b.SSM.(*teardownSSM).params
 	for name := range params {
@@ -345,14 +346,14 @@ func severed(t *testing.T, b Bootstrap, class string) {
 func TestRemoveTearsDownEveryEdgeThePlanShowed(t *testing.T) {
 	t.Parallel()
 
-	b, selected, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, selected, installed := frontedBootstrapper(t, bootstrap.TierProduction)
 
-	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	for _, front := range []*planningEdge{selected, installed} {
-		if !slices.Equal(front.torndown, []edge.Class{edge.ClassProduction}) {
-			t.Errorf("the %s edge saw teardowns %v, want the class the plan showed it under", front.Kind(), front.torndown)
+		if !slices.Equal(front.torndown, []environment.Tier{environment.TierProduction}) {
+			t.Errorf("the %s edge saw teardowns %v, want the tier the plan showed it under", front.Kind(), front.torndown)
 		}
 	}
 }
@@ -360,12 +361,12 @@ func TestRemoveTearsDownEveryEdgeThePlanShowed(t *testing.T) {
 func TestRemoveLeavesAloneAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 	t.Parallel()
 
-	b, selected, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, selected, installed := frontedBootstrapper(t, bootstrap.TierProduction)
 	unused := &planningEdge{teardownEdge: teardownEdge{kind: "relay"}}
 	b.Edges = registryOf(selected, installed, unused)
 	b.Kinds = kindsOf(selected, installed, unused)
 
-	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if len(unused.torndown) != 0 {
@@ -376,14 +377,14 @@ func TestRemoveLeavesAloneAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 	t.Parallel()
 
-	b := removingBootstrapper(t, bootstrap.ClassProduction)
+	b := removingBootstrapper(t, bootstrap.TierProduction)
 
-	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 
-	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(provider.FeatureVarsKey, bootstrap.ClassProduction))
+	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(provider.FeatureVarsKey, bootstrap.TierProduction))
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the stack the vars key is provisioned in", groupNames(plan))
 	}

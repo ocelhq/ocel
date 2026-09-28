@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -25,8 +26,8 @@ type Machine interface {
 	Address(ctx context.Context) (string, error)
 	HasImage(ctx context.Context, imageRef string) (bool, error)
 	RunContainer(ctx context.Context, spec host.Container) error
-	ForgetNetwork(ctx context.Context, class edge.Class, project string) error
-	Promote(ctx context.Context, class edge.Class, project, app, imageRef string) error
+	ForgetNetwork(ctx context.Context, tier environment.Tier, project string) error
+	Promote(ctx context.Context, tier environment.Tier, project, app, imageRef string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
 	Release(ctx context.Context, rel host.Release, progress progress.Progress) error
 	UnroutePointer(ctx context.Context, owner, pointer string) error
@@ -43,7 +44,7 @@ type Machine interface {
 	RemovePreviewEntry(ctx context.Context, base string) error
 }
 
-type Origins func(ctx context.Context, project string, class edge.Class) error
+type Origins func(ctx context.Context, project string, tier environment.Tier) error
 
 type Edge struct {
 	machine Machine
@@ -69,14 +70,14 @@ func (e *Edge) Facts() edge.Facts {
 
 func (e *Edge) Hooks() edge.Hooks { return edge.Hooks{} }
 
-func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
+func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (e *Edge) Teardown(context.Context, edge.Class) error { return nil }
+func (e *Edge) Teardown(context.Context, environment.Tier) error { return nil }
 
-func Surface(slug string, class edge.Class) string {
-	return live.Surface(slug, string(class))
+func Surface(slug string, tier environment.Tier) string {
+	return live.Surface(slug, string(tier))
 }
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -86,7 +87,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	}
 	next := prior
 	next.Slug = spec.Slug
-	next.Class = spec.Class
+	next.Tier = spec.Tier
 	next.PreviewBase = declaredPreviewBase(spec)
 	s := &stack{e: e, state: next}
 	if err := s.openLedger().EnsureSchema(ctx); err != nil {
@@ -96,7 +97,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 }
 
 func declaredPreviewBase(spec edge.StackSpec) string {
-	if spec.Class != edge.ClassPreview {
+	if spec.Tier != environment.TierPreview {
 		return ""
 	}
 	for _, hostname := range spec.Domains {
@@ -130,8 +131,8 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 	return claims[at].Owner, nil
 }
 
-func (e *Edge) ProjectOwner(slug string, class edge.Class) string {
-	return Surface(slug, class)
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
+	return Surface(slug, tier)
 }
 
 func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {

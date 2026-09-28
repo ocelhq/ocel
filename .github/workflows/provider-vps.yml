@@ -12,6 +12,7 @@ on:
       - "pkg/connectorserver/**"
       - "pkg/constants/**"
       - "pkg/edge/**"
+      - "pkg/environment/**"
       - "pkg/envvars/**"
       - "pkg/envvarsserver/**"
       - "pkg/images/**"

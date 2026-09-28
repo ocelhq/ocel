@@ -8,6 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -33,8 +34,8 @@ type names struct {
 
 func dashed(parts ...string) string { return strings.Join(parts, "-") }
 
-func frontNames(class edge.Class) names {
-	stem := dashed("ocel", string(Kind), string(class))
+func frontNames(tier environment.Tier) names {
+	stem := dashed("ocel", string(Kind), string(tier))
 	return names{
 		Address:        stem + "-address",
 		NotFound:       stem + "-notfound",

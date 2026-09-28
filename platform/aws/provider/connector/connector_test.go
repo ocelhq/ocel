@@ -168,11 +168,11 @@ func TestTheStackIsSeparateFromEveryBootstrapStack(t *testing.T) {
 	t.Parallel()
 
 	named := StackName(defaultNamespace)
-	production, err := defaultNamespace.StackNameFor(bootstrap.ClassProduction)
+	production, err := defaultNamespace.StackNameFor(bootstrap.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := defaultNamespace.StackNameFor(bootstrap.ClassPreview)
+	preview, err := defaultNamespace.StackNameFor(bootstrap.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestAnAccountWithNoBootstrappedKeyRefusesTheInstall(t *testing.T) {
 
 	_, err := varsKeys(context.Background(), noStacks{}, defaultNamespace)
 	if err == nil {
-		t.Fatal("an account with neither class bootstrapped rendered a policy, and it would name no key to scope the grant to")
+		t.Fatal("an account with neither tier bootstrapped rendered a policy, and it would name no key to scope the grant to")
 	}
 	if !strings.Contains(err.Error(), "ocel connector add") {
 		t.Errorf("the refusal reads %q, and it should say what finishes the install", err)

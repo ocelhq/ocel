@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -208,32 +209,32 @@ func (p *cloudFront) rollout() Rollout {
 	return p.pacing
 }
 
-func knownClass(class edge.Class) error {
-	if class != edge.ClassProduction && class != edge.ClassPreview {
-		return fmt.Errorf("the %q edge does not know the class %q", Kind, class)
+func knownTier(tier environment.Tier) error {
+	if tier != environment.TierProduction && tier != environment.TierPreview {
+		return fmt.Errorf("the %q edge does not know the tier %q", Kind, tier)
 	}
 	return nil
 }
 
-func (p *cloudFront) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
-	if err := knownClass(class); err != nil {
+func (p *cloudFront) bootstrap(ctx context.Context, c Clients, tier environment.Tier) (bootstrap.Deployed, error) {
+	if err := knownTier(tier); err != nil {
 		return bootstrap.Deployed{}, err
 	}
-	if class == edge.ClassPreview {
+	if tier == environment.TierPreview {
 		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p.ns)
 	}
 	return bootstrap.CheckDeployed(ctx, c.CFN, p.ns)
 }
 
-func (p *cloudFront) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
-	if err := knownClass(class); err != nil {
+func (p *cloudFront) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
+	if err := knownTier(tier); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (p *cloudFront) Teardown(ctx context.Context, class edge.Class) error {
-	if err := knownClass(class); err != nil {
+func (p *cloudFront) Teardown(ctx context.Context, tier environment.Tier) error {
+	if err := knownTier(tier); err != nil {
 		return err
 	}
 	c, err := p.clientsFor(ctx)
@@ -249,13 +250,13 @@ func (p *cloudFront) Teardown(ctx context.Context, class edge.Class) error {
 		names = append(names, summary.comment)
 	}
 	slices.Sort(names)
-	fronted := surface.ProjectsNamed(p.ns, names, class)
+	fronted := surface.ProjectsNamed(p.ns, names, tier)
 	if len(fronted) == 0 {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"the %q edge still fronts %d project(s) of class %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
-		Kind, len(fronted), class, strings.Join(fronted, ", "), "ocel destroy "+string(class))
+		"the %q edge still fronts %d project(s) of tier %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
+		Kind, len(fronted), tier, strings.Join(fronted, ", "), "ocel destroy "+string(tier))
 }
 
 func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -266,25 +267,25 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	if spec.Slug == "" {
 		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack names none", Kind)
 	}
-	deployed, err := p.bootstrap(ctx, c, spec.Class)
+	deployed, err := p.bootstrap(ctx, c, spec.Tier)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s bootstrap is not installed, so the %q edge has no state table to keep %s's deployments in. Run `%s` against this account, then deploy again", spec.Class, Kind, spec.Slug, provider.BootstrapCommand(spec.Class))
+		return nil, fmt.Errorf("the %s bootstrap is not installed, so the %q edge has no state table to keep %s's deployments in. Run `%s` against this account, then deploy again", spec.Tier, Kind, spec.Slug, provider.BootstrapCommand(spec.Tier))
 	}
 	var own private
 	if err := prior.Private.Into(&own); err != nil {
 		return nil, err
 	}
-	set, err := edgeSetOf(deployed, spec.Class)
+	set, err := edgeSetOf(deployed, spec.Tier)
 	if err != nil {
 		return nil, err
 	}
 
 	next := prior
 	next.Slug = spec.Slug
-	next.Class = spec.Class
+	next.Tier = spec.Tier
 	own.StateTable = deployed.StateTable
 	own.AssetBucket = deployed.AssetBucket
 	own.Region = c.Region
@@ -319,8 +320,8 @@ func (p *cloudFront) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (p *cloudFront) ProjectOwner(slug string, class edge.Class) string {
-	return distributionName(p.ns, slug, class)
+func (p *cloudFront) ProjectOwner(slug string, tier environment.Tier) string {
+	return distributionName(p.ns, slug, tier)
 }
 
 func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, error) {
@@ -328,8 +329,8 @@ func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, 
 	if err != nil {
 		return "", err
 	}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		owner, found, err := routeOwner(ctx, c, p.ns, class, hostname)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		owner, found, err := routeOwner(ctx, c, p.ns, tier, hostname)
 		if err != nil {
 			return "", err
 		}
@@ -349,8 +350,8 @@ func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, 
 	return "", nil
 }
 
-func distributionName(ns bootstrap.Namespace, slug string, class edge.Class) string {
-	return surface.Fitted(maxDistributionNameLen, ns, slug, class)
+func distributionName(ns bootstrap.Namespace, slug string, tier environment.Tier) string {
+	return surface.Fitted(maxDistributionNameLen, ns, slug, tier)
 }
 
 func assetOriginDomain(bucket, region string) string {

@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -24,29 +25,29 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func deployed(t *testing.T, vendor *fake.Provider, class edge.Class, slug string) {
+func deployed(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
-	seedStack(t, vendor, class, slug, stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: slug, Class: class, Endpoint: "https://" + slug + ".fake.invalid"},
+	seedStack(t, vendor, tier, slug, stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: slug, Tier: tier, Endpoint: "https://" + slug + ".fake.invalid"},
 	})
-	promoted(t, vendor, class, slug)
+	promoted(t, vendor, tier, slug)
 }
 
-func promoted(t *testing.T, vendor *fake.Provider, class edge.Class, slug string) {
+func promoted(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
-	if err := ledger.New(vendor.Records(), class, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
+	if err := ledger.New(vendor.Records(), tier, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func seedStack(t *testing.T, vendor *fake.Provider, class edge.Class, slug string, state stackrecords.EdgeState) {
+func seedStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string, state stackrecords.EdgeState) {
 	t.Helper()
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := stackrecords.EdgeStackRecord(class, slug)
+	name := stackrecords.EdgeStackRecord(tier, slug)
 	recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
 	if err != nil {
 		t.Fatal(err)
@@ -57,9 +58,9 @@ func seedStack(t *testing.T, vendor *fake.Provider, class edge.Class, slug strin
 	}
 }
 
-func readStack(t *testing.T, vendor *fake.Provider, class edge.Class, slug string) stackrecords.EdgeState {
+func readStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) stackrecords.EdgeState {
 	t.Helper()
-	recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.EdgeStackRecord(class, slug))
+	recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.EdgeStackRecord(tier, slug))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func zoned(zone string) *contractv1.EdgeSelection {
 func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -97,7 +98,7 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 		t.Fatalf("AddHostname() = %q, want it to attach the hostname", result.GetError())
 	}
 
-	state := readStack(t, vendor, edge.ClassProduction, "shop")
+	state := readStack(t, vendor, environment.TierProduction, "shop")
 	if !slices.Contains(state.Edge.Bound, "app.acme.com") {
 		t.Errorf("the recorded edge state binds %v, want app.acme.com among them", state.Edge.Bound)
 	}
@@ -116,7 +117,7 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 func TestAddHostnameSaysWhatTheEdgeAsksOfYouAsItBinds(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).SayOnBind("Route app.acme.com → http://127.0.0.1:8480 (keep Host, set X-Forwarded-Proto)")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -142,8 +143,8 @@ func TestAddHostnameSaysWhatTheEdgeAsksOfYouAsItBinds(t *testing.T) {
 func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	seedStack(t, vendor, edge.ClassProduction, "shop", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Endpoint: "https://shop.fake.invalid"},
+	seedStack(t, vendor, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Endpoint: "https://shop.fake.invalid"},
 	})
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -159,7 +160,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	if result.GetSuccess() || !strings.Contains(said, "promoted no release") || strings.Contains(said, "deploy again") {
 		t.Fatalf("AddHostname() = %q, want it to say plainly that nothing is promoted for app.acme.com to serve", said)
 	}
-	recorded := readStack(t, vendor, edge.ClassProduction, "shop")
+	recorded := readStack(t, vendor, environment.TierProduction, "shop")
 	if len(recorded.Edge.Bound) != 0 || len(recorded.Hosts) != 0 {
 		t.Errorf("the refused add left the edge binding %v and the recorded hostnames %v, want nothing changed: `ocel deploy` attaches the hostname when it promotes",
 			recorded.Edge.Bound, recorded.Hostnames())
@@ -179,7 +180,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 func TestAddHostnameNamesTheManualRecordsWhenNoWriterIsSelected(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -204,7 +205,7 @@ func TestAddHostnameNamesTheManualRecordsWhenNoWriterIsSelected(t *testing.T) {
 	if !slices.ContainsFunc(notes, func(note string) bool { return strings.Contains(note, "wrote none of them") }) {
 		t.Errorf("the manual records came with %v, want a note saying ocel wrote none of them: instructions-only DNS is the normal state and the text may never leave the operator guessing whether something was automated", notes)
 	}
-	if hostState := readStack(t, vendor, edge.ClassProduction, "shop").Host("app.acme.com"); len(hostState.Manual) == 0 {
+	if hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com"); len(hostState.Manual) == 0 {
 		t.Error("the hostname state records no manual record, so nothing tells the operator what to write")
 	}
 }
@@ -212,7 +213,7 @@ func TestAddHostnameNamesTheManualRecordsWhenNoWriterIsSelected(t *testing.T) {
 func TestAddHostnameRefusesAHostTheProjectDoesNotDeclare(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -250,7 +251,7 @@ func TestAddHostnameRefusesAProjectWithNoProductionDeploy(t *testing.T) {
 func TestGetHostnameStatusReportsWhatIsPending(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	before, err := client.GetHostnameStatus(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -301,7 +302,7 @@ func TestGetHostnameStatusReportsWhatIsPending(t *testing.T) {
 func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	add, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -331,7 +332,7 @@ func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 		t.Fatalf("RemoveHostname() = %q, want the hostname given back", result.GetError())
 	}
 
-	state := readStack(t, vendor, edge.ClassProduction, "shop")
+	state := readStack(t, vendor, environment.TierProduction, "shop")
 	if slices.Contains(state.Edge.Bound, "app.acme.com") {
 		t.Errorf("the recorded edge state still binds %v", state.Edge.Bound)
 	}
@@ -346,7 +347,7 @@ func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	add, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -388,7 +389,7 @@ func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T
 	if !slices.ContainsFunc(warned, func(line string) bool { return strings.Contains(line, "next deploy") }) {
 		t.Errorf("RemoveHostname() warned %v, want the edge's warning passed on as a warning", warned)
 	}
-	if state := readStack(t, vendor, edge.ClassProduction, "shop"); len(state.Hosts) != 0 {
+	if state := readStack(t, vendor, environment.TierProduction, "shop"); len(state.Hosts) != 0 {
 		t.Errorf("the hostname state still records %v", state.Hostnames())
 	}
 }
@@ -396,7 +397,7 @@ func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T
 func TestRemoveHostnameRefusesAHostTheProjectDoesNotServe(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	stream, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug: "shop",
@@ -413,7 +414,7 @@ func TestRemoveHostnameRefusesAHostTheProjectDoesNotServe(t *testing.T) {
 func TestAddHostnameBindsTheCertificateItsProviderIssues(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 	vendor.PinServingCertificate("app.acme.com", "cert-for-app")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -432,7 +433,7 @@ func TestAddHostnameBindsTheCertificateItsProviderIssues(t *testing.T) {
 	if len(bindings) != 1 || bindings[0].Certificate != "cert-for-app" {
 		t.Errorf("the edge was bound with %+v, want the certificate the provider issued", bindings)
 	}
-	if hostState := readStack(t, vendor, edge.ClassProduction, "shop").Host("app.acme.com"); hostState.Certificate.ID != "cert-for-app" {
+	if hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com"); hostState.Certificate.ID != "cert-for-app" {
 		t.Errorf("recorded certificate = %q, want the one the provider issued", hostState.Certificate.ID)
 	}
 }
@@ -440,7 +441,7 @@ func TestAddHostnameBindsTheCertificateItsProviderIssues(t *testing.T) {
 func TestAddHostnameRefusesWhenNoCertificateCanBeIssued(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 	vendor.RefuseCertificates(refusal.Refuse(refusal.CodeNotReady, "no certificate covers app.acme.com"))
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -472,7 +473,7 @@ var validationRecord = edge.Record{
 func TestAddHostnameWritesTheValidationRecordsItsProviderProves(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 	vendor.RequireValidationRecords(validationRecord)
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -491,7 +492,7 @@ func TestAddHostnameWritesTheValidationRecordsItsProviderProves(t *testing.T) {
 		t.Fatalf("AddHostname() = %q, want the certificate issued and the hostname attached", result.GetError())
 	}
 
-	hostState := readStack(t, vendor, edge.ClassProduction, "shop").Host("app.acme.com")
+	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
 	if !hostState.Certificate.Requested || hostState.Certificate.ID != "issued-for-app.acme.com" {
 		t.Errorf("recorded certificate = %+v, want the one ocel requested", hostState.Certificate)
 	}
@@ -507,13 +508,13 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Endpoint: "https://shop.fake.invalid"},
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Endpoint: "https://shop.fake.invalid"},
 		Hosts: map[string]stackrecords.HostnameState{
 			"app.acme.com": {Certificate: provider.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
-	promoted(t, p, edge.ClassProduction, "shop")
+	promoted(t, p, environment.TierProduction, "shop")
 	writer, err := p.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
@@ -569,7 +570,7 @@ func addHostname(t *testing.T, client contractv1connect.ProviderServiceClient) *
 func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 	vendor.RequireValidationRecords(validationRecord)
 	if result := addHostname(t, client); !result.GetSuccess() {
 		t.Fatalf("AddHostname() = %q, want the hostname attached", result.GetError())
@@ -585,7 +586,7 @@ func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *
 	if discarded := vendor.Discarded(); !slices.Contains(discarded, "issued-for-app.acme.com") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
-	hostState := readStack(t, vendor, edge.ClassProduction, "shop").Host("app.acme.com")
+	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
 	if len(hostState.Superseded) != 0 {
 		t.Errorf("the record still has %+v, want the discarded certificate forgotten", hostState.Superseded)
 	}
@@ -597,7 +598,7 @@ func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *
 func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPending(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 	vendor.RequireValidationRecords(validationRecord)
 	if result := addHostname(t, client); !result.GetSuccess() {
 		t.Fatalf("AddHostname() = %q, want the hostname attached", result.GetError())
@@ -610,7 +611,7 @@ func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPe
 		t.Fatal("AddHostname() attached the hostname, want it told to come back to a certificate still validating")
 	}
 
-	hostState := readStack(t, vendor, edge.ClassProduction, "shop").Host("app.acme.com")
+	hostState := readStack(t, vendor, environment.TierProduction, "shop").Host("app.acme.com")
 	if len(hostState.Superseded) != 1 || hostState.Superseded[0].ID != "issued-for-app.acme.com" {
 		t.Fatalf("the record has %+v superseded, want the certificate the pending one replaced still reachable", hostState.Superseded)
 	}
@@ -631,10 +632,10 @@ func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPe
 func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
-	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    edge.ClassProduction,
+			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
@@ -646,7 +647,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 			},
 		},
 	})
-	promoted(t, p, edge.ClassProduction, "shop")
+	promoted(t, p, environment.TierProduction, "shop")
 	p.PinServingCertificate("app.acme.com", "cert-of-today")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -670,10 +671,10 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
-	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    edge.ClassProduction,
+			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
@@ -718,10 +719,10 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	seedStack(t, vendor, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, vendor, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    edge.ClassProduction,
+			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 			Fronts:   map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
@@ -768,7 +769,7 @@ func configuredHosts(named ...string) []*contractv1.ConfiguredHostname {
 func TestTheAppAHostnameWasDeclaredUnderReachesTheEdgeThatBindsIt(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassProduction, "shop")
+	deployed(t, vendor, environment.TierProduction, "shop")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug: "shop",

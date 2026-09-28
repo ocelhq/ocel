@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func TestCloudflareEdgeConformance(t *testing.T) {
@@ -17,11 +18,11 @@ func TestCloudflareEdgeConformance(t *testing.T) {
 			return previewZoneMock().provider(t), previewSpec(store.URL, "v1")
 		},
 		Hostname: "shop.app.com",
-		Bootstrap: func(t *testing.T) (edge.Edge, edge.Class) {
+		Bootstrap: func(t *testing.T) (edge.Edge, environment.Tier) {
 			seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 			p := bootstrapMock(t, false).provider(t)
 			p.objects = func(string, r2.TemporaryCredentialNewResponse) objectAPI { return &fakeObjects{} }
-			return p, edge.ClassProduction
+			return p, environment.TierProduction
 		},
 	})
 }

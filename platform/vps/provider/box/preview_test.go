@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -120,7 +121,7 @@ func previewStack(t *testing.T, m *machine) edge.EdgeStack {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassPreview, Slug: slug,
+		Version: "test", Tier: environment.TierPreview, Slug: slug,
 	}, edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -159,7 +160,7 @@ func TestAPreviewOfAMultiAppProjectClaimsOneHostnamePerApp(t *testing.T) {
 	m := aMachine()
 	previewed(t, previewStack(t, m), "pr-7", "api", "web")
 
-	surface := box.Surface(slug, edge.ClassPreview)
+	surface := box.Surface(slug, environment.TierPreview)
 	want := []host.HostClaim{
 		{Hostname: slug + "--pr-7--api." + previewBase, Owner: surface, Pointer: "pr-7", App: "api"},
 		{Hostname: slug + "--pr-7--web." + previewBase, Owner: surface, Pointer: "pr-7", App: "web"},
@@ -177,7 +178,7 @@ func TestAPreviewOfASingleAppProjectClaimsTheOneHostnameTheBranchIsNamedFor(t *t
 
 	want := []host.HostClaim{{
 		Hostname: slug + "--pr-7." + previewBase,
-		Owner:    box.Surface(slug, edge.ClassPreview),
+		Owner:    box.Surface(slug, environment.TierPreview),
 		Pointer:  "pr-7",
 	}}
 	if claimed := claimedOn(t, m); !slices.Equal(claimed, want) {
@@ -289,7 +290,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	}
 
 	pointed, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
+		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{GlobalPreview: previewBase})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -301,7 +302,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 		t.Fatalf("Promote under a pointer: %v", err)
 	}
 	if claimed := claimedOn(t, m); len(claimed) != 0 {
-		t.Errorf("a production promotion under pointer pr-7 on a box that knows a preview base claimed %v: the class is the whole of what decides whether a promotion claims a preview hostname, and the pointer and the base alone do not", claimed)
+		t.Errorf("a production promotion under pointer pr-7 on a box that knows a preview base claimed %v: the tier is the whole of what decides whether a promotion claims a preview hostname, and the pointer and the base alone do not", claimed)
 	}
 }
 
@@ -395,7 +396,7 @@ func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheEdgeContractNamesForIt(t 
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
 	stack, err := front.Reconcile(ctx, edge.StackSpec{
-		Version: "test", Class: edge.ClassPreview, Slug: slug,
+		Version: "test", Tier: environment.TierPreview, Slug: slug,
 		Domains: []string{edge.PreviewWildcard(previewBase)},
 	}, edge.StackState{})
 	if err != nil {
@@ -429,7 +430,7 @@ func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
 	reconciled, err := front.Reconcile(ctx, edge.StackSpec{
-		Version: "test", Class: edge.ClassPreview, Slug: slug,
+		Version: "test", Tier: environment.TierPreview, Slug: slug,
 		Domains: []string{edge.PreviewWildcard(previewBase)},
 	}, edge.StackState{})
 	if err != nil {

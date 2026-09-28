@@ -15,6 +15,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -25,14 +26,14 @@ import (
 )
 
 type Scope struct {
-	Class edge.Class
-	Slug  string
-	Env   string
-	Edge  edge.Kind
+	Tier environment.Tier
+	Slug string
+	Env  string
+	Edge edge.Kind
 }
 
 func scopeOf(ref provider.StackRef, kind edge.Kind) Scope {
-	return Scope{Class: ref.Class, Slug: ref.Project, Env: ref.Name.Env, Edge: kind}
+	return Scope{Tier: ref.Tier, Slug: ref.Project, Env: ref.Name.Env, Edge: kind}
 }
 
 func edgeKindOf(spec provider.StackSpec) edge.Kind {

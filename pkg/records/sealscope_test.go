@@ -3,15 +3,15 @@ package records_test
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 )
 
 func TestTwoCoordinatesNeverBindToTheSameBytes(t *testing.T) {
 	t.Parallel()
 
-	scope := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/a%2Fb", Binding: "", Name: "KEY"}
-	beside := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/a/b", Binding: "", Name: "KEY"}
+	scope := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/a%2Fb", Binding: "", Name: "KEY"}
+	beside := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/a/b", Binding: "", Name: "KEY"}
 
 	if string(scope.AAD()) == string(beside.AAD()) {
 		t.Fatalf("%s and %s bind to the same bytes, so a value sealed at one opens at the other",

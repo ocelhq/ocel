@@ -324,7 +324,7 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 	}
 	_, err = vars.SetReference(context.Background(), &envvarsv1.SetReferenceRequest{Tier: preview, Coordinate: cell("NEW"), Target: &envvarsv1.Coordinate{Slug: "other", Key: "K"}})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Fatalf("SetReference() on a class-wide value = %v, want it refused", err)
+		t.Fatalf("SetReference() on a tier-wide value = %v, want it refused", err)
 	}
 
 	override := &envvarsv1.Coordinate{Slug: slug, Key: "DATABASE_URL", Environment: "pr-12"}

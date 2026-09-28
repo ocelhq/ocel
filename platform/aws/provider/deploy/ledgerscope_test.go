@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 )
@@ -15,9 +15,9 @@ func TestLedgerScopeNamesTheProjectTheISRPrefixDoes(t *testing.T) {
 	for _, slug := range []string{"shop", "Shop Ltd", "shop_2", "SHOP--2"} {
 		coord := storageCoordinate("prod", slug, "web", deployedAs("BUILD1").Release())
 		project := strings.Split(isrPrefixOf(coord), naming.PathSeparator)[1]
-		want := string(edge.ClassProduction) + naming.PathSeparator + project
+		want := string(environment.TierProduction) + naming.PathSeparator + project
 
-		if got := ledger.Scope(edge.ClassProduction, slug); got != want {
+		if got := ledger.Scope(environment.TierProduction, slug); got != want {
 			t.Errorf("Scope(%q) = %q, want %q; the invalidator reads the ledger under the project the ISR prefix names, so a scope that differs makes every raise miss", slug, got, want)
 		}
 	}

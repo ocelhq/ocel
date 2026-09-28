@@ -32,7 +32,7 @@ type Record struct {
 }
 
 type Environment struct {
-	Class    string `json:"class"`
+	Tier     string `json:"tier"`
 	Identity string `json:"identity,omitempty"`
 }
 

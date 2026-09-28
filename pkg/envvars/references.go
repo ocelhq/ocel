@@ -21,7 +21,7 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 		return Metadata{}, fmt.Errorf("a reference names no project to resolve against")
 	}
 	sourceAt := Coordinate{Cell: target.Cell}
-	to := Scope{Project: target.Project, Class: scope.Class}
+	to := Scope{Project: target.Project, Tier: scope.Tier}
 	if scope == to && at.canonical() == sourceAt.canonical() {
 		return Metadata{}, fmt.Errorf("%s would reference itself: %w", at, ErrWouldDeepen)
 	}
@@ -62,7 +62,7 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 }
 
 func (s Store) References(ctx context.Context, scope Scope, at Coordinate) ([]Reference, error) {
-	if at.Environment != "" && at.Environment != ClassWideEnvironment {
+	if at.Environment != "" && at.Environment != TierWideEnvironment {
 		return nil, nil
 	}
 	recorded, err := s.Records.List(ctx, refsName(scope, at))
@@ -96,7 +96,7 @@ func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate
 }
 
 func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, target Target) error {
-	to := Scope{Project: target.Project, Class: scope.Class}
+	to := Scope{Project: target.Project, Tier: scope.Tier}
 	name := refName(to, Coordinate{Cell: target.Cell}, scope, at)
 	recorded, err := records.ReadOrEmpty(ctx, s.Records, name)
 	if err != nil {
@@ -110,7 +110,7 @@ func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, t
 }
 
 func (s Store) unindexReference(ctx context.Context, scope Scope, at Coordinate, target *Target) error {
-	to := Scope{Project: target.Project, Class: scope.Class}
+	to := Scope{Project: target.Project, Tier: scope.Tier}
 	if err := records.Forget(ctx, s.Records, refName(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
 		return fmt.Errorf("forget that %s references %s: %w", at, target, err)
 	}

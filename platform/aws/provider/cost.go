@@ -18,7 +18,7 @@ const tfDataTransfer = "aws_data_transfer"
 func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
 	tree := &pricing.Tree{}
 	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)
-	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Class))
+	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Tier))
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	var options []bootstrap.ShapeOption
@@ -29,7 +29,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	if !slices.Contains(features, provider.FeatureVarsKey) {
 		features = append(slices.Clone(features), provider.FeatureVarsKey)
 	}
-	bootstrapShape, err := bootstrap.Shape(p.namespace, string(req.Deploy.Class), features, options...)
+	bootstrapShape, err := bootstrap.Shape(p.namespace, string(req.Deploy.Tier), features, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	if err != nil {
 		return nil, err
 	}
-	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: p.aws.Region}
+	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: p.aws.Region}
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}

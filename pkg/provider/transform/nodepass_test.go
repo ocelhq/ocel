@@ -12,7 +12,7 @@ import (
 func functionRequest() Request {
 	return Request{
 		Provider:  "aws",
-		EnvClass:  "production",
+		EnvTier:   "production",
 		Env:       "prod",
 		Resources: []Resource{{Type: "function", Name: "api-users", App: "api"}},
 	}
@@ -51,7 +51,7 @@ func TestNodePassEvaluate(t *testing.T) {
 				import { defineTransform } from "@ocel/transforms"
 				export default defineTransform([
 					{ aws: { function: { lambda: { memorySize: 2048, timeout: 60 } } } },
-					{ if: (ctx) => ctx.envClass === "production", aws: { function: { url: { invokeMode: "BUFFERED" } } } },
+					{ if: (ctx) => ctx.envTier === "production", aws: { function: { url: { invokeMode: "BUFFERED" } } } },
 				])
 			`,
 			"modules/late.transform.ts": `
@@ -84,7 +84,7 @@ func TestNodePassEvaluate(t *testing.T) {
 			"preview.transform.ts": `
 				import { defineTransform } from "@ocel/transforms"
 				export default defineTransform({
-					if: (ctx) => ctx.envClass === "preview",
+					if: (ctx) => ctx.envTier === "preview",
 					aws: { function: { lambda: { memorySize: 128 } } },
 				})
 			`,

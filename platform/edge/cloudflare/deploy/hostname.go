@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
@@ -152,7 +153,7 @@ func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-func (p *cloudflare) ProjectOwner(string, edge.Class) string { return "" }
+func (p *cloudflare) ProjectOwner(string, environment.Tier) string { return "" }
 
 func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	accountID := os.Getenv(envAccountID)

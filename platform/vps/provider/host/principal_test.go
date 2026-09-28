@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type account struct {
@@ -190,9 +190,9 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 	t.Parallel()
 
 	existing := decidedAccount()
-	class := edge.ClassProduction
-	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	observed, _, err := readSurvey(sh(t, stubs(t, &existing), survey(items, StampPath(class))))
+	tier := environment.TierProduction
+	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	observed, _, err := readSurvey(sh(t, stubs(t, &existing), survey(items, StampPath(tier))))
 	if err != nil {
 		t.Fatal(err)
 	}

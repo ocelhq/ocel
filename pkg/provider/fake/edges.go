@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -286,11 +287,11 @@ func (e *Edge) Serves(needs []edge.Need) {
 	e.serves = &needs
 }
 
-func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
+func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (e *Edge) Teardown(context.Context, edge.Class) error { return nil }
+func (e *Edge) Teardown(context.Context, environment.Tier) error { return nil }
 
 func (e *Edge) Stacks() []edge.StackSpec {
 	e.mu.Lock()
@@ -304,7 +305,7 @@ func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.Stac
 	e.mu.Unlock()
 	e.warn(spec.Warn)
 	state := prior
-	state.Slug, state.Class = spec.Slug, spec.Class
+	state.Slug, state.Tier = spec.Slug, spec.Tier
 	state.Front = e.front(spec.Slug)
 	return e.open(state)
 }
@@ -324,7 +325,7 @@ func (e *Edge) open(state edge.StackState) (*Stack, error) {
 	if build == nil {
 		store := e.records
 		build = func(stack edge.StackState) Ledger {
-			return ledger.New(store, stack.Class, stack.Slug)
+			return ledger.New(store, stack.Tier, stack.Slug)
 		}
 	}
 	return &Stack{front: e, state: state, ledger: build(state)}, nil
@@ -373,14 +374,14 @@ func (e *Edge) OwnersUnreadable(err error) {
 	e.unreadable = err
 }
 
-func (e *Edge) ProjectOwner(slug string, class edge.Class) string {
-	return "ocel-" + slug + "-" + string(class)
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string {
+	return "ocel-" + slug + "-" + string(tier)
 }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   "Fake::EdgeStack",
-		Name:   scope.Slug + "-" + string(scope.Class),
+		Name:   scope.Slug + "-" + string(scope.Tier),
 		Action: edge.PlanDelete,
 		Reason: "the " + string(e.kind) + " edge stack this project deploys through",
 	}}

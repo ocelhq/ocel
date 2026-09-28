@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -35,14 +36,14 @@ func (e *Edge) Facts() edge.Facts {
 
 func (e *Edge) Hooks() edge.Hooks { return edge.Hooks{} }
 
-func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
+func (e *Edge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
 
-func (e *Edge) Teardown(context.Context, edge.Class) error { return nil }
+func (e *Edge) Teardown(context.Context, environment.Tier) error { return nil }
 
-func Surface(slug string, class edge.Class) string {
-	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), string(class))
+func Surface(slug string, tier environment.Tier) string {
+	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), string(tier))
 }
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -52,7 +53,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	}
 	next := prior
 	next.Slug = spec.Slug
-	next.Class = spec.Class
+	next.Tier = spec.Tier
 	s := &stack{e: e, state: next}
 	if err := s.openLedger().EnsureSchema(ctx); err != nil {
 		return nil, err
@@ -66,7 +67,7 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 
 func (e *Edge) DomainOwner(context.Context, string) (string, error) { return "", nil }
 
-func (e *Edge) ProjectOwner(slug string, class edge.Class) string { return Surface(slug, class) }
+func (e *Edge) ProjectOwner(slug string, tier environment.Tier) string { return Surface(slug, tier) }
 
 func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", unbindable("a preview wildcard")
@@ -77,7 +78,7 @@ func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return ni
 func unbindable(what string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
-			"name the %q edge, which provisions one load balancer per bootstrap class at %s",
+			"name the %q edge, which provisions one load balancer per bootstrap tier at %s",
 		Kind, what, alb.Kind, alb.BaselineCost)
 }
 
@@ -116,7 +117,7 @@ var (
 func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
-	return ledger.New(s.e.records, s.state.Class, s.state.Slug)
+	return ledger.New(s.e.records, s.state.Tier, s.state.Slug)
 }
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }

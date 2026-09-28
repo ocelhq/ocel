@@ -46,7 +46,7 @@ func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, e
 		Name:     host.ResourceName(in.Ref.Name.String(), in.Resource.Name, postgresKind),
 		Project:  in.Ref.Project,
 		Resource: in.Resource.Name,
-		Class:    in.Ref.Class,
+		Tier:     in.Ref.Tier,
 
 		Image:        postgresRegistry + image,
 		Env:          map[string]string{"POSTGRES_DB": in.Resource.Name},
@@ -112,10 +112,10 @@ func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionReq
 
 func (p *Provider) recordedSecret(ctx context.Context, in resources.ProvisionRequest, name, folder, item string, mint func() (string, error)) (string, error) {
 	at := records.SealScope{
-		Project: in.Ref.Project, Class: in.Ref.Class, Env: in.Ref.Name.String(),
+		Project: in.Ref.Project, Tier: in.Ref.Tier, Env: in.Ref.Name.String(),
 		Folder: folder, Binding: in.Resource.Name, Name: item,
 	}
-	sealed, err := p.host.Kept(ctx, in.Ref.Class, name)
+	sealed, err := p.host.Kept(ctx, in.Ref.Tier, name)
 	if err != nil {
 		return "", err
 	}
@@ -128,7 +128,7 @@ func (p *Provider) recordedSecret(ctx context.Context, in resources.ProvisionReq
 		if err != nil {
 			return "", err
 		}
-		if sealed, err = p.host.KeepOnce(ctx, in.Ref.Class, name, candidate); err != nil {
+		if sealed, err = p.host.KeepOnce(ctx, in.Ref.Tier, name, candidate); err != nil {
 			return "", err
 		}
 	}
@@ -139,7 +139,7 @@ func (p *Provider) recordedSecret(ctx context.Context, in resources.ProvisionReq
 	if len(opened) == 0 {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the credential kept for %s is empty\nRemove %s on the box",
-			in.Resource.Name, host.KeptPath(in.Ref.Class, name))
+			in.Resource.Name, host.KeptPath(in.Ref.Tier, name))
 	}
 	return string(opened), nil
 }

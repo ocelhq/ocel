@@ -40,35 +40,35 @@ func varsKeyTemplate(in featureInputs) featureStack {
 	})
 	if in.varsKey != "" {
 		return featureStack{params: values, body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this class is sealed under, and the env source sync that encrypts under it. Ocel owns no key here and puts nothing on it."
+Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this tier is sealed under, and the env source sync that encrypts under it. Ocel owns no key here and puts nothing on it."
 %sResources:
   VarsKeyRecord:
     Type: AWS::CloudFormation::WaitConditionHandle
     Metadata:
-      Description: "Placeholder for the %s class's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
+      Description: "Placeholder for the %s tier's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
 %sOutputs:
 %s`,
-			provider.FeatureVarsKey, in.class, params, in.class,
-			envSourceSyncResources(in.ns, in.code.envSourceSync, in.class, fmt.Sprintf("%q", in.varsKey)),
+			provider.FeatureVarsKey, in.tier, params, in.tier,
+			envSourceSyncResources(in.ns, in.code.envSourceSync, in.tier, fmt.Sprintf("%q", in.varsKey)),
 			broughtVarsKeyOutput(in.varsKey))}
 	}
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this class is sealed under, the alias naming it, and the env source sync that encrypts under it."
+Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted variable of this tier is sealed under, the alias naming it, and the env source sync that encrypts under it."
 %sResources:
 %s%sOutputs:
 %s`,
-			provider.FeatureVarsKey, in.class, params,
-			varsKeyResources(in.ns, in.class),
-			envSourceSyncResources(in.ns, in.code.envSourceSync, in.class, "!GetAtt VarsKey.Arn"),
+			provider.FeatureVarsKey, in.tier, params,
+			varsKeyResources(in.ns, in.tier),
+			envSourceSyncResources(in.ns, in.code.envSourceSync, in.tier, "!GetAtt VarsKey.Arn"),
 			varsKeyOutputs()),
 	}
 }
 
 func broughtVarsKeyOutput(named string) string {
 	return fmt.Sprintf(`  %s:
-    Description: "KMS key every encrypted value of this class is encrypted under. This account brought it, so ocel records it and neither made nor manages it."
+    Description: "KMS key every encrypted value of this tier is encrypted under. This account brought it, so ocel records it and neither made nor manages it."
     Value: %q
   %s:
     Description: "Marks the key above as one this account brought, so a later run knows ocel made no key here."
@@ -84,7 +84,7 @@ type KeyAPI interface {
 
 const varsKeyProbeBytes = 16
 
-func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request) ([]provider.Change, error) {
+func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, req Request) ([]provider.Change, error) {
 	if req.VarsKey == "" {
 		return nil, nil
 	}
@@ -113,7 +113,7 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class
 	if _, err := rand.Read(probe); err != nil {
 		return nil, fmt.Errorf("generate a probe for the brought variable key: %w", err)
 	}
-	bound := map[string]string{"ocel:probe": class}
+	bound := map[string]string{"ocel:probe": tier}
 	sealed, err := apis.KMS.Encrypt(ctx, &kms.EncryptInput{
 		KeyId:             aws.String(req.VarsKey),
 		Plaintext:         probe,

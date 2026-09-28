@@ -182,7 +182,7 @@ func TestBindingVarsKeysArePerBindingPartitions(t *testing.T) {
 		t.Fatalf("binding values partition to %q, the same partition a user's own values live in", shared)
 	}
 	if !strings.HasPrefix(main, shared+KeySeparator) {
-		t.Errorf("BindingVarsKey = %q, want it under %q so one class's bindings stay one class's", main, shared)
+		t.Errorf("BindingVarsKey = %q, want it under %q so one tier's bindings stay one tier's", main, shared)
 	}
 	if BindingVarsKey("shop", "preview", "main") == main {
 		t.Errorf("preview and production share the binding partition %q", main)
@@ -239,7 +239,7 @@ func TestResourceIDsReadAsEnglish(t *testing.T) {
 
 func TestTagsDropEmptyFacts(t *testing.T) {
 	c := Coordinate{Project: "shop", Env: "prod", App: "web", Kind: KindFunction, Name: "index", Release: NewRelease("b", "")}
-	tags := c.Tags(Facts{ManagedBy: "ocel-cli/1.2.3", EnvClass: "production", BuildID: "b"})
+	tags := c.Tags(Facts{ManagedBy: "ocel-cli/1.2.3", EnvTier: "production", BuildID: "b"})
 	if _, ok := tags["ocel:expires-at"]; ok {
 		t.Error("an absent fact must not become an empty tag")
 	}
@@ -248,6 +248,14 @@ func TestTagsDropEmptyFacts(t *testing.T) {
 	}
 	if tags["ocel:stack"] != c.Stack().String() {
 		t.Errorf("ocel:stack = %q, want %q", tags["ocel:stack"], c.Stack().String())
+	}
+}
+
+func TestTheTierADeployServesIsTaggedAsItsEnvTier(t *testing.T) {
+	c := Coordinate{Project: "shop", Env: "pr-7", App: "web", Kind: KindFunction, Name: "index", Release: NewRelease("b", "")}
+	tags := c.Tags(Facts{EnvTier: "preview"})
+	if tags["ocel:env-tier"] != "preview" {
+		t.Errorf("ocel:env-tier = %q, want %q: IAM conditions scope an edge's grants to one tier by this tag", tags["ocel:env-tier"], "preview")
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -29,7 +29,7 @@ func coolifysTraefik() Front {
 func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
 
-	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, routedByHand())
+	items := Items(environment.TierProduction, []byte(aKey+"\n"), ArchAMD64, routedByHand())
 	for _, item := range items {
 		switch {
 		case item.Kind == KindContainer && item.Name == caddy.Container,
@@ -188,31 +188,31 @@ func TestAProxyRoutedByHandOnItsOwnNetworkIsToldTheSwitchboardsNameOnIt(t *testi
 	}
 }
 
-func frontRecordItem(front Front, project string, class edge.Class) (Item, error) {
-	return frontRecord{Proxy: front.recorded(), Project: project, Class: class}.item()
+func frontRecordItem(front Front, project string, tier environment.Tier) (Item, error) {
+	return frontRecord{Proxy: front.recorded(), Project: project, Tier: tier}.item()
 }
 
-func recordOn(t *testing.T, box *bench, class edge.Class, front Front, project string) {
+func recordOn(t *testing.T, box *bench, tier environment.Tier, front Front, project string) {
 	t.Helper()
-	record, err := frontRecordItem(front, project, class)
+	record, err := frontRecordItem(front, project, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	box.installed[class] = append(unrecorded(box, class), record)
+	box.installed[tier] = append(unrecorded(box, tier), record)
 }
 
-func unrecorded(box *bench, class edge.Class) []Item {
-	return slices.DeleteFunc(box.installed[class], func(item Item) bool { return item.Name == FrontRecordPath })
+func unrecorded(box *bench, tier environment.Tier) []Item {
+	return slices.DeleteFunc(box.installed[tier], func(item Item) bool { return item.Name == FrontRecordPath })
 }
 
 func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
-	box.installed[class] = unrecorded(box, class)
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
+	box.installed[tier] = unrecorded(box, tier)
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	at := box.at("/dev/stdin " + quoted(FrontRecordPath))
@@ -220,7 +220,7 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 		t.Fatalf("the apply never wrote %s:\n%s", FrontRecordPath, strings.Join(box.commands(), "\n"))
 	}
 	written := box.fed[at]
-	for _, wanted := range []string{`"proxy":null`, `"project":"shop"`, `"class":"production"`} {
+	for _, wanted := range []string{`"proxy":null`, `"project":"shop"`, `"tier":"production"`} {
 		if !strings.Contains(written, wanted) {
 			t.Errorf("%s was written as %s, want %s in it", FrontRecordPath, written, wanted)
 		}
@@ -230,11 +230,11 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 func TestABootstrapLeavesARecordThatAgreesUnchanged(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassPreview
-	box := bootstrappedOn(t, class)
-	recordOn(t, box, class, Front{}, "blog")
+	tier := environment.TierPreview
+	box := bootstrappedOn(t, tier)
+	recordOn(t, box, tier, Front{}, "blog")
 	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := box.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {
@@ -245,10 +245,10 @@ func TestABootstrapLeavesARecordThatAgreesUnchanged(t *testing.T) {
 func TestABootstrapWhoseProxyTheBoxDoesNotRouteThroughIsRefusedWithWhatToWrite(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
-	recordOn(t, box, class, routedByHand(), "blog")
-	_, err := NewBootstrap(box.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Class: class})
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
+	recordOn(t, box, tier, routedByHand(), "blog")
+	_, err := NewBootstrap(box.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
 	refused := refusalOf(t, err, refusal.CodeInvalid)
 	for _, wanted := range []string{"a proxy you route yourself", "set by blog/production", "add `\"proxy\": \"manual\"`"} {
 		if !strings.Contains(refused.Message, wanted) {
@@ -334,8 +334,8 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			box := bootstrappedOn(t, edge.ClassPreview)
-			recordOn(t, box, edge.ClassPreview, tc.recorded, "blog")
+			box := bootstrappedOn(t, environment.TierPreview)
+			recordOn(t, box, environment.TierPreview, tc.recorded, "blog")
 			refused := refusalOf(t, box.fronted(tc.ours).FrontAgrees(context.Background()), refusal.CodeInvalid)
 			for _, wanted := range tc.wanted {
 				if !strings.Contains(refused.Message, wanted) {
@@ -349,8 +349,8 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 func TestADeployOntoABoxRecordedForItsOwnProxyGoesAhead(t *testing.T) {
 	t.Parallel()
 
-	box := bootstrappedOn(t, edge.ClassProduction)
-	recordOn(t, box, edge.ClassProduction, routedByHand(), "blog")
+	box := bootstrappedOn(t, environment.TierProduction)
+	recordOn(t, box, environment.TierProduction, routedByHand(), "blog")
 	if err := box.fronted(routedByHand()).FrontAgrees(context.Background()); err != nil {
 		t.Errorf("FrontAgrees() = %v, want a box that routes the way this project says let through", err)
 	}
@@ -374,8 +374,8 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			box := bootstrappedOn(t, edge.ClassProduction)
-			recordOn(t, box, edge.ClassProduction, tc.recorded, "blog")
+			box := bootstrappedOn(t, environment.TierProduction)
+			recordOn(t, box, environment.TierProduction, tc.recorded, "blog")
 			if err := box.fronted(tc.ours).FrontAgrees(context.Background()); err != nil {
 				t.Errorf("FrontAgrees() = %v, want a preset and the values it fills agreed as one proxy", err)
 			}
@@ -392,21 +392,21 @@ func onAPort(front Front) Front {
 func TestADeployOntoABoxThatRecordsNoProxyIsSentToBootstrap(t *testing.T) {
 	t.Parallel()
 
-	box := bootstrappedOn(t, edge.ClassProduction)
-	box.installed[edge.ClassProduction] = unrecorded(box, edge.ClassProduction)
+	box := bootstrappedOn(t, environment.TierProduction)
+	box.installed[environment.TierProduction] = unrecorded(box, environment.TierProduction)
 	refused := refusalOf(t, box.host().FrontAgrees(context.Background()), refusal.CodeNotReady)
 	if !strings.Contains(refused.Message, FrontRecordPath) || !strings.Contains(refused.Message, "ocel bootstrap") {
 		t.Errorf("the refusal says %q, want it to name %s and the bootstrap that writes it", refused.Message, FrontRecordPath)
 	}
 }
 
-func TestTheLastClassToGoTakesTheRecordWithIt(t *testing.T) {
+func TestTheLastTierToGoTakesTheRecordWithIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
-	recordOn(t, box, class, Front{}, "shop")
-	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), class)
+	tier := environment.TierProduction
+	box := machine(map[environment.Tier][]Item{tier: bootstrapped(t, tier)})
+	recordOn(t, box, tier, Front{}, "shop")
+	plan, err := NewBootstrap(box.host(), testVendor, "shop").PlanRemove(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -431,12 +431,12 @@ func recordChange(t *testing.T, plan provider.Plan) provider.Change {
 func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedIsRefused(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
-	box.installed[class] = unrecorded(box, class)
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
+	box.installed[tier] = unrecorded(box, tier)
 	boot := NewBootstrap(box.fronted(routedByHand()), testVendor, "shop")
-	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
-	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		refused := refusalOf(t, err, refusal.CodeInvalid)
 		for _, wanted := range []string{"ocel's own proxy", "remove `\"proxy\"`"} {
@@ -457,18 +457,18 @@ func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedI
 func TestABootstrapOverADeletedRecordPlansItAsDriftAndWritesItBack(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
-	box.installed[class] = unrecorded(box, class)
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
+	box.installed[tier] = unrecorded(box, tier)
 	boot := NewBootstrap(box.host(), testVendor, "shop")
-	described, err := boot.Describe(context.Background(), class)
+	described, err := boot.Describe(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
 	}
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a box whose record was deleted current, so no bootstrap would ever write it back and every deploy refuses")
 	}
-	plan, err := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
+	plan, err := boot.Plan(context.Background(), provider.BootstrapRequest{Tier: tier})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -488,7 +488,7 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
 	plan, err := NewBootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
-		provider.BootstrapRequest{Class: edge.ClassProduction})
+		provider.BootstrapRequest{Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatalf("Plan() = %v, want a fresh box, where nothing of ocel's is installed, free to take a proxy routed by hand", err)
 	}

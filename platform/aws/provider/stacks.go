@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -32,14 +32,14 @@ import (
 const artifactRootDirName = constants.ProjectStateDirName + "/output"
 
 func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
-	deployed, err := p.bootstrapped(ctx, scope.Class)
+	deployed, err := p.bootstrapped(ctx, scope.Tier)
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	if err := p.requireBootstrapped(deployed, scope.Class); err != nil {
+	if err := p.requireBootstrapped(deployed, scope.Tier); err != nil {
 		return deploy.Config{}, err
 	}
-	params, err := p.classParams(ctx, scope.Class, scope.Edge)
+	params, err := p.tierParams(ctx, scope.Tier, scope.Edge)
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -48,7 +48,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		return deploy.Config{}, err
 	}
 	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
-	referenced, err := store.ReferenceOwners(ctx, envvars.Scope{Project: scope.Slug, Class: scope.Class})
+	referenced, err := store.ReferenceOwners(ctx, envvars.Scope{Project: scope.Slug, Tier: scope.Tier})
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -65,7 +65,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Records: p.Records(),
 		Rules:   elasticloadbalancingv2.NewFromConfig(p.aws),
 
-		Class:          scope.Class,
+		Tier:           scope.Tier,
 		Slug:           scope.Slug,
 		Env:            scope.Env,
 		StateTable:     deployed.StateTable,
@@ -116,8 +116,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	return cfg, nil
 }
 
-func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, class edge.Class) error {
-	command := provider.BootstrapCommand(class)
+func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, tier environment.Tier) error {
+	command := provider.BootstrapCommand(tier)
 	for _, missing := range []struct {
 		value string
 		what  string

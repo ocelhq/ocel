@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -69,7 +69,7 @@ func TestTheCheckOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
 		reached = append(reached, address)
 		return nil
 	})
-	checks, err := p.CheckHost(context.Background(), provider.HostCheckRequest{Class: edge.ClassProduction})
+	checks, err := p.CheckHost(context.Background(), provider.HostCheckRequest{Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}

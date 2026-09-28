@@ -16,7 +16,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -285,7 +285,7 @@ func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ edge.Class, prefix string, _ progress.Progress) error {
+func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ environment.Tier, prefix string, _ progress.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for at := range s.objects {
@@ -307,7 +307,7 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
 	result, err := conformingStacks(engine).Provision(context.Background(), provider.StackSpec{
-		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
+		Ref:  provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
 			{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
@@ -366,7 +366,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
 	if _, err := stacksPlacingInto(engine, uploader).Provision(context.Background(), provider.StackSpec{
-		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
+		Ref:  provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
 			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},

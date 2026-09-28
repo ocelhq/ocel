@@ -10,7 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -40,7 +40,7 @@ func spec() provider.StackSpec {
 	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
-			Class:   edge.ClassProduction,
+			Tier:    environment.TierProduction,
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind: provider.StackInfra,

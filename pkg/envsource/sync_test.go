@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 )
@@ -38,7 +38,7 @@ func syncFixture(t *testing.T) (*envsource.Sync, envvars.Store, *fakeInfisical, 
 	at := &clock{at: time.Unix(1_800_000_000, 0)}
 	return &envsource.Sync{
 		Store: store,
-		Class: edge.ClassProduction,
+		Tier:  environment.TierProduction,
 		Login: envsource.Login{ProveIdentity: proveBySignedRequest, Client: server.Client()},
 		Now:   at.now,
 	}, store, fake, server.URL, at
@@ -46,14 +46,14 @@ func syncFixture(t *testing.T) (*envsource.Sync, envvars.Store, *fakeInfisical, 
 
 func register(t *testing.T, store envvars.Store, registration envsource.Registration) {
 	t.Helper()
-	if _, err := envsource.Register(context.Background(), store, edge.ClassProduction, registration); err != nil {
+	if _, err := envsource.Register(context.Background(), store, environment.TierProduction, registration); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func statusOf(t *testing.T, store envvars.Store, registration envsource.Registration) envsource.Status {
 	t.Helper()
-	status, err := envsource.StatusOf(context.Background(), store, edge.ClassProduction, registration)
+	status, err := envsource.StatusOf(context.Background(), store, environment.TierProduction, registration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,13 +78,13 @@ func TestProjectsSharingOneSourceCoordinateCostOneReadAPoll(t *testing.T) {
 	if listed := fake.listedPaths(); !slices.Equal(listed, []string{"/", "/api", "/web"}) {
 		t.Fatalf("listed %v, want every registered folder once for the one shared coordinate", listed)
 	}
-	if web := reveal(t, store, scopeOf("shop"), classWide("/web", "WEB")); web.Plaintext != "web" {
+	if web := reveal(t, store, scopeOf("shop"), tierWide("/web", "WEB")); web.Plaintext != "web" {
 		t.Fatalf("shop /web WEB = %q", web.Plaintext)
 	}
-	if shared := reveal(t, store, scopeOf("admin"), classWide("", "SHARED")); shared.Plaintext != "root" {
+	if shared := reveal(t, store, scopeOf("admin"), tierWide("", "SHARED")); shared.Plaintext != "root" {
 		t.Fatalf("admin SHARED = %q", shared.Plaintext)
 	}
-	if _, err := store.Get(ctx, scopeOf("shop"), classWide("/api", "API"), false); !errors.Is(err, envvars.ErrNotFound) {
+	if _, err := store.Get(ctx, scopeOf("shop"), tierWide("/api", "API"), false); !errors.Is(err, envvars.ErrNotFound) {
 		t.Fatalf("shop got a folder it never registered: %v", err)
 	}
 	status := statusOf(t, store, shop)
@@ -121,7 +121,7 @@ func TestAFailingSourceKeepsItsValuesAndIsReadAgainOnlyAfterABackoff(t *testing.
 	if !strings.Contains(status.LastError, "403") || !status.LastSuccessAt.Equal(synced) || !status.LastAttemptAt.Equal(at.now()) || !status.RetryAt.After(at.now()) {
 		t.Fatalf("status = %+v, want the failure recorded beside the last success, and a retry scheduled", status)
 	}
-	if k := reveal(t, store, scopeOf("shop"), classWide("", "K")); k.Plaintext != "v" {
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "v" {
 		t.Fatal("a failing source dropped the last copied value")
 	}
 
@@ -160,7 +160,7 @@ func TestAnEnvSourceWhoseRootIsGoneKeepsEveryValueItCopied(t *testing.T) {
 	if err := sync.CopyScheduled(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for _, at := range []envvars.Coordinate{classWide("", "DATABASE_URL"), classWide("/web", "API_KEY")} {
+	for _, at := range []envvars.Coordinate{tierWide("", "DATABASE_URL"), tierWide("/web", "API_KEY")} {
 		if _, err := store.Get(ctx, scopeOf("shop"), at, false); err != nil {
 			t.Errorf("%s after its env source's root went missing = %v, want the copied value kept", at, err)
 		}
@@ -196,7 +196,7 @@ func TestASlowEnvSourceYieldsTheRestOfTheSyncToTheOthers(t *testing.T) {
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
 
 	onceWithin(t, sync, 5*time.Second)
-	if k := reveal(t, store, scopeOf("shop"), classWide("", "K")); k.Plaintext != "v" {
+	if k := reveal(t, store, scopeOf("shop"), tierWide("", "K")); k.Plaintext != "v" {
 		t.Fatalf("K = %q, want the env source after the slow one copied within the same sync", k.Plaintext)
 	}
 	if status := statusOf(t, store, stuck); status.LastError == "" || status.LastAttemptAt.IsZero() {
@@ -297,7 +297,7 @@ func TestEachSyncLogsInWithTheCredentialStoredNow(t *testing.T) {
 		t.Fatalf("logged in with %v, want the rotated secret used by the sync after it was stored", secrets)
 	}
 
-	if _, err := store.Delete(ctx, scopeOf("shop"), classWide("", "INFISICAL_CLIENT_SECRET"), nil); err != nil {
+	if _, err := store.Delete(ctx, scopeOf("shop"), tierWide("", "INFISICAL_CLIENT_SECRET"), nil); err != nil {
 		t.Fatal(err)
 	}
 	reads := len(fake.listedPaths())
@@ -339,7 +339,7 @@ func TestCopyingAProjectFromASourceAlreadyReadCopiesWhatItHoldsAndRecordsTheSucc
 	if err != nil || !slices.Equal(result.Written, []envvars.Cell{cell("/web", "WEB")}) {
 		t.Fatalf("CopyProjectFrom() = %+v, %v", result, err)
 	}
-	if web := reveal(t, store, scopeOf("shop"), classWide("/web", "WEB")); web.Provenance.EnvSource != "exec" {
+	if web := reveal(t, store, scopeOf("shop"), tierWide("/web", "WEB")); web.Provenance.EnvSource != "exec" {
 		t.Fatalf("WEB = %+v, want it named as exec's", web)
 	}
 	if status := statusOf(t, store, registration); status.EnvSource != "exec" || status.LastSuccessAt.IsZero() {
@@ -383,7 +383,7 @@ func TestForgettingAProjectStopsItsSync(t *testing.T) {
 	t.Parallel()
 	sync, store, fake, host, _ := syncFixture(t)
 	register(t, store, infisicalRegistration("shop", host, cloudIdentity, ""))
-	if err := envsource.ForgetProject(context.Background(), store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(context.Background(), store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
 	if err := sync.CopyScheduled(context.Background()); err != nil {
@@ -406,23 +406,23 @@ func TestForgettingAProjectKeepsTheStatusAnotherProjectShares(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
-	if _, registered, _ := envsource.Registered(ctx, store.Records, edge.ClassProduction, "shop"); registered {
+	if _, registered, _ := envsource.Registered(ctx, store.Records, environment.TierProduction, "shop"); registered {
 		t.Fatal("a forgotten project is still registered")
 	}
 	if status := statusOf(t, store, admin); status.LastSuccessAt.IsZero() {
 		t.Fatal("forgetting shop dropped the status admin shares")
 	}
 
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "admin"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "admin"); err != nil {
 		t.Fatal(err)
 	}
 	if status := statusOf(t, store, admin); !status.LastSuccessAt.IsZero() {
 		t.Fatalf("status = %+v, want it forgotten with the last project reading it", status)
 	}
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "never-registered"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "never-registered"); err != nil {
 		t.Fatalf("ForgetProject() of a project with no env source = %v", err)
 	}
 }

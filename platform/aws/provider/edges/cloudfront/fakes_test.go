@@ -26,6 +26,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -125,10 +126,10 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if f.absent {
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	name := aws.ToString(in.StackName)
-	if trimmed, preview := strings.CutSuffix(name, "-"+string(edge.ClassPreview)); preview {
-		class, name = edge.ClassPreview, trimmed
+	if trimmed, preview := strings.CutSuffix(name, "-"+string(environment.TierPreview)); preview {
+		tier, name = environment.TierPreview, trimmed
 	}
 	var outputs map[string]string
 	switch name {
@@ -141,7 +142,7 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 		if f.otherEdge {
 			return &cloudformation.DescribeStacksOutput{}, nil
 		}
-		outputs = fakeEdgeOutputs(class)
+		outputs = fakeEdgeOutputs(tier)
 	default:
 		return &cloudformation.DescribeStacksOutput{}, nil
 	}
@@ -219,33 +220,33 @@ func newFakeCloudFront(shared *trail) *fakeCloudFront {
 		stores:        map[string]*fakeStore{},
 		distributions: map[string]*fakeDistribution{},
 	}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		name := defaultNamespace.EdgeRoutesStoreName(class)
-		f.stores[name] = &fakeStore{arn: fakeRoutesARN(class), etag: "kvs-1"}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		name := defaultNamespace.EdgeRoutesStoreName(tier)
+		f.stores[name] = &fakeStore{arn: fakeRoutesARN(tier), etag: "kvs-1"}
 	}
 	return f
 }
 
-func fakeRoutesARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:key-value-store/" + defaultNamespace.EdgeRoutesStoreName(class)
+func fakeRoutesARN(tier environment.Tier) string {
+	return "arn:aws:cloudfront::123456789012:key-value-store/" + defaultNamespace.EdgeRoutesStoreName(tier)
 }
 
-func fakeResolverARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeResolverName(class)
+func fakeResolverARN(tier environment.Tier) string {
+	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeResolverName(tier)
 }
 
-func fakeEmptyBodyARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeEmptyBodyName(class)
+func fakeEmptyBodyARN(tier environment.Tier) string {
+	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeEmptyBodyName(tier)
 }
 
-func fakeEdgeOutputs(class edge.Class) map[string]string {
+func fakeEdgeOutputs(tier environment.Tier) map[string]string {
 	return map[string]string{
-		bootstrap.OutputEdgeRoutesStoreARN: fakeRoutesARN(class),
-		bootstrap.OutputEdgeResolverARN:    fakeResolverARN(class),
-		bootstrap.OutputEdgeEmptyBodyARN:   fakeEmptyBodyARN(class),
-		bootstrap.OutputEdgeCachePolicy:    "cache-" + string(class),
-		bootstrap.OutputEdgeHeadersPolicy:  "headers-" + string(class),
-		bootstrap.OutputEdgeAssetAccess:    "oac-" + string(class),
+		bootstrap.OutputEdgeRoutesStoreARN: fakeRoutesARN(tier),
+		bootstrap.OutputEdgeResolverARN:    fakeResolverARN(tier),
+		bootstrap.OutputEdgeEmptyBodyARN:   fakeEmptyBodyARN(tier),
+		bootstrap.OutputEdgeCachePolicy:    "cache-" + string(tier),
+		bootstrap.OutputEdgeHeadersPolicy:  "headers-" + string(tier),
+		bootstrap.OutputEdgeAssetAccess:    "oac-" + string(tier),
 	}
 }
 

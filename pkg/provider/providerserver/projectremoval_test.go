@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -103,7 +104,7 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), vendor.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.Records(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 
 	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
-	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Class: edge.ClassProduction}, stackrecords.ProductionEnv)
+	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Tier: environment.TierProduction}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,10 +148,10 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	ctx := context.Background()
 	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
-	if _, err := envsource.Register(ctx, store, edge.ClassProduction, registration); err != nil {
+	if _, err := envsource.Register(ctx, store, environment.TierProduction, registration); err != nil {
 		t.Fatal(err)
 	}
-	sync := &envsource.Sync{Store: store, Class: edge.ClassProduction}
+	sync := &envsource.Sync{Store: store, Tier: environment.TierProduction}
 	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", nil)); err != nil {
 		t.Fatal(err)
 	}
@@ -163,10 +164,10 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
 	}
 
-	if _, registered, err := envsource.Registered(ctx, store.Records, edge.ClassProduction, "shop"); err != nil || registered {
+	if _, registered, err := envsource.Registered(ctx, store.Records, environment.TierProduction, "shop"); err != nil || registered {
 		t.Errorf("Registered() after the removal = %v, %v, want a scheduled sync to stop reading for a project that is gone", registered, err)
 	}
-	if status, err := envsource.StatusOf(ctx, store, edge.ClassProduction, registration); err != nil || !status.LastAttemptAt.IsZero() {
+	if status, err := envsource.StatusOf(ctx, store, environment.TierProduction, registration); err != nil || !status.LastAttemptAt.IsZero() {
 		t.Errorf("StatusOf() after the removal = %+v, %v, want the status record removed with the project", status, err)
 	}
 }
@@ -185,10 +186,10 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 func cutOverProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
 	t.Helper()
 	client, p := contractServed(t, "1.0.0")
-	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    edge.ClassProduction,
+			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
@@ -272,10 +273,10 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	client, p := contractServed(t, "1.0.0")
 	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
+	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
-			Class:    edge.ClassProduction,
+			Tier:     environment.TierProduction,
 			Endpoint: "https://shop.fake.invalid",
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
@@ -348,7 +349,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	}
 
 	admin := naming.AppStack(stackrecords.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
-	if err := stackrecords.Write(ctx, vendor.Records(), edge.ClassProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
+	if err := stackrecords.Write(ctx, vendor.Records(), environment.TierProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
 		t.Fatalf("stackrecords.Write() error = %v", err)
 	}
 

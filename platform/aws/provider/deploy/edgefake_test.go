@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -104,11 +105,11 @@ func (f *recordingEdge) SharedPreviewRemoval() edge.PlanGroup {
 	return f.declared().SharedPreviewRemoval()
 }
 
-func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
+func (f *recordingEdge) Bootstrap(context.Context, environment.Tier) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
 
-func (f *recordingEdge) Teardown(context.Context, edge.Class) error { return nil }
+func (f *recordingEdge) Teardown(context.Context, environment.Tier) error { return nil }
 
 func (f *recordingEdge) Hooks() edge.Hooks {
 	return edge.Hooks{}
@@ -118,7 +119,7 @@ func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string,
 	return f.bound[hostname], nil
 }
 
-func (f *recordingEdge) ProjectOwner(slug string, _ edge.Class) string { return slug }
+func (f *recordingEdge) ProjectOwner(slug string, _ environment.Tier) string { return slug }
 
 func (f *recordingEdge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
 	return "", nil
@@ -339,7 +340,7 @@ func TestOriginFakeEdgeConformance(t *testing.T) {
 				New: func(*testing.T) (edge.Edge, edge.StackSpec) {
 					return fakeEdgeOf(kind), edge.StackSpec{
 						Version: "v1",
-						Class:   edge.ClassProduction,
+						Tier:    environment.TierProduction,
 						Slug:    "conformance",
 						Program: &edge.ProgramSpec{Name: "root", StoreEndpoint: fakeStoreEndpoint},
 					}

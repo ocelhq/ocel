@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -137,7 +137,7 @@ func TestTheRecordsHelperListsEverythingUnderAPrefixAndNothingBeside(t *testing.
 	}
 }
 
-const helperClass = "production"
+const helperTier = "production"
 
 func helperDir(t *testing.T) string {
 	t.Helper()
@@ -145,7 +145,7 @@ func helperDir(t *testing.T) string {
 		t.Skip("no flock on this machine, and the helper takes its lock with it")
 	}
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, helperClass, "records"), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, helperTier, "records"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -153,7 +153,7 @@ func helperDir(t *testing.T) string {
 
 func recordsDir(t *testing.T, root string) string {
 	t.Helper()
-	return filepath.Join(root, helperClass, "records")
+	return filepath.Join(root, helperTier, "records")
 }
 
 func helper(t *testing.T, root, stdin string, args ...string) (string, int) {
@@ -162,7 +162,7 @@ func helper(t *testing.T, root, stdin string, args ...string) (string, int) {
 	if err := os.WriteFile(script, recordsScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", append([]string{script, helperClass}, args...)...)
+	cmd := exec.Command("/bin/sh", append([]string{script, helperTier}, args...)...)
 	cmd.Env = append(os.Environ(), "OCEL_RECORDS_ROOT="+root)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
@@ -345,7 +345,7 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		return session.Result{}, false
 	}
 
-	record, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(edge.ClassProduction, "shop"))
+	record, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(environment.TierProduction, "shop"))
 	if err != nil {
 		t.Fatalf("Read() as the login every deploy runs as = %v", err)
 	}
@@ -384,7 +384,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		return session.Result{}, false
 	}
 
-	_, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(edge.ClassProduction, "shop"))
+	_, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(environment.TierProduction, "shop"))
 	if err == nil {
 		t.Fatal("a record tier this login could neither read nor elevate to read answered a row")
 	}

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -186,7 +186,7 @@ func liveDigest(t *testing.T, target provider.RegistryTarget, coordinate string)
 
 func TestLiveTheMachinePullsTheImageAndIsLeftWithNoCredential(t *testing.T) {
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
+	bootstrapped(t, vm, environment.TierProduction)
 	_, _ = imported(t)
 
 	target := vm.registry(t)

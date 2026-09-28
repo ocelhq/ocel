@@ -12,12 +12,12 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
-export function bootstrapPartition(bootstrapClass: string): string {
-  return `${partitionPrefix}${bootstrapClass}`;
+export function bootstrapPartition(bootstrapTier: string): string {
+  return `${partitionPrefix}${bootstrapTier}`;
 }
 
-export function ledgerPartition(bootstrapClass: string, project: string): string {
-  return `${bootstrapPartition(bootstrapClass)}/${project}`;
+export function ledgerPartition(bootstrapTier: string, project: string): string {
+  return `${bootstrapPartition(bootstrapTier)}/${project}`;
 }
 
 async function notedAt(
@@ -44,17 +44,17 @@ export async function targetsOf(
   dynamo: DynamoLike,
   commands: DynamoCommands,
   table: string,
-  bootstrapClass: string,
+  bootstrapTier: string,
   project: string,
 ): Promise<string[]> {
   const [wildcard, owned] = await Promise.all([
-    notedAt(dynamo, commands, table, bootstrapPartition(bootstrapClass)),
-    notedAt(dynamo, commands, table, ledgerPartition(bootstrapClass, project)),
+    notedAt(dynamo, commands, table, bootstrapPartition(bootstrapTier)),
+    notedAt(dynamo, commands, table, ledgerPartition(bootstrapTier, project)),
   ]);
   const targets = [...new Set([...wildcard, ...owned])].sort();
   if (targets.length === 0) {
     console.warn(
-      `ocel: the ${bootstrapClass} ledger names no front to invalidate for ${project}, so its raised tags reach nothing`,
+      `ocel: the ${bootstrapTier} ledger names no front to invalidate for ${project}, so its raised tags reach nothing`,
     );
   }
   return targets;

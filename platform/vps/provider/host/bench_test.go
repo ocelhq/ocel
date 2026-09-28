@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -26,7 +26,7 @@ type bench struct {
 	mu        sync.Mutex
 	dest      session.Destination
 	facts     session.Facts
-	installed map[edge.Class][]Item
+	installed map[environment.Tier][]Item
 	ran       []string
 	fed       []string
 	dials     int
@@ -38,7 +38,7 @@ type bench struct {
 	after     func(b *bench, command string)
 }
 
-func machine(installed map[edge.Class][]Item) *bench {
+func machine(installed map[environment.Tier][]Item) *bench {
 	return &bench{
 		dest: session.Destination{
 			Written:    "ocelbox",
@@ -202,8 +202,8 @@ func (b *bench) rendered(command string) session.Result {
 	case readsProxy(command):
 		return session.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
 	case strings.Contains(command, "for p in"):
-		for class, items := range b.installed {
-			if strings.Contains(command, quoted(StampPath(class))) {
+		for tier, items := range b.installed {
+			if strings.Contains(command, quoted(StampPath(tier))) {
 				return session.Result{Stdout: surveyed(items)}
 			}
 		}
@@ -255,23 +255,23 @@ func surveyed(items []Item) string {
 	return rendered.String()
 }
 
-func bootstrapped(t *testing.T, class edge.Class) []Item {
+func bootstrapped(t *testing.T, tier environment.Tier) []Item {
 	t.Helper()
-	stamp, err := Stamp{Schema: provider.BootstrapSchema, State: StateComplete}.item(class)
+	stamp, err := Stamp{Schema: provider.BootstrapSchema, State: StateComplete}.item(tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), stamp)
+	return append(Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}), stamp)
 }
 
 func TestASurveyedHostReadsBackAsTheItemsThatAreInstalledOnIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	box := machine(map[edge.Class][]Item{class: items})
+	tier := environment.TierProduction
+	items := Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{})
+	box := machine(map[environment.Tier][]Item{tier: items})
 
-	read, err := box.host().Survey(context.Background(), class)
+	read, err := box.host().Survey(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("Survey() = %v", err)
 	}
@@ -282,17 +282,17 @@ func TestASurveyedHostReadsBackAsTheItemsThatAreInstalledOnIt(t *testing.T) {
 	}
 }
 
-func bootstrappedOn(t *testing.T, class edge.Class) *bench {
+func bootstrappedOn(t *testing.T, tier environment.Tier) *bench {
 	t.Helper()
 	seeded := string(routingTableItem().Content)
-	return bootstrappedWith(t, class, &seeded, nil)
+	return bootstrappedWith(t, tier, &seeded, nil)
 }
 
-func bootstrappedWith(t *testing.T, class edge.Class, table, config *string) *bench {
+func bootstrappedWith(t *testing.T, tier environment.Tier, table, config *string) *bench {
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64, Front{})
+	items := Items(tier, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 	present := make([]Item, 0, len(items)+1)
 	for _, item := range items {
@@ -301,7 +301,7 @@ func bootstrappedWith(t *testing.T, class edge.Class, table, config *string) *be
 		}
 		present = append(present, item)
 	}
-	record, err := frontRecordItem(Front{}, "shop", class)
+	record, err := frontRecordItem(Front{}, "shop", tier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,11 +311,11 @@ func bootstrappedWith(t *testing.T, class edge.Class, table, config *string) *be
 		Writer:  "the-suite",
 		Seal:    Seal{Fingerprint: contentSum(minted), Algorithm: SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},
 		Digests: digests(append(items, record)),
-	}.item(class)
+	}.item(tier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	box := machine(map[edge.Class][]Item{class: append(present, stamp, record)})
+	box := machine(map[environment.Tier][]Item{tier: append(present, stamp, record)})
 	proxied := servesPair(box, table, config)
 	box.answer = func(command string) (session.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
@@ -329,10 +329,10 @@ func bootstrappedWith(t *testing.T, class edge.Class, table, config *string) *be
 func TestABoxAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
 
-	described, err := NewBootstrap(box.host(), testVendor, "shop").Describe(context.Background(), class)
+	described, err := NewBootstrap(box.host(), testVendor, "shop").Describe(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
 	}
@@ -348,8 +348,8 @@ func TestABoxAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) {
 func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
 	answered := box.answer
 	box.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "for p in") {
@@ -358,7 +358,7 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 		return answered(command)
 	}
 
-	described, err := NewBootstrap(box.host(), testVendor, "shop").Describe(context.Background(), class)
+	described, err := NewBootstrap(box.host(), testVendor, "shop").Describe(context.Background(), tier)
 	if err == nil {
 		t.Fatalf("Describe() over a survey that could not run one of its probes = %+v, want a refusal: a plan built on it writes over whatever the probe could not see", described)
 	}
@@ -370,16 +370,16 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	box := bootstrappedOn(t, class)
-	installed := box.installed[class]
+	tier := environment.TierProduction
+	box := bootstrappedOn(t, tier)
+	installed := box.installed[tier]
 	for at, item := range installed {
 		if item.Name == SwitchboardBinary {
 			installed[at].Content = nil
 		}
 	}
 
-	read, err := box.host().Read(context.Background(), class)
+	read, err := box.host().Read(context.Background(), tier)
 	if err != nil {
 		t.Fatalf("Read() = %v", err)
 	}

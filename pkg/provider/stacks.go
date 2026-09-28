@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
@@ -26,7 +27,7 @@ type Stacks interface {
 
 type StackRef struct {
 	Project string
-	Class   edge.Class
+	Tier    environment.Tier
 	Name    naming.StackName
 }
 

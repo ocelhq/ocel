@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -166,13 +166,13 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
-			t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", class, err)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+			t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", tier, err)
 		}
 		defer func() {
-			if err := bootstrap.Remove(ctx, class, nil); err != nil {
-				t.Errorf("Remove(%s) = %v", class, err)
+			if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+				t.Errorf("Remove(%s) = %v", tier, err)
 			}
 		}()
 	}

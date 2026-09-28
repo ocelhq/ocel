@@ -20,6 +20,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -27,20 +28,20 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-func installedBootstrapper(t *testing.T, class string) Bootstrap {
+func installedBootstrapper(t *testing.T, tier string) Bootstrap {
 	t.Helper()
 
-	stackName, err := defaultNamespace.StackNameFor(class)
+	stackName, err := defaultNamespace.StackNameFor(tier)
 	if err != nil {
-		t.Fatalf("StackNameFor(%s): %v", class, err)
+		t.Fatalf("StackNameFor(%s): %v", tier, err)
 	}
-	params, err := bootstrap.ClassParamNames(defaultNamespace, class)
+	params, err := bootstrap.TierParamNames(defaultNamespace, tier)
 	if err != nil {
-		t.Fatalf("ClassParamNames(%s): %v", class, err)
+		t.Fatalf("TierParamNames(%s): %v", tier, err)
 	}
-	userName, err := defaultNamespace.EdgeUserNameFor(class)
+	userName, err := defaultNamespace.EdgeUserNameFor(tier)
 	if err != nil {
-		t.Fatalf("EdgeUserNameFor(%s): %v", class, err)
+		t.Fatalf("EdgeUserNameFor(%s): %v", tier, err)
 	}
 
 	stored := map[string]string{passphraseParam: "pp"}
@@ -110,7 +111,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	b := planningBootstrapper(front)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Class:    edge.ClassProduction,
+		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -147,8 +148,8 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if len(edgeGroup.Changes) != len(front.planned) {
 		t.Errorf("the edge group has %d changes, want the ones the edge planned", len(edgeGroup.Changes))
 	}
-	if front.classes[0] != edge.ClassProduction {
-		t.Errorf("the edge was planned for %q, want the class the bootstrap is for", front.classes[0])
+	if front.tiers[0] != environment.TierProduction {
+		t.Errorf("the edge was planned for %q, want the tier the bootstrap is for", front.tiers[0])
 	}
 }
 
@@ -163,7 +164,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	b := planningBootstrapper(front)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Class:  edge.ClassProduction,
+		Tier:   environment.TierProduction,
 		Remove: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -204,7 +205,7 @@ func TestPlanShowsAnEdgeFeatureArrivingBehindAnotherFront(t *testing.T) {
 	b.Kinds = kindsOf(selected, other)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Class:    edge.ClassProduction,
+		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureCloudFrontEdge, bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -231,7 +232,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	b.Kinds = kindsOf(selected, other)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Class:    edge.ClassProduction,
+		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureCloudFrontEdge},
 		Remove:   []string{bootstrap.FeatureCloudflareEdge},
 	})
@@ -256,7 +257,7 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 	b := planningBootstrapper(&teardownEdge{})
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Class:    edge.ClassProduction,
+		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err != nil {
@@ -275,7 +276,7 @@ func TestPlanPassesTheEdgesRefusalOut(t *testing.T) {
 	b := planningBootstrapper(&planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")})
 
 	_, err := b.Plan(context.Background(), provider.BootstrapRequest{
-		Class:    edge.ClassProduction,
+		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") {
@@ -301,16 +302,16 @@ type planningEdge struct {
 	planned  []edge.PlanChange
 	removals []edge.PlanChange
 	err      error
-	classes  []edge.Class
+	tiers    []environment.Tier
 }
 
 func (e *planningEdge) Hooks() edge.Hooks {
 	return edge.Hooks{
-		PlanBootstrap: func(_ context.Context, class edge.Class) ([]edge.PlanChange, error) {
-			e.classes = append(e.classes, class)
+		PlanBootstrap: func(_ context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
+			e.tiers = append(e.tiers, tier)
 			return e.planned, e.err
 		},
-		PlanRemoveBootstrap: func(context.Context, edge.Class) ([]edge.PlanChange, error) {
+		PlanRemoveBootstrap: func(context.Context, environment.Tier) ([]edge.PlanChange, error) {
 			return e.removals, e.err
 		},
 	}
@@ -320,12 +321,12 @@ type adoptingEdge struct {
 	teardownEdge
 
 	refusal error
-	asked   []edge.Class
+	asked   []environment.Tier
 }
 
 func (e *adoptingEdge) Hooks() edge.Hooks {
-	return edge.Hooks{PlanAdoption: func(_ context.Context, class edge.Class) (edge.Adoption, error) {
-		e.asked = append(e.asked, class)
+	return edge.Hooks{PlanAdoption: func(_ context.Context, tier environment.Tier) (edge.Adoption, error) {
+		e.asked = append(e.asked, tier)
 		return edge.Adoption{}, e.refusal
 	}}
 }
@@ -335,29 +336,29 @@ func TestPlanAsksTheEdgeWhatItHandsThisAccountToStore(t *testing.T) {
 
 	front := &adoptingEdge{refusal: errors.New("CLOUDFLARE_API_TOKEN was rejected")}
 	_, err := planningBootstrapper(front).Plan(context.Background(), provider.BootstrapRequest{
-		Class:    edge.ClassProduction,
+		Tier:     environment.TierProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN was rejected") {
 		t.Fatalf("Plan error = %v, want the edge's refusal to say what it hands this account", err)
 	}
-	if !slices.Equal(front.asked, []edge.Class{edge.ClassProduction}) {
-		t.Errorf("the edge was asked what it hands over for %v, want the one class planned", front.asked)
+	if !slices.Equal(front.asked, []environment.Tier{environment.TierProduction}) {
+		t.Errorf("the edge was asked what it hands over for %v, want the one tier planned", front.asked)
 	}
 }
 
-func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
+func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 	t.Parallel()
 
-	b := installedBootstrapper(t, bootstrap.ClassProduction)
+	b := installedBootstrapper(t, bootstrap.TierProduction)
 	cfn, buckets, iamfake := b.CFN.(*teardownCFN), b.Buckets.(*teardownBuckets), b.IAM.(*teardownIAM)
 
-	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
+	if err := b.Remove(context.Background(), environment.TierProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 
-	if got := b.Edge.(*teardownEdge).torndown; !slices.Equal(got, []edge.Class{edge.ClassProduction}) {
-		t.Errorf("edge teardown classes = %v, want [production]", got)
+	if got := b.Edge.(*teardownEdge).torndown; !slices.Equal(got, []environment.Tier{environment.TierProduction}) {
+		t.Errorf("edge teardown tiers = %v, want [production]", got)
 	}
 	if !slices.Equal(cfn.deleted, []string{coreStackName}) {
 		t.Errorf("deleted stacks = %v, want [%s]", cfn.deleted, coreStackName)
@@ -372,8 +373,8 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 		t.Errorf("deleted access keys = %v, want the edge reader's", iamfake.deletedKeys)
 	}
 	for _, name := range []string{
-		edgeParam(t, bootstrap.ClassProduction, "/credentials"),
-		edgeParam(t, bootstrap.ClassProduction, "/values"),
+		edgeParam(t, bootstrap.TierProduction, "/credentials"),
+		edgeParam(t, bootstrap.TierProduction, "/values"),
 		passphraseParam,
 	} {
 		if _, still := b.SSM.(*teardownSSM).params[name]; still {
@@ -385,16 +386,16 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	t.Parallel()
 
-	b := installedBootstrapper(t, bootstrap.ClassPreview)
+	b := installedBootstrapper(t, bootstrap.TierPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
-	if err := b.Remove(context.Background(), edge.ClassPreview, nil); err != nil {
+	if err := b.Remove(context.Background(), environment.TierPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if _, kept := b.SSM.(*teardownSSM).params[passphraseParam]; !kept {
 		t.Error("the passphrase the production bootstrap still needs was deleted")
 	}
-	if _, kept := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.ClassPreview, "/credentials")]; kept {
+	if _, kept := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.TierPreview, "/credentials")]; kept {
 		t.Error("the preview bootstrap's own parameters must go")
 	}
 }
@@ -402,7 +403,7 @@ func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 type teardownEdge struct {
 	edge.Edge
 	kind     edge.Kind
-	torndown []edge.Class
+	torndown []environment.Tier
 }
 
 func (e *teardownEdge) Kind() edge.Kind {
@@ -414,8 +415,8 @@ func (e *teardownEdge) Kind() edge.Kind {
 
 func (e *teardownEdge) Hooks() edge.Hooks { return edge.Hooks{} }
 
-func (e *teardownEdge) Teardown(_ context.Context, class edge.Class) error {
-	e.torndown = append(e.torndown, class)
+func (e *teardownEdge) Teardown(_ context.Context, tier environment.Tier) error {
+	e.torndown = append(e.torndown, tier)
 	return nil
 }
 
@@ -564,7 +565,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	cfn := b.CFN.(*teardownCFN)
 	gate := providerserver.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
 
-	status, err := gate.Status(context.Background(), edge.ClassProduction)
+	status, err := gate.Status(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}

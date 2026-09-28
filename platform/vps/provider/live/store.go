@@ -13,14 +13,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
-	ClassRoot = "/etc/ocel"
+	TierRoot  = "/etc/ocel"
 	StateRoot = "/var/lib/ocel"
 )
 
@@ -32,12 +32,12 @@ const (
 	sealTag      = 16
 )
 
-func RecordsDir(root string, class edge.Class) string {
-	return filepath.Join(root, string(class), "records")
+func RecordsDir(root string, tier environment.Tier) string {
+	return filepath.Join(root, string(tier), "records")
 }
 
-func KeyPath(root string, class edge.Class) string {
-	return filepath.Join(root, string(class), sealKeyFile)
+func KeyPath(root string, tier environment.Tier) string {
+	return filepath.Join(root, string(tier), sealKeyFile)
 }
 
 var errReadOnly = errors.New("the box's records are read-only here")
@@ -45,11 +45,11 @@ var errReadOnly = errors.New("the box's records are read-only here")
 type Records struct{ Root string }
 
 func (r Records) Read(_ context.Context, name records.Name) (records.Record, error) {
-	class, encoded, err := Located(name)
+	tier, encoded, err := Located(name)
 	if err != nil {
 		return records.Record{}, err
 	}
-	raw, err := os.ReadFile(filepath.Join(RecordsDir(r.Root, class), encoded+recordSuffix))
+	raw, err := os.ReadFile(filepath.Join(RecordsDir(r.Root, tier), encoded+recordSuffix))
 	if errors.Is(err, fs.ErrNotExist) {
 		return records.Record{}, records.ErrNotFound
 	}
@@ -64,11 +64,11 @@ func (r Records) Read(_ context.Context, name records.Name) (records.Record, err
 }
 
 func (r Records) List(_ context.Context, under records.Name) ([]records.Record, error) {
-	class, encoded, err := Located(under)
+	tier, encoded, err := Located(under)
 	if err != nil {
 		return nil, err
 	}
-	dir := RecordsDir(r.Root, class)
+	dir := RecordsDir(r.Root, tier)
 	var found []records.Record
 	err = filepath.WalkDir(filepath.Join(dir, encoded), func(path string, entry fs.DirEntry, err error) error {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -136,12 +136,12 @@ func (Cipher) Seal(context.Context, records.SealScope, []byte) ([]byte, error) {
 }
 
 func (s Cipher) Open(_ context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
-	if at.Class == "" {
-		return nil, fmt.Errorf("%s names no class", at.Name)
+	if at.Tier == "" {
+		return nil, fmt.Errorf("%s names no tier", at.Name)
 	}
-	key, err := os.ReadFile(KeyPath(s.Root, at.Class))
+	key, err := os.ReadFile(KeyPath(s.Root, at.Tier))
 	if err != nil {
-		return nil, fmt.Errorf("read the %s seal key: %w", at.Class, err)
+		return nil, fmt.Errorf("read the %s seal key: %w", at.Tier, err)
 	}
 	return Open(key, at, sealed)
 }
@@ -168,17 +168,17 @@ func Open(key []byte, at records.SealScope, sealed []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func Located(name records.Name) (edge.Class, string, error) {
-	class, named := stackrecords.ClassOf(name)
+func Located(name records.Name) (environment.Tier, string, error) {
+	tier, named := stackrecords.TierOf(name)
 	if !named {
 		return "", "", refusal.Refuse(refusal.CodeInvalid,
-			"%s names no class", name)
+			"%s names no tier", name)
 	}
 	encoded, err := EncodeName(name)
 	if err != nil {
 		return "", "", err
 	}
-	return class, encoded, nil
+	return tier, encoded, nil
 }
 
 func EncodeName(name records.Name) (string, error) {

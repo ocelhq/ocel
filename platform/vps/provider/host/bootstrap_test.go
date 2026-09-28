@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -18,22 +18,22 @@ import (
 const testVendor provider.Vendor = "vps"
 
 func currentHost() Reading {
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
 	return Reading{
 		Arch:     ArchAMD64,
-		Class:    class,
+		Tier:     tier,
 		Present:  true,
 		Keys:     keys,
-		Stamp:    Stamp{Schema: provider.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys, ArchAMD64, Front{}))},
-		Observed: digests(Items(class, keys, ArchAMD64, Front{})),
+		Stamp:    Stamp{Schema: provider.BootstrapSchema, State: StateComplete, Digests: digests(Items(tier, keys, ArchAMD64, Front{}))},
+		Observed: digests(Items(tier, keys, ArchAMD64, Front{})),
 	}
 }
 
 func drifted(t *testing.T, read Reading, name string) Reading {
 	t.Helper()
 
-	for _, item := range Items(read.Class, read.Keys, ArchAMD64, Front{}) {
+	for _, item := range Items(read.Tier, read.Keys, ArchAMD64, Front{}) {
 		if item.Name != name {
 			continue
 		}
@@ -60,20 +60,20 @@ func refusalOf(t *testing.T, err error, code refusal.Code) refusal.Refusal {
 func TestHealReassertsTheStateTheDeployLoginOwns(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, currentHost(), RecordsDir(edge.ClassProduction))
+	read := drifted(t, currentHost(), RecordsDir(environment.TierProduction))
 	work, _, err := healable(read)
 	if err != nil {
 		t.Fatalf("healable() over a drifted record tier = %v, want the deploy login's own state reasserted", err)
 	}
-	if len(work) != 1 || work[0].Name != RecordsDir(edge.ClassProduction) {
-		t.Fatalf("healable() = %v, want only %s", ids(work), RecordsDir(edge.ClassProduction))
+	if len(work) != 1 || work[0].Name != RecordsDir(environment.TierProduction) {
+		t.Fatalf("healable() = %v, want only %s", ids(work), RecordsDir(environment.TierProduction))
 	}
 }
 
 func TestHealRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, drifted(t, currentHost(), RecordsDir(edge.ClassProduction)), boxstore.RecordsHelper)
+	read := drifted(t, drifted(t, currentHost(), RecordsDir(environment.TierProduction)), boxstore.RecordsHelper)
 	work, _, err := healable(read)
 	refused := refusalOf(t, err, refusal.CodeDenied)
 	if !strings.Contains(refused.Message, boxstore.RecordsHelper) {
@@ -87,9 +87,9 @@ func TestHealRefusesAMixedSetWholeRatherThanDoingThePartItMay(t *testing.T) {
 func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	for _, name := range []string{
-		ClassDir(class), SealKeyPath(class), boxstore.SealHelper, sudoersSeal(class), deployUser, sshDir, authorizedKeys,
+		TierDir(tier), SealKeyPath(tier), boxstore.SealHelper, sudoersSeal(tier), deployUser, sshDir, authorizedKeys,
 	} {
 		read := drifted(t, currentHost(), name)
 		refused := refusalOf(t, second(healable(read)), refusal.CodeDenied)
@@ -102,16 +102,16 @@ func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 func TestHealLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	reported := []string{dockerEngine, dockerUnit, ProxyNetwork, caddy.Container, SwitchboardContainer}
 	for _, name := range reported {
-		read := drifted(t, drifted(t, currentHost(), RecordsDir(class)), name)
+		read := drifted(t, drifted(t, currentHost(), RecordsDir(tier)), name)
 		work, left, err := healing(read, true)
 		if err != nil {
 			t.Fatalf("heal over a box whose %s is not as the stamp records = %v, want it left: heal starts nothing and a daemon reports what it runs, so a stopped one is not drift heal can refuse over",
 				name, err)
 		}
-		if len(work) != 1 || work[0].Name != RecordsDir(class) {
+		if len(work) != 1 || work[0].Name != RecordsDir(tier) {
 			t.Errorf("healing() over a drifted %s = %v, want only the record tier", name, ids(work))
 		}
 		if !slices.ContainsFunc(left, func(item Item) bool { return item.Name == name }) {
@@ -119,7 +119,7 @@ func TestHealLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
 		}
 	}
 
-	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}) {
+	for _, item := range Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}) {
 		if daemonState(item) && deployOwned(item) {
 			t.Errorf("%s is both a daemon's to report and heal's to write, and the two dispositions cannot both apply", item.ID())
 		}
@@ -129,19 +129,19 @@ func TestHealLeavesWhatADaemonReportsRatherThanRefusingOverIt(t *testing.T) {
 func TestHealWillNotReassertRecordsSealedToAKeyThatIsGone(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, currentHost(), RecordsDir(edge.ClassProduction))
-	read.Stamp.Seal = Seal{Fingerprint: "the key every value this class stores was sealed to"}
-	delete(read.Observed, sealKey(read.Class).ID())
+	read := drifted(t, currentHost(), RecordsDir(environment.TierProduction))
+	read.Stamp.Seal = Seal{Fingerprint: "the key every value this tier stores was sealed to"}
+	delete(read.Observed, sealKey(read.Tier).ID())
 	refused := refusalOf(t, second(healing(read, true)), refusal.CodeInvalid)
-	if !strings.Contains(refused.Message, SealKeyPath(read.Class)) {
-		t.Errorf("heal over a class whose seal key vanished says %q, want it to name the key: reasserting the records and calling the bootstrap refreshed loses the failure until unseal time", refused.Message)
+	if !strings.Contains(refused.Message, SealKeyPath(read.Tier)) {
+		t.Errorf("heal over a tier whose seal key vanished says %q, want it to name the key: reasserting the records and calling the bootstrap refreshed loses the failure until unseal time", refused.Message)
 	}
 }
 
 func TestHealReadsAKeyItCannotOpenAsTheKeyInPlace(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, currentHost(), RecordsDir(edge.ClassProduction))
+	read := drifted(t, currentHost(), RecordsDir(environment.TierProduction))
 	read.Stamp.Seal = Seal{Fingerprint: "the key the stamp records"}
 	read.Seal = Seal{}
 	if _, _, err := healing(read, true); err != nil {
@@ -152,7 +152,7 @@ func TestHealReadsAKeyItCannotOpenAsTheKeyInPlace(t *testing.T) {
 func TestHealRunsTheReplacementRefusingGateTheRestOfApplyRuns(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, currentHost(), RecordsDir(edge.ClassProduction))
+	read := drifted(t, currentHost(), RecordsDir(environment.TierProduction))
 	work, _, err := healing(read, true)
 	if err != nil {
 		t.Fatalf("a replacement-refusing heal over a drifted record tier = %v, want the converge to proceed", err)
@@ -165,10 +165,10 @@ func TestHealRunsTheReplacementRefusingGateTheRestOfApplyRuns(t *testing.T) {
 func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	read := drifted(t, currentHost(), RecordsDir(class))
+	tier := environment.TierProduction
+	read := drifted(t, currentHost(), RecordsDir(tier))
 	var unread []string
-	for _, item := range Items(class, read.Keys, ArchAMD64, Front{}) {
+	for _, item := range Items(tier, read.Keys, ArchAMD64, Front{}) {
 		hidden := item.Kind == KindFile && item.Owner == rootOwner && item.Mode&0o004 == 0
 		if !hidden && item.Kind != KindUser {
 			continue
@@ -176,7 +176,7 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 		unread = append(unread, item.ID())
 		delete(read.Observed, item.ID())
 	}
-	for _, hidden := range []string{KindFile + " " + sudoersSeal(edge.ClassProduction)} {
+	for _, hidden := range []string{KindFile + " " + sudoersSeal(environment.TierProduction)} {
 		if !slices.Contains(unread, hidden) {
 			t.Fatalf("%s reads as one %s can hash, and a survey drawn by that login reports nothing for it: %v", hidden, deployUser, unread)
 		}
@@ -185,23 +185,23 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 	if err != nil {
 		t.Fatalf("heal over a survey that could read none of %v = %v, want the record tier reasserted anyway", unread, err)
 	}
-	if len(work) != 1 || work[0].Name != RecordsDir(class) {
-		t.Errorf("healing() = %v, want only %s", ids(work), RecordsDir(class))
+	if len(work) != 1 || work[0].Name != RecordsDir(tier) {
+		t.Errorf("healing() = %v, want only %s", ids(work), RecordsDir(tier))
 	}
 }
 
 func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	installed := bootstrapped(t, class)
-	records := RecordsDir(class)
+	tier := environment.TierProduction
+	installed := bootstrapped(t, tier)
+	records := RecordsDir(tier)
 	for at, item := range installed {
 		if item.Kind == KindDir && item.Name == records {
 			installed[at].Mode = 0o700
 		}
 	}
-	box := machine(map[edge.Class][]Item{class: installed})
+	box := machine(map[environment.Tier][]Item{tier: installed})
 	box.facts = session.Facts{Arch: "x86_64"}
 	box.floor = refusal.Refuse(refusal.CodeDenied,
 		"ada@ocelbox can neither act as root nor run sudo without a password, and bootstrap writes as root throughout")
@@ -213,7 +213,7 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 	}
 
 	err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite", Heal: true, RefuseReplacements: true}, nil)
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite", Heal: true, RefuseReplacements: true}, nil)
 	if err != nil {
 		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
 	}
@@ -233,10 +233,10 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 func TestHealNeverFinishesAnApplyThatDiedMidWay(t *testing.T) {
 	t.Parallel()
 
-	read := drifted(t, currentHost(), RecordsDir(edge.ClassProduction))
+	read := drifted(t, currentHost(), RecordsDir(environment.TierProduction))
 	read.Stamp.State = StateApplying
 	refused := refusalOf(t, second(healable(read)), refusal.CodeDenied)
-	if !strings.Contains(refused.Message, StampPath(read.Class)) {
+	if !strings.Contains(refused.Message, StampPath(read.Tier)) {
 		t.Errorf("heal over an unfinished apply says %q, want it to name the stamp that says so", refused.Message)
 	}
 }
@@ -244,8 +244,8 @@ func TestHealNeverFinishesAnApplyThatDiedMidWay(t *testing.T) {
 func TestHealHasNothingToReassertWhereNoBootstrapRan(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	fresh := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{}}
+	tier := environment.TierProduction
+	fresh := Reading{Arch: ArchAMD64, Tier: tier, Observed: map[string]string{}}
 	refusalOf(t, second(healable(fresh)), refusal.CodeDenied)
 }
 
@@ -262,9 +262,9 @@ func ids(items []Item) []string {
 func TestAReplacementRefusingApplyInstallsWhatIsAbsent(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	fresh := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{}}
-	if err := refuseReplacements(fresh, Items(class, nil, ArchAMD64, Front{})); err != nil {
+	tier := environment.TierProduction
+	fresh := Reading{Arch: ArchAMD64, Tier: tier, Observed: map[string]string{}}
+	if err := refuseReplacements(fresh, Items(tier, nil, ArchAMD64, Front{})); err != nil {
 		t.Errorf("a replacement-refusing apply over a machine nothing has bootstrapped = %v, want the installs to proceed", err)
 	}
 }
@@ -272,10 +272,10 @@ func TestAReplacementRefusingApplyInstallsWhatIsAbsent(t *testing.T) {
 func TestAReplacementRefusingApplyWillNotWriteOverWhatAlreadyExists(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	for _, name := range []string{boxstore.RecordsHelper, SealKeyPath(class), deployUser, dockerEngine} {
+	tier := environment.TierProduction
+	for _, name := range []string{boxstore.RecordsHelper, SealKeyPath(tier), deployUser, dockerEngine} {
 		read := drifted(t, currentHost(), name)
-		refused := refusalOf(t, refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64, Front{})), refusal.CodeNotReady)
+		refused := refusalOf(t, refuseReplacements(read, Items(read.Tier, read.Keys, ArchAMD64, Front{})), refusal.CodeNotReady)
 		if !strings.Contains(refused.Message, name) {
 			t.Errorf("the refusal says %q, want it to name %s as the thing it would write over", refused.Message, name)
 		}
@@ -288,20 +288,20 @@ func TestAReplacementRefusingApplyWillNotWriteOverWhatAlreadyExists(t *testing.T
 func TestAReplacementRefusingApplyConvergesAHostRatherThanRefusingEveryChange(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	for _, name := range []string{dockerUnit, RecordsDir(class), stateRoot, boxstore.Dir} {
+	tier := environment.TierProduction
+	for _, name := range []string{dockerUnit, RecordsDir(tier), stateRoot, boxstore.Dir} {
 		read := drifted(t, currentHost(), name)
-		if err := refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64, Front{})); err != nil {
+		if err := refuseReplacements(read, Items(read.Tier, read.Keys, ArchAMD64, Front{})); err != nil {
 			t.Errorf("a replacement-refusing apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)
 		}
 	}
 }
 
-func TestNothingHealMayWriteIsAReplacementClassChange(t *testing.T) {
+func TestNothingHealMayWriteIsAReplacementTierChange(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
-	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}) {
+	tier := environment.TierProduction
+	for _, item := range Items(tier, []byte(aKey+"\n"), ArchAMD64, Front{}) {
 		if deployOwned(item) && replacing(item) {
 			t.Errorf("heal may write %s and writing it replaces rather than converges, so heal, the one path that refuses replacements, would rebuild it", item.ID())
 		}

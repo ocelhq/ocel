@@ -22,11 +22,11 @@ Write a module, and list it in `ocel.json`:
 ```ts
 import { defineTransform } from "@ocel/transforms";
 
-export default defineTransform(({ bindings, envClass }) => ({
+export default defineTransform(({ bindings, envTier }) => ({
   aws: {
     function: {
       lambda: {
-        memorySize: envClass === "production" ? 2048 : 512,
+        memorySize: envTier === "production" ? 2048 : 512,
         vpcConfig: { subnetIds: bindings.custom.network.subnetIds },
       },
     },

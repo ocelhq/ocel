@@ -61,13 +61,6 @@ func EdgeGroupKindOf(name string) (Kind, bool) {
 	return Kind(kind), true
 }
 
-type Class string
-
-const (
-	ClassProduction Class = "production"
-	ClassPreview    Class = "preview"
-)
-
 type TrustBoundary string
 
 const (

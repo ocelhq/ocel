@@ -11,6 +11,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -22,7 +23,7 @@ import (
 )
 
 func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
-	session, err := h.openEdgeSession(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if undeployed(err) {
 		return &contractv1.ListPromotionsResponse{}, nil
 	}
@@ -37,7 +38,7 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 }
 
 func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
-	session, err := h.openEdgeSession(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openEdgeSession(ctx, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -99,7 +100,7 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
-		class, err := classOf(req.GetEnvironment().GetTier())
+		tier, err := tierOf(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err
 		}
@@ -107,13 +108,13 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		if class == edge.ClassProduction {
+		if tier == environment.TierProduction {
 			pointer = ""
 		}
 
-		session, err := h.openEdgeSession(ctx, class, req.GetSlug(), req.GetEdge())
+		session, err := h.openEdgeSession(ctx, tier, req.GetSlug(), req.GetEdge())
 		if undeployed(err) {
-			progress.Say(fmt.Sprintf("Nothing to prune: %s has no deploy in %s", req.GetSlug(), environmentPhrase(class, pointer)))
+			progress.Say(fmt.Sprintf("Nothing to prune: %s has no deploy in %s", req.GetSlug(), environmentPhrase(tier, pointer)))
 			return nil
 		}
 		if err != nil {
@@ -127,7 +128,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 			return err
 		}
 		env := pointer
-		if class == edge.ClassProduction {
+		if tier == environment.TierProduction {
 			env = stackrecords.ProductionEnv
 		}
 		targets, err := ReclaimTargets(req.GetSlug(), env,
@@ -135,7 +136,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		if err := destroyReclaimTargets(ctx, session.provider, req.GetSlug(), class, targets, progress); err != nil {
+		if err := destroyReclaimTargets(ctx, session.provider, req.GetSlug(), tier, targets, progress); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {
@@ -149,7 +150,7 @@ func pruneTitle(req *contractv1.RemoveStalePromotionsRequest) string {
 	env := req.GetEnvironment()
 	where := "production"
 	if env.GetTier() == environmentv1.Tier_TIER_PREVIEW {
-		where = environmentPhrase(edge.ClassPreview, env.GetIdentity())
+		where = environmentPhrase(environment.TierPreview, env.GetIdentity())
 	}
 	return fmt.Sprintf("Pruning the promotions of %s beyond the newest %d", where, req.GetKeepN())
 }

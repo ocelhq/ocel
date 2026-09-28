@@ -349,14 +349,14 @@ func TestDestroyingProductionAsksForTheProjectNameWhileTheRunIsHeldAfterThePlanI
 	}
 }
 
-func TestDestroyNeedsAClass(t *testing.T) {
+func TestDestroyNeedsATier(t *testing.T) {
 	var out bytes.Buffer
 	destroyCmd.SetOut(&out)
 	destroyCmd.SetErr(&out)
 	t.Cleanup(func() { destroyCmd.SetOut(nil); destroyCmd.SetErr(nil) })
 
 	if err := destroyCmd.RunE(destroyCmd, nil); err == nil {
-		t.Fatal("bare destroy err = nil, want destroy without a class to be a failure")
+		t.Fatal("bare destroy err = nil, want destroy without a tier to be a failure")
 	}
 	for _, want := range []string{"production", "preview"} {
 		if !strings.Contains(out.String(), want) {
@@ -365,7 +365,7 @@ func TestDestroyNeedsAClass(t *testing.T) {
 	}
 }
 
-func TestDestroyNamesAClassItDoesNotKnow(t *testing.T) {
+func TestDestroyNamesATierItDoesNotKnow(t *testing.T) {
 	var out bytes.Buffer
 	destroyCmd.SetOut(&out)
 	destroyCmd.SetErr(&out)
@@ -373,17 +373,17 @@ func TestDestroyNamesAClassItDoesNotKnow(t *testing.T) {
 
 	err := destroyCmd.RunE(destroyCmd, []string{"foo"})
 	if err == nil {
-		t.Fatal("destroy foo err = nil, want a class it does not know to be a failure")
+		t.Fatal("destroy foo err = nil, want a tier it does not know to be a failure")
 	}
-	if err.Error() != `the class to destroy is production or preview, not "foo"` {
+	if err.Error() != `the tier to destroy is production or preview, not "foo"` {
 		t.Errorf("err = %v, want it to name the value typed", err)
 	}
 	if out.Len() != 0 {
-		t.Errorf("output = %q, want no help dump when the class is named but wrong", out.String())
+		t.Errorf("output = %q, want no help dump when the tier is named but wrong", out.String())
 	}
 }
 
-func TestDestroyClassCommands(t *testing.T) {
+func TestDestroyTierCommands(t *testing.T) {
 	for typed, want := range map[string]string{
 		"production": "production",
 		"prod":       "production",

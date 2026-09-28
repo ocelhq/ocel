@@ -19,8 +19,8 @@ const (
 
 const ClaimPrefix = "ocel-host-"
 
-func Surface(slug, class string) string {
-	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), class)
+func Surface(slug, tier string) string {
+	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), tier)
 }
 
 func StoreHostname(hostname string) string {

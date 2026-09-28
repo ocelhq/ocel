@@ -130,7 +130,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		role.ValuesTableARN = r.cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = r.cfg.Slug
-		role.VarsClass = string(r.cfg.Class)
+		role.VarsTier = string(r.cfg.Tier)
 	}
 
 	r.served.plan(r, app.App, logical, bytecode)
@@ -201,7 +201,7 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 		if arn == "" {
 			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"this account's bootstrap publishes no %s runtime for this build's functions to boot through; re-run `%s`",
-				arch, provider.BootstrapCommand(r.cfg.Class))
+				arch, provider.BootstrapCommand(r.cfg.Tier))
 		}
 		layers[arch] = arn
 	}
@@ -244,7 +244,7 @@ func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
 	if r.cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
 			"the edge reaches %s over a Function URL no signature guards, and this bootstrap has no secret for the entry function to demand of it; re-run `%s`",
-			spec.App.App, provider.BootstrapCommand(r.cfg.Class))
+			spec.App.App, provider.BootstrapCommand(r.cfg.Tier))
 	}
 	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }

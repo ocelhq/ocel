@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -18,8 +18,8 @@ const (
 	previewCacheStoreBucketName = "ocel-edge-cache-preview"
 )
 
-func cacheStoreName(class edge.Class) string {
-	name, err := cacheStoreNameFor("ocel", class)
+func cacheStoreName(tier environment.Tier) string {
+	name, err := cacheStoreNameFor("ocel", tier)
 	if err != nil {
 		panic(err)
 	}
@@ -31,7 +31,7 @@ func TestAccountNames(t *testing.T) {
 
 	derivations := []struct {
 		name          string
-		nameFor       func(string, edge.Class) (string, error)
+		nameFor       func(string, environment.Tier) (string, error)
 		prod, preview string
 	}{
 		{"the deployments store", storeScriptNameFor, sharedStoreScriptName, previewStoreScriptName},
@@ -46,11 +46,11 @@ func TestAccountNames(t *testing.T) {
 			t.Run("the default namespace keeps the names it always had", func(t *testing.T) {
 				t.Parallel()
 
-				prod, err := tc.nameFor("ocel", edge.ClassProduction)
+				prod, err := tc.nameFor("ocel", environment.TierProduction)
 				if err != nil {
 					t.Fatalf("production: %v", err)
 				}
-				preview, err := tc.nameFor("ocel", edge.ClassPreview)
+				preview, err := tc.nameFor("ocel", environment.TierPreview)
 				if err != nil {
 					t.Fatalf("preview: %v", err)
 				}
@@ -62,11 +62,11 @@ func TestAccountNames(t *testing.T) {
 			t.Run("another namespace names its own", func(t *testing.T) {
 				t.Parallel()
 
-				prod, err := tc.nameFor("j-1874-deploy-next", edge.ClassProduction)
+				prod, err := tc.nameFor("j-1874-deploy-next", environment.TierProduction)
 				if err != nil {
 					t.Fatalf("production: %v", err)
 				}
-				preview, err := tc.nameFor("j-1874-deploy-next", edge.ClassPreview)
+				preview, err := tc.nameFor("j-1874-deploy-next", environment.TierPreview)
 				if err != nil {
 					t.Fatalf("preview: %v", err)
 				}
@@ -81,16 +81,16 @@ func TestAccountNames(t *testing.T) {
 			t.Run("no namespace is an error", func(t *testing.T) {
 				t.Parallel()
 
-				if _, err := tc.nameFor("", edge.ClassProduction); err == nil {
+				if _, err := tc.nameFor("", environment.TierProduction); err == nil {
 					t.Error("nameFor(no namespace) = nil error, want an error")
 				}
 			})
 
-			t.Run("an unknown class is an error", func(t *testing.T) {
+			t.Run("an unknown tier is an error", func(t *testing.T) {
 				t.Parallel()
 
-				if _, err := tc.nameFor("ocel", edge.Class("nonsense")); err == nil {
-					t.Error("nameFor(unknown class) = nil error, want an error")
+				if _, err := tc.nameFor("ocel", environment.Tier("nonsense")); err == nil {
+					t.Error("nameFor(unknown tier) = nil error, want an error")
 				}
 			})
 
@@ -98,7 +98,7 @@ func TestAccountNames(t *testing.T) {
 				t.Parallel()
 
 				long := strings.Repeat("a", longestAccountName)
-				if _, err := tc.nameFor(long, edge.ClassPreview); err == nil || !strings.Contains(err.Error(), long) {
+				if _, err := tc.nameFor(long, environment.TierPreview); err == nil || !strings.Contains(err.Error(), long) {
 					t.Errorf("nameFor(%d-character namespace) err = %v, want one naming it", len(long), err)
 				}
 			})

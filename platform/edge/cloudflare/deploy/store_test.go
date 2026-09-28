@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -190,7 +191,7 @@ func testState(endpoint, secret string) edge.StackState {
 		Endpoint:   endpoint,
 		Secret:     secret,
 		OwnerToken: storeOwnerToken,
-		Class:      edge.ClassProduction,
+		Tier:       environment.TierProduction,
 	}
 }
 

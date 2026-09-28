@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -20,16 +20,16 @@ type LocalTransport struct {
 	Elevation []string
 }
 
-func (LocalTransport) HasStore(_ context.Context, class edge.Class) (bool, error) {
+func (LocalTransport) HasStore(_ context.Context, tier environment.Tier) (bool, error) {
 	if _, err := os.Stat(RecordsHelper); err != nil {
 		return false, nil
 	}
-	info, err := os.Stat(live.RecordsDir(live.StateRoot, class))
+	info, err := os.Stat(live.RecordsDir(live.StateRoot, tier))
 	return err == nil && info.IsDir(), nil
 }
 
-func (LocalTransport) Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error) {
-	stdout, stderr, code, err := runCommand(ctx, stdin, RecordsHelper, append([]string{string(class)}, argv...)...)
+func (LocalTransport) Records(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+	stdout, stderr, code, err := runCommand(ctx, stdin, RecordsHelper, append([]string{string(tier)}, argv...)...)
 	switch {
 	case err != nil:
 		return "", refusal.Refuse(refusal.CodeDenied, "run the records helper on this host: %s", err)

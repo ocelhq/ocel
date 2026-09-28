@@ -25,28 +25,28 @@ func installedParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 
 	ctx := context.Background()
 	ssmc, iamc := newFakeSSM(), &fakeIAM{}
-	if _, err := ensureOriginSecret(ctx, ssmc, defaultNamespace, ClassProduction, time.Now()); err != nil {
+	if _, err := ensureOriginSecret(ctx, ssmc, defaultNamespace, TierProduction, time.Now()); err != nil {
 		t.Fatalf("ensureOriginSecret: %v", err)
 	}
 	if _, err := ensurePassphrase(ctx, ssmc, defaultNamespace); err != nil {
 		t.Fatalf("ensurePassphrase: %v", err)
 	}
-	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, time.Now()); err != nil {
+	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, time.Now()); err != nil {
 		t.Fatalf("ensureEdgeCredentials: %v", err)
 	}
-	if err := adoptCacheStore(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredStore()); err != nil {
+	if err := adoptCacheStore(ctx, ssmc, defaultNamespace, TierProduction, KindCloudflare, offeredStore()); err != nil {
 		t.Fatalf("adoptCacheStore: %v", err)
 	}
-	if err := adoptDeploymentsStore(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredDeploymentsStore()); err != nil {
+	if err := adoptDeploymentsStore(ctx, ssmc, defaultNamespace, TierProduction, KindCloudflare, offeredDeploymentsStore()); err != nil {
 		t.Fatalf("adoptDeploymentsStore: %v", err)
 	}
-	if err := adoptISRWriter(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredISRWriter("", "cred-prod")); err != nil {
+	if err := adoptISRWriter(ctx, ssmc, defaultNamespace, TierProduction, KindCloudflare, offeredISRWriter("", "cred-prod")); err != nil {
 		t.Fatalf("adoptISRWriter: %v", err)
 	}
-	if _, err := ensureISRWriterSeed(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare); err != nil {
+	if _, err := ensureISRWriterSeed(ctx, ssmc, defaultNamespace, TierProduction, KindCloudflare); err != nil {
 		t.Fatalf("ensureISRWriterSeed: %v", err)
 	}
-	if err := writeEdgeValues(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, cloudflareAdoption().Values); err != nil {
+	if err := writeEdgeValues(ctx, ssmc, defaultNamespace, TierProduction, KindCloudflare, cloudflareAdoption().Values); err != nil {
 		t.Fatalf("writeEdgeValues: %v", err)
 	}
 	return ssmc, iamc
@@ -60,7 +60,7 @@ func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) prov
 		adoptions = []EdgeAdoption{{Kind: KindCloudflare, Adoption: cloudflareAdoption()}}
 	}
 	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace,
-		ClassProduction, adoptions, req)
+		TierProduction, adoptions, req)
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPlanParametersOnAFreshAccountCreatesEveryParameter(t *testing.T) {
 	if group.Action != provider.ActionCreate {
 		t.Errorf("group action = %q, want create where nothing is provisioned", group.Action)
 	}
-	names := cloudflareNames(ClassProduction)
+	names := cloudflareNames(TierProduction)
 	want := []string{
 		originSecretParam,
 		passphraseParam,
@@ -137,7 +137,7 @@ func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
 
 func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 	ssmc, iamc := installedParams(t)
-	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare, map[string]string{"cacheBucket": "stale"}); err != nil {
+	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, TierProduction, KindCloudflare, map[string]string{"cacheBucket": "stale"}); err != nil {
 		t.Fatalf("writeEdgeValues: %v", err)
 	}
 
@@ -146,7 +146,7 @@ func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 	if group.Action != provider.ActionUpdate {
 		t.Errorf("group action = %q, want update where one parameter drifted", group.Action)
 	}
-	names := cloudflareNames(ClassProduction)
+	names := cloudflareNames(TierProduction)
 	for _, change := range group.Changes {
 		want := provider.ActionKeep
 		if change.Name == names.valuesParam {
@@ -163,7 +163,7 @@ func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 
 func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testing.T) {
 	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: newFakeSSM(), IAM: &fakeIAM{}}, defaultNamespace,
-		ClassProduction, []EdgeAdoption{{Kind: KindCloudFront}}, Request{Features: []string{FeatureCloudFrontEdge}})
+		TierProduction, []EdgeAdoption{{Kind: KindCloudFront}}, Request{Features: []string{FeatureCloudFrontEdge}})
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
 
 	group := plannedParams(t, ssmc, iamc, Request{Remove: []string{FeatureCloudflareEdge}})
 
-	names := cloudflareNames(ClassProduction)
+	names := cloudflareNames(TierProduction)
 	got := actions(group)
 	for _, name := range append(names.edgeParams(), names.user) {
 		if got[name] != provider.ActionDelete {
@@ -203,11 +203,11 @@ func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
 func TestPlanParametersRotatesAKeyPastItsAge(t *testing.T) {
 	ssmc, iamc := installedParams(t)
 	payload, _ := json.Marshal(EdgeCredentials{AccessKeyID: "AKIAEDGE", SecretAccessKey: "s", CreatedAt: time.Now().Add(-EdgeKeyMaxAge - time.Hour)})
-	ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = string(payload)
+	ssmc.params[cloudflareNames(TierProduction).credentialsParam] = string(payload)
 
 	group := plannedParams(t, ssmc, iamc, fronting())
 
-	names := cloudflareNames(ClassProduction)
+	names := cloudflareNames(TierProduction)
 	for _, change := range group.Changes {
 		if change.Name != names.credentialsParam && change.Name != names.user {
 			continue
@@ -224,7 +224,7 @@ func TestPlanParametersRemintsTheKeyTheAccountNoLongerHas(t *testing.T) {
 
 	group := plannedParams(t, ssmc, iamc, fronting())
 
-	names := cloudflareNames(ClassProduction)
+	names := cloudflareNames(TierProduction)
 	for _, change := range group.Changes {
 		switch change.Name {
 		case names.credentialsParam:
@@ -275,7 +275,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 	ssmc, iamc := installedParams(t)
 	ssmc.batches = 0
 
-	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, ClassProduction, false)
+	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, TierProduction, false)
 	if err != nil {
 		t.Fatalf("PlanParameterRemoval: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 		t.Fatal("the removal plan names nothing, and this account stores parameters")
 	}
 
-	names, err := ClassParamNames(defaultNamespace, ClassProduction)
+	names, err := TierParamNames(defaultNamespace, TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}

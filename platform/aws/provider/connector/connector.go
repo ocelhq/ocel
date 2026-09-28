@@ -137,8 +137,8 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Insta
 
 func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
 	keys := make([]string, 0, 2)
-	for _, class := range []string{bootstrap.ClassProduction, bootstrap.ClassPreview} {
-		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, class)
+	for _, tier := range []string{bootstrap.TierProduction, bootstrap.TierPreview} {
+		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, tier)
 		if err != nil {
 			return nil, err
 		}
@@ -151,8 +151,8 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 	}
 	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"neither the %s nor the %s class of %s is bootstrapped with a key variables are sealed under, so the connector would read nothing: bootstrap this account and run ocel connector add again",
-			bootstrap.ClassProduction, bootstrap.ClassPreview, ns)
+			"neither the %s nor the %s tier of %s is bootstrapped with a key variables are sealed under, so the connector would read nothing: bootstrap this account and run ocel connector add again",
+			bootstrap.TierProduction, bootstrap.TierPreview, ns)
 	}
 	return keys, nil
 }

@@ -12,6 +12,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
@@ -26,7 +27,7 @@ const (
 )
 
 func previewStackSpec() edge.StackSpec {
-	return edge.StackSpec{Version: "v1", Class: edge.ClassPreview, Slug: conformanceSlug, PruneOnly: true}
+	return edge.StackSpec{Version: "v1", Tier: environment.TierPreview, Slug: conformanceSlug, PruneOnly: true}
 }
 
 func previewWildcardSpec() edge.PreviewWildcardSpec {
@@ -47,7 +48,7 @@ func previewing(t *testing.T, w *world) (*apiGateway, edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
 	e := w.edge()
-	if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
+	if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
 	if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
@@ -92,7 +93,7 @@ func TestReconcilePreviewWildcardRoutesEverythingUnclaimedTo404(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := w.edge()
-	if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
+	if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
 	w.gateway.calls = nil
@@ -137,7 +138,7 @@ func TestReconcilePreviewWildcardTwiceChangesNothing(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := w.edge()
-	if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
+	if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
 	first, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec())
@@ -169,7 +170,7 @@ func TestReconcilePreviewWildcardConvergesADomainThatDrifted(t *testing.T) {
 
 		w := newWorld()
 		e := w.edge()
-		if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
+		if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 			t.Fatalf("Bootstrap(preview): %v", err)
 		}
 		stale := previewWildcardSpec()
@@ -196,7 +197,7 @@ func TestReconcilePreviewWildcardConvergesADomainThatDrifted(t *testing.T) {
 
 		w := newWorld()
 		e := w.edge()
-		if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
+		if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 			t.Fatalf("Bootstrap(preview): %v", err)
 		}
 		if _, err := w.gateway.CreateDomainName(ctx, &apigateway.CreateDomainNameInput{
@@ -321,7 +322,7 @@ func TestPromoteOffTheGlobalPreviewDomainRoutesNothing(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	e := w.edge()
-	if _, err := e.Bootstrap(ctx, edge.ClassPreview); err != nil {
+	if _, err := e.Bootstrap(ctx, environment.TierPreview); err != nil {
 		t.Fatalf("Bootstrap(preview): %v", err)
 	}
 	if _, err := e.ReconcilePreviewWildcard(ctx, previewWildcardSpec()); err != nil {
@@ -386,7 +387,7 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 		if left[host] != nil {
 			t.Errorf("%s is still routed after the stack that served it was destroyed", host)
 		}
-		if w.gateway.named(apiName(defaultNamespace, conformanceSlug, edge.ClassPreview, pointer)) != nil {
+		if w.gateway.named(apiName(defaultNamespace, conformanceSlug, environment.TierPreview, pointer)) != nil {
 			t.Errorf("the REST API for %s survived the destroy", pointer)
 		}
 	}

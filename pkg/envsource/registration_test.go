@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 )
@@ -33,12 +33,12 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 		infisicalRegistration("shop", "https://infisical.example.com", universal, "/web", "", "/web"),
 		infisicalRegistration("admin", "https://infisical.example.com", cloudIdentity, ""),
 	} {
-		if _, err := envsource.Register(ctx, store, edge.ClassProduction, registration); err != nil {
+		if _, err := envsource.Register(ctx, store, environment.TierProduction, registration); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	shop, registered, err := envsource.Registered(ctx, records, edge.ClassProduction, "shop")
+	shop, registered, err := envsource.Registered(ctx, records, environment.TierProduction, "shop")
 	if err != nil || !registered {
 		t.Fatalf("Registered() = %v, %v", registered, err)
 	}
@@ -48,19 +48,19 @@ func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T)
 	if want := []envvars.Cell{{Key: "INFISICAL_CLIENT_ID"}, {Key: "INFISICAL_CLIENT_SECRET"}}; !slices.Equal(shop.Credentials(), want) {
 		t.Fatalf("Credentials() = %v, want %v", shop.Credentials(), want)
 	}
-	if _, registered, _ := envsource.Registered(ctx, records, edge.ClassPreview, "shop"); registered {
+	if _, registered, _ := envsource.Registered(ctx, records, environment.TierPreview, "shop"); registered {
 		t.Fatal("a production registration was read back in preview")
 	}
 
-	all, err := envsource.Registrations(ctx, records, edge.ClassProduction)
+	all, err := envsource.Registrations(ctx, records, environment.TierProduction)
 	if err != nil || len(all) != 2 || all[0].Project != "admin" || all[1].Project != "shop" {
 		t.Fatalf("Registrations() = %+v, %v, want admin then shop", all, err)
 	}
 
-	if err := envsource.ForgetProject(ctx, store, edge.ClassProduction, "shop"); err != nil {
+	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
-	if _, registered, err := envsource.Registered(ctx, records, edge.ClassProduction, "shop"); err != nil || registered {
+	if _, registered, err := envsource.Registered(ctx, records, environment.TierProduction, "shop"); err != nil || registered {
 		t.Fatalf("Registered() after ForgetProject = %v, %v, want nothing", registered, err)
 	}
 }
@@ -69,10 +69,10 @@ func TestRestoringARegistrationLeavesOneAnotherDeployRegisteredSince(t *testing.
 	t.Parallel()
 	store, _ := storeFixture()
 	ctx := context.Background()
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	register := func(host string) envsource.Registration {
 		t.Helper()
-		registration, err := envsource.Register(ctx, store, class, infisicalRegistration("shop", host, universal, ""))
+		registration, err := envsource.Register(ctx, store, tier, infisicalRegistration("shop", host, universal, ""))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,10 +82,10 @@ func TestRestoringARegistrationLeavesOneAnotherDeployRegisteredSince(t *testing.
 	failed := register("https://failed.example.com")
 	register("https://since.example.com")
 
-	if err := envsource.RestoreRegistration(ctx, store, class, failed, &working); err != nil {
+	if err := envsource.RestoreRegistration(ctx, store, tier, failed, &working); err != nil {
 		t.Fatal(err)
 	}
-	current, _, err := envsource.Registered(ctx, store.Records, class, "shop")
+	current, _, err := envsource.Registered(ctx, store.Records, tier, "shop")
 	if err != nil || current.Descriptor.Infisical.Host != "https://since.example.com" {
 		t.Fatalf("Registered() = %+v, %v, want the registration made since the failed one left in place", current, err)
 	}

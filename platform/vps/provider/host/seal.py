@@ -11,7 +11,7 @@ KEY_MODE = 0o400
 NONCE_BYTES = 12
 TAG_BYTES = 16
 
-COORDINATE = ("project", "class", "env", "folder", "binding", "name")
+COORDINATE = ("project", "tier", "env", "folder", "binding", "name")
 SEAL_ROOT = "/etc/ocel"
 
 
@@ -97,17 +97,17 @@ def additional(at):
     return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in at).encode()
 
 
-def coordinate(class_name, args):
+def coordinate(tier, args):
     at = dict.fromkeys(COORDINATE, "")
     while args:
         flag = args.pop(0)
         field = flag[2:] if flag.startswith("--") else ""
-        if field not in at or field == "class":
+        if field not in at or field == "tier":
             abort("%s is not a coordinate flag" % flag)
         if not args:
             abort("%s was given no value" % flag)
         at[field] = args.pop(0)
-    at["class"] = class_name
+    at["tier"] = tier
     return additional([at[field] for field in COORDINATE])
 
 
@@ -148,11 +148,11 @@ def mint(path):
 
 def main(argv):
     if len(argv) < 2:
-        abort("usage: seal <class> init|seal|open [coordinate flags]")
-    class_name, verb, rest = argv[0], argv[1], list(argv[2:])
-    if not re.fullmatch("[a-z0-9-]+", class_name):
-        abort("%s is not a valid class" % class_name)
-    path = os.path.join(SEAL_ROOT, class_name, "seal.key")
+        abort("usage: seal <tier> init|seal|open [coordinate flags]")
+    tier, verb, rest = argv[0], argv[1], list(argv[2:])
+    if not re.fullmatch("[a-z0-9-]+", tier):
+        abort("%s is not a valid tier" % tier)
+    path = os.path.join(SEAL_ROOT, tier, "seal.key")
 
     if verb == "init":
         if rest:
@@ -162,7 +162,7 @@ def main(argv):
     if verb not in ("seal", "open"):
         abort("unknown verb %s" % verb)
 
-    aad = coordinate(class_name, rest)
+    aad = coordinate(tier, rest)
     key = key_of(path)
     fed = sys.stdin.buffer.read().strip()
     try:

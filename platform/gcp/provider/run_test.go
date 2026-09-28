@@ -51,7 +51,7 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 			container.Ports, appbuild.InjectedPort)
 	}
 	if template.ServiceAccount != "ocel-production@acme.iam.gserviceaccount.com" {
-		t.Errorf("a revision runs as %q, want the class's own runtime account", template.ServiceAccount)
+		t.Errorf("a revision runs as %q, want the tier's own runtime account", template.ServiceAccount)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestAFunctionAsksForTheMemoryAndTheTimeoutItsSpecNamed(t *testing.T) {
 	}
 }
 
-func TestAFunctionThatNamesNoMemoryOrTimeoutKeepsTheProfileTheClassRunsOn(t *testing.T) {
+func TestAFunctionThatNamesNoMemoryOrTimeoutKeepsTheProfileTheTierRunsOn(t *testing.T) {
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-fn",
 		image:   "fn@sha256:abc",

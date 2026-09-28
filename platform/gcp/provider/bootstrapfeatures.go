@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -81,8 +82,8 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
-		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Class) + ": " + feature.Summary)
-		_, err := front.Bootstrap(ctx, req.Class)
+		ensureProgress(progress).Say("Installing feature " + feature.Name + " for " + string(req.Tier) + ": " + feature.Summary)
+		_, err := front.Bootstrap(ctx, req.Tier)
 		return err
 	})
 }
@@ -104,30 +105,30 @@ func (b bootstrap) dropFronts(
 	progress progress.Progress,
 ) error {
 	dropping := droppedFeatures(read.Stamp.Features, req)
-	if err := b.frontsFree(ctx, req.Class, dropping); err != nil {
+	if err := b.frontsFree(ctx, req.Tier, dropping); err != nil {
 		return err
 	}
 	return b.eachFront(dropping, func(feature provider.Feature, front edge.Edge) error {
-		ensureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Class) +
+		ensureProgress(progress).Say("Taking down the " + string(front.Kind()) + " edge's front for " + string(req.Tier) +
 			": this bootstrap no longer requests feature " + feature.Name)
-		return front.Teardown(ctx, req.Class)
+		return front.Teardown(ctx, req.Tier)
 	})
 }
 
-func (b bootstrap) tearFronts(ctx context.Context, class edge.Class, features []string) error {
+func (b bootstrap) tearFronts(ctx context.Context, tier environment.Tier, features []string) error {
 	return b.eachFront(features, func(_ provider.Feature, front edge.Edge) error {
-		return front.Teardown(ctx, class)
+		return front.Teardown(ctx, tier)
 	})
 }
 
-func (b bootstrap) frontInstalled(ctx context.Context, class edge.Class, feature string) (bool, error) {
+func (b bootstrap) frontInstalled(ctx context.Context, tier environment.Tier, feature string) (bool, error) {
 	installed := true
 	err := b.eachFront([]string{feature}, func(_ provider.Feature, front edge.Edge) error {
 		checkInstalled := front.Hooks().CheckBootstrapInstalled
 		if checkInstalled == nil {
 			return nil
 		}
-		up, err := checkInstalled(ctx, class)
+		up, err := checkInstalled(ctx, tier)
 		if err != nil {
 			return err
 		}
@@ -137,20 +138,20 @@ func (b bootstrap) frontInstalled(ctx context.Context, class edge.Class, feature
 	return installed, err
 }
 
-func (b bootstrap) frontsFree(ctx context.Context, class edge.Class, features []string) error {
+func (b bootstrap) frontsFree(ctx context.Context, tier environment.Tier, features []string) error {
 	return b.eachFront(features, func(_ provider.Feature, front edge.Edge) error {
 		boundHostnames := front.Hooks().ListBoundHostnames
 		if boundHostnames == nil {
 			return nil
 		}
-		bound, err := boundHostnames(ctx, class)
+		bound, err := boundHostnames(ctx, tier)
 		if err != nil || len(bound) == 0 {
 			return err
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s is still served by the %s front of class %s, and the front owns the certificate map those hostnames are entries in, "+
+			"%s is still served by the %s front of tier %s, and the front owns the certificate map those hostnames are entries in, "+
 				"which Google will not delete while it contains any.\nRelease them with `ocel domain remove` in the projects that bound them, then remove this bootstrap",
-			strings.Join(bound, ", "), front.Kind(), class)
+			strings.Join(bound, ", "), front.Kind(), tier)
 	})
 }
 

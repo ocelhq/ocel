@@ -11,6 +11,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -46,7 +47,7 @@ func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wil
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := stackrecords.WildcardRecord(edge.ClassPreview)
+	name := stackrecords.WildcardRecord(environment.TierPreview)
 	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +60,7 @@ func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wil
 
 func readRecordedWildcard(t *testing.T, vendor *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
-	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.WildcardRecord(edge.ClassPreview))
+	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.WildcardRecord(environment.TierPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,11 +187,11 @@ func TestGetPreviewWildcardNamesTheProjectsServedOnIt(t *testing.T) {
 	client, vendor := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
 
-	seedStack(t, vendor, edge.ClassPreview, "shop", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "shop", Class: edge.ClassPreview, GlobalPreview: "preview.acme.com"},
+	seedStack(t, vendor, environment.TierPreview, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierPreview, GlobalPreview: "preview.acme.com"},
 	})
-	seedStack(t, vendor, edge.ClassPreview, "blog", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "blog", Class: edge.ClassPreview, GlobalPreview: "elsewhere.acme.com"},
+	seedStack(t, vendor, environment.TierPreview, "blog", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "blog", Tier: environment.TierPreview, GlobalPreview: "elsewhere.acme.com"},
 	})
 
 	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
@@ -208,8 +209,8 @@ func TestPlanRemovePreviewWildcardRefusesWhileAProjectStillHasLivePreviews(t *te
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
-	seedStack(t, vendor, edge.ClassPreview, "shop", stackrecords.EdgeState{
-		Edge: edge.StackState{Slug: "shop", Class: edge.ClassPreview, GlobalPreview: "preview.acme.com"},
+	seedStack(t, vendor, environment.TierPreview, "shop", stackrecords.EdgeState{
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierPreview, GlobalPreview: "preview.acme.com"},
 	})
 	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", naming.NewRelease("b1", "")))
 

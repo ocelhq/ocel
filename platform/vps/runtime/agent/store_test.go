@@ -16,7 +16,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -114,7 +114,7 @@ func (s goSealer) Open(_ context.Context, at records.SealScope, sealed []byte) (
 }
 
 type box struct {
-	classRoot    string
+	tierRoot     string
 	stateRoot    string
 	routingTable string
 	records      *memRecords
@@ -127,12 +127,12 @@ func aBox(t *testing.T, root string) *box {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	b := &box{classRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, sealer: goSealer{key: key}}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.classRoot, class)), 0o755); err != nil {
+	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, sealer: goSealer{key: key}}
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(vars.KeyPath(b.classRoot, class), key, 0o400); err != nil {
+		if err := os.WriteFile(vars.KeyPath(b.tierRoot, tier), key, 0o400); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -164,11 +164,11 @@ func (b *box) dump(t *testing.T) {
 	b.records.mu.Lock()
 	defer b.records.mu.Unlock()
 	for _, record := range b.records.records {
-		class, encoded, err := vars.Located(record.Name)
+		tier, encoded, err := vars.Located(record.Name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(vars.RecordsDir(b.stateRoot, class), encoded+".rec")
+		path := filepath.Join(vars.RecordsDir(b.stateRoot, tier), encoded+".rec")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -179,7 +179,7 @@ func (b *box) dump(t *testing.T) {
 }
 
 func (b *box) resolver() Store {
-	return Store{ClassRoot: b.classRoot, StateRoot: b.stateRoot, RoutingTable: b.routingTable}
+	return Store{TierRoot: b.tierRoot, StateRoot: b.stateRoot, RoutingTable: b.routingTable}
 }
 
 func (b *box) claims(t *testing.T, document string) {
@@ -195,7 +195,7 @@ func (b *box) claims(t *testing.T, document string) {
 
 func aStoreManifest(sealed string) vars.Manifest {
 	return vars.Manifest{
-		Slug: "shop", Class: "production",
+		Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}},
 		Store: &vars.Store{
 			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
@@ -239,35 +239,35 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	}
 }
 
-var shop = envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+var shop = envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 
 func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
 	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}, Environment: "pr-7"}, "postgres://pr-7")
 	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION", Folder: "/web"}}, "s3cret")
-	b.set(t, envvars.Scope{Project: "other", Class: edge.ClassProduction}, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://other")
+	b.set(t, envvars.Scope{Project: "other", Tier: environment.TierProduction}, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://other")
 	b.dump(t)
 
 	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
-		Slug: "shop", Class: "production",
+		Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}, {Key: "SESSION", Folder: "/web"}, {Key: "MISSING"}},
 	})
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if resolved["DATABASE_URL"] != "postgres://class-wide" || resolved["SESSION"] != "s3cret" {
-		t.Errorf("Resolve() = %v, want the class-wide value and the folder's", resolved)
+	if resolved["DATABASE_URL"] != "postgres://tier-wide" || resolved["SESSION"] != "s3cret" {
+		t.Errorf("Resolve() = %v, want the tier-wide value and the folder's", resolved)
 	}
 	if _, found := resolved["MISSING"]; found {
 		t.Errorf("Resolve() handed back MISSING, which nothing stored: the runtime is what says it is unset")
 	}
 	preview, err := b.resolver().Resolve(context.Background(), vars.Manifest{
-		Slug: "shop", Class: "production", Environment: "pr-7", Keys: []live.Key{{Key: "DATABASE_URL"}},
+		Slug: "shop", Tier: "production", Environment: "pr-7", Keys: []live.Key{{Key: "DATABASE_URL"}},
 	})
 	if err != nil || preview["DATABASE_URL"] != "postgres://pr-7" {
-		t.Errorf("Resolve() for pr-7 = %v, %v, want the environment's own value over the class-wide one", preview, err)
+		t.Errorf("Resolve() for pr-7 = %v, %v, want the environment's own value over the tier-wide one", preview, err)
 	}
 }
 
@@ -284,7 +284,7 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	b.dump(t)
 
 	bindings := []live.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
-	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Class: "production", Bindings: bindings})
+	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Tier: "production", Bindings: bindings})
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
@@ -297,15 +297,15 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	}
 }
 
-func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
+func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://tier-wide")
 	b.dump(t)
-	if err := os.Remove(vars.KeyPath(b.classRoot, edge.ClassProduction)); err != nil {
+	if err := os.Remove(vars.KeyPath(b.tierRoot, environment.TierProduction)); err != nil {
 		t.Fatal(err)
 	}
-	_, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
+	_, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err == nil || !errors.Is(err, os.ErrNotExist) && !strings.Contains(err.Error(), "seal key") {
 		t.Errorf("Resolve() with no key = %v, want a refusal naming the key", err)
 	}
@@ -315,7 +315,7 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	t.Parallel()
 	b := aBox(t, t.TempDir())
 	at := records.SealScope{
-		Project: "shop", Class: edge.ClassProduction, Env: "shop-prod",
+		Project: "shop", Tier: environment.TierProduction, Env: "shop-prod",
 		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
 	}
 	sealed, err := b.sealer.Seal(context.Background(), at, []byte("s3cr3t"))
@@ -329,7 +329,7 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	b.dump(t)
 
 	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
-		Slug: "shop", Class: "production",
+		Slug: "shop", Tier: "production",
 		Bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		Store: &vars.Store{
 			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
@@ -349,7 +349,7 @@ func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
 	elsewhere := records.SealScope{
-		Project: "other", Class: edge.ClassProduction, Env: "other-prod",
+		Project: "other", Tier: environment.TierProduction, Env: "other-prod",
 		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
 	}
 	sealed, err := b.sealer.Seal(context.Background(), elsewhere, []byte("s3cr3t"))
@@ -358,7 +358,7 @@ func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	}
 	b.dump(t)
 	_, err = b.resolver().Resolve(context.Background(), vars.Manifest{
-		Slug: "shop", Class: "production",
+		Slug: "shop", Tier: "production",
 		Keys:  []live.Key{{Key: "DATABASE_URL"}},
 		Store: &vars.Store{Env: "shop-prod", Sealed: base64.StdEncoding.EncodeToString(sealed)},
 	})
@@ -384,7 +384,7 @@ func aBucketBinding(t *testing.T, b *box, public bool) []live.Binding {
 func resolvedBucket(t *testing.T, b *box, bindings []live.Binding) *bindingsv1.BucketProperties {
 	t.Helper()
 	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
-		Slug: "shop", Class: "production", Bindings: bindings,
+		Slug: "shop", Tier: "production", Bindings: bindings,
 		Store: aStoreManifest("").Store,
 	})
 	if err != nil {

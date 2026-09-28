@@ -129,7 +129,7 @@ func (c Coordinate) Description(detail string) string {
 
 type Facts struct {
 	ManagedBy  string
-	EnvClass   string
+	EnvTier    string
 	BuildID    string
 	Deployment string
 	Promotion  string
@@ -142,7 +142,7 @@ func (c Coordinate) Tags(f Facts) map[string]string {
 		"ocel:managed-by": f.ManagedBy,
 		"ocel:project":    c.Project,
 		"ocel:env":        c.Env,
-		"ocel:env-class":  f.EnvClass,
+		"ocel:env-tier":   f.EnvTier,
 		"ocel:app":        c.App,
 		"ocel:release":    c.Release.String(),
 		"ocel:build":      f.BuildID,

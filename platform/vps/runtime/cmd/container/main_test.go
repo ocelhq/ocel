@@ -41,7 +41,7 @@ func answering(t *testing.T, values map[string]string) string {
 
 func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToShip(t *testing.T) {
 	socket := answering(t, map[string]string{"DATABASE_URL": "postgres://app:hunter2@db/orders"})
-	manifest, err := vars.Render(vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
+	manifest, err := vars.Render(vars.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToShip(t *tes
 func bucketManifest(t *testing.T, store *vars.Store) (vars.Manifest, string) {
 	t.Helper()
 	manifest := vars.Manifest{
-		Slug: "shop", Class: "production",
+		Slug: "shop", Tier: "production",
 		Bindings: []live.Binding{{
 			Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads",
 			Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET,
@@ -172,7 +172,7 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 }
 
 func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
-	manifest := vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
+	manifest := vars.Manifest{Slug: "shop", Tier: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
 	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"), "127.0.0.1:1")
 	if err != nil || served.Env != nil {
 		t.Errorf("proxying() = %+v, %v, want no proxy for a deployment binding nothing it must be fronted for", served, err)
@@ -198,7 +198,7 @@ func TestAProxiedBindingWithNoStoreCredentialIsRefused(t *testing.T) {
 func TestAManifestNamingNothingLiveResolvesToNoValuesAndNoDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "live")
 
-	values, err := resolve(context.Background(), `{"slug":"shop","class":"production"}`, filepath.Join(t.TempDir(), "absent.sock"), dir)
+	values, err := resolve(context.Background(), `{"slug":"shop","tier":"production"}`, filepath.Join(t.TempDir(), "absent.sock"), dir)
 	if err != nil {
 		t.Fatalf("resolve() = %v", err)
 	}

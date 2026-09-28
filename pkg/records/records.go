@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type Store interface {
@@ -112,7 +112,7 @@ type Cipher interface {
 
 type SealScope struct {
 	Project string
-	Class   edge.Class
+	Tier    environment.Tier
 	Env     string
 	Folder  string
 	Binding string

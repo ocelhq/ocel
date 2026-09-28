@@ -12,7 +12,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -71,7 +71,7 @@ func TestAPreviewIdentityBesideProductionsIsTaken(t *testing.T) {
 func seedEnvironment(t *testing.T, vendor *fake.Provider, slug string, stacks ...naming.StackName) {
 	t.Helper()
 	for _, stack := range stacks {
-		name := stackrecords.StackRecord(edge.ClassPreview, slug, stack)
+		name := stackrecords.StackRecord(environment.TierPreview, slug, stack)
 		recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
 		if err != nil {
 			t.Fatal(err)
@@ -124,11 +124,11 @@ func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing
 	)
 	before := time.Now().Unix()
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.Records(),
-		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
+		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.Records(),
-		edge.ClassPreview, "shop", "staging", ""); err != nil {
+		environment.TierPreview, "shop", "staging", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,7 +153,7 @@ func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing
 		t.Fatalf("the record a preview deploy wrote reads %s and contains nothing this test can read an absence out of", stamped)
 	}
 	if strings.Contains(stamped, "expires") {
-		t.Errorf("the record a preview deploy wrote reads %s, and an expiry stamped there has exactly one class of reader: `ocel preview ls` prints it, and nothing on any box or in any account ever compares it to a clock",
+		t.Errorf("the record a preview deploy wrote reads %s, and an expiry stamped there has exactly one tier of reader: `ocel preview ls` prints it, and nothing on any box or in any account ever compares it to a clock",
 			stamped)
 	}
 }
@@ -163,13 +163,13 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	_, vendor := contractServed(t, "1.0.0")
 	ctx := context.Background()
 	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.Records(),
-		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
+		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	first := readEnvironmentMeta(t, vendor, "shop", "pr-7")
 
 	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.Records(),
-		edge.ClassPreview, "shop", "pr-7", ""); err != nil {
+		environment.TierPreview, "shop", "pr-7", ""); err != nil {
 		t.Fatal(err)
 	}
 	second := readEnvironmentMeta(t, vendor, "shop", "pr-7")
@@ -185,7 +185,7 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 
 func environmentRecordBytes(t *testing.T, vendor *fake.Provider, slug, env string) []byte {
 	t.Helper()
-	recorded, err := vendor.Records().Read(context.Background(), stackrecords.EnvironmentRecord(edge.ClassPreview, slug, env))
+	recorded, err := vendor.Records().Read(context.Background(), stackrecords.EnvironmentRecord(environment.TierPreview, slug, env))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,11 +204,11 @@ func readEnvironmentMeta(t *testing.T, vendor *fake.Provider, slug, env string) 
 func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
-	seedPromotions(t, vendor, edge.ClassPreview, "shop", "pr-7", "p1")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
 
 	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
-	scope := envvars.Scope{Project: "shop", Class: edge.ClassPreview}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
 		pair, err := envvarsserver.BindingPair(owner, binding)
 		if err != nil {
@@ -260,12 +260,12 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
-	seedPromotions(t, vendor, edge.ClassPreview, "shop", "pr-7", "p1", "p2")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
 	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
 	seedEnvironment(t, vendor, "shop", outlived, naming.InfraStack("pr-7"))
 	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.Records(),
-		edge.ClassPreview, "shop", "pr-7", "pr-123"); err != nil {
+		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,14 +287,14 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 		t.Fatalf("RemoveEnvironment() = %q, want the pointer dropped", result.GetError())
 	}
 
-	history, err := ledger.New(vendor.Records(), edge.ClassPreview, "shop").History(context.Background(), "pr-7")
+	history, err := ledger.New(vendor.Records(), environment.TierPreview, "shop").History(context.Background(), "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(history) != 0 {
 		t.Errorf("pr-7 still has %v, want its promotions gone with the pointer", history)
 	}
-	name := stackrecords.EnvironmentRecord(edge.ClassPreview, "shop", "pr-7")
+	name := stackrecords.EnvironmentRecord(environment.TierPreview, "shop", "pr-7")
 	if _, err := vendor.Records().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
@@ -380,7 +380,7 @@ func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, imag
 
 	release := releaseOf(t, buildIdentity(1))
 	name := naming.AppStack(pointer, app, release)
-	if err := stackrecords.Write(context.Background(), p.Records(), edge.ClassPreview, slug, name, stackrecords.Stack{
+	if err := stackrecords.Write(context.Background(), p.Records(), environment.TierPreview, slug, name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    release.String(),
@@ -415,7 +415,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	swept := &sweeper{}
 	vendor := fake.NewProvider(fake.Options{Region: "nowhere"}).ResourceStacks(swept.hooks())
 	client := servedProvider(t, "1.0.0", vendor)
-	deployed(t, vendor, edge.ClassPreview, "shop")
+	deployed(t, vendor, environment.TierPreview, "shop")
 	stack := seedContainerStack(t, vendor, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); !result.GetSuccess() {
@@ -426,7 +426,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 		t.Errorf("the teardown reconciled %v, want %v: this preview's ledger names none of its releases any more, and the sweep is otherwise a deploy's final act — a box that is never deployed to again keeps this image forever", swept.swept(), want)
 	}
 	if _, found, err := stackrecords.Read(context.Background(), vendor.Records(),
-		edge.ClassPreview, "shop", stack); err != nil || found {
+		environment.TierPreview, "shop", stack); err != nil || found {
 		t.Errorf("%s still exists after its preview came down (%v): a teardown that reads only what the ledger last named reports success over every container it left running", stack, err)
 	}
 }
@@ -435,13 +435,13 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
+	deployed(t, vendor, environment.TierPreview, "shop")
 	stack := seedContainerStack(t, vendor, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	store, ok := vendor.Records().(*fake.Records)
 	if !ok {
 		t.Fatalf("this test drives the record store's removal refusal and the provider has a %T", vendor.Records())
 	}
-	store.RefuseRemoval(stackrecords.StackRecord(edge.ClassPreview, "shop", stack),
+	store.RefuseRemoval(stackrecords.StackRecord(environment.TierPreview, "shop", stack),
 		errors.New("the record store answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
@@ -463,7 +463,7 @@ func TestAPreviewTeardownTakesItsAppStacksDownBeforeTheInfraTheyDependOn(t *test
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
+	deployed(t, vendor, environment.TierPreview, "shop")
 	app := seedContainerStack(t, vendor, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	infra := naming.InfraStack("pr-7")
 	seedEnvironment(t, vendor, "shop", infra)
@@ -487,8 +487,8 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftInPlace(t *testing.T) 
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
-	seedPromotions(t, vendor, edge.ClassPreview, "shop", "pr-7", "p1")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
 	stack := seedContainerStack(t, vendor, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
 	vendor.FakeStacks().RefuseNextDestroy(errors.New("the box answered nothing"))
 
@@ -500,7 +500,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftInPlace(t *testing.T) 
 	}
 
 	if _, found, err := stackrecords.Read(context.Background(), vendor.Records(),
-		edge.ClassPreview, "shop", stack); err != nil || found {
+		environment.TierPreview, "shop", stack); err != nil || found {
 		t.Errorf("%s still exists after a second teardown that reported success (%v): the first run emptied the ledger before it fell over, so a reclaim driven off the ledger's diff has nothing left to name and every container of this preview keeps running", stack, err)
 	}
 }
@@ -508,7 +508,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftInPlace(t *testing.T) 
 func TestRemoveEnvironmentRefusesProduction(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
+	deployed(t, vendor, environment.TierPreview, "shop")
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
 		Slug:        "shop",
@@ -525,8 +525,8 @@ func TestRemoveEnvironmentRefusesProduction(t *testing.T) {
 func TestRemovingAPreviewSaysWhichPointerAndStacksItRemovesAndHowFarAlongItIs(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
-	deployed(t, vendor, edge.ClassPreview, "shop")
-	seedPromotions(t, vendor, edge.ClassPreview, "shop", "pr-7", "p1", "p2")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
 	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7))), naming.InfraStack("pr-7"))
 
 	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{

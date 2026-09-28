@@ -123,7 +123,7 @@ func TestRunPreviewUp(t *testing.T) {
 		if !reflect.DeepEqual(got.Usages, want) {
 			t.Errorf("usages = %+v, want %+v", got.Usages, want)
 		}
-		if got.Environment.Class != "preview" {
+		if got.Environment.Tier != "preview" {
 			t.Errorf("environment = %+v, want the preview's own context", got.Environment)
 		}
 
@@ -214,7 +214,7 @@ func TestRunPreviewUp(t *testing.T) {
 			t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com tier=TIER_PREVIEW") {
-			t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight under the preview class", stdout.String())
+			t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight under the preview tier", stdout.String())
 		}
 	})
 
@@ -286,7 +286,7 @@ export default {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("a class mismatch refuses and drives no Deploy", func(t *testing.T) {
+	t.Run("a tier mismatch refuses and drives no Deploy", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -299,10 +299,10 @@ export default {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
+			t.Fatal("runPreviewUp err = nil, want a tier-mismatch error")
 		}
 		if !strings.Contains(stdout.String(), "this command needs preview infrastructure") {
-			t.Errorf("stdout = %q, want the concrete class-mismatch message", stdout.String())
+			t.Errorf("stdout = %q, want the concrete tier-mismatch message", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "DEPLOY ") {
 			t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
@@ -822,7 +822,6 @@ func TestPreviewPreflightShapeKeepsTeardownOffTheSharedWildcardRefusal(t *testin
 type preflightRecord struct {
 	slug    string
 	domains []string
-	class   string
 }
 
 func readPreflightJournal(t *testing.T, path string) []preflightRecord {
@@ -851,8 +850,6 @@ func readPreflightJournal(t *testing.T, path string) []preflightRecord {
 				if value != "" {
 					rec.domains = strings.Split(value, ",")
 				}
-			case "class":
-				rec.class = value
 			}
 		}
 		records = append(records, rec)

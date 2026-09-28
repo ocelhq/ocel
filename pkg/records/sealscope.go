@@ -4,7 +4,7 @@ import "strings"
 
 func (c SealScope) AAD() []byte {
 	var bound strings.Builder
-	for _, part := range []string{c.Project, string(c.Class), c.Env, c.Folder, c.Binding, c.Name} {
+	for _, part := range []string{c.Project, string(c.Tier), c.Env, c.Folder, c.Binding, c.Name} {
 		bound.WriteString(Escape(part))
 		bound.WriteByte('/')
 	}

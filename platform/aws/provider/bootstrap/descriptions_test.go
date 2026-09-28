@@ -54,12 +54,12 @@ func propertyDescriptionLimit(resourceType string) int {
 
 func everyRenderedTemplate() map[string]string {
 	rendered := map[string]string{
-		"core/" + ClassProduction: coreStackTemplate(defaultNamespace, ClassProduction, ""),
-		"core/" + ClassPreview:    coreStackTemplate(defaultNamespace, ClassPreview, ""),
+		"core/" + TierProduction: coreStackTemplate(defaultNamespace, TierProduction, ""),
+		"core/" + TierPreview:    coreStackTemplate(defaultNamespace, TierPreview, ""),
 	}
 	for _, name := range featureNames() {
-		for _, class := range []string{ClassProduction, ClassPreview} {
-			rendered[name+"/"+class] = featureTemplateWith(name, class, everyFeature())
+		for _, tier := range []string{TierProduction, TierPreview} {
+			rendered[name+"/"+tier] = featureTemplateWith(name, tier, everyFeature())
 		}
 	}
 	return rendered
@@ -100,12 +100,12 @@ func TestRenderedDescriptionsFitTheirLimits(t *testing.T) {
 }
 
 func TestSSMDescriptionsFitTheirLimits(t *testing.T) {
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		t.Run(class, func(t *testing.T) {
+	for _, tier := range []string{TierProduction, TierPreview} {
+		t.Run(tier, func(t *testing.T) {
 			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-			if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, class, everything(), nil); err != nil {
+			if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, tier, everything(), nil); err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			if len(ssmc.descriptions) == 0 {

@@ -6,19 +6,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 )
 
 func scopeOf(project string) envvars.Scope {
-	return envvars.Scope{Project: project, Class: edge.ClassProduction}
+	return envvars.Scope{Project: project, Tier: environment.TierProduction}
 }
 
 func setCredentials(t *testing.T, store envvars.Store, project, clientID, clientSecret string) {
 	t.Helper()
 	for key, plaintext := range map[string]string{"INFISICAL_CLIENT_ID": clientID, "INFISICAL_CLIENT_SECRET": clientSecret} {
-		if _, err := store.Set(context.Background(), scopeOf(project), classWide("", key), plaintext, nil); err != nil {
+		if _, err := store.Set(context.Background(), scopeOf(project), tierWide("", key), plaintext, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -28,11 +28,11 @@ func TestAnUnsetCredentialIsRefusedWithTheCommandThatSetsIt(t *testing.T) {
 	t.Parallel()
 	store, _ := storeFixture()
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
-	for class, flag := range map[edge.Class]string{edge.ClassProduction: "", edge.ClassPreview: " --preview"} {
-		_, err := envsource.ReadCredential(context.Background(), store, envvars.Scope{Project: "shop", Class: class}, descriptor, envsource.Login{})
+	for tier, flag := range map[environment.Tier]string{environment.TierProduction: "", environment.TierPreview: " --preview"} {
+		_, err := envsource.ReadCredential(context.Background(), store, envvars.Scope{Project: "shop", Tier: tier}, descriptor, envsource.Login{})
 		var refused *envsource.CredentialError
 		if !errors.As(err, &refused) || refused.Variable != "INFISICAL_CLIENT_ID" || !strings.Contains(err.Error(), "ocel env set INFISICAL_CLIENT_ID=<VALUE>"+flag+"`") {
-			t.Errorf("ReadCredential() in %s = %v, want INFISICAL_CLIENT_ID refused with the command that sets it", class, err)
+			t.Errorf("ReadCredential() in %s = %v, want INFISICAL_CLIENT_ID refused with the command that sets it", tier, err)
 		}
 	}
 }
@@ -47,7 +47,7 @@ func TestACredentialAnEnvSourceWroteIsRefused(t *testing.T) {
 		t.Fatalf("ReadCredential() with both set = %v", err)
 	}
 
-	if _, err := store.SetFromEnvSource(ctx, scope, classWide("", "INFISICAL_CLIENT_SECRET"), "cached", envvars.Provenance{EnvSource: "infisical:p-1/prod", Version: "s9@1"}, 1); err != nil {
+	if _, err := store.SetFromEnvSource(ctx, scope, tierWide("", "INFISICAL_CLIENT_SECRET"), "cached", envvars.Provenance{EnvSource: "infisical:p-1/prod", Version: "s9@1"}, 1); err != nil {
 		t.Fatal(err)
 	}
 	_, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{})
@@ -62,12 +62,12 @@ func TestACredentialReferencedFromAProjectMustBeOneThatProjectStoresItself(t *te
 	ctx := context.Background()
 	shared := scopeOf("shared")
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET", "OTHER"} {
-		if _, err := store.Set(ctx, shared, classWide("", key), "x", nil); err != nil {
+		if _, err := store.Set(ctx, shared, tierWide("", key), "x", nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"} {
-		if _, err := store.SetReference(ctx, scope, classWide("", key), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: key}}); err != nil {
+		if _, err := store.SetReference(ctx, scope, tierWide("", key), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: key}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -76,14 +76,14 @@ func TestACredentialReferencedFromAProjectMustBeOneThatProjectStoresItself(t *te
 		t.Fatalf("ReadCredential() borrowing from a project on ocel's own store = %v", err)
 	}
 
-	if _, err := envsource.Register(ctx, store, edge.ClassProduction, infisicalRegistration("shared", "https://infisical.example.com", universal, "")); err != nil {
+	if _, err := envsource.Register(ctx, store, environment.TierProduction, infisicalRegistration("shared", "https://infisical.example.com", universal, "")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{}); err != nil {
 		t.Fatalf("ReadCredential() borrowing the credentials of a project on an env source = %v, want them its own", err)
 	}
 
-	if _, err := store.SetReference(ctx, scope, classWide("", "INFISICAL_CLIENT_SECRET"), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: "OTHER"}}); err != nil {
+	if _, err := store.SetReference(ctx, scope, tierWide("", "INFISICAL_CLIENT_SECRET"), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: "OTHER"}}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := envsource.ReadCredential(ctx, store, scope, descriptor, envsource.Login{})
@@ -107,7 +107,7 @@ func TestProjectsReadingOneSourceWithOneCredentialShareADedupeKey(t *testing.T) 
 	setCredentials(t, store, "shared", "id", "secret")
 	for _, project := range []string{"shop", "admin"} {
 		for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET"} {
-			if _, err := store.SetReference(ctx, scopeOf(project), classWide("", key), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: key}}); err != nil {
+			if _, err := store.SetReference(ctx, scopeOf(project), tierWide("", key), envvars.Target{Project: "shared", Cell: envvars.Cell{Key: key}}); err != nil {
 				t.Fatal(err)
 			}
 		}

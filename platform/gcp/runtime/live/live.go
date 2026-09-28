@@ -4,7 +4,7 @@ import (
 	"context"
 	"maps"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -70,7 +70,7 @@ func Over(manifest vars.Manifest, store records.Store, sealer records.Cipher) *l
 		reader: envvars.EnvironmentReader{
 			Records:     store,
 			Cipher:      sealer,
-			Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),

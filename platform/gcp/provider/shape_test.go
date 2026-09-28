@@ -3,7 +3,7 @@ package gcp
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -39,11 +39,11 @@ func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
 	t.Parallel()
 
 	b := bootstrap{clients: &clients{Names: Names{namespace: "ocel", project: "acme-prod"}, region: "europe-west1"}}
-	sent, err := serviceOf(b.syncServing(edge.ClassProduction))
+	sent, err := serviceOf(b.syncServing(environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	properties := itemProperties(item{Kind: KindService, Name: b.clients.EnvSourceSync(edge.ClassProduction)}, "europe-west1")
+	properties := itemProperties(item{Kind: KindService, Name: b.clients.EnvSourceSync(environment.TierProduction)}, "europe-west1")
 	if properties["ingress"] != sent.Ingress {
 		t.Errorf("shaped ingress %v, the bootstrap sends %v", properties["ingress"], sent.Ingress)
 	}
@@ -67,10 +67,10 @@ func TestEveryBootstrapItemHasAShape(t *testing.T) {
 	t.Parallel()
 
 	names := Names{namespace: "ocel", project: "acme-prod"}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		for _, item := range bootstrapItems(names, class, false) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, item := range bootstrapItems(names, tier, false) {
 			if _, shaped := itemTypes[item.Kind]; !shaped {
-				t.Errorf("%s provisions a %s the shape has no name for", class, item.ID())
+				t.Errorf("%s provisions a %s the shape has no name for", tier, item.ID())
 			}
 		}
 	}

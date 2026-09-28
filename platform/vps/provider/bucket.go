@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -49,12 +50,12 @@ const storeHealthPath = "/health/ready"
 
 func storeRoute(ref provider.StackRef, store string) host.AppRoute {
 	pointer := edge.DefaultPointer
-	if ref.Class == edge.ClassPreview {
+	if ref.Tier == environment.TierPreview {
 		pointer = ref.Name.Env
 	}
 	return host.AppRoute{
 		RouteKey: host.RouteKey{
-			Owner:   live.Surface(ref.Project, string(ref.Class)),
+			Owner:   live.Surface(ref.Project, string(ref.Tier)),
 			Pointer: pointer,
 			App:     switchboard.StoreLabel,
 		},
@@ -64,7 +65,7 @@ func storeRoute(ref provider.StackRef, store string) host.AppRoute {
 
 func storeBucketSpec(ref provider.StackRef, store, secret string, spec host.BucketSpec) host.BucketSpec {
 	spec.Store = store
-	spec.Class = ref.Class
+	spec.Tier = ref.Tier
 	spec.Endpoint = "http://127.0.0.1:" + storePort
 	spec.Region = storeRegion
 	spec.AccessKeyID = storeAccessKey
@@ -77,7 +78,7 @@ func storeContainer(in resources.ProvisionRequest) host.ResourceContainer {
 		Name:     storeName(in.Ref),
 		Project:  in.Ref.Project,
 		Resource: storeResource,
-		Class:    in.Ref.Class,
+		Tier:     in.Ref.Tier,
 
 		Image: constants.ObjectStoreImage(),
 		Env: map[string]string{
@@ -96,7 +97,7 @@ func storeContainer(in resources.ProvisionRequest) host.ResourceContainer {
 }
 
 func storeRef(ref provider.StackRef) provider.StackRef {
-	return provider.StackRef{Project: ref.Project, Class: ref.Class, Name: naming.InfraStack(ref.Name.Env)}
+	return provider.StackRef{Project: ref.Project, Tier: ref.Tier, Name: naming.InfraStack(ref.Name.Env)}
 }
 
 func storeName(ref provider.StackRef) string {
@@ -210,14 +211,14 @@ func (s *liveStores) once(name string, mint func() (storeCredential, error)) (st
 
 func storeCoordinate(ref provider.StackRef) records.SealScope {
 	return records.SealScope{
-		Project: ref.Project, Class: ref.Class, Env: storeRef(ref).Name.String(),
+		Project: ref.Project, Tier: ref.Tier, Env: storeRef(ref).Name.String(),
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}
 }
 
 func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, name string) (storeCredential, error) {
 	at := storeCoordinate(ref)
-	sealed, err := p.host.Kept(ctx, ref.Class, name)
+	sealed, err := p.host.Kept(ctx, ref.Tier, name)
 	if err != nil {
 		return storeCredential{}, err
 	}
@@ -230,7 +231,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 		if err != nil {
 			return storeCredential{}, err
 		}
-		if sealed, err = p.host.KeepOnce(ctx, ref.Class, name, candidate); err != nil {
+		if sealed, err = p.host.KeepOnce(ctx, ref.Tier, name, candidate); err != nil {
 			return storeCredential{}, err
 		}
 	}
@@ -241,7 +242,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 	if len(opened) == 0 {
 		return storeCredential{}, refusal.Refuse(refusal.CodeNotReady,
 			"the credential kept for %s is empty\nRemove %s on the box",
-			name, host.KeptPath(ref.Class, name))
+			name, host.KeptPath(ref.Tier, name))
 	}
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
@@ -375,7 +376,7 @@ func (p *Provider) storeAccount(ctx context.Context, spec provider.StackSpec, st
 	}
 	if err := p.host.GrantStoreAccount(ctx, host.StoreAccount{
 		Store:       store,
-		Class:       spec.Ref.Class,
+		Tier:        spec.Ref.Tier,
 		Endpoint:    "http://127.0.0.1:" + storePort,
 		Region:      storeRegion,
 		RootKeyID:   storeAccessKey,
@@ -452,7 +453,7 @@ func (p *Provider) bucketOrigins(ctx context.Context, ref provider.StackRef, spe
 
 func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostClaim) []string {
 	origins := slices.Clone(declared)
-	owner := live.Surface(ref.Project, string(ref.Class))
+	owner := live.Surface(ref.Project, string(ref.Tier))
 	for _, claim := range claims {
 		if claim.Owner != owner || claim.App == switchboard.StoreLabel {
 			continue
@@ -464,14 +465,14 @@ func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostCla
 	return origins
 }
 
-func (p *Provider) applyOrigins(ctx context.Context, project string, class edge.Class) error {
-	entries, err := stackrecords.List(ctx, p.records, class, project)
+func (p *Provider) applyOrigins(ctx context.Context, project string, tier environment.Tier) error {
+	entries, err := stackrecords.List(ctx, p.records, tier, project)
 	if err != nil {
 		return err
 	}
 	claims := sync.OnceValues(func() ([]host.HostClaim, error) { return p.host.Claims(ctx) })
 	for _, entry := range entries {
-		ref := provider.StackRef{Project: project, Class: class, Name: entry.Name}
+		ref := provider.StackRef{Project: project, Tier: tier, Name: entry.Name}
 		if err := p.applyStackOrigins(ctx, ref, entry, claims); err != nil {
 			return err
 		}
@@ -541,7 +542,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, bindin
 		progress.Say("Removing bucket " + binding.Name + " and its objects from object store " + store)
 	}
 	return p.host.RemoveBucket(ctx, host.BucketRef{
-		Class:       ref.Class,
+		Tier:        ref.Tier,
 		Project:     ref.Project,
 		Store:       store,
 		Bucket:      bucket,
@@ -561,7 +562,7 @@ func (p *Provider) reconcileStore(ctx context.Context, ref provider.StackRef, pr
 }
 
 func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool, error) {
-	entries, err := stackrecords.List(ctx, p.records, ref.Class, ref.Project)
+	entries, err := stackrecords.List(ctx, p.records, ref.Tier, ref.Project)
 	if err != nil {
 		return false, err
 	}
@@ -588,7 +589,7 @@ func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progr
 		return err
 	}
 	if err := p.host.RemoveResource(ctx, host.ResourceRef{
-		Class: ref.Class, Project: ref.Project, Resource: storeResource, Name: store,
+		Tier: ref.Tier, Project: ref.Project, Resource: storeResource, Name: store,
 	}); err != nil {
 		return err
 	}
@@ -596,11 +597,11 @@ func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progr
 	if err != nil {
 		return err
 	}
-	return p.host.ForgetKept(ctx, ref.Class, accounts)
+	return p.host.ForgetKept(ctx, ref.Tier, accounts)
 }
 
 func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]string, error) {
-	entries, err := stackrecords.List(ctx, p.records, ref.Class, ref.Project)
+	entries, err := stackrecords.List(ctx, p.records, ref.Tier, ref.Project)
 	if err != nil {
 		return nil, err
 	}
@@ -627,7 +628,7 @@ func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]
 func (p *Provider) removeStoreAccount(ctx context.Context, ref provider.StackRef, app string) error {
 	store := storeName(ref)
 	key := host.StoreAccountKey(storeRef(ref).Name.String(), app)
-	sealed, err := p.host.Kept(ctx, ref.Class, key)
+	sealed, err := p.host.Kept(ctx, ref.Tier, key)
 	if err != nil || len(sealed) == 0 {
 		return err
 	}
@@ -638,7 +639,7 @@ func (p *Provider) removeStoreAccount(ctx context.Context, ref provider.StackRef
 	if root.secret != "" {
 		if err := p.host.RevokeStoreAccount(ctx, host.StoreAccount{
 			Store:       store,
-			Class:       ref.Class,
+			Tier:        ref.Tier,
 			Endpoint:    "http://127.0.0.1:" + storePort,
 			Region:      storeRegion,
 			RootKeyID:   storeAccessKey,
@@ -648,11 +649,11 @@ func (p *Provider) removeStoreAccount(ctx context.Context, ref provider.StackRef
 			return err
 		}
 	}
-	return p.host.ForgetKept(ctx, ref.Class, []string{key})
+	return p.host.ForgetKept(ctx, ref.Tier, []string{key})
 }
 
 func (p *Provider) storeRoot(ctx context.Context, ref provider.StackRef, store string) (storeCredential, error) {
-	sealed, err := p.host.Kept(ctx, ref.Class, store)
+	sealed, err := p.host.Kept(ctx, ref.Tier, store)
 	if err != nil {
 		return storeCredential{}, err
 	}

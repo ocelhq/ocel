@@ -40,21 +40,21 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPrefl
 	if pre.Edge == "" || pre.Progress == nil {
 		return nil
 	}
-	params, err := p.classParams(ctx, pre.Deploy.Class, pre.Edge)
+	params, err := p.tierParams(ctx, pre.Deploy.Tier, pre.Edge)
 	if err != nil {
 		return err
 	}
 	if params.EdgeCredentialsErr != nil {
 		return nil
 	}
-	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Deploy.Class)); notice != "" {
+	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Deploy.Tier)); notice != "" {
 		pre.Progress.Warn(notice)
 	}
 	return nil
 }
 
 func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
-	params, err := p.classParams(ctx, pre.Deploy.Class, pre.Edge)
+	params, err := p.tierParams(ctx, pre.Deploy.Tier, pre.Edge)
 	if err != nil {
 		return err
 	}
@@ -65,11 +65,11 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 	if pre.Progress == nil {
 		return nil
 	}
-	params, err := p.classParams(ctx, pre.Deploy.Class, pre.Edge)
+	params, err := p.tierParams(ctx, pre.Deploy.Tier, pre.Edge)
 	if err != nil {
 		return err
 	}
-	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Deploy.Class)); notice != "" {
+	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Deploy.Tier)); notice != "" {
 		pre.Progress.Warn(notice)
 	}
 	return nil
@@ -79,15 +79,15 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 	if pre.Dry {
 		return nil
 	}
-	class := pre.Deploy.Class
-	deployed, err := p.bootstrapped(ctx, class)
+	tier := pre.Deploy.Tier
+	deployed, err := p.bootstrapped(ctx, tier)
 	if err != nil || !deployed.Present {
 		return err
 	}
 	published, err := bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
 		CFN:   cloudformation.NewFromConfig(p.aws),
 		Store: s3.NewFromConfig(p.aws),
-	}, p.namespace, string(class), bootstrap.RuntimeLayerRequest{
+	}, p.namespace, string(tier), bootstrap.RuntimeLayerRequest{
 		ArtifactBucket: deployed.ArtifactBucket,
 		Writer:         pre.WrittenBy,
 	}, pre.Progress)
@@ -109,7 +109,7 @@ func refuseContainersBehindFunctionEdge(pre provider.DeployPreflight) error {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
-			"app %s runs as a container, and the %q edge reaches a release's entry function rather than an origin that demands the class's secret, so it has no way to reach one: front this project with %q, or give %s `compute: \"serverless\"`",
+			"app %s runs as a container, and the %q edge reaches a release's entry function rather than an origin that demands the tier's secret, so it has no way to reach one: front this project with %q, or give %s `compute: \"serverless\"`",
 			app.App, pre.Edge, edges.DefaultKind, app.App)
 	}
 	return nil

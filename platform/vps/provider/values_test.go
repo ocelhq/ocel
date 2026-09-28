@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -37,9 +37,9 @@ func everyValue() []string {
 	return []string{sensitiveValue, plainValue}
 }
 
-func envFileWritten(t *testing.T, machine *box, class edge.Class, physical string) string {
+func envFileWritten(t *testing.T, machine *box, tier environment.Tier, physical string) string {
 	t.Helper()
-	path := host.EnvFile(class, physical)
+	path := host.EnvFile(tier, physical)
 	machine.mu.Lock()
 	defer machine.mu.Unlock()
 	for at, command := range machine.ran {
@@ -59,7 +59,7 @@ func TestTheValuesAnAppIsHandedReachItThroughAFileAndNoOtherWay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, edge.ClassProduction, started[0].Physical)
+	file := envFileWritten(t, machine, environment.TierProduction, started[0].Physical)
 	for _, value := range everyValue() {
 		if !strings.Contains(file, value) {
 			t.Errorf("the env file reads %q and does not include every value the deploy delivered", file)
@@ -80,7 +80,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, edge.ClassProduction, started[0].Physical)
+	file := envFileWritten(t, machine, environment.TierProduction, started[0].Physical)
 	if strings.Contains(file, "DATABASE_URL=") || strings.Contains(file, "SESSION_SECRET=") || strings.Contains(file, "OCEL_RESOURCE_POSTGRES_main=") {
 		t.Errorf("the env file reads %q and contains a secret or a binding record, which the runtime reads live off the box instead", file)
 	}
@@ -97,8 +97,8 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	if err != nil {
 		t.Fatalf("%s = %q, which the runtime cannot read: %v", vars.EnvVar, line, err)
 	}
-	if manifest.Slug != "shop" || manifest.Class != "production" || manifest.Environment != "" {
-		t.Errorf("manifest = %+v, want the project slug and class with no environment in production", manifest)
+	if manifest.Slug != "shop" || manifest.Tier != "production" || manifest.Environment != "" {
+		t.Errorf("manifest = %+v, want the project slug and tier with no environment in production", manifest)
 	}
 	if len(manifest.Keys) != 2 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Keys[1].Key != "SESSION_SECRET" || manifest.Keys[1].Folder != "/web" {
 		t.Errorf("manifest pins %+v, want each secret by key and folder", manifest.Keys)
@@ -119,14 +119,14 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 	machine := &box{}
 	spec := aStack(t, valuedApp())
-	spec.Ref.Class = edge.ClassPreview
+	spec.Ref.Tier = environment.TierPreview
 	started, err := over(machine).ProvisionContainers(context.Background(), spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	file := envFileWritten(t, machine, edge.ClassPreview, started[0].Physical)
-	if !strings.Contains(file, `"class":"preview"`) || !strings.Contains(file, `"environment":"`+spec.Ref.Name.Env+`"`) {
-		t.Errorf("the env file reads %q, want a manifest naming the preview class and the stack's environment so its own value shadows the class-wide one", file)
+	file := envFileWritten(t, machine, environment.TierPreview, started[0].Physical)
+	if !strings.Contains(file, `"tier":"preview"`) || !strings.Contains(file, `"environment":"`+spec.Ref.Name.Env+`"`) {
+		t.Errorf("the env file reads %q, want a manifest naming the preview tier and the stack's environment so its own value shadows the tier-wide one", file)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if file := envFileWritten(t, machine, edge.ClassProduction, started[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
+	if file := envFileWritten(t, machine, environment.TierProduction, started[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
 		t.Errorf("an app declaring no value is handed %q, want the health path alone", file)
 	}
 	joined := strings.Join(machine.commands(), "\n")

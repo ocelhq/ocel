@@ -47,7 +47,7 @@ func TestBootstrapNeedsASubcommand(t *testing.T) {
 	})
 }
 
-func TestBootstrapClassCommands(t *testing.T) {
+func TestBootstrapTierCommands(t *testing.T) {
 	t.Parallel()
 
 	cmd := NewCommand(cmddeps.Deps{})
@@ -80,25 +80,25 @@ func TestBootstrapClassCommands(t *testing.T) {
 	}
 }
 
-func TestBootstrapDestroyNeedsAClass(t *testing.T) {
+func TestBootstrapDestroyNeedsATier(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name string
 		args []string
 	}{
-		{"no class", []string{"destroy"}},
-		{"a class that is not one", []string{"destroy", "staging"}},
+		{"no tier", []string{"destroy"}},
+		{"a tier that is not one", []string{"destroy", "staging"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			out, err := runCommand(t, tc.args...)
 			if err == nil {
-				t.Fatal("Execute err = nil, want a destroy without a class to be a failure")
+				t.Fatal("Execute err = nil, want a destroy without a tier to be a failure")
 			}
 			if !strings.Contains(err.Error(), "preview") || !strings.Contains(err.Error(), "production") {
-				t.Errorf("err = %v, want it to name both classes", err)
+				t.Errorf("err = %v, want it to name both tiers", err)
 			}
 			if !strings.Contains(out, "destroy <production|preview>") {
 				t.Errorf("output = %q, want the destroy help", out)
@@ -107,7 +107,7 @@ func TestBootstrapDestroyNeedsAClass(t *testing.T) {
 	}
 }
 
-func TestBootstrapDestroyClassArgument(t *testing.T) {
+func TestBootstrapDestroyTierArgument(t *testing.T) {
 	t.Parallel()
 
 	for typed, want := range map[string]environmentv1.Tier{

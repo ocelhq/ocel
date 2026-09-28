@@ -20,12 +20,12 @@ func (f *freePlanEdge) Hooks() edge.Hooks {
 }
 
 func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
-	for _, class := range []string{ClassProduction, ClassPreview} {
-		t.Run(class, func(t *testing.T) {
+	for _, tier := range []string{TierProduction, TierPreview} {
+		t.Run(tier, func(t *testing.T) {
 			ed := &freePlanEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
 			frontedBy(t, ed)
 
-			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), defaultNamespace, class, everything(), nil); err != nil {
+			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), defaultNamespace, tier, everything(), nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			if ed.checks != 0 {

@@ -11,17 +11,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const classRoutes = "ocel-alb-production-routes"
+const tierRoutes = "ocel-alb-production-routes"
 
 func emptyMap() *compute.UrlMap {
-	return &compute.UrlMap{Name: classRoutes, Fingerprint: "0", DefaultService: "notfound"}
+	return &compute.UrlMap{Name: tierRoutes, Fingerprint: "0", DefaultService: "notfound"}
 }
 
 func TestRoutingAHostnameWritesTheHostRuleAndThePathMatcherThatServesIt(t *testing.T) {
 	t.Parallel()
 
 	p, server := routing(t, emptyMap())
-	if err := p.Route(context.Background(), classRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -43,10 +43,10 @@ func TestUnroutingTheLastHostnameClearsTheRuleRatherThanLeavingItPointingAtADele
 
 	ctx := context.Background()
 	p, server := routing(t, emptyMap())
-	if err := p.Route(ctx, classRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(ctx, tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
-	if err := p.Unroute(ctx, classRoutes, "shop.example.com"); err != nil {
+	if err := p.Unroute(ctx, tierRoutes, "shop.example.com"); err != nil {
 		t.Fatalf("Unroute = %v", err)
 	}
 
@@ -62,12 +62,12 @@ func TestRoutingRetriesTheWriteTheUrlMapChangedUnder(t *testing.T) {
 
 	p, server := routing(t, emptyMap())
 	server.conflicts = 1
-	if err := p.Route(context.Background(), classRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
 	if got := server.writes(); got != 2 {
-		t.Errorf("the route wrote %d times, want 2: the url map is shared by every project in the class, so a stale fingerprint is re-read and written again", got)
+		t.Errorf("the route wrote %d times, want 2: the url map is shared by every project in the tier, so a stale fingerprint is re-read and written again", got)
 	}
 	if len(server.current().HostRules) != 1 {
 		t.Errorf("the url map has %+v after the retry, want the host rule the route asked for", server.current().HostRules)
@@ -78,7 +78,7 @@ func TestAHostnameServedNotFoundIsAnsweredWithA404RatherThanTheEmptyBackendsGate
 	t.Parallel()
 
 	p, server := routing(t, emptyMap())
-	if err := p.ServeNotFound(context.Background(), classRoutes, "shop.example.com"); err != nil {
+	if err := p.ServeNotFound(context.Background(), tierRoutes, "shop.example.com"); err != nil {
 		t.Fatalf("ServeNotFound = %v", err)
 	}
 
@@ -102,12 +102,12 @@ func TestANotFoundHostnameFollowsTheMapsDefaultWhenTheFrontIsRaisedAgain(t *test
 	t.Parallel()
 
 	stale := &compute.UrlMap{
-		Name: classRoutes, Fingerprint: "0", DefaultService: "notfound-v2",
+		Name: tierRoutes, Fingerprint: "0", DefaultService: "notfound-v2",
 		HostRules:    []*compute.HostRule{{Hosts: []string{"unreleased.example.com"}, PathMatcher: matcherFor("unreleased.example.com")}},
 		PathMatchers: []*compute.PathMatcher{{Name: matcherFor("unreleased.example.com"), DefaultService: "notfound-v1", DefaultRouteAction: refusing()}},
 	}
 	p, server := routing(t, stale)
-	if err := p.Route(context.Background(), classRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+	if err := p.Route(context.Background(), tierRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
@@ -131,7 +131,7 @@ func TestRoutingRefusesAHostRuleThatNamesNoBackend(t *testing.T) {
 	t.Parallel()
 
 	p, _ := routing(t, emptyMap())
-	err := p.Route(context.Background(), classRoutes, "shop.example.com", "")
+	err := p.Route(context.Background(), tierRoutes, "shop.example.com", "")
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Route with no backend = %v, want an %s refusal", err, refusal.CodeInvalid)

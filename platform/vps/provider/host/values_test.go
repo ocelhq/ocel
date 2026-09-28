@@ -5,17 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const sensitiveValue = "sk-live-0123456789"
 
-const aManifest = `{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
+const aManifest = `{"slug":"shop","tier":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
 
 func valued() Container {
 	spec := aContainer()
-	spec.Class = edge.ClassProduction
+	spec.Tier = environment.TierProduction
 	spec.Resolved = true
 	spec.Env = map[string]string{
 		"API_TOKEN": sensitiveValue,
@@ -28,7 +28,7 @@ func valued() Container {
 
 func promoted() Container {
 	spec := aContainer()
-	spec.Class = edge.ClassProduction
+	spec.Tier = environment.TierProduction
 	spec.Resolved = false
 	return spec
 }
@@ -60,15 +60,15 @@ func TestAContainerIsHandedItsValuesInAFileRatherThanOnTheCommandLine(t *testing
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
 	command := ranContainer(t, rig)
 	if !strings.Contains(command, quoted("--env-file")+" "+quoted(path)) {
 		t.Fatalf("starting a container runs %q, which hands it no env file", command)
 	}
-	if !strings.HasPrefix(path, StateDir(spec.Class)+"/") {
-		t.Errorf("the env file sits at %q, want it under the state directory of the class whose key sealed what is in it", path)
+	if !strings.HasPrefix(path, StateDir(spec.Tier)+"/") {
+		t.Errorf("the env file sits at %q, want it under the state directory of the tier whose key sealed what is in it", path)
 	}
 	for name, value := range spec.Env {
 		if strings.Contains(command, value) {
@@ -93,7 +93,7 @@ func TestTheEnvFileIsWrittenAtSixHundredToTheDeployPrincipalWithNoElevation(t *t
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
 	rig.facts.Root = false
 	denyingDocker(rig, "false ")
@@ -138,7 +138,7 @@ func TestTheEnvFileIsTakenBackOnTheSuccessPath(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
 	taken, ran := rig.at("rm -f "+quoted(path)), rig.at(quoted("--env-file"))
@@ -157,7 +157,7 @@ func TestTheEnvFileIsTakenBackWhenTheContainerCannotBeStarted(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
 	rig.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
@@ -186,7 +186,7 @@ func TestTheEnvFileIsTakenBackWhenTheWriteItselfFallsOver(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
 	rig.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "docker inspect") && strings.Contains(command, quoted(servingSelectors())) {
@@ -212,7 +212,7 @@ func TestTheEnvFileIsTakenBackWhenTheDeployIsInterrupted(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := machine(nil)
 	imaging(rig, "false ")
 	ctx, stop := context.WithCancel(context.Background())
@@ -236,7 +236,7 @@ func TestNoValueTheDeployResolvesIsSpokenAnywhereButIntoTheFile(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	path := EnvFile(spec.Class, spec.Name)
+	path := EnvFile(spec.Tier, spec.Name)
 	rig := runningWith(t, spec)
 
 	file := wrote(t, rig, path)
@@ -367,7 +367,7 @@ func TestADeployThatResolvedNoValueReplacesAContainerRunningWithTheOnesItDropped
 	if !strings.Contains(joined, quoted("run")+" "+quoted("--detach")) {
 		t.Fatalf("a deploy that resolved no value at all kept the container running with the values the deploy before it handed over, so removing the last value an app declares never reaches what serves it and API_TOKEN goes on being served for the life of the release:\n%s", joined)
 	}
-	if file := wrote(t, rig, EnvFile(emptied.Class, emptied.Name)); file != "OCEL_HEALTH_PATH=/healthz\n" {
+	if file := wrote(t, rig, EnvFile(emptied.Tier, emptied.Name)); file != "OCEL_HEALTH_PATH=/healthz\n" {
 		t.Errorf("a deploy that resolved no value handed the container %q, want the health path alone", file)
 	}
 }

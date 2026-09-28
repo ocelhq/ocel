@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -29,7 +30,7 @@ func ChangeGroups(described provider.BootstrapDescription, catalogue []provider.
 		current[stack.Feature] = stack
 	}
 
-	groups := []provider.ChangeGroup{baselineGroup(described, current[""], req.Class)}
+	groups := []provider.ChangeGroup{baselineGroup(described, current[""], req.Tier)}
 	for _, name := range req.Features {
 		groups = append(groups, featureGroup(current[name], name))
 	}
@@ -47,8 +48,8 @@ func ChangeGroups(described provider.BootstrapDescription, catalogue []provider.
 	return groups
 }
 
-func baselineGroup(described provider.BootstrapDescription, stack provider.BootstrapStack, class edge.Class) provider.ChangeGroup {
-	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, string(class)+" bootstrap")}
+func baselineGroup(described provider.BootstrapDescription, stack provider.BootstrapStack, tier environment.Tier) provider.ChangeGroup {
+	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, string(tier)+" bootstrap")}
 	group.Action, group.Reason = bootstrapStackAction(stack, described.Present)
 	return group
 }

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -23,14 +23,14 @@ func envSourceSync(argv []string, errs io.Writer) int {
 	named := "ocel-live " + live.EnvSourceSyncCommand
 	flags := flag.NewFlagSet(named, flag.ContinueOnError)
 	flags.SetOutput(errs)
-	class := flags.String("class", "", "the class whose values this sync keeps in step with their env sources")
+	tier := flags.String("tier", "", "the tier whose values this sync keeps in step with their env sources")
 	if err := flags.Parse(argv); err != nil {
 		return 2
 	}
-	switch edge.Class(*class) {
-	case edge.ClassProduction, edge.ClassPreview:
+	switch environment.Tier(*tier) {
+	case environment.TierProduction, environment.TierPreview:
 	default:
-		fmt.Fprintf(errs, "%s: --class is %q, want %s or %s\n", named, *class, edge.ClassProduction, edge.ClassPreview)
+		fmt.Fprintf(errs, "%s: --tier is %q, want %s or %s\n", named, *tier, environment.TierProduction, environment.TierPreview)
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -38,7 +38,7 @@ func envSourceSync(argv []string, errs io.Writer) int {
 	local := boxstore.LocalTransport{}
 	sync := &envsource.Sync{
 		Store: envvars.Store{Records: boxstore.NewRecords(local), Cipher: boxstore.NewCipher(local)},
-		Class: edge.Class(*class),
+		Tier:  environment.Tier(*tier),
 		Login: envsource.Login{Client: &http.Client{Timeout: envSourceRequestTimeout}},
 	}
 	sync.CopyScheduledEveryInterval(ctx, func(err error) { fmt.Fprintf(errs, "%s: %s\n", named, err) })

@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -19,10 +19,10 @@ type Cipher struct {
 }
 
 func (s Cipher) key(at records.SealScope) (string, error) {
-	if at.Class == "" {
-		return "", Classless("a value")
+	if at.Tier == "" {
+		return "", Tierless("a value")
 	}
-	return s.Clients.KeyPath(string(at.Class)), nil
+	return s.Clients.KeyPath(string(at.Tier)), nil
 }
 
 func (s Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
@@ -40,7 +40,7 @@ func (s Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte
 		AdditionalAuthenticatedData: at.AAD(),
 	})
 	if err != nil {
-		return nil, s.keyless(at.Class, "encrypt value", err)
+		return nil, s.keyless(at.Tier, "encrypt value", err)
 	}
 	return sealed.GetCiphertext(), nil
 }
@@ -60,16 +60,16 @@ func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) (
 		AdditionalAuthenticatedData: at.AAD(),
 	})
 	if err != nil {
-		return nil, s.keyless(at.Class, "decrypt value", err)
+		return nil, s.keyless(at.Tier, "decrypt value", err)
 	}
 	return opened.GetPlaintext(), nil
 }
 
-func (s Cipher) keyless(class edge.Class, doing string, err error) error {
+func (s Cipher) keyless(tier environment.Tier, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
-			class, s.Clients.KeyRing(), class, provider.BootstrapVarsKeyCommand(class))
+			tier, s.Clients.KeyRing(), tier, provider.BootstrapVarsKeyCommand(tier))
 	}
 	return fmt.Errorf("%s: %w", doing, err)
 }

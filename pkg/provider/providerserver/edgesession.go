@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -80,7 +81,7 @@ func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection)
 	return p.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
 }
 
-func (h *handlers) openEdgeSession(ctx context.Context, class edge.Class, slug string, sel *contractv1.EdgeSelection) (*edgeSession, error) {
+func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, slug string, sel *contractv1.EdgeSelection) (*edgeSession, error) {
 	vendor, err := h.session.use()
 	if err != nil {
 		return nil, err
@@ -92,13 +93,13 @@ func (h *handlers) openEdgeSession(ctx context.Context, class edge.Class, slug s
 	if err != nil {
 		return nil, err
 	}
-	store := edgeStateStore{records: vendor.Records(), name: stackrecords.EdgeStackRecord(class, slug)}
+	store := edgeStateStore{records: vendor.Records(), name: stackrecords.EdgeStackRecord(tier, slug)}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if state.Edge.Empty() {
-		return nil, errNoDeploy(class)
+		return nil, errNoDeploy(tier)
 	}
 	stack, err := front.Open(state.Edge)
 	if err != nil {
@@ -143,8 +144,8 @@ type noDeploy struct{ refusal.Refusal }
 
 func (n noDeploy) Unwrap() error { return n.Refusal }
 
-func errNoDeploy(class edge.Class) error {
-	if class == edge.ClassPreview {
+func errNoDeploy(tier environment.Tier) error {
+	if tier == environment.TierPreview {
 		return noDeploy{refusal.Refusal{Code: refusal.CodeNotReady,
 			Message: "this project has no preview deploys yet; run `ocel preview` first"}}
 	}

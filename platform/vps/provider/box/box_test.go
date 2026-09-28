@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -90,12 +91,12 @@ func (m *machine) RunContainer(_ context.Context, spec host.Container) error {
 	return m.refuse("RunContainer")
 }
 
-func (m *machine) ForgetNetwork(_ context.Context, class edge.Class, project string) error {
-	m.calls = append(m.calls, "forget network "+string(class)+"/"+project)
+func (m *machine) ForgetNetwork(_ context.Context, tier environment.Tier, project string) error {
+	m.calls = append(m.calls, "forget network "+string(tier)+"/"+project)
 	return m.refuse("ForgetNetwork")
 }
 
-func (m *machine) Promote(_ context.Context, _ edge.Class, project, app, coordinate string) error {
+func (m *machine) Promote(_ context.Context, _ environment.Tier, project, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
@@ -210,8 +211,8 @@ func edgeOver(m *machine, store records.Store) *box.Edge {
 	return box.New(m, m.ApplyOrigins, store, sshScope)
 }
 
-func (m *machine) ApplyOrigins(_ context.Context, project string, class edge.Class) error {
-	m.calls = append(m.calls, "apply origins "+project+"/"+string(class))
+func (m *machine) ApplyOrigins(_ context.Context, project string, tier environment.Tier) error {
+	m.calls = append(m.calls, "apply origins "+project+"/"+string(tier))
 	return m.refuse("ApplyOrigins")
 }
 
@@ -248,11 +249,11 @@ func TestTheBoxEdge(t *testing.T) {
 		Hostname: "shop.example.com",
 		New: func(*testing.T) (edge.Edge, edge.StackSpec) {
 			return edgeOver(aMachine(), fake.NewRecords()),
-				edge.StackSpec{Version: "test", Class: edge.ClassProduction, Slug: slug}
+				edge.StackSpec{Version: "test", Tier: environment.TierProduction, Slug: slug}
 		},
 		Previews: func(*testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
 			return edgeOver(aMachine(), fake.NewRecords()),
-				edge.StackSpec{Version: "test", Class: edge.ClassPreview, Slug: slug},
+				edge.StackSpec{Version: "test", Tier: environment.TierPreview, Slug: slug},
 				previewSpec()
 		},
 	})
@@ -264,7 +265,7 @@ func reconciled(t *testing.T) (*machine, *box.Edge, edge.EdgeStack) {
 	m := aMachine()
 	front := edgeOver(m, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
+		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -325,14 +326,14 @@ func TestBootstrappingTheEdgeTouchesTheBoxNotAtAll(t *testing.T) {
 
 	m := aMachine()
 	front := edgeOver(m, fake.NewRecords())
-	out, err := front.Bootstrap(context.Background(), edge.ClassProduction)
+	out, err := front.Bootstrap(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	if out.Trust != edge.TrustInternal {
 		t.Errorf("Bootstrap trust = %q, want %q: the proxy and everything it depends on are the box bootstrap's items", out.Trust, edge.TrustInternal)
 	}
-	if err := front.Teardown(context.Background(), edge.ClassProduction); err != nil {
+	if err := front.Teardown(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if len(m.calls) != 0 {
@@ -464,7 +465,7 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 	m := aMachine()
 	front := edgeOver(m, honouring{fake.NewRecords()})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
+		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -496,7 +497,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	store := fake.NewRecords()
 	front := edgeOver(m, store)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
+		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -509,7 +510,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	}
 	m.releasing = func(rel host.Release) error {
 		m.releasing = nil
-		overtaking := ledger.New(store, edge.ClassProduction, slug)
+		overtaking := ledger.New(store, environment.TierProduction, slug)
 		if err := overtaking.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}
@@ -595,7 +596,7 @@ func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	m := aMachine()
 	front := edgeOver(m, staleAt{Store: fake.NewRecords(), at: "pointers"})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
+		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -671,7 +672,7 @@ func TestABoundHostnameIsClaimedOnTheProxyAndPointedAtTheBoxItself(t *testing.T)
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if owner != box.Surface(slug, edge.ClassProduction) {
+	if owner != box.Surface(slug, environment.TierProduction) {
 		t.Errorf("DomainOwner(%q) = %q, want the surface the binding claimed it for", hostname, owner)
 	}
 	dnsRecords, err := edge.RecordsFor(edge.TargetFor(front, stack.State()), stack.State().Bound)
@@ -791,14 +792,14 @@ func TestAHostnameAnotherProjectStillClaimsIsRefusedNamingWhoClaimsIt(t *testing
 	if err == nil {
 		t.Fatalf("binding %q over the project still claiming it succeeded, and that project's site goes dark with nothing telling it why", hostname)
 	}
-	if !strings.Contains(err.Error(), box.Surface("shop", edge.ClassProduction)) {
+	if !strings.Contains(err.Error(), box.Surface("shop", environment.TierProduction)) {
 		t.Errorf("the refusal reads %q and never names the surface claiming %q, so nobody knows where to unbind it", err, hostname)
 	}
 	owner, err := edgeOver(m, fake.NewRecords()).DomainOwner(ctx, hostname)
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if want := box.Surface("shop", edge.ClassProduction); owner != want {
+	if want := box.Surface("shop", environment.TierProduction); owner != want {
 		t.Errorf("DomainOwner(%q) = %q, want %q: a refused bind leaves the claim where it was", hostname, owner, want)
 	}
 }
@@ -808,7 +809,7 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 
 	front := edgeOver(aMachine(), fake.NewRecords())
 	groups := front.ProjectRemovals(edge.ProjectScope{
-		Slug: slug, Class: edge.ClassProduction, Hostnames: []string{"shop.example.com"}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
 	})
 	if len(groups) != 1 {
 		t.Fatalf("ProjectRemovals = %d groups, want one", len(groups))
@@ -849,7 +850,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 
 	kept := map[string]edge.PlanChange{}
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
-		Slug: slug, Class: edge.ClassProduction, Hostnames: []string{"shop.example.com", pinned}, Front: address,
+		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com", pinned}, Front: address,
 	})[0].Changes {
 		if change.Kind == box.CertificateKind {
 			kept[change.Name] = change
@@ -917,7 +918,7 @@ func reconciledOn(t *testing.T, m *machine, named string) edge.EdgeStack {
 
 	front := edgeOver(m, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: named,
+		Version: "test", Tier: environment.TierProduction, Slug: named,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(%s): %v", named, err)
@@ -1131,7 +1132,7 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, edge.ClassProduction), Pointer: edge.DefaultPointer, App: "api"}
+	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, environment.TierProduction), Pointer: edge.DefaultPointer, App: "api"}
 	if len(claims) != 1 || claims[0] != want {
 		t.Errorf("the box records %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
 	}
@@ -1140,7 +1141,7 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if owner != box.Surface(slug, edge.ClassProduction) {
+	if owner != box.Surface(slug, environment.TierProduction) {
 		t.Errorf("DomainOwner(%q) = %q, want the surface: the claim guard and the preview-entry check are both project-grained, so this answer stays surface-valued whatever app the hostname was declared under", hostname, owner)
 	}
 }
@@ -1163,7 +1164,7 @@ func TestTheRemovalPlanKeepsABoundHostnamesCertificateUnderTheProxysOwnHandle(t 
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
-	certificate := keptCertificate(t, front.ProjectRemovals(edge.ProjectScope{Slug: slug, Class: edge.ClassProduction, Hostnames: []string{bound}}))
+	certificate := keptCertificate(t, front.ProjectRemovals(edge.ProjectScope{Slug: slug, Tier: environment.TierProduction, Hostnames: []string{bound}}))
 	if certificate.Name != certs.ProxyHandle(bound) {
 		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", certificate.Name, bound)
 	}

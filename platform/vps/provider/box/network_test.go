@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 )
@@ -28,7 +29,7 @@ func TestDestroyingAStackTakesTheProjectsNetworkAfterItsRoutes(t *testing.T) {
 	if forgot < 0 {
 		t.Fatalf("a torn-down project leaves its network on the box, occupying one of the engine's subnets for nothing: %v", m.calls)
 	}
-	if unrouted := slices.IndexFunc(m.calls, func(call string) bool { return call == "unroute "+box.Surface(slug, edge.ClassProduction) }); unrouted > forgot {
+	if unrouted := slices.IndexFunc(m.calls, func(call string) bool { return call == "unroute "+box.Surface(slug, environment.TierProduction) }); unrouted > forgot {
 		t.Errorf("the network was forgotten at %d and the surface unrouted at %d: %v", forgot, unrouted, m.calls)
 	}
 }
@@ -43,7 +44,7 @@ func TestANetworkThatWillNotGoIsReportedAndTheRestOfTheTeardownStillRuns(t *test
 	if !errors.Is(err, refusal) {
 		t.Fatalf("Destroy() = %v, want the network's refusal returned", err)
 	}
-	if !slices.ContainsFunc(m.calls, func(call string) bool { return call == "unroute "+box.Surface(slug, edge.ClassProduction) }) {
+	if !slices.ContainsFunc(m.calls, func(call string) bool { return call == "unroute "+box.Surface(slug, environment.TierProduction) }) {
 		t.Errorf("a network that would not go stopped the teardown before the routes were taken: %v", m.calls)
 	}
 }

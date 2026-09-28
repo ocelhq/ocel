@@ -5,7 +5,7 @@ export default defineTransform([
     aws: { function: { lambda: { memorySize: 2048, timeout: 60 } } },
   },
   {
-    if: ({ envClass }) => envClass === "production",
+    if: ({ envTier }) => envTier === "production",
     aws: {
       postgres: {
         cluster: { serverlessv2ScalingConfiguration: { minCapacity: 2, maxCapacity: 16 } },

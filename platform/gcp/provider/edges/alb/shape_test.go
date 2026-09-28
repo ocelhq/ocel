@@ -4,7 +4,7 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
@@ -47,20 +47,20 @@ func shapedCounts(shaped []pricing.Shaped) map[string]int {
 func TestTheFrontShapeMatchesTheFrontProgram(t *testing.T) {
 	t.Parallel()
 
-	spec := frontSpec{Region: "europe-west1", Names: frontNames(edge.ClassPreview),
+	spec := frontSpec{Region: "europe-west1", Names: frontNames(environment.TierPreview),
 		Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
 	registered := declaredCounts(t, frontProgram(spec))
-	shaped := shapedCounts(ShapeFront(edge.ClassPreview, "preview.example.com"))
+	shaped := shapedCounts(ShapeFront(environment.TierPreview, "preview.example.com"))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the front program registers %v, the shape lists %v", registered, shaped)
 	}
 
-	registered = declaredCounts(t, frontProgram(frontSpec{Names: frontNames(edge.ClassProduction)}))
-	shaped = shapedCounts(ShapeFront(edge.ClassProduction, ""))
+	registered = declaredCounts(t, frontProgram(frontSpec{Names: frontNames(environment.TierProduction)}))
+	shaped = shapedCounts(ShapeFront(environment.TierProduction, ""))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("without a preview base the front program registers %v, the shape lists %v", registered, shaped)
 	}
-	for _, s := range ShapeFront(edge.ClassProduction, "") {
+	for _, s := range ShapeFront(environment.TierProduction, "") {
 		if s.Type == tfGlobalForwardingRule && s.Properties["network_tier"] != premiumTier {
 			t.Errorf("forwarding rule = %v, want the premium tier the program asks for", s.Properties)
 		}
@@ -71,15 +71,15 @@ func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
 	t.Parallel()
 
 	hosts := map[string]Host{
-		"shop.example.com":  {Certificate: "cert", Service: "svc-a", Backend: backendName("shop", edge.ClassProduction, "shop.example.com")},
-		"admin.example.com": {Certificate: "cert", Service: "svc-b", Backend: backendName("shop", edge.ClassProduction, "admin.example.com")},
+		"shop.example.com":  {Certificate: "cert", Service: "svc-a", Backend: backendName("shop", environment.TierProduction, "shop.example.com")},
+		"admin.example.com": {Certificate: "cert", Service: "svc-b", Backend: backendName("shop", environment.TierProduction, "admin.example.com")},
 	}
 	registered := declaredCounts(t, binding(hosts))
-	shaped := shapedCounts(ShapeHosts("shop", edge.ClassProduction, []string{"shop.example.com", "admin.example.com"}))
+	shaped := shapedCounts(ShapeHosts("shop", environment.TierProduction, []string{"shop.example.com", "admin.example.com"}))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the binding program registers %v, the shape lists %v", registered, shaped)
 	}
-	for _, s := range ShapeHosts("shop", edge.ClassProduction, []string{"shop.example.com"}) {
+	for _, s := range ShapeHosts("shop", environment.TierProduction, []string{"shop.example.com"}) {
 		if s.Type == tfBackendService && s.Properties["enable_cdn"] != true {
 			t.Errorf("a host's backend = %v, want the CDN the program enables", s.Properties)
 		}

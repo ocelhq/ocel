@@ -10,7 +10,7 @@ function request(
 ): EvaluateRequest {
   return {
     provider: "vps",
-    envClass: "production",
+    envTier: "production",
     env: "production",
     resources,
   };
@@ -59,7 +59,7 @@ describe("the vps branch", () => {
     ["container", "publish", ["5432:5432"]],
     ["container", "mounts", ["/:/host"]],
     ["volume", "name", "mine"],
-    ["volume", "labels", { "ocel.class": "production" }],
+    ["volume", "labels", { "ocel.tier": "production" }],
   ])("refuses %s.%s, which the box fills itself", (surface, field, value) => {
     const modules = [
       module(

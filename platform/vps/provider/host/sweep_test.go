@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -16,7 +16,7 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 	spec := valued()
 	rig := runningWith(t, spec)
 	swept := rig.at(sweepCommand())
-	wrote := rig.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Class, spec.Name)))
+	wrote := rig.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Tier, spec.Name)))
 	if swept < 0 || wrote < 0 || swept > wrote {
 		t.Fatalf("the sweep ran at %d and the env file was written at %d: a sweep after the write is a sweep of nothing, and a SIGKILL between the write and the forget leaves plaintext nothing but the next deploy's sweep takes", swept, wrote)
 	}
@@ -32,8 +32,8 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 			t.Errorf("the sweep runs %q, which names no %s (%s)", command, what, wanted)
 		}
 	}
-	if !strings.HasPrefix(EnvFile(edge.ClassProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(edge.ClassProduction, "x"), stateRoot+"/"), "/") != 1 {
-		t.Errorf("the env file sits at %s, which is not the depth the sweep reads", EnvFile(edge.ClassProduction, "x"))
+	if !strings.HasPrefix(EnvFile(environment.TierProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(environment.TierProduction, "x"), stateRoot+"/"), "/") != 1 {
+		t.Errorf("the env file sits at %s, which is not the depth the sweep reads", EnvFile(environment.TierProduction, "x"))
 	}
 }
 

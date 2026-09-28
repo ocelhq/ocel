@@ -16,6 +16,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/option"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func seedBootstrapBundles(t *testing.T, store, writer string) (string, string) {
@@ -39,16 +40,16 @@ func bootstrapMock(t *testing.T, provisioned bool) *cfMock {
 	t.Setenv(envAPIToken, "tok")
 	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
 	if provisioned {
-		m.existingBuckets = []string{cacheStoreName(edge.ClassProduction)}
-		m.existingTokens = []map[string]any{{"id": "token-1", "name": cacheStoreName(edge.ClassProduction)}}
+		m.existingBuckets = []string{cacheStoreName(environment.TierProduction)}
+		m.existingTokens = []map[string]any{{"id": "token-1", "name": cacheStoreName(environment.TierProduction)}}
 	}
 	return m
 }
 
 func productionPlan(action edge.PlanAction, reason string) []edge.PlanChange {
 	changes := []edge.PlanChange{
-		{Kind: kindR2Bucket, Name: cacheStoreName(edge.ClassProduction), Action: action, Reason: reason},
-		{Kind: kindAPIToken, Name: cacheStoreName(edge.ClassProduction), Action: action, Reason: reason},
+		{Kind: kindR2Bucket, Name: cacheStoreName(environment.TierProduction), Action: action, Reason: reason},
+		{Kind: kindAPIToken, Name: cacheStoreName(environment.TierProduction), Action: action, Reason: reason},
 	}
 	for _, script := range []string{sharedStoreScriptName, isrWriterScriptName} {
 		changes = append(changes,
@@ -86,7 +87,7 @@ func stripBinding(t *testing.T, m *cfMock, script, kind string) {
 	m.scriptSettings[script]["bindings"] = kept
 }
 
-func planner(t *testing.T, m *cfMock) func(context.Context, edge.Class) ([]edge.PlanChange, error) {
+func planner(t *testing.T, m *cfMock) func(context.Context, environment.Tier) ([]edge.PlanChange, error) {
 	t.Helper()
 	plan := m.provider(t).Hooks().PlanBootstrap
 	if plan == nil {
@@ -100,7 +101,7 @@ func TestPlanBootstrap(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, false)
 
-		changes, err := planner(t, m)(t.Context(), edge.ClassProduction)
+		changes, err := planner(t, m)(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -113,11 +114,11 @@ func TestPlanBootstrap(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 
-		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -130,14 +131,14 @@ func TestPlanBootstrap(t *testing.T) {
 		storePath, _ := seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		if err := os.WriteFile(storePath, []byte("export default {rebuilt:1}"), 0o600); err != nil {
 			t.Fatalf("rewrite bundle: %v", err)
 		}
 
-		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -150,13 +151,13 @@ func TestPlanBootstrap(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		uploads := len(m.putScripts)
 		m.scriptSettings[sharedStoreScriptName]["compatibility_date"] = "2020-01-01"
 
-		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -164,7 +165,7 @@ func TestPlanBootstrap(t *testing.T) {
 			t.Errorf("plan = %+v, want the store worker updated for metadata drift", changes)
 		}
 
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
 		if got := m.putScripts[uploads:]; !reflect.DeepEqual(got, []string{sharedStoreScriptName}) {
@@ -179,13 +180,13 @@ func TestPlanBootstrap(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		uploads := len(m.putScripts)
 		stripBinding(t, m, isrWriterScriptName, "r2_bucket")
 
-		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -193,7 +194,7 @@ func TestPlanBootstrap(t *testing.T) {
 			t.Errorf("plan = %+v, want the isr writer updated for the binding it lost", changes)
 		}
 
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
 		if got := m.putScripts[uploads:]; !reflect.DeepEqual(got, []string{isrWriterScriptName}) {
@@ -207,7 +208,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 		t.Setenv(envAPIToken, "tok")
-		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), edge.ClassProduction); err == nil {
+		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("PlanBootstrap without an account id err = nil, want an error")
 		}
 	})
@@ -215,7 +216,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset api token is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 		t.Setenv(envAPIToken, "")
-		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), edge.ClassProduction); err == nil {
+		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("PlanBootstrap without an api token err = nil, want an error")
 		}
 	})
@@ -227,7 +228,7 @@ func TestBootstrapConverges(t *testing.T) {
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
 
-		first, err := p.Bootstrap(t.Context(), edge.ClassProduction)
+		first, err := p.Bootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
@@ -241,7 +242,7 @@ func TestBootstrapConverges(t *testing.T) {
 		}
 		puts, subdomains := len(m.putScripts), len(m.subdomainCalls)
 
-		second, err := p.Bootstrap(t.Context(), edge.ClassProduction)
+		second, err := p.Bootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
@@ -271,14 +272,14 @@ func TestBootstrapConverges(t *testing.T) {
 		storePath, _ := seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		if err := os.WriteFile(storePath, []byte("export default {rebuilt:1}"), 0o600); err != nil {
 			t.Fatalf("rewrite bundle: %v", err)
 		}
 
-		out, err := p.Bootstrap(t.Context(), edge.ClassProduction)
+		out, err := p.Bootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
@@ -320,13 +321,13 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, true)
 		p := m.provider(t)
-		if _, err := p.Bootstrap(t.Context(), edge.ClassProduction); err != nil {
+		if _, err := p.Bootstrap(t.Context(), environment.TierProduction); err != nil {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 		uploads := len(m.putScripts)
 		m.scriptSecrets[sharedStoreScriptName] = nil
 
-		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -334,7 +335,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 			t.Errorf("plan = %+v, want %+v", changes, want)
 		}
 
-		out, err := p.Bootstrap(t.Context(), edge.ClassProduction)
+		out, err := p.Bootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("re-run Bootstrap: %v", err)
 		}
@@ -357,7 +358,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 			}
 		}
 
-		replanned, err := p.planBootstrap(t.Context(), edge.ClassProduction)
+		replanned, err := p.planBootstrap(t.Context(), environment.TierProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap after the secret was set: %v", err)
 		}

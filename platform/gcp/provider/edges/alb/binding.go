@@ -8,13 +8,13 @@ import (
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/compute"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type bindingSpec struct {
 	Region         string
 	Slug           string
-	Class          edge.Class
+	Tier           environment.Tier
 	CertificateMap string
 	Hosts          map[string]Host
 }
@@ -25,7 +25,7 @@ func bindingProgram(spec bindingSpec) Program {
 		for _, hostname := range slices.Sorted(maps.Keys(spec.Hosts)) {
 			host := spec.Hosts[hostname]
 			if host.Certificate != "" {
-				entry := entryName(spec.Slug, spec.Class, hostname)
+				entry := entryName(spec.Slug, spec.Tier, hostname)
 				if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry,
 					&certificatemanager.CertificateMapEntryArgs{
 						Name:         pulumi.String(entry),
@@ -40,7 +40,7 @@ func bindingProgram(spec bindingSpec) Program {
 			if host.Service == "" {
 				continue
 			}
-			neg := negName(spec.Slug, spec.Class, hostname)
+			neg := negName(spec.Slug, spec.Tier, hostname)
 			group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
 				Name:                pulumi.String(neg),
 				Project:             project,

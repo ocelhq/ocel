@@ -12,6 +12,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -177,7 +178,7 @@ func TestDestroyWaitsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		},
 	}
-	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {
+	if _, err := e.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
@@ -203,7 +204,7 @@ func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t 
 	t.Parallel()
 
 	w := newWorld()
-	name := distributionName(defaultNamespace, strings.Repeat("storefront-", 20), edge.ClassProduction)
+	name := distributionName(defaultNamespace, strings.Repeat("storefront-", 20), environment.TierProduction)
 	spec := distributionSpec{
 		name:          name,
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",

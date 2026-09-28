@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -35,8 +36,8 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 	t.Helper()
 
 	vm := liveMachine(t)
-	bootstrapped(t, vm, edge.ClassProduction)
-	bootstrapped(t, vm, edge.ClassPreview)
+	bootstrapped(t, vm, environment.TierProduction)
+	bootstrapped(t, vm, environment.TierPreview)
 	fixtures(t, vm)
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+"="+teardownApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
@@ -57,7 +58,7 @@ func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassPreview, Slug: teardownSlug,
+		Version: "test", Tier: environment.TierPreview, Slug: teardownSlug,
 	}, edge.StackState{GlobalPreview: livePreviewBase})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -93,7 +94,7 @@ func previewStack(t *testing.T, slug, app, pointer string) provider.StackRef {
 
 	return provider.StackRef{
 		Project: slug,
-		Class:   edge.ClassPreview,
+		Tier:    environment.TierPreview,
 		Name:    naming.AppStack(pointer, app, previewBuild(t, pointer).Release()),
 	}
 }
@@ -138,7 +139,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	if len(provisioned.Containers) != 1 {
 		t.Fatalf("Provision(%s) started %v", pointer, provisioned.Containers)
 	}
-	if err := stackrecords.Write(ctx, p.Records(), edge.ClassPreview, slug, spec.Ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, p.Records(), environment.TierPreview, slug, spec.Ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),
@@ -177,7 +178,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err := providerserver.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
-	infra := provider.StackRef{Project: teardownSlug, Class: edge.ClassPreview, Name: naming.InfraStack(pointer)}
+	infra := provider.StackRef{Project: teardownSlug, Tier: environment.TierPreview, Name: naming.InfraStack(pointer)}
 	if err := p.Stacks().Destroy(ctx, infra, spoken); err != nil {
 		t.Fatalf("Destroy(%s) = %v: an ephemeral preview provisions no infra stack, and teardown destroys one regardless", infra.Name, err)
 	}
@@ -294,7 +295,7 @@ func TestLiveTearingDownOneOfFourLivePreviewsSweepsNoLivePreviewsImage(t *testin
 	for at, pointer := range []string{"pr-1", "pr-2", "pr-3", "pr-4"} {
 		previewUp(t, vm, p, stack, pointer, int64(at)+1)
 	}
-	window := windowOf(t, vm, teardownSlug, teardownApp, edge.ClassPreview)
+	window := windowOf(t, vm, teardownSlug, teardownApp, environment.TierPreview)
 	if len(window) != 3 {
 		t.Fatalf("the box's preview window reads %v, and this test turns on it being full: past the third live preview of one app the container's ocel.ref label is the sole guard against sweeping a live one", window)
 	}

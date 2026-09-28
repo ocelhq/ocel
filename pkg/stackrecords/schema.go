@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -15,9 +15,9 @@ const SchemaVersion = 2
 
 const schemaAttempts = 8
 
-func EnsureSchema(ctx context.Context, store records.Store, class edge.Class) error {
+func EnsureSchema(ctx context.Context, store records.Store, tier environment.Tier) error {
 	for range schemaAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(class))
+		recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(tier))
 		if err != nil {
 			return fmt.Errorf("read the record schema: %w", err)
 		}
@@ -49,8 +49,8 @@ func EnsureSchema(ctx context.Context, store records.Store, class edge.Class) er
 	return fmt.Errorf("record the record schema: it moved under %d attempts", schemaAttempts)
 }
 
-func WrittenSchema(ctx context.Context, store records.Store, class edge.Class) (int, error) {
-	recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(class))
+func WrittenSchema(ctx context.Context, store records.Store, tier environment.Tier) (int, error) {
+	recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(tier))
 	if err != nil {
 		return 0, fmt.Errorf("read the record schema: %w", err)
 	}

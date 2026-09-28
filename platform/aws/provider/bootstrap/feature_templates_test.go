@@ -31,9 +31,9 @@ var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition
 
 func TestFeatureTemplates(t *testing.T) {
 	for _, name := range featureNames() {
-		for _, class := range []string{ClassProduction, ClassPreview} {
-			t.Run(name+"/"+class, func(t *testing.T) {
-				stack := featureStackFor(name, class, everyFeature())
+		for _, tier := range []string{TierProduction, TierPreview} {
+			t.Run(name+"/"+tier, func(t *testing.T) {
+				stack := featureStackFor(name, tier, everyFeature())
 
 				var tmpl declaredTemplate
 				if err := yaml.Unmarshal([]byte(stack.body), &tmpl); err != nil {

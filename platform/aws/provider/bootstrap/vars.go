@@ -18,11 +18,11 @@ const (
 	VarsKeyComponentTagValue = "vars-key"
 )
 
-func varsKeyResources(ns Namespace, class string) string {
+func varsKeyResources(ns Namespace, tier string) string {
 	return fmt.Sprintf(`  VarsKey:
     Type: AWS::KMS::Key
     Properties:
-      Description: "Ocel: the key every encrypted variable of the %s class is encrypted under, written when a value is set and read by deploys and running functions. Scheduling its deletion strands those values - each has to be set again under a new key."
+      Description: "Ocel: the key every encrypted variable of the %s tier is encrypted under, written when a value is set and read by deploys and running functions. Scheduling its deletion strands those values - each has to be set again under a new key."
       EnableKeyRotation: true
       Tags:
         - Key: %s
@@ -38,25 +38,25 @@ func varsKeyResources(ns Namespace, class string) string {
   VarsKeyAlias:
     Type: AWS::KMS::Alias
     Metadata:
-      Description: "Stable name for the %s class's variable key, so an operator reading a key policy or a CloudTrail entry can tell which key it is without resolving the id."
+      Description: "Stable name for the %s tier's variable key, so an operator reading a key policy or a CloudTrail entry can tell which key it is without resolving the id."
     Properties:
       AliasName: %s
       TargetKeyId: !Ref VarsKey
-`, class, VarsKeyComponentTagKey, VarsKeyComponentTagValue, class, ns.varsKeyAliasFor(class))
+`, tier, VarsKeyComponentTagKey, VarsKeyComponentTagValue, tier, ns.varsKeyAliasFor(tier))
 }
 
 func varsKeyOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "KMS key every encrypted value of this class is encrypted under. A deploy decrypts through it, and so does each app's execution role."
+    Description: "KMS key every encrypted value of this tier is encrypted under. A deploy decrypts through it, and so does each app's execution role."
     Value: !GetAtt VarsKey.Arn
 `, outputVarsKeyARN)
 }
 
-func varsResources(class string) string {
+func varsResources(tier string) string {
 	return fmt.Sprintf(`  VarsTable:
     Type: AWS::DynamoDB::Table
     Metadata:
-      Description: "Every variable Ocel stores for the %s class, keyed by pk/sk, with the recent versions behind each value. Deleting it means every variable has to be set again."
+      Description: "Every variable Ocel stores for the %s tier, keyed by pk/sk, with the recent versions behind each value. Deleting it means every variable has to be set again."
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
@@ -82,12 +82,12 @@ func varsResources(class string) string {
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
-`, class, VarsTableIndexName)
+`, tier, VarsTableIndexName)
 }
 
 func varsOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "DynamoDB table storing every variable set for this class, with its history. Kept apart from the state table so a variable read never touches deploy state."
+    Description: "DynamoDB table storing every variable set for this tier, with its history. Kept apart from the state table so a variable read never touches deploy state."
     Value: !Ref VarsTable
   %s:
     Description: "ARN of that table, passed to the vars-key stack so its env source sync's role reaches this table and no other."

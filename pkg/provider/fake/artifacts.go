@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -60,17 +60,17 @@ func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, class edge.Class, prefix string, progress progress.Progress) error {
+func (a *Artifacts) RemovePrefix(_ context.Context, tier environment.Tier, prefix string, progress progress.Progress) error {
 	a.journal.note("remove-prefix " + prefix)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for ref := range maps.Keys(a.objects) {
-		if ref.Class == class && strings.HasPrefix(ref.Key, prefix) {
+		if ref.Tier == tier && strings.HasPrefix(ref.Key, prefix) {
 			delete(a.objects, ref)
 		}
 	}
 	if progress != nil {
-		progress.Say("Removed the " + string(class) + " artifacts under " + prefix)
+		progress.Say("Removed the " + string(tier) + " artifacts under " + prefix)
 	}
 	return nil
 }

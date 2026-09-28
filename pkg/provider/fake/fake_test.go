@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -124,7 +124,7 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 
 	ctx := context.Background()
 	cipher := fake.NewCipher()
-	at := records.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "production", Name: "DATABASE_URL"}
+	at := records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "production", Name: "DATABASE_URL"}
 
 	sealed, err := cipher.Seal(ctx, at, []byte("postgres://"))
 	if err != nil {
@@ -154,8 +154,8 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 
 	ctx := context.Background()
 	artifacts := fake.NewArtifacts()
-	kept := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "other/app.zip"}
-	removed := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreAssets, Key: "releases/r1/app.zip"}
+	kept := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "other/app.zip"}
+	removed := provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreAssets, Key: "releases/r1/app.zip"}
 
 	for _, ref := range []provider.ArtifactRef{kept, removed} {
 		if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("body"))); err != nil {
@@ -163,7 +163,7 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 		}
 	}
 
-	if err := artifacts.RemovePrefix(ctx, edge.ClassProduction, "releases/", nil); err != nil {
+	if err := artifacts.RemovePrefix(ctx, environment.TierProduction, "releases/", nil); err != nil {
 		t.Fatalf("RemovePrefix() error = %v", err)
 	}
 	if _, err := artifacts.Open(ctx, removed); err == nil {
@@ -192,7 +192,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	stacks := resources.NewHookStacks(p.Records(), p.Artifacts(), p.ResourceHooks())
 	ref := provider.StackRef{
 		Project: "shop",
-		Class:   edge.ClassProduction,
+		Tier:    environment.TierProduction,
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 
@@ -229,7 +229,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a container app = %+v, want it to reach the Containers hooks alone", contained)
 	}
 
-	if err := stackrecords.Write(context.Background(), p.Records(), ref.Class, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(context.Background(), p.Records(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		Containers: contained.Containers,
 	}); err != nil {
@@ -252,7 +252,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	}
 }
 
-func TestTheReferenceProviderSaysWhatItDidAndToWhichStackClassOrPrefix(t *testing.T) {
+func TestTheReferenceProviderSaysWhatItDidAndToWhichStackTierOrPrefix(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -260,7 +260,7 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackClassOrPrefix(t *testin
 	artifacts := fake.NewArtifacts()
 	stacks := fake.NewStacks(artifacts)
 	bootstrap := fake.NewBootstrap()
-	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: naming.InfraStack("prod")}
+	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack("prod")}
 
 	if _, err := stacks.Provision(ctx, provider.StackSpec{Ref: ref, Kind: provider.StackInfra}, progress); err != nil {
 		t.Fatalf("Provision() = %v", err)
@@ -268,13 +268,13 @@ func TestTheReferenceProviderSaysWhatItDidAndToWhichStackClassOrPrefix(t *testin
 	if err := stacks.Destroy(ctx, ref, progress); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
-	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: edge.ClassProduction}, progress); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: environment.TierProduction}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	if err := bootstrap.Remove(ctx, edge.ClassProduction, progress); err != nil {
+	if err := bootstrap.Remove(ctx, environment.TierProduction, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
-	if err := artifacts.RemovePrefix(ctx, edge.ClassProduction, "releases/", progress); err != nil {
+	if err := artifacts.RemovePrefix(ctx, environment.TierProduction, "releases/", progress); err != nil {
 		t.Fatalf("RemovePrefix() = %v", err)
 	}
 

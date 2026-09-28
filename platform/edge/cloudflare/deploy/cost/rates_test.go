@@ -5,22 +5,22 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 )
 
-func shapedSet(t *testing.T, class edge.Class) *costv1.ResourceSet {
+func shapedSet(t *testing.T, tier environment.Tier) *costv1.ResourceSet {
 	t.Helper()
-	shape, err := cloudflare.Shape("ocel", pricing.EdgeSite{Slug: "shop", Class: class})
+	shape, err := cloudflare.Shape("ocel", pricing.EdgeSite{Slug: "shop", Tier: tier})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tree := &pricing.Tree{}
 	tree.AddEdge(pricing.EdgeScopes{
-		Shared:      tree.Scope("", pricing.ScopeShared, string(class)),
+		Shared:      tree.Scope("", pricing.ScopeShared, string(tier)),
 		Environment: tree.Scope("", pricing.ScopeEnvironment, "prod"),
 	}, shape)
 	set, err := tree.Set("ocel")
@@ -62,7 +62,7 @@ func estimateOfType(t *testing.T, est *costv1.Estimate, set *costv1.ResourceSet,
 func TestTheEdgeShapesItsPlanStoreWriterCacheAndEntry(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, edge.ClassProduction)
+	set := shapedSet(t, environment.TierProduction)
 	counts := map[string]int{}
 	for _, r := range set.GetResources() {
 		counts[r.GetType()]++
@@ -73,16 +73,16 @@ func TestTheEdgeShapesItsPlanStoreWriterCacheAndEntry(t *testing.T) {
 	if counts[cost.TypeAccountSubscription] != 1 || counts[cost.TypeR2Bucket] != 1 || counts[cost.TypeWorkersScript] != 3 {
 		t.Errorf("counts = %v, want the plan, the cache bucket, and the store, writer and entry workers", counts)
 	}
-	preview := shapedSet(t, edge.ClassPreview)
+	preview := shapedSet(t, environment.TierPreview)
 	if n := len(preview.GetResources()); n != len(set.GetResources())+1 {
-		t.Errorf("a preview class shapes %d resources, want the production set plus the shared preview entry worker", n)
+		t.Errorf("a preview tier shapes %d resources, want the production set plus the shared preview entry worker", n)
 	}
 }
 
 func TestAModerateMonthStaysInsideThePaidPlansAllowances(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, edge.ClassProduction)
+	set := shapedSet(t, environment.TierProduction)
 	est := priced(t, set, costv1.Profile_PROFILE_MODERATE)
 
 	plan := estimateOfType(t, est, set, cost.TypeAccountSubscription, "shared:production")
@@ -100,7 +100,7 @@ func TestAModerateMonthStaysInsideThePaidPlansAllowances(t *testing.T) {
 func TestAHeavyMonthBillsRequestsPastTheAllowance(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, edge.ClassProduction)
+	set := shapedSet(t, environment.TierProduction)
 	est := priced(t, set, costv1.Profile_PROFILE_HEAVY)
 
 	entry := estimateOfType(t, est, set, cost.TypeWorkersScript, "environment:prod")
@@ -121,7 +121,7 @@ func TestAHeavyMonthBillsRequestsPastTheAllowance(t *testing.T) {
 func TestTheIncludedRequestsAreSpentOnceAcrossEveryWorker(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, edge.ClassProduction)
+	set := shapedSet(t, environment.TierProduction)
 	est := priced(t, set, costv1.Profile_PROFILE_HEAVY)
 
 	var billed int

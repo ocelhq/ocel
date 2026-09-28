@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
 )
@@ -31,12 +31,12 @@ func (r Registration) Credentials() []envvars.Cell {
 	return out
 }
 
-func registrationName(class edge.Class, project string) records.Name {
-	return records.Name{records.RootEnvSources, string(class), project}
+func registrationName(tier environment.Tier, project string) records.Name {
+	return records.Name{records.RootEnvSources, string(tier), project}
 }
 
-func Register(ctx context.Context, store envvars.Store, class edge.Class, registration Registration) (Registration, error) {
-	key, err := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Class: class}, registration.Descriptor)
+func Register(ctx context.Context, store envvars.Store, tier environment.Tier, registration Registration) (Registration, error) {
+	key, err := DedupeKey(ctx, store, envvars.Scope{Project: registration.Project, Tier: tier}, registration.Descriptor)
 	if err != nil {
 		return Registration{}, err
 	}
@@ -46,7 +46,7 @@ func Register(ctx context.Context, store envvars.Store, class edge.Class, regist
 	if err != nil {
 		return Registration{}, err
 	}
-	name := registrationName(class, registration.Project)
+	name := registrationName(tier, registration.Project)
 	for range registerAttempts {
 		recorded, err := records.ReadOrEmpty(ctx, store.Records, name)
 		if err != nil {
@@ -64,13 +64,13 @@ func Register(ctx context.Context, store envvars.Store, class edge.Class, regist
 		if err != nil {
 			return Registration{}, err
 		}
-		return registration, moveSharer(ctx, store.Records, class, registration.Project, previous.DedupeKey, key)
+		return registration, moveSharer(ctx, store.Records, tier, registration.Project, previous.DedupeKey, key)
 	}
 	return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
 }
 
-func RestoreRegistration(ctx context.Context, store envvars.Store, class edge.Class, replacing Registration, previous *Registration) error {
-	name := registrationName(class, replacing.Project)
+func RestoreRegistration(ctx context.Context, store envvars.Store, tier environment.Tier, replacing Registration, previous *Registration) error {
+	name := registrationName(tier, replacing.Project)
 	recorded, err := store.Records.Read(ctx, name)
 	if errors.Is(err, records.ErrNotFound) {
 		return nil
@@ -90,7 +90,7 @@ func RestoreRegistration(ctx context.Context, store envvars.Store, class edge.Cl
 		if err != nil {
 			return err
 		}
-		return release(ctx, store.Records, class, replacing.DedupeKey, replacing.Project)
+		return release(ctx, store.Records, tier, replacing.DedupeKey, replacing.Project)
 	}
 	if recorded.Bytes, err = json.Marshal(previous); err != nil {
 		return err
@@ -102,11 +102,11 @@ func RestoreRegistration(ctx context.Context, store envvars.Store, class edge.Cl
 	if err != nil {
 		return err
 	}
-	return moveSharer(ctx, store.Records, class, replacing.Project, replacing.DedupeKey, previous.DedupeKey)
+	return moveSharer(ctx, store.Records, tier, replacing.Project, replacing.DedupeKey, previous.DedupeKey)
 }
 
-func rekey(ctx context.Context, store envvars.Store, class edge.Class, project string) error {
-	recorded, err := store.Records.Read(ctx, registrationName(class, project))
+func rekey(ctx context.Context, store envvars.Store, tier environment.Tier, project string) error {
+	recorded, err := store.Records.Read(ctx, registrationName(tier, project))
 	if errors.Is(err, records.ErrNotFound) {
 		return nil
 	}
@@ -117,7 +117,7 @@ func rekey(ctx context.Context, store envvars.Store, class edge.Class, project s
 	if err != nil {
 		return err
 	}
-	key, err := DedupeKey(ctx, store, envvars.Scope{Project: project, Class: class}, current.Descriptor)
+	key, err := DedupeKey(ctx, store, envvars.Scope{Project: project, Tier: tier}, current.Descriptor)
 	if err != nil || key == current.DedupeKey {
 		return err
 	}
@@ -133,7 +133,7 @@ func rekey(ctx context.Context, store envvars.Store, class edge.Class, project s
 	if err != nil {
 		return err
 	}
-	return moveSharer(ctx, store.Records, class, project, previous, key)
+	return moveSharer(ctx, store.Records, tier, project, previous, key)
 }
 
 func registrationOf(recorded records.Record) (Registration, error) {
@@ -147,8 +147,8 @@ func registrationOf(recorded records.Record) (Registration, error) {
 	return out, nil
 }
 
-func Registered(ctx context.Context, store records.Store, class edge.Class, project string) (Registration, bool, error) {
-	recorded, err := store.Read(ctx, registrationName(class, project))
+func Registered(ctx context.Context, store records.Store, tier environment.Tier, project string) (Registration, bool, error) {
+	recorded, err := store.Read(ctx, registrationName(tier, project))
 	if errors.Is(err, records.ErrNotFound) {
 		return Registration{}, false, nil
 	}
@@ -162,10 +162,10 @@ func Registered(ctx context.Context, store records.Store, class edge.Class, proj
 	return out, true, nil
 }
 
-func Registrations(ctx context.Context, store records.Store, class edge.Class) ([]Registration, error) {
-	recorded, err := store.List(ctx, records.Name{records.RootEnvSources, string(class)})
+func Registrations(ctx context.Context, store records.Store, tier environment.Tier) ([]Registration, error) {
+	recorded, err := store.List(ctx, records.Name{records.RootEnvSources, string(tier)})
 	if err != nil {
-		return nil, fmt.Errorf("read the %s env source registrations: %w", class, err)
+		return nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
 	}
 	out := make([]Registration, 0, len(recorded))
 	for _, record := range recorded {

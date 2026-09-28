@@ -21,7 +21,7 @@ import (
 const (
 	ProjectEnvVar = "OCEL_GCP_PROJECT"
 	RegionEnvVar  = "OCEL_GCP_REGION"
-	ClassEnvVar   = "OCEL_INFRA_CLASS"
+	TierEnvVar    = "OCEL_INFRA_TIER"
 
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 
@@ -139,7 +139,7 @@ func HostPort(endpoint string) string {
 	return authority
 }
 
-func Classless(what any) error {
+func Tierless(what any) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s names no class, and this project keeps each class's state apart from the other class's", what)
+		"%s names no tier, and this project keeps each tier's state apart from the other tier's", what)
 }

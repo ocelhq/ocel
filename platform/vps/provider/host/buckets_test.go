@@ -13,7 +13,7 @@ import (
 func aStore() BucketSpec {
 	return BucketSpec{
 		Store:       "shop-prod-store-s3",
-		Class:       "production",
+		Tier:        "production",
 		Endpoint:    "http://127.0.0.1:9000",
 		Region:      "us-east-1",
 		AccessKeyID: "ocel",

@@ -195,7 +195,7 @@ func (s Store) dereference(ctx context.Context, scope Scope, at Coordinate, cell
 	if cell.Target == nil {
 		return cell, scope, at, nil
 	}
-	from := Scope{Project: cell.Target.Project, Class: scope.Class}
+	from := Scope{Project: cell.Target.Project, Tier: scope.Tier}
 	sourceAt := Coordinate{Cell: cell.Target.Cell}
 	_, source, err := s.cellAt(ctx, from, sourceAt)
 	if err != nil {
@@ -277,7 +277,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 			continue
 		}
 		target := *cellValues[i].Target
-		from[i] = Scope{Project: target.Project, Class: scope.Class}
+		from[i] = Scope{Project: target.Project, Tier: scope.Tier}
 		sourceCells[i] = Coordinate{Cell: target.Cell}
 		source := sources[cellName(from[i], sourceCells[i]).String()]
 		if err := validateSource(at, &target, source); err != nil {
@@ -344,7 +344,7 @@ func (s Store) gather(ctx context.Context, scope Scope, stored map[string]stored
 		if cell.Target == nil {
 			continue
 		}
-		at := Scope{Project: cell.Target.Project, Class: scope.Class}
+		at := Scope{Project: cell.Target.Project, Tier: scope.Tier}
 		sourceAt := Coordinate{Cell: cell.Target.Cell}
 		key := cellName(at, sourceAt).String()
 		if wanted[key] {
@@ -493,7 +493,7 @@ func coordinateOf(scope Scope, at Coordinate) records.SealScope {
 	at = at.canonical()
 	return records.SealScope{
 		Project: scope.Project,
-		Class:   scope.Class,
+		Tier:    scope.Tier,
 		Env:     at.Environment,
 		Folder:  at.Folder,
 		Name:    at.Key,

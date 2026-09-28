@@ -3,7 +3,7 @@ package cloudflare
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const defaultNamespace = "ocel"
@@ -14,7 +14,7 @@ func TestConventionWorkerNames(t *testing.T) {
 	t.Run("production names every worker family the project deploys", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := conventionWorkerNames(defaultNamespace, "shop", edge.ClassProduction, []string{"web"})
+		got, err := conventionWorkerNames(defaultNamespace, "shop", environment.TierProduction, []string{"web"})
 		if err != nil {
 			t.Fatalf("conventionWorkerNames: %v", err)
 		}
@@ -24,10 +24,10 @@ func TestConventionWorkerNames(t *testing.T) {
 		})
 	})
 
-	t.Run("preview names the worker the preview class deploys", func(t *testing.T) {
+	t.Run("preview names the worker the preview tier deploys", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := conventionWorkerNames(defaultNamespace, "shop", edge.ClassPreview, nil)
+		got, err := conventionWorkerNames(defaultNamespace, "shop", environment.TierPreview, nil)
 		if err != nil {
 			t.Fatalf("conventionWorkerNames: %v", err)
 		}
@@ -37,11 +37,11 @@ func TestConventionWorkerNames(t *testing.T) {
 	t.Run("another namespace deploying the same slug derives its own names", func(t *testing.T) {
 		t.Parallel()
 
-		mine, err := conventionWorkerNames(defaultNamespace, "shop", edge.ClassProduction, nil)
+		mine, err := conventionWorkerNames(defaultNamespace, "shop", environment.TierProduction, nil)
 		if err != nil {
 			t.Fatalf("conventionWorkerNames: %v", err)
 		}
-		theirs, err := conventionWorkerNames("j-1874-deploy-next-cloudflare", "shop", edge.ClassProduction, nil)
+		theirs, err := conventionWorkerNames("j-1874-deploy-next-cloudflare", "shop", environment.TierProduction, nil)
 		if err != nil {
 			t.Fatalf("conventionWorkerNames: %v", err)
 		}
@@ -54,21 +54,21 @@ func TestConventionWorkerNames(t *testing.T) {
 		}
 	})
 
-	t.Run("a state that names no namespace, class or slug derives nothing", func(t *testing.T) {
+	t.Run("a state that names no namespace, tier or slug derives nothing", func(t *testing.T) {
 		t.Parallel()
 
 		for _, tc := range []struct {
 			namespace string
 			slug      string
-			class     edge.Class
+			tier      environment.Tier
 		}{
-			{namespace: defaultNamespace, slug: "", class: edge.ClassProduction},
-			{namespace: defaultNamespace, slug: "shop", class: ""},
-			{namespace: "", slug: "shop", class: edge.ClassProduction},
+			{namespace: defaultNamespace, slug: "", tier: environment.TierProduction},
+			{namespace: defaultNamespace, slug: "shop", tier: ""},
+			{namespace: "", slug: "shop", tier: environment.TierProduction},
 		} {
-			got, err := conventionWorkerNames(tc.namespace, tc.slug, tc.class, []string{"web"})
+			got, err := conventionWorkerNames(tc.namespace, tc.slug, tc.tier, []string{"web"})
 			if err != nil {
-				t.Fatalf("conventionWorkerNames(%q, %q, %q): %v", tc.namespace, tc.slug, tc.class, err)
+				t.Fatalf("conventionWorkerNames(%q, %q, %q): %v", tc.namespace, tc.slug, tc.tier, err)
 			}
 			if len(got) != 0 {
 				t.Errorf("names = %v, want none: nothing identifies the project's workers", got)
@@ -76,11 +76,11 @@ func TestConventionWorkerNames(t *testing.T) {
 		}
 	})
 
-	t.Run("an unknown class is an error", func(t *testing.T) {
+	t.Run("an unknown tier is an error", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := conventionWorkerNames(defaultNamespace, "shop", edge.Class("nonsense"), nil); err == nil {
-			t.Error("conventionWorkerNames(unknown class) err = nil, want an error")
+		if _, err := conventionWorkerNames(defaultNamespace, "shop", environment.Tier("nonsense"), nil); err == nil {
+			t.Error("conventionWorkerNames(unknown tier) err = nil, want an error")
 		}
 	})
 }
@@ -89,7 +89,7 @@ func TestProjectOwnsScriptReadsOnlyThisNamespacesWorkers(t *testing.T) {
 	t.Parallel()
 
 	const other = "j-1874-deploy-next-cloudflare"
-	theirs, err := conventionWorkerNames(other, "shop", edge.ClassProduction, nil)
+	theirs, err := conventionWorkerNames(other, "shop", environment.TierProduction, nil)
 	if err != nil {
 		t.Fatalf("conventionWorkerNames: %v", err)
 	}

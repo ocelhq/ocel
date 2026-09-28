@@ -11,7 +11,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -24,9 +24,9 @@ type artifacts struct {
 	p *Provider
 }
 
-func (a artifacts) bucket(ctx context.Context, class edge.Class) (*storage.BucketHandle, error) {
-	if class == "" {
-		return nil, ports.Classless("an artifact")
+func (a artifacts) bucket(ctx context.Context, tier environment.Tier) (*storage.BucketHandle, error) {
+	if tier == "" {
+		return nil, ports.Tierless("an artifact")
 	}
 	clients, err := a.p.openClients(ctx)
 	if err != nil {
@@ -36,7 +36,7 @@ func (a artifacts) bucket(ctx context.Context, class edge.Class) (*storage.Bucke
 	if err != nil {
 		return nil, err
 	}
-	return client.Bucket(clients.Bucket(class)), nil
+	return client.Bucket(clients.Bucket(tier)), nil
 }
 
 func objectName(ref provider.ArtifactRef) (string, error) {
@@ -55,7 +55,7 @@ func (a artifacts) object(ctx context.Context, ref provider.ArtifactRef) (*stora
 	if err != nil {
 		return nil, err
 	}
-	bucket, err := a.bucket(ctx, ref.Class)
+	bucket, err := a.bucket(ctx, ref.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +70,10 @@ func (a artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Re
 	writer := object.NewWriter(ctx)
 	if _, err := io.Copy(writer, body); err != nil {
 		writer.Close()
-		return a.storeless(ctx, ref.Class, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
+		return a.storeless(ctx, ref.Tier, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
 	}
 	if err := writer.Close(); err != nil {
-		return a.storeless(ctx, ref.Class, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
+		return a.storeless(ctx, ref.Tier, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
 	}
 	return nil
 }
@@ -87,7 +87,7 @@ func (a artifacts) Has(ctx context.Context, ref provider.ArtifactRef) (bool, err
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return false, nil
 		}
-		return false, a.storeless(ctx, ref.Class, fmt.Errorf("look for %s: %w", object.ObjectName(), err))
+		return false, a.storeless(ctx, ref.Tier, fmt.Errorf("look for %s: %w", object.ObjectName(), err))
 	}
 	return true, nil
 }
@@ -102,17 +102,17 @@ func (a artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadC
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "no artifact at %s", object.ObjectName())
 		}
-		return nil, a.storeless(ctx, ref.Class, fmt.Errorf("read %s: %w", object.ObjectName(), err))
+		return nil, a.storeless(ctx, ref.Tier, fmt.Errorf("read %s: %w", object.ObjectName(), err))
 	}
 	return reader, nil
 }
 
-func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress progress.Progress) error {
+func (a artifacts) RemovePrefix(ctx context.Context, tier environment.Tier, prefix string, progress progress.Progress) error {
 	if prefix == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"an empty prefix names every artifact this project keeps")
 	}
-	bucket, err := a.bucket(ctx, class)
+	bucket, err := a.bucket(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix st
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
-	ensureProgress(progress).Say("Removed the " + string(class) + " artifacts under " + prefix + " from bucket " + bucket.BucketName())
+	ensureProgress(progress).Say("Removed the " + string(tier) + " artifacts under " + prefix + " from bucket " + bucket.BucketName())
 	return nil
 }
 
@@ -154,12 +154,12 @@ func absent(err error) bool {
 	return errors.As(err, &answered) && answered.Code == http.StatusNotFound
 }
 
-func (a artifacts) storeless(ctx context.Context, class edge.Class, err error) error {
+func (a artifacts) storeless(ctx context.Context, tier environment.Tier, err error) error {
 	names, named := a.p.Names(ctx)
 	if named == nil && (errors.Is(err, storage.ErrBucketNotExist) || absent(err)) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s bucket, so it has no %s artifact store yet.\nRun `%s` to create it, then try again",
-			names.Bucket(class), class, provider.BootstrapCommand(class))
+			names.Bucket(tier), tier, provider.BootstrapCommand(tier))
 	}
 	return err
 }

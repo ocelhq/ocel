@@ -16,6 +16,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
@@ -35,36 +36,36 @@ const (
 	reasonBucketEmptied = "every cached object in it, emptied one page at a time first"
 )
 
-func (p *cloudflare) planBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+func (p *cloudflare) planBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return nil, err
 	}
-	state, err := p.readState(ctx, accountID, class)
+	state, err := p.readState(ctx, accountID, tier)
 	if err != nil {
 		return nil, err
 	}
 	return state.changes(), nil
 }
 
-func (p *cloudflare) planRemoveBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+func (p *cloudflare) planRemoveBootstrap(ctx context.Context, tier environment.Tier) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return nil, err
 	}
-	state, err := p.readState(ctx, accountID, class)
+	state, err := p.readState(ctx, accountID, tier)
 	if err != nil {
 		return nil, err
 	}
 	return state.removals(), nil
 }
 
-func (p *cloudflare) adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
-	name, err := cacheStoreNameFor(p.namespace, class)
+func (p *cloudflare) adoption(_ context.Context, tier environment.Tier) (edge.Adoption, error) {
+	name, err := cacheStoreNameFor(p.namespace, tier)
 	if err != nil {
 		return edge.Adoption{}, err
 	}
-	workers, err := bootstrapWorkers(p.namespace, class)
+	workers, err := bootstrapWorkers(p.namespace, tier)
 	if err != nil {
 		return edge.Adoption{}, err
 	}
@@ -133,12 +134,12 @@ type bootstrapState struct {
 	workers []workerState
 }
 
-func (p *cloudflare) readState(ctx context.Context, accountID string, class edge.Class) (bootstrapState, error) {
-	store, err := p.cacheStore().read(ctx, accountID, class)
+func (p *cloudflare) readState(ctx context.Context, accountID string, tier environment.Tier) (bootstrapState, error) {
+	store, err := p.cacheStore().read(ctx, accountID, tier)
 	if err != nil {
 		return bootstrapState{}, err
 	}
-	planned, err := bootstrapWorkers(p.namespace, class)
+	planned, err := bootstrapWorkers(p.namespace, tier)
 	if err != nil {
 		return bootstrapState{}, err
 	}

@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -24,31 +24,31 @@ type Cipher struct {
 }
 
 type Keys interface {
-	Key(ctx context.Context, class edge.Class) (string, error)
+	Key(ctx context.Context, tier environment.Tier) (string, error)
 }
 
 type Key string
 
-func (k Key) Key(context.Context, edge.Class) (string, error) { return string(k), nil }
+func (k Key) Key(context.Context, environment.Tier) (string, error) { return string(k), nil }
 
 func (s Cipher) key(ctx context.Context, at records.SealScope) (string, error) {
-	if at.Class == "" {
+	if at.Tier == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"a value names no class, and this account seals each class's values under the key its own bootstrap made")
+			"a value names no tier, and this account seals each tier's values under the key its own bootstrap made")
 	}
 	if s.Keys == nil {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account has a key to seal a %s value under.\nRun `%s`, then try again",
-			at.Class, provider.BootstrapVarsKeyCommand(at.Class))
+			at.Tier, provider.BootstrapVarsKeyCommand(at.Tier))
 	}
-	key, err := s.Keys.Key(ctx, at.Class)
+	key, err := s.Keys.Key(ctx, at.Tier)
 	if err != nil {
 		return "", err
 	}
 	if key == "" {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the %s bootstrap has no key to seal a value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
-			at.Class, provider.BootstrapVarsKeyCommand(at.Class))
+			at.Tier, provider.BootstrapVarsKeyCommand(at.Tier))
 	}
 	return key, nil
 }
@@ -96,7 +96,7 @@ func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) (
 func encryptionContext(at records.SealScope) (map[string]string, error) {
 	bound := map[string]string{
 		"project":     at.Project,
-		"class":       string(at.Class),
+		"class":       string(at.Tier),
 		"environment": at.Env,
 		"folder":      at.Folder,
 		"key":         at.Name,

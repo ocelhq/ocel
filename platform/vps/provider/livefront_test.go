@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -233,9 +234,9 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
-			t.Fatalf("Apply(%s) behind %s = %v", class, front, err)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
+			t.Fatalf("Apply(%s) behind %s = %v", tier, front, err)
 		}
 	}
 	if state := vm.state(t, caddy.Container); state != "gone" {
@@ -251,7 +252,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
 	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
-		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
+		Slug: frontedSlug, Tier: environment.TierProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
 	}
@@ -260,7 +261,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 	if err != nil {
 		t.Fatal(err)
 	}
-	stack, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Class: edge.ClassProduction, Slug: frontedSlug}, edge.StackState{})
+	stack, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Tier: environment.TierProduction, Slug: frontedSlug}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
@@ -304,7 +305,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		meanwhile(vm)
 	}
 
-	checks, err := d.CheckHost(ctx, provider.HostCheckRequest{Class: edge.ClassProduction})
+	checks, err := d.CheckHost(ctx, provider.HostCheckRequest{Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}
@@ -318,9 +319,9 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		t.Errorf("Destroy() = %v", err)
 	}
 	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
-	for _, class := range []edge.Class{edge.ClassPreview, edge.ClassProduction} {
-		if err := bootstrap.Remove(ctx, class, nil); err != nil {
-			t.Fatalf("Remove(%s) behind %s = %v", class, front, err)
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		if err := bootstrap.Remove(ctx, tier, nil); err != nil {
+			t.Fatalf("Remove(%s) behind %s = %v", tier, front, err)
 		}
 	}
 	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
@@ -375,7 +376,7 @@ func servesAPreviewBehind(t *testing.T, vm machine, d *vps.Provider, opened edge
 	}); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard(%s) behind %s = %v", frontedPreview, front, err)
 	}
-	previews, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Class: edge.ClassPreview, Slug: frontedSlug},
+	previews, err := opened.Reconcile(ctx, edge.StackSpec{Version: "test", Tier: environment.TierPreview, Slug: frontedSlug},
 		edge.StackState{GlobalPreview: frontedPreview})
 	if err != nil {
 		t.Fatalf("Reconcile(preview): %v", err)

@@ -9,7 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -39,27 +39,27 @@ type FixedBackend Backend
 
 func (s FixedBackend) Read() (Backend, error) { return Backend(s), nil }
 
-func (h *Service) values(tier environmentv1.Tier) (envvars.Store, edge.Class, error) {
+func (h *Service) values(requested environmentv1.Tier) (envvars.Store, environment.Tier, error) {
 	backend, err := h.Source.Read()
 	if err != nil {
 		return envvars.Store{}, "", err
 	}
-	class := edge.ClassProduction
-	if tier == environmentv1.Tier_TIER_PREVIEW {
-		class = edge.ClassPreview
+	tier := environment.TierProduction
+	if requested == environmentv1.Tier_TIER_PREVIEW {
+		tier = environment.TierPreview
 	}
-	return envvars.Store{Records: backend.Records, Cipher: backend.Cipher}, class, nil
+	return envvars.Store{Records: backend.Records, Cipher: backend.Cipher}, tier, nil
 }
 
-func (h *Service) scoped(tier environmentv1.Tier, slug string) (envvars.Store, envvars.Scope, error) {
-	store, class, err := h.values(tier)
+func (h *Service) scoped(requested environmentv1.Tier, slug string) (envvars.Store, envvars.Scope, error) {
+	store, tier, err := h.values(requested)
 	if err != nil {
 		return envvars.Store{}, envvars.Scope{}, err
 	}
 	if err := envvars.ValidateProject(slug); err != nil {
 		return envvars.Store{}, envvars.Scope{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return store, envvars.Scope{Project: slug, Class: class}, nil
+	return store, envvars.Scope{Project: slug, Tier: tier}, nil
 }
 
 func (h *Service) addressable(ctx context.Context, tier environmentv1.Tier, at *envvarsv1.Coordinate) error {
@@ -92,7 +92,7 @@ func (h *Service) namedEnvironments(ctx context.Context, slug string) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	stacks, err := stackrecords.StackNames(ctx, backend.Records, edge.ClassPreview, slug)
+	stacks, err := stackrecords.StackNames(ctx, backend.Records, environment.TierPreview, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

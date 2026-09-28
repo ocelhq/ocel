@@ -37,7 +37,7 @@ type stackRefs struct {
 
 type featureInputs struct {
 	ns             Namespace
-	class          string
+	tier           string
 	artifactBucket string
 	code           stackPayloads
 	refs           stackRefs
@@ -52,7 +52,7 @@ type featureStack struct {
 
 type stepDeps struct {
 	ns       Namespace
-	class    string
+	tier     string
 	ssm      SSMAPI
 	iam      IAMAPI
 	progress progress.Progress
@@ -100,8 +100,8 @@ func (f feature) edgeKind() (edge.Kind, bool) {
 	return "", false
 }
 
-func (f feature) stackName(ns Namespace, class string) string {
-	return ns.featureStackName(f.name, class)
+func (f feature) stackName(ns Namespace, tier string) string {
+	return ns.featureStackName(f.name, tier)
 }
 
 var featureRegistry = []feature{

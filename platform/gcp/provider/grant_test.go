@@ -46,7 +46,7 @@ func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {
 
 	server := &policyServer{refusals: 1}
 	if err := (bootstrap{clients: server.open(t)}).grantRunAs(context.Background(), "ocel-production"); err != nil {
-		t.Fatalf("grantRunAs() against a policy that changed once under it = %v, want the grant to land: another run bootstrapping the sibling class writes this same policy", err)
+		t.Fatalf("grantRunAs() against a policy that changed once under it = %v, want the grant to land: another run bootstrapping the sibling tier writes this same policy", err)
 	}
 	if got := server.writes.Load(); got != 2 {
 		t.Errorf("the grant wrote the policy %d times, want 2: a 409 says the read the write was built on is stale", got)

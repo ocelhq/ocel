@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -63,7 +64,7 @@ func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", direct.Kind, err)
 	}
-	stack, err := front.Open(edge.StackState{Slug: "shop", Class: edge.ClassProduction})
+	stack, err := front.Open(edge.StackState{Slug: "shop", Tier: environment.TierProduction})
 	if err != nil {
 		t.Fatal(err)
 	}

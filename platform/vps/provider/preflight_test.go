@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -60,7 +60,7 @@ func healthyBox() []scriptedAnswer {
 	}
 }
 
-const builtInRecord = `{"proxy":null,"project":"shop","class":"production"}`
+const builtInRecord = `{"proxy":null,"project":"shop","tier":"production"}`
 
 func boxSaying(overrides map[string]answer) *scripted {
 	script := healthyBox()
@@ -141,9 +141,9 @@ func preflighting(machine *scripted) error {
 	}
 	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
-			Slug:  "shop",
-			Class: edge.ClassProduction,
-			Apps:  []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
+			Slug: "shop",
+			Tier: environment.TierProduction,
+			Apps: []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 	})
 }

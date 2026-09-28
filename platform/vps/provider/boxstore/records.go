@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -32,42 +32,42 @@ const (
 )
 
 type RecordTransport interface {
-	HasStore(ctx context.Context, class edge.Class) (bool, error)
+	HasStore(ctx context.Context, tier environment.Tier) (bool, error)
 
-	Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error)
+	Records(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error)
 }
 
 type Records struct{ over RecordTransport }
 
 func NewRecords(over RecordTransport) *Records { return &Records{over: over} }
 
-func (r *Records) tier(ctx context.Context, name records.Name) (edge.Class, string, bool, error) {
-	class, encoded, err := live.Located(name)
+func (r *Records) tier(ctx context.Context, name records.Name) (environment.Tier, string, bool, error) {
+	tier, encoded, err := live.Located(name)
 	if err != nil {
 		return "", "", false, err
 	}
-	provisioned, err := r.over.HasStore(ctx, class)
+	provisioned, err := r.over.HasStore(ctx, tier)
 	if err != nil {
 		return "", "", false, err
 	}
-	return class, encoded, provisioned, nil
+	return tier, encoded, provisioned, nil
 }
 
-func unbootstrapped(class edge.Class) error {
+func unbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this host has no ocel bootstrap\nRun `%s`",
-		provider.BootstrapCommand(class))
+		provider.BootstrapCommand(tier))
 }
 
 func (r *Records) Read(ctx context.Context, name records.Name) (records.Record, error) {
-	class, encoded, provisioned, err := r.tier(ctx, name)
+	tier, encoded, provisioned, err := r.tier(ctx, name)
 	if err != nil {
 		return records.Record{}, err
 	}
 	if !provisioned {
 		return records.Record{}, records.ErrNotFound
 	}
-	rendered, err := r.helper(ctx, class, nil, "read", encoded)
+	rendered, err := r.helper(ctx, tier, nil, "read", encoded)
 	if err != nil {
 		return records.Record{}, err
 	}
@@ -79,14 +79,14 @@ func (r *Records) Read(ctx context.Context, name records.Name) (records.Record, 
 }
 
 func (r *Records) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	class, encoded, provisioned, err := r.tier(ctx, record.Name)
+	tier, encoded, provisioned, err := r.tier(ctx, record.Name)
 	if err != nil {
 		return "", err
 	}
 	if !provisioned {
-		return "", unbootstrapped(class)
+		return "", unbootstrapped(tier)
 	}
-	rendered, err := r.helper(ctx, class, bytes.NewReader(body(record)), "write", encoded, string(record.Revision))
+	rendered, err := r.helper(ctx, tier, bytes.NewReader(body(record)), "write", encoded, string(record.Revision))
 	if err != nil {
 		return "", err
 	}
@@ -94,7 +94,7 @@ func (r *Records) Write(ctx context.Context, record records.Record) (records.Rev
 }
 
 func (r *Records) WritePair(ctx context.Context, first, second records.Record) error {
-	class, one, provisioned, err := r.tier(ctx, first.Name)
+	tier, one, provisioned, err := r.tier(ctx, first.Name)
 	if err != nil {
 		return err
 	}
@@ -102,16 +102,16 @@ func (r *Records) WritePair(ctx context.Context, first, second records.Record) e
 	if err != nil {
 		return err
 	}
-	if beside != class {
+	if beside != tier {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s and %s belong to different classes",
+			"%s and %s belong to different tiers",
 			first.Name, second.Name)
 	}
 	if !provisioned {
-		return unbootstrapped(class)
+		return unbootstrapped(tier)
 	}
 	fed := append(body(first), body(second)...)
-	rendered, err := r.helper(ctx, class, bytes.NewReader(fed), "pair", one, string(first.Revision), two, string(second.Revision))
+	rendered, err := r.helper(ctx, tier, bytes.NewReader(fed), "pair", one, string(first.Revision), two, string(second.Revision))
 	if err != nil {
 		return err
 	}
@@ -128,14 +128,14 @@ func (r *Records) WritePair(ctx context.Context, first, second records.Record) e
 }
 
 func (r *Records) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
-	class, encoded, provisioned, err := r.tier(ctx, name)
+	tier, encoded, provisioned, err := r.tier(ctx, name)
 	if err != nil {
 		return err
 	}
 	if !provisioned {
 		return records.ErrNotFound
 	}
-	rendered, err := r.helper(ctx, class, nil, "remove", encoded, string(expected))
+	rendered, err := r.helper(ctx, tier, nil, "remove", encoded, string(expected))
 	if err != nil {
 		return err
 	}
@@ -147,14 +147,14 @@ func (r *Records) Remove(ctx context.Context, name records.Name, expected record
 }
 
 func (r *Records) List(ctx context.Context, under records.Name) ([]records.Record, error) {
-	class, encoded, provisioned, err := r.tier(ctx, under)
+	tier, encoded, provisioned, err := r.tier(ctx, under)
 	if err != nil {
 		return nil, err
 	}
 	if !provisioned {
 		return nil, nil
 	}
-	rendered, err := r.helper(ctx, class, nil, "list", encoded)
+	rendered, err := r.helper(ctx, tier, nil, "list", encoded)
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +181,8 @@ func (r *Records) List(ctx context.Context, under records.Name) ([]records.Recor
 	return found, nil
 }
 
-func (r *Records) helper(ctx context.Context, class edge.Class, stdin io.Reader, args ...string) (string, error) {
-	return r.over.Records(ctx, class, stdin, args...)
+func (r *Records) helper(ctx context.Context, tier environment.Tier, stdin io.Reader, args ...string) (string, error) {
+	return r.over.Records(ctx, tier, stdin, args...)
 }
 
 func parseRevision(rendered string) (records.Revision, error) {

@@ -44,8 +44,8 @@ func TestDeployResult(t *testing.T) {
 		if got.Slug != "test-app" {
 			t.Errorf("slug = %q, want the resolved config's", got.Slug)
 		}
-		if got.Environment.Class != "production" {
-			t.Errorf("environment.class = %q, want %q", got.Environment.Class, "production")
+		if got.Environment.Tier != "production" {
+			t.Errorf("environment.tier = %q, want %q", got.Environment.Tier, "production")
 		}
 		if got.Provider.Name != "aws" || got.Provider.Region != "eu-west-2" {
 			t.Errorf("provider = %+v, want the config's provider and region", got.Provider)
@@ -108,7 +108,7 @@ func TestDeployResult(t *testing.T) {
 		}
 
 		got := readDeployResult(t, root)
-		if got.Environment.Class != "preview" || got.Environment.Identity != "e2e-42" {
+		if got.Environment.Tier != "preview" || got.Environment.Identity != "e2e-42" {
 			t.Errorf("environment = %+v, want the named preview", got.Environment)
 		}
 		if got.PromotionID != clitest.FakePromotionID {

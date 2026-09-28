@@ -377,7 +377,7 @@ func (h *Host) currentTable(ctx context.Context) (routingPair, error) {
 	}
 	if pair.table == nil {
 		return routingPair{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s is missing on %s\nRun `ocel bootstrap` for this box's class", live.RoutingTable, h.named())
+			"%s is missing on %s\nRun `ocel bootstrap` for this box's tier", live.RoutingTable, h.named())
 	}
 	return pair, nil
 }
@@ -478,7 +478,7 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 			seeded += " or " + ProxyConfig
 		}
 		return "", nil, refusal.Refuse(refusal.CodeNotReady,
-			"%s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's class",
+			"%s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's tier",
 			seeded, h.named())
 	default:
 		return "", nil, unelevated(refused, h.refuse("write "+routingFiles(file), result, elevation))

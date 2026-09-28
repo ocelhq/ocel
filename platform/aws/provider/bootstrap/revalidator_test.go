@@ -104,18 +104,18 @@ func parseRevalidatorTemplate(t *testing.T, template string) parsedRevalidator {
 
 func revalidatorTemplates() []struct {
 	name         string
-	class        string
+	tier         string
 	template     string
 	edgeTemplate string
 } {
 	return []struct {
 		name         string
-		class        string
+		tier         string
 		template     string
 		edgeTemplate string
 	}{
-		{"production", ClassProduction, featureTemplate(FeatureISR, ClassProduction), featureTemplate(FeatureCloudflareEdge, ClassProduction)},
-		{"preview", ClassPreview, featureTemplate(FeatureISR, ClassPreview), featureTemplate(FeatureCloudflareEdge, ClassPreview)},
+		{"production", TierProduction, featureTemplate(FeatureISR, TierProduction), featureTemplate(FeatureCloudflareEdge, TierProduction)},
+		{"preview", TierPreview, featureTemplate(FeatureISR, TierPreview), featureTemplate(FeatureCloudflareEdge, TierPreview)},
 	}
 }
 
@@ -124,7 +124,7 @@ func TestRevalidateQueue(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseRevalidatorTemplate(t, tc.template)
-				wantQueue, wantDLQ := defaultNamespace.revalidateQueueNames(tc.class)
+				wantQueue, wantDLQ := defaultNamespace.revalidateQueueNames(tc.tier)
 
 				q, ok := tmpl.Resources["RevalidateQueue"]
 				if !ok {
@@ -343,8 +343,8 @@ func TestRevalidator(t *testing.T) {
 					if got := equals["aws:ResourceTag/ocel:component"]; got != "function" {
 						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:component': 'function' — anything looser reaches the bucket listeners too", got)
 					}
-					if got := equals["aws:ResourceTag/ocel:env-class"]; got != tc.class {
-						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:env-class': %q — the %s revalidator must not render through the other class's functions", got, tc.class, tc.class)
+					if got := equals["aws:ResourceTag/ocel:env-tier"]; got != tc.tier {
+						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:env-tier': %q — the %s revalidator must not render through the other tier's functions", got, tc.tier, tc.tier)
 					}
 					return
 				}
@@ -449,17 +449,17 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 func TestRunRevalidator(t *testing.T) {
 	t.Run("this build bootstraps a consumer", func(t *testing.T) {
 		for _, tc := range []struct {
-			class     string
+			tier      string
 			stackName string
 		}{
-			{ClassProduction, isrStack(ClassProduction)},
-			{ClassPreview, isrStack(ClassPreview)},
+			{TierProduction, isrStack(TierProduction)},
+			{TierPreview, isrStack(TierPreview)},
 		} {
-			t.Run(tc.class, func(t *testing.T) {
+			t.Run(tc.tier, func(t *testing.T) {
 				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, tc.class, everything(), nil); err != nil {
+				if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, tc.tier, everything(), nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				template := stacks.template(tc.stackName)

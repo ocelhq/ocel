@@ -8,8 +8,8 @@ import (
 var (
 	defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
 
-	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.ClassProduction)
-	edgeUserName, _  = defaultNamespace.EdgeUserNameFor(bootstrap.ClassProduction)
+	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.TierProduction)
+	edgeUserName, _  = defaultNamespace.EdgeUserNameFor(bootstrap.TierProduction)
 
 	passphraseParam = defaultNamespace.PassphraseParamName()
 )

@@ -10,6 +10,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -25,7 +26,7 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, p.ns, string(edge.ClassPreview), bootstrap.FeatureAPIGatewayEdge)
+	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, p.ns, string(environment.TierPreview), bootstrap.FeatureAPIGatewayEdge)
 	if err != nil {
 		return "", err
 	}

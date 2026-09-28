@@ -16,7 +16,7 @@ import (
 )
 
 func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription) provider.BootstrapDescription {
-	coreStack, err := ns.StackNameFor(string(described.Class))
+	coreStack, err := ns.StackNameFor(string(described.Tier))
 	if err != nil {
 		return described
 	}
@@ -25,18 +25,18 @@ func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription
 		if !ok {
 			return coreStack
 		}
-		return f.stackName(ns, string(described.Class))
+		return f.stackName(ns, string(described.Tier))
 	})
 }
 
 const planFanOut = 4
 
 func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request, groups []provider.ChangeGroup) ([]provider.ChangeGroup, error) {
-	target, err := bootstrapFor(read.ns, read.class)
+	target, err := bootstrapFor(read.ns, read.tier)
 	if err != nil {
 		return nil, err
 	}
-	deployed, refs, class := read.Deployed, read.refs, read.class
+	deployed, refs, tier := read.Deployed, read.refs, read.tier
 	alongside := FeatureSet{}
 	for _, name := range req.Features {
 		alongside[name] = true
@@ -57,7 +57,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 	for i, group := range groups {
 		stack, ok := renderGroup(target, group.Feature, featureInputs{
 			ns:             read.ns,
-			class:          class,
+			tier:           tier,
 			artifactBucket: deployed.ArtifactBucket,
 			refs:           refs,
 			alongside:      alongside,
@@ -85,11 +85,11 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 	if !read.Deployed.Present {
 		return nil, nil
 	}
-	target, err := bootstrapFor(read.ns, read.class)
+	target, err := bootstrapFor(read.ns, read.tier)
 	if err != nil {
 		return nil, err
 	}
-	coreStack, err := read.ns.StackNameFor(read.class)
+	coreStack, err := read.ns.StackNameFor(read.tier)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 		}
 		name := coreStack
 		if feature != "" {
-			name = read.ns.FeatureStackName(feature, read.class)
+			name = read.ns.FeatureStackName(feature, read.tier)
 		}
 		group := provider.ChangeGroup{
 			Kind:    provider.StackGroupKind,
@@ -120,7 +120,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.C
 		}
 		stack, ok := renderGroup(target, feature, featureInputs{
 			ns:             read.ns,
-			class:          read.class,
+			tier:           read.tier,
 			artifactBucket: read.Deployed.ArtifactBucket,
 			refs:           read.refs,
 			alongside:      alongside,
@@ -144,7 +144,7 @@ var stranded = map[string]provider.Change{
 		Reason: "every build's static assets, prerender fallbacks and edge fetch cache",
 		Slow:   true,
 	},
-	"VarsTable": {Reason: "every variable value this class stores, and their history"},
+	"VarsTable": {Reason: "every variable value this tier stores, and their history"},
 	"VarsKey":   {Reason: "the key those values are encrypted under"},
 }
 

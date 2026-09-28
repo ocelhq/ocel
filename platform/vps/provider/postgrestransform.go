@@ -100,7 +100,7 @@ func (p *Provider) reshaped(ctx context.Context, in resources.ProvisionRequest, 
 	}
 	results, err := p.transform.Evaluate(ctx, transform.Request{
 		Provider: transformProvider,
-		EnvClass: string(in.Ref.Class),
+		EnvTier:  string(in.Ref.Tier),
 		Env:      in.Ref.Name.Env,
 		Resources: []transform.Resource{
 			{Type: kind, Name: in.Resource.Name},

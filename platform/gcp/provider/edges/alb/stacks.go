@@ -5,7 +5,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 )
@@ -13,20 +13,20 @@ import (
 type Program func(ctx *pulumi.Context, project string) error
 
 type Target struct {
-	Class edge.Class
-	Slug  string
+	Tier environment.Tier
+	Slug string
 }
 
 func (t Target) Name() string {
 	if t.Slug == "" {
-		return FrontStack(t.Class)
+		return FrontStack(t.Tier)
 	}
-	return BindingStack(t.Slug, t.Class)
+	return BindingStack(t.Slug, t.Tier)
 }
 
 func (t Target) Prefix() string {
 	if t.Slug == "" {
-		return dashed(string(Kind), "front", string(t.Class))
+		return dashed(string(Kind), "front", string(t.Tier))
 	}
 	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
 }
@@ -78,8 +78,8 @@ func frontOf(outputs map[string]string) Front {
 	}
 }
 
-func FrontStack(class edge.Class) string { return dashed(string(Kind), "front", string(class)) }
+func FrontStack(tier environment.Tier) string { return dashed(string(Kind), "front", string(tier)) }
 
-func BindingStack(slug string, class edge.Class) string {
-	return dashed(string(Kind), string(class), naming.Sanitize(slug))
+func BindingStack(slug string, tier environment.Tier) string {
+	return dashed(string(Kind), string(tier), naming.Sanitize(slug))
 }

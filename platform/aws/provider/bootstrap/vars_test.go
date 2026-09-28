@@ -76,31 +76,31 @@ func parseVarsTemplate(t *testing.T, template string) varsTemplate {
 
 func varsBootstraps() []struct {
 	name     string
-	class    string
+	tier     string
 	template string
 } {
 	return []struct {
 		name     string
-		class    string
+		tier     string
 		template string
 	}{
-		{"production", ClassProduction, coreStackTemplate(defaultNamespace, ClassProduction, "")},
-		{"preview", ClassPreview, coreStackTemplate(defaultNamespace, ClassPreview, "")},
+		{"production", TierProduction, coreStackTemplate(defaultNamespace, TierProduction, "")},
+		{"preview", TierPreview, coreStackTemplate(defaultNamespace, TierPreview, "")},
 	}
 }
 
 func varsKeyBootstraps() []struct {
 	name     string
-	class    string
+	tier     string
 	template string
 } {
 	return []struct {
 		name     string
-		class    string
+		tier     string
 		template string
 	}{
-		{"production", ClassProduction, featureTemplate(provider.FeatureVarsKey, ClassProduction)},
-		{"preview", ClassPreview, featureTemplate(provider.FeatureVarsKey, ClassPreview)},
+		{"production", TierProduction, featureTemplate(provider.FeatureVarsKey, TierProduction)},
+		{"preview", TierPreview, featureTemplate(provider.FeatureVarsKey, TierPreview)},
 	}
 }
 
@@ -206,18 +206,18 @@ func TestVarsKey(t *testing.T) {
 			if alias.Type != "AWS::KMS::Alias" {
 				t.Errorf("VarsKeyAlias Type = %q, want AWS::KMS::Alias", alias.Type)
 			}
-			if got, want := alias.Properties.AliasName, defaultNamespace.varsKeyAliasFor(tc.class); got != want {
+			if got, want := alias.Properties.AliasName, defaultNamespace.varsKeyAliasFor(tc.tier); got != want {
 				t.Errorf("AliasName = %q, want %q", got, want)
 			}
-			aliases[tc.class] = alias.Properties.AliasName
+			aliases[tc.tier] = alias.Properties.AliasName
 
 			if _, ok := tmpl.Outputs[outputVarsKeyARN]; !ok {
 				t.Fatalf("template is missing the %s output", outputVarsKeyARN)
 			}
 		})
 	}
-	if aliases[ClassProduction] == aliases[ClassPreview] {
-		t.Errorf("both classes alias the key %q; each class must own its own key", aliases[ClassProduction])
+	if aliases[TierProduction] == aliases[TierPreview] {
+		t.Errorf("both tiers alias the key %q; each tier must own its own key", aliases[TierProduction])
 	}
 }
 
@@ -261,7 +261,7 @@ func TestVarsDescriptions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 
-			key := parseVarsTemplate(t, featureTemplate(provider.FeatureVarsKey, tc.class))
+			key := parseVarsTemplate(t, featureTemplate(provider.FeatureVarsKey, tc.tier))
 			described := map[string]string{
 				"VarsKey":        key.Resources["VarsKey"].Properties.Description,
 				"VarsKeyAlias":   key.Resources["VarsKeyAlias"].Metadata.Description,
@@ -283,8 +283,8 @@ func TestVarsDescriptions(t *testing.T) {
 			}
 
 			for _, name := range []string{"VarsKey", "VarsKeyAlias", "VarsTable"} {
-				if !strings.Contains(described[name], tc.class) {
-					t.Errorf("%s description = %q, want it to name the %s class it belongs to", name, described[name], tc.class)
+				if !strings.Contains(described[name], tc.tier) {
+					t.Errorf("%s description = %q, want it to name the %s tier it belongs to", name, described[name], tc.tier)
 				}
 			}
 			if !strings.Contains(described["VarsKey"], "again") {
@@ -319,11 +319,11 @@ func TestRunVars(t *testing.T) {
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := Request{Features: []string{provider.FeatureVarsKey}}
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(provider.FeatureVarsKey, ClassProduction)))
+		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(provider.FeatureVarsKey, TierProduction)))
 		for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the vars-key stack does not declare %s", name)
@@ -338,11 +338,11 @@ func TestRunVars(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, Request{}, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, TierProduction, Request{}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		stack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, ClassProduction)
+		stack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, TierProduction)
 		if slices.Contains(stacks.stacks(), stack) {
 			t.Errorf("%s exists after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}

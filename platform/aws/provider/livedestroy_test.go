@@ -7,26 +7,26 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
 func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T) {
 	a := live(t)
-	class := edge.ClassProduction
-	boot := a.emptied(t, class)
+	tier := environment.TierProduction
+	boot := a.emptied(t, tier)
 	ctx := context.Background()
 
-	if err := boot.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
+	if err := boot.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(tier))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	removal, err := boot.PlanRemove(ctx, class)
+	removal, err := boot.PlanRemove(ctx, tier)
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
@@ -45,17 +45,17 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	dropping := groupNamed(t, removal, "aws/"+bootstrap.ParamGroupName)
 	passphrase := changeFor(dropping, passphraseParam)
 	if passphrase.Action != provider.ActionDelete {
-		t.Errorf("PlanRemove() plans the passphrase as %q, want the last class on this account to take it", passphrase.Action)
+		t.Errorf("PlanRemove() plans the passphrase as %q, want the last tier on this account to take it", passphrase.Action)
 	}
 	if passphrase.Reason == "" {
 		t.Error("PlanRemove() takes the passphrase with no reason, and every Pulumi state in this account is encrypted under it")
 	}
 
-	if err := boot.Remove(ctx, class, nil); err != nil {
+	if err := boot.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	gone, err := boot.Describe(ctx, class)
+	gone, err := boot.Describe(ctx, tier)
 	if err != nil {
 		t.Fatalf("Describe() after Remove() = %v", err)
 	}
@@ -75,7 +75,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 			t.Errorf("%s still answers after Remove()", table)
 		}
 	}
-	origin, err := defaultNamespace.OriginSecretParamFor(string(class))
+	origin, err := defaultNamespace.OriginSecretParamFor(string(tier))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,11 +85,11 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 		}
 	}
 
-	if err := boot.Remove(ctx, class, nil); err != nil {
+	if err := boot.Remove(ctx, tier, nil); err != nil {
 		t.Errorf("a second Remove() = %v, want an already-forgotten account to be a no-op", err)
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter})
 	if err != nil {
 		t.Fatalf("Plan() after Remove() = %v", err)
 	}
@@ -98,15 +98,15 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	}
 }
 
-func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesInPlace(t *testing.T) {
+func TestLiveDestroyingOneTierLeavesTheSiblingAndThePassphraseItSharesInPlace(t *testing.T) {
 	a := live(t)
-	production, preview := edge.ClassProduction, edge.ClassPreview
+	production, preview := environment.TierProduction, environment.TierPreview
 	boot := a.emptied(t, production, preview)
 	ctx := context.Background()
 
-	for _, class := range []edge.Class{production, preview} {
-		if err := boot.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
-			t.Fatalf("Apply(%s) = %v", class, err)
+	for _, tier := range []environment.Tier{production, preview} {
+		if err := boot.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}, nil); err != nil {
+			t.Fatalf("Apply(%s) = %v", tier, err)
 		}
 	}
 
@@ -136,14 +136,14 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesInPlace(t
 		t.Fatalf("Describe(%s) after destroying its sibling = %v", preview, err)
 	}
 	if stack := stackNamed(t, remaining, previewStackName); !remaining.Present || !stack.DigestCurrent {
-		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a class untouched by a destroy beside it", preview, stack)
+		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a tier untouched by a destroy beside it", preview, stack)
 	}
 	dropped, err := boot.Describe(ctx, production)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if dropped.Present {
-		t.Errorf("Describe(%s) still claims a bootstrap after the class was destroyed", production)
+		t.Errorf("Describe(%s) still claims a bootstrap after the tier was destroyed", production)
 	}
 
 	last, err := boot.PlanRemove(ctx, preview)
@@ -152,12 +152,12 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesInPlace(t
 	}
 	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), passphraseParam)
 	if alone.Action != provider.ActionDelete {
-		t.Errorf("destroying the last class plans the passphrase as %q, and a secret nothing decrypts with is one nobody rotates", alone.Action)
+		t.Errorf("destroying the last tier plans the passphrase as %q, and a secret nothing decrypts with is one nobody rotates", alone.Action)
 	}
 	if err := boot.Remove(ctx, preview, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
 	if a.paramExists(t, passphraseParam) {
-		t.Error("the passphrase still exists after the last class on this account went")
+		t.Error("the passphrase still exists after the last tier on this account went")
 	}
 }

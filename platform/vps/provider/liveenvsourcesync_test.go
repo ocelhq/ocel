@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -97,14 +97,14 @@ func copied(ctx context.Context, store envvars.Store, scope envvars.Scope, want 
 	}
 }
 
-func TestLiveTheEnvSourceSyncKeepsAClassesValuesInStepWithItsEnvSourceAndGoesWithTheClass(t *testing.T) {
+func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithTheTier(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
 	dirties(t, vm)
-	class := edge.ClassProduction
-	p := bootstrapped(t, vm, class)
+	tier := environment.TierProduction
+	p := bootstrapped(t, vm, tier)
 	ctx := context.Background()
-	service := host.EnvSourceSyncService(class)
+	service := host.EnvSourceSyncService(tier)
 
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active "+service+" || true")); active != "active" {
 		t.Fatalf("%s is %q after a bootstrap, want the sync running before any deploy registers an env source", service, active)
@@ -112,7 +112,7 @@ func TestLiveTheEnvSourceSyncKeepsAClassesValuesInStepWithItsEnvSourceAndGoesWit
 
 	vm.startsFakeInfisical(t)
 	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
-	scope := envvars.Scope{Project: "shop", Class: class}
+	scope := envvars.Scope{Project: "shop", Tier: tier}
 	for key, value := range map[string]string{"INFISICAL_CLIENT_ID": "id", "INFISICAL_CLIENT_SECRET": "secret"} {
 		if _, err := store.Set(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, value, nil); err != nil {
 			t.Fatalf("Set(%s) = %v", key, err)
@@ -126,7 +126,7 @@ func TestLiveTheEnvSourceSyncKeepsAClassesValuesInStepWithItsEnvSourceAndGoesWit
 			Auth: envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVariable: "INFISICAL_CLIENT_ID", ClientSecretVariable: "INFISICAL_CLIENT_SECRET"},
 		}},
 	}
-	if _, err := envsource.Register(ctx, store, class, registration); err != nil {
+	if _, err := envsource.Register(ctx, store, tier, registration); err != nil {
 		t.Fatalf("Register() = %v", err)
 	}
 	vm.ssh(t, "sudo systemctl restart "+service)
@@ -145,7 +145,7 @@ func TestLiveTheEnvSourceSyncKeepsAClassesValuesInStepWithItsEnvSourceAndGoesWit
 		t.Fatalf("DATABASE_URL still reads %q two polls after the env source changed it (%v):\n%s",
 			found.Plaintext, err, vm.ssh(t, "sudo journalctl -u "+service+" --no-pager -n 30"))
 	}
-	status, err := envsource.StatusOf(ctx, store, class, registration)
+	status, err := envsource.StatusOf(ctx, store, tier, registration)
 	if err != nil || status.LastSuccessAt.IsZero() || status.LastError != "" {
 		t.Errorf("StatusOf() = %+v, %v, want a success the sync recorded", status, err)
 	}
@@ -154,15 +154,15 @@ func TestLiveTheEnvSourceSyncKeepsAClassesValuesInStepWithItsEnvSourceAndGoesWit
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Remove(ctx, class, nil); err != nil {
+	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	if said := strings.TrimSpace(vm.ssh(t, "systemctl cat "+service+" >/dev/null 2>&1 && echo present || echo gone")); said != "gone" {
-		t.Errorf("%s is %s after the last class went", service, said)
+		t.Errorf("%s is %s after the last tier went", service, said)
 	}
-	for _, gone := range []string{"/etc/systemd/system/ocel-envsourcesync@.service", host.LiveBinary, host.StateDir(class)} {
+	for _, gone := range []string{"/etc/systemd/system/ocel-envsourcesync@.service", host.LiveBinary, host.StateDir(tier)} {
 		if vm.exists(t, gone) {
-			t.Errorf("%s is present after the last class went", gone)
+			t.Errorf("%s is present after the last tier went", gone)
 		}
 	}
 }

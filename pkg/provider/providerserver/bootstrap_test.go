@@ -12,6 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -96,8 +97,8 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 	if want := []string{fake.FeatureCache, fake.FeatureImages}; !slices.Equal(applied[0].Features, want) {
 		t.Errorf("Apply() was asked for %v, want %v", applied[0].Features, want)
 	}
-	if applied[0].Class != edge.ClassProduction {
-		t.Errorf("Apply() ran against %s, want %s", applied[0].Class, edge.ClassProduction)
+	if applied[0].Tier != environment.TierProduction {
+		t.Errorf("Apply() ran against %s, want %s", applied[0].Tier, environment.TierProduction)
 	}
 	if !applied[0].RefuseReplacements {
 		t.Error("Apply() was allowed to replace resources where nothing accepted replacements")
@@ -151,7 +152,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		AutoHeal: &healing,
 	})
 
-	recorded, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
+	recorded, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(environment.TierProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
@@ -160,7 +161,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Bytes, err)
 	}
 
-	written, err := stackrecords.WrittenSchema(ctx, vendor.Records(), edge.ClassProduction)
+	written, err := stackrecords.WrittenSchema(ctx, vendor.Records(), environment.TierProduction)
 	if err != nil || written != stackrecords.SchemaVersion {
 		t.Fatalf("WrittenSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, stackrecords.SchemaVersion)
 	}
@@ -276,7 +277,7 @@ func recordProject(t *testing.T, vendor *fake.Provider, slug string, features ..
 		t.Fatal(err)
 	}
 	if _, err := vendor.Records().Write(context.Background(), records.Record{
-		Name:  stackrecords.ProjectRecord(edge.ClassProduction, slug),
+		Name:  stackrecords.ProjectRecord(environment.TierProduction, slug),
 		Bytes: body,
 	}); err != nil {
 		t.Fatal(err)
@@ -406,7 +407,7 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	t.Parallel()
 
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 
 	req := &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
@@ -454,7 +455,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 
 	ctx := context.Background()
 	client, vendor := contractServed(t, "1.2.3")
-	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache)
 
 	scope := &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION}
 	consented, err := client.PlanRemoveBootstrap(ctx, scope)
@@ -462,7 +463,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
 
-	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, vendor, environment.TierProduction, fake.FeatureCache, fake.FeatureImages)
 
 	scope.Consented = consented
 	stream, err := client.RemoveBootstrap(ctx, scope)
@@ -491,8 +492,8 @@ func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	if plan == nil {
 		t.Fatal("Bootstrap() streamed no plan, and the only thing consented to is the plan")
 	}
-	if plan.GetSubject() != string(edge.ClassProduction) {
-		t.Errorf("plan subject = %q, want the class it applies to", plan.GetSubject())
+	if plan.GetSubject() != string(environment.TierProduction) {
+		t.Errorf("plan subject = %q, want the tier it applies to", plan.GetSubject())
 	}
 	if plan.GetEdgeKind() != string(fake.KindRelay) {
 		t.Errorf("plan was drawn against the %q edge, want the default the apply bootstraps", plan.GetEdgeKind())
@@ -640,7 +641,7 @@ func (e documentingEdge) Hooks() edge.Hooks {
 	return hooks
 }
 
-func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
+func TestPlanRemoveBootstrapNamesTheTierAndWhatGoes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -655,8 +656,8 @@ func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
-	if plan.GetSubject() != string(edge.ClassPreview) {
-		t.Errorf("subject = %q, want the class the CLI asks the user to type back", plan.GetSubject())
+	if plan.GetSubject() != string(environment.TierPreview) {
+		t.Errorf("subject = %q, want the tier the CLI asks the user to type back", plan.GetSubject())
 	}
 	if len(plan.GetGroups()) != 3 {
 		t.Fatalf("PlanRemoveBootstrap() planned %d items, want the feature stack, the core and the edge", len(plan.GetGroups()))
@@ -731,7 +732,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	if planned.GetBootstrap().GetPresent() {
 		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
 	}
-	if _, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction)); !errors.Is(err, records.ErrNotFound) {
+	if _, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(environment.TierProduction)); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
 	}
 }

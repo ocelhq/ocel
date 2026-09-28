@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -61,61 +61,61 @@ func (i item) phrase() string { return kindNouns[i.Kind] + " " + i.Name }
 
 func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
 
-func stackItems(names Names, class edge.Class, emulated bool) []item {
+func stackItems(names Names, tier environment.Tier, emulated bool) []item {
 	items := []item{
 		{
 			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
-			Note: "every record this project stores, and both classes keep theirs in it",
+			Note: "every record this project stores, and both tiers keep theirs in it",
 		},
 		{
-			Kind: KindBucket, Name: names.Bucket(class),
-			Note: "the artifacts this class deploys, and the stamp saying what this bootstrap is",
+			Kind: KindBucket, Name: names.Bucket(tier),
+			Note: "the artifacts this tier deploys, and the stamp saying what this bootstrap is",
 		},
 		{
-			Kind: KindBucket, Name: names.StateBucket(class), Versioned: true,
-			Note: "the state every stack in this class writes, versioned so a bad write is recoverable",
+			Kind: KindBucket, Name: names.StateBucket(tier), Versioned: true,
+			Note: "the state every stack in this tier writes, versioned so a bad write is recoverable",
 		},
 		{
 			Kind: KindKeyRing, Name: names.KeyRing(), Shared: true,
-			Note: "the ring both classes' keys hang on",
+			Note: "the ring both tiers' keys hang on",
 		},
 		{
-			Kind: KindKey, Name: string(class),
-			Note: "the key every value this class stores is sealed under",
+			Kind: KindKey, Name: string(tier),
+			Note: "the key every value this tier stores is sealed under",
 		},
 		{
-			Kind: KindServiceAccount, Name: names.WorkloadAccount(class),
-			Note: "the identity every app in this class runs as, and the one the deploy hands Cloud Run",
+			Kind: KindServiceAccount, Name: names.WorkloadAccount(tier),
+			Note: "the identity every app in this tier runs as, and the one the deploy hands Cloud Run",
 		},
 		{
-			Kind: KindRepository, Name: names.Repository(class),
-			Note: "the images this class runs, and an untagged image lives at least a week",
+			Kind: KindRepository, Name: names.Repository(tier),
+			Note: "the images this tier runs, and an untagged image lives at least a week",
 		},
 		{
-			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(class),
-			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this project's records, seals and opens under the class key, and calls the sync service alone",
+			Kind: KindServiceAccount, Name: names.EnvSourceSyncAccount(tier),
+			Note: "the identity the env source sync runs as and Cloud Scheduler calls it as: it reads and writes this project's records, seals and opens under the tier key, and calls the sync service alone",
 		},
 		{
-			Kind: KindService, Name: names.EnvSourceSync(class),
-			Note: "the env source sync: each call syncs every scheduled env source this class registers once, and it bills only while a sync runs",
+			Kind: KindService, Name: names.EnvSourceSync(tier),
+			Note: "the env source sync: each call syncs every scheduled env source this tier registers once, and it bills only while a sync runs",
 		},
 		{
-			Kind: KindSchedule, Name: names.EnvSourceSync(class),
+			Kind: KindSchedule, Name: names.EnvSourceSync(tier),
 			Note: "calls the env source sync once a minute, with no retry because the next minute is the retry",
 		},
 	}
 	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })
 }
 
-func parameterItems(names Names, class edge.Class) []item {
+func parameterItems(names Names, tier environment.Tier) []item {
 	return []item{{
-		Kind: KindSecret, Name: names.PassphraseSecret(class),
-		Note: "the passphrase this class's state is encrypted under, minted here and never written over",
+		Kind: KindSecret, Name: names.PassphraseSecret(tier),
+		Note: "the passphrase this tier's state is encrypted under, minted here and never written over",
 	}}
 }
 
-func bootstrapItems(names Names, class edge.Class, emulated bool) []item {
-	return slices.Concat(stackItems(names, class, emulated), parameterItems(names, class))
+func bootstrapItems(names Names, tier environment.Tier, emulated bool) []item {
+	return slices.Concat(stackItems(names, tier, emulated), parameterItems(names, tier))
 }
 
 func digestOf(namespace provider.Namespace, items []item) string {
@@ -127,9 +127,9 @@ func digestOf(namespace provider.Namespace, items []item) string {
 	return hex.EncodeToString(sum.Sum(nil))
 }
 
-func siblingOf(class edge.Class) edge.Class {
-	if class == edge.ClassProduction {
-		return edge.ClassPreview
+func siblingOf(tier environment.Tier) environment.Tier {
+	if tier == environment.TierProduction {
+		return environment.TierPreview
 	}
-	return edge.ClassProduction
+	return environment.TierProduction
 }

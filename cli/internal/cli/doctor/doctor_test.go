@@ -349,7 +349,7 @@ func TestDoctorReadsTheBootstrapAndNothingThatGrowsWithTheAccount(t *testing.T) 
 	}
 	got := clitest.ReadJournal(t, journal)
 	if len(got) != 2 {
-		t.Fatalf("the provider was asked %d times, want once per class: %v", len(got), got)
+		t.Fatalf("the provider was asked %d times, want once per tier: %v", len(got), got)
 	}
 	for _, line := range got {
 		if strings.Contains(line, "withDependents=true") {

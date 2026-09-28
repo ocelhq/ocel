@@ -34,9 +34,9 @@ func quoteAll(names []string) string {
 	return strings.Join(quoted, ", ")
 }
 
-func describeCoordinate(class, environment string) string {
+func describeCoordinate(tier, environment string) string {
 	if environment == "" {
-		return class
+		return tier
 	}
-	return class + "/" + environment
+	return tier + "/" + environment
 }

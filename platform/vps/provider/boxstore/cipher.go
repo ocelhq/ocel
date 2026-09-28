@@ -46,11 +46,11 @@ func (s *Cipher) through(ctx context.Context, verb string, at records.SealScope,
 }
 
 func sealArgv(verb string, at records.SealScope) ([]string, error) {
-	if at.Class == "" {
+	if at.Tier == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"%s names no class", at.Name)
+			"%s names no tier", at.Name)
 	}
-	argv := []string{SealHelper, string(at.Class), verb}
+	argv := []string{SealHelper, string(at.Tier), verb}
 	for _, named := range [][2]string{
 		{"project", at.Project},
 		{"env", at.Env},

@@ -39,7 +39,7 @@ func (r *deployRun) containerEnv(entry provider.AppEntry, values provider.AppVal
 func (r *deployRun) refuseUnsetSecret(app, key string) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"app %s declares %s as a secret and nothing is stored for it in %s: a container is handed the value the deploy resolved, so an unset secret is refused here rather than at the app's first read. Set it with `ocel env set %s <value>`",
-		app, key, describeCoordinate(string(r.spec.Class), bindingEnvironment(r.spec)), key)
+		app, key, describeCoordinate(string(r.spec.Tier), bindingEnvironment(r.spec)), key)
 }
 
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {

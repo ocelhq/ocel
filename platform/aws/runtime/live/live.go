@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -137,7 +137,7 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 		reader: envvars.EnvironmentReader{
 			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
-			Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),

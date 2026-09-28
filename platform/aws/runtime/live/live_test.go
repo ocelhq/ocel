@@ -97,7 +97,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Slug:        "shop",
 			Table:       "ocel-vars",
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
-			Class:       "preview",
+			Tier:        "preview",
 			Environment: "pr-42",
 			Bindings: []live.Binding{
 				{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"},
@@ -136,7 +136,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Slug:   "shop",
 			Table:  "ocel-vars",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
-			Class:  "production",
+			Tier:   "production",
 			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
@@ -207,7 +207,7 @@ func TestResolveLiveValues(t *testing.T) {
 	})
 
 	t.Run("a manifest naming no keys builds nothing", func(t *testing.T) {
-		root := plant(t, []byte(`{"slug":"shop","table":"ocel-vars","keyArn":"arn","class":"production","keys":[]}`))
+		root := plant(t, []byte(`{"slug":"shop","table":"ocel-vars","keyArn":"arn","tier":"production","keys":[]}`))
 		unsetAWS(t)
 
 		l, err := Resolve(context.Background(), root)
@@ -224,7 +224,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Slug:   "shop",
 			Table:  "ocel-vars",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
-			Class:  "production",
+			Tier:   "production",
 			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		})
 		if err != nil {
@@ -255,7 +255,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Slug:        "shop",
 			Table:       "ocel-vars",
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
-			Class:       "preview",
+			Tier:        "preview",
 			Environment: "pr-42",
 			Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 			Bindings:    []live.Binding{binding},

@@ -10,7 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -406,9 +406,9 @@ func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
 	}
 }
 
-func deployPreview(t *testing.T, provider *fake.Provider, environment string) {
+func deployPreview(t *testing.T, provider *fake.Provider, preview string) {
 	t.Helper()
-	name := stackrecords.StackRecord(edge.ClassPreview, slug, naming.InfraStack(environment))
+	name := stackrecords.StackRecord(environment.TierPreview, slug, naming.InfraStack(preview))
 	if _, err := provider.Records().Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")}); err != nil {
 		t.Fatalf("record a deployed preview environment: %v", err)
 	}

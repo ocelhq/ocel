@@ -26,7 +26,7 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 
 			req := everything()
 			req.AcceptReplacements = accept
-			err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil)
+			err := Run(context.Background(), apis, defaultNamespace, TierProduction, req, nil)
 			if err == nil {
 				t.Fatal("a bootstrap that would replace the core's state table was allowed through")
 			}
@@ -53,7 +53,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 
 		req := everything()
 		req.Writer = "9.9.9"
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if got := stacks.stampOf(coreStackName).WrittenBy; got != "9.9.9" {
@@ -71,7 +71,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		before := stacks.restamps
 
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if stacks.restamps != before {
@@ -84,13 +84,13 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
 	built := everything()
 	built.Writer = "1.4.0"
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, built, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, built, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	for _, sha := range []string{"dev+1111111", "dev+2222222"} {
 		rebuilt := everything()
 		rebuilt.Writer = provider.WrittenBy(sha)
-		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, TierProduction, rebuilt, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 	}
@@ -98,7 +98,7 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 
 	rebuilt := everything()
 	rebuilt.Writer = "dev+3333333"
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, rebuilt, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if stacks.restamps != before {
@@ -189,7 +189,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		err := cfn.Update(ctx, stacks, defaultNamespace.ChangeSetNameFor, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
+		err := cfn.Update(ctx, stacks, defaultNamespace.ChangeSetNameFor, isrStack(TierProduction), staleBody, nil, nil, staleTags,
 			func(string, []cfntypes.ResourceChange) error {
 				cancel()
 				return errors.New("this run stops here")
@@ -207,7 +207,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		func() {
 			defer func() { _ = recover() }()
-			_ = cfn.Update(context.Background(), stacks, defaultNamespace.ChangeSetNameFor, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
+			_ = cfn.Update(context.Background(), stacks, defaultNamespace.ChangeSetNameFor, isrStack(TierProduction), staleBody, nil, nil, staleTags,
 				func(string, []cfntypes.ResourceChange) error { panic("the run came apart") })
 		}()
 		if left := stacks.leftBehind(); len(left) != 0 {
@@ -245,11 +245,11 @@ func (deniedChangeSets) CreateChangeSet(context.Context, *cloudformation.CreateC
 
 func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	stacks.fallBehind(isrStack(ClassProduction))
+	stacks.fallBehind(isrStack(TierProduction))
 	apis.CFN = deniedChangeSets{stacks}
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
+	healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if !errors.Is(err, ErrHealNotPermitted) {
 		t.Fatalf("Heal err = %v, want ErrHealNotPermitted", err)
 	}
@@ -264,12 +264,12 @@ func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
 	waits := recordWaits(t)
 	stacks, apis := installedBootstrap(t)
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 	stacks.fallBehind(stack)
 	stacks.busy(stack, idleAttempts*4)
 	var log healLog
 
-	if _, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log); err != nil {
+	if _, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log); err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
 	if len(*waits) >= cfn.ChangeSetAttempts {
@@ -282,7 +282,7 @@ func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
 
 func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	stack := edgeStack(ClassProduction)
+	stack := edgeStack(TierProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack,
 		cfntypes.ResourceChange{
@@ -295,7 +295,7 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 	)
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
+	healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 
 func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	stack := edgeStack(ClassProduction)
+	stack := edgeStack(TierProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack, cfntypes.ResourceChange{
 		Action:            cfntypes.ChangeActionModify,
@@ -319,7 +319,7 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 	})
 	var log healLog
 
-	healed, _ := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
+	healed, _ := Heal(context.Background(), apis, defaultNamespace, TierProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, &log)
 	if healed {
 		t.Error("a heal rewrote the policy of the identity the edge signs its calls with")
 	}
@@ -330,10 +330,10 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 
 func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	stacks.fallBehind(isrStack(ClassProduction))
-	stacks.fallBehind(runtimeStack(ClassProduction))
+	stacks.fallBehind(isrStack(TierProduction))
+	stacks.fallBehind(runtimeStack(TierProduction))
 
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	planned := stacks.changeSetsPlanned()

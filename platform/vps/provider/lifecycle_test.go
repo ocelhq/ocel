@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -907,9 +908,9 @@ func lines(rendered string) []string {
 	return strings.Split(trimmed, "\n")
 }
 
-func (j journey) window(t *testing.T, class edge.Class) []string {
+func (j journey) window(t *testing.T, tier environment.Tier) []string {
 	t.Helper()
-	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(class))))
+	return lines(j.vm.sshAs(t, host.DeployUser(), "cat "+quote(host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(tier))))
 }
 
 func (j journey) container(t *testing.T) string {
@@ -954,7 +955,7 @@ func firstLineOf(rendered, fragment string) string {
 
 func (j journey) promotionOf(t *testing.T, ref string) string {
 	t.Helper()
-	promotions, err := ledger.New(j.box(t).Records(), edge.ClassProduction, lifecycleSlug).
+	promotions, err := ledger.New(j.box(t).Records(), environment.TierProduction, lifecycleSlug).
 		History(context.Background(), edge.DefaultPointer)
 	if err != nil {
 		t.Fatalf("read the promotions this box records for %s: %v", lifecycleSlug, err)
@@ -984,7 +985,7 @@ func (j journey) box(t *testing.T) *vps.Provider {
 func (j journey) claims(t *testing.T, hostname string) string {
 	t.Helper()
 	if err := j.box(t).Host().ClaimHosts(context.Background(), []host.HostClaim{{
-		Hostname: hostname, Owner: boxedge.Surface(lifecycleSlug, edge.ClassPreview), Pointer: edge.DefaultPointer,
+		Hostname: hostname, Owner: boxedge.Surface(lifecycleSlug, environment.TierPreview), Pointer: edge.DefaultPointer,
 	}}); err != nil {
 		t.Fatalf("claim %s on this box, so a release of the catch-all has a route beside it that it never touches: %v", hostname, err)
 	}
@@ -1016,7 +1017,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.resolving(t, lifecycleHostname, edge.ProbeHostname("*."+lifecyclePreviewBase),
 		lifecyclePreview+"."+lifecyclePreviewBase, "unclaimed."+lifecyclePreviewBase)
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	fresh := run.must(t, "doctor")
 	if !needsBootstrap.MatchString(fresh) {
 		t.Fatalf("`ocel doctor` on a machine nothing has written to said:\n%s", fresh)
@@ -1127,18 +1128,18 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Fatalf("%s does not read %s as the value this deploy resolved, and nothing below turns on a value the container never got", container, lifecycleSensitive)
 	}
 
-	envFile := host.EnvFile(class, container)
+	envFile := host.EnvFile(tier, container)
 	run.vm.proves(t, envFile)
 	if run.vm.exists(t, envFile) {
 		t.Errorf("%s still exists after the deploy that wrote it, and it stores in plaintext every value this deploy resolved", envFile)
 	}
-	listed := run.vm.ssh(t, "sudo ls -A "+quote(host.StateDir(class)))
+	listed := run.vm.ssh(t, "sudo ls -A "+quote(host.StateDir(tier)))
 	if !strings.Contains(listed, "records") {
-		t.Fatalf("%s lists\n%s\nand names not even the records tier a bootstrap writes, so an env file missing from that listing means nothing", host.StateDir(class), listed)
+		t.Fatalf("%s lists\n%s\nand names not even the records tier a bootstrap writes, so an env file missing from that listing means nothing", host.StateDir(tier), listed)
 	}
 	for _, left := range lines(listed) {
 		if strings.HasSuffix(strings.TrimSpace(left), ".env") {
-			t.Errorf("%s still contains %s after the deploy, and a file no deploy after this one takes back keeps every value in plaintext", host.StateDir(class), left)
+			t.Errorf("%s still contains %s after the deploy, and a file no deploy after this one takes back keeps every value in plaintext", host.StateDir(tier), left)
 		}
 	}
 	if at := strings.Index(deployed, run.value); at >= 0 {
@@ -1227,9 +1228,9 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if state := run.vm.state(t, retired); state != "exited" {
 		t.Errorf("%s reads %q after the deploy that replaced it, want it stopped and still present: a rollback the ledger still offers has nothing to restart once it is removed", retired, state)
 	}
-	window := run.window(t, class)
+	window := run.window(t, tier)
 	if len(window) != 2 || len(window) > host.KeepWindow {
-		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(class), window, host.KeepWindow)
+		t.Fatalf("%s names %v, want the two refs two deploys left, most-recent-first, inside a window of %d", host.ReleasesDir()+"/"+lifecycleSlug+"/"+lifecycleApp+"/"+string(tier), window, host.KeepWindow)
 	}
 	if serving := run.vm.inspects(t, "container", run.container(t), host.LabelSelector(host.LabelRef)); window[0] != serving {
 		t.Errorf("the keep window reads %v and %s serves %s, want the most recent ref first", window, lifecycleApp, serving)
@@ -1263,7 +1264,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 
 	rival := run.rival(t)
 	taken := rival.refused(t, "deploy", "--yes")
-	for _, want := range []string{lifecycleHostname + " is owned by " + boxedge.Surface(lifecycleSlug, edge.ClassProduction), "another project already serves a hostname this project declares"} {
+	for _, want := range []string{lifecycleHostname + " is owned by " + boxedge.Surface(lifecycleSlug, environment.TierProduction), "another project already serves a hostname this project declares"} {
 		if !strings.Contains(taken, want) {
 			t.Errorf("a second project declaring %s was refused without saying %q, and a hostname belongs to one project:\n%s", lifecycleHostname, want, taken)
 		}
@@ -1412,7 +1413,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if asked < 0 {
 		t.Fatalf("`ocel bootstrap destroy production` never asked for the environment name, so there is no confirmation for anything to be named before:\n%s", destroyed)
 	}
-	for _, bearing := range []string{host.StateDir(class), host.SealKeyPath(class), host.ProxyData} {
+	for _, bearing := range []string{host.StateDir(tier), host.SealKeyPath(tier), host.ProxyData} {
 		switch at := strings.Index(destroyed, bearing); {
 		case at < 0:
 			t.Errorf("`ocel bootstrap destroy production` never named %s, and a user types the confirmation without knowing what is unrecoverable — %s stores every certificate this box was issued and the account key that issued them:\n%s",
@@ -1429,7 +1430,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	run.gaveBack(t, repository)
 	for _, taken := range []string{
-		filepath.Dir(host.ClassDir(class)), host.ClassDir(class), host.StateDir(class),
+		filepath.Dir(host.TierDir(tier)), host.TierDir(tier), host.StateDir(tier),
 		filepath.Dir(boxstore.SealHelper), host.ProxyData, host.ProxyConfig, vars.RoutingTable, host.SwitchboardBinary,
 	} {
 		if run.vm.exists(t, taken) {
@@ -1443,7 +1444,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("%s reads %q after both bootstrap destroys, and nothing ocel placed on this machine survives them", caddy.Container, left)
 	}
 	if strings.TrimSpace(run.vm.ssh(t, "id -u "+host.DeployUser()+" >/dev/null 2>&1 && echo present || echo gone")) != "gone" {
-		t.Errorf("%s still logs in after the last class on this machine went", host.DeployUser())
+		t.Errorf("%s still logs in after the last tier on this machine went", host.DeployUser())
 	}
 	if strings.TrimSpace(run.vm.ssh(t, "command -v docker >/dev/null && echo present || echo gone")) != "present" {
 		t.Error("the docker engine went with the destroy, and removing ocel from a host must never remove what runs on it")

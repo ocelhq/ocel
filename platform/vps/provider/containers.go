@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -37,7 +37,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	manifest, err := vars.Render(vars.Manifest{
 		Slug:        spec.Ref.Project,
-		Class:       string(spec.Ref.Class),
+		Tier:        string(spec.Ref.Tier),
 		Environment: liveEnvironment(spec.Ref),
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),
@@ -57,11 +57,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if err := p.host.RunContainer(ctx, host.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
-		Class: spec.Ref.Class, Env: app.Values.ContainerEnv, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
+		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
 	}); err != nil {
 		return nil, err
 	}
-	if err := p.host.Promote(ctx, spec.Ref.Class, spec.Ref.Project, app.App, app.Image); err != nil {
+	if err := p.host.Promote(ctx, spec.Ref.Tier, spec.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
 	return []provider.AppContainer{{
@@ -80,7 +80,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 		if progress != nil {
 			progress.Say("Removing " + container.Name + "'s container " + container.Physical)
 		}
-		if err := p.host.TakeDown(ctx, ref.Class, container.Physical); err != nil {
+		if err := p.host.TakeDown(ctx, ref.Tier, container.Physical); err != nil {
 			return err
 		}
 		if err := p.removeStoreAccount(ctx, ref, container.Name); err != nil {
@@ -91,7 +91,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, 
 }
 
 func liveEnvironment(ref provider.StackRef) string {
-	if ref.Class == edge.ClassProduction {
+	if ref.Tier == environment.TierProduction {
 		return ""
 	}
 	return ref.Name.Env

@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type edgeUserTemplate struct {
@@ -35,8 +36,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{ClassProduction, featureTemplate(FeatureCloudflareEdge, ClassProduction), edgeUserName},
-		{ClassPreview, featureTemplate(FeatureCloudflareEdge, ClassPreview), previewEdgeUser},
+		{TierProduction, featureTemplate(FeatureCloudflareEdge, TierProduction), edgeUserName},
+		{TierPreview, featureTemplate(FeatureCloudflareEdge, TierPreview), previewEdgeUser},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate
@@ -62,7 +63,7 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var s3Read, s3Write, ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeClassed bool
+			var s3Read, s3Write, ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeTiered bool
 			for _, st := range stmts {
 				if st.Resource == "${"+paramAssetBucketARN+"}/*" {
 					s3Read = hasAction(st.Action, "s3:GetObject")
@@ -88,8 +89,8 @@ func TestEdgeUser(t *testing.T) {
 						if equals["aws:ResourceTag/ocel:component"] == "function" {
 							invokeTagged = true
 						}
-						if equals["aws:ResourceTag/ocel:env-class"] == tc.name {
-							invokeClassed = true
+						if equals["aws:ResourceTag/ocel:env-tier"] == tc.name {
+							invokeTiered = true
 						}
 					}
 				}
@@ -115,8 +116,8 @@ func TestEdgeUser(t *testing.T) {
 			if !invokeTagged {
 				t.Error("lambda:Invoke* grant must be gated on ocel:component being function, so it reaches no listener or other Ocel-run function")
 			}
-			if !invokeClassed {
-				t.Errorf("lambda:Invoke* grant must be gated on ocel:env-class being %s, or the %s edge's key invokes the other class's functions too", tc.name, tc.name)
+			if !invokeTiered {
+				t.Errorf("lambda:Invoke* grant must be gated on ocel:env-tier being %s, or the %s edge's key invokes the other tier's functions too", tc.name, tc.name)
 			}
 		})
 	}
@@ -128,9 +129,9 @@ type mintingEdge struct {
 	torn    int
 }
 
-func (e *mintingEdge) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+func (e *mintingEdge) Bootstrap(_ context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
 	e.bootstraps++
-	e.class = class
+	e.tier = tier
 	cred := ""
 	if !e.hasCred {
 		cred, e.hasCred = "bootstrap-secret", true
@@ -145,7 +146,7 @@ func (e *mintingEdge) Bootstrap(_ context.Context, class edge.Class) (edge.Boots
 	}}}, nil
 }
 
-func (e *mintingEdge) Teardown(context.Context, edge.Class) error {
+func (e *mintingEdge) Teardown(context.Context, environment.Tier) error {
 	e.hasCred = false
 	e.torn++
 	return nil
@@ -158,12 +159,12 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, TierProduction, fronted, nil); err != nil {
 		t.Fatalf("the bootstrap that installs the edge: %v", err)
 	}
 
 	drop := Request{Features: []string{FeatureISR}, Remove: []string{FeatureCloudflareEdge}}
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, drop, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, TierProduction, drop, nil); err != nil {
 		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
 	}
 	if front.torn != 1 {
@@ -172,11 +173,11 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if front.bootstraps != 1 {
 		t.Errorf("the edge was bootstrapped %d times, want once: a drop re-adopting what it is about to sever leaves the two disagreeing", front.bootstraps)
 	}
-	if _, present := ssmc.params[cloudflareNames(ClassProduction).deploymentsStoreParam]; present {
+	if _, present := ssmc.params[cloudflareNames(TierProduction).deploymentsStoreParam]; present {
 		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store for an edge that is no longer installed")
 	}
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, TierProduction, fronted, nil); err != nil {
 		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
 	}
 }

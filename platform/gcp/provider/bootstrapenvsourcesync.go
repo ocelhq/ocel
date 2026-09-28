@@ -16,7 +16,7 @@ import (
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
@@ -46,7 +46,7 @@ const (
 	syncScheduleMethod     = "POST"
 	syncScheduleUpdateMask = "description,schedule,timeZone,httpTarget,retryConfig"
 
-	reasonUnwritable      = "it exists, and it may not write this project's records or seal under the class key, so the env source sync running as it would write nothing"
+	reasonUnwritable      = "it exists, and it may not write this project's records or seal under the tier key, so the env source sync running as it would write nothing"
 	reasonServiceChanged  = "it runs another env source sync than the one this provider embeds, runs it as another account, or is billed, scaled, cut off or reached otherwise than this bootstrap deploys it"
 	reasonCallersChanged  = "it exists, and the account Cloud Scheduler calls it as may not call it, or another may"
 	reasonScheduleChanged = "it calls the env source sync on another schedule, at another URL or as another account than this bootstrap names"
@@ -66,18 +66,18 @@ var syncImageTag = sync.OnceValue(func() string {
 	return hex.EncodeToString(sum.Sum(nil))[:syncImageTagLen]
 })
 
-func syncImageRef(c *clients, class edge.Class) string {
-	return c.RepositoryPath(c.region, class) + "/" + syncImageName + ":" + syncImageTag()
+func syncImageRef(c *clients, tier environment.Tier) string {
+	return c.RepositoryPath(c.region, tier) + "/" + syncImageName + ":" + syncImageTag()
 }
 
-func syncMember(c *clients, class edge.Class) string {
-	return "serviceAccount:" + c.EnvSourceSyncAccountEmail(class)
+func syncMember(c *clients, tier environment.Tier) string {
+	return "serviceAccount:" + c.EnvSourceSyncAccountEmail(tier)
 }
 
-func (b bootstrap) syncPurpose(class edge.Class) accountPurpose {
+func (b bootstrap) syncPurpose(tier environment.Tier) accountPurpose {
 	return accountPurpose{
-		displayName: "ocel env source sync (" + b.clients.Namespace().String() + ", " + string(class) + ")",
-		description: "the identity the ocel env source sync of the " + string(class) + " class runs as, and the one Cloud Scheduler calls it as",
+		displayName: "ocel env source sync (" + b.clients.Namespace().String() + ", " + string(tier) + ")",
+		description: "the identity the ocel env source sync of the " + string(tier) + " tier runs as, and the one Cloud Scheduler calls it as",
 		ungranted:   reasonUnwritable,
 		grant:       b.grantSyncWrites,
 		forget:      b.forgetSyncWrites,
@@ -85,44 +85,44 @@ func (b bootstrap) syncPurpose(class edge.Class) accountPurpose {
 	}
 }
 
-func (b bootstrap) grantSyncWrites(ctx context.Context, class edge.Class) error {
-	member := syncMember(b.clients, class)
+func (b bootstrap) grantSyncWrites(ctx context.Context, tier environment.Tier) error {
+	member := syncMember(b.clients, tier)
 	if err := b.clients.bindProjectRole(ctx, member, syncRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()), true); err != nil {
 		return fmt.Errorf("let %s read and write the %s database's records: %w", member, ports.Database(b.clients.Namespace()), err)
 	}
-	if _, err := b.clients.bindKeyRoles(ctx, class, member, syncKeyRoles, syncKeyRoles); err != nil {
-		return fmt.Errorf("let %s seal and open values under the %s key: %w", member, class, err)
+	if _, err := b.clients.bindKeyRoles(ctx, tier, member, syncKeyRoles, syncKeyRoles); err != nil {
+		return fmt.Errorf("let %s seal and open values under the %s key: %w", member, tier, err)
 	}
 	return nil
 }
 
-func (b bootstrap) forgetSyncWrites(ctx context.Context, class edge.Class) error {
-	member := syncMember(b.clients, class)
+func (b bootstrap) forgetSyncWrites(ctx context.Context, tier environment.Tier) error {
+	member := syncMember(b.clients, tier)
 	return everyStep(
 		func() error {
 			return b.clients.bindProjectRole(ctx, member, syncRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()), false)
 		},
 		func() error {
-			_, err := b.clients.bindKeyRoles(ctx, class, member, syncKeyRoles, nil)
+			_, err := b.clients.bindKeyRoles(ctx, tier, member, syncKeyRoles, nil)
 			return err
 		},
 	)
 }
 
-func (b bootstrap) syncWritesGranted(ctx context.Context, class edge.Class) (bool, error) {
-	member := syncMember(b.clients, class)
+func (b bootstrap) syncWritesGranted(ctx context.Context, tier environment.Tier) (bool, error) {
+	member := syncMember(b.clients, tier)
 	records, err := b.clients.projectRoleGranted(ctx, member, syncRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()))
 	if err != nil || !records {
 		return false, err
 	}
-	return b.clients.keyRolesGranted(ctx, class, member, syncKeyRoles)
+	return b.clients.keyRolesGranted(ctx, tier, member, syncKeyRoles)
 }
 
-func (b bootstrap) syncServing(class edge.Class) serving {
+func (b bootstrap) syncServing(tier environment.Tier) serving {
 	return serving{
-		service:     b.clients.EnvSourceSync(class),
-		image:       syncImageRef(b.clients, class),
-		account:     b.clients.EnvSourceSyncAccountEmail(class),
+		service:     b.clients.EnvSourceSync(tier),
+		image:       syncImageRef(b.clients, tier),
+		account:     b.clients.EnvSourceSyncAccountEmail(tier),
 		compute:     provider.ComputeServerless,
 		cpu:         syncCPU,
 		memory:      syncMemoryMiB,
@@ -135,7 +135,7 @@ func (b bootstrap) syncServing(class edge.Class) serving {
 			provider.NamespaceEnvVar: string(b.clients.Namespace()),
 			ports.ProjectEnvVar:      b.clients.project,
 			ports.RegionEnvVar:       b.clients.region,
-			ports.ClassEnvVar:        string(class),
+			ports.TierEnvVar:         string(tier),
 		},
 	}
 }
@@ -192,19 +192,19 @@ func (b bootstrap) readService(ctx context.Context, name string) (*run.GoogleClo
 	return found, nil
 }
 
-func (b bootstrap) servicePresence(ctx context.Context, class edge.Class, name string) (presence, error) {
+func (b bootstrap) servicePresence(ctx context.Context, tier environment.Tier, name string) (presence, error) {
 	current, err := b.readService(ctx, name)
 	if err != nil || current == nil {
 		return presence{}, err
 	}
-	desired, err := serviceOf(b.syncServing(class))
+	desired, err := serviceOf(b.syncServing(tier))
 	if err != nil {
 		return presence{}, err
 	}
 	if !sameService(current, desired) {
 		return presence{present: true, mends: reasonServiceChanged}, nil
 	}
-	callable, err := b.onlySyncCalls(ctx, class, name)
+	callable, err := b.onlySyncCalls(ctx, tier, name)
 	if err != nil {
 		return presence{}, err
 	}
@@ -214,18 +214,18 @@ func (b bootstrap) servicePresence(ctx context.Context, class edge.Class, name s
 	return presence{present: true}, nil
 }
 
-func (b bootstrap) makeService(ctx context.Context, class edge.Class, name string) error {
+func (b bootstrap) makeService(ctx context.Context, tier environment.Tier, name string) error {
 	if b.pushBinary == nil || b.deployService == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s service runs an image, and this bootstrap was opened with nowhere to push one or nothing to deploy it with", name)
 	}
-	if err := b.pushBinary(ctx, class, syncImageName, syncImageRef(b.clients, class), payloads.EnvSourceSync(), syncImagePath); err != nil {
+	if err := b.pushBinary(ctx, tier, syncImageName, syncImageRef(b.clients, tier), payloads.EnvSourceSync(), syncImagePath); err != nil {
 		return err
 	}
-	if _, err := b.deployService(ctx, b.syncServing(class), nil); err != nil {
+	if _, err := b.deployService(ctx, b.syncServing(tier), nil); err != nil {
 		return err
 	}
-	return b.letSyncCall(ctx, class, name)
+	return b.letSyncCall(ctx, tier, name)
 }
 
 func (b bootstrap) takeService(ctx context.Context, name string) error {
@@ -250,21 +250,21 @@ func (b bootstrap) servicePolicy(ctx context.Context, name string) (*run.GoogleI
 	return policy, nil
 }
 
-func (b bootstrap) onlySyncCalls(ctx context.Context, class edge.Class, name string) (bool, error) {
+func (b bootstrap) onlySyncCalls(ctx context.Context, tier environment.Tier, name string) (bool, error) {
 	policy, err := b.servicePolicy(ctx, name)
 	if err != nil {
 		return false, err
 	}
-	_, changed := onlyInvoker(policy.Bindings, syncMember(b.clients, class))
+	_, changed := onlyInvoker(policy.Bindings, syncMember(b.clients, tier))
 	return !changed, nil
 }
 
-func (b bootstrap) letSyncCall(ctx context.Context, class edge.Class, name string) error {
+func (b bootstrap) letSyncCall(ctx context.Context, tier environment.Tier, name string) error {
 	services, err := b.clients.Run()
 	if err != nil {
 		return err
 	}
-	member := syncMember(b.clients, class)
+	member := syncMember(b.clients, tier)
 	var refused error
 	for attempt := range bindAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
@@ -311,17 +311,17 @@ func onlyInvoker(bindings []*run.GoogleIamV1Binding, member string) ([]*run.Goog
 
 func schedulePath(c *clients, name string) string { return c.location() + "/jobs/" + name }
 
-func (b bootstrap) syncSchedule(class edge.Class, name, uri string) *cloudscheduler.Job {
+func (b bootstrap) syncSchedule(tier environment.Tier, name, uri string) *cloudscheduler.Job {
 	return &cloudscheduler.Job{
 		Name:        schedulePath(b.clients, name),
-		Description: "calls the ocel env source sync of the " + string(class) + " class",
+		Description: "calls the ocel env source sync of the " + string(tier) + " tier",
 		Schedule:    syncSchedule,
 		TimeZone:    syncScheduleTimeZone,
 		HttpTarget: &cloudscheduler.HttpTarget{
 			Uri:        uri + "/",
 			HttpMethod: syncScheduleMethod,
 			OidcToken: &cloudscheduler.OidcToken{
-				ServiceAccountEmail: b.clients.EnvSourceSyncAccountEmail(class),
+				ServiceAccountEmail: b.clients.EnvSourceSyncAccountEmail(tier),
 				Audience:            uri,
 			},
 		},
@@ -347,7 +347,7 @@ func sameSchedule(current, desired *cloudscheduler.Job, emulated bool) bool {
 		(current.RetryConfig == nil || current.RetryConfig.RetryCount == 0)
 }
 
-func (b bootstrap) schedulePresence(ctx context.Context, class edge.Class, name string) (presence, error) {
+func (b bootstrap) schedulePresence(ctx context.Context, tier environment.Tier, name string) (presence, error) {
 	service, err := b.clients.Scheduler()
 	if err != nil {
 		return presence{}, err
@@ -363,7 +363,7 @@ func (b bootstrap) schedulePresence(ctx context.Context, class edge.Class, name 
 	if err != nil {
 		return presence{}, err
 	}
-	if called == nil || !sameSchedule(current, b.syncSchedule(class, name, called.Uri), b.clients.emulated()) {
+	if called == nil || !sameSchedule(current, b.syncSchedule(tier, name, called.Uri), b.clients.emulated()) {
 		return presence{present: true, mends: reasonScheduleChanged}, nil
 	}
 	if current.State != scheduleEnabled {
@@ -372,7 +372,7 @@ func (b bootstrap) schedulePresence(ctx context.Context, class edge.Class, name 
 	return presence{present: true}, nil
 }
 
-func (b bootstrap) makeSchedule(ctx context.Context, class edge.Class, name string) error {
+func (b bootstrap) makeSchedule(ctx context.Context, tier environment.Tier, name string) error {
 	called, err := b.readService(ctx, name)
 	if err != nil {
 		return err
@@ -387,11 +387,11 @@ func (b bootstrap) makeSchedule(ctx context.Context, class edge.Class, name stri
 	}
 	path := schedulePath(b.clients, name)
 	create := func() (*cloudscheduler.Job, error) {
-		return attempted(ctx, service.Projects.Locations.Jobs.Create(b.clients.location(), b.syncSchedule(class, name, called.Uri)).Context(ctx).Do)
+		return attempted(ctx, service.Projects.Locations.Jobs.Create(b.clients.location(), b.syncSchedule(tier, name, called.Uri)).Context(ctx).Do)
 	}
 	job, err := create()
 	if taken(err) {
-		desired := b.syncSchedule(class, name, called.Uri)
+		desired := b.syncSchedule(tier, name, called.Uri)
 		desired.Name = ""
 		job, err = attempted(ctx, service.Projects.Locations.Jobs.Patch(path, desired).
 			UpdateMask(syncScheduleUpdateMask).Context(ctx).Do)

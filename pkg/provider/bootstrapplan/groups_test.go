@@ -3,7 +3,7 @@ package bootstrapplan_test
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -41,7 +41,7 @@ func TestChangeGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	t.Parallel()
 
 	described := provider.BootstrapDescription{
-		Class:   edge.ClassPreview,
+		Tier:    environment.TierPreview,
 		Present: true,
 		Stacks: []provider.BootstrapStack{
 			{Name: "core", Present: true, Schema: provider.BootstrapSchema, DigestCurrent: true},
@@ -49,7 +49,7 @@ func TestChangeGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 		},
 	}
 	groups := bootstrapplan.ChangeGroups(described, fake.NewBootstrap().Catalogue(), provider.BootstrapRequest{
-		Class:    edge.ClassPreview,
+		Tier:     environment.TierPreview,
 		Features: []string{fake.FeatureCache},
 		Remove:   []string{fake.FeatureImages},
 	})

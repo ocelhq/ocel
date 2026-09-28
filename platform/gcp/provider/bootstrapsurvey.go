@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -41,7 +41,7 @@ type stamp struct {
 }
 
 type survey struct {
-	Class      edge.Class
+	Tier       environment.Tier
 	Names      Names
 	Project    string
 	Region     string
@@ -69,9 +69,9 @@ func (s survey) current(items []item) bool {
 	return true
 }
 
-func (b bootstrap) survey(ctx context.Context, class edge.Class) (survey, error) {
+func (b bootstrap) survey(ctx context.Context, tier environment.Tier) (survey, error) {
 	read := survey{
-		Class:    class,
+		Tier:     tier,
 		Names:    b.clients.Names,
 		Project:  b.clients.project,
 		Region:   b.clients.region,
@@ -79,8 +79,8 @@ func (b bootstrap) survey(ctx context.Context, class edge.Class) (survey, error)
 		present:  map[string]bool{},
 		mending:  map[string]string{},
 	}
-	for _, item := range bootstrapItems(read.Names, class, read.Emulated) {
-		found, err := b.presenceOf(ctx, class, item)
+	for _, item := range bootstrapItems(read.Names, tier, read.Emulated) {
+		found, err := b.presenceOf(ctx, tier, item)
 		if err != nil {
 			return survey{}, err
 		}
@@ -90,19 +90,19 @@ func (b bootstrap) survey(ctx context.Context, class edge.Class) (survey, error)
 		}
 	}
 
-	sibling, err := b.stamped(ctx, read.Names.Bucket(siblingOf(class)))
+	sibling, err := b.stamped(ctx, read.Names.Bucket(siblingOf(tier)))
 	if err != nil {
 		return survey{}, err
 	}
 	read.sibling = sibling.present
 
-	own, err := b.stamped(ctx, read.Names.Bucket(class))
+	own, err := b.stamped(ctx, read.Names.Bucket(tier))
 	if err != nil {
 		return survey{}, err
 	}
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
 
-	if read.stateOf, err = b.stateIn(ctx, read.Names.StateBucket(class)); err != nil {
+	if read.stateOf, err = b.stateIn(ctx, read.Names.StateBucket(tier)); err != nil {
 		return survey{}, err
 	}
 	return read, nil
@@ -169,7 +169,7 @@ type presence struct {
 	mends   string
 }
 
-func (b bootstrap) presenceOf(ctx context.Context, class edge.Class, target item) (presence, error) {
+func (b bootstrap) presenceOf(ctx context.Context, tier environment.Tier, target item) (presence, error) {
 	switch target.Kind {
 	case KindDatabase:
 		return b.databasePresence(ctx)
@@ -184,11 +184,11 @@ func (b bootstrap) presenceOf(ctx context.Context, class edge.Class, target item
 	case KindRepository:
 		return b.repositoryPresence(ctx, target.Name)
 	case KindServiceAccount:
-		return b.accountPresence(ctx, class, target.Name)
+		return b.accountPresence(ctx, tier, target.Name)
 	case KindService:
-		return b.servicePresence(ctx, class, target.Name)
+		return b.servicePresence(ctx, tier, target.Name)
 	case KindSchedule:
-		return b.schedulePresence(ctx, class, target.Name)
+		return b.schedulePresence(ctx, tier, target.Name)
 	}
 	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 }
@@ -361,7 +361,7 @@ func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
 		policy.Condition.TagState == untaggedImages && policy.Condition.OlderThan == untaggedLifetime
 }
 
-func (b bootstrap) accountPresence(ctx context.Context, class edge.Class, name string) (presence, error) {
+func (b bootstrap) accountPresence(ctx context.Context, tier environment.Tier, name string) (presence, error) {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return presence{}, err
@@ -384,8 +384,8 @@ func (b bootstrap) accountPresence(ctx context.Context, class edge.Class, name s
 	if !granted(policy, memberOf(member)) {
 		return presence{present: true, mends: reasonUngranted}, nil
 	}
-	purpose := b.purposeOf(class, name)
-	grants, err := purpose.granted(ctx, class)
+	purpose := b.purposeOf(tier, name)
+	grants, err := purpose.granted(ctx, tier)
 	if err != nil {
 		return presence{}, err
 	}

@@ -45,8 +45,8 @@ func ensureRevalidatorPayload(ctx context.Context, store ObjectStore, bucket str
 	return payloads.Place(ctx, store, bucket, revalidatorKeyPrefix, revalidatorLabel, payloads.Revalidator())
 }
 
-func revalidateQueueResources(ns Namespace, class string) string {
-	queue, dlq := ns.revalidateQueueNames(class)
+func revalidateQueueResources(ns Namespace, tier string) string {
+	queue, dlq := ns.revalidateQueueNames(tier)
 	return fmt.Sprintf(`  RevalidateDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -74,7 +74,7 @@ func revalidateQueueResources(ns Namespace, class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(ns Namespace, class string, code payloads.Placement) string {
+func revalidatorResources(ns Namespace, tier string, code payloads.Placement) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
@@ -116,7 +116,7 @@ func revalidatorResources(ns Namespace, class string, code payloads.Placement) s
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/ocel:env-class': '%s'
+                    'aws:ResourceTag/ocel:env-tier': '%s'
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
@@ -146,7 +146,7 @@ func revalidatorResources(ns Namespace, class string, code payloads.Placement) s
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), class, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), tier, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)

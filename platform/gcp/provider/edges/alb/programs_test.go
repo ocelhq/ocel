@@ -3,23 +3,23 @@ package alb
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func binding(hosts map[string]Host) Program {
 	return bindingProgram(bindingSpec{
 		Region:         "europe-west1",
 		Slug:           "shop",
-		Class:          edge.ClassProduction,
+		Tier:           environment.TierProduction,
 		CertificateMap: "ocel-alb-production-certs",
 		Hosts:          hosts,
 	})
 }
 
-func TestTheFrontendProvisionsOneLoadBalancerForTheWholeClass(t *testing.T) {
+func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(frontProgram(frontSpec{Names: frontNames(edge.ClassProduction)}))
+	seen, err := declared(frontProgram(frontSpec{Names: frontNames(environment.TierProduction)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -34,7 +34,7 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeClass(t *testing.T) {
 	} {
 		resource, declared := seen[name]
 		if !declared {
-			t.Errorf("the frontend declares no %s; without it a hostname on this class reaches nothing", name)
+			t.Errorf("the frontend declares no %s; without it a hostname on this tier reaches nothing", name)
 			continue
 		}
 		if resource.Token != token {
@@ -109,7 +109,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 		t.Errorf("the certificate map entry answers for %v, want shop.example.com", got)
 	}
 	if got := entry.Args["map"]; got != "ocel-alb-production-certs" {
-		t.Errorf("the certificate map entry lands in %v, want the class's own map", got)
+		t.Errorf("the certificate map entry lands in %v, want the tier's own map", got)
 	}
 
 	neg, declaredNEG := seen["ocel-alb-shop-production-shop-example-com-neg"]

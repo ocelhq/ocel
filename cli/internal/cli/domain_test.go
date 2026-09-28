@@ -18,16 +18,16 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func TestRequirePreviewClass(t *testing.T) {
+func TestRequirePreviewTier(t *testing.T) {
 	t.Parallel()
 
-	if err := requirePreviewClass("ocel domain use", true); err != nil {
-		t.Fatalf("requirePreviewClass(preview) = %v, want nil", err)
+	if err := requirePreviewTier("ocel domain use", true); err != nil {
+		t.Fatalf("requirePreviewTier(preview) = %v, want nil", err)
 	}
 
-	err := requirePreviewClass("ocel domain use", false)
+	err := requirePreviewTier("ocel domain use", false)
 	if err == nil {
-		t.Fatal("requirePreviewClass(no --preview) = nil, want a refusal")
+		t.Fatal("requirePreviewTier(no --preview) = nil, want a refusal")
 	}
 	for _, want := range []string{"--preview", "preview-only"} {
 		if !strings.Contains(err.Error(), want) {

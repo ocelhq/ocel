@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -35,7 +36,7 @@ const (
 	outputArtifactBucket      = "ArtifactBucketName"
 	outputAssetBucket         = "AssetBucketName"
 	outputAssetBucketARN      = "AssetBucketArn"
-	outputInfraClass          = "InfrastructureClass"
+	outputInfraTier           = "InfrastructureTier"
 
 	artifactExpirationDays     = 30
 	artifactAbortMultipartDays = 7
@@ -45,8 +46,8 @@ const (
 )
 
 const (
-	ClassProduction = "production"
-	ClassPreview    = "preview"
+	TierProduction = "production"
+	TierPreview    = "preview"
 )
 
 type Deployed struct {
@@ -63,7 +64,7 @@ type Deployed struct {
 	ImageOptimizerURL  string
 	RevalidateQueueURL string
 	AppBoundaryARN     string
-	Class              string
+	Tier               string
 	RuntimeLayers      map[string]string
 	RuntimeStack       StackStamp
 	Outputs            map[string]string
@@ -94,47 +95,47 @@ type Request struct {
 }
 
 func CheckDeployed(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ns, ClassProduction)
+	return CheckDeployedFor(ctx, api, ns, TierProduction)
 }
 
 func CheckDeployedPreview(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ns, ClassPreview)
+	return CheckDeployedFor(ctx, api, ns, TierPreview)
 }
 
-func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, ns, class)
+func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Deployed, error) {
+	deployed, _, err := readBootstrap(ctx, api, ns, tier)
 	return deployed, err
 }
 
 type Reading struct {
 	Deployed Deployed
 	ns       Namespace
-	class    string
+	tier     string
 	refs     stackRefs
 }
 
-func (r Reading) Class() string { return r.class }
+func (r Reading) Tier() string { return r.tier }
 
 func (r Reading) Namespace() Namespace { return r.ns }
 
-func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (Reading, error) {
-	deployed, refs, err := readBootstrap(ctx, api, ns, class)
+func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Reading, error) {
+	deployed, refs, err := readBootstrap(ctx, api, ns, tier)
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Deployed: deployed, ns: ns, class: class, refs: refs}, nil
+	return Reading{Deployed: deployed, ns: ns, tier: tier, refs: refs}, nil
 }
 
-func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, class, name string) (map[string]string, error) {
+func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier, name string) (map[string]string, error) {
 	f, ok := featureNamed(name)
 	if !ok {
 		return nil, fmt.Errorf("bootstrap: no feature named %q", name)
 	}
-	return cfn.StackOutputs(ctx, api, f.stackName(ns, class))
+	return cfn.StackOutputs(ctx, api, f.stackName(ns, tier))
 }
 
-func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (Deployed, stackRefs, error) {
-	coreStack, err := ns.StackNameFor(class)
+func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Deployed, stackRefs, error) {
+	coreStack, err := ns.StackNameFor(tier)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
@@ -154,13 +155,13 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, class s
 	coreStamp := readStamp(core.Tags)
 	d.Schema = coreStamp.Schema
 
-	if err := readRuntimeLayers(ctx, api, &d, &refs, ns, class); err != nil {
+	if err := readRuntimeLayers(ctx, api, &d, &refs, ns, tier); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 
 	stamps := make(map[string]Stamp, len(featureRegistry))
 	for _, f := range featureRegistry {
-		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, class))
+		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, tier))
 		if err != nil {
 			return Deployed{}, stackRefs{}, err
 		}
@@ -176,7 +177,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, class s
 		}
 	}
 
-	target, err := bootstrapFor(ns, class)
+	target, err := bootstrapFor(ns, tier)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
@@ -190,20 +191,20 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, class s
 	})
 	for _, f := range featureRegistry {
 		if !d.Features.Has(f.name) {
-			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(ns, class), Feature: f.name})
+			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(ns, tier), Feature: f.name})
 			continue
 		}
 		stamp := stamps[f.name]
 		d.Schema = min(d.Schema, stamp.Schema)
 		d.Stacks = append(d.Stacks, StackStamp{
-			Name:    f.stackName(ns, class),
+			Name:    f.stackName(ns, tier),
 			Feature: f.name,
 			Present: true,
 			Schema:  stamp.Schema,
 			Digest:  stamp.Digest,
 			Intended: cfn.TemplateDigest(f.planned(featureInputs{
 				ns:             ns,
-				class:          class,
+				tier:           tier,
 				artifactBucket: d.ArtifactBucket,
 				refs:           refs,
 				alongside:      d.Features,
@@ -215,12 +216,12 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, class s
 	return d, refs, nil
 }
 
-func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs *stackRefs, ns Namespace, class string) error {
-	intended, err := runtimeLayerTemplateAt(ns, class, d.ArtifactBucket)
+func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs *stackRefs, ns Namespace, tier string) error {
+	intended, err := runtimeLayerTemplateAt(ns, tier, d.ArtifactBucket)
 	if err != nil {
 		return err
 	}
-	stackName := ns.runtimeStackName(class)
+	stackName := ns.runtimeStackName(tier)
 	d.RuntimeStack = StackStamp{Name: stackName, Intended: cfn.TemplateDigest(intended)}
 	stack, err := cfn.DescribeStack(ctx, api, stackName)
 	if err != nil || stack == nil || cfn.Unusable(stack.StackStatus) {
@@ -244,10 +245,10 @@ func broughtVarsKey(outputs map[string]string) string {
 	return outputs[outputVarsKeyARN]
 }
 
-func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (FeatureSet, error) {
+func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (FeatureSet, error) {
 	installed := FeatureSet{}
 	for _, f := range featureRegistry {
-		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, class))
+		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, tier))
 		if err != nil {
 			return nil, err
 		}
@@ -292,8 +293,8 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			refs.revalidateQueueARN = value
 		case outputAppBoundaryARN:
 			d.AppBoundaryARN = value
-		case outputInfraClass:
-			d.Class = value
+		case outputInfraTier:
+			d.Tier = value
 		default:
 			if arch, isLayer := layers[key]; isLayer {
 				if d.RuntimeLayers == nil {
@@ -316,45 +317,45 @@ type stackPayloads struct {
 
 type spec struct {
 	ns        Namespace
-	class     string
+	tier      string
 	stackName string
 	stackStep string
 }
 
-func (s spec) core(broughtKey string) string { return coreStackTemplate(s.ns, s.class, broughtKey) }
+func (s spec) core(broughtKey string) string { return coreStackTemplate(s.ns, s.tier, broughtKey) }
 
 func productionBootstrap(ns Namespace) spec {
 	return spec{
 		ns:        ns,
-		class:     ClassProduction,
+		tier:      TierProduction,
 		stackName: ns.CoreStackName(),
 		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
 	}
 }
 
 func previewBootstrap(ns Namespace) spec {
-	name, _ := ns.StackNameFor(ClassPreview)
+	name, _ := ns.StackNameFor(TierPreview)
 	return spec{
 		ns:        ns,
-		class:     ClassPreview,
+		tier:      TierPreview,
 		stackName: name,
 		stackStep: "Ensuring preview infrastructure (CloudFormation)",
 	}
 }
 
-func bootstrapFor(ns Namespace, class string) (spec, error) {
-	switch class {
-	case ClassProduction:
+func bootstrapFor(ns Namespace, tier string) (spec, error) {
+	switch tier {
+	case TierProduction:
 		return productionBootstrap(ns), nil
-	case ClassPreview:
+	case TierPreview:
 		return previewBootstrap(ns), nil
 	default:
-		return spec{}, fmt.Errorf("bootstrap: unknown class %q", class)
+		return spec{}, fmt.Errorf("bootstrap: unknown tier %q", tier)
 	}
 }
 
-func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request, progress progress.Progress) error {
-	target, err := specFor(ns, class)
+func Run(ctx context.Context, apis APIs, ns Namespace, tier string, req Request, progress progress.Progress) error {
+	target, err := specFor(ns, tier)
 	if err != nil {
 		return err
 	}
@@ -368,14 +369,14 @@ func ensureProgress(runProgress progress.Progress) progress.Progress {
 	return runProgress
 }
 
-func specFor(ns Namespace, class string) (spec, error) {
-	switch class {
-	case ClassProduction:
+func specFor(ns Namespace, tier string) (spec, error) {
+	switch tier {
+	case TierProduction:
 		return productionBootstrap(ns), nil
-	case ClassPreview:
+	case TierPreview:
 		return previewBootstrap(ns), nil
 	default:
-		return spec{}, fmt.Errorf("there is no %s bootstrap; a bootstrap is either production or preview", class)
+		return spec{}, fmt.Errorf("there is no %s bootstrap; a bootstrap is either production or preview", tier)
 	}
 }
 
@@ -387,20 +388,20 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	}
 
 	progress.Say("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
-	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.class, time.Now())
+	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.tier, time.Now())
 	if err != nil {
 		return err
 	}
 	if secret.retired {
-		progress.Warn(fmt.Sprintf("Retired the %s origin secret a rotation replaced: a release not re-deployed since no longer answers its front", target.class))
+		progress.Warn(fmt.Sprintf("Retired the %s origin secret a rotation replaced: a release not re-deployed since no longer answers its front", target.tier))
 	}
 	switch {
 	case secret.rotated:
-		progress.Warn(fmt.Sprintf("Rotated the %s origin secret, which was older than %d days: re-deploy each project in the class so its releases accept the new one; the first bootstrap after %d days retires the old one", target.class, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24)))
+		progress.Warn(fmt.Sprintf("Rotated the %s origin secret, which was older than %d days: re-deploy each project in the tier so its releases accept the new one; the first bootstrap after %d days retires the old one", target.tier, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24)))
 	case secret.minted:
-		progress.Say(fmt.Sprintf("Minted a new %s origin secret", target.class))
+		progress.Say(fmt.Sprintf("Minted a new %s origin secret", target.tier))
 	default:
-		progress.Debug(fmt.Sprintf("Reused the existing %s origin secret", target.class))
+		progress.Debug(fmt.Sprintf("Reused the existing %s origin secret", target.tier))
 	}
 
 	alongside := FeatureSet{}
@@ -416,14 +417,14 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.tier)
 	if err != nil {
 		return err
 	}
 	if err := applyRuntimeLayers(ctx, apis, target, req, deployed.ArtifactBucket, progress); err != nil {
 		return err
 	}
-	steps := stepDeps{ns: target.ns, class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progress}
+	steps := stepDeps{ns: target.ns, tier: target.tier, ssm: apis.SSM, iam: apis.IAM, progress: progress}
 	dropped := Removing(req.Features, req.Remove)
 	if err := tearDownEdges(ctx, apis, steps, dropped); err != nil {
 		return err
@@ -448,16 +449,16 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	}
 
 	for _, level := range levels {
-		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(target.ns, level, target.class), ", ")))
+		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(target.ns, level, target.tier), ", ")))
 		produced := make([]map[string]string, len(level))
 		group, gctx := errgroup.WithContext(ctx)
 		for i, name := range level {
 			group.Go(func() error {
 				f, _ := featureNamed(name)
-				stackName := f.stackName(target.ns, target.class)
+				stackName := f.stackName(target.ns, target.tier)
 				stack, err := f.staged(gctx, apis.Store, featureInputs{
 					ns:             target.ns,
-					class:          target.class,
+					tier:           target.tier,
 					artifactBucket: deployed.ArtifactBucket,
 					refs:           refs,
 					alongside:      alongside,
@@ -504,7 +505,7 @@ func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder
 	if len(dropOrder) == 0 {
 		return nil
 	}
-	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(steps.ns, dropOrder, steps.class), ", ")))
+	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(steps.ns, dropOrder, steps.tier), ", ")))
 	for _, name := range dropOrder {
 		f, _ := featureNamed(name)
 		if f.drop == nil {
@@ -514,7 +515,7 @@ func dropFeatures(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return deleteFeatureStacks(ctx, stacks, steps.ns, steps.class, dropOrder, steps.progress)
+	return deleteFeatureStacks(ctx, stacks, steps.ns, steps.tier, dropOrder, steps.progress)
 }
 
 func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
@@ -564,7 +565,7 @@ func tearDownEdges(ctx context.Context, apis APIs, d stepDeps, dropped []string)
 
 func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	d.progress.Say(fmt.Sprintf("Tearing the %s edge down", front.Kind()))
-	if err := front.Teardown(ctx, edge.Class(d.class)); err != nil {
+	if err := front.Teardown(ctx, environment.Tier(d.tier)); err != nil {
 		return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 	}
 	return nil
@@ -572,7 +573,7 @@ func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 
 func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	d.progress.Say(fmt.Sprintf("Bootstrapping the %s edge", front.Kind()))
-	out, err := front.Bootstrap(ctx, edge.Class(d.class))
+	out, err := front.Bootstrap(ctx, environment.Tier(d.tier))
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", front.Kind(), err)
 	}
@@ -580,20 +581,20 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 		switch offer.Kind {
 		case edge.OfferCacheStore:
 			d.progress.Say(fmt.Sprintf("Adopting the %s edge's cache store (SSM SecureString)", front.Kind()))
-			if err := adoptCacheStore(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
+			if err := adoptCacheStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferDeploymentsStore:
 			d.progress.Say(fmt.Sprintf("Adopting the %s edge's deployments-store worker (SSM SecureString)", front.Kind()))
-			if err := adoptDeploymentsStore(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
+			if err := adoptDeploymentsStore(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferISRWriter:
 			d.progress.Say(fmt.Sprintf("Adopting the %s edge's ISR writer worker (SSM SecureString)", front.Kind()))
-			if err := adoptISRWriter(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
+			if err := adoptISRWriter(ctx, d.ssm, d.ns, d.tier, front.Kind(), offer.Values); err != nil {
 				return err
 			}
-			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.ns, d.class, front.Kind()); err != nil {
+			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.ns, d.tier, front.Kind()); err != nil {
 				return err
 			}
 		default:
@@ -604,7 +605,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 		return nil
 	}
 	d.progress.Say(fmt.Sprintf("Storing the %s edge's %d bootstrap outputs (SSM SecureString)", front.Kind(), len(out.Values)))
-	return writeEdgeValues(ctx, d.ssm, d.ns, d.class, front.Kind(), out.Values)
+	return writeEdgeValues(ctx, d.ssm, d.ns, d.tier, front.Kind(), out.Values)
 }
 
 func absorbRefs(refs *stackRefs, out map[string]string) error {
@@ -667,7 +668,7 @@ func coreVarsKey(alongside FeatureSet, brought string) string {
 	return ""
 }
 
-func coreStackTemplate(ns Namespace, class, broughtKey string) string {
+func coreStackTemplate(ns Namespace, tier, broughtKey string) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
 Resources:
@@ -676,30 +677,30 @@ Resources:
     Description: "S3 bucket storing the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
-    Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
+    Description: "Tier this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
-`, coreStackDescription(class),
-		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(ns, class, broughtKey),
-		outputStateBucket, class, scopeOf(class),
-		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, class)
+`, coreStackDescription(tier),
+		stateBucketResource(tier), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(tier), appBoundaryResource(ns, tier, broughtKey),
+		outputStateBucket, tier, scopeOf(tier),
+		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraTier, tier)
 }
 
-func coreStackDescription(class string) string {
+func coreStackDescription(tier string) string {
 	apart := ""
-	if class == ClassPreview {
+	if tier == TierPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
-	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with is installed in a feature stack of its own beside it.%s", class, scopeOf(class), apart)
+	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with is installed in a feature stack of its own beside it.%s", tier, scopeOf(tier), apart)
 }
 
-func scopeOf(class string) string {
-	if class == ClassPreview {
+func scopeOf(tier string) string {
+	if tier == TierPreview {
 		return "preview environment"
 	}
 	return "production app"
 }
 
-func stateBucketResource(class string) string {
+func stateBucketResource(tier string) string {
 	return fmt.Sprintf(`  StateBucket:
     Type: AWS::S3::Bucket
     Metadata:
@@ -727,7 +728,7 @@ func stateBucketResource(class string) string {
           - Id: expire-state-delete-markers
             Status: Enabled
             ExpiredObjectDeleteMarker: true
-`, scopeOf(class), stateNoncurrentDays, stateAbortMultipartDays)
+`, scopeOf(tier), stateNoncurrentDays, stateAbortMultipartDays)
 }
 
 func stateTableResource() string {

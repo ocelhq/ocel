@@ -11,7 +11,7 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -80,7 +80,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a claimed priority tore down %v, want nothing: the deploy recovers rather than abandons", torn)
 	}
-	if _, present, err := stackrecords.Read(context.Background(), cfg.Records, edge.ClassProduction, ContainersSlug, containerInfraRef(edge.ClassProduction).Name); err != nil || !present {
+	if _, present, err := stackrecords.Read(context.Background(), cfg.Records, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || !present {
 		t.Errorf("the shared container infrastructure is not recorded (present %v, err %v) after the deploy that recovered", present, err)
 	}
 }

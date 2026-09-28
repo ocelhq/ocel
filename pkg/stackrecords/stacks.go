@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -33,8 +33,8 @@ type NamedStack struct {
 	Stack
 }
 
-func Read(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) (Stack, bool, error) {
-	name := StackRecord(class, slug, stack)
+func Read(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) (Stack, bool, error) {
+	name := StackRecord(tier, slug, stack)
 	row, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
@@ -49,8 +49,8 @@ func Read(ctx context.Context, store records.Store, class edge.Class, slug strin
 	return recorded, true, nil
 }
 
-func Write(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName, recorded Stack) error {
-	name := StackRecord(class, slug, stack)
+func Write(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName, recorded Stack) error {
+	name := StackRecord(tier, slug, stack)
 	row, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
@@ -65,12 +65,12 @@ func Write(ctx context.Context, store records.Store, class edge.Class, slug stri
 	return nil
 }
 
-func Forget(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) error {
-	return records.Forget(ctx, store, StackRecord(class, slug, stack))
+func Forget(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) error {
+	return records.Forget(ctx, store, StackRecord(tier, slug, stack))
 }
 
-func List(ctx context.Context, store records.Store, class edge.Class, slug string) ([]NamedStack, error) {
-	under := StacksRecord(class, slug)
+func List(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]NamedStack, error) {
+	under := StacksRecord(tier, slug)
 	recorded, err := store.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)

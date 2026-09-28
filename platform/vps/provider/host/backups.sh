@@ -39,8 +39,8 @@ keep_newest() {
 }
 
 dump_volume() {
-  class=$1 container=$2
-  dir=$(dir_of "$class" "$container")
+  tier=$1 container=$2
+  dir=$(dir_of "$tier" "$container")
   umask 077
   mkdir -p "$dir"
   room_for "$dir" "$container" .tar
@@ -61,13 +61,13 @@ dump_volume() {
   trap - EXIT INT TERM
   mv -f "$partial" "$dir/$stamp.tar"
   keep_newest "$dir" .tar
-  owned "$class" "$root/$class/backups"
+  owned "$tier" "$root/$tier/backups"
   printf '%s\n' "$dir/$stamp.tar"
 }
 
 dump() {
-  class=$1 container=$2 database=$3
-  dir=$(dir_of "$class" "$container")
+  tier=$1 container=$2 database=$3
+  dir=$(dir_of "$tier" "$container")
   umask 077
   mkdir -p "$dir"
   room_for "$dir" "$container" .dump
@@ -87,7 +87,7 @@ dump() {
   mv -f "$partial" "$dir/$stamp.dump"
 
   keep_newest "$dir" .dump
-  owned "$class" "$root/$class/backups"
+  owned "$tier" "$root/$tier/backups"
   printf '%s\n' "$dir/$stamp.dump"
 }
 
@@ -105,12 +105,12 @@ restore() {
 sweep() {
   failed=0
   docker ps --filter label=ocel.backup \
-    --format '{{.Names}}	{{.Label "ocel.class"}}	{{.Label "ocel.resource"}}	{{.Label "ocel.backup"}}' |
-    while IFS='	' read -r container class database kind; do
+    --format '{{.Names}}	{{.Label "ocel.tier"}}	{{.Label "ocel.resource"}}	{{.Label "ocel.backup"}}' |
+    while IFS='	' read -r container tier database kind; do
       [ -n "$container" ] || continue
       case "$kind" in
-      pg) ( dump "$class" "$container" "$database" >/dev/null ) || echo failed ;;
-      vol) ( dump_volume "$class" "$container" >/dev/null ) || echo failed ;;
+      pg) ( dump "$tier" "$container" "$database" >/dev/null ) || echo failed ;;
+      vol) ( dump_volume "$tier" "$container" >/dev/null ) || echo failed ;;
       *) ;;
       esac
     done | grep -q failed && failed=1
@@ -122,16 +122,16 @@ sweep)
   sweep
   ;;
 *)
-  [ $# -ge 2 ] || abort "usage: backups sweep | backups <class> dump <container> <database> | backups <class> restore <container> <database> <file>"
-  class=$1 verb=$2
+  [ $# -ge 2 ] || abort "usage: backups sweep | backups <tier> dump <container> <database> | backups <tier> restore <container> <database> <file>"
+  tier=$1 verb=$2
   shift 2
   case "$verb" in
   dump)
-    [ $# -eq 2 ] || abort "usage: backups <class> dump <container> <database>"
-    dump "$class" "$1" "$2"
+    [ $# -eq 2 ] || abort "usage: backups <tier> dump <container> <database>"
+    dump "$tier" "$1" "$2"
     ;;
   restore)
-    [ $# -eq 3 ] || abort "usage: backups <class> restore <container> <database> <file>"
+    [ $# -eq 3 ] || abort "usage: backups <tier> restore <container> <database> <file>"
     restore "$1" "$2" "$3"
     ;;
   *)

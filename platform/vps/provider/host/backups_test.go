@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -82,9 +82,9 @@ func (b backupBench) runs(t *testing.T, args ...string) (string, string, int) {
 	return strings.TrimSpace(stdout.String()), stderr.String(), code
 }
 
-func (b backupBench) kept(t *testing.T, class, container string) []string {
+func (b backupBench) kept(t *testing.T, tier, container string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(b.root, class, "backups", container))
+	entries, err := os.ReadDir(filepath.Join(b.root, tier, "backups", container))
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
@@ -292,16 +292,16 @@ func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 	t.Parallel()
 
-	class := edge.ClassProduction
+	tier := environment.TierProduction
 	var missing []string
 	for _, item := range BackupItems() {
 		missing = append(missing, item.ID())
 	}
-	older := bootstrappedOn(t, class)
-	older.installed[class] = slices.DeleteFunc(older.installed[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
+	older := bootstrappedOn(t, tier)
+	older.installed[tier] = slices.DeleteFunc(older.installed[tier], func(item Item) bool { return slices.Contains(missing, item.ID()) })
 	progress := &said{}
 	if err := NewBootstrap(older.host(), testVendor, "shop").Apply(context.Background(),
-		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
+		provider.BootstrapRequest{Tier: tier, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	for _, item := range BackupItems() {

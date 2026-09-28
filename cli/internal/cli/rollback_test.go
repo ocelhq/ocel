@@ -251,10 +251,10 @@ func TestRunRollback(t *testing.T) {
 		clitest.AttachTerminalSink(deps, &stdout)
 		err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
 		if err == nil {
-			t.Fatal("runRollback err = nil, want a class-mismatch error")
+			t.Fatal("runRollback err = nil, want a tier-mismatch error")
 		}
 		if !strings.Contains(stdout.String(), "this command needs production infrastructure") {
-			t.Errorf("stdout = %q, want the concrete class-mismatch message", stdout.String())
+			t.Errorf("stdout = %q, want the concrete tier-mismatch message", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "Rolled back") {
 			t.Errorf("stdout = %q, want no rollback to have been driven against preview infra", stdout.String())

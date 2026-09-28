@@ -111,14 +111,14 @@ func TestEveryInspectThisPackageRunsIsOneOfTheFlavoursThoseRostersCover(t *testi
 func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 	t.Parallel()
 
-	project := AppNetwork(valued().Class, valued().Project)
+	project := AppNetwork(valued().Tier, valued().Project)
 	networking := map[string]struct{ command, network string }{
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
 		"what a destroy removes the proxy network with":       {removal{kind: KindNetwork, path: ProxyNetwork}.command(), ProxyNetwork},
-		"what a deploy puts a project's network up with":      {joinNetworkScript(valued().Class, valued().Project), project},
-		"what a resource puts a project's network up with":    {networkCreating(valued().Class, valued().Project), project},
-		"what a teardown takes a project's network down with": {networkForgetting(valued().Class, valued().Project), project},
+		"what a deploy puts a project's network up with":      {joinNetworkScript(valued().Tier, valued().Project), project},
+		"what a resource puts a project's network up with":    {networkCreating(valued().Tier, valued().Project), project},
+		"what a teardown takes a project's network down with": {networkForgetting(valued().Tier, valued().Project), project},
 		"what a switchboard write finds your proxy's network with": {
 			switchboardBox(nil, Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}).networksPresent(), "coolify",
 		},

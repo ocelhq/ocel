@@ -6,13 +6,14 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
-func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
+func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(tier))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -20,12 +21,12 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	shared, err := bootstrap.SiblingSharesPassphrase(ctx, b.CFN, b.Namespace, string(class))
+	shared, err := bootstrap.SiblingSharesPassphrase(ctx, b.CFN, b.Namespace, string(tier))
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameterRemoval(ctx,
-		b.paramAPIs(), b.Namespace, string(class), shared)
+		b.paramAPIs(), b.Namespace, string(tier), shared)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -34,12 +35,12 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	}
 
 	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, stacks)}
-	fronts, err := b.installedEdges(ctx, class, read.Deployed)
+	fronts, err := b.installedEdges(ctx, tier, read.Deployed)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	for _, front := range fronts {
-		group, err := b.removedEdgeGroup(ctx, class, front)
+		group, err := b.removedEdgeGroup(ctx, tier, front)
 		if err != nil {
 			return provider.Plan{}, err
 		}
@@ -50,7 +51,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 	return plan, nil
 }
 
-func (b Bootstrap) installedEdges(ctx context.Context, class edge.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
+func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, deployed bootstrap.Deployed) ([]edge.Edge, error) {
 	featureKinds := bootstrap.EdgeKindsFor(deployed.Features.Names())
 	fronts := []edge.Edge{b.Edge}
 	for _, kind := range b.Kinds {
@@ -60,7 +61,7 @@ func (b Bootstrap) installedEdges(ctx context.Context, class edge.Class, deploye
 		installed := slices.Contains(featureKinds, kind)
 		if !installed {
 			var err error
-			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, string(class), kind); err != nil {
+			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, string(tier), kind); err != nil {
 				return nil, err
 			}
 		}
@@ -76,12 +77,12 @@ func (b Bootstrap) installedEdges(ctx context.Context, class edge.Class, deploye
 	return fronts, nil
 }
 
-func (b Bootstrap) removedEdgeGroup(ctx context.Context, class edge.Class, front edge.Edge) (*provider.ChangeGroup, error) {
+func (b Bootstrap) removedEdgeGroup(ctx context.Context, tier environment.Tier, front edge.Edge) (*provider.ChangeGroup, error) {
 	plan := front.Hooks().PlanRemoveBootstrap
 	if plan == nil {
 		return nil, nil
 	}
-	planned, err := plan(ctx, class)
+	planned, err := plan(ctx, tier)
 	if err != nil {
 		return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
 	}

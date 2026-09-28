@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -87,7 +88,7 @@ func (s *store) List(_ context.Context, under records.Name) ([]records.Record, e
 
 func fixture() (*Ledger, *store) {
 	store := newStore()
-	return New(store, edge.ClassProduction, "shop"), store
+	return New(store, environment.TierProduction, "shop"), store
 }
 
 func TestNextSequenceRetriesPastAClaimerThatGotThereFirst(t *testing.T) {

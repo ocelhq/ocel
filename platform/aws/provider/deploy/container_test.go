@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -56,14 +57,14 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		AppBoundaryARN: "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		OriginSecret:   fixtureSecret,
 		Slug:           "shop",
-		Class:          edge.ClassProduction,
+		Tier:           environment.TierProduction,
 		VarsTable:      "ocel-vars",
 		VarsTableARN:   "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-vars",
 		VarsKeyARN:     "arn:aws:kms:us-east-1:123456789012:key/abcd",
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
 	spec := provider.StackSpec{
-		Ref:    provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Ref:    provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: stack},
 		Kind:   provider.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
 		Images: provider.ImagePushes{Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
@@ -130,7 +131,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 		t.Errorf("%s = %q, want %s, the port the target group probes", containerPortEnv, work.env[containerPortEnv], containerPort)
 	}
 	if work.env[edge.OriginSecretVar] != fixtureSecret {
-		t.Errorf("%s = %q, want the class's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
+		t.Errorf("%s = %q, want the tier's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
 	}
 	if _, pinned := work.env[vars.EnvVar]; pinned {
 		t.Errorf("env contains %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", vars.EnvVar)
@@ -154,7 +155,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	cfg.OriginSecret = ""
 	spec.App.HealthCheckPath = "/healthz"
 	if _, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra()); err == nil {
-		t.Error("containerWork accepted a class with no origin secret, so the listener rule would admit every stranger")
+		t.Error("containerWork accepted a tier with no origin secret, so the listener rule would admit every stranger")
 	}
 }
 
@@ -199,7 +200,7 @@ func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEith
 		t.Fatalf("containerWork() = %v", err)
 	}
 	if _, set := unrotated.env[edge.OriginSecretPreviousVar]; set || len(unrotated.secrets) != 1 {
-		t.Errorf("a class with no rotation underway hands the container %v and env %v, want the current secret alone", unrotated.secrets, unrotated.env)
+		t.Errorf("a tier with no rotation underway hands the container %v and env %v, want the current secret alone", unrotated.secrets, unrotated.env)
 	}
 }
 
@@ -253,7 +254,7 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 		t.Errorf("environment = %v, want the delivered values and the port", env)
 	}
 	if definition.LogConfig.Options["awslogs-group"] != "/ocel/containers/production" || definition.LogConfig.Options["awslogs-region"] != "us-east-1" {
-		t.Errorf("logs = %v, want the class log group in the deploy's region", definition.LogConfig)
+		t.Errorf("logs = %v, want the tier log group in the deploy's region", definition.LogConfig)
 	}
 
 	group := recordedOf(t, rec, "aws:lb/targetGroup:TargetGroup")
@@ -275,7 +276,7 @@ func TestAContainerStackProvisionsAFargateServiceBehindTheSharedFront(t *testing
 		demanded[header["httpHeaderName"].StringValue()] = header["values"].ArrayValue()[0].StringValue()
 	}
 	if demanded[edge.OriginSecretHeader] != fixtureSecret {
-		t.Errorf("the rule demands %v, want the class's origin secret: without it every stranger reaches the container", demanded)
+		t.Errorf("the rule demands %v, want the tier's origin secret: without it every stranger reaches the container", demanded)
 	}
 	if demanded[edge.OriginContainerHeader] != "shop-prod-web-container-r3f8a1c90" {
 		t.Errorf("the rule demands %v, want the container the edge names: every release shares one front", demanded)
@@ -464,10 +465,10 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if len(policies) != 1 {
 		t.Fatalf("the task role has %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
 	}
-	own, _ := valuePartition("shop", string(edge.ClassProduction))
+	own, _ := valuePartition("shop", string(environment.TierProduction))
 	for _, want := range []string{"kms:Decrypt", cfg.VarsKeyARN, "dynamodb:Query", cfg.VarsTableARN, own} {
 		if !strings.Contains(policies[0], want) {
-			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the class key", policies[0], want)
+			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the tier key", policies[0], want)
 		}
 	}
 }
@@ -514,7 +515,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	}
 }
 
-func TestAContainerWhoseClassResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t *testing.T) {
+func TestAContainerWhoseTierResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t *testing.T) {
 	cfg, spec := containerStackSpec(t)
 	cfg.AppBoundaryARN = ""
 	_, err := releasing(t, cfg).containerWork(spec, fixtureContainerInfra())

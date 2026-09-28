@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-const manualRecord = `{"proxy":{"manual":{"port":8480}},"project":"shop","class":"production"}`
+const manualRecord = `{"proxy":{"manual":{"port":8480}},"project":"shop","tier":"production"}`
 
 func routedByHand(overrides map[string]answer) *scripted {
 	script := map[string]answer{
@@ -42,9 +42,9 @@ func preflightingByHand(machine *scripted) error {
 	}
 	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
 		Deploy: provider.DeploySpec{
-			Slug:  "shop",
-			Class: edge.ClassProduction,
-			Apps:  []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
+			Slug: "shop",
+			Tier: environment.TierProduction,
+			Apps: []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 	})
 }

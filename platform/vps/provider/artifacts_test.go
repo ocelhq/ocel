@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
@@ -48,13 +48,13 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	spec := provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
-			Class:   edge.ClassProduction,
+			Tier:    environment.TierProduction,
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind: provider.StackInfra,
 		Uploads: []provider.Upload{{
 			Name: "web",
-			Ref:  provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+			Ref:  provider.ArtifactRef{Tier: environment.TierProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
 			Path: path,
 		}},
 	}

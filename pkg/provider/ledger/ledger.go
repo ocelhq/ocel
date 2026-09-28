@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -34,15 +35,15 @@ type Ledger struct {
 
 var _ edge.Ledger = (*Ledger)(nil)
 
-func New(store records.Store, class edge.Class, slug string) *Ledger {
-	return &Ledger{records: store, scope: Scope(class, slug)}
+func New(store records.Store, tier environment.Tier, slug string) *Ledger {
+	return &Ledger{records: store, scope: Scope(tier, slug)}
 }
 
-func Scope(class edge.Class, slug string) string {
+func Scope(tier environment.Tier, slug string) string {
 	if slug == "" {
-		return string(class)
+		return string(tier)
 	}
-	return string(class) + naming.PathSeparator + naming.Sanitize(slug)
+	return string(tier) + naming.PathSeparator + naming.Sanitize(slug)
 }
 
 func RecordKey(app, build string) string { return "record:" + app + "/" + build }

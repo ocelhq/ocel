@@ -371,17 +371,17 @@ func buildUsages(apps []App, declared map[identity]Declaration) ([]*contractv1.M
 	return out, nil
 }
 
-var domainClassTiers = map[string]environmentv1.Tier{
+var domainTiers = map[string]environmentv1.Tier{
 	"production": environmentv1.Tier_TIER_PRODUCTION,
 	"preview":    environmentv1.Tier_TIER_PREVIEW,
 }
 
 func tierDomains(domains map[string][]string) ([]*contractv1.TierDomains, error) {
 	out := make([]*contractv1.TierDomains, 0, len(domains))
-	for class, hostnames := range domains {
-		tier, ok := domainClassTiers[class]
+	for named, hostnames := range domains {
+		tier, ok := domainTiers[named]
 		if !ok {
-			return nil, fmt.Errorf("manifestbuilder: %q is not a domain class — `domains` accepts \"production\" and \"preview\"", class)
+			return nil, fmt.Errorf("manifestbuilder: %q is not a domain tier — `domains` accepts \"production\" and \"preview\"", named)
 		}
 		if len(hostnames) == 0 {
 			continue

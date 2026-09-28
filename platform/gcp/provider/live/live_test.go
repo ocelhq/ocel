@@ -9,7 +9,7 @@ import (
 
 func complete() Manifest {
 	return Manifest{
-		Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Class: "production",
+		Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "production",
 		Keys: []live.Key{{Key: "DATABASE_URL"}},
 	}
 }
@@ -27,7 +27,7 @@ func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
 func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	t.Parallel()
 	manifest := complete()
-	manifest.Class, manifest.Environment = "preview", "pr-7"
+	manifest.Tier, manifest.Environment = "preview", "pr-7"
 	rendered, err := Render(manifest)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
@@ -37,7 +37,7 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 		t.Fatalf("Parse() = %v", err)
 	}
 	if parsed.Project != manifest.Project || parsed.Region != manifest.Region || parsed.Namespace != manifest.Namespace ||
-		parsed.Slug != manifest.Slug || parsed.Class != manifest.Class || parsed.Environment != manifest.Environment ||
+		parsed.Slug != manifest.Slug || parsed.Tier != manifest.Tier || parsed.Environment != manifest.Environment ||
 		len(parsed.Keys) != 1 || parsed.Keys[0].Key != "DATABASE_URL" {
 		t.Errorf("Parse(Render()) = %+v, want %+v", parsed, manifest)
 	}
@@ -49,12 +49,12 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 func TestAManifestMissingWhatAddressesTheStoreIsRefused(t *testing.T) {
 	t.Parallel()
 	for name, sabotage := range map[string]func(*Manifest){
-		"project":                   func(m *Manifest) { m.Project = "" },
-		"region":                    func(m *Manifest) { m.Region = "" },
-		"namespace":                 func(m *Manifest) { m.Namespace = "" },
-		"slug":                      func(m *Manifest) { m.Slug = "" },
-		"class":                     func(m *Manifest) { m.Class = "" },
-		"a class nothing is called": func(m *Manifest) { m.Class = "staging" },
+		"project":                  func(m *Manifest) { m.Project = "" },
+		"region":                   func(m *Manifest) { m.Region = "" },
+		"namespace":                func(m *Manifest) { m.Namespace = "" },
+		"slug":                     func(m *Manifest) { m.Slug = "" },
+		"tier":                     func(m *Manifest) { m.Tier = "" },
+		"a tier nothing is called": func(m *Manifest) { m.Tier = "staging" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			manifest := complete()

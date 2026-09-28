@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func mainModule() edge.WorkerModule {
@@ -429,7 +430,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		{
 			name: "Bootstrap without an account id is an error",
 			call: func(ctx context.Context, p edge.Edge) error {
-				_, err := p.Bootstrap(ctx, edge.ClassProduction)
+				_, err := p.Bootstrap(ctx, environment.TierProduction)
 				return err
 			},
 		},
@@ -482,45 +483,45 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 
 func TestTeardown(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		class edge.Class
-		want  []string
+		name string
+		tier environment.Tier
+		want []string
 	}{
 		{
-			name:  "production takes the workers production bootstrapped",
-			class: edge.ClassProduction,
-			want:  []string{sharedStoreScriptName, isrWriterScriptName},
+			name: "production takes the workers production bootstrapped",
+			tier: environment.TierProduction,
+			want: []string{sharedStoreScriptName, isrWriterScriptName},
 		},
 		{
-			name:  "preview takes the workers preview bootstrapped",
-			class: edge.ClassPreview,
-			want:  []string{previewStoreScriptName, previewISRWriterScriptName},
+			name: "preview takes the workers preview bootstrapped",
+			tier: environment.TierPreview,
+			want: []string{previewStoreScriptName, previewISRWriterScriptName},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(envAccountID, "acct")
 
-			store := cacheStoreName(tc.class)
+			store := cacheStoreName(tc.tier)
 			m := &cfMock{
 				zoneID:         "zone1",
 				zoneName:       "app.com",
-				existingTokens: []map[string]any{{"id": "token-" + string(tc.class), "name": store}},
+				existingTokens: []map[string]any{{"id": "token-" + string(tc.tier), "name": store}},
 			}
 			p := m.provider(t)
-			if err := p.Teardown(t.Context(), tc.class); err != nil {
+			if err := p.Teardown(t.Context(), tc.tier); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
 			assertSet(t, "deleted scripts", m.deletedScripts, tc.want)
-			assertSet(t, "deleted tokens", m.deletedTokens, []string{"token-" + string(tc.class)})
+			assertSet(t, "deleted tokens", m.deletedTokens, []string{"token-" + string(tc.tier)})
 		})
 	}
 
-	t.Run("an unknown class deletes nothing", func(t *testing.T) {
+	t.Run("an unknown tier deletes nothing", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 
 		m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
-		if err := m.provider(t).Teardown(t.Context(), edge.Class("nonsense")); err == nil {
-			t.Fatal("Teardown(unknown class) err = nil, want an error")
+		if err := m.provider(t).Teardown(t.Context(), environment.Tier("nonsense")); err == nil {
+			t.Fatal("Teardown(unknown tier) err = nil, want an error")
 		}
 		if len(m.deletedScripts) != 0 {
 			t.Errorf("deleted scripts = %v, want none", m.deletedScripts)
@@ -530,7 +531,7 @@ func TestTeardown(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := New("ocel").Teardown(t.Context(), edge.ClassProduction); err == nil {
+		if err := New("ocel").Teardown(t.Context(), environment.TierProduction); err == nil {
 			t.Fatal("Teardown without an account id err = nil, want an error")
 		}
 	})

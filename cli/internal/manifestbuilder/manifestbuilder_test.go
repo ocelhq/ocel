@@ -423,7 +423,7 @@ func TestBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a domain class that names no tier", func(t *testing.T) {
+	t.Run("refuses a domains key that names no tier", func(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", map[string][]string{"staging": {"app.acme.com"}}, nil, "serverless", nil, nil, nil, nil)

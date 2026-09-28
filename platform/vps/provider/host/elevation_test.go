@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -38,12 +38,12 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (sessi
 		return session.Result{Stdout: "x86_64\n"}, nil
 	case command == frontReading():
 		return session.Result{Stdout: c.recorded}, nil
-	case c.stamped != "" && command == "cat "+quoted(StampPath(edge.ClassProduction)):
+	case c.stamped != "" && command == "cat "+quoted(StampPath(environment.TierProduction)):
 		return session.Result{Stdout: c.stamped}, nil
 	case c.stamped != "" && strings.Contains(command, "for p in"):
-		return session.Result{Stdout: KindFile + "\t" + StampPath(edge.ClassProduction) + "\t644\troot\tabc\n" +
+		return session.Result{Stdout: KindFile + "\t" + StampPath(environment.TierProduction) + "\t644\troot\tabc\n" +
 			KindFile + "\t" + FrontRecordPath + "\t644\troot\tdef\n" +
-			KindSealKey + "\t" + SealKeyPath(edge.ClassProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
+			KindSealKey + "\t" + SealKeyPath(environment.TierProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
 	default:
 		return session.Result{}, nil
 	}
@@ -71,13 +71,13 @@ func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
 	conn := &sudoless{}
 	ctx := context.Background()
 
-	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(ctx, edge.ClassProduction)
+	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(ctx, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Describe() = %v, want what this login can see of the host: the preflight reports bootstrap state through Describe, and a Describe that demands root turns every deploy under %s into a refusal that includes no claims, no bootstrap state and no known slugs",
 			err, "ocel-deploy")
 	}
 	if described.Present {
-		t.Errorf("Describe() reports the class present against a host that answered no survey line, want it absent")
+		t.Errorf("Describe() reports the tier present against a host that answered no survey line, want it absent")
 	}
 	if over := conn.elevated(); len(over) != 0 {
 		t.Errorf("Describe() ran %q as root, want a description read as the login that asked for it", over)
@@ -88,7 +88,7 @@ func TestReadingTheHostABootstrapWritesToStillNeedsRoot(t *testing.T) {
 	conn := &sudoless{}
 	ctx := context.Background()
 
-	_, err := hostFor(conn).Read(ctx, edge.ClassProduction)
+	_, err := hostFor(conn).Read(ctx, environment.TierProduction)
 	if err == nil || !strings.Contains(err.Error(), "sudo") {
 		t.Fatalf("Read() = %v, want the refusal naming the grant this login lacks: an apply plans against what root can see, and a plan drawn from a narrower view writes over what it could not read",
 			err)
@@ -101,12 +101,12 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err := frontRecordItem(Front{}, "shop", edge.ClassProduction)
+	record, err := frontRecordItem(Front{}, "shop", environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	conn.recorded = string(record.Content)
-	written := digests(append(Items(edge.ClassProduction, keys, ArchAMD64, Front{}), record))
+	written := digests(append(Items(environment.TierProduction, keys, ArchAMD64, Front{}), record))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
 		Schema:  provider.BootstrapSchema,
@@ -124,12 +124,12 @@ func TestALoginThatCannotElevateSeesTheBootstrapThisBuildWroteAsCurrent(t *testi
 	conn := &sudoless{}
 	stampedBy(t, conn, func(map[string]string) {})
 
-	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), edge.ClassProduction)
+	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !described.Present || !described.Stacks[0].DigestCurrent {
-		t.Errorf("Describe() = present %v, current %v, want a class this build stamped complete reported current: ocel-deploy cannot hash the root-only seal key, and a deploy right after a bootstrap was told the bootstrap is behind",
+		t.Errorf("Describe() = present %v, current %v, want a tier this build stamped complete reported current: ocel-deploy cannot hash the root-only seal key, and a deploy right after a bootstrap was told the bootstrap is behind",
 			described.Present, described.Stacks[0].DigestCurrent)
 	}
 	if over := conn.elevated(); len(over) != 0 {
@@ -146,11 +146,11 @@ func TestALoginThatCannotElevateStillSeesABootstrapAnotherBuildWrote(t *testing.
 		}
 	})
 
-	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), edge.ClassProduction)
+	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if described.Stacks[0].DigestCurrent {
-		t.Errorf("Describe() reports current a class whose stamp records content this build does not write, want it behind")
+		t.Errorf("Describe() reports current a tier whose stamp records content this build does not write, want it behind")
 	}
 }

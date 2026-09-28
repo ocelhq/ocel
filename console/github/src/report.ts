@@ -4,7 +4,7 @@ export const deployResultSchema = z.looseObject({
   schemaVersion: z.literal(1),
   slug: z.string(),
   environment: z.looseObject({
-    class: z.string(),
+    tier: z.string(),
     identity: z.string().optional(),
   }),
   provider: z.looseObject({

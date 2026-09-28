@@ -18,10 +18,10 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 
 	var first, again fake.Progress
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), &first); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), &first); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), &again); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), &again); err != nil {
 		t.Fatalf("Run again: %v", err)
 	}
 
@@ -29,8 +29,8 @@ func TestABootstrapRunSaysWhatItWroteAndKeepsWhatItReusedAtDebug(t *testing.T) {
 		"INFO Minted a new production origin secret",
 		"INFO Generated a new Pulumi passphrase",
 		"INFO Minted a new edge reader access key",
-		"INFO Applied stack " + isrStack(ClassProduction),
-		"INFO Applied stack " + runtimeStack(ClassProduction),
+		"INFO Applied stack " + isrStack(TierProduction),
+		"INFO Applied stack " + runtimeStack(TierProduction),
 	} {
 		if !slices.Contains(first.Lines(), want) {
 			t.Errorf("the first bootstrap said %v, want %q", first.Lines(), want)
@@ -52,7 +52,7 @@ func TestATeardownSaysWhatItRemovedInSentences(t *testing.T) {
 	apis, _, _, _ := teardownFakes(t)
 	var progress fake.Progress
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, &progress); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, TierProduction, &progress); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
 	if !slices.Contains(progress.Lines(), "INFO Emptying bucket ocel-state") {
@@ -63,7 +63,7 @@ func TestATeardownSaysWhatItRemovedInSentences(t *testing.T) {
 
 func TestAWriteThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
 	var progress fake.Progress
-	stack := isrStack(ClassProduction)
+	stack := isrStack(TierProduction)
 
 	if err := AdmitReplacements(defaultNamespace, true, &progress)(stack, []cfntypes.ResourceChange{
 		change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue),

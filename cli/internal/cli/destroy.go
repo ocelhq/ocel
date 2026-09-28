@@ -25,8 +25,8 @@ import (
 
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
-	Short: "Permanently destroy this project's deployment of one class",
-	Long: "Permanently destroy what this project has deployed into one class: `production` takes " +
+	Short: "Permanently destroy this project's deployment of one tier",
+	Long: "Permanently destroy what this project has deployed into one tier: `production` takes " +
 		"the edge stack (edge workers, custom-domain binding, deployments store), the infra stack " +
 		"(databases and buckets, including all their data), and every app-deploy stack; `preview` " +
 		"takes the whole preview footprint and leaves the account-level preview bootstrap intact.\n\n" +
@@ -37,10 +37,10 @@ var destroyCmd = &cobra.Command{
 		"Any other value is not a bypass.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
-			return fmt.Errorf("the class to destroy is production or preview, not %q", args[0])
+			return fmt.Errorf("the tier to destroy is production or preview, not %q", args[0])
 		}
 		_ = cmd.Help()
-		return errors.New("destroy acts on one class at a time: production or preview")
+		return errors.New("destroy acts on one tier at a time: production or preview")
 	},
 }
 
