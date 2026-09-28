@@ -219,7 +219,7 @@ A binding keyed by `production` or `preview` serves that tier alone, and the oth
 its own resource as usual. `ocel dev` always runs its own. A bucket binds to one in a store you
 already run: see [Bucket](/docs/sdk/bucket#a-bucket-in-a-store-you-already-run).
 
-`{ "$env": "NAME" }` is a [variable](/docs/environments), set with `ocel env set` for each class
+`{ "$env": "NAME" }` is a [variable](/docs/environments), set with `ocel env set` for each tier
 and environment, and it is the only way a password, a connection string, a CA or a key reaches a
 binding. `${NAME}` in the same file is read from your shell when the config loads, and belongs to
 the values that are not secret. Each `$env` a binding reads is required like one your code declares:

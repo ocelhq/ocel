@@ -354,7 +354,7 @@ binding lives in `bindings`, on any provider:
 }
 ```
 
-The key pair is written as variables you set with `ocel env set`, per class and environment, so
+The key pair is written as variables you set with `ocel env set`, per tier and environment, so
 the config never contains it and the app never reads it. Add `"pathStyle": true` for a store that
 serves no wildcard DNS. `prefix` keeps every key the app writes under it, so one bucket can store
 several resources, and `$env` on `bucket` or `prefix` gives each preview environment its own.
