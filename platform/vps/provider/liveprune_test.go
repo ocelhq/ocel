@@ -57,7 +57,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	promotes(t, routed(t, d, stack), "p-one", "one", provisioned(t, d, "one"), 1)
+	promotes(t, d, stack, "p-one", "one", provisioned(t, d, "one"), 1)
 	recorded(t, d, frontedSlug, stack.State())
 	bindsBehind(t, d, front)
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "one" {
@@ -85,7 +85,7 @@ func prunedAndRestarted(t *testing.T, front string) {
 		}
 		time.Sleep(time.Second)
 	}
-	promotes(t, routed(t, d, stack), "p-two", "two", provisioned(t, d, "two"), 2)
+	promotes(t, d, stack, "p-two", "two", provisioned(t, d, "two"), 2)
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "two" {
 		t.Errorf("%s answered %q for %s after a deploy onto the restored switchboard, want two", front, served, frontedHostname)
 	}

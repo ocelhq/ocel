@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -159,21 +158,8 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		Physical:   provisioned.Containers[0].Physical,
 		HealthPath: healthPath,
 	}
-	releases := ledger.New(p.KeyValues(), environment.TierPreview, slug)
-	if err := releases.PutStaged(ctx, record); err != nil {
-		t.Fatalf("PutStaged(%s): %v", pointer, err)
-	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()}}
-	if err := releases.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
-		t.Fatalf("Promote(%s): %v", pointer, err)
-	}
-	if err := routed(t, p, stack).Flip(ctx, router.Flip{
-		Pointer:   pointer,
-		Promotion: promotion,
-		Records:   map[string]router.DeploymentRecord{app: record},
-	}, progress.DiscardProgress()); err != nil {
-		t.Fatalf("Flip(%s): %v", pointer, err)
-	}
+	promotesRecord(t, p, stack, pointer, promotion, record)
 }
 
 func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer string) *said {
