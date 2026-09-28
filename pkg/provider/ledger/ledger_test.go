@@ -377,7 +377,7 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 
 func activeIn(t *testing.T, l *Ledger, pointer string) string {
 	t.Helper()
-	active, err := l.pointerAt(context.Background(), pointerOr(pointer))
+	active, err := l.pointerAt(context.Background(), router.ResolvePointer(pointer))
 	if err != nil {
 		t.Fatal(err)
 	}

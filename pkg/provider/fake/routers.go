@@ -67,10 +67,7 @@ type projectPointer struct {
 }
 
 func pointerOf(state edge.StackState, pointer string) projectPointer {
-	if pointer == "" {
-		pointer = router.DefaultPointer
-	}
-	return projectPointer{slug: state.Slug, tier: state.Tier, pointer: pointer}
+	return projectPointer{slug: state.Slug, tier: state.Tier, pointer: router.ResolvePointer(pointer)}
 }
 
 func (d *DataPlane) Builds(slug string, tier environment.Tier, pointer string) map[string]string {

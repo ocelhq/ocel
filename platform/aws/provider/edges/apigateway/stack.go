@@ -107,7 +107,7 @@ func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiSpec,
 }
 
 func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string) (string, bool, error) {
-	if pointerOr(pointer) == router.DefaultPointer {
+	if router.IsDefaultPointer(pointer) {
 		if id := s.own.API; id != "" {
 			return id, true, nil
 		}
@@ -187,7 +187,7 @@ func (s *stack) previewHost(pointer string) (string, string) {
 	if base == "" || s.tier() != environment.TierPreview {
 		return "", ""
 	}
-	if pointerOr(pointer) == router.DefaultPointer {
+	if router.IsDefaultPointer(pointer) {
 		return "", ""
 	}
 	host := edge.SharedPreview(s.slug(), base).Host(pointer, "")

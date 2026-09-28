@@ -98,10 +98,7 @@ func (s *stack) flip(ctx context.Context, body flipBody) (bool, error) {
 }
 
 func (s *stack) removeServed(ctx context.Context, pointer string) error {
-	if pointer == "" {
-		pointer = router.DefaultPointer
-	}
-	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, nil)
+	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": router.ResolvePointer(pointer)}, nil)
 	return err
 }
 

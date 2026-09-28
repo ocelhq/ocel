@@ -364,17 +364,10 @@ func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, 
 }
 
 func apiName(ns bootstrap.Namespace, slug string, tier environment.Tier, pointer string) string {
-	if p := pointerOr(pointer); p != router.DefaultPointer {
+	if p := router.ResolvePointer(pointer); p != router.DefaultPointer {
 		return surface.Name(ns, slug, tier, p)
 	}
 	return surface.Name(ns, slug, tier)
-}
-
-func pointerOr(pointer string) string {
-	if pointer == "" {
-		return router.DefaultPointer
-	}
-	return pointer
 }
 
 func accountOf(roleARN string) string {

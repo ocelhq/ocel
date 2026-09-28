@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -377,13 +376,6 @@ func originHost(rawURL string) string {
 	}
 	host, _, _ = strings.Cut(host, "/")
 	return strings.TrimSuffix(host, ":443")
-}
-
-func pointerOr(pointer string) string {
-	if pointer == "" {
-		return router.DefaultPointer
-	}
-	return pointer
 }
 
 func ptr[T any](value T) *T { return &value }

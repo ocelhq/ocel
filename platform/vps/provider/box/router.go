@@ -59,13 +59,13 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) error {
 	s := r.s
-	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
+	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), router.ResolvePointer(pointer)); err != nil {
 		return err
 	}
 	if err := s.applyOrigins(ctx); err != nil {
 		progress.Warn(s.released("Preview "+pointer, err).Error())
 	}
-	return s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer))
+	return s.e.machine.UnroutePointer(ctx, s.surface(), router.ResolvePointer(pointer))
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }
