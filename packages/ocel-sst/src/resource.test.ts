@@ -85,7 +85,7 @@ describe("declaring a postgres binding", () => {
     expect(one.name).toBe("ocel-binding-orders");
     expect(one.props).toMatchObject({
       name: "orders",
-      class: "production",
+      tier: "production",
       project: root,
       owner:
         "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
@@ -97,12 +97,12 @@ describe("declaring a postgres binding", () => {
     expect(declare({ project: "/repo/other" }).props.project).toBe("/repo/other");
   });
 
-  it("refuses an environment outside the preview class", () => {
-    expect(() => declare({ environment: "pr-12" })).toThrow(/is named alongside class production/);
+  it("refuses an environment outside the preview tier", () => {
+    expect(() => declare({ environment: "pr-12" })).toThrow(/is named alongside tier production/);
   });
 
-  it("refuses the reserved class-wide marker", () => {
-    expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
+  it("refuses the reserved tier-wide marker", () => {
+    expect(() => declare({ tier: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
   it("says where a binding call belongs when nothing supplies the util", () => {
@@ -150,14 +150,14 @@ describe("publishing a postgres binding", () => {
 
   it("names the preview environment it publishes into", async () => {
     await postgresProvider.create(
-      declare({ class: "preview", environment: "pr-12" }).props as never,
+      declare({ tier: "preview", environment: "pr-12" }).props as never,
     );
 
     expect(argv().args.slice(-3)).toEqual(["--preview", "--environment", "pr-12"]);
   });
 
-  it("binds class-wide when no preview environment is named", async () => {
-    await postgresProvider.create(declare({ class: "preview" }).props as never);
+  it("binds tier-wide when no preview environment is named", async () => {
+    await postgresProvider.create(declare({ tier: "preview" }).props as never);
 
     expect(argv().args.slice(-1)).toEqual(["--preview"]);
   });
@@ -193,16 +193,16 @@ describe("changing a published postgres binding", () => {
     expect(diff).toMatchObject({ changes: true, replaces: [] });
   });
 
-  it("replaces when the class it lands in changed", async () => {
+  it("replaces when the tier it lands in changed", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
 
     const diff = await postgresProvider.diff(
       "id",
       olds,
-      declare({ class: "preview" }).props as never,
+      declare({ tier: "preview" }).props as never,
     );
 
-    expect(diff.replaces).toContain("class");
+    expect(diff.replaces).toContain("tier");
     expect(diff.deleteBeforeReplace).toBe(true);
   });
 
@@ -259,7 +259,7 @@ describe("declaring a custom binding", () => {
     expect(one.name).toBe("ocel-binding-network");
     expect(one.props).toMatchObject({
       name: "network",
-      class: "production",
+      tier: "production",
       project: root,
       owner:
         "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",

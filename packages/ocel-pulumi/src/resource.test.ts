@@ -105,7 +105,7 @@ describe("declaring a postgres binding", () => {
     expect(one.name).toBe("ocel-binding-orders");
     expect(await inputs(one)).toMatchObject({
       name: "orders",
-      class: "production",
+      tier: "production",
       project: root,
       owner: ownerUrn,
       properties,
@@ -132,12 +132,12 @@ describe("declaring a postgres binding", () => {
     );
   });
 
-  it("refuses an environment outside the preview class", () => {
-    expect(() => declare({ environment: "pr-12" })).toThrow(/is named alongside class production/);
+  it("refuses an environment outside the preview tier", () => {
+    expect(() => declare({ environment: "pr-12" })).toThrow(/is named alongside tier production/);
   });
 
-  it("refuses the reserved class-wide marker", () => {
-    expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
+  it("refuses the reserved tier-wide marker", () => {
+    expect(() => declare({ tier: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
   it("keeps only the fields a postgres binding contains", async () => {
@@ -166,15 +166,13 @@ describe("publishing a postgres binding", () => {
   });
 
   it("names the preview environment it publishes into", async () => {
-    await postgresProvider.create(
-      await inputs(declare({ class: "preview", environment: "pr-12" })),
-    );
+    await postgresProvider.create(await inputs(declare({ tier: "preview", environment: "pr-12" })));
 
     expect(argv().args.slice(-3)).toEqual(["--preview", "--environment", "pr-12"]);
   });
 
-  it("binds class-wide when no preview environment is named", async () => {
-    await postgresProvider.create(await inputs(declare({ class: "preview" })));
+  it("binds tier-wide when no preview environment is named", async () => {
+    await postgresProvider.create(await inputs(declare({ tier: "preview" })));
 
     expect(argv().args.slice(-1)).toEqual(["--preview"]);
   });
@@ -227,16 +225,16 @@ describe("changing a published postgres binding", () => {
     expect(diff).toMatchObject({ changes: true, replaces: [] });
   });
 
-  it("replaces when the class it lands in changed", async () => {
+  it("replaces when the tier it lands in changed", async () => {
     const olds = (await postgresProvider.create(await inputs(declare()))).outs;
 
     const diff = await postgresProvider.diff(
       "id",
       olds,
-      await inputs(declare({ class: "preview" })),
+      await inputs(declare({ tier: "preview" })),
     );
 
-    expect(diff.replaces).toContain("class");
+    expect(diff.replaces).toContain("tier");
     expect(diff.deleteBeforeReplace).toBe(true);
   });
 
@@ -292,7 +290,7 @@ describe("declaring a custom binding", () => {
     expect(one.name).toBe("ocel-binding-network");
     expect(await inputs(one)).toMatchObject({
       name: "network",
-      class: "production",
+      tier: "production",
       project: root,
       owner: customOwner,
       properties: network,

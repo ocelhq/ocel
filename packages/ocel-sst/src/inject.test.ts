@@ -70,7 +70,7 @@ describe("reaching what SST injects into the config bundle", () => {
 
     expect(built).toHaveLength(1);
     expect(built[0]?.name).toBe("ocel-binding-orders");
-    expect(built[0]?.props).toMatchObject({ project: root, class: "production" });
+    expect(built[0]?.props).toMatchObject({ project: root, tier: "production" });
   });
 
   it("declares a custom binding from the injected util", () => {

@@ -6,7 +6,7 @@ export const source = "pulumi";
 
 export interface Target {
   project: string;
-  class: "production" | "preview";
+  tier: "production" | "preview";
   environment?: string;
 }
 
@@ -36,32 +36,32 @@ export function checkTarget(target: Target): void {
       "an ocel project is required: it is the directory containing ocel.json, whose apps consume this binding, and it is never read from a Pulumi stack or project name",
     );
   }
-  if (target.class !== "production" && target.class !== "preview") {
+  if (target.tier !== "production" && target.tier !== "preview") {
     throw new Error(
-      `class ${JSON.stringify(target.class ?? null)} is neither "production" nor "preview": a binding is published to an ocel class, never to a Pulumi stack name`,
+      `tier ${JSON.stringify(target.tier ?? null)} is neither "production" nor "preview": a binding is published to an ocel tier, never to a Pulumi stack name`,
     );
   }
-  if (target.environment === classWideMarker) {
+  if (target.environment === tierWideMarker) {
     throw new Error(
-      `${classWideMarker} is reserved: leave the environment off to publish to the whole class, which serves every preview including the ephemeral ones`,
+      `${tierWideMarker} is reserved: leave the environment off to publish to the whole tier, which serves every preview including the ephemeral ones`,
     );
   }
-  if (target.environment && target.class !== "preview") {
+  if (target.environment && target.tier !== "preview") {
     throw new Error(
-      `environment ${target.environment} is named alongside class ${target.class}: a binding is published to a class and, in preview, to one preview environment`,
+      `environment ${target.environment} is named alongside tier ${target.tier}: a binding is published to a tier and, in preview, to one preview environment`,
     );
   }
 }
 
 function flagsFor(target: Target): string[] {
-  const flags = target.class === "preview" ? ["--preview"] : [];
+  const flags = target.tier === "preview" ? ["--preview"] : [];
   if (target.environment) {
     flags.push("--environment", target.environment);
   }
   return flags;
 }
 
-const classWideMarker = "*";
+const tierWideMarker = "*";
 
 function refusal(stderr: string, status: number | null): string {
   const said = stderr.trim();
