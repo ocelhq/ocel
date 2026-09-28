@@ -29,6 +29,40 @@ func heldStage(t *testing.T, w *world, holder string, until time.Time) {
 	}
 }
 
+func takeStage(t *testing.T, w *world, holder string, until time.Time) {
+	t.Helper()
+	store := awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
+	partition := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootRouters, Path: []string{string(Kind), conformanceSlug}}
+	held, err := keyvalue.ReadOrEmpty(context.Background(), store, partition.Key("stage", router.DefaultPointer))
+	if err != nil {
+		t.Fatalf("read who holds the stage: %v", err)
+	}
+	if held.Value, err = json.Marshal(leaseRecord{Holder: holder, Until: until.Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Write(context.Background(), held); err != nil {
+		t.Fatalf("take the stage: %v", err)
+	}
+}
+
+func stageHolder(t *testing.T, w *world) string {
+	t.Helper()
+	store := awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
+	partition := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootRouters, Path: []string{string(Kind), conformanceSlug}}
+	held, err := keyvalue.ReadOrEmpty(context.Background(), store, partition.Key("stage", router.DefaultPointer))
+	if err != nil {
+		t.Fatalf("read who holds the stage: %v", err)
+	}
+	if len(held.Value) == 0 {
+		return ""
+	}
+	var lease leaseRecord
+	if err := json.Unmarshal(held.Value, &lease); err != nil {
+		t.Fatal(err)
+	}
+	return lease.Holder
+}
+
 func leasesLeft(w *world) []string {
 	var left []string
 	for key := range w.dynamo.items {
@@ -110,5 +144,45 @@ func TestDestroyLetsGoOfAStageAPromoteNeverReleased(t *testing.T) {
 	}
 	if left := leasesLeft(w); len(left) != 0 {
 		t.Errorf("the destroy left %v behind, want nothing: a destroyed project leaves no bytes behind", left)
+	}
+}
+
+func TestAFlipWhoseStageAnotherPromoteTookOverOnceItsTermRanOutMovesNothing(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	w.gateway.mu.Lock()
+	w.gateway.beforeGetStage = func() { takeStage(t, w, "p-other", time.Now().Add(time.Minute)) }
+	w.gateway.mu.Unlock()
+
+	err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1")
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("Flip whose stage another promote took over = %v, want router.Unserved", err)
+	}
+	if got := w.gateway.count("UpdateStage"); got != 0 {
+		t.Errorf("UpdateStage calls = %d, want none: the stage belongs to the promote that took it over", got)
+	}
+	if holder := stageHolder(t, w); holder != "p-other" {
+		t.Errorf("the stage is held by %q, want p-other still: a flip lets go only of a stage it holds", holder)
+	}
+}
+
+func TestAFlipWritesTheStageOnlyWhileItsHoldOnTheStageLasts(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+
+	started := time.Now()
+	if err := stagedFlip(t, openRouter(stack).Stack.(routerStack), "p1"); err != nil {
+		t.Fatalf("Flip: %v", err)
+	}
+	w.gateway.mu.Lock()
+	deadline := w.gateway.stageDeadline
+	w.gateway.mu.Unlock()
+	if deadline.IsZero() || !deadline.Before(started.Add(leaseTerm)) {
+		t.Errorf("the stage write ran until %v, want a deadline before %v, when the hold it renewed runs out: a write that outlives the hold can land after another promote took the stage", deadline, started.Add(leaseTerm))
 	}
 }
