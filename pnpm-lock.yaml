@@ -1153,8 +1153,6 @@ importers:
 
   scripts/check: {}
 
-  scripts/claude-hooks: {}
-
   scripts/release: {}
 
   tests/fixtures/deploy/next:
