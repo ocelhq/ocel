@@ -1058,7 +1058,7 @@ jobs:
           OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          ocel preview up --yes --log-format json 2>&1 | tee "$RUNNER_TEMP/preview.log"
+          ocel preview up --yes 2>&1 | tee "$RUNNER_TEMP/preview.log"
 
       - name: Drop the deployments this preview has outgrown
         run: ocel preview prune --yes
