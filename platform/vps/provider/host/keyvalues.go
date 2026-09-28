@@ -21,7 +21,7 @@ func (s sshKeyValues) HasStore(ctx context.Context, tier environment.Tier) (bool
 	return s.host.hasStore(ctx, tier)
 }
 
-func (s sshKeyValues) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+func (s sshKeyValues) Run(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
 	command := quoted(boxstore.KeyValuesHelper) + " " + quoted(string(tier))
 	for _, arg := range argv {
 		command += " " + quoted(arg)

@@ -37,7 +37,7 @@ func newHelperHere(t *testing.T) helperHere {
 
 func (h helperHere) HasStore(context.Context, environment.Tier) (bool, error) { return true, nil }
 
-func (h helperHere) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+func (h helperHere) Run(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
 	script := filepath.Join(h.t.TempDir(), "keyvalues")
 	if err := os.WriteFile(script, keyValuesScript, 0o755); err != nil {
 		return "", err

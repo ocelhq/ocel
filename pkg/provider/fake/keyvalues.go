@@ -23,7 +23,7 @@ func NewKeyValues() *KeyValues {
 	return &KeyValues{rows: map[string]keyvalue.Entry{}, refusals: map[string]error{}}
 }
 
-func rowOf(key keyvalue.Key) string {
+func encodeKey(key keyvalue.Key) string {
 	encoded, _ := json.Marshal([]any{key.Partition.Tier, key.Partition.Root, key.Partition.Path, key.Path})
 	return string(encoded)
 }
@@ -31,7 +31,7 @@ func rowOf(key keyvalue.Key) string {
 func (s *KeyValues) RefuseRemoval(key keyvalue.Key, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.refusals[rowOf(key)] = err
+	s.refusals[encodeKey(key)] = err
 }
 
 func (s *KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
@@ -40,7 +40,7 @@ func (s *KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, e
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	row, ok := s.rows[rowOf(key)]
+	row, ok := s.rows[encodeKey(key)]
 	if !ok {
 		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
@@ -85,7 +85,7 @@ func refuseUnwritable(entry keyvalue.Entry) error {
 }
 
 func (s *KeyValues) checkRevision(entry keyvalue.Entry) error {
-	prior, exists := s.rows[rowOf(entry.Key)]
+	prior, exists := s.rows[encodeKey(entry.Key)]
 	if exists != (entry.Revision != "") || (exists && prior.Revision != entry.Revision) {
 		return keyvalue.ErrStale
 	}
@@ -96,7 +96,7 @@ func (s *KeyValues) store(entry keyvalue.Entry) keyvalue.Revision {
 	s.seq++
 	next := copyEntry(entry)
 	next.Revision = keyvalue.Revision(strconv.FormatUint(s.seq, 10))
-	s.rows[rowOf(entry.Key)] = next
+	s.rows[encodeKey(entry.Key)] = next
 	return next.Revision
 }
 
@@ -106,7 +106,7 @@ func (s *KeyValues) Remove(_ context.Context, key keyvalue.Key, expected keyvalu
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	row := rowOf(key)
+	row := encodeKey(key)
 	s.journal.note("forget " + key.String())
 	if refused := s.refusals[row]; refused != nil {
 		return refused
@@ -130,7 +130,7 @@ func (s *KeyValues) List(_ context.Context, in keyvalue.Partition, under ...stri
 	defer s.mu.Unlock()
 	var found []keyvalue.Entry
 	for _, entry := range s.rows {
-		if !samePartition(entry.Key.Partition, in) || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
+		if !isSamePartition(entry.Key.Partition, in) || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
 			continue
 		}
 		found = append(found, copyEntry(entry))
@@ -139,7 +139,7 @@ func (s *KeyValues) List(_ context.Context, in keyvalue.Partition, under ...stri
 	return found, nil
 }
 
-func samePartition(a, b keyvalue.Partition) bool {
+func isSamePartition(a, b keyvalue.Partition) bool {
 	return a.Tier == b.Tier && a.Root == b.Root && slices.Equal(a.Path, b.Path)
 }
 

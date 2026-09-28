@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
@@ -34,12 +35,14 @@ const (
 type KeyValueTransport interface {
 	HasStore(ctx context.Context, tier environment.Tier) (bool, error)
 
-	KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error)
+	Run(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error)
 }
 
 type KeyValues struct{ over KeyValueTransport }
 
 func NewKeyValues(over KeyValueTransport) *KeyValues { return &KeyValues{over: over} }
+
+var errUnprovisioned = errors.New("this host keeps no store for the tier")
 
 func unbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
@@ -47,19 +50,23 @@ func unbootstrapped(tier environment.Tier) error {
 		provider.BootstrapCommand(tier))
 }
 
+func (s *KeyValues) run(ctx context.Context, tier environment.Tier, unprovisioned error, stdin io.Reader, argv ...string) (string, error) {
+	provisioned, err := s.over.HasStore(ctx, tier)
+	if err != nil {
+		return "", err
+	}
+	if !provisioned {
+		return "", unprovisioned
+	}
+	return s.over.Run(ctx, tier, stdin, argv...)
+}
+
 func (s *KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
 	path, err := live.PathOf(key)
 	if err != nil {
 		return keyvalue.Entry{}, err
 	}
-	provisioned, err := s.over.HasStore(ctx, key.Partition.Tier)
-	if err != nil {
-		return keyvalue.Entry{}, err
-	}
-	if !provisioned {
-		return keyvalue.Entry{}, keyvalue.ErrNotFound
-	}
-	rendered, err := s.over.KeyValues(ctx, key.Partition.Tier, nil, "read", path)
+	rendered, err := s.run(ctx, key.Partition.Tier, keyvalue.ErrNotFound, nil, "read", path)
 	if err != nil {
 		return keyvalue.Entry{}, err
 	}
@@ -72,19 +79,12 @@ func (s *KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry,
 }
 
 func (s *KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	path, line, err := written(entry)
+	path, line, err := encodeEntry(entry)
 	if err != nil {
 		return "", err
 	}
 	tier := entry.Key.Partition.Tier
-	provisioned, err := s.over.HasStore(ctx, tier)
-	if err != nil {
-		return "", err
-	}
-	if !provisioned {
-		return "", unbootstrapped(tier)
-	}
-	rendered, err := s.over.KeyValues(ctx, tier, bytes.NewReader(line), "write", path, string(entry.Revision))
+	rendered, err := s.run(ctx, tier, unbootstrapped(tier), bytes.NewReader(line), "write", path, string(entry.Revision))
 	if err != nil {
 		return "", err
 	}
@@ -92,11 +92,11 @@ func (s *KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.R
 }
 
 func (s *KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
-	one, firstLine, err := written(first)
+	one, firstLine, err := encodeEntry(first)
 	if err != nil {
 		return err
 	}
-	two, secondLine, err := written(second)
+	two, secondLine, err := encodeEntry(second)
 	if err != nil {
 		return err
 	}
@@ -106,15 +106,8 @@ func (s *KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry)
 			"%s and %s belong to different tiers",
 			first.Key, second.Key)
 	}
-	provisioned, err := s.over.HasStore(ctx, tier)
-	if err != nil {
-		return err
-	}
-	if !provisioned {
-		return unbootstrapped(tier)
-	}
 	fed := io.MultiReader(bytes.NewReader(firstLine), bytes.NewReader(secondLine))
-	rendered, err := s.over.KeyValues(ctx, tier, fed, "pair", one, string(first.Revision), two, string(second.Revision))
+	rendered, err := s.run(ctx, tier, unbootstrapped(tier), fed, "pair", one, string(first.Revision), two, string(second.Revision))
 	if err != nil {
 		return err
 	}
@@ -135,14 +128,7 @@ func (s *KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyva
 	if err != nil {
 		return err
 	}
-	provisioned, err := s.over.HasStore(ctx, key.Partition.Tier)
-	if err != nil {
-		return err
-	}
-	if !provisioned {
-		return keyvalue.ErrNotFound
-	}
-	rendered, err := s.over.KeyValues(ctx, key.Partition.Tier, nil, "remove", path, string(expected))
+	rendered, err := s.run(ctx, key.Partition.Tier, keyvalue.ErrNotFound, nil, "remove", path, string(expected))
 	if err != nil {
 		return err
 	}
@@ -166,14 +152,10 @@ func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...st
 		}
 		argv = append(argv, strings.TrimPrefix(prefix, dir+"/"))
 	}
-	provisioned, err := s.over.HasStore(ctx, in.Tier)
-	if err != nil {
-		return nil, err
-	}
-	if !provisioned {
+	rendered, err := s.run(ctx, in.Tier, errUnprovisioned, nil, argv...)
+	if errors.Is(err, errUnprovisioned) {
 		return nil, nil
 	}
-	rendered, err := s.over.KeyValues(ctx, in.Tier, nil, argv...)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +182,7 @@ func (s *KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...st
 	return found, nil
 }
 
-func written(entry keyvalue.Entry) (string, []byte, error) {
+func encodeEntry(entry keyvalue.Entry) (string, []byte, error) {
 	path, err := live.PathOf(entry.Key)
 	if err != nil {
 		return "", nil, err

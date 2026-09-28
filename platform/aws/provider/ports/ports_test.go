@@ -38,7 +38,7 @@ func (tierTables) ValuesTable(_ context.Context, tier environment.Tier) (string,
 	return "ocel-" + string(tier) + "-vars", nil
 }
 
-func newRecords(t *testing.T) (awsports.KeyValues, *fakeDynamo) {
+func newKeyValues(t *testing.T) (awsports.KeyValues, *fakeDynamo) {
 	t.Helper()
 	ddb := newFakeDynamo()
 	return awsports.KeyValues{Dynamo: ddb, Tables: tierTables{}}, ddb
@@ -56,18 +56,18 @@ func newCipher() (awsports.Cipher, *fakeKMS) {
 	}}, crypto
 }
 
-func TestRecordsConformance(t *testing.T) {
-	table, _ := newRecords(t)
+func TestTheKeyValueStoreConformsOverATableForEachTier(t *testing.T) {
+	table, _ := newKeyValues(t)
 	conformance.RunStore(t, table)
 }
 
-func TestCipherConformance(t *testing.T) {
+func TestTheCipherSealsAsEveryCipherMust(t *testing.T) {
 	cipher, _ := newCipher()
 	conformance.RunCipher(t, cipher)
 }
 
-func TestValueRecordsPartitionOnTheProjectAndTier(t *testing.T) {
-	table, ddb := newRecords(t)
+func TestValueEntriesPartitionOnTheProjectAndTier(t *testing.T) {
+	table, ddb := newKeyValues(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
@@ -90,7 +90,7 @@ func TestValueRecordsPartitionOnTheProjectAndTier(t *testing.T) {
 }
 
 func TestAnEntryIsKeptAsTheJSONItHoldsInAStringAttribute(t *testing.T) {
-	table, ddb := newRecords(t)
+	table, ddb := newKeyValues(t)
 	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
 	if _, err := table.Write(context.Background(), keyvalue.Entry{Key: key, Value: []byte(`{"features":["cache"]}`)}); err != nil {
@@ -104,7 +104,7 @@ func TestAnEntryIsKeptAsTheJSONItHoldsInAStringAttribute(t *testing.T) {
 }
 
 func TestAnItemThisLayoutDidNotWriteIsNotReadAsEmpty(t *testing.T) {
-	table, ddb := newRecords(t)
+	table, ddb := newKeyValues(t)
 	ddb.items["ocel-production-state"] = map[string]map[string]map[string]ddbtypes.AttributeValue{"schema": {"production#": {
 		"pk":   &ddbtypes.AttributeValueMemberS{Value: "schema"},
 		"sk":   &ddbtypes.AttributeValueMemberS{Value: "production#"},
@@ -130,7 +130,7 @@ func stringOf(value ddbtypes.AttributeValue) string {
 }
 
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
-	table, _ := newRecords(t)
+	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := envvars.Store{KeyValues: table, Cipher: cipher}
@@ -151,7 +151,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 }
 
 func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFolderAndKey(t *testing.T) {
-	table, _ := newRecords(t)
+	table, _ := newKeyValues(t)
 	cipher, crypto := newCipher()
 	store := envvars.Store{KeyValues: table, Cipher: cipher}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
@@ -177,7 +177,7 @@ func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFo
 }
 
 func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
-	table, _ := newRecords(t)
+	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
 	sealed := fakeCipherMarker + keyARN + "#class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
 		base64.StdEncoding.EncodeToString([]byte("sk_live_secret"))
@@ -201,7 +201,7 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 }
 
 func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
-	table, _ := newRecords(t)
+	table, _ := newKeyValues(t)
 	cipher, crypto := newCipher()
 	store := envvars.Store{KeyValues: table, Cipher: cipher}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
@@ -348,7 +348,7 @@ func TestAPartitionIsItsRootAndPathAndNothingElse(t *testing.T) {
 }
 
 func TestTheSchemaSitsOnTheKeyEveryLayoutWroteIt(t *testing.T) {
-	table, ddb := newRecords(t)
+	table, ddb := newKeyValues(t)
 	if err := stackrecords.EnsureSchema(context.Background(), table, environment.TierPreview); err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 }
 
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
-	table, ddb := newRecords(t)
+	table, ddb := newKeyValues(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
