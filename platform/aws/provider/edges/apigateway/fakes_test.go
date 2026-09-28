@@ -976,11 +976,11 @@ func ownState(t *testing.T, stack edge.EdgeStack) private {
 	return own
 }
 
-func routes(shared edge.EdgeStack) routerStack { return routerStack{s: shared.(*stack)} }
+func openRouter(shared edge.EdgeStack) routerStack { return routerStack{s: shared.(*stack)} }
 
 func removePointer(ctx context.Context, stack edge.EdgeStack, pointer string, progress progress.Progress) (router.PruneResult, error) {
-	if err := routes(stack).RemovePointer(ctx, pointer, progress); err != nil {
+	if err := openRouter(stack).RemovePointer(ctx, pointer, progress); err != nil {
 		return router.PruneResult{}, err
 	}
-	return routes(stack).Ledger().RemovePointer(ctx, pointer)
+	return openRouter(stack).Ledger().RemovePointer(ctx, pointer)
 }

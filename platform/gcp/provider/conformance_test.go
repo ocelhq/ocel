@@ -71,11 +71,11 @@ func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	routes, err := p.Routers().Open(router.Kind(direct.Kind))
+	opened, err := p.Routers().Open(router.Kind(direct.Kind))
 	if err != nil {
 		t.Fatalf("Routers().Open(%q) = %v", direct.Kind, err)
 	}
-	if !routes.Facts().AddressesItself {
+	if !opened.Facts().AddressesItself {
 		t.Error("Facts() says the origin does not address itself, and a deploy would then demand a hostname " +
 			"the direct edge has no way to bind")
 	}

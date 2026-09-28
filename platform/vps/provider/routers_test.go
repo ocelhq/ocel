@@ -11,12 +11,11 @@ import (
 
 func routed(t *testing.T, p *vps.Provider, stack edge.EdgeStack) router.Stack {
 	t.Helper()
-	routes, err := p.Routers().Open(router.Kind(boxedge.Kind))
+	paired, err := p.Routers().Open(router.Kind(boxedge.Kind))
 	if err != nil {
 		t.Fatalf("Routers().Open(%q) = %v", boxedge.Kind, err)
 	}
-	state := stack.State()
-	opened, err := routes.Open(router.NewStackState(state))
+	opened, err := paired.Open(router.NewStackState(stack.State()))
 	if err != nil {
 		t.Fatalf("Open the router = %v", err)
 	}

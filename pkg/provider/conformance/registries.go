@@ -112,20 +112,20 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 
 	t.Run("a paired router opens under its kind and reaches every compute it is paired for", func(t *testing.T) {
 		for _, pairing := range facts.Pairings {
-			routes, err := routers.Open(pairing.Router)
+			opened, err := routers.Open(pairing.Router)
 			if err != nil {
 				t.Errorf("Open(%q) = %v, want the router Facts.Pairings names", pairing.Router, err)
 				continue
 			}
-			if routes.Kind() != pairing.Router {
-				t.Errorf("Open(%q) answered a router calling itself %q", pairing.Router, routes.Kind())
+			if opened.Kind() != pairing.Router {
+				t.Errorf("Open(%q) answered a router calling itself %q", pairing.Router, opened.Kind())
 			}
-			reaches := routes.Facts()
+			routerFacts := opened.Facts()
 			for _, compute := range pairing.Computes {
 				switch {
-				case compute == provider.ComputeServerless && !reaches.ReachesFunctions:
+				case compute == provider.ComputeServerless && !routerFacts.ReachesFunctions:
 					t.Errorf("the %q router is paired for serverless apps and reaches no function", pairing.Router)
-				case compute == provider.ComputeContainer && !reaches.ReachesContainers:
+				case compute == provider.ComputeContainer && !routerFacts.ReachesContainers:
 					t.Errorf("the %q router is paired for container apps and reaches no container", pairing.Router)
 				}
 			}
@@ -133,20 +133,20 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 			if err != nil {
 				continue
 			}
-			if front.Facts().RunsCode && !reaches.SignsOriginForwards {
+			if front.Facts().RunsCode && !routerFacts.SignsOriginForwards {
 				t.Errorf("the %q router signs no origin forward, and the %q edge it pairs with runs code; the code it runs reaches the origin with the credentials it was bootstrapped, so its router must sign", pairing.Router, pairing.Edge)
 			}
-			if front.Facts().RunsCode && !reaches.Dispatches {
+			if front.Facts().RunsCode && !routerFacts.Dispatches {
 				t.Errorf("the %q router dispatches no path, and the %q edge it pairs with runs the code that dispatches a release's paths", pairing.Router, pairing.Edge)
 			}
 		}
 	})
 
 	t.Run("a router this provider does not have is refused as invalid", func(t *testing.T) {
-		unserved := router.Kind("no-such-router")
-		routes, err := routers.Open(unserved)
+		missing := router.Kind("no-such-router")
+		opened, err := routers.Open(missing)
 		if err == nil {
-			t.Fatalf("Open(%q) = %v, want a refusal", unserved, routes)
+			t.Fatalf("Open(%q) = %v, want a refusal", missing, opened)
 		}
 		requireInvalid(t, err, "Open")
 	})

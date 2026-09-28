@@ -14,12 +14,12 @@ func TestAFlipWhosePromotionIsNoLongerActiveCreatesNoAPIForItsPointer(t *testing
 	w := newWorld()
 	_, stack := previewing(t, w)
 	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
-	if err := routes(stack).Ledger().PutStaged(ctx, record); err != nil {
+	if err := openRouter(stack).Ledger().PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	displaced := errors.New("another promotion displaced this one")
 
-	err := routes(stack).Flip(ctx, router.Flip{
+	err := openRouter(stack).Flip(ctx, router.Flip{
 		Pointer:     previewPoint,
 		Promotion:   router.Promotion{PromotionID: "p-displaced", Ts: 1, Builds: map[string]string{"web": record.Build}},
 		StillActive: func(context.Context) error { return displaced },
