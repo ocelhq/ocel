@@ -11,53 +11,27 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type answeringFirestore struct {
 	firestorepb.UnimplementedFirestoreServer
 
 	queries error
-	holding string
 }
 
 func (a answeringFirestore) BatchGetDocuments(*firestorepb.BatchGetDocumentsRequest, firestorepb.Firestore_BatchGetDocumentsServer) error {
 	return status.Error(codes.NotFound, `"projects/acme-prod/databases/ocel/documents/records-production/x" not found`)
 }
 
-func (a answeringFirestore) RunQuery(req *firestorepb.RunQueryRequest, stream firestorepb.Firestore_RunQueryServer) error {
-	if a.queries != nil || a.holding == "" {
-		return a.queries
-	}
-	collection := req.GetStructuredQuery().GetFrom()[0].GetCollectionId()
-	written := timestamppb.Now()
-	return stream.Send(&firestorepb.RunQueryResponse{
-		ReadTime: written,
-		Document: &firestorepb.Document{
-			Name:       req.GetParent() + "/" + collection + "/" + a.holding,
-			Fields:     map[string]*firestorepb.Value{"body": {ValueType: &firestorepb.Value_BytesValue{BytesValue: []byte("2")}}},
-			CreateTime: written,
-			UpdateTime: written,
-		},
-	})
+func (a answeringFirestore) RunQuery(*firestorepb.RunQueryRequest, firestorepb.Firestore_RunQueryServer) error {
+	return a.queries
 }
 
 func firestoreAnswering(t *testing.T, queries error) string {
-	t.Helper()
-	return firestoreServing(t, answeringFirestore{queries: queries})
-}
-
-func firestoreHolding(t *testing.T, id string) string {
-	t.Helper()
-	return firestoreServing(t, answeringFirestore{holding: id})
-}
-
-func firestoreServing(t *testing.T, answering answeringFirestore) string {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -65,7 +39,7 @@ func firestoreServing(t *testing.T, answering answeringFirestore) string {
 		t.Fatalf("listen on loopback: %v", err)
 	}
 	server := grpc.NewServer()
-	firestorepb.RegisterFirestoreServer(server, answering)
+	firestorepb.RegisterFirestoreServer(server, answeringFirestore{queries: queries})
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	return "http://" + listener.Addr().String()
@@ -93,30 +67,6 @@ func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheEntryIsMis
 
 		if _, err := testProvider(t).KeyValues().Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
 			t.Fatalf("Read() of a name nothing was written at = %v, want ErrNotFound", err)
-		}
-	})
-}
-
-func TestASchemaTheOlderLayoutWroteIsRefusedRatherThanStampedOver(t *testing.T) {
-	t.Run("the older layout's schema document", func(t *testing.T) {
-		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", firestoreHolding(t, "schema#production"))
-
-		var refused refusal.Refusal
-		err := stackrecords.EnsureSchema(context.Background(), testProvider(t).KeyValues(), environment.TierProduction)
-		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-			t.Fatalf("EnsureSchema() over a schema the older layout wrote = %v, want a %s refusal: a build that reads it as unwritten stamps its own schema beside records it cannot see", err, refusal.CodeNotReady)
-		}
-		if !strings.Contains(refused.Message, "older ocel") {
-			t.Errorf("EnsureSchema() refused with %q, want it to say an older ocel wrote what is there", refused.Message)
-		}
-	})
-
-	t.Run("a document the older layout wrote for another key", func(t *testing.T) {
-		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", firestoreHolding(t, "stacks#production#shop"))
-
-		key := stackrecords.SchemaKey(environment.TierProduction)
-		if _, err := testProvider(t).KeyValues().Read(context.Background(), key); !errors.Is(err, keyvalue.ErrNotFound) {
-			t.Fatalf("Read(%s) beside an older document for another key = %v, want ErrNotFound", key, err)
 		}
 	})
 }

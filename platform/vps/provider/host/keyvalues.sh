@@ -75,17 +75,9 @@ valueof() {
 	printf '%s' "${rest%\}}"
 }
 
-refuserecfile() {
-	rec="${1%.json}.rec"
-	[ ! -f "$rec" ] || abort "$rec is an entry an older ocel wrote, in a layout this build does not read"
-}
-
 readrev() {
 	current=
-	if [ ! -f "$1" ]; then
-		refuserecfile "$1"
-		return 0
-	fi
+	[ -f "$1" ] || return 0
 	current=$(revof "$1")
 }
 
@@ -128,10 +120,7 @@ read)
 	[ $# -eq 1 ] || usage
 	f=$(fileof "$1")
 	ours "$f"
-	if [ ! -f "$f" ]; then
-		refuserecfile "$f"
-		exit 3
-	fi
+	[ -f "$f" ] || exit 3
 	rev=$(revof "$f")
 	value=$(valueof "$f")
 	printf '%s\t%s\n' "$rev" "$value"

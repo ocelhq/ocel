@@ -46,17 +46,11 @@ func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firest
 	return client.Collection(tierCollectionPrefix + string(tier))
 }
 
-func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firestore.CollectionRef, key keyvalue.Key) error {
-	flat := flatDocumentID(key)
-	documents := collection.Select().OrderBy(firestore.DocumentID, firestore.Asc).StartAt(flat).Limit(1).Documents(ctx)
+func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firestore.CollectionRef, tier environment.Tier) error {
+	documents := collection.Select().Limit(1).Documents(ctx)
 	defer documents.Stop()
-	snapshot, err := documents.Next()
-	switch {
-	case status.Code(err) == codes.NotFound:
-		return s.refuseUnbootstrapped(key.Partition.Tier)
-	case err == nil && snapshot.Ref.ID == flat:
-		return refusal.Refuse(refusal.CodeNotReady,
-			"%s is kept as the document %q, which this build did not write: an older ocel wrote it in a layout this build does not read", key, flat)
+	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
+		return s.refuseUnbootstrapped(tier)
 	}
 	return keyvalue.ErrNotFound
 }
@@ -71,7 +65,7 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 	}
 	snapshot, err := collection.Doc(documentID(key)).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return keyvalue.Entry{}, s.refuseAbsentDocument(ctx, collection, key)
+		return keyvalue.Entry{}, s.refuseAbsentDocument(ctx, collection, key.Partition.Tier)
 	}
 	if err != nil {
 		return keyvalue.Entry{}, fmt.Errorf("read %s: %w", key, err)
@@ -299,8 +293,7 @@ func (s KeyValues) refuseUnbootstrapped(tier environment.Tier) error {
 func entryOf(key keyvalue.Key, snapshot *firestore.DocumentSnapshot) (keyvalue.Entry, error) {
 	value, present := snapshot.Data()[valueField].(string)
 	if !present {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s holds a document with no JSON %q field, which this build did not write: an older ocel wrote it in a layout this build does not read", key, valueField)
+		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s holds a document with no JSON %q field, so ocel did not write it", key, valueField)
 	}
 	return keyvalue.Entry{Key: key, Value: []byte(value), Revision: revisionOf(snapshot)}, nil
 }
@@ -320,10 +313,6 @@ func partitionCeiling(in keyvalue.Partition) string {
 
 func documentID(key keyvalue.Key) string {
 	return partitionPrefix(key.Partition) + join(key.Path)
-}
-
-func flatDocumentID(key keyvalue.Key) string {
-	return keyvalue.JoinSegments(append(key.Partition.Segments(), key.Path...), segmentSeparator, "/")
 }
 
 func join(segments []string) string {

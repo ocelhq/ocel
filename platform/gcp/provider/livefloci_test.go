@@ -8,16 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"cloud.google.com/go/firestore"
-
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -80,29 +76,6 @@ func TestLiveStacks(t *testing.T) {
 
 func TestLiveTheKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 	conformance.RunStore(t, live(t).KeyValues())
-}
-
-func TestLiveASchemaTheOlderLayoutWroteIsRefusedRatherThanStampedOver(t *testing.T) {
-	p := live(t)
-	bootstrapped(t, p, environment.TierPreview)
-
-	ctx := context.Background()
-	client, err := firestore.NewClientWithDatabase(ctx, liveProject(), liveNames(t).Database(), ports.EmulatorGRPC(endpoint())...)
-	if err != nil {
-		t.Fatalf("open Firestore: %v", err)
-	}
-	t.Cleanup(func() { _ = client.Close() })
-	older := ports.OpenTierCollection(client, environment.TierPreview).Doc("schema#preview")
-	if _, err := older.Set(ctx, map[string]any{"body": []byte("2"), "rev": "older"}); err != nil {
-		t.Fatalf("write the schema the older layout kept: %v", err)
-	}
-	t.Cleanup(func() { _, _ = older.Delete(ctx) })
-
-	var refused refusal.Refusal
-	err = stackrecords.EnsureSchema(ctx, p.KeyValues(), environment.TierPreview)
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("EnsureSchema() over a schema the older layout wrote = %v, want a %s refusal: a build that reads it as unwritten stamps its own schema beside records it cannot see", err, refusal.CodeNotReady)
-	}
 }
 
 func TestLiveTheCipherSealsAsEveryCipherMust(t *testing.T) {

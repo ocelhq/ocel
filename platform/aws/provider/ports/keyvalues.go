@@ -325,8 +325,7 @@ func pathOf(item map[string]ddbtypes.AttributeValue) ([]string, bool, error) {
 func entryOf(key keyvalue.Key, item map[string]ddbtypes.AttributeValue) (keyvalue.Entry, error) {
 	value, ok := item[valueAttribute].(*ddbtypes.AttributeValueMemberS)
 	if !ok {
-		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s holds an item with no JSON %q attribute, which this build did not write: an older ocel wrote it in a layout this build does not read", key, valueAttribute)
+		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s holds an item with no JSON %q attribute, so ocel did not write it", key, valueAttribute)
 	}
 	return keyvalue.Entry{Key: key, Value: []byte(value.Value), Revision: keyvalue.Revision(stringAttribute(item, revisionAttribute))}, nil
 }
