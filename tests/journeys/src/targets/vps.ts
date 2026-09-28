@@ -36,9 +36,10 @@ import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
-const RECORDS_TIER = "/var/lib/ocel/production/records";
-const PROJECT_RECORDS = `${RECORDS_TIER}/projects/production`;
-const NO_RECORDS_TIER = "no-records-tier";
+const KEYVALUES_TIER = "/var/lib/ocel/production/keyvalues";
+const PROJECT_ENTRIES = `${KEYVALUES_TIER}/projects`;
+const NO_KEYVALUES_TIER = "no-keyvalues-tier";
+const ENTRY_SUFFIX = ".json";
 const CONTAINER_APP_ROOT = "/app";
 const CONTAINER_LIVE_DIR = "/ocel/live";
 const BOOTSTRAP_DIR = path.join(outputRoot, "vps", "box");
@@ -115,13 +116,13 @@ export function hostnamesWithoutUrl(said: string, hostnames: string[]): string[]
   );
 }
 
-export function recordFile(slug: string): string {
+export function entryFile(slug: string): string {
   const encoded = Array.from(Buffer.from(slug, "utf8"), (byte, at) => {
     const char = String.fromCharCode(byte);
     const plain = /^[A-Za-z0-9\-_.]$/.test(char) && !(at === 0 && char === ".");
     return plain ? char : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
   }).join("");
-  return `${encoded}.rec`;
+  return `${encoded}${ENTRY_SUFFIX}`;
 }
 
 export function heldProbe(held: string): string {
@@ -129,21 +130,21 @@ export function heldProbe(held: string): string {
 }
 
 export function projectListing(prefix: string): string {
-  return `test -d '${RECORDS_TIER}' && { ls -1d '${PROJECT_RECORDS}'/${prefix}*.rec 2>/dev/null || true; } || echo ${NO_RECORDS_TIER}`;
+  return `test -d '${KEYVALUES_TIER}' && { ls -1d '${PROJECT_ENTRIES}'/${prefix}*${ENTRY_SUFFIX} 2>/dev/null || true; } || echo ${NO_KEYVALUES_TIER}`;
 }
 
 export function slugsOf(listing: string): string[] {
-  if (listing.trim() === NO_RECORDS_TIER) {
+  if (listing.trim() === NO_KEYVALUES_TIER) {
     throw new Error(
-      `${RECORDS_TIER} does not exist on the box, so nothing here can tell a box that has ` +
+      `${KEYVALUES_TIER} does not exist on the box, so nothing here can tell a box that has ` +
         "no harness project from one this listing failed to read",
     );
   }
   return listing
     .split("\n")
     .map((line) => line.trim().split("/").pop() ?? "")
-    .filter((name) => name.endsWith(".rec"))
-    .map((name) => decodeURIComponent(name.slice(0, -".rec".length)));
+    .filter((name) => name.endsWith(ENTRY_SUFFIX))
+    .map((name) => decodeURIComponent(name.slice(0, -ENTRY_SUFFIX.length)));
 }
 
 export function sshRefusal(target: Box, login: string, command: string, error: unknown): Error {
@@ -692,7 +693,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     const said = await ssh(
       this.box(),
       DEPLOY_LOGIN,
-      `test -e '${PROJECT_RECORDS}/${recordFile(slug)}' && echo present || echo gone`,
+      `test -e '${PROJECT_ENTRIES}/${entryFile(slug)}' && echo present || echo gone`,
     );
     return said.trim() === "present";
   }

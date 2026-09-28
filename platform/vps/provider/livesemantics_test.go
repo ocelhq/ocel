@@ -19,7 +19,7 @@ import (
 const (
 	helperDir       = "/usr/local/lib/ocel"
 	keyValuesHelper = helperDir + "/keyvalues"
-	keyValuesDir    = "/var/lib/ocel/production/records"
+	keyValuesDir    = "/var/lib/ocel/production/keyvalues"
 )
 
 type killer struct {

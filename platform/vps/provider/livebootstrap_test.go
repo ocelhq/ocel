@@ -98,7 +98,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	for _, want := range []string{
 		"/etc/ocel/production",
 		"/var/lib/ocel/production",
-		"/var/lib/ocel/production/records",
+		"/var/lib/ocel/production/keyvalues",
 		"/var/lib/ocel/.ssh/authorized_keys",
 		"/usr/local/lib/ocel",
 		"/usr/local/lib/ocel/keyvalues",
@@ -131,7 +131,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /etc/ocel/production")); owner != "root" {
 		t.Errorf("/etc/ocel/production is owned by %q, want root: the tier tier is root's alone", owner)
 	}
-	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /var/lib/ocel/production/records")); owner != deployLogin {
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /var/lib/ocel/production/keyvalues")); owner != deployLogin {
 		t.Errorf("the record tier is owned by %q, want %s: it is the deploy login's alone", owner, deployLogin)
 	}
 	accountAsDecided(t, vm)

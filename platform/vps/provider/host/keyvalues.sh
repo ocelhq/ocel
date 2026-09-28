@@ -21,7 +21,7 @@ case $tier in
 '' | *[!a-z0-9-]*) abort "$tier is not a valid tier" ;;
 esac
 
-dir="${OCEL_STATE_ROOT:-/var/lib/ocel}/$tier/records"
+dir="${OCEL_STATE_ROOT:-/var/lib/ocel}/$tier/keyvalues"
 [ ! -L "$dir" ] || abort "$dir is a symlink to $(readlink "$dir"), not the directory ocel bootstrap made"
 [ -d "$dir" ] || abort "$dir is missing; run ocel bootstrap"
 
