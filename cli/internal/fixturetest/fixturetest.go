@@ -3,7 +3,6 @@ package fixturetest
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -11,11 +10,20 @@ import (
 
 func RepoDir(t *testing.T) string {
 	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("locate the test source")
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("no go.work above this package")
+		}
+		dir = parent
+	}
 }
 
 func Dirs(t *testing.T) []string {

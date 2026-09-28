@@ -9,11 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -105,12 +105,7 @@ func expressFixture(t *testing.T) string {
 
 func repoRelPath(t *testing.T, parts ...string) string {
 	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	repoRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
-	return filepath.Join(append([]string{repoRoot}, parts...)...)
+	return filepath.Join(append([]string{fixturetest.RepoDir(t)}, parts...)...)
 }
 
 func TestBuild(t *testing.T) {
