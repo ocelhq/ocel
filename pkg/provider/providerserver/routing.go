@@ -12,8 +12,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func sharedRouter(p provider.Provider, front edge.Edge) (router.Router, error) {
-	return p.Routers().Open(router.Kind(front.Kind()))
+func openSharedStack(p provider.Provider, front edge.Edge) (*sharedStack, error) {
+	paired, err := p.Routers().Open(router.Kind(front.Kind()))
+	if err != nil {
+		return nil, err
+	}
+	return &sharedStack{front: front, router: paired}, nil
 }
 
 type sharedStack struct {
@@ -96,7 +100,7 @@ func (s *sharedStack) removePointer(ctx context.Context, pointer string, progres
 	return removed, nil
 }
 
-func (s *sharedStack) destroyStack(ctx context.Context) error {
+func (s *sharedStack) destroy(ctx context.Context) error {
 	routed, err := s.openRouter()
 	if err != nil {
 		return err

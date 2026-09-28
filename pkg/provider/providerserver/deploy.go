@@ -221,7 +221,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	paired, err := sharedRouter(p, front)
+	shared, err := openSharedStack(p, front)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	}
 	run := &deployRun{
 		edgeSession: &edgeSession{
-			sharedStack: sharedStack{front: front, router: paired},
+			sharedStack: shared,
 			provider:    p,
 			store:       edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
 		},
