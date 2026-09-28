@@ -47,16 +47,16 @@ func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firest
 }
 
 func (s KeyValues) absent(ctx context.Context, collection *firestore.CollectionRef, key keyvalue.Key) error {
-	older := olderLayoutID(key)
-	documents := collection.Select().OrderBy(firestore.DocumentID, firestore.Asc).StartAt(older).Limit(1).Documents(ctx)
+	flat := flatDocumentID(key)
+	documents := collection.Select().OrderBy(firestore.DocumentID, firestore.Asc).StartAt(flat).Limit(1).Documents(ctx)
 	defer documents.Stop()
 	snapshot, err := documents.Next()
 	switch {
 	case status.Code(err) == codes.NotFound:
 		return s.unbootstrapped(key.Partition.Tier)
-	case err == nil && snapshot.Ref.ID == older:
+	case err == nil && snapshot.Ref.ID == flat:
 		return refusal.Refuse(refusal.CodeNotReady,
-			"%s is kept as the document %q, which this build did not write: an older ocel wrote it in a layout this build does not read", key, older)
+			"%s is kept as the document %q, which this build did not write: an older ocel wrote it in a layout this build does not read", key, flat)
 	}
 	return keyvalue.ErrNotFound
 }
@@ -325,7 +325,7 @@ func documentID(key keyvalue.Key) string {
 	return partitionPrefix(key.Partition) + join(key.Path)
 }
 
-func olderLayoutID(key keyvalue.Key) string {
+func flatDocumentID(key keyvalue.Key) string {
 	return keyvalue.JoinSegments(append(key.Partition.Segments(), key.Path...), segmentSeparator, "/")
 }
 
