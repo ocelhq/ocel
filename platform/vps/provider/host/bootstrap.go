@@ -621,6 +621,7 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 		beneath = append(beneath,
 			taking(KindDir, sshDir, ""),
 			taking(KindDir, releasesRoot, "images stay"),
+			taking(KindFile, imagesLock, ""),
 			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, ""),
 			taking(KindFile, boxstore.RecordsHelper, ""),

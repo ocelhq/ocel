@@ -482,7 +482,7 @@ func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte,
 	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
 	}
-	rendered, err := drawn.ask(ctx, "survey what "+string(tier)+" has installed", drawn.survey(surveying, StampPath(tier), FrontRecordPath), nil)
+	rendered, err := drawn.ask(ctx, "survey what "+string(tier)+" has installed", drawn.survey(surveying, StampPath(tier), FrontRecordPath, imagesLock), nil)
 	if err != nil {
 		return Reading{}, err
 	}
