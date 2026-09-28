@@ -136,7 +136,7 @@ For every changed abstraction, ask: could a second origin cloud or edge land as 
 directory, with no branch added to existing code? If the diff makes that harder, it fails.
 
 Ocel separates origin from edge — AWS origin with Cloudflare edge is a supported pairing,
-and `pkg/edge` is what both sides agree on.
+and `pkg/edge` and `pkg/router` are what both sides agree on.
 
 Fails when:
 

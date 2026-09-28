@@ -48,8 +48,9 @@ which are tooling.
   has its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
 - **`platform/edge/`** — the edge role. `contract/` is the TypeScript an edge and an origin
-  both run; the Go they agree on is `pkg/edge`. Siblings are edges bought _independently
-  of an origin cloud_ — a vendor's native edge belongs under that vendor instead.
+  both run; the Go they agree on is `pkg/edge`, and `pkg/router` for the router and the
+  release records they share. Siblings are edges bought _independently of an origin
+  cloud_ — a vendor's native edge belongs under that vendor instead.
 - **`platform/s3/`** — the S3 protocol as a store any origin can reach with a static
   credential: the plain-S3 bucket backend and its in-bucket upload sessions. The one
   `platform/` path every vendor may import, and it imports none of them.
