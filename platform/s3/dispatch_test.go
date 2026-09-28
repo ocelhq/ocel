@@ -59,20 +59,20 @@ func presignIn(t *testing.T, svc bucketv1connect.BucketServiceHandler, bucket st
 	return resp.GetSessionId()
 }
 
-func TestTheRouterSendsEachBucketToTheBackendThatStoresIt(t *testing.T) {
+func TestEachBucketIsSentToTheBackendThatStoresIt(t *testing.T) {
 	own := &ownBackend{}
 	uploads := boundBackend(t, "b0", "acme/uploads")
 	avatars := boundBackend(t, "b1", "acme-avatars")
-	router := route(own, uploads, avatars)
+	handler := newFixedDispatch(own, uploads, avatars)
 
-	if _, err := router.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "ocel-owned", Key: "a.png"}); err != nil {
+	if _, err := handler.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "ocel-owned", Key: "a.png"}); err != nil {
 		t.Fatalf("Head(ocel-owned): %v", err)
 	}
 	if len(own.headed) != 1 {
 		t.Errorf("own backend headed %v, want the bucket no binding names sent to it", own.headed)
 	}
 
-	session := presignIn(t, router, "acme/uploads")
+	session := presignIn(t, handler, "acme/uploads")
 	if !strings.HasPrefix(session, "sess_b0_") {
 		t.Errorf("session = %q, want it tagged with the backend that opened it", session)
 	}
@@ -80,15 +80,15 @@ func TestTheRouterSendsEachBucketToTheBackendThatStoresIt(t *testing.T) {
 		t.Errorf("own backend presigned %v, want the bound bucket kept off it", own.presigned)
 	}
 
-	if _, err := router.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: session}); err != nil {
+	if _, err := handler.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: session}); err != nil {
 		t.Fatalf("CompleteUpload(%s): %v", session, err)
 	}
 	if len(own.completed) != 0 {
 		t.Errorf("own backend completed %v, want the tagged session completed where it lives", own.completed)
 	}
 
-	owned := presignIn(t, router, "ocel-owned")
-	if _, err := router.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: owned}); err != nil {
+	owned := presignIn(t, handler, "ocel-owned")
+	if _, err := handler.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: owned}); err != nil {
 		t.Fatalf("CompleteUpload(%s): %v", owned, err)
 	}
 	if len(own.completed) != 1 || own.completed[0] != owned {
@@ -96,10 +96,10 @@ func TestTheRouterSendsEachBucketToTheBackendThatStoresIt(t *testing.T) {
 	}
 }
 
-func TestARouterWithNoOwnBackendRefusesABucketNoBindingNames(t *testing.T) {
-	router := route(nil, boundBackend(t, "b0", "acme/uploads"))
+func TestABucketNoBindingNamesIsRefusedWhenTheRuntimeHasNoStoreOfItsOwn(t *testing.T) {
+	handler := newFixedDispatch(nil, boundBackend(t, "b0", "acme/uploads"))
 
-	_, err := router.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "elsewhere", Key: "a.png"})
+	_, err := handler.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "elsewhere", Key: "a.png"})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("Head(elsewhere) = %v, want failed precondition", err)
 	}
@@ -108,7 +108,7 @@ func TestARouterWithNoOwnBackendRefusesABucketNoBindingNames(t *testing.T) {
 			t.Errorf("Head(elsewhere) = %v, want it to name %s: this runtime has no store of its own, so a grant is not what is missing", err, want)
 		}
 	}
-	_, err = router.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_0a1b2c"})
+	_, err = handler.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_0a1b2c"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("CompleteUpload(untagged) = %v, want not found", err)
 	}

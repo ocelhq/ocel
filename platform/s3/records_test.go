@@ -111,17 +111,17 @@ func (a *arriving) Generation() uint32 {
 	return 1
 }
 
-func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
+func TestRecordsThatArriveAfterServingStartedAreServed(t *testing.T) {
 	records := &arriving{fixedRecords: fixedRecords{
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values: map[string]string{
 			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"http://127.0.0.1:1","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
 		},
 	}}
-	router := RouteRecords(&ownBackend{}, records, &recordingPoster{})
+	handler := NewDispatch(&ownBackend{}, records, &recordingPoster{})
 
 	records.arrived = true
-	resp, err := router.Sign(t.Context(), &bucketv1.SignRequest{
+	resp, err := handler.Sign(t.Context(), &bucketv1.SignRequest{
 		Bucket:    "OCEL_RESOURCE_BUCKET_uploads",
 		Key:       "a.png",
 		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
@@ -135,17 +135,17 @@ func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
 	}
 }
 
-func TestARouterRereadsNoRecordUntilTheirGenerationMoves(t *testing.T) {
+func TestNoRecordIsRereadUntilTheRecordsGenerationMoves(t *testing.T) {
 	records := &arriving{arrived: true, fixedRecords: fixedRecords{
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values: map[string]string{
 			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"http://127.0.0.1:1","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
 		},
 	}}
-	router := RouteRecords(&ownBackend{}, records, &recordingPoster{})
+	handler := NewDispatch(&ownBackend{}, records, &recordingPoster{})
 	head := func() {
 		t.Helper()
-		if _, err := router.Head(t.Context(), &bucketv1.HeadRequest{Bucket: "shop-prod-avatars", Key: "a.png"}); err != nil {
+		if _, err := handler.Head(t.Context(), &bucketv1.HeadRequest{Bucket: "shop-prod-avatars", Key: "a.png"}); err != nil {
 			t.Fatalf("Head: %v", err)
 		}
 	}
@@ -156,7 +156,7 @@ func TestARouterRereadsNoRecordUntilTheirGenerationMoves(t *testing.T) {
 	head()
 
 	if records.reads != first {
-		t.Errorf("the router read the records %d more times across two requests under one generation, want none: every request would copy every bucket credential", records.reads-first)
+		t.Errorf("the records were read %d more times across two requests under one generation, want none: every request would copy every bucket credential", records.reads-first)
 	}
 }
 
@@ -258,7 +258,7 @@ func TestTwoBindingsOnOneStoreBucketAreEachServedUnderTheirOwnPrefixAndKeyPair(t
 	if err := values.Join(values.Prefetch(t.Context())); err != nil {
 		t.Fatal(err)
 	}
-	router := RouteRecords(&ownBackend{}, values, &recordingPoster{})
+	handler := NewDispatch(&ownBackend{}, values, &recordingPoster{})
 
 	for _, tc := range []struct{ key, prefix, keyID string }{
 		{"OCEL_RESOURCE_BUCKET_uploads", "/acme/uploads/", "UPLOADSKEY"},
@@ -289,14 +289,14 @@ func TestTwoBindingsOnOneStoreBucketAreEachServedUnderTheirOwnPrefixAndKeyPair(t
 			}
 			store.take()
 
-			_, _ = router.Head(ctx, &bucketv1.HeadRequest{Bucket: name, Key: "a.png"})
+			_, _ = handler.Head(ctx, &bucketv1.HeadRequest{Bucket: name, Key: "a.png"})
 			heardUnder("Head")
-			_, _ = router.List(ctx, &bucketv1.ListRequest{Bucket: name})
+			_, _ = handler.List(ctx, &bucketv1.ListRequest{Bucket: name})
 			heardUnder("List")
-			_, _ = router.Delete(ctx, &bucketv1.DeleteRequest{Bucket: name, Keys: []string{"a.png"}})
+			_, _ = handler.Delete(ctx, &bucketv1.DeleteRequest{Bucket: name, Keys: []string{"a.png"}})
 			heardUnder("Delete")
 
-			signed, err := router.Sign(ctx, &bucketv1.SignRequest{
+			signed, err := handler.Sign(ctx, &bucketv1.SignRequest{
 				Bucket: name, Key: "a.png",
 				Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
 				Audience:  bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
@@ -312,9 +312,9 @@ func TestTwoBindingsOnOneStoreBucketAreEachServedUnderTheirOwnPrefixAndKeyPair(t
 				t.Errorf("signed %v, want %sa.png signed with %s", target, tc.prefix, tc.keyID)
 			}
 
-			session := presignIn(t, router, name)
+			session := presignIn(t, handler, name)
 			heardUnder("PresignUpload")
-			_, _ = router.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: session})
+			_, _ = handler.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: session})
 			heardUnder("CompleteUpload")
 		})
 	}
