@@ -319,11 +319,7 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) err
 	if err := r.preflight(ctx, progress); err != nil {
 		return err
 	}
-	paired, err := pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
-	if err != nil {
-		return err
-	}
-	r.appRouters = paired
+	r.appRouters = pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
 	return nil
 }
 
