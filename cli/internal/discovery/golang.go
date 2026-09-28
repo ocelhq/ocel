@@ -38,7 +38,7 @@ func (goLauncher) Command(ctx context.Context, configDir string, root Root, serv
 		return nil, fmt.Errorf("discovery: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "go", "run", "./"+goEntryDir)
+	cmd := exec.CommandContext(ctx, "go", "run", "-trimpath=false", "./"+goEntryDir)
 	cmd.Dir = moduleRoot
 	cmd.Env = append(os.Environ(), server.Env()...)
 	return cmd, nil
