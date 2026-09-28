@@ -5,7 +5,8 @@
   "type": "module",
   "description": "the variables table, rendered by the CLI's env ui and by the console",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./model": "./src/model.ts"
   },
   "scripts": {
     "test": "vitest run",
