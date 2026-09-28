@@ -29,7 +29,7 @@ const (
 	OriginSecretVar         = "OCEL_ORIGIN_SECRET"
 	OriginSecretPreviousVar = "OCEL_ORIGIN_SECRET_PREVIOUS"
 	OriginSignedVar         = "OCEL_ORIGIN_SIGNED"
-	OriginRouterVar         = "OCEL_ORIGIN_ROUTER"
+	OriginDispatchVar       = "OCEL_ORIGIN_DISPATCH"
 	CacheTagPurgeVar        = "OCEL_CACHE_TAG_PURGE"
 	OriginSecretHeader      = "x-ocel-origin-secret"
 

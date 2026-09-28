@@ -1,19 +1,19 @@
 import {
+  type Scenario as DispatchScenario,
   get,
-  type Scenario as RouterScenario,
-  deps as routerDeps,
+  deps as scenarioDeps,
 } from "@framework/next-router/test-support/serve-scenario";
 import { describe, expect, it } from "vitest";
 
 import { type RouteDeps, serve } from "../src/index";
 import { coloDeps } from "./cache-deps";
 
-interface Scenario extends RouterScenario {
+interface Scenario extends DispatchScenario {
   cache?: RouteDeps["cache"];
 }
 
 function deps(scenario: Scenario): RouteDeps {
-  return { ...routerDeps(scenario), cache: scenario.cache };
+  return { ...scenarioDeps(scenario), cache: scenario.cache };
 }
 
 describe("the resolved path is what keys the response", () => {

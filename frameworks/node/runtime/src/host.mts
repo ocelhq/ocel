@@ -154,10 +154,10 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
   }
 }
 
-const originRouterVar = "OCEL_ORIGIN_ROUTER";
+const originDispatchVar = "OCEL_ORIGIN_DISPATCH";
 
-export function routerMode(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(env[originRouterVar]);
+export function dispatchesAtOrigin(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[originDispatchVar]);
 }
 
 const cacheTagPurgeVar = "OCEL_CACHE_TAG_PURGE";
@@ -191,7 +191,7 @@ function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   const previous = env[originSecretPreviousVar];
   delete env[originSecretVar];
   delete env[originSecretPreviousVar];
-  if (!routerMode(env) || env[originSignedVar]) return undefined;
+  if (!dispatchesAtOrigin(env) || env[originSignedVar]) return undefined;
   if (!secret) return () => false;
   const expected = [secret, previous]
     .filter((value): value is string => Boolean(value))

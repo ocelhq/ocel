@@ -1,6 +1,6 @@
 import type http from "node:http";
 import { storedCacheTags } from "@framework/next-cache";
-import { invalidatesByCacheTag, routerMode } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/edge-kind";
 import { collectTags, notedTags } from "./origin-tags.mjs";
 import type { ProjectManifest } from "./project-manifest.mjs";
 
@@ -44,7 +44,7 @@ export function originShaping(
   manifest: ProjectManifest | null,
   env: NodeJS.ProcessEnv,
 ): OriginShaping | null {
-  if (!routerMode(env)) return null;
+  if (!dispatchesAtOrigin(env)) return null;
 
   const routes = new Map<string, Window>();
   for (const [route, entry] of Object.entries<any>(manifest?.prerender?.routes ?? {})) {

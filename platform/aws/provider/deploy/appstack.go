@@ -39,7 +39,7 @@ type appStackFunctions struct {
 	Env       map[string]string
 	ISR       *isrConfig
 	Bytecode  *bytecodeConfig
-	Router    *routerHost
+	Dispatch  *dispatchHost
 	Guard     *originGuard
 	RoleArn   pulumi.StringInput
 	RoleName  pulumi.StringInput
@@ -54,7 +54,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 	var arns []pulumi.StringInput
 	var entry *appFunction
 	for _, fn := range a.Functions {
-		if a.Router.hosts(fn) || a.Guard.hosts(fn) {
+		if a.Dispatch.hosts(fn) || a.Guard.hosts(fn) {
 			entry = &fn
 			continue
 		}
@@ -69,18 +69,18 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 		return nil
 	}
 	var resolved map[string]pulumi.StringInput
-	if a.Router != nil {
+	if a.Dispatch != nil {
 		if err := a.grantInvoke(ctx, arns); err != nil {
 			return err
 		}
 		resolved = map[string]pulumi.StringInput{functionURLsEnv: siblingFunctionURLs(siblings)}
 	}
-	_, err := a.declare(ctx, *entry, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
+	_, err := a.declare(ctx, *entry, a.Guard.entryEnv(a.Dispatch.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
 	return err
 }
 
 func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) error {
-	optimizer := a.Router.ImageOptimizerURL != ""
+	optimizer := a.Dispatch.ImageOptimizerURL != ""
 	if len(arns) == 0 && !optimizer {
 		return nil
 	}
@@ -100,10 +100,10 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 		for _, arn := range resolved[1:] {
 			siblings = append(siblings, fmt.Sprint(arn))
 		}
-		return routerInvokePolicy(siblings, account, optimizer)
+		return renderDispatchInvokePolicy(siblings, account, optimizer)
 	}).(pulumi.StringOutput)
 
-	_, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "router", "invoke"), &iam.RolePolicyArgs{
+	_, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "dispatch", "invoke"), &iam.RolePolicyArgs{
 		Role:   a.RoleName,
 		Policy: policy,
 	})

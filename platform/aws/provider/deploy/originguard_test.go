@@ -58,9 +58,9 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
 	t.Helper()
 	release := releasing(t, cfg)
-	host, err := release.routerHost(spec)
+	host, err := release.newDispatchHost(spec)
 	if err != nil {
-		t.Fatalf("routerHost: %v", err)
+		t.Fatalf("newDispatchHost: %v", err)
 	}
 	guard, err := release.originGuard(spec)
 	if err != nil {
@@ -69,7 +69,7 @@ func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, function
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: spec.App.App, Boundary: testBoundaryARN, Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: spec.App.App, Boundary: testBoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -81,7 +81,7 @@ func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, function
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
 			Env:       release.appEnv(spec, appBundle{}, sessionScope{}),
-			Router:    host,
+			Dispatch:  host,
 			Guard:     guard,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
@@ -212,7 +212,7 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--api--entry").Name, "url")
 	value := rec.inputs(functionURLToken, name)["authorizationType"]
 	if !value.IsString() || value.StringValue() != functionURLAuthNone {
-		t.Errorf("entry Function URL auth = %v, want %q for the sole function of an app no router fronts", value, functionURLAuthNone)
+		t.Errorf("entry Function URL auth = %v, want %q for the sole function of an app whose origin dispatches no path", value, functionURLAuthNone)
 	}
 	env := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--api--entry").PhysicalName(maxLambdaBaseNameLen))
 	if env[edge.OriginSecretVar] != testOriginSecret {

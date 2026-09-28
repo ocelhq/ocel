@@ -53,7 +53,7 @@ func TestAPlanThatChangesSomethingStillRaisesTheGate(t *testing.T) {
 func mixedPlan() *planv1.ChangePlan {
 	return &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
 		{Kind: "stack", Name: "ocel-production-core", Action: planv1.Change_ACTION_UPDATE, Changes: []*planv1.Change{
-			{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: planv1.Change_ACTION_UPDATE},
+			{Kind: "AWS::Lambda::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
 			{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE},
 		}},
 		{Kind: "stack", Name: "ocel-production-queues", Action: planv1.Change_ACTION_CREATE, Changes: []*planv1.Change{

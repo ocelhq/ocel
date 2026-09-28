@@ -55,7 +55,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	if err != nil {
 		return nil, err
 	}
-	router, err := r.routerHost(spec)
+	dispatch, err := r.newDispatchHost(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +101,8 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	env := r.appEnv(spec, bundle, sessions)
 	for i, fn := range functions {
 		declared := env
-		if router.hosts(fn) {
-			declared = router.plannedEntryEnv(env, functions)
+		if dispatch.hosts(fn) {
+			declared = dispatch.plannedEntryEnv(env, functions)
 		}
 		if guard.hosts(fn) {
 			declared = guard.entryEnv(declared)
@@ -124,7 +124,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 	role := executionRole{
 		App: app.App, Cache: cache, Bytecode: bytecode,
 		VarsKeyARN: r.cfg.VarsKeyARN, Boundary: r.cfg.AppBoundaryARN,
-		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Router: router,
+		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
 	}
 	if bundle.hasLive() {
 		role.ValuesTableARN = r.cfg.VarsTableARN
@@ -159,7 +159,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 			Env:       env,
 			ISR:       cache,
 			Bytecode:  bytecode,
-			Router:    router,
+			Dispatch:  dispatch,
 			Guard:     guard,
 			KmsKeyARN: r.cfg.VarsKeyARN,
 			Layers:    layers,
@@ -208,13 +208,13 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 	return layers, nil
 }
 
-func (r *release) routerHost(spec provider.StackSpec) (*routerHost, error) {
+func (r *release) newDispatchHost(spec provider.StackSpec) (*dispatchHost, error) {
 	routing := spec.App.Routing
 	if routing == nil {
 		return nil, nil
 	}
 	prefix := spec.App.AssetPrefix
-	host := &routerHost{
+	host := &dispatchHost{
 		Entry:             routing.Entry,
 		AssetBucket:       r.cfg.AssetBucket,
 		AssetPrefix:       prefix,
@@ -327,7 +327,7 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 		env[edgeKindEnv] = string(spec.Edge.Kind())
 		facts := spec.Edge.Facts()
 		if !facts.RunsCode {
-			env[edge.OriginRouterVar] = "1"
+			env[edge.OriginDispatchVar] = "1"
 			env[edge.OriginSignedVar] = "1"
 		}
 		if facts.InvalidatesByCacheTag {

@@ -167,7 +167,7 @@ func bytecodePolicy(c bytecodeConfig) (string, error) {
 	return string(out), nil
 }
 
-func assetReadPolicy(h *routerHost) (string, error) {
+func assetReadPolicy(h *dispatchHost) (string, error) {
 	doc := map[string]any{
 		"Version": "2012-10-17",
 		"Statement": []any{
@@ -185,7 +185,7 @@ func assetReadPolicy(h *routerHost) (string, error) {
 	return string(out), nil
 }
 
-func routerInvokePolicy(siblings []string, account string, optimizer bool) (string, error) {
+func renderDispatchInvokePolicy(siblings []string, account string, optimizer bool) (string, error) {
 	statements := []any{}
 	if len(siblings) > 0 {
 		statements = append(statements, map[string]any{
@@ -211,7 +211,7 @@ func routerInvokePolicy(siblings []string, account string, optimizer bool) (stri
 	}
 	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
 	if err != nil {
-		return "", fmt.Errorf("render router invoke policy: %w", err)
+		return "", fmt.Errorf("render dispatch invoke policy: %w", err)
 	}
 	return string(out), nil
 }
@@ -321,7 +321,7 @@ type executionRole struct {
 	VarsKeyARN string
 	Boundary   string
 	VPCAccess  bool
-	Router     *routerHost
+	Dispatch   *dispatchHost
 
 	ValuesTableARN string
 	Slug           string
@@ -331,8 +331,8 @@ type executionRole struct {
 	BindingPolicies []bindingPolicy
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, router *routerHost) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Router: router}
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, dispatch *dispatchHost) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch}
 	if bundle.hasLive() {
 		role.ValuesTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -399,8 +399,8 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 			return nil, err
 		}
 	}
-	if r.Router != nil && r.Router.AssetBucket != "" {
-		policy, err := assetReadPolicy(r.Router)
+	if r.Dispatch != nil && r.Dispatch.AssetBucket != "" {
+		policy, err := assetReadPolicy(r.Dispatch)
 		if err != nil {
 			return nil, err
 		}

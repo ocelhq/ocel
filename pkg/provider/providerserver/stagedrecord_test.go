@@ -52,7 +52,7 @@ func TestTheStagedRecordKeysFunctionURLsByTheRouteTheManifestNames(t *testing.T)
 		t.Fatalf("the deploy provisioned %d functions, want the one the manifest declares", len(functions))
 	}
 	if urls["bundle-0"] != functions[0].GetUrl() {
-		t.Errorf("functionUrls[bundle-0] = %q, want the URL %q the function is reachable at: the router reaches a target by the route the manifest names, and a record keyed by logical name answers every page 502",
+		t.Errorf("functionUrls[bundle-0] = %q, want the URL %q the function is reachable at: dispatch reaches a target by the route the manifest names, and a record keyed by logical name answers every page 502",
 			urls["bundle-0"], functions[0].GetUrl())
 	}
 	if _, keyed := urls["server"]; keyed {

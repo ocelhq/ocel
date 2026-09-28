@@ -28,13 +28,13 @@ type AppServingInput struct {
 }
 
 type AppServing struct {
-	Entry       string
-	Routing     *provider.RoutingSpec
-	EdgeRouting *provider.RoutingSpec
-	Guard       *provider.OriginGuard
-	ISR         *provider.ISRSpec
-	Bytecode    *provider.BytecodeSpec
-	AssetPrefix string
+	Entry          string
+	OriginDispatch *provider.RoutingSpec
+	EdgeDispatch   *provider.RoutingSpec
+	Guard          *provider.OriginGuard
+	ISR            *provider.ISRSpec
+	Bytecode       *provider.BytecodeSpec
+	AssetPrefix    string
 }
 
 func AppServingFor(q AppServingInput) (AppServing, error) {
@@ -60,9 +60,9 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 		return AppServing{}, err
 	}
 	if q.EdgeRunsCode {
-		facts.EdgeRouting = routing
+		facts.EdgeDispatch = routing
 	} else {
-		facts.Routing = routing
+		facts.OriginDispatch = routing
 	}
 	facts.Guard = guardFor(q, desc, present)
 	return facts, nil

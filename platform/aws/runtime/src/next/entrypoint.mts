@@ -2,7 +2,7 @@ import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
-import { routerMode } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin } from "@framework/node-runtime/edge-kind";
 import {
   type Invoke,
   installCompileCacheFlush,
@@ -78,7 +78,7 @@ async function boot(): Promise<void> {
     );
   };
 
-  if (!routerMode(process.env)) {
+  if (!dispatchesAtOrigin(process.env)) {
     await serveInvoke(invoke, (port) => {
       process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
     });
@@ -88,8 +88,8 @@ async function boot(): Promise<void> {
   const localOrigin = `http://127.0.0.1:${await serveLocal(invoke)}`;
   process.env.__NEXT_PRIVATE_ORIGIN = localOrigin;
 
-  const { routerHostFromEnv, routerHostInvoke } = await import("./router-host.mjs");
-  await serveEntry(routerHostInvoke(routerHostFromEnv(process.env, localOrigin)));
+  const { readDispatchHost, newDispatchInvoke } = await import("./dispatch-host.mjs");
+  await serveEntry(newDispatchInvoke(readDispatchHost(process.env, localOrigin)));
 }
 
 boot().catch((err) => {

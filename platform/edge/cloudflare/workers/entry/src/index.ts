@@ -1,9 +1,9 @@
 import {
+  type RouteDeps as DispatchDeps,
+  serve as dispatch,
+  dispatchResult as dispatchRouteResult,
   type HostRequestExtras,
   type RouteResult,
-  type RouteDeps as RouterDeps,
-  dispatchResult as routeDispatchResult,
-  serve as routeServe,
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
@@ -36,7 +36,7 @@ export function withEdgeHeader(response: Response): Response {
 }
 
 export interface RouteDeps
-  extends Omit<RouterDeps, "prerender" | "imageCache" | "onRevalidated" | "hostRequestInit"> {
+  extends Omit<DispatchDeps, "prerender" | "imageCache" | "onRevalidated" | "hostRequestInit"> {
   cache?: CacheDeps;
   interception?: InterceptionTier;
   imageStore?: ImageStore;
@@ -46,7 +46,7 @@ function hostRequestInit(request: Request): HostRequestExtras {
   return { cf: request.cf };
 }
 
-function bound(deps: RouteDeps): RouterDeps {
+function bound(deps: RouteDeps): DispatchDeps {
   const { cache, interception, imageStore, ...rest } = deps;
   return {
     ...rest,
@@ -70,7 +70,7 @@ function forgetSnapshot(tier: InterceptionTier): Promise<void> {
 }
 
 export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
-  return withEdgeHeader(await routeServe(request, bound(deps)));
+  return withEdgeHeader(await dispatch(request, bound(deps)));
 }
 
 export function dispatchResult(
@@ -78,7 +78,7 @@ export function dispatchResult(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  return routeDispatchResult(result, request, bound(deps));
+  return dispatchRouteResult(result, request, bound(deps));
 }
 
 export type ResolveBase = Omit<
@@ -116,7 +116,7 @@ interface ServeRuntime {
 const routedRuntime: ServeRuntime = {
   serve: (record, deployments, base) => {
     const deps = bound(routedDeps(record, deployments, base));
-    return async (request) => withEdgeHeader(await routeServe(request, deps));
+    return async (request) => withEdgeHeader(await dispatch(request, deps));
   },
   routeDeps: routedDeps,
 };

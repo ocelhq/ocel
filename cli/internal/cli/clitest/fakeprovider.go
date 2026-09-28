@@ -663,7 +663,7 @@ func fakeChangePlan(req *contractv1.BootstrapRequest) *planv1.ChangePlan {
 	}
 	core.Action = planv1.Change_ACTION_UPDATE
 	core.Changes = []*planv1.Change{
-		{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: planv1.Change_ACTION_UPDATE},
+		{Kind: "AWS::Lambda::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
 		{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
 	}
 	plan.Groups = append(plan.Groups,
