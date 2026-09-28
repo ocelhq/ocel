@@ -16,7 +16,7 @@ import (
 
 const keySealedWith = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 
-func sealedWithFixtureKey(t *testing.T) *fake.Cipher {
+func newFixtureKeyCipher(t *testing.T) *fake.Cipher {
 	t.Helper()
 	key, err := base64.StdEncoding.DecodeString(keySealedWith)
 	if err != nil {
@@ -25,7 +25,7 @@ func sealedWithFixtureKey(t *testing.T) *fake.Cipher {
 	return fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key})
 }
 
-func holding(t *testing.T, rows map[string]records.Name) *fake.Records {
+func newRecordsHolding(t *testing.T, rows map[string]records.Name) *fake.Records {
 	t.Helper()
 	store := fake.NewRecords()
 	for body, name := range rows {
@@ -40,10 +40,10 @@ func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyI
 	t.Parallel()
 
 	store := envvars.Store{
-		Records: holding(t, map[string]records.Name{
+		Records: newRecordsHolding(t, map[string]records.Name{
 			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+VgAViEpXXIk4f9gdIkzfy1DSDSCljR35ULyG/f4QqTpm7DEoFaNMcm+"}`: {"values", "shop", "production", "cells", "%2Fweb", "STRIPE_API_KEY", "staging"},
 		}),
-		Cipher: sealedWithFixtureKey(t),
+		Cipher: newFixtureKeyCipher(t),
 	}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
@@ -58,11 +58,11 @@ func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testi
 	t.Parallel()
 
 	store := envvars.Store{
-		Records: holding(t, map[string]records.Name{
+		Records: newRecordsHolding(t, map[string]records.Name{
 			`{"version":1,"updatedAt":1790580978,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`:               {"values", "shop", "production", "bindings", "orders", "records", "*"},
 			`{"version":1,"sealed":"kH20mriYvg2PFri7a1XPVAmM0y9YqXkDfsjQMCWX6gyemVuOD8Ro1RkBDEdPnJpRyqOs/YGNHQ=="}`: {"values", "shop", "production", "bindings", "orders", "values", "*"},
 		}),
-		Cipher: sealedWithFixtureKey(t),
+		Cipher: newFixtureKeyCipher(t),
 	}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 
@@ -72,12 +72,12 @@ func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testi
 	}
 }
 
-type sealCounted struct {
+type countedCipher struct {
 	*fake.Cipher
 	sealed int
 }
 
-func (c *sealCounted) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
+func (c *countedCipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
 	c.sealed++
 	return c.Cipher.Seal(ctx, tier, bound, plaintext)
 }
@@ -102,7 +102,7 @@ func TestAValueThatNamesNoProjectOrKeyIsRefusedBeforeItIsSealed(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			cipher := &sealCounted{Cipher: fake.NewCipher()}
+			cipher := &countedCipher{Cipher: fake.NewCipher()}
 			store := envvars.Store{Records: fake.NewRecords(), Cipher: cipher}
 
 			err := write(store)
@@ -114,5 +114,21 @@ func TestAValueThatNamesNoProjectOrKeyIsRefusedBeforeItIsSealed(t *testing.T) {
 				t.Fatalf("the cipher sealed %d value(s) before the write was refused", cipher.sealed)
 			}
 		})
+	}
+}
+
+func TestABindingThatNamesNoBindingIsRefusedBeforeItIsSealed(t *testing.T) {
+	t.Parallel()
+
+	cipher := &countedCipher{Cipher: fake.NewCipher()}
+	store := envvars.Store{Records: fake.NewRecords(), Cipher: cipher}
+
+	_, err := store.SetBinding(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "", envvars.OwnerOcel, "",
+		envvars.BindingWrite{Record: []byte(`{}`), Value: []byte(`{}`)})
+	if err == nil {
+		t.Fatal("SetBinding() with no name = nil, want a refusal: a binding with no name is bound to the bytes of the root-folder PROPERTIES cell")
+	}
+	if cipher.sealed != 0 {
+		t.Fatalf("the cipher sealed %d value(s) before the write was refused", cipher.sealed)
 	}
 }

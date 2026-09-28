@@ -11,9 +11,6 @@ func newCellAssociatedData(scope Scope, at Coordinate) (seal.AssociatedData, err
 }
 
 func newBindingAssociatedData(scope Scope, environment, name string) (seal.AssociatedData, error) {
-	if name == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "a binding's value names no binding, and its name is what the value is sealed to")
-	}
 	return newAssociatedData(scope, canonicalEnvironment(environment), rootFolder, name, bindingValueKey)
 }
 
