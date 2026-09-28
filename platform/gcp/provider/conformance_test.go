@@ -59,6 +59,12 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	}
 }
 
+func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
+	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
+}
+
 func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	registry := p.Edges()
