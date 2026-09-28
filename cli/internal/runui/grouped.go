@@ -267,7 +267,8 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	}
 	header := unit.header(ev.GetLevel(), status, message, s.present)
 	if s.present.GitHubActions && !failed && !partial && len(unit.body) > 0 {
-		header.text, header.command = "::group::"+workflowData.Replace(header.text), true
+		title := header.from.render(Presentation{})
+		header.text, header.command = "::group::"+workflowData.Replace(title), true
 		s.print(header)
 		s.print(unit.body...)
 		s.print(blockLine{text: "::endgroup::", command: true})

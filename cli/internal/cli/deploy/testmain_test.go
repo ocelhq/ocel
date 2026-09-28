@@ -11,6 +11,7 @@ func TestMain(m *testing.M) {
 	if os.Getenv(clitest.FakeProviderEnvVar) == "1" {
 		os.Exit(clitest.RunFakeProvider())
 	}
+	clitest.UnsetColorEnv()
 	done := clitest.IsolateConfigHome()
 	code := m.Run()
 	done()

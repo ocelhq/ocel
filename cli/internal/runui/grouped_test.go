@@ -511,6 +511,20 @@ func TestInGitHubActionsASuccessfulBlockIsACollapsedGroup(t *testing.T) {
 	}
 }
 
+func TestInGitHubActionsWithColourAGroupTitleIsStillPlainText(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{GitHubActions: true, Color: true})
+	web := run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "built 12 routes")
+	output(t, web, "Compiled successfully")
+	c.pass(34 * time.Second)
+	web.End(nil)
+
+	if want := "::group::INFO  [build] ✓ web: built 12 routes in 34s\n"; !strings.HasPrefix(out.String(), want) {
+		t.Fatalf("got\n%q\nwant it to open with\n%q", out.String(), want)
+	}
+}
+
 func TestInGitHubActionsAFailedBlockStaysExpandedAndALaterSuccessKeepsItsBodyFolded(t *testing.T) {
 	t.Parallel()
 

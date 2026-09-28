@@ -31,7 +31,7 @@ func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
 }
 
 func gated(stdout io.Writer, c *color.Color) *color.Color {
-	if runui.IsTerminal(stdout) && !color.NoColor {
+	if runui.IsColored(stdout) {
 		c.EnableColor()
 	} else {
 		c.DisableColor()

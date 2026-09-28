@@ -104,6 +104,12 @@ func IsolateConfigHome() func() {
 	return func() { os.RemoveAll(dir) }
 }
 
+func UnsetColorEnv() {
+	for _, name := range []string{"FORCE_COLOR", "CLICOLOR_FORCE", "GITHUB_ACTIONS"} {
+		os.Unsetenv(name)
+	}
+}
+
 func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 	t.Helper()
 
