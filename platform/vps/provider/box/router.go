@@ -14,8 +14,6 @@ import (
 
 type Router struct{ e *Edge }
 
-var _ router.Router = Router{}
-
 func NewRouter(e *Edge) Router { return Router{e: e} }
 
 func (r Router) Kind() router.Kind { return router.Kind(Kind) }
@@ -29,9 +27,7 @@ func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge needs a project slug; this stack has none", Kind)
 	}
-	state := prior.Edge
-	state.Slug, state.Tier = spec.Slug, spec.Tier
-	return r.Open(router.NewStackState(state))
+	return r.Open(prior.WithSpec(spec))
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {

@@ -12,8 +12,6 @@ import (
 
 type Router struct{ p *cloudFront }
 
-var _ router.Router = Router{}
-
 func NewRouter(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) Router {
 	return Router{p: newCloudFront(ns, open)}
 }
@@ -33,9 +31,7 @@ func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router
 	if spec.Slug == "" {
 		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack names none", Kind)
 	}
-	state := prior.Edge
-	state.Slug, state.Tier = spec.Slug, spec.Tier
-	return r.Open(router.NewStackState(state))
+	return r.Open(prior.WithSpec(spec))
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {

@@ -19,3 +19,9 @@ type StackState struct {
 func NewStackState(shared edge.StackState) StackState {
 	return StackState{Slug: shared.Slug, Tier: shared.Tier, Edge: shared}
 }
+
+func (s StackState) WithSpec(spec StackSpec) StackState {
+	shared := s.Edge
+	shared.Slug, shared.Tier = spec.Slug, spec.Tier
+	return NewStackState(shared)
+}
