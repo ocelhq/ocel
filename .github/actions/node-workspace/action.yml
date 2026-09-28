@@ -29,10 +29,22 @@ runs:
       with:
         version: 11.10.0
 
+    - name: Name the installed workspace after the lockfile, node and pnpm
+      id: modules
+      shell: bash
+      run: echo "key=node-modules-$RUNNER_OS-$RUNNER_ARCH-node22-pnpm11.10.0-${{ hashFiles(format('{0}/pnpm-lock.yaml', inputs.working-directory), format('{0}/pnpm-workspace.yaml', inputs.working-directory)) }}" >> "$GITHUB_OUTPUT"
+
+    - name: The workspace as main last installed it
+      id: installed
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/node-modules.tar
+        key: ${{ steps.modules.outputs.key }}
+
     - uses: actions/setup-node@v4
       with:
         node-version: 22
-        cache: pnpm
+        cache: ${{ steps.installed.outputs.cache-hit != 'true' && 'pnpm' || '' }}
         cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
         registry-url: ${{ inputs.registry-url }}
 
@@ -40,10 +52,33 @@ runs:
       with:
         bun-version: 1.4.0
 
+    - name: Put its node_modules back
+      if: steps.installed.outputs.cache-hit == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: tar -xf "$RUNNER_TEMP/node-modules.tar"
+
     - name: Install dependencies
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: pnpm install --frozen-lockfile
+
+    - name: Pack node_modules for the runs after this one
+      id: pack
+      if: steps.installed.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        find . -name node_modules -type d -prune -not -path './.git/*' -print0 \
+          | tar --null -cf "$RUNNER_TEMP/node-modules.tar" -T -
+
+    - name: Keep them
+      if: steps.pack.outcome == 'success'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/node-modules.tar
+        key: ${{ steps.modules.outputs.key }}
 
     - name: Point turbo at the remote cache
       if: inputs.turbo-token != ''
