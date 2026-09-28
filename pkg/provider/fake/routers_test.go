@@ -34,13 +34,13 @@ func fakeFixture(t *testing.T, kind edge.Kind) routerconformance.Fixture {
 	if err != nil {
 		t.Fatalf("Reconcile the edge: %v", err)
 	}
-	routes, err := p.Routers().Open(router.Kind(kind))
+	opened, err := p.Routers().Open(router.Kind(kind))
 	if err != nil {
 		t.Fatalf("Routers().Open(%q): %v", kind, err)
 	}
 	edges := p.Edges().(*fake.Edges)
 	return routerconformance.Fixture{
-		Router: routes,
+		Router: opened,
 		Spec:   router.StackSpec{Tier: spec.Tier, Slug: spec.Slug},
 		Prior:  router.NewStackState(stack.State()),
 		Serving: func(pointer string) string {

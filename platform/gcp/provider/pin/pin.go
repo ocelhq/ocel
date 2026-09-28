@@ -49,7 +49,7 @@ func Flip(
 		return err
 	}
 	if err := flip.RefuseInactive(ctx); err != nil {
-		return unpinned(ctx, l, promotion.PromotionID, pointer, err)
+		return unpromote(ctx, l, promotion.PromotionID, pointer, err)
 	}
 	pinned := false
 	for _, record := range pinning {
@@ -62,7 +62,7 @@ func Flip(
 				if !pinned {
 					err = router.Unserved{Err: err}
 				}
-				return unpinned(ctx, l, promotion.PromotionID, pointer, err)
+				return unpromote(ctx, l, promotion.PromotionID, pointer, err)
 			}
 			pinned = true
 		}
@@ -70,7 +70,7 @@ func Flip(
 	return nil
 }
 
-func unpinned(ctx context.Context, l *ledger.Ledger, promotionID, pointer string, err error) error {
+func unpromote(ctx context.Context, l *ledger.Ledger, promotionID, pointer string, err error) error {
 	if undo := l.Unpromote(ctx, promotionID, pointer); undo != nil {
 		return errors.Join(err, fmt.Errorf("the ledger still names promotion %s, which Cloud Run never finished pinning: %w", promotionID, undo))
 	}

@@ -99,7 +99,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := routes(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: router.Promotion{
+	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
@@ -454,7 +454,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		recordFront(t, w, environment.TierPreview)
 		w.front.calls = nil
 
-		if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
@@ -509,14 +509,14 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		w.store.updateErr = errors.New("the store is closed")
 
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "refused",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
 		}}, progress.DiscardProgress()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the key value store")
 		}
-		history, err := routes(stack).Ledger().History(context.Background(), previewPointer)
+		history, err := openRouter(stack).Ledger().History(context.Background(), previewPointer)
 		if err != nil {
 			t.Fatalf("History: %v", err)
 		}
@@ -600,7 +600,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.dynamo.putErr = errors.New("the table is closed")
 
-		if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
+		if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},

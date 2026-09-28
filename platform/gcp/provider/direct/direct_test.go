@@ -47,7 +47,7 @@ func (p *pinRecorder) calls() []string {
 
 const webService = "ocel-shop-prod-web"
 
-func TestTheDirectRouterIsARouter(t *testing.T) {
+func TestTheDirectRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
 			store, pins := fake.NewKeyValues(), &pinRecorder{}
@@ -102,11 +102,11 @@ func frontingOn(t *testing.T, store keyvalue.Store, pins *pinRecorder) router.St
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
-	routes, err := direct.NewRouter(front).Open(router.NewStackState(stack.State()))
+	opened, err := direct.NewRouter(front).Open(router.NewStackState(stack.State()))
 	if err != nil {
 		t.Fatalf("Open the router = %v", err)
 	}
-	return routes
+	return opened
 }
 
 func staged(t *testing.T, stack router.Stack, identity, revision string) {

@@ -23,11 +23,11 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	first := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
 	second := router.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
 	for _, record := range []router.DeploymentRecord{first, second} {
-		if err := routes(stack).Ledger().PutStaged(ctx, record); err != nil {
+		if err := openRouter(stack).Ledger().PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	}
-	if err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.dynamo.beforePut = func(key string, items map[string]map[string]ddbtypes.AttributeValue) {
@@ -36,7 +36,7 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 
-	err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}}, progress.DiscardProgress())
+	err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}}, progress.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Promote(p2) = %v, want the busy refusal a moved pointer earns", err)
@@ -48,7 +48,7 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	if got := api.variables[assetsVariable]; got != first.AssetPrefix {
 		t.Errorf("the stage serves assets %q, want %q", got, first.AssetPrefix)
 	}
-	history, err := routes(stack).Ledger().History(ctx, "")
+	history, err := openRouter(stack).Ledger().History(ctx, "")
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}

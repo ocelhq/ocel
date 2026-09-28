@@ -59,7 +59,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
-	routes, err := edges.Routers{}.Open(router.Kind(cfg.Edge.Kind()))
+	opened, err := edges.Routers{}.Open(router.Kind(cfg.Edge.Kind()))
 	if err != nil {
 		t.Fatalf("Routers().Open(%q): %v", cfg.Edge.Kind(), err)
 	}
@@ -71,7 +71,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 		Stack:             stack,
 		Coordinate:        coord,
 		EdgeRunsCode:      facts.RunsCode,
-		EdgeSignsForwards: routes.Facts().SignsOriginForwards,
+		EdgeSignsForwards: opened.Facts().SignsOriginForwards,
 	})
 	if err != nil {
 		t.Fatalf("ServingFactsFor: %v", err)

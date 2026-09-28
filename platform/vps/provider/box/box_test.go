@@ -224,11 +224,11 @@ func (s boxStack) State() edge.StackState { return s.EdgeStack.State() }
 func (s boxStack) Destroy(ctx context.Context) error { return s.EdgeStack.Destroy(ctx) }
 
 func stackOn(front *box.Edge, stack edge.EdgeStack) boxStack {
-	routes, err := box.NewRouter(front).Open(router.NewStackState(stack.State()))
+	opened, err := box.NewRouter(front).Open(router.NewStackState(stack.State()))
 	if err != nil {
 		panic(err)
 	}
-	return boxStack{EdgeStack: stack, Stack: routes}
+	return boxStack{EdgeStack: stack, Stack: opened}
 }
 
 func removePointer(ctx context.Context, stack boxStack, pointer string, progress progress.Progress) (router.PruneResult, error) {
@@ -275,7 +275,7 @@ func (m *machine) RemovePreviewEntry(_ context.Context, base string) error {
 	return nil
 }
 
-func TestTheBoxEdge(t *testing.T) {
+func TestTheBoxEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		Hostname: "shop.example.com",
 		New: func(*testing.T) (edge.Edge, edge.StackSpec) {
@@ -290,7 +290,7 @@ func TestTheBoxEdge(t *testing.T) {
 	})
 }
 
-func TestTheBoxRouter(t *testing.T) {
+func TestTheBoxRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		Hostname: "shop.example.com",
 		New: func(t *testing.T) routerconformance.Fixture {

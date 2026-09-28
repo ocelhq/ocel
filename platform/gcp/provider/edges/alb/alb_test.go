@@ -35,7 +35,7 @@ func fronting(t *testing.T) (*Edge, *world) {
 	}), w
 }
 
-func TestTheAlbEdgeIsAnEdge(t *testing.T) {
+func TestTheALBEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 	t.Parallel()
 
 	edgeconformance.Run(t, edgeconformance.Suite{
@@ -53,7 +53,7 @@ func TestTheAlbEdgeIsAnEdge(t *testing.T) {
 
 const conformanceService = "ocel-shop-production-web"
 
-func TestTheAlbRouterIsARouter(t *testing.T) {
+func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
 			front, w, stack := reconciled(t)
@@ -235,7 +235,7 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 	ctx := context.Background()
 	_, w, stack := reconciled(t)
 	for _, build := range []struct{ identity, revision string }{{"b1", "web-00001-abc"}, {"b2", "web-00002-def"}} {
-		if err := routes(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
+		if err := openRouter(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
 			App: "web", Build: build.identity, Physical: "ocel-shop-prod-web",
 			Revisions: map[string]string{"ocel-shop-prod-web": build.revision},
 		}); err != nil {
@@ -243,7 +243,7 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 		}
 	}
 	for _, step := range []struct{ id, identity string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
-		err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}}}, progress.DiscardProgress())
+		err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}}}, progress.DiscardProgress())
 		if err != nil {
 			t.Fatalf("Promote(%s) = %v", step.id, err)
 		}
@@ -483,13 +483,13 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 	}
 	before := w.hosts("ocel-alb-production-routes")
 
-	if err := routes(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
+	if err := openRouter(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App: "web", Build: "b1", Physical: "shop--pr-7",
 		Revisions: map[string]string{"shop--pr-7": "shop--pr-7-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := routes(stack).Flip(ctx, router.Flip{Pointer: "pr-7", Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Pointer: "pr-7", Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -663,13 +663,13 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain = %v", err)
 	}
-	if err := routes(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
+	if err := openRouter(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -688,14 +688,14 @@ func TestTheReleaseThatTakesAHostnameLiveSaysWhichServiceItRoutesTo(t *testing.T
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain = %v", err)
 	}
-	if err := routes(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
+	if err := openRouter(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	progress := &fake.Progress{}
-	if err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -710,13 +710,13 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 
 	ctx := context.Background()
 	_, w, stack := reconciled(t)
-	if err := routes(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
+	if err := openRouter(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
@@ -738,13 +738,13 @@ func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
 		t.Fatalf("BindDomain = %v", err)
 	}
-	if err := routes(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
+	if err := openRouter(stack).Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App: "admin", Build: "b1", Physical: "ocel-shop-prod-admin",
 		Revisions: map[string]string{"ocel-shop-prod-admin": "ocel-shop-prod-admin-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
 	}
-	if err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}}}, progress.DiscardProgress()); err != nil {
+	if err := openRouter(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -768,4 +768,4 @@ func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheFrontsNotFoundBackend(t 
 	}
 }
 
-func routes(shared edge.EdgeStack) routerStack { return routerStack{s: shared.(*stack)} }
+func openRouter(shared edge.EdgeStack) routerStack { return routerStack{s: shared.(*stack)} }
