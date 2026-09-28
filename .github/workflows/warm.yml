@@ -18,6 +18,10 @@ on:
       - "pnpm-lock.yaml"
       - ".github/actions/go/**"
       - ".github/workflows/warm.yml"
+      - "scripts/incus.sh"
+      - ".github/actions/vps-images/**"
+  schedule:
+    - cron: "30 0 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -29,7 +33,22 @@ permissions:
   actions: write
 
 jobs:
+  vps-images:
+    name: vps images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/vps-images
+        with:
+          host: absent
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
   go:
+    if: github.event_name != 'schedule'
     name: go
     runs-on: ubuntu-latest
     timeout-minutes: 60

@@ -60,6 +60,7 @@ on:
       - "tests/fronts/**"
       - ".github/workflows/provider-vps.yml"
       - ".github/actions/incus-vm/**"
+      - ".github/actions/vps-images/**"
       - ".github/actions/suite-gate/**"
       - ".github/actions/suite-passed/**"
   workflow_dispatch:
@@ -75,7 +76,6 @@ permissions:
 env:
   SHARDS: 4
   ENGINE_TEST: TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted
-  BAKE: curl -fsSL --retry 5 --retry-delay 2 https://get.docker.com | sudo sh
 
 jobs:
   gate:
@@ -134,13 +134,20 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Bake the box every lane is cloned from, while the race-instrumented test binary compiles
+      - name: Compile the race-instrumented test binary while the image loads
+        run: |
+          (go test -C platform/vps/provider -race -list '^TestLive' ./... > live.list 2> live.list.log; echo $? > live.list.rc) &
+
+      - name: The image every lane boots from
+        uses: ./.github/actions/vps-images
+        with:
+          images: docker
+
+      - name: Wait for the test binary
         run: |
           set -euo pipefail
-          go test -C platform/vps/provider -race -list '^TestLive' ./... > live.list 2> live.list.log &
-          compile=$!
-          sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
-          wait "$compile" || { cat live.list.log >&2; exit 1; }
+          until [ -s live.list.rc ]; do sleep 2; done
+          [ "$(cat live.list.rc)" = 0 ] || { cat live.list.log >&2; exit 1; }
 
       - name: Deal its tests across the lanes
         run: |
@@ -158,7 +165,7 @@ jobs:
             cat "shard-$s.tests"
             run="^($(paste -sd'|' "shard-$s.tests"))\$"
             printf '%s\t%s\t%s\t%s\n' "$VM-$s" "reports/live-$s.json" \
-              "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$run' -json ./..." "$VM-base" >> reports/lanes.tsv
+              "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '$run' -json ./..." ocel-vps-docker >> reports/lanes.tsv
           done
 
       - name: Run the live conformance suite, one VM per lane
@@ -191,7 +198,7 @@ jobs:
       - name: No VM left behind
         if: always()
         run: |
-          for name in $(cut -f1 reports/lanes.tsv 2>/dev/null) $VM-base; do
+          for name in $(cut -f1 reports/lanes.tsv 2>/dev/null); do
             sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
           done
 
@@ -213,21 +220,28 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Bake the box the build lane is cloned from, while the race-instrumented test binary compiles
+      - name: Compile the race-instrumented test binary while the images load
+        run: |
+          (go test -C cli -race -list '^TestLive' ./... > /dev/null 2> compile.log; echo $? > compile.rc) &
+
+      - name: The images the lanes boot from
+        uses: ./.github/actions/vps-images
+        with:
+          images: base docker
+
+      - name: Wait for the test binary
         run: |
           set -euo pipefail
-          go test -C cli -race -list '^TestLive' ./... > /dev/null 2> compile.log &
-          compile=$!
-          sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
-          wait "$compile" || { cat compile.log >&2; exit 1; }
+          until [ -s compile.rc ]; do sleep 2; done
+          [ "$(cat compile.rc)" = 0 ] || { cat compile.log >&2; exit 1; }
 
       - name: Run the build pipeline and the engine install, a VM each
         run: |
           set -euo pipefail
           mkdir reports
           printf '%s\t%s\t%s\t%s\n' \
-            "$VM-build" reports/build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." "$VM-base" \
-            "$VM-engine" reports/engine.json "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^$ENGINE_TEST\$' -json ./..." "" \
+            "$VM-build" reports/build.json "go test -C cli -race -count=1 -timeout 30m -run '^TestLive' -json ./..." ocel-vps-docker \
+            "$VM-engine" reports/engine.json "go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^$ENGINE_TEST\$' -json ./..." ocel-vps-base \
             > reports/lanes.tsv
           scripts/incus-fanout.sh reports/lanes.tsv
 
@@ -263,6 +277,6 @@ jobs:
       - name: No VM left behind
         if: always()
         run: |
-          for name in $(cut -f1 reports/lanes.tsv 2>/dev/null) $VM-base; do
+          for name in $(cut -f1 reports/lanes.tsv 2>/dev/null); do
             sg incus-admin -c "scripts/incus.sh destroy $name" || echo "could not destroy $name"
           done

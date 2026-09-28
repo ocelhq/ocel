@@ -1,0 +1,108 @@
+name: vps-images
+description: >-
+  The VM images incus lanes boot from, baked once a week and once per change
+  to what bakes them, kept in the actions cache: ocel-vps-base, the stock
+  cloud image with sshd, and ocel-vps-docker, the same with docker installed.
+  Each named in images is loaded into this runner's incus; one the cache
+  lacks is baked here, on an incus host this action brings up only when the
+  caller has none, and saved only from main.
+
+inputs:
+  images:
+    description: The images to load, from base and docker, space separated. Empty loads none and only makes sure the cache holds both.
+    default: ""
+  host:
+    description: ready when the caller has set up the incus host already.
+    default: ready
+  turbo-token:
+    default: ""
+  turbo-team:
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Name the cache entries after what bakes the images
+      id: key
+      shell: bash
+      env:
+        WANTED: ${{ inputs.images }}
+      run: |
+        set -euo pipefail
+        echo "prefix=vps-image-$(date -u +%G-%V)-${{ hashFiles('scripts/incus.sh', '.github/actions/vps-images/action.yml') }}" >> "$GITHUB_OUTPUT"
+        for image in base docker; do
+          if [[ " $WANTED " == *" $image "* ]]; then
+            echo "lookup-$image=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "lookup-$image=true" >> "$GITHUB_OUTPUT"
+          fi
+        done
+
+    - name: The base image
+      id: base
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/vps-image/base
+        key: ${{ steps.key.outputs.prefix }}-base
+        lookup-only: ${{ steps.key.outputs.lookup-base }}
+
+    - name: The docker image
+      id: docker
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/vps-image/docker
+        key: ${{ steps.key.outputs.prefix }}-docker
+        lookup-only: ${{ steps.key.outputs.lookup-docker }}
+
+    - name: The incus host a bake needs
+      if: inputs.host != 'ready' && (steps.base.outputs.cache-hit != 'true' || steps.docker.outputs.cache-hit != 'true')
+      uses: ./.github/actions/incus-vm
+      with:
+        go: "false"
+        turbo-token: ${{ inputs.turbo-token }}
+        turbo-team: ${{ inputs.turbo-team }}
+
+    - name: Bake the base image
+      if: steps.base.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sg incus-admin -c "scripts/incus.sh bake ocel-vps-base -- true"
+        sg incus-admin -c "scripts/incus.sh save ocel-vps-base $RUNNER_TEMP/vps-image/base"
+
+    - name: Keep the base image
+      if: steps.base.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/vps-image/base
+        key: ${{ steps.key.outputs.prefix }}-base
+
+    - name: Bake the docker image
+      if: steps.docker.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sg incus-admin -c "scripts/incus.sh bake ocel-vps-docker -- 'curl -fsSL --retry 5 --retry-delay 2 https://get.docker.com | sudo sh'"
+        sg incus-admin -c "scripts/incus.sh save ocel-vps-docker $RUNNER_TEMP/vps-image/docker"
+
+    - name: Keep the docker image
+      if: steps.docker.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/vps-image/docker
+        key: ${{ steps.key.outputs.prefix }}-docker
+
+    - name: Load the images this runner boots from
+      shell: bash
+      env:
+        WANTED: ${{ inputs.images }}
+        BASE_HIT: ${{ steps.base.outputs.cache-hit }}
+        DOCKER_HIT: ${{ steps.docker.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
+        for image in $WANTED; do
+          hit=BASE_HIT
+          [ "$image" = docker ] && hit=DOCKER_HIT
+          [ "${!hit}" = true ] || continue
+          sg incus-admin -c "scripts/incus.sh load $RUNNER_TEMP/vps-image/$image ocel-vps-$image"
+        done

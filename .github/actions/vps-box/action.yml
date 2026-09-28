@@ -48,6 +48,12 @@ runs:
         turbo-token: ${{ inputs.turbo-token }}
         turbo-team: ${{ inputs.turbo-team }}
 
+    - name: The image the box boots from
+      if: inputs.real != 'true'
+      uses: ./.github/actions/vps-images
+      with:
+        images: base
+
     - uses: ./.github/actions/node-workspace
       if: inputs.real == 'true'
       with:
@@ -72,7 +78,7 @@ runs:
         VM: ${{ inputs.vm }}
       run: |
         set -euo pipefail
-        sg incus-admin -c "scripts/incus.sh create $VM"
+        sg incus-admin -c "scripts/incus.sh create --from ocel-vps-base $VM"
         eval "$(sg incus-admin -c "scripts/incus.sh info $VM")"
         {
           echo "OCEL_VPS_HOST=$OCEL_INCUS_ADDR"

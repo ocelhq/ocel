@@ -7,9 +7,9 @@ usage() {
     cat <<'EOF'
 usage: scripts/incus-fanout.sh <lanes.tsv>
 
-  One lane per line: <vm-name> TAB <report-file> TAB <command> [TAB <base>]
+  One lane per line: <vm-name> TAB <report-file> TAB <command> [TAB <image>]
   Every lane starts at once as `scripts/incus.sh run <vm-name> -- <command>`,
-  cloned from <base> when the lane names one, with the command's stdout in
+  created from the baked <image> when the lane names one, with the command's stdout in
   <report-file>, its stderr in <report-file>.log and "<exit> <seconds>" in
   <report-file>.status. The host is sampled with vmstat for the duration.
   Exits nonzero when any lane does.
@@ -30,8 +30,8 @@ as_admin() {
 }
 
 lane() {
-    local name=$1 report=$2 command=$3 base=$4 start=$SECONDS rc=0 from=""
-    [ -z "$base" ] || from="--from $base"
+    local name=$1 report=$2 command=$3 image=$4 start=$SECONDS rc=0 from=""
+    [ -z "$image" ] || from="--from $image"
     as_admin "$here/incus.sh run $from $name -- $command" > "$report" 2> "$report.log" || rc=$?
     echo "$rc $((SECONDS - start))" > "$report.status"
 }
@@ -44,7 +44,9 @@ host() {
 }
 
 host "before the lanes"
-as_admin "$here/incus.sh fetch"
+if cut -f4 "$lanes" | grep -qx ''; then
+    as_admin "$here/incus.sh fetch"
+fi
 
 profile=${lanes%.tsv}.vmstat
 vmstat -t 15 > "$profile" &
@@ -52,9 +54,9 @@ sampler=$!
 
 pids=()
 reports=()
-while IFS=$'\t' read -r name report command base; do
+while IFS=$'\t' read -r name report command image; do
     [ -n "$name" ] || continue
-    lane "$name" "$report" "$command" "$base" &
+    lane "$name" "$report" "$command" "$image" &
     pids+=($!)
     reports+=("$report")
 done < "$lanes"
