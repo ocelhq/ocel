@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -54,16 +55,16 @@ func NewCipher(h *Host) *boxstore.Cipher { return boxstore.NewCipher(sshSeal{hos
 
 type sshSeal struct{ host *Host }
 
-func (s sshSeal) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
+func (s sshSeal) Seal(ctx context.Context, what string, tier environment.Tier, argv []string, stdin io.Reader) (string, error) {
 	rendered, err := s.host.granted(ctx, what, argv, stdin)
-	if err == nil || len(argv) < 2 {
+	var refused refusal.Refusal
+	if err == nil || !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		return rendered, err
 	}
 	installed, readErr := s.host.reach(ctx, "read the seal helper", "cat "+quoted(boxstore.SealHelper), nil)
 	if readErr != nil || installed == string(sealScript) {
 		return "", err
 	}
-	tier := environment.Tier(argv[1])
 	return "", refusal.Refuse(refusal.CodeNotReady,
 		"%s\nThe seal helper on this box is not the one this ocel installs.\nRun `%s` to update it, then try again",
 		err, provider.BootstrapCommand(tier))
