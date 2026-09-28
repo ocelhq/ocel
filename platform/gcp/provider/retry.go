@@ -161,7 +161,11 @@ func waiting[T any](
 func waited(ctx context.Context, attempt int) bool { return waitedFor(ctx, attempt, askCeiling) }
 
 func waitedFor(ctx context.Context, attempt int, ceiling time.Duration) bool {
-	backoff := min(askBackoff<<(attempt-1), ceiling)
+	backoff := askBackoff
+	for doubled := 1; doubled < attempt && backoff < ceiling; doubled++ {
+		backoff *= 2
+	}
+	backoff = min(backoff, ceiling)
 	timer := time.NewTimer(backoff/2 + rand.N(backoff/2))
 	defer timer.Stop()
 	select {
