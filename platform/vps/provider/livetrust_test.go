@@ -14,8 +14,8 @@ const trustQuestion = "Trust that key and record"
 
 var needsBootstrap = regexp.MustCompile("⚠ not bootstrapped\n\\s+→ run `ocel bootstrap production`")
 
-func TestLifecycleFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T) {
-	run := lifecycle(t)
+func TestLiveFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T) {
+	run := liveWorkstation(t)
 	run.forgets(t)
 
 	rendered, err := run.onATerminal(t, []string{"doctor"}, trustQuestion, "y")
@@ -41,8 +41,8 @@ func TestLifecycleFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *test
 	}
 }
 
-func TestLifecycleAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T) {
-	run := lifecycle(t)
+func TestLiveAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T) {
+	run := liveWorkstation(t)
 	decoy := run.decoys(t)
 	write(t, run.store, decoy)
 
@@ -67,7 +67,7 @@ func TestLifecycleAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T
 	}
 }
 
-func (j journey) decoys(t *testing.T) string {
+func (ws workstation) decoys(t *testing.T) string {
 	t.Helper()
 	key := filepath.Join(t.TempDir(), "decoy")
 	made := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-f", key, "-N", "", "-C", "ocel-e2e-decoy")
@@ -82,5 +82,5 @@ func (j journey) decoys(t *testing.T) string {
 	if len(fields) < 2 {
 		t.Fatalf("ssh-keygen wrote a public key nothing can key a known_hosts line on: %q", public)
 	}
-	return j.vm.addr + " " + fields[0] + " " + fields[1] + "\n"
+	return ws.vm.addr + " " + fields[0] + " " + fields[1] + "\n"
 }
