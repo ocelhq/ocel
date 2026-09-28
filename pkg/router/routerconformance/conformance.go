@@ -88,7 +88,7 @@ func Run(t *testing.T, suite Suite) {
 		stack := reconciled(t, fixture)
 		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
-		displaced := stage("conformance-b2", record(App, "b2"))
+		displaced := newFlip("conformance-b2", record(App, "b2"))
 		displaced.Pointer = pointer
 		displaced.StillActive = func(context.Context) error { return errDisplaced }
 		err := stack.Flip(context.Background(), displaced, progress.DiscardProgress())
@@ -125,7 +125,7 @@ func Run(t *testing.T, suite Suite) {
 		stack := reconciled(t, fixture)
 		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
-		refused := stage("conformance-b2", record(App, "b2"))
+		refused := newFlip("conformance-b2", record(App, "b2"))
 		refused.Pointer = pointer
 		fixture.FailNextFlip(errDataPlane)
 		err := stack.Flip(context.Background(), refused, progress.DiscardProgress())
@@ -238,10 +238,10 @@ func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(
 		t.Fatalf("Open a second stack onto the same state: %v", err)
 	}
 
-	ledger := &standInLedger{active: "conformance-b1"}
-	later := stage("conformance-b3", record(App, "b3"))
+	ledger := &memoryLedger{active: "conformance-b1"}
+	later := newFlip("conformance-b3", record(App, "b3"))
 	later.Pointer = pointer
-	earlier := stage("conformance-b2", record(App, "b2"))
+	earlier := newFlip("conformance-b2", record(App, "b2"))
 	earlier.Pointer = pointer
 	var raced error
 	checks := 0
@@ -292,7 +292,7 @@ func reconciled(t *testing.T, fixture Fixture) router.Stack {
 	return stack
 }
 
-func stage(promotionID string, records ...router.DeploymentRecord) router.Flip {
+func newFlip(promotionID string, records ...router.DeploymentRecord) router.Flip {
 	flip := router.Flip{
 		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
 		Records:   map[string]router.DeploymentRecord{},
@@ -306,7 +306,7 @@ func stage(promotionID string, records ...router.DeploymentRecord) router.Flip {
 
 func flips(t *testing.T, stack router.Stack, pointer, promotionID string, records ...router.DeploymentRecord) {
 	t.Helper()
-	flip := stage(promotionID, records...)
+	flip := newFlip(promotionID, records...)
 	flip.Pointer = pointer
 	if err := stack.Flip(context.Background(), flip, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Flip(%s onto %q): %v", promotionID, pointer, err)
@@ -333,11 +333,11 @@ func roundTrip(t *testing.T, state router.StackState) router.StackState {
 	return read
 }
 
-type standInLedger struct {
+type memoryLedger struct {
 	active string
 }
 
-func (l *standInLedger) stillActive(promotionID string) router.StillActive {
+func (l *memoryLedger) stillActive(promotionID string) router.StillActive {
 	return func(context.Context) error {
 		if l.active != promotionID {
 			return errDisplaced
@@ -346,7 +346,7 @@ func (l *standInLedger) stillActive(promotionID string) router.StillActive {
 	}
 }
 
-func (l *standInLedger) promote(ctx context.Context, stack router.Stack, flip router.Flip, stillActive router.StillActive) error {
+func (l *memoryLedger) promote(ctx context.Context, stack router.Stack, flip router.Flip, stillActive router.StillActive) error {
 	displaced := l.active
 	l.active = flip.Promotion.PromotionID
 	if stillActive == nil {

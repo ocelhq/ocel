@@ -98,7 +98,7 @@ func (s *stack) openLedger(c Clients) *ledger.Ledger {
 }
 
 func (s *stack) invalidationTargets(c Clients) invalidationTargets {
-	return invalidationTargets{keyValues: s.keyValues(c), partition: invalidationPartition(s.tier(), s.slug())}
+	return invalidationTargets{keyValues: s.keyValues(c), partition: newInvalidationPartition(s.tier(), s.slug())}
 }
 
 func (s *stack) routes(c Clients) routeStore {

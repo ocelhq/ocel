@@ -40,7 +40,7 @@ export interface Flip {
   records: DeploymentRecord[];
 }
 
-export type Flipped = "flipped" | "moved";
+export type Flipped = "flipped" | "stale";
 
 export const SCHEMA_VERSION = 3;
 
@@ -103,7 +103,7 @@ function setMeta(store: SqlStore, key: string, value: string): void {
   );
 }
 
-export function servedPromotion(
+export function readServedPromotion(
   store: SqlStore,
   pointer: string = DEFAULT_POINTER,
 ): string | undefined {
@@ -116,7 +116,8 @@ export function servedPromotion(
 export function flip(store: SqlStore, flipped: Flip): Flipped {
   const pointer = flipped.pointer || DEFAULT_POINTER;
   return store.transactionSync(() => {
-    if ((servedPromotion(store, pointer) ?? null) !== (flipped.replaces || null)) return "moved";
+    if ((readServedPromotion(store, pointer) ?? null) !== (flipped.replaces || null))
+      return "stale";
     store.sql.exec(`DELETE FROM served WHERE pointer = ?`, pointer);
     for (const record of flipped.records) {
       store.sql.exec(
@@ -145,7 +146,7 @@ export function removePointer(store: SqlStore, pointer: string): void {
   });
 }
 
-export function apps(store: SqlStore): string[] {
+export function listApps(store: SqlStore): string[] {
   return store.sql
     .exec<{ app: string }>(`SELECT app FROM apps ORDER BY app`)
     .toArray()

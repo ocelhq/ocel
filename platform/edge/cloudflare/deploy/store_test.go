@@ -264,7 +264,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state with no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := stackOn(&cloudflare{}, edge.StackState{}).servedPromotion(t.Context(), "")
+		_, err := stackOn(&cloudflare{}, edge.StackState{}).readServedPromotion(t.Context(), "")
 		if err == nil {
 			t.Fatal("expected an error when the root-stack state has no endpoint")
 		}
@@ -287,8 +287,8 @@ func TestStoreRequest(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).servedPromotion(t.Context(), ""); err != nil {
-			t.Fatalf("servedPromotion: %v", err)
+		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
+			t.Fatalf("readServedPromotion: %v", err)
 		}
 		if attempts != 3 {
 			t.Errorf("attempts = %d, want 3: the two unavailable answers must have been retried", attempts)
@@ -305,8 +305,8 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).servedPromotion(t.Context(), ""); err == nil {
-			t.Fatal("servedPromotion err = nil, want the rejection surfaced")
+		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).readServedPromotion(t.Context(), ""); err == nil {
+			t.Fatal("readServedPromotion err = nil, want the rejection surfaced")
 		}
 		if attempts != 1 {
 			t.Errorf("attempts = %d, want 1", attempts)
@@ -325,8 +325,8 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).servedPromotion(ctx, ""); err == nil {
-			t.Fatal("servedPromotion err = nil, want the failure surfaced")
+		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).readServedPromotion(ctx, ""); err == nil {
+			t.Fatal("readServedPromotion err = nil, want the failure surfaced")
 		}
 		if attempts != 1 {
 			t.Errorf("attempts = %d, want 1: a cancelled context must not wait out the backoff", attempts)
@@ -389,7 +389,7 @@ func TestDestroyInstance(t *testing.T) {
 		if err := p.destroyInstance(t.Context(), state); err != nil {
 			t.Fatalf("destroyInstance: %v", err)
 		}
-		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})

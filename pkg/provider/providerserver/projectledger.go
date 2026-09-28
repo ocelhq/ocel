@@ -24,7 +24,7 @@ func openProjectLedger(p provider.Provider, tier environment.Tier, slug string) 
 	return projectLedger{Ledger: ledger.New(p.KeyValues(), tier, slug), cipher: p.Cipher(), tier: tier, slug: slug}
 }
 
-func (l projectLedger) envelopeBound(app, build string) seal.AssociatedData {
+func (l projectLedger) newEnvelopeAssociatedData(app, build string) seal.AssociatedData {
 	return seal.AssociatedData{
 		{Name: "project", Value: l.slug},
 		{Name: "app", Value: app},
@@ -35,7 +35,7 @@ func (l projectLedger) envelopeBound(app, build string) seal.AssociatedData {
 
 func (l projectLedger) putStaged(ctx context.Context, record router.DeploymentRecord) error {
 	if record.Envelope != "" {
-		sealed, err := l.cipher.Seal(ctx, l.tier, l.envelopeBound(record.App, record.Build), []byte(record.Envelope))
+		sealed, err := l.cipher.Seal(ctx, l.tier, l.newEnvelopeAssociatedData(record.App, record.Build), []byte(record.Envelope))
 		if err != nil {
 			return fmt.Errorf("seal the envelope %s/%s serves with before the ledger keeps it: %w", record.App, record.Build, err)
 		}
@@ -44,7 +44,7 @@ func (l projectLedger) putStaged(ctx context.Context, record router.DeploymentRe
 	return l.PutStaged(ctx, record)
 }
 
-func (l projectLedger) records(ctx context.Context, promotion router.Promotion, apps []string) (map[string]router.DeploymentRecord, error) {
+func (l projectLedger) readRecords(ctx context.Context, promotion router.Promotion, apps []string) (map[string]router.DeploymentRecord, error) {
 	records := make(map[string]router.DeploymentRecord, len(apps))
 	for _, app := range apps {
 		build, promoted := promotion.Builds[app]
@@ -76,7 +76,7 @@ func (l projectLedger) openEnvelope(ctx context.Context, record router.Deploymen
 	if err != nil {
 		return "", fmt.Errorf("read the envelope the ledger keeps for %s/%s: %w", record.App, record.Build, err)
 	}
-	opened, err := l.cipher.Open(ctx, l.tier, l.envelopeBound(record.App, record.Build), sealed)
+	opened, err := l.cipher.Open(ctx, l.tier, l.newEnvelopeAssociatedData(record.App, record.Build), sealed)
 	if err != nil {
 		return "", fmt.Errorf("open the envelope the ledger keeps for %s/%s: %w", record.App, record.Build, err)
 	}

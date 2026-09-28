@@ -62,7 +62,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	moved := false
+	stageWritten := false
 	err = s.newStageLease(c, pointer, flip.Promotion.PromotionID).hold(ctx, func(held *heldLease) error {
 		if err := flip.RefuseInactive(ctx); err != nil {
 			return err
@@ -79,10 +79,10 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 		if err := moveStage(bounded, c, id, flip.Promotion.PromotionID, patch); err != nil {
 			return err
 		}
-		moved = true
+		stageWritten = true
 		return s.routePreview(ctx, c, pointer, id)
 	})
-	if err != nil && !moved {
+	if err != nil && !stageWritten {
 		return router.Unserved{Err: err}
 	}
 	return err

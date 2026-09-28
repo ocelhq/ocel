@@ -42,7 +42,7 @@ describe("flip", () => {
 
     expect(await store.flip(makeFlip())).toBe("flipped");
 
-    expect(await store.servedPromotion()).toBe("promo-1");
+    expect(await store.readServedPromotion()).toBe("promo-1");
     expect(await store.pointerRecord("web")).toEqual({
       kind: "record",
       identity: "deploy-1",
@@ -61,7 +61,7 @@ describe("flip", () => {
     });
     expect(await store.flip(next)).toBe("flipped");
 
-    expect(await store.servedPromotion()).toBe("promo-2");
+    expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.pointerRecord("web")).toMatchObject({
       kind: "record",
       identity: "deploy-2",
@@ -84,9 +84,9 @@ describe("flip", () => {
       replaces: "promo-1",
       records: [makeRecord({ identity: "deploy-3" })],
     });
-    expect(await store.flip(stale)).toBe("moved");
+    expect(await store.flip(stale)).toBe("stale");
 
-    expect(await store.servedPromotion()).toBe("promo-2");
+    expect(await store.readServedPromotion()).toBe("promo-2");
     expect(await store.pointerRecord("web")).toMatchObject({
       kind: "record",
       identity: "deploy-2",
@@ -96,9 +96,9 @@ describe("flip", () => {
   it("moves nothing when it names a promotion on a pointer that serves none", async () => {
     const store = storeStub();
 
-    expect(await store.flip(makeFlip({ replaces: "promo-0" }))).toBe("moved");
+    expect(await store.flip(makeFlip({ replaces: "promo-0" }))).toBe("stale");
 
-    expect(await store.servedPromotion()).toBeUndefined();
+    expect(await store.readServedPromotion()).toBeUndefined();
     expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
   });
 
@@ -123,8 +123,8 @@ describe("flip", () => {
       }),
     );
 
-    expect(await store.servedPromotion()).toBe("promo-1");
-    expect(await store.servedPromotion("pr-42")).toBe("promo-preview");
+    expect(await store.readServedPromotion()).toBe("promo-1");
+    expect(await store.readServedPromotion("pr-42")).toBe("promo-preview");
     expect(await store.pointerRecord("web", "pr-42")).toMatchObject({ identity: "preview-1" });
     expect(await store.pointerRecord("web")).toMatchObject({ identity: "deploy-1" });
   });
@@ -189,9 +189,9 @@ describe("removePointer", () => {
 
     await store.removePointer("pr-42");
 
-    expect(await store.servedPromotion("pr-42")).toBeUndefined();
+    expect(await store.readServedPromotion("pr-42")).toBeUndefined();
     expect(await store.pointerRecord("web", "pr-42")).toEqual({ kind: "no-pointer" });
-    expect(await store.servedPromotion()).toBe("promo-1");
+    expect(await store.readServedPromotion()).toBe("promo-1");
   });
 
   it("removing a pointer that serves nothing is a clean no-op", async () => {
@@ -205,7 +205,7 @@ describe("apps", () => {
     await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
     await store.flip(makeFlip({ promotionId: "promo-2", replaces: "promo-1" }));
 
-    expect(await store.apps()).toEqual(["admin", "web"]);
+    expect(await store.listApps()).toEqual(["admin", "web"]);
   });
 });
 
@@ -272,9 +272,9 @@ describe("destroy", () => {
 
     await store.destroy();
 
-    expect(await store.servedPromotion()).toBeUndefined();
+    expect(await store.readServedPromotion()).toBeUndefined();
     expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
-    expect(await store.apps()).toEqual([]);
+    expect(await store.listApps()).toEqual([]);
     expect(await store.authorized("s3cret")).toBe(false);
 
     await store.initialize("owner-2", "fresh", false);

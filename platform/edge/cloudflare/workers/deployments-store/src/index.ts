@@ -59,7 +59,7 @@ export default class extends WorkerEntrypoint<Env> {
 
     if (request.method === "GET" && sub === "/pointer") {
       const pointer = url.searchParams.get("pointer") || undefined;
-      return Response.json({ promotionId: (await store.servedPromotion(pointer)) ?? null });
+      return Response.json({ promotionId: (await store.readServedPromotion(pointer)) ?? null });
     }
 
     if (request.method === "POST" && sub === "/flip") {
@@ -67,7 +67,7 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.promotionId || !Array.isArray(body.records)) {
         return new Response("Bad Request", { status: 400 });
       }
-      if ((await store.flip(body)) === "moved") {
+      if ((await store.flip(body)) === "stale") {
         return new Response(
           `the pointer no longer serves ${body.replaces || "nothing"}, the promotion this flip replaces`,
           { status: 409 },
@@ -77,7 +77,7 @@ export default class extends WorkerEntrypoint<Env> {
     }
 
     if (request.method === "GET" && sub === "/apps") {
-      return Response.json(await store.apps());
+      return Response.json(await store.listApps());
     }
 
     if (request.method === "GET" && sub === "/version-stamp") {

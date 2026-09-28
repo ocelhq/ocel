@@ -20,7 +20,7 @@ import (
 
 var errStoreRequestUnbuildable = errors.New("build deployments-store request")
 
-func unauthorized(res *http.Response) bool {
+func isUnauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
 
@@ -29,7 +29,7 @@ func (p *cloudflare) destroyInstance(ctx context.Context, state edge.StackState)
 		return nil
 	}
 	res, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
-	if unauthorized(res) {
+	if isUnauthorized(res) {
 		return nil
 	}
 	return err
@@ -46,7 +46,7 @@ func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName str
 	return err
 }
 
-func (s *stack) served(records map[string]router.DeploymentRecord) ([]router.DeploymentRecord, error) {
+func (s *stack) wrapEnvelopes(records map[string]router.DeploymentRecord) ([]router.DeploymentRecord, error) {
 	served := make([]router.DeploymentRecord, 0, len(records))
 	for _, app := range slices.Sorted(maps.Keys(records)) {
 		record := records[app]
@@ -62,7 +62,7 @@ func (s *stack) served(records map[string]router.DeploymentRecord) ([]router.Dep
 	return served, nil
 }
 
-func (s *stack) servedPromotion(ctx context.Context, pointer string) (string, error) {
+func (s *stack) readServedPromotion(ctx context.Context, pointer string) (string, error) {
 	subpath := "/pointer"
 	if pointer != "" {
 		subpath += "?pointer=" + url.QueryEscape(pointer)
@@ -97,12 +97,12 @@ func (s *stack) flip(ctx context.Context, body flipBody) (bool, error) {
 	return false, err
 }
 
-func (s *stack) removeServed(ctx context.Context, pointer string) error {
+func (s *stack) removePointerRecords(ctx context.Context, pointer string) error {
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": router.ResolvePointer(pointer)}, nil)
 	return err
 }
 
-func (p *cloudflare) servedApps(ctx context.Context, state edge.StackState) ([]string, error) {
+func (p *cloudflare) readServedApps(ctx context.Context, state edge.StackState) ([]string, error) {
 	var apps []string
 	if _, err := p.storeRequest(ctx, state, http.MethodGet, "/apps", nil, &apps); err != nil {
 		return nil, err

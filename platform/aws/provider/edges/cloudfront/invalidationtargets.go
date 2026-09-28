@@ -14,7 +14,7 @@ import (
 
 const invalidationAttempts = 8
 
-func invalidationPartition(tier environment.Tier, slug string) keyvalue.Partition {
+func newInvalidationPartition(tier environment.Tier, slug string) keyvalue.Partition {
 	partition := keyvalue.Partition{Tier: tier, Root: keyvalue.RootRouters, Path: []string{string(Kind)}}
 	if slug != "" {
 		partition.Path = append(partition.Path, naming.Sanitize(slug))

@@ -733,7 +733,7 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	targets := w.invalidationTargets(invalidationPartition(environment.TierProduction, conformanceSlug))
+	targets := w.invalidationTargets(newInvalidationPartition(environment.TierProduction, conformanceSlug))
 	if targets == nil {
 		t.Fatalf("the CloudFront router names no front for the tag invalidator to reach; it contains %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}
