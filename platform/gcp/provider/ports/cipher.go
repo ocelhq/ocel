@@ -18,7 +18,7 @@ type Cipher struct {
 	Clients *Clients
 }
 
-func (s Cipher) key(tier environment.Tier) (string, error) {
+func (s Cipher) resolveKeyPath(tier environment.Tier) (string, error) {
 	if tier == "" {
 		return "", Tierless("a value")
 	}
@@ -26,7 +26,7 @@ func (s Cipher) key(tier environment.Tier) (string, error) {
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	key, err := s.key(tier)
+	key, err := s.resolveKeyPath(tier)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 }
 
 func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	key, err := s.key(tier)
+	key, err := s.resolveKeyPath(tier)
 	if err != nil {
 		return nil, err
 	}

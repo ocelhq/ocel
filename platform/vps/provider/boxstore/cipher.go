@@ -21,14 +21,14 @@ type Cipher struct{ over SealTransport }
 func NewCipher(over SealTransport) *Cipher { return &Cipher{over: over} }
 
 func (s *Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	return s.through(ctx, "seal", tier, bound, plaintext)
+	return s.runSealHelper(ctx, "seal", tier, bound, plaintext)
 }
 
 func (s *Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	return s.through(ctx, "open", tier, bound, sealed)
+	return s.runSealHelper(ctx, "open", tier, bound, sealed)
 }
 
-func (s *Cipher) through(ctx context.Context, verb string, tier environment.Tier, bound seal.AssociatedData, body []byte) ([]byte, error) {
+func (s *Cipher) runSealHelper(ctx context.Context, verb string, tier environment.Tier, bound seal.AssociatedData, body []byte) ([]byte, error) {
 	if tier == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"a value bound to %s names no tier", bound.Bytes())

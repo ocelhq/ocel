@@ -92,11 +92,11 @@ type keylessBootstrap struct{}
 
 func (keylessBootstrap) Key(context.Context, environment.Tier) (string, error) { return "", nil }
 
-var sealedAt = seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_API_KEY"}}
+var bound = seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_API_KEY"}}
 
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 	cipher := awsports.Cipher{Keys: keylessBootstrap{}}
-	_, err := cipher.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
+	_, err := cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal when this bootstrap made no key")
 	}
@@ -111,7 +111,7 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	cipher := awsports.Cipher{}
-	_, err := cipher.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
+	_, err := cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal where nothing has a key at all")
 	}

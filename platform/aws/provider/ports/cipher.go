@@ -32,7 +32,7 @@ type Key string
 
 func (k Key) Key(context.Context, environment.Tier) (string, error) { return string(k), nil }
 
-func (s Cipher) key(ctx context.Context, tier environment.Tier) (string, error) {
+func (s Cipher) readKey(ctx context.Context, tier environment.Tier) (string, error) {
 	if tier == "" {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"a value names no tier, and this account seals each tier's values under the key its own bootstrap made")
@@ -59,7 +59,7 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 	if err != nil {
 		return nil, err
 	}
-	key, err := s.key(ctx, tier)
+	key, err := s.readKey(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 	if err != nil {
 		return nil, err
 	}
-	key, err := s.key(ctx, tier)
+	key, err := s.readKey(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
