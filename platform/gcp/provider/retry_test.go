@@ -130,3 +130,14 @@ func TestAWaitSurfacesTheErrorItsReadReturns(t *testing.T) {
 		t.Fatalf("until() = %v, want the error the read answered with", err)
 	}
 }
+
+func TestEveryAttemptAWaitAllowsBacksOffWithoutPanicking(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for attempt := 1; attempt < waitAttempts; attempt++ {
+		if waitedFor(ctx, attempt, waitCeiling) {
+			t.Fatalf("waitedFor() at attempt %d = true, want false for a cancelled run", attempt)
+		}
+	}
+}
