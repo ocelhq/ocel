@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-tail -n 20 "${RUNNER_TEMP:-}/preview.log" 2>/dev/null || echo "the run left no log"
+log="${RUNNER_TEMP:-}/preview.log"
+if [ ! -f "$log" ]; then
+  echo "the run left no log"
+  exit 0
+fi
+sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' "$log" | { grep -Ev '^[[:space:]]*::' || true; } | tail -n 20
