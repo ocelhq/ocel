@@ -65,15 +65,15 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progre
 	if err != nil {
 		return err
 	}
+	if err := flip.RefuseInactive(ctx); err != nil {
+		return err
+	}
 	id, err := s.ensureAPI(ctx, c, pointer)
 	if err != nil {
 		return err
 	}
 	patch, err := s.stagePatch(ctx, c, promotion)
 	if err != nil {
-		return err
-	}
-	if err := flip.RefuseInactive(ctx); err != nil {
 		return err
 	}
 	if err := moveStage(ctx, c, id, promotion.PromotionID, patch); err != nil {
