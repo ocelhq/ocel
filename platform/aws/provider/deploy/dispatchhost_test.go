@@ -77,7 +77,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 			App:         app,
 			Framework:   runtime,
 			Deployment:  "d1",
-			Routing:     serving.Routing,
+			Routing:     serving.OriginDispatch,
 			Guard:       serving.Guard,
 			AssetPrefix: serving.AssetPrefix,
 		},
@@ -89,23 +89,23 @@ func routedSpec(t *testing.T, cfg Config) provider.StackSpec {
 	return servingSpec(t, cfg, "web", appbuild.FrameworkNext, routedCoordinate(t))
 }
 
-func routedRouter(t *testing.T, cfg Config) *routerHost {
+func newDispatchHostFor(t *testing.T, cfg Config) *dispatchHost {
 	t.Helper()
-	host, err := releasing(t, cfg).routerHost(routedSpec(t, cfg))
+	host, err := releasing(t, cfg).newDispatchHost(routedSpec(t, cfg))
 	if err != nil {
-		t.Fatalf("routerHost: %v", err)
+		t.Fatalf("newDispatchHost: %v", err)
 	}
 	return host
 }
 
-func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
+func TestDispatchHostNamesTheEntryAndWhatDispatchReads(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
 	coord := routedCoordinate(t)
-	host := routedRouter(t, cfg)
+	host := newDispatchHostFor(t, cfg)
 	if host == nil {
-		t.Fatal("router host = none, want the entry function to host the router")
+		t.Fatal("dispatch host = none, want the entry function to host dispatch")
 	}
 	if host.Entry != "/" {
 		t.Errorf("entry = %q, want the route id the spec names", host.Entry)
@@ -152,12 +152,12 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
-	host := routedRouter(t, cfg)
+	host := newDispatchHostFor(t, cfg)
 
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -172,7 +172,7 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 			},
 			Layers:   testRuntimeLayers(),
 			Env:      map[string]string{edgeKindEnv: string(cloudfront.Kind)},
-			Router:   host,
+			Dispatch: host,
 			RoleArn:  role.Arn,
 			RoleName: role.Name,
 		}.register(pctx)
@@ -197,11 +197,11 @@ func TestEntryFunctionGetsTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	}
 }
 
-func TestASiblingFunctionHostsNoRouter(t *testing.T) {
+func TestASiblingFunctionHostsNoDispatch(t *testing.T) {
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
-	host := routedRouter(t, cfg)
+	host := newDispatchHostFor(t, cfg)
 
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
@@ -214,7 +214,7 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
 			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
-			Router:    host,
+			Dispatch:  host,
 			RoleArn:   pulumi.String("arn:aws:iam::123456789012:role/app"),
 			RoleName:  pulumi.String("app"),
 		}.register(pctx)
@@ -229,7 +229,7 @@ func TestASiblingFunctionHostsNoRouter(t *testing.T) {
 	}
 	for _, key := range []string{routingManifestEnv, functionURLsEnv} {
 		if _, wired := sibling[key]; wired {
-			t.Errorf("sibling has %s, want the router wired into the entry function alone", key)
+			t.Errorf("sibling has %s, want dispatch wired into the entry function alone", key)
 		}
 	}
 }
@@ -248,6 +248,20 @@ func TestAppEnvPassesTheDeploymentURLToTheFunction(t *testing.T) {
 		if got, want := env[key], "https://shop.example"; got != want {
 			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}
+	}
+}
+
+func TestAnEdgeThatRunsNoCodeLeavesPathDispatchToTheOrigin(t *testing.T) {
+	t.Parallel()
+
+	behindCloudFront := plannedEnv(t, routedConfig(t, cloudfront.Kind), routedApp(), fakeEdgeOf(cloudfront.Kind))
+	if behindCloudFront["OCEL_ORIGIN_DISPATCH"] != "1" {
+		t.Errorf("OCEL_ORIGIN_DISPATCH = %q behind CloudFront, want \"1\": the entry function dispatches each path", behindCloudFront["OCEL_ORIGIN_DISPATCH"])
+	}
+
+	behindCloudflare := plannedEnv(t, routedConfig(t, cloudflare.Kind), routedApp(), fakeEdgeOf(cloudflare.Kind))
+	if _, dispatches := behindCloudflare["OCEL_ORIGIN_DISPATCH"]; dispatches {
+		t.Error("OCEL_ORIGIN_DISPATCH is set behind Cloudflare, want it unset: the edge dispatches each path")
 	}
 }
 
@@ -273,7 +287,7 @@ func TestAppEnvNamesTheEdgeKind(t *testing.T) {
 func TestTheEnvBudgetChargesForSiblingURLsStillToResolve(t *testing.T) {
 	t.Parallel()
 
-	host := routedRouter(t, routedConfig(t, cloudfront.Kind))
+	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
 
 	base := map[string]string{edgeKindEnv: string(cloudfront.Kind)}
 	planned := host.plannedEntryEnv(base, manifestAppFunctions(routedFunctions()))
@@ -292,9 +306,9 @@ type invokeStatement struct {
 	Condition map[string]map[string]string
 }
 
-func routerInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
+func readDispatchInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
 	t.Helper()
-	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "router", "invoke")
+	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "dispatch", "invoke")
 	raw, ok := rec.inputs(rolePolicyToken, name)["policy"]
 	if !ok || !raw.IsString() {
 		t.Fatalf("the entry role has no %s policy", name)
@@ -309,12 +323,12 @@ func routerInvokeGrant(t *testing.T, rec *inputRecorder) []invokeStatement {
 func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	t.Parallel()
 
-	host := routedRouter(t, routedConfig(t, cloudfront.Kind))
+	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
 
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Dispatch: host})
 		if err != nil {
 			return err
 		}
@@ -326,7 +340,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
 			Env:       map[string]string{edgeKindEnv: string(cloudfront.Kind)},
-			Router:    host,
+			Dispatch:  host,
 			RoleArn:   role.Arn,
 			RoleName:  role.Name,
 		}.register(pctx)
@@ -335,7 +349,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	statements := routerInvokeGrant(t, rec)
+	statements := readDispatchInvokeGrant(t, rec)
 	sibling := mockAccountARN("lambda", "function:"+functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
 
 	var reachesSibling, reachesOptimizer bool
@@ -386,8 +400,8 @@ func TestAnAppBehindCloudflareGrantsNoInvoke(t *testing.T) {
 		t.Fatalf("run program: %v", err)
 	}
 
-	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "router", "invoke")
+	name := naming.ResourceID(naming.KindRole, roleLocalName, "policy", "dispatch", "invoke")
 	if _, granted := rec.inputs(rolePolicyToken, name)["policy"]; granted {
-		t.Error("an app whose edge routes has an invoke grant, want the grant only where the origin routes")
+		t.Error("an app whose edge dispatches has an invoke grant, want the grant only where the origin dispatches")
 	}
 }

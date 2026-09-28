@@ -106,7 +106,7 @@ describe("the edge marks every response as its own", () => {
     expect((served as Response).headers.get(EDGE_HEADER)).toBe("cloudflare");
   });
 
-  it("marks what the router serves", async () => {
+  it("marks what dispatch serves", async () => {
     const response = await serve(new Request("https://shop.example.com/a"), routedDeps());
 
     expect(response.status).toBe(200);

@@ -22,7 +22,7 @@ func mixedPlan() *planv1.ChangePlan {
 				Name:   "ocel-production-core",
 				Action: planv1.Change_ACTION_UPDATE,
 				Changes: []*planv1.Change{
-					{Kind: "AWS::Lambda::Function", Name: "OcelRouterFunction", Action: planv1.Change_ACTION_UPDATE},
+					{Kind: "AWS::Lambda::Function", Name: "OcelDispatchFunction", Action: planv1.Change_ACTION_UPDATE},
 					{Kind: "AWS::SecretsManager::Secret", Name: "OcelOriginSecret", Action: planv1.Change_ACTION_REPLACE, Reason: "rotation forces replacement"},
 				},
 			},
@@ -65,8 +65,8 @@ func TestAPlanProjectsAsRowsOfRemoteMutationUnderOneTally(t *testing.T) {
 Proposed changes to the production bootstrap:
 
 ~ ocel-production-core  [core]
-    ~ OcelRouterFunction  AWS::Lambda::Function
-    ± OcelOriginSecret    AWS::SecretsManager::Secret   — rotation forces replacement
+    ~ OcelDispatchFunction  AWS::Lambda::Function
+    ± OcelOriginSecret      AWS::SecretsManager::Secret   — rotation forces replacement
 
 + ocel-production-queues  [queues]
     + OcelQueue     AWS::SQS::Queue

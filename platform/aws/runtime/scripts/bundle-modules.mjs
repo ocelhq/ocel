@@ -22,9 +22,9 @@ const internalModules = [
   "use-cache-store",
 ];
 
-const bundledModules = ["router-host"];
+const bundledModules = ["dispatch-host"];
 
-const bundledInternals = ["router-assets", "router-signing"];
+const bundledInternals = ["dispatch-assets", "dispatch-signing"];
 
 const cjsInterop = [
   'import { createRequire as ocelCreateRequire } from "node:module";',

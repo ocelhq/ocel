@@ -25,7 +25,7 @@ const (
 	functionURLBudgetBytes = 80
 )
 
-type routerHost struct {
+type dispatchHost struct {
 	Entry             string
 	AssetBucket       string
 	AssetPrefix       string
@@ -33,11 +33,11 @@ type routerHost struct {
 	Env               map[string]string
 }
 
-func (h *routerHost) hosts(fn appFunction) bool {
+func (h *dispatchHost) hosts(fn appFunction) bool {
 	return h != nil && fn.route() == h.Entry
 }
 
-func (h *routerHost) entryEnv(base map[string]string) map[string]string {
+func (h *dispatchHost) entryEnv(base map[string]string) map[string]string {
 	if h == nil {
 		return base
 	}
@@ -47,7 +47,7 @@ func (h *routerHost) entryEnv(base map[string]string) map[string]string {
 	return env
 }
 
-func (h *routerHost) plannedEntryEnv(base map[string]string, functions []appFunction) map[string]string {
+func (h *dispatchHost) plannedEntryEnv(base map[string]string, functions []appFunction) map[string]string {
 	env := h.entryEnv(base)
 	size := len("{}")
 	for _, fn := range functions {

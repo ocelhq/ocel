@@ -314,7 +314,7 @@ func TestEncodePrelude(t *testing.T) {
 		}
 	})
 
-	t.Run("the edge header the router set reaches the prelude", func(t *testing.T) {
+	t.Run("an X-Ocel-Edge header on the response reaches the prelude", func(t *testing.T) {
 		h := http.Header{}
 		h.Set("Content-Type", "text/html")
 		h.Set("X-Ocel-Edge", "cloudfront")
@@ -330,7 +330,7 @@ func TestEncodePrelude(t *testing.T) {
 			t.Fatalf("prelude JSON invalid: %v", err)
 		}
 		if p.Headers["X-Ocel-Edge"] != "cloudfront" {
-			t.Errorf("headers = %v, want the edge header the router set passed through; it is the only thing that marks a streamed response", p.Headers)
+			t.Errorf("headers = %v, want the X-Ocel-Edge header on the response passed through; it is the only thing that marks a streamed response", p.Headers)
 		}
 	})
 

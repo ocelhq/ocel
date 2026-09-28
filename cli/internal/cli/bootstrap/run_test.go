@@ -277,8 +277,8 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 		for _, want := range []string{
 			"Proposed changes to the production bootstrap",
 			"~ aws/ocel-production-core  [core]",
-			"    ~ OcelRouterFunction  AWS::Lambda::Function",
-			"    ± OcelOriginSecret    AWS::SecretsManager::Secret   — rotation forces replacement",
+			"    ~ OcelDispatchFunction  AWS::Lambda::Function",
+			"    ± OcelOriginSecret      AWS::SecretsManager::Secret   — rotation forces replacement",
 			"+ aws/ocel-production-image-optimization  [image-optimization]",
 			"– aws/ocel-production-isr  [isr]  — web, api were deployed against it (slow)",
 			"    – OcelRevalidationTable  AWS::DynamoDB::Table",

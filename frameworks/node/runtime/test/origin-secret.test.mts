@@ -100,7 +100,7 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  delete process.env.OCEL_ORIGIN_ROUTER;
+  delete process.env.OCEL_ORIGIN_DISPATCH;
   delete process.env.OCEL_ORIGIN_SECRET;
   delete process.env.OCEL_ORIGIN_SECRET_PREVIOUS;
   delete process.env.OCEL_ORIGIN_SIGNED;
@@ -115,7 +115,7 @@ afterAll(async () => {
 
 describe.each(Object.keys(doors))("%s", (door) => {
   test("a request with no secret never reaches the app", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
 
@@ -124,7 +124,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a request with the wrong secret never reaches the app", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
 
@@ -134,7 +134,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a refused request still completes the invocation", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
     const before = messages.filter((m) => m.type === "invocation-complete").length;
@@ -145,7 +145,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a request with the secret is served, and the app never sees it", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     const port = await start(door, echo);
 
@@ -154,7 +154,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("while a rotation runs, the secret it replaced is served too, and neither reaches the app", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     process.env.OCEL_ORIGIN_SECRET_PREVIOUS = PREVIOUS;
     const port = await start(door, echo);
@@ -168,7 +168,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a predecessor with no current secret opens nothing", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET_PREVIOUS = PREVIOUS;
     const port = await start(door, echo);
 
@@ -177,14 +177,14 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("the secret leaves the environment the app can read", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SECRET = SECRET;
     await start(door, echo);
 
     expect(process.env.OCEL_ORIGIN_SECRET).toBeUndefined();
   });
 
-  test("behind an edge that hosts the router itself every request is served", async () => {
+  test("behind an edge that dispatches itself every request is served", async () => {
     const port = await start(door, echo);
 
     expect(await reach(port, {})).toBe(200);
@@ -193,7 +193,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("a sibling the entry signs to is served without a secret", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     process.env.OCEL_ORIGIN_SIGNED = "1";
     const port = await start(door, echo);
 
@@ -202,7 +202,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
   });
 
   test("an unsigned front door with no secret to demand refuses everything", async () => {
-    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_DISPATCH = "1";
     const port = await start(door, echo);
 
     expect(await reach(port, {})).toBe(403);

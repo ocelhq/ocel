@@ -1,7 +1,7 @@
 import {
+  type ImageDeps as DispatchImageDeps,
+  serveImage as dispatchImage,
   type ImageCache,
-  type ImageDeps as RouterImageDeps,
-  serveImage as routeImage,
 } from "@framework/next-router/image";
 
 import { answerableImageRequest, type CacheDeps, serveCachedImage } from "./cache";
@@ -18,7 +18,7 @@ export interface ImageColoDeps {
   imageStore?: ImageStore;
 }
 
-export type ImageDeps = Omit<RouterImageDeps, "imageCache"> & {
+export type ImageDeps = Omit<DispatchImageDeps, "imageCache"> & {
   cache?: CacheDeps;
   imageStore?: ImageStore;
 };
@@ -47,7 +47,7 @@ export function coloImageCache(deps: ImageColoDeps): ImageCache {
 }
 
 export function serveImage(request: Request, url: URL, deps: ImageDeps): Promise<Response> {
-  return routeImage(request, url, {
+  return dispatchImage(request, url, {
     ...deps,
     imageCache: coloImageCache(deps),
   });

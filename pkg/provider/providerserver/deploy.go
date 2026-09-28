@@ -833,7 +833,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err != nil {
 				return err
 			}
-			staged, functions, err := r.stageFunctions(ctx, entry, pack, facts.Routing)
+			staged, functions, err := r.stageFunctions(ctx, entry, pack, facts.OriginDispatch)
 			if err != nil {
 				return err
 			}
@@ -862,7 +862,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Arch:            entry.Arch,
 					Values:          values,
 					Grants:          grants,
-					Routing:         facts.Routing,
+					Routing:         facts.OriginDispatch,
 					ISR:             facts.ISR,
 					Bytecode:        facts.Bytecode,
 					AssetPrefix:     facts.AssetPrefix,
@@ -1165,8 +1165,8 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 	}
 	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
 	var routing any
-	if facts.EdgeRouting != nil {
-		routing = json.RawMessage(facts.EdgeRouting.Manifest)
+	if facts.EdgeDispatch != nil {
+		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
 	}
 	record := edge.DeploymentRecord{
 		RoutingManifest:  routing,

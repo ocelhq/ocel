@@ -2,17 +2,17 @@ import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import { edgeHeader, routerMode } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin, edgeHeader } from "@framework/node-runtime/edge-kind";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { s3AssetBucket } from "../src/next/router-assets.mjs";
+import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
 import {
-  type RouterHost,
-  routerHostFromEnv,
-  serveRouted,
+  type DispatchHost,
+  dispatchRequest,
+  readDispatchHost,
   siblingFunctionUrls,
   withoutClientControl,
-} from "../src/next/router-host.mjs";
-import { isLoopback, siblingOriginFetch } from "../src/next/router-signing.mjs";
+} from "../src/next/dispatch-host.mjs";
+import { isLoopback, siblingOriginFetch } from "../src/next/dispatch-signing.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
@@ -66,7 +66,7 @@ beforeAll(async () => {
 
 afterAll(() => new Promise<void>((resolve) => local.close(() => resolve())));
 
-function host(): RouterHost {
+function host(): DispatchHost {
   const capturing = (async (input: Request) => {
     const request = new Request(input);
     if (request.url.startsWith(localOrigin)) return fetch(request);
@@ -91,7 +91,7 @@ function host(): RouterHost {
 function serving(path: string, headers: Record<string, string> = {}) {
   seen = [];
   signed = [];
-  return serveRouted(new Request(`https://app.example${path}`, { headers }), host(), () => {});
+  return dispatchRequest(new Request(`https://app.example${path}`, { headers }), host(), () => {});
 }
 
 const forged = {
@@ -164,14 +164,14 @@ test("withoutClientControl keeps everything the app is allowed to see", () => {
   expect(kept.get("x-ocel-probe")).toBe("probe-value");
 });
 
-test("only a deploy that declared an origin router hosts one", () => {
-  expect(routerMode({} as NodeJS.ProcessEnv)).toBe(false);
-  expect(routerMode({ OCEL_ORIGIN_ROUTER: "" } as NodeJS.ProcessEnv)).toBe(false);
-  expect(routerMode({ OCEL_ORIGIN_ROUTER: "1" } as NodeJS.ProcessEnv)).toBe(true);
+test("only a deploy that declared origin dispatch hosts it", () => {
+  expect(dispatchesAtOrigin({} as NodeJS.ProcessEnv)).toBe(false);
+  expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "" } as NodeJS.ProcessEnv)).toBe(false);
+  expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "1" } as NodeJS.ProcessEnv)).toBe(true);
 });
 
-test("router mode without a routing manifest refuses to boot", () => {
-  expect(() => routerHostFromEnv({ OCEL_EDGE_KIND: "cloudfront" }, localOrigin)).toThrow(
+test("origin dispatch without a routing manifest refuses to boot", () => {
+  expect(() => readDispatchHost({ OCEL_EDGE_KIND: "cloudfront" }, localOrigin)).toThrow(
     /OCEL_ROUTING_MANIFEST/,
   );
 });
@@ -201,11 +201,11 @@ test("the env names the entry function's own bundle as the loopback origin", asy
   const { writeFile, mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const dir = await mkdtemp(join(tmpdir(), "ocel-router-host-"));
+  const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-host-"));
   const path = join(dir, "routing-manifest.json");
   await writeFile(path, JSON.stringify(manifest));
 
-  const built = routerHostFromEnv(
+  const built = readDispatchHost(
     {
       OCEL_EDGE_KIND: "cloudfront",
       OCEL_ROUTING_MANIFEST: path,
@@ -279,7 +279,7 @@ test("an asset bucket the function cannot read refuses to boot", async () => {
   const { writeFile, mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const dir = await mkdtemp(join(tmpdir(), "ocel-router-creds-"));
+  const dir = await mkdtemp(join(tmpdir(), "ocel-dispatch-creds-"));
   const path = join(dir, "routing-manifest.json");
   await writeFile(path, JSON.stringify(manifest));
 
@@ -290,8 +290,8 @@ test("an asset bucket the function cannot read refuses to boot", async () => {
     AWS_REGION: "us-east-1",
   };
 
-  expect(() => routerHostFromEnv(env, localOrigin)).toThrow(/assets-bucket/);
-  expect(routerHostFromEnv({ ...env, ...credentials }, localOrigin).assetBucket).toBeDefined();
+  expect(() => readDispatchHost(env, localOrigin)).toThrow(/assets-bucket/);
+  expect(readDispatchHost({ ...env, ...credentials }, localOrigin).assetBucket).toBeDefined();
 });
 
 test("a sibling call signs with the credentials the sandbox has now", async () => {
@@ -318,7 +318,7 @@ test("a sibling call with no credentials fails loudly", async () => {
   await expect(originFetch(`${SIBLING_URL}/sibling`)).rejects.toThrow(/credentials/);
 });
 
-test("every routed response names the edge that served it", async () => {
+test("every dispatched response names the edge that served it", async () => {
   for (const path of ["/local", "/sibling"]) {
     const response = await serving(path, forged);
     expect(response.headers.get(edgeHeader)).toBe(EDGE_KIND);
@@ -326,7 +326,7 @@ test("every routed response names the edge that served it", async () => {
 });
 
 test("the edge an origin claims is replaced by the edge in front of it", async () => {
-  const marked = await serveRouted(
+  const marked = await dispatchRequest(
     new Request("https://app.example/sibling"),
     { ...host(), edgeKind: "cloudflare" },
     () => {},
@@ -336,8 +336,8 @@ test("the edge an origin claims is replaced by the edge in front of it", async (
   expect(await marked.text()).toBe("sibling");
 });
 
-test("a router hosted behind no edge marks nothing", async () => {
-  const bare = await serveRouted(
+test("dispatch hosted behind no edge marks nothing", async () => {
+  const bare = await dispatchRequest(
     new Request("https://app.example/sibling"),
     { ...host(), edgeKind: "" },
     () => {},

@@ -1,4 +1,4 @@
-import { invalidatesByCacheTag, routerMode } from "@framework/node-runtime/edge-kind";
+import { dispatchesAtOrigin, invalidatesByCacheTag } from "@framework/node-runtime/edge-kind";
 import { expect, test } from "vitest";
 import {
   type OriginShaping,
@@ -62,22 +62,22 @@ const isrRoutes = {
 
 function shaping(env: Record<string, string> = {}, config: Record<string, unknown> = {}) {
   return originShaping(manifest(isrRoutes, config), {
-    OCEL_ORIGIN_ROUTER: "1",
+    OCEL_ORIGIN_DISPATCH: "1",
     OCEL_CACHE_TAG_PURGE: "1",
     OCEL_ISR_PREFIX: prefix,
     ...env,
   } as NodeJS.ProcessEnv)!;
 }
 
-test("the gate stays shut when the deploy declared no origin router", () => {
-  expect(routerMode({} as NodeJS.ProcessEnv)).toBe(false);
-  expect(routerMode({ OCEL_ORIGIN_ROUTER: "" } as NodeJS.ProcessEnv)).toBe(false);
+test("the gate stays shut when the deploy declared no origin dispatch", () => {
+  expect(dispatchesAtOrigin({} as NodeJS.ProcessEnv)).toBe(false);
+  expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "" } as NodeJS.ProcessEnv)).toBe(false);
   expect(originShaping(manifest(isrRoutes), {} as any)).toBeNull();
 });
 
-test("the gate opens when the deploy declared the origin hosts the router", () => {
-  expect(routerMode({ OCEL_ORIGIN_ROUTER: "1" } as NodeJS.ProcessEnv)).toBe(true);
-  expect(originShaping(manifest(isrRoutes), { OCEL_ORIGIN_ROUTER: "1" } as any)).not.toBeNull();
+test("the gate opens when the deploy declared the origin hosts dispatch", () => {
+  expect(dispatchesAtOrigin({ OCEL_ORIGIN_DISPATCH: "1" } as NodeJS.ProcessEnv)).toBe(true);
+  expect(originShaping(manifest(isrRoutes), { OCEL_ORIGIN_DISPATCH: "1" } as any)).not.toBeNull();
 });
 
 test("only a front the deploy declared tag-purging is given cache tags", () => {

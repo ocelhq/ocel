@@ -10,8 +10,8 @@ import {
 } from "@framework/node-runtime/edge-kind";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
-import { s3AssetBucket, uncachedResponses } from "./router-assets.mjs";
-import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./router-signing.mjs";
+import { s3AssetBucket, uncachedResponses } from "./dispatch-assets.mjs";
+import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./dispatch-signing.mjs";
 
 const NEXT_INTERNAL_PREFIX = "x-middleware-";
 
@@ -26,7 +26,7 @@ export function withoutClientControl(headers: Headers): Headers {
   return kept;
 }
 
-export interface RouterHost {
+export interface DispatchHost {
   manifest: RoutingManifest;
   edgeKind: string;
   keepCacheTags: boolean;
@@ -41,7 +41,10 @@ export interface RouterHost {
   originFetch: typeof fetch;
 }
 
-function routerDeps(host: RouterHost, waitUntil: (promise: Promise<unknown>) => void): RouteDeps {
+function newRouteDeps(
+  host: DispatchHost,
+  waitUntil: (promise: Promise<unknown>) => void,
+): RouteDeps {
   return {
     manifest: host.manifest,
     functionUrls: {
@@ -64,20 +67,20 @@ function routerDeps(host: RouterHost, waitUntil: (promise: Promise<unknown>) => 
   };
 }
 
-export async function serveRouted(
+export async function dispatchRequest(
   request: Request,
-  host: RouterHost,
+  host: DispatchHost,
   waitUntil: (promise: Promise<unknown>) => void,
 ): Promise<Response> {
   const stripped = new Request(request, {
     headers: withoutClientControl(request.headers),
   });
-  return withEdgeHeader(await serve(stripped, routerDeps(host, waitUntil)), host.edgeKind);
+  return withEdgeHeader(await serve(stripped, newRouteDeps(host, waitUntil)), host.edgeKind);
 }
 
-export function routerHostInvoke(host: RouterHost): Invoke {
+export function newDispatchInvoke(host: DispatchHost): Invoke {
   return (req, res, ocel) =>
-    fetchToNodeHandler((request) => serveRouted(request, host, ocel.waitUntil))(req, res, ocel);
+    fetchToNodeHandler((request) => dispatchRequest(request, host, ocel.waitUntil))(req, res, ocel);
 }
 
 const functionUrlsVar = "OCEL_FUNCTION_URLS";
@@ -100,7 +103,7 @@ export function siblingFunctionUrls(declared: string | undefined): Record<string
   return urls;
 }
 
-export function routerHostFromEnv(env: NodeJS.ProcessEnv, localOrigin: string): RouterHost {
+export function readDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string): DispatchHost {
   const manifestPath = env[routingManifestPathVar];
   if (!manifestPath) {
     throw new Error(`ocel: ${routingManifestPathVar} names no routing manifest`);

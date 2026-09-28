@@ -43,13 +43,13 @@ const launcherModule = `module.exports = {
 };
 `;
 
-const routedPaths = ["/page", "/isr", "/static", "/blog/hello", "/__stale", "/__private"];
+const dispatchedPaths = ["/page", "/isr", "/static", "/blog/hello", "/__stale", "/__private"];
 
 const routingManifest = {
   entry: ENTRY_BUNDLE,
   buildId: "t",
   basePath: "",
-  pathnames: routedPaths,
+  pathnames: dispatchedPaths,
   routes: {
     beforeMiddleware: [],
     beforeFiles: [],
@@ -59,7 +59,7 @@ const routingManifest = {
     fallback: [],
   },
   dispatch: Object.fromEntries(
-    routedPaths.map((path) => [path, { kind: "lambda", id: ENTRY_BUNDLE, entryKey: path }]),
+    dispatchedPaths.map((path) => [path, { kind: "lambda", id: ENTRY_BUNDLE, entryKey: path }]),
   ),
 };
 
@@ -91,7 +91,7 @@ function waitFor(pred: () => boolean, timeoutMs = 5000): Promise<void> {
 }
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ocel-next-router-"));
+  dir = await mkdtemp(join(tmpdir(), "ocel-next-dispatch-"));
 
   const sockPath = join(dir, "control.sock");
   controlServer = net.createServer((conn) => {
@@ -138,7 +138,7 @@ beforeAll(async () => {
 
   process.env.OCEL_ISR_PREFIX = "prod/shop/web/r0a1b2c3d/isr";
   process.env.OCEL_EDGE_KIND = "cloudfront";
-  process.env.OCEL_ORIGIN_ROUTER = "1";
+  process.env.OCEL_ORIGIN_DISPATCH = "1";
   process.env.OCEL_CACHE_TAG_PURGE = "1";
   process.env.OCEL_ORIGIN_SECRET = originSecret;
   process.env.OCEL_ROUTING_MANIFEST = manifestPath;
@@ -169,11 +169,11 @@ test("the unsigned front door refuses a request the origin secret does not open"
   await response.text();
 });
 
-test("the announced server is the router, not the app's own loopback", () => {
+test("the announced server is the dispatch host, not the app's own loopback", () => {
   expect(process.env.__NEXT_PRIVATE_ORIGIN).not.toBe(`http://127.0.0.1:${port}`);
 });
 
-test("a routed request reaches the app through the entry the manifest names", async () => {
+test("a dispatched request reaches the app through the entry the manifest names", async () => {
   const response = await front(`/page`, {
     headers: {
       "x-ocel-entry": "/admin",
@@ -192,7 +192,7 @@ test("a routed request reaches the app through the entry the manifest names", as
   expect(seen.headers["x-keep"]).toBe("yes");
 });
 
-test("every Set-Cookie the app writes survives the router", async () => {
+test("every Set-Cookie the app writes survives dispatch", async () => {
   const response = await front(`/page`, {
     headers: { "x-set-cookies": "1" },
   });
@@ -210,13 +210,13 @@ test("a forwarded host a client forges is not the host the app answers as", asyn
   expect(seen.headers["x-forwarded-host"]).not.toBe("evil.example");
 });
 
-test("a pathname the manifest does not route is a 404 the router answers", async () => {
+test("a pathname the manifest does not route is a 404 dispatch answers", async () => {
   const response = await front(`/nowhere`);
 
   expect(response.status).toBe(404);
 });
 
-test("passes the origin's cache tags out through the router to the front", async () => {
+test("passes the origin's cache tags out through dispatch to the front", async () => {
   const res = await front(`/__stale`);
 
   expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|_N_T_/products,r0a1b2c3d|products");

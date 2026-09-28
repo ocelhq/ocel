@@ -7,7 +7,7 @@ INFO  [plan] ✓ production: Planned the changes to the production bootstrap in 
 Proposed changes to the production bootstrap, fronted by the cloudflare edge:
 
 ~ aws/ocel-bootstrap  [core]
-    ~ OcelRouterFunction  AWS::Lambda::Function
+    ~ OcelDispatchFunction  AWS::Lambda::Function
 
 + cloudflare/edge  [cloudflare-edge]
     + ocel-edge-cache         Cloudflare::R2Bucket
