@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -48,7 +47,7 @@ func TestTheRootSchemaIsWrittenOnceAndReadBack(t *testing.T) {
 	}
 }
 
-func TestARecordTreeAnOlderOcelWroteIsRefused(t *testing.T) {
+func TestARecordTreeStampedBelowThisBuildsSchemaIsStampedAtIt(t *testing.T) {
 	store := fake.NewKeyValues()
 	ctx := context.Background()
 
@@ -57,17 +56,11 @@ func TestARecordTreeAnOlderOcelWroteIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := stackrecords.EnsureSchema(ctx, store, environment.TierProduction)
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("EnsureSchema() over an older tree = %v, want it refused as not ready", err)
+	if err := stackrecords.EnsureSchema(ctx, store, environment.TierProduction); err != nil {
+		t.Fatalf("EnsureSchema() over a tree stamped %s = %v, want it stamped at %d", behind, err, stackrecords.SchemaVersion)
 	}
-	if !strings.Contains(refused.Message, behind) || !strings.Contains(refused.Message, strconv.Itoa(stackrecords.SchemaVersion)) {
-		t.Errorf("refusal = %q, want it to name both the schema written and the schema this build reads", refused.Message)
-	}
-	recorded, err := store.Read(ctx, stackrecords.SchemaKey(environment.TierProduction))
-	if err != nil || string(recorded.Value) != behind {
-		t.Fatalf("the refused tree was stamped %q, want it left at %q rather than claimed as this build's", recorded.Value, behind)
+	if written, err := stackrecords.WrittenSchema(ctx, store, environment.TierProduction); err != nil || written != stackrecords.SchemaVersion {
+		t.Fatalf("WrittenSchema() = %d, %v, want %d", written, err, stackrecords.SchemaVersion)
 	}
 }
 

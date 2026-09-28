@@ -32,10 +32,6 @@ func EnsureSchema(ctx context.Context, store keyvalue.Store, tier environment.Ti
 			return refusal.Refuse(refusal.CodeNotReady,
 				"this account's records are at schema %d and this build reads schema %d: a newer ocel wrote them, and migrations run forward only. Update ocel rather than downgrade the records",
 				written, SchemaVersion)
-		case written > 0:
-			return refusal.Refuse(refusal.CodeNotReady,
-				"this account's records are at schema %d and this build reads schema %d: an older ocel wrote them under a layout this build does not read, and there is no migration between the two. Remove what that ocel deployed with the ocel that deployed it, then bootstrap this account afresh",
-				written, SchemaVersion)
 		}
 		if recorded.Value, err = json.Marshal(SchemaVersion); err != nil {
 			return fmt.Errorf("record the record schema: %w", err)
