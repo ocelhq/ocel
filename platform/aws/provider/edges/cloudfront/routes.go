@@ -41,6 +41,7 @@ type routeStore struct {
 	arn     string
 	wait    func(context.Context, time.Duration) error
 	jitter  func() float64
+	guard   func(context.Context) error
 }
 
 func (w routeStore) backoff(ctx context.Context, attempt int) error {
@@ -105,6 +106,11 @@ func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []
 			}
 			last = err
 			continue
+		}
+		if w.guard != nil {
+			if err := w.guard(ctx); err != nil {
+				return err
+			}
 		}
 		_, err = w.clients.KeyValueStore.UpdateKeys(ctx, &cloudfrontkeyvaluestore.UpdateKeysInput{
 			KvsARN:  aws.String(w.arn),

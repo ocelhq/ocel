@@ -159,7 +159,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames []string) error {
+func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames []string, guard func(context.Context) error) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
@@ -171,7 +171,9 @@ func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, re
 	for _, hostname := range hostnames {
 		puts[hostname] = published
 	}
-	return s.routes(c).apply(ctx, puts, nil)
+	routes := s.routes(c)
+	routes.guard = guard
+	return routes.apply(ctx, puts, nil)
 }
 
 func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (router.Promotion, bool, error) {
@@ -372,7 +374,7 @@ func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) err
 		}
 		records[app] = record
 	}
-	return s.publishOn(ctx, c, active.PromotionID, records, []string{hostname})
+	return s.publishOn(ctx, c, active.PromotionID, records, []string{hostname}, nil)
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {

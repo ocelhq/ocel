@@ -250,7 +250,7 @@ func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2Tr
 	return trafficTo(serving)
 }
 
-func (p *Provider) Pin(ctx context.Context, service, revision string) error {
+func (p *Provider) Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error {
 	if revision == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
@@ -264,7 +264,7 @@ func (p *Provider) Pin(ctx context.Context, service, revision string) error {
 		return err
 	}
 	_, _, err = p.route(ctx, services, clients.servicePath(service), service,
-		"pin the traffic of "+service+" to "+revision, named(revision))
+		"pin the traffic of "+service+" to "+revision, activeNamed(ctx, revision, stillActive))
 	return err
 }
 
@@ -280,8 +280,13 @@ func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, err
 	}
 }
 
-func named(revision string) func(*run.GoogleCloudRunV2Service) (string, error) {
-	return func(*run.GoogleCloudRunV2Service) (string, error) { return revision, nil }
+func activeNamed(ctx context.Context, revision string, stillActive func(context.Context) error) func(*run.GoogleCloudRunV2Service) (string, error) {
+	return func(*run.GoogleCloudRunV2Service) (string, error) {
+		if stillActive == nil {
+			return revision, nil
+		}
+		return revision, stillActive(ctx)
+	}
 }
 
 func (p *Provider) route(

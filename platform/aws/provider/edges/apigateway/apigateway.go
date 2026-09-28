@@ -89,9 +89,10 @@ type apiGateway struct {
 	ns   bootstrap.Namespace
 	open func(context.Context) (Clients, error)
 
-	mu      sync.Mutex
-	delete  *Deletion
-	clients *Clients
+	mu        sync.Mutex
+	delete    *Deletion
+	clients   *Clients
+	leaseWait func(context.Context, time.Duration) error
 }
 
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
@@ -99,7 +100,7 @@ func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) ed
 }
 
 func newAPIGateway(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) *apiGateway {
-	return &apiGateway{ns: ns, open: open, delete: NewDeletion()}
+	return &apiGateway{ns: ns, open: open, delete: NewDeletion(), leaseWait: waitFor}
 }
 
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {

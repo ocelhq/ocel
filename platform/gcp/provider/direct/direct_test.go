@@ -20,23 +20,33 @@ import (
 )
 
 type pinRecorder struct {
-	mu        sync.Mutex
-	pinned    []string
-	refuse    error
-	interrupt context.CancelFunc
+	mu     sync.Mutex
+	pinned []string
+	refuse error
 }
 
-func (p *pinRecorder) Pin(_ context.Context, service, revision string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.interrupt != nil {
-		p.interrupt()
+func (p *pinRecorder) Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error {
+	for {
+		p.mu.Lock()
+		read, refused := len(p.pinned), p.refuse
+		p.mu.Unlock()
+		if refused != nil {
+			return refused
+		}
+		if stillActive != nil {
+			if err := stillActive(ctx); err != nil {
+				return err
+			}
+		}
+		p.mu.Lock()
+		if len(p.pinned) != read {
+			p.mu.Unlock()
+			continue
+		}
+		p.pinned = append(p.pinned, service+"@"+revision)
+		p.mu.Unlock()
+		return nil
 	}
-	if p.refuse != nil {
-		return p.refuse
-	}
-	p.pinned = append(p.pinned, service+"@"+revision)
-	return nil
 }
 
 func (p *pinRecorder) calls() []string {

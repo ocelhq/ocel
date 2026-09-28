@@ -366,5 +366,8 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return errors.Join(append(errs, drained)...)
 	}
 	s.own.API = ""
+	if err := s.forgetStageLeases(ctx, c); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }

@@ -46,6 +46,7 @@ type machine struct {
 	visited     []string
 	releasing   func(host.Release) error
 	byHand      int
+	tables      int
 }
 
 func aMachine() *machine {
@@ -130,15 +131,22 @@ func (m *machine) Release(_ context.Context, rel host.Release, _ progress.Progre
 	if err := m.refuse("Release"); err != nil {
 		return err
 	}
-	if rel.StillActive != nil {
-		if err := rel.StillActive(context.Background()); err != nil {
-			return router.Unserved{Err: err}
+	for {
+		read := m.tables
+		if rel.StillActive != nil {
+			if err := rel.StillActive(context.Background()); err != nil {
+				return router.Unserved{Err: err}
+			}
 		}
+		if m.tables != read {
+			continue
+		}
+		for _, app := range rel.Apps {
+			m.upstream[app.RouteKey] = app.Target
+		}
+		m.tables++
+		return nil
 	}
-	for _, app := range rel.Apps {
-		m.upstream[app.RouteKey] = app.Target
-	}
-	return nil
 }
 
 func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error {
@@ -149,6 +157,7 @@ func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error
 	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool {
 		return key.Owner == owner && key.Pointer == pointer
 	})
+	m.tables++
 	return nil
 }
 
@@ -158,6 +167,7 @@ func (m *machine) UnrouteSurface(_ context.Context, owner string) error {
 		return err
 	}
 	maps.DeleteFunc(m.upstream, func(key host.RouteKey, _ string) bool { return key.Owner == owner })
+	m.tables++
 	return nil
 }
 

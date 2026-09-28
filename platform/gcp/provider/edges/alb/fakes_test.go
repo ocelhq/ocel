@@ -154,14 +154,28 @@ func (w *world) enter(certificateMap, hostname string) {
 	w.entries[certificateMap][hostname] = true
 }
 
-func (w *world) Pin(_ context.Context, service, revision string) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.pinning != nil {
-		return w.pinning
+func (w *world) Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error {
+	for {
+		w.mu.Lock()
+		read, refused := len(w.pinned), w.pinning
+		w.mu.Unlock()
+		if refused != nil {
+			return refused
+		}
+		if stillActive != nil {
+			if err := stillActive(ctx); err != nil {
+				return err
+			}
+		}
+		w.mu.Lock()
+		if len(w.pinned) != read {
+			w.mu.Unlock()
+			continue
+		}
+		w.pinned = append(w.pinned, service+"@"+revision)
+		w.mu.Unlock()
+		return nil
 	}
-	w.pinned = append(w.pinned, service+"@"+revision)
-	return nil
 }
 
 func (w *world) refusePins(err error) {

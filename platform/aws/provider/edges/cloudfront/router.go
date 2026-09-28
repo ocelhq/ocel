@@ -61,7 +61,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 	if err := flip.RefuseInactive(ctx); err != nil {
 		return err
 	}
-	if err := s.publishOn(ctx, c, flip.Promotion.PromotionID, flip.Records, s.servedHostnames(flip.Pointer)); err != nil {
+	if err := s.publishOn(ctx, c, flip.Promotion.PromotionID, flip.Records, s.servedHostnames(flip.Pointer), flip.RefuseInactive); err != nil {
 		return router.Unserved{Err: err}
 	}
 	return nil
