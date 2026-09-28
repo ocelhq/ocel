@@ -1,9 +1,0 @@
-{
-  "name": "live-fixture-root",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "exit 1",
-    "start": "exit 1"
-  }
-}

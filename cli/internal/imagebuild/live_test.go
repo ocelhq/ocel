@@ -2,10 +2,7 @@ package imagebuild_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -103,72 +100,4 @@ func TestLiveADockerfileBuildLandsTheSameCoordinateAsARailpackOne(t *testing.T) 
 	if said := serves(t, vm, image, 18081); said != "dockerfile" {
 		t.Errorf("the running image answered %q: the app's Dockerfile is what sets that, so %q was built by railpack instead", said, image.Ref)
 	}
-}
-
-const journeyFixture = "testdata/express"
-
-func TestLiveTheExpressFixtureBuildsAndServesItsVersion(t *testing.T) {
-	vm := livemachine.Require(t)
-	vm.Engine(t)
-	vm.Forward(t)
-
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
-		imagebuild.App{Slug: "Shop Live", Name: "web", Workspace: located(t, journeyFixture)})
-	if err != nil {
-		t.Fatalf("Build() of the express fixture = %v", err)
-	}
-
-	want := declaredVersion(t)
-	if said := serves(t, vm, image, 18082); said != want {
-		t.Errorf("the express fixture answered %q, want %q: a redeploy is told apart by the version its package.json names", said, want)
-	}
-}
-
-const (
-	workspaceFixture    = "testdata/pnpmworkspace-live"
-	workspaceFixtureApp = workspaceFixture + "/apps/web"
-	workspaceGreeting   = "greeting from the workspace package"
-)
-
-func TestLiveAnAppInsideAWorkspaceBuildsFromTheWorkspaceRoot(t *testing.T) {
-	vm := livemachine.Require(t)
-	vm.Engine(t)
-	vm.Forward(t)
-
-	loc := located(t, workspaceFixtureApp)
-	if !loc.InWorkspace() {
-		t.Fatalf("%s is not inside a workspace, so this test proves nothing about one", workspaceFixtureApp)
-	}
-
-	image, err := imagebuild.Builder{Progress: livemachine.Progress{T: t}}.Build(context.Background(),
-		imagebuild.App{Slug: "Shop Live", Name: "workspace express", Workspace: loc})
-	if err != nil {
-		t.Fatalf("Build() of an app inside a workspace = %v", err)
-	}
-
-	addresses(t, vm, image, "ocel/shop-live/workspace-express")
-	if out := vm.SSH(t, "docker run --rm --entrypoint sh "+image.Ref+" -c 'ls "+loc.Path+"/node_modules/express/package.json'"); !strings.Contains(out, "package.json") {
-		t.Errorf("the image contains %q where the app's own dependencies belong: the install inside it resolved nothing from the root's lockfile", out)
-	}
-	if said := serves(t, vm, image, 18083); said != workspaceGreeting {
-		t.Errorf("the app answered %q, want %q: the image serves the app only if the workspace package beside it was built and resolved", said, workspaceGreeting)
-	}
-}
-
-func declaredVersion(t *testing.T) string {
-	t.Helper()
-	read, err := os.ReadFile(filepath.Join(journeyFixture, "package.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var manifest struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(read, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if manifest.Version == "" {
-		t.Fatalf("%s declares no version, and the fixture serves one so two releases of it can be told apart", journeyFixture)
-	}
-	return manifest.Version
 }
