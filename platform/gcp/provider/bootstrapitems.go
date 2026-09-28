@@ -126,10 +126,3 @@ func digestOf(namespace provider.Namespace, items []item) string {
 	}
 	return hex.EncodeToString(sum.Sum(nil))
 }
-
-func siblingOf(tier environment.Tier) environment.Tier {
-	if tier == environment.TierProduction {
-		return environment.TierPreview
-	}
-	return environment.TierProduction
-}

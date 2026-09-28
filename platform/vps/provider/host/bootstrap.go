@@ -540,7 +540,7 @@ func (b Bootstrap) removals(ctx context.Context, tier environment.Tier) ([]remov
 	if err != nil {
 		return nil, err
 	}
-	sibling, err := b.host.Survey(ctx, other(tier))
+	sibling, err := b.host.Survey(ctx, tier.Sibling())
 	if err != nil {
 		return nil, err
 	}
@@ -648,11 +648,4 @@ func removing(read, sibling Reading, apps appsPresent) []removal {
 		return append([]removal{keptEngine()}, present...)
 	}
 	return present
-}
-
-func other(tier environment.Tier) environment.Tier {
-	if tier == environment.TierProduction {
-		return environment.TierPreview
-	}
-	return environment.TierProduction
 }

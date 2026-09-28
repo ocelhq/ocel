@@ -236,7 +236,7 @@ func planned(read survey, items []item) []provider.Change {
 }
 
 func sharedWith(tier environment.Tier) string {
-	return fmt.Sprintf(reasonShared, siblingOf(tier))
+	return fmt.Sprintf(reasonShared, tier.Sibling())
 }
 
 func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
@@ -871,7 +871,7 @@ func removing(read survey, target item) removal {
 	case target.Kind == KindKeyRing:
 		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
 	case target.Kind == KindDatabase && read.sibling:
-		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, siblingOf(read.Tier))
+		taking.action, taking.reason = provider.ActionKeep, fmt.Sprintf(reasonSharedDB, read.Tier.Sibling())
 	case target.Shared && read.sibling:
 		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Tier)
 	case target.Kind == KindDatabase && read.Emulated:

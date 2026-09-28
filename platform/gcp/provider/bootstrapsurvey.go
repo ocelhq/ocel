@@ -90,7 +90,7 @@ func (b bootstrap) survey(ctx context.Context, tier environment.Tier) (survey, e
 		}
 	}
 
-	sibling, err := b.stamped(ctx, read.Names.Bucket(siblingOf(tier)))
+	sibling, err := b.stamped(ctx, read.Names.Bucket(tier.Sibling()))
 	if err != nil {
 		return survey{}, err
 	}

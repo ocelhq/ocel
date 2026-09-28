@@ -18,3 +18,17 @@ func TestEachTierIsSpelledTheWayTagsKeysAndSealedValuesStoreIt(t *testing.T) {
 		}
 	}
 }
+
+func TestEachTierNamesTheOtherAsItsSibling(t *testing.T) {
+	t.Parallel()
+
+	for tier, want := range map[environment.Tier]environment.Tier{
+		environment.TierProduction:  environment.TierPreview,
+		environment.TierPreview:     environment.TierProduction,
+		environment.Tier("staging"): "",
+	} {
+		if got := tier.Sibling(); got != want {
+			t.Errorf("%q.Sibling() = %q, want %q", tier, got, want)
+		}
+	}
+}

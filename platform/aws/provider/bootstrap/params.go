@@ -138,10 +138,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 		})
 	}
 
-	passphrase, err := plannedPassphraseRemoval(present[ns.PassphraseParamName()], ns, tier, sharedPassphrase)
-	if err != nil {
-		return provider.ChangeGroup{}, err
-	}
+	passphrase := plannedPassphraseRemoval(present[ns.PassphraseParamName()], ns, tier, sharedPassphrase)
 	if passphrase.Name != "" {
 		group.Changes = append(group.Changes, passphrase)
 	}
@@ -156,9 +153,9 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 	return group, nil
 }
 
-func plannedPassphraseRemoval(present bool, ns Namespace, tier environment.Tier, shared bool) (provider.Change, error) {
+func plannedPassphraseRemoval(present bool, ns Namespace, tier environment.Tier, shared bool) provider.Change {
 	if !present {
-		return provider.Change{}, nil
+		return provider.Change{}
 	}
 	if !shared {
 		return provider.Change{
@@ -166,18 +163,14 @@ func plannedPassphraseRemoval(present bool, ns Namespace, tier environment.Tier,
 			Name:   ns.PassphraseParamName(),
 			Action: provider.ActionDelete,
 			Reason: passphraseStranded,
-		}, nil
-	}
-	sibling, err := SiblingTierOf(tier)
-	if err != nil {
-		return provider.Change{}, err
+		}
 	}
 	return provider.Change{
 		Kind:   kindParameter,
 		Name:   ns.PassphraseParamName(),
 		Action: provider.ActionKeep,
-		Reason: fmt.Sprintf(passphraseShared, sibling),
-	}, nil
+		Reason: fmt.Sprintf(passphraseShared, tier.Sibling()),
+	}
 }
 
 func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {
