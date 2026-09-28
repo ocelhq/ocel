@@ -541,54 +541,6 @@ func (l *Ledger) Destroy(ctx context.Context) error {
 	return nil
 }
 
-func (l *Ledger) NoteInvalidationTarget(ctx context.Context, distribution string) error {
-	return l.setInvalidationTarget(ctx, distribution, true)
-}
-
-func (l *Ledger) ForgetInvalidationTarget(ctx context.Context, distribution string) error {
-	return l.setInvalidationTarget(ctx, distribution, false)
-}
-
-func (l *Ledger) setInvalidationTarget(ctx context.Context, distribution string, note bool) error {
-	if distribution == "" {
-		return fmt.Errorf("note an invalidation target for %s: it names no front to invalidate", l.partition)
-	}
-	at := l.key("invalidation")
-	for range casAttempts {
-		recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, at)
-		if err != nil {
-			return fmt.Errorf("read the invalidation targets for %s: %w", l.partition, err)
-		}
-		var targets []string
-		if len(recorded.Value) > 0 {
-			if err := json.Unmarshal(recorded.Value, &targets); err != nil {
-				return fmt.Errorf("read the invalidation targets for %s: %w", l.partition, err)
-			}
-		}
-		kept := slices.DeleteFunc(slices.Clone(targets), func(target string) bool { return target == distribution })
-		if note {
-			kept = append(kept, distribution)
-		}
-		slices.Sort(kept)
-		if slices.Equal(kept, targets) {
-			return nil
-		}
-		encoded, err := json.Marshal(kept)
-		if err != nil {
-			return fmt.Errorf("encode the invalidation targets for %s: %w", l.partition, err)
-		}
-		recorded.Value = encoded
-		if _, err := l.keyValues.Write(ctx, recorded); err != nil {
-			if errors.Is(err, keyvalue.ErrStale) {
-				continue
-			}
-			return fmt.Errorf("record the invalidation targets for %s: %w", l.partition, err)
-		}
-		return nil
-	}
-	return fmt.Errorf("record the invalidation targets for %s: they moved under %d attempts", l.partition, casAttempts)
-}
-
 func (l *Ledger) deletePromotions(ctx context.Context, pointer string, rows []promotionRecord, keptKeys []string) error {
 	for _, row := range rows {
 		names := []keyvalue.Key{l.promotionKey(pointer, row.PromotionID)}

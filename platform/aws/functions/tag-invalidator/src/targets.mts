@@ -2,7 +2,7 @@ export const targetsSortKey = "invalidation#";
 
 export const targetsAttribute = "value";
 
-export const ledgerRoot = "ledger";
+export const routerPartition = "routers#cloudfront";
 
 export interface DynamoLike {
   send(command: any): Promise<any>;
@@ -12,8 +12,8 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
-export function ledgerPartition(project: string): string {
-  return `${ledgerRoot}#${project.replaceAll("%", "%25").replaceAll("#", "%23")}`;
+export function projectPartition(project: string): string {
+  return `${routerPartition}#${project.replaceAll("%", "%25").replaceAll("#", "%23")}`;
 }
 
 async function notedAt(
@@ -46,13 +46,13 @@ export async function targetsOf(
   project: string,
 ): Promise<string[]> {
   const [wildcard, owned] = await Promise.all([
-    notedAt(dynamo, commands, table, ledgerRoot),
-    notedAt(dynamo, commands, table, ledgerPartition(project)),
+    notedAt(dynamo, commands, table, routerPartition),
+    notedAt(dynamo, commands, table, projectPartition(project)),
   ]);
   const targets = [...new Set([...wildcard, ...owned])].sort();
   if (targets.length === 0) {
     console.warn(
-      `ocel: the ${bootstrapTier} ledger names no front to invalidate for ${project}, so its raised tags reach nothing`,
+      `ocel: the ${bootstrapTier} CloudFront router names no front to invalidate for ${project}, so its raised tags reach nothing`,
     );
   }
   return targets;

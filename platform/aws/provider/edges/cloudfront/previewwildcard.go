@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -55,7 +54,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	if err := bootstrapLedger(c, environment.TierPreview, deployed).NoteInvalidationTarget(ctx, wildcardFront.id); err != nil {
+	if err := wildcardInvalidationTargets(c, environment.TierPreview, deployed).note(ctx, wildcardFront.id); err != nil {
 		return "", err
 	}
 	return wildcardFront.domainName, nil
@@ -89,8 +88,11 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, spec distribu
 	return existing, nil
 }
 
-func bootstrapLedger(c Clients, tier environment.Tier, deployed bootstrap.Deployed) *ledger.Ledger {
-	return awsports.Ledger(c.Dynamo, awsports.Table(deployed.StateTable), tier, "")
+func wildcardInvalidationTargets(c Clients, tier environment.Tier, deployed bootstrap.Deployed) invalidationTargets {
+	return invalidationTargets{
+		keyValues: awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)},
+		partition: invalidationPartition(tier, ""),
+	}
 }
 
 func cloudFrontCertificate(wildcard, certificate string) error {
@@ -216,7 +218,7 @@ func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients,
 	if !deployed.Present {
 		return nil
 	}
-	return bootstrapLedger(c, environment.TierPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
+	return wildcardInvalidationTargets(c, environment.TierPreview, deployed).forget(ctx, distribution)
 }
 
 func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, baseDomain string) error {

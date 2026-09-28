@@ -97,6 +97,10 @@ func (s *stack) openLedger(c Clients) *ledger.Ledger {
 	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.tier(), s.slug())
 }
 
+func (s *stack) invalidationTargets(c Clients) invalidationTargets {
+	return invalidationTargets{keyValues: s.keyValues(c), partition: invalidationPartition(s.tier(), s.slug())}
+}
+
 func (s *stack) routes(c Clients) routeStore {
 	return routeStore{clients: c, arn: s.own.KeyValueStore}
 }
@@ -168,7 +172,7 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 	} else if err := reshapeDistribution(ctx, c, spec, dist.id); err != nil {
 		return front{}, err
 	}
-	if err := s.openLedger(c).NoteInvalidationTarget(ctx, dist.id); err != nil {
+	if err := s.invalidationTargets(c).note(ctx, dist.id); err != nil {
 		return front{}, err
 	}
 	s.recordFront(dist)
@@ -186,7 +190,7 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 		if err != nil {
 			return front{}, err
 		}
-		if err := s.openLedger(c).NoteInvalidationTarget(ctx, created.id); err != nil {
+		if err := s.invalidationTargets(c).note(ctx, created.id); err != nil {
 			return front{}, err
 		}
 		dist = created
@@ -460,7 +464,7 @@ func (s *stack) forgetInvalidationTarget(ctx context.Context, c Clients, distrib
 	if !s.provisioned() {
 		return nil
 	}
-	return s.openLedger(c).ForgetInvalidationTarget(ctx, distribution)
+	return s.invalidationTargets(c).forget(ctx, distribution)
 }
 
 func (s *stack) Destroy(ctx context.Context) error {

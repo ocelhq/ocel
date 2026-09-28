@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -297,11 +296,11 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		}
 
 		raised := w.front.named(previewWildcardName(previewBase))
-		targets := w.invalidationTargets(ledger.Partition(environment.TierPreview, ""))
+		targets := w.invalidationTargets(invalidationPartition(environment.TierPreview, ""))
 		if !slices.Equal(targets, []string{raised.id}) {
 			t.Errorf("bootstrap invalidation targets = %v, want the wildcard every preview is served from (%q)", targets, raised.id)
 		}
-		if perProject := w.invalidationTargets(ledger.Partition(environment.TierPreview, conformanceSlug)); perProject != nil {
+		if perProject := w.invalidationTargets(invalidationPartition(environment.TierPreview, conformanceSlug)); perProject != nil {
 			t.Errorf("project invalidation targets = %v, want a shared front named once rather than per project", perProject)
 		}
 	})
@@ -316,7 +315,7 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 		if err := e.DestroyPreviewWildcard(ctx, previewBase); err != nil {
 			t.Fatalf("DestroyPreviewWildcard: %v", err)
 		}
-		if targets := w.invalidationTargets(ledger.Partition(environment.TierPreview, "")); len(targets) != 0 {
+		if targets := w.invalidationTargets(invalidationPartition(environment.TierPreview, "")); len(targets) != 0 {
 			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", targets)
 		}
 	})

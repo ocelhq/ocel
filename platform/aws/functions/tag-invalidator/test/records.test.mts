@@ -80,7 +80,7 @@ describe("raisesOf", () => {
 });
 
 describe("coordinateOf", () => {
-  it("reads the project the ledger is scoped by and the release the tags are prefixed with", () => {
+  it("reads the project the invalidation targets are scoped by and the release the tags are prefixed with", () => {
     expect(coordinateOf(PREFIX)).toEqual({ project: "acme", release: "r3f8a1c9d" });
   });
 
