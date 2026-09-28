@@ -3,6 +3,7 @@ package vps_test
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -146,6 +147,9 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 
 func buildProvider(t *testing.T) string {
 	t.Helper()
+	if prebuilt := os.Getenv("OCEL_VPS_PROVIDER_BINARY"); prebuilt != "" {
+		return prebuilt
+	}
 	binary := filepath.Join(t.TempDir(), "deploy")
 	if runtime.GOOS == "windows" {
 		binary += ".exe"

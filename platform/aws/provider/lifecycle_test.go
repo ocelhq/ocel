@@ -55,7 +55,18 @@ func lifecycle(t *testing.T) journey {
 
 	root := repoRoot(t)
 	build(t, filepath.Join(root, "cli"), run.bin, "./ocel")
-	build(t, ".", run.installed(), "./cmd/deploy")
+	if prebuilt := os.Getenv(prebuiltProviderEnv); prebuilt != "" {
+		binary, err := os.ReadFile(prebuilt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(t, run.installed(), string(binary))
+		if err := os.Chmod(run.installed(), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		build(t, ".", run.installed(), "./cmd/deploy")
+	}
 	write(t, filepath.Join(run.project, "ocel.config.ts"), run.declaration(t))
 
 	return run

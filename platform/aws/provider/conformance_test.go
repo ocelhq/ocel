@@ -1,6 +1,7 @@
 package aws_test
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -61,8 +62,13 @@ func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	}
 }
 
+const prebuiltProviderEnv = "OCEL_AWS_PROVIDER_BINARY"
+
 func buildProvider(t *testing.T) string {
 	t.Helper()
+	if prebuilt := os.Getenv(prebuiltProviderEnv); prebuilt != "" {
+		return prebuilt
+	}
 	binary := filepath.Join(t.TempDir(), "deploy")
 	if runtime.GOOS == "windows" {
 		binary += ".exe"
