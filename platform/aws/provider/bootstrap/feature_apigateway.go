@@ -48,8 +48,7 @@ func apiGatewayEdgeTemplate(in featureInputs) featureStack {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the role API Gateway assumes reads a release's static assets out of it and nothing else.", in.refs.assetBucketARN},
 	})
-	edgeTier := environment.Tier(in.tier)
-	responder := notFoundAPIResource(in.ns, edgeTier) +
+	responder := notFoundAPIResource(in.ns, in.tier) +
 		notFoundProxyResource() +
 		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", edgeRootPath) +
 		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", edgeRootPath+edgeProxyPathPart)
@@ -62,7 +61,7 @@ Description: "Ocel bootstrap feature (%s, %s) - what an API Gateway front needs 
 %s%s%s%sOutputs:
 %s`,
 			FeatureAPIGatewayEdge, in.tier, params,
-			invokeRoleResource(in.ns, edgeTier),
+			invokeRoleResource(in.ns, in.tier),
 			responder,
 			notFoundDeploymentResource(published),
 			notFoundStageResource(published),

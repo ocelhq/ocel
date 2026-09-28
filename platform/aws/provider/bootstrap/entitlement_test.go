@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type freePlanEdge struct {
@@ -20,8 +21,8 @@ func (f *freePlanEdge) Hooks() edge.Hooks {
 }
 
 func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			ed := &freePlanEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
 			frontedBy(t, ed)
 

@@ -24,16 +24,16 @@ func (p *Provider) Region() string { return p.aws.Region }
 
 func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (bootstrap.Deployed, error) {
 	return p.deployed.resolve(tier, func() (bootstrap.Deployed, error) {
-		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, string(tier))
+		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
 	})
 }
 
 func (p *Provider) tierParams(ctx context.Context, tier environment.Tier, kind edge.Kind) (bootstrap.TierParams, error) {
 	return p.params.resolve(tierEdge{tier: tier, kind: kind}, func() (bootstrap.TierParams, error) {
 		if kind == "" {
-			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(tier))
+			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, tier)
 		}
-		return bootstrap.ReadTierParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(tier), kind)
+		return bootstrap.ReadTierParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, tier, kind)
 	})
 }
 

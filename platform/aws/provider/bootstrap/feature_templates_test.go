@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,8 +32,8 @@ var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition
 
 func TestFeatureTemplates(t *testing.T) {
 	for _, name := range featureNames() {
-		for _, tier := range []string{TierProduction, TierPreview} {
-			t.Run(name+"/"+tier, func(t *testing.T) {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			t.Run(name+"/"+string(tier), func(t *testing.T) {
 				stack := featureStackFor(name, tier, everyFeature())
 
 				var tmpl declaredTemplate

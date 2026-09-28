@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
@@ -211,7 +212,7 @@ func installedBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
-	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	return stacks, apis
@@ -222,7 +223,7 @@ func TestChangeSets(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
 		before := stacks.updates
 
-		if err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if stacks.updates != before {
@@ -235,11 +236,11 @@ func TestChangeSets(t *testing.T) {
 
 	t.Run("a replacement stops a bootstrap that was not told to accept one", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(TierProduction)
+		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
-		err := Run(context.Background(), apis, defaultNamespace, TierProduction, everything(), nil)
+		err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil)
 		if err == nil {
 			t.Fatal("a bootstrap that would replace a live queue was allowed through")
 		}
@@ -253,13 +254,13 @@ func TestChangeSets(t *testing.T) {
 
 	t.Run("accepting replacements writes the stack", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(TierProduction)
+		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
 		req := everything()
 		req.AcceptReplacements = true
-		if err := Run(context.Background(), apis, defaultNamespace, TierProduction, req, nil); err != nil {
+		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if stacks.template(stack) == behindTemplate {
@@ -273,11 +274,11 @@ func TestHeal(t *testing.T) {
 
 	t.Run("a required feature stack that has fallen behind is written back", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(TierProduction)
+		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, all, &log)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -297,7 +298,7 @@ func TestHeal(t *testing.T) {
 		stacks.fallBehind(coreStackName)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, all, &log)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -308,11 +309,11 @@ func TestHeal(t *testing.T) {
 
 	t.Run("a stack this deploy does not need is left alone", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := optStack(TierProduction)
+		stack := optStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, &log)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -323,12 +324,12 @@ func TestHeal(t *testing.T) {
 
 	t.Run("a change the rule refuses leaves the stack unchanged", func(t *testing.T) {
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(TierProduction)
+		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, all, &log)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -346,12 +347,12 @@ func TestHeal(t *testing.T) {
 	t.Run("a stack another run is writing is left to that run", func(t *testing.T) {
 		recordWaits(t)
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(TierProduction)
+		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, cfn.ChangeSetAttempts*2)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, all, &log)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
@@ -366,12 +367,12 @@ func TestHeal(t *testing.T) {
 	t.Run("a stack that goes idle still behind is left to whoever wrote it", func(t *testing.T) {
 		recordWaits(t)
 		stacks, apis := installedBootstrap(t)
-		stack := isrStack(TierProduction)
+		stack := isrStack(environment.TierProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, 3)
 		var log healLog
 
-		healed, err := Heal(context.Background(), apis, defaultNamespace, TierProduction, all, &log)
+		healed, err := Heal(context.Background(), apis, defaultNamespace, environment.TierProduction, all, &log)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}

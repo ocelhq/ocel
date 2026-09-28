@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -104,18 +105,18 @@ func parseRevalidatorTemplate(t *testing.T, template string) parsedRevalidator {
 
 func revalidatorTemplates() []struct {
 	name         string
-	tier         string
+	tier         environment.Tier
 	template     string
 	edgeTemplate string
 } {
 	return []struct {
 		name         string
-		tier         string
+		tier         environment.Tier
 		template     string
 		edgeTemplate string
 	}{
-		{"production", TierProduction, featureTemplate(FeatureISR, TierProduction), featureTemplate(FeatureCloudflareEdge, TierProduction)},
-		{"preview", TierPreview, featureTemplate(FeatureISR, TierPreview), featureTemplate(FeatureCloudflareEdge, TierPreview)},
+		{"production", environment.TierProduction, featureTemplate(FeatureISR, environment.TierProduction), featureTemplate(FeatureCloudflareEdge, environment.TierProduction)},
+		{"preview", environment.TierPreview, featureTemplate(FeatureISR, environment.TierPreview), featureTemplate(FeatureCloudflareEdge, environment.TierPreview)},
 	}
 }
 
@@ -343,7 +344,7 @@ func TestRevalidator(t *testing.T) {
 					if got := equals["aws:ResourceTag/ocel:component"]; got != "function" {
 						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:component': 'function' — anything looser reaches the bucket listeners too", got)
 					}
-					if got := equals["aws:ResourceTag/ocel:env-tier"]; got != tc.tier {
+					if got := equals["aws:ResourceTag/ocel:env-tier"]; got != string(tc.tier) {
 						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:env-tier': %q — the %s revalidator must not render through the other tier's functions", got, tc.tier, tc.tier)
 					}
 					return
@@ -449,13 +450,13 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 func TestRunRevalidator(t *testing.T) {
 	t.Run("this build bootstraps a consumer", func(t *testing.T) {
 		for _, tc := range []struct {
-			tier      string
+			tier      environment.Tier
 			stackName string
 		}{
-			{TierProduction, isrStack(TierProduction)},
-			{TierPreview, isrStack(TierPreview)},
+			{environment.TierProduction, isrStack(environment.TierProduction)},
+			{environment.TierPreview, isrStack(environment.TierPreview)},
 		} {
-			t.Run(tc.tier, func(t *testing.T) {
+			t.Run(string(tc.tier), func(t *testing.T) {
 				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 

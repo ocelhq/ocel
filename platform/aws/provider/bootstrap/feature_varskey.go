@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
@@ -84,7 +85,7 @@ type KeyAPI interface {
 
 const varsKeyProbeBytes = 16
 
-func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, req Request) ([]provider.Change, error) {
+func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request) ([]provider.Change, error) {
 	if req.VarsKey == "" {
 		return nil, nil
 	}
@@ -113,7 +114,7 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, tier 
 	if _, err := rand.Read(probe); err != nil {
 		return nil, fmt.Errorf("generate a probe for the brought variable key: %w", err)
 	}
-	bound := map[string]string{"ocel:probe": tier}
+	bound := map[string]string{"ocel:probe": string(tier)}
 	sealed, err := apis.KMS.Encrypt(ctx, &kms.EncryptInput{
 		KeyId:             aws.String(req.VarsKey),
 		Plaintext:         probe,

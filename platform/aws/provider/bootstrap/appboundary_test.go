@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,7 +29,7 @@ type boundaryTemplate struct {
 	} `yaml:"Resources"`
 }
 
-func boundaryStatements(t *testing.T, tier, broughtKey string) []boundaryStatement {
+func boundaryStatements(t *testing.T, tier environment.Tier, broughtKey string) []boundaryStatement {
 	t.Helper()
 	var tmpl boundaryTemplate
 	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, tier, broughtKey)), &tmpl); err != nil {
@@ -49,7 +50,7 @@ func boundaryStatements(t *testing.T, tier, broughtKey string) []boundaryStateme
 
 func TestTheAppBoundaryKeepsTheDescriptionItWasCreatedWith(t *testing.T) {
 	var tmpl boundaryTemplate
-	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, TierPreview, "")), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, environment.TierPreview, "")), &tmpl); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
 	want := "Permissions boundary for the roles Ocel creates for apps in the preview class."
@@ -59,8 +60,8 @@ func TestTheAppBoundaryKeepsTheDescriptionItWasCreatedWith(t *testing.T) {
 }
 
 func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsTierOwns(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			for _, st := range boundaryStatements(t, tier, "") {
 				if st.Effect != "Allow" {
 					t.Errorf("statement Effect = %q, want Allow", st.Effect)
@@ -94,8 +95,8 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsTierOwns(t 
 }
 
 func TestTheAppBoundaryAdmitsABroughtKeyByItsARNAndPutsNoAliasOnIt(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			var keyed []boundaryStatement
 			for _, st := range boundaryStatements(t, tier, broughtKeyARN) {
 				if slices.ContainsFunc(yamlStrings(st.Action), func(action string) bool { return strings.HasPrefix(action, "kms:") }) {
@@ -116,8 +117,8 @@ func TestTheAppBoundaryAdmitsABroughtKeyByItsARNAndPutsNoAliasOnIt(t *testing.T)
 }
 
 func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			var admitted []string
 			for _, st := range boundaryStatements(t, tier, "") {
 				admitted = append(admitted, yamlStrings(st.Action)...)

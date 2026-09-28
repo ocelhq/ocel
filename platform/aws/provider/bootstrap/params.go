@@ -15,6 +15,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -47,7 +48,7 @@ type EdgeAdoption struct {
 	Adoption edge.Adoption
 }
 
-func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, adoptions []EdgeAdoption, req Request) (provider.ChangeGroup, error) {
+func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, adoptions []EdgeAdoption, req Request) (provider.ChangeGroup, error) {
 	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: ParamGroupName}
 
 	origin, err := planOriginSecret(ctx, apis.SSM, ns, tier, time.Now())
@@ -82,9 +83,9 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier stri
 	return group, nil
 }
 
-type paramChanges func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error)
+type paramChanges func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 
-func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, req Request, named []string, hook func(feature) paramChanges) ([]provider.Change, error) {
+func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request, named []string, hook func(feature) paramChanges) ([]provider.Change, error) {
 	var changes []provider.Change
 	for _, f := range featureRegistry {
 		plan := hook(f)
@@ -100,7 +101,7 @@ func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier strin
 	return changes, nil
 }
 
-func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, sharedPassphrase bool) (provider.ChangeGroup, error) {
+func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, sharedPassphrase bool) (provider.ChangeGroup, error) {
 	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: ParamGroupName}
 
 	names, err := TierParamNames(ns, tier)
@@ -155,7 +156,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 	return group, nil
 }
 
-func plannedPassphraseRemoval(present bool, ns Namespace, tier string, shared bool) (provider.Change, error) {
+func plannedPassphraseRemoval(present bool, ns Namespace, tier environment.Tier, shared bool) (provider.Change, error) {
 	if !present {
 		return provider.Change{}, nil
 	}
@@ -179,7 +180,7 @@ func plannedPassphraseRemoval(present bool, ns Namespace, tier string, shared bo
 	}, nil
 }
 
-func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {
+func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {
 	if len(adoption.Values) == 0 && len(adoption.Offers) == 0 {
 		return nil, nil
 	}

@@ -10,55 +10,55 @@ import (
 
 func namesOf(t *testing.T, n Namespace) map[string]string {
 	t.Helper()
-	production, err := n.StackNameFor(TierProduction)
+	production, err := n.StackNameFor(environment.TierProduction)
 	if err != nil {
 		t.Fatalf("production stack name: %v", err)
 	}
-	preview, err := n.StackNameFor(TierPreview)
+	preview, err := n.StackNameFor(environment.TierPreview)
 	if err != nil {
 		t.Fatalf("preview stack name: %v", err)
 	}
-	edgeUser, err := n.EdgeUserNameFor(TierProduction)
+	edgeUser, err := n.EdgeUserNameFor(environment.TierProduction)
 	if err != nil {
 		t.Fatalf("edge user name: %v", err)
 	}
-	edgeUserPreview, err := n.EdgeUserNameFor(TierPreview)
+	edgeUserPreview, err := n.EdgeUserNameFor(environment.TierPreview)
 	if err != nil {
 		t.Fatalf("preview edge user name: %v", err)
 	}
-	originSecret, err := n.OriginSecretParamFor(TierProduction)
+	originSecret, err := n.OriginSecretParamFor(environment.TierProduction)
 	if err != nil {
 		t.Fatalf("origin secret param: %v", err)
 	}
-	originSecretPreview, err := n.OriginSecretParamFor(TierPreview)
+	originSecretPreview, err := n.OriginSecretParamFor(environment.TierPreview)
 	if err != nil {
 		t.Fatalf("preview origin secret param: %v", err)
 	}
-	edgeParams, err := n.EdgeParamPrefix(TierProduction, KindCloudflare)
+	edgeParams, err := n.EdgeParamPrefix(environment.TierProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("edge param prefix: %v", err)
 	}
-	edgeParamsPreview, err := n.EdgeParamPrefix(TierPreview, KindCloudflare)
+	edgeParamsPreview, err := n.EdgeParamPrefix(environment.TierPreview, KindCloudflare)
 	if err != nil {
 		t.Fatalf("preview edge param prefix: %v", err)
 	}
-	queue, dlq := n.revalidateQueueNames(TierProduction)
-	previewQueue, previewDLQ := n.revalidateQueueNames(TierPreview)
+	queue, dlq := n.revalidateQueueNames(environment.TierProduction)
+	previewQueue, previewDLQ := n.revalidateQueueNames(environment.TierPreview)
 	return map[string]string{
 		"core stack":            production,
 		"preview core stack":    preview,
-		"feature stack":         n.FeatureStackName(FeatureImageOptimization, TierProduction),
-		"preview feature stack": n.FeatureStackName(FeatureImageOptimization, TierPreview),
+		"feature stack":         n.FeatureStackName(FeatureImageOptimization, environment.TierProduction),
+		"preview feature stack": n.FeatureStackName(FeatureImageOptimization, environment.TierPreview),
 		"passphrase param":      n.PassphraseParamName(),
 		"edge user":             edgeUser,
 		"preview edge user":     edgeUserPreview,
-		"app boundary":          n.AppBoundaryNameFor(TierProduction),
-		"preview app boundary":  n.AppBoundaryNameFor(TierPreview),
+		"app boundary":          n.AppBoundaryNameFor(environment.TierProduction),
+		"preview app boundary":  n.AppBoundaryNameFor(environment.TierPreview),
 		"origin secret":         originSecret,
 		"preview origin secret": originSecretPreview,
 		"edge param prefix":     edgeParams,
 		"preview edge params":   edgeParamsPreview,
-		"vars key alias":        n.varsKeyAliasFor(TierProduction),
+		"vars key alias":        n.varsKeyAliasFor(environment.TierProduction),
 		"edge invoke role":      n.EdgeInvokeRoleName(environment.TierProduction),
 		"preview invoke role":   n.EdgeInvokeRoleName(environment.TierPreview),
 		"not found api":         n.EdgeNotFoundAPIName(environment.TierProduction),
@@ -74,10 +74,10 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"preview queue":         previewQueue,
 		"preview dlq":           previewDLQ,
 		"cache policy name":     n.PolicyName("edge-cache"),
-		"schedule group":        n.envSourceSyncScheduleGroupName(TierProduction),
-		"preview schedules":     n.envSourceSyncScheduleGroupName(TierPreview),
-		"schedule":              n.envSourceSyncScheduleName(TierProduction),
-		"preview schedule":      n.envSourceSyncScheduleName(TierPreview),
+		"schedule group":        n.envSourceSyncScheduleGroupName(environment.TierProduction),
+		"preview schedules":     n.envSourceSyncScheduleGroupName(environment.TierPreview),
+		"schedule":              n.envSourceSyncScheduleName(environment.TierProduction),
+		"preview schedule":      n.envSourceSyncScheduleName(environment.TierPreview),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -39,7 +40,7 @@ func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket st
 	return payloads.Place(ctx, store, bucket, tagPublisherKeyPrefix, tagPublisherLabel, payloads.TagPublisher())
 }
 
-func tagPublisherResources(ns Namespace, code payloads.Placement, tier string) string {
+func tagPublisherResources(ns Namespace, code payloads.Placement, tier environment.Tier) string {
 	writerParam, seedParam := isrWriterParamNames(ns, tier)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -142,7 +143,7 @@ func tagPublisherResources(ns Namespace, code payloads.Placement, tier string) s
 		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)
 }
 
-func isrWriterParamNames(ns Namespace, tier string) (writer, seed string) {
+func isrWriterParamNames(ns Namespace, tier environment.Tier) (writer, seed string) {
 	names, err := edgeNamesFor(ns, tier, KindCloudflare)
 	if err != nil {
 		return "", ""

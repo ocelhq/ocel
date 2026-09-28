@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,7 +39,7 @@ type TierParams struct {
 	OriginSecretErr error
 }
 
-func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier string) (TierParams, error) {
+func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier environment.Tier) (TierParams, error) {
 	origin, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
 		return TierParams{}, err
@@ -77,7 +78,7 @@ func originSecretIn(found map[string]string, name string) (OriginSecret, error) 
 
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
 
-func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier string, kind edge.Kind) (TierParams, error) {
+func ReadTierParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (TierParams, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return TierParams{}, err
@@ -151,7 +152,7 @@ type TeardownParams struct {
 	ISRWriter  ISRWriter
 }
 
-func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier string, kind edge.Kind) (TeardownParams, error) {
+func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (TeardownParams, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return TeardownParams{}, err

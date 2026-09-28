@@ -18,6 +18,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -137,7 +138,7 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Insta
 
 func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
 	keys := make([]string, 0, 2)
-	for _, tier := range []string{bootstrap.TierProduction, bootstrap.TierPreview} {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, tier)
 		if err != nil {
 			return nil, err
@@ -152,7 +153,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"neither the %s nor the %s tier of %s is bootstrapped with a key variables are sealed under, so the connector would read nothing: bootstrap this account and run ocel connector add again",
-			bootstrap.TierProduction, bootstrap.TierPreview, ns)
+			environment.TierProduction, environment.TierPreview, ns)
 	}
 	return keys, nil
 }

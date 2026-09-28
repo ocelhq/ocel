@@ -16,6 +16,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type fakeSSM struct {
@@ -129,7 +130,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, mintedAt)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -140,9 +141,9 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, edgeUserName)
 		}
 
-		stored, ok := ssmc.params[cloudflareNames(TierProduction).credentialsParam]
+		stored, ok := ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]
 		if !ok {
-			t.Fatalf("credentials were not written to %s", cloudflareNames(TierProduction).credentialsParam)
+			t.Fatalf("credentials were not written to %s", cloudflareNames(environment.TierProduction).credentialsParam)
 		}
 		var creds EdgeCredentials
 		if err := json.Unmarshal([]byte(stored), &creds); err != nil {
@@ -158,10 +159,10 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 
 	t.Run("reuses a recorded key the user still has", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[cloudflareNames(TierProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
 		iamc := &fakeIAM{keys: []string{"AKOLD"}}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, mintedAt)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -178,10 +179,10 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 
 	t.Run("re-mints when the recorded key is gone from the user", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[cloudflareNames(TierProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
 		iamc := &fakeIAM{}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, mintedAt)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -189,7 +190,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 			t.Error("expected a mint: a CloudFormation replacement of the user takes its key, and the parameter outlives it")
 		}
 		var creds EdgeCredentials
-		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(TierProduction).credentialsParam]), &creds); err != nil {
+		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]), &creds); err != nil {
 			t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
 		}
 		if creds.AccessKeyID != "AKIAEDGE" {
@@ -199,10 +200,10 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 
 	t.Run("names the dead key when the cap blocks a re-mint", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[cloudflareNames(TierProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
 		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, mintedAt)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
 		if err == nil {
 			t.Fatal("expected an error when the user is already at the 2-key cap")
 		}
@@ -215,7 +216,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, mintedAt)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, mintedAt)
 		if err == nil {
 			t.Fatal("expected an error when the user is already at the 2-key cap")
 		}
@@ -231,14 +232,14 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{}
 
-		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierPreview, KindCloudflare, mintedAt); err != nil {
+		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierPreview, KindCloudflare, mintedAt); err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
 		if len(iamc.created) != 1 || iamc.created[0] != previewEdgeUser {
 			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, previewEdgeUser)
 		}
-		if _, ok := ssmc.params[cloudflareNames(TierPreview).credentialsParam]; !ok {
-			t.Errorf("preview credentials were not written to %s", cloudflareNames(TierPreview).credentialsParam)
+		if _, ok := ssmc.params[cloudflareNames(environment.TierPreview).credentialsParam]; !ok {
+			t.Errorf("preview credentials were not written to %s", cloudflareNames(environment.TierPreview).credentialsParam)
 		}
 	})
 }
@@ -246,7 +247,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 func recordedCreds(t *testing.T, ssmc *fakeSSM) EdgeCredentials {
 	t.Helper()
 	var creds EdgeCredentials
-	if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(TierProduction).credentialsParam]), &creds); err != nil {
+	if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam]), &creds); err != nil {
 		t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
 	}
 	return creds
@@ -257,7 +258,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 	fresh := mintedAt.Add(EdgeKeyMaxAge - time.Hour)
 	recorded := func(ssmc *fakeSSM, id string, at time.Time) {
 		payload, _ := json.Marshal(EdgeCredentials{AccessKeyID: id, SecretAccessKey: "s", CreatedAt: at})
-		ssmc.params[cloudflareNames(TierProduction).credentialsParam] = string(payload)
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = string(payload)
 	}
 
 	t.Run("a key younger than the maximum age is kept", func(t *testing.T) {
@@ -265,7 +266,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		recorded(ssmc, "AKOLD", mintedAt)
 		iamc := &fakeIAM{keys: []string{"AKOLD"}}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, fresh)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, fresh)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -282,7 +283,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		recorded(ssmc, "AKOLD", mintedAt)
 		iamc := &fakeIAM{keys: []string{"AKOLD"}}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, stale)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -302,10 +303,10 @@ func TestEdgeCredentialRotation(t *testing.T) {
 
 	t.Run("the age falls back to what IAM recorded when the parameter records none", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		ssmc.params[cloudflareNames(TierProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"s"}`
+		ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"s"}`
 		iamc := &fakeIAM{keys: []string{"AKOLD"}, minted: map[string]time.Time{"AKOLD": mintedAt}}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, stale)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -322,7 +323,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 			lastUsed: map[string]time.Time{"AKOLD": stale.Add(2 * time.Hour)},
 		}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, stale.Add(48*time.Hour))
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale.Add(48*time.Hour))
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -343,7 +344,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 			lastUsed: map[string]time.Time{"AKOLD": now.Add(-time.Hour)},
 		}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, now)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, now)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -357,7 +358,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		recorded(ssmc, "AKNEW", stale)
 		iamc := &fakeIAM{keys: []string{"AKOLD", "AKNEW"}}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, stale.Add(time.Hour))
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, stale.Add(time.Hour))
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -375,7 +376,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 			lastUsed: map[string]time.Time{"AKOLD": now.Add(-time.Minute)},
 		}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, now)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, now)
 		if err == nil {
 			t.Fatal("ensureEdgeCredentials err = nil, want a refusal: two keys exist and both are in use")
 		}
@@ -393,7 +394,7 @@ func TestEdgeCredentialRotation(t *testing.T) {
 		now := mintedAt.Add(EdgeKeyMaxAge)
 		iamc := &fakeIAM{keys: []string{"AKOLD", "AKNEW"}}
 
-		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, TierProduction, KindCloudflare, now)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, environment.TierProduction, KindCloudflare, now)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
@@ -409,25 +410,25 @@ func TestEdgeCredentialRotation(t *testing.T) {
 func TestStaleEdgeKeyNotice(t *testing.T) {
 	creds := EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: mintedAt}
 
-	if notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge-time.Second), TierProduction); notice != "" {
+	if notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge-time.Second), environment.TierProduction); notice != "" {
 		t.Errorf("notice = %q, want none for a key within its age", notice)
 	}
-	notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge+24*time.Hour), TierProduction)
+	notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge+24*time.Hour), environment.TierProduction)
 	for _, want := range []string{"AKOLD", "91 days", "ocel bootstrap"} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("notice = %q, want it to contain %q", notice, want)
 		}
 	}
-	if notice := StaleEdgeKeyNotice(EdgeCredentials{AccessKeyID: "AKOLD"}, mintedAt.Add(10*EdgeKeyMaxAge), TierProduction); notice != "" {
+	if notice := StaleEdgeKeyNotice(EdgeCredentials{AccessKeyID: "AKOLD"}, mintedAt.Add(10*EdgeKeyMaxAge), environment.TierProduction); notice != "" {
 		t.Errorf("notice = %q, want none when the mint time is unknown", notice)
 	}
 }
 
 func TestReadEdgeCredentials(t *testing.T) {
 	ssmc := newFakeSSM()
-	ssmc.params[cloudflareNames(TierProduction).credentialsParam] = `{"accessKeyId":"AK1","secretAccessKey":"s1"}`
+	ssmc.params[cloudflareNames(environment.TierProduction).credentialsParam] = `{"accessKeyId":"AK1","secretAccessKey":"s1"}`
 
-	creds, err := ReadEdgeCredentials(context.Background(), ssmc, defaultNamespace, TierProduction, KindCloudflare)
+	creds, err := ReadEdgeCredentials(context.Background(), ssmc, defaultNamespace, environment.TierProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadEdgeCredentials: %v", err)
 	}
@@ -458,10 +459,10 @@ func TestAdoptCacheStore(t *testing.T) {
 	t.Run("fresh mint persists every coordinate", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredStore()); err != nil {
+		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredStore()); err != nil {
 			t.Fatalf("adoptCacheStore: %v", err)
 		}
-		got, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		got, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore: %v", err)
 		}
@@ -479,7 +480,7 @@ func TestAdoptCacheStore(t *testing.T) {
 
 	t.Run("reuse keeps stored secret", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredStore()); err != nil {
+		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredStore()); err != nil {
 			t.Fatalf("first adopt: %v", err)
 		}
 
@@ -487,10 +488,10 @@ func TestAdoptCacheStore(t *testing.T) {
 		delete(reoffer, edge.OfferKeySecretAccessKey)
 		reoffer[edge.OfferKeyEndpoint] = "https://acct.r2.cloudflarestorage.com/v2"
 
-		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", reoffer); err != nil {
+		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
-		got, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		got, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore: %v", err)
 		}
@@ -513,20 +514,20 @@ func TestAdoptCacheStore(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				ssmc := newFakeSSM()
 				if tc.stored != "" {
-					ssmc.params[namesFor(TierProduction, "fake").cacheStoreParam] = tc.stored
+					ssmc.params[namesFor(environment.TierProduction, "fake").cacheStoreParam] = tc.stored
 				}
 				offer := offeredStore()
 				delete(offer, edge.OfferKeySecretAccessKey)
 
-				err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offer)
+				err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 				if err == nil {
 					t.Fatal("expected a dangling-token error for a secretless offer with no matching stored secret")
 				}
 				if !strings.Contains(err.Error(), "tok-1") {
 					t.Errorf("diagnostic does not name the token: %v", err)
 				}
-				if ssmc.params[namesFor(TierProduction, "fake").cacheStoreParam] != tc.stored {
-					t.Errorf("wrote %q over the stored store despite failing", ssmc.params[namesFor(TierProduction, "fake").cacheStoreParam])
+				if ssmc.params[namesFor(environment.TierProduction, "fake").cacheStoreParam] != tc.stored {
+					t.Errorf("wrote %q over the stored store despite failing", ssmc.params[namesFor(environment.TierProduction, "fake").cacheStoreParam])
 				}
 			})
 		}
@@ -538,18 +539,18 @@ func TestAdoptCacheStore(t *testing.T) {
 		preview[edge.OfferKeyBucket] = "ocel-edge-cache-preview"
 		preview[edge.OfferKeyAccessKeyID] = "tok-preview"
 
-		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredStore()); err != nil {
+		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredStore()); err != nil {
 			t.Fatalf("production adopt: %v", err)
 		}
-		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, TierPreview, "fake", preview); err != nil {
+		if err := adoptCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake", preview); err != nil {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		prod, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore production: %v", err)
 		}
-		prev, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, TierPreview, "fake")
+		prev, err := ReadCacheStore(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore preview: %v", err)
 		}
@@ -570,7 +571,7 @@ func TestAdoptCacheStore(t *testing.T) {
 
 func TestReadCacheStore(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
-		got, err := ReadCacheStore(context.Background(), newFakeSSM(), defaultNamespace, TierProduction, "fake")
+		got, err := ReadCacheStore(context.Background(), newFakeSSM(), defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadCacheStore on an absent parameter: %v", err)
 		}
@@ -590,11 +591,11 @@ func offeredDeploymentsStore() map[string]string {
 
 func TestDeploymentsStoreParamFor(t *testing.T) {
 	for _, tc := range []struct {
-		tier string
+		tier environment.Tier
 		want string
 	}{
-		{TierProduction, "/ocel/edge/fake/deployments-store"},
-		{TierPreview, "/ocel/edge/fake-preview/deployments-store"},
+		{environment.TierProduction, "/ocel/edge/fake/deployments-store"},
+		{environment.TierPreview, "/ocel/edge/fake-preview/deployments-store"},
 	} {
 		got, err := DeploymentsStoreParamFor(defaultNamespace, tc.tier, "fake")
 		if err != nil {
@@ -607,7 +608,7 @@ func TestDeploymentsStoreParamFor(t *testing.T) {
 	if _, err := DeploymentsStoreParamFor(defaultNamespace, "nonsense", "fake"); err == nil {
 		t.Error("DeploymentsStoreParamFor(defaultNamespace, unknown tier) = nil error, want an error")
 	}
-	if _, err := DeploymentsStoreParamFor(defaultNamespace, TierProduction, ""); err == nil {
+	if _, err := DeploymentsStoreParamFor(defaultNamespace, environment.TierProduction, ""); err == nil {
 		t.Error("DeploymentsStoreParamFor(defaultNamespace, no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
 	}
 }
@@ -620,18 +621,18 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 		preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
 		preview[edge.OfferKeyStoreBootstrapCred] = "cred-preview"
 
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredDeploymentsStore()); err != nil {
+		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredDeploymentsStore()); err != nil {
 			t.Fatalf("production adopt: %v", err)
 		}
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, TierPreview, "fake", preview); err != nil {
+		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake", preview); err != nil {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor(production): %v", err)
 		}
-		prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, TierPreview, "fake")
+		prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
 		}
@@ -649,18 +650,18 @@ func TestAdoptDeploymentsStore(t *testing.T) {
 func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	t.Run("a stored credential survives a re-offer without one", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredDeploymentsStore()); err != nil {
+		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredDeploymentsStore()); err != nil {
 			t.Fatalf("first adopt: %v", err)
 		}
 
 		reoffer := offeredDeploymentsStore()
 		delete(reoffer, edge.OfferKeyStoreBootstrapCred)
 		reoffer[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store.acct.workers.dev/v2"
-		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", reoffer); err != nil {
+		if err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", reoffer); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
 
-		got, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		got, err := ReadDeploymentsStoreFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadDeploymentsStoreFor: %v", err)
 		}
@@ -677,14 +678,14 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 		offer := offeredDeploymentsStore()
 		delete(offer, edge.OfferKeyStoreBootstrapCred)
 
-		err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offer)
+		err := adoptDeploymentsStore(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		if err == nil {
 			t.Fatal("adoptDeploymentsStore stored a credential-less store rather than refusing")
 		}
-		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), namesFor(TierProduction, "fake").deploymentsStoreParam) {
+		if !strings.Contains(err.Error(), "ocel-deployments-store") || !strings.Contains(err.Error(), namesFor(environment.TierProduction, "fake").deploymentsStoreParam) {
 			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
 		}
-		if _, stored := ssmc.params[namesFor(TierProduction, "fake").deploymentsStoreParam]; stored {
+		if _, stored := ssmc.params[namesFor(environment.TierProduction, "fake").deploymentsStoreParam]; stored {
 			t.Error("a credential-less store was written despite the refusal")
 		}
 	})
@@ -693,14 +694,14 @@ func TestAdoptDeploymentsStoreBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	t.Run("a stored credential survives a re-offer without one", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
+		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
 			t.Fatalf("first adopt: %v", err)
 		}
 
-		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredISRWriter("", "")); err != nil {
+		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredISRWriter("", "")); err != nil {
 			t.Fatalf("second adopt: %v", err)
 		}
-		got, err := ReadISRWriterFor(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		got, err := ReadISRWriterFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor: %v", err)
 		}
@@ -712,14 +713,14 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 	t.Run("nothing on either side is a refusal, not an empty credential", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredISRWriter("", ""))
+		err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredISRWriter("", ""))
 		if err == nil {
 			t.Fatal("adoptISRWriter stored a credential-less writer rather than refusing")
 		}
-		if !strings.Contains(err.Error(), "ocel-isr-writer") || !strings.Contains(err.Error(), namesFor(TierProduction, "fake").isrWriterParam) {
+		if !strings.Contains(err.Error(), "ocel-isr-writer") || !strings.Contains(err.Error(), namesFor(environment.TierProduction, "fake").isrWriterParam) {
 			t.Errorf("error = %v, want it to name the worker and the parameter that stores nothing", err)
 		}
-		if _, stored := ssmc.params[namesFor(TierProduction, "fake").isrWriterParam]; stored {
+		if _, stored := ssmc.params[namesFor(environment.TierProduction, "fake").isrWriterParam]; stored {
 			t.Error("a credential-less writer was written despite the refusal")
 		}
 	})
@@ -727,7 +728,7 @@ func TestAdoptISRWriterBacksTheOmittedCredentialOutOfSSM(t *testing.T) {
 
 func TestReadDeploymentsStore(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
-		for _, tier := range []string{TierProduction, TierPreview} {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 			got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), defaultNamespace, tier, "fake")
 			if err != nil {
 				t.Fatalf("ReadDeploymentsStoreFor(%q) on an absent parameter: %v", tier, err)
@@ -749,11 +750,11 @@ func offeredISRWriter(suffix, cred string) map[string]string {
 
 func TestISRWriterParamFor(t *testing.T) {
 	for _, tc := range []struct {
-		tier string
+		tier environment.Tier
 		want string
 	}{
-		{TierProduction, "/ocel/edge/fake/isr-writer"},
-		{TierPreview, "/ocel/edge/fake-preview/isr-writer"},
+		{environment.TierProduction, "/ocel/edge/fake/isr-writer"},
+		{environment.TierPreview, "/ocel/edge/fake-preview/isr-writer"},
 	} {
 		got, err := ISRWriterParamFor(defaultNamespace, tc.tier, "fake")
 		if err != nil {
@@ -766,7 +767,7 @@ func TestISRWriterParamFor(t *testing.T) {
 	if _, err := ISRWriterParamFor(defaultNamespace, "nonsense", "fake"); err == nil {
 		t.Error("ISRWriterParamFor(defaultNamespace, unknown tier) = nil error, want an error")
 	}
-	if _, err := ISRWriterParamFor(defaultNamespace, TierProduction, ""); err == nil {
+	if _, err := ISRWriterParamFor(defaultNamespace, environment.TierProduction, ""); err == nil {
 		t.Error("ISRWriterParamFor(defaultNamespace, no kind) = nil error, want an error: every edge parameter is namespaced by the kind that owns it")
 	}
 }
@@ -774,18 +775,18 @@ func TestISRWriterParamFor(t *testing.T) {
 func TestAdoptISRWriter(t *testing.T) {
 	t.Run("preview stores separately", func(t *testing.T) {
 		ssmc := newFakeSSM()
-		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
+		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", offeredISRWriter("", "cred-prod")); err != nil {
 			t.Fatalf("production adopt: %v", err)
 		}
-		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, TierPreview, "fake", offeredISRWriter("-preview", "cred-preview")); err != nil {
+		if err := adoptISRWriter(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake", offeredISRWriter("-preview", "cred-preview")); err != nil {
 			t.Fatalf("preview adopt: %v", err)
 		}
 
-		prod, err := ReadISRWriterFor(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		prod, err := ReadISRWriterFor(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor(production): %v", err)
 		}
-		prev, err := ReadISRWriterFor(context.Background(), ssmc, defaultNamespace, TierPreview, "fake")
+		prev, err := ReadISRWriterFor(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor(preview): %v", err)
 		}
@@ -802,7 +803,7 @@ func TestAdoptISRWriter(t *testing.T) {
 
 func TestReadISRWriterFor(t *testing.T) {
 	t.Run("absent is not an error", func(t *testing.T) {
-		got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), defaultNamespace, TierProduction, "fake")
+		got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterFor on an absent parameter: %v", err)
 		}
@@ -816,14 +817,14 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 	t.Run("is create only", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		first, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		first, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed: %v", err)
 		}
 		if first == "" {
 			t.Fatal("ensureISRWriterSeed minted no seed")
 		}
-		again, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		again, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed (second run): %v", err)
 		}
@@ -831,7 +832,7 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 			t.Errorf("second bootstrap returned seed %q, want the stored %q", again, first)
 		}
 
-		preview, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, TierPreview, "fake")
+		preview, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, environment.TierPreview, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed (preview): %v", err)
 		}
@@ -843,7 +844,7 @@ func TestEnsureISRWriterSeed(t *testing.T) {
 	t.Run("converges on a concurrent bootstrap", func(t *testing.T) {
 		ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
 
-		seed, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+		seed, err := ensureISRWriterSeed(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ensureISRWriterSeed lost a race instead of converging: %v", err)
 		}
@@ -869,7 +870,7 @@ func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput,
 
 func TestReadISRWriterSeedFor(t *testing.T) {
 	t.Run("absent is not a failure", func(t *testing.T) {
-		seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), defaultNamespace, TierProduction, "fake")
+		seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), defaultNamespace, environment.TierProduction, "fake")
 		if err != nil {
 			t.Fatalf("ReadISRWriterSeedFor: %v", err)
 		}
@@ -888,21 +889,21 @@ type adoption struct {
 func adoptions() []adoption {
 	cacheStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
 		return func(ctx context.Context, ssmc SSMAPI) error {
-			return adoptCacheStore(ctx, ssmc, defaultNamespace, TierProduction, "fake", offer)
+			return adoptCacheStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		}
 	}
 	deploymentsStore := func(offer map[string]string) func(context.Context, SSMAPI) error {
 		return func(ctx context.Context, ssmc SSMAPI) error {
-			return adoptDeploymentsStore(ctx, ssmc, defaultNamespace, TierProduction, "fake", offer)
+			return adoptDeploymentsStore(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		}
 	}
 	isrWriter := func(offer map[string]string) func(context.Context, SSMAPI) error {
 		return func(ctx context.Context, ssmc SSMAPI) error {
-			return adoptISRWriter(ctx, ssmc, defaultNamespace, TierProduction, "fake", offer)
+			return adoptISRWriter(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", offer)
 		}
 	}
 	edgeValues := func(ctx context.Context, ssmc SSMAPI) error {
-		return writeEdgeValues(ctx, ssmc, defaultNamespace, TierProduction, "fake", map[string]string{"cacheBucket": "ocel-edge-cache"})
+		return writeEdgeValues(ctx, ssmc, defaultNamespace, environment.TierProduction, "fake", map[string]string{"cacheBucket": "ocel-edge-cache"})
 	}
 	return []adoption{
 		{"the cache store", cacheStore(offeredStore()), cacheStore(without(offeredStore(), edge.OfferKeySecretAccessKey))},
@@ -956,16 +957,16 @@ func TestAdoptionWritesNothingWhenAReofferOmitsTheStoredCredential(t *testing.T)
 
 func TestWriteEdgeValuesRewritesWhatDrifted(t *testing.T) {
 	ssmc := newFakeSSM()
-	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", map[string]string{"cacheBucket": "old"}); err != nil {
+	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", map[string]string{"cacheBucket": "old"}); err != nil {
 		t.Fatalf("writeEdgeValues: %v", err)
 	}
-	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, TierProduction, "fake", map[string]string{"cacheBucket": "new"}); err != nil {
+	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake", map[string]string{"cacheBucket": "new"}); err != nil {
 		t.Fatalf("writeEdgeValues (drifted): %v", err)
 	}
 	if ssmc.puts != 2 {
 		t.Errorf("puts = %d, want the drifted values written", ssmc.puts)
 	}
-	values, err := ReadEdgeValues(context.Background(), ssmc, defaultNamespace, TierProduction, "fake")
+	values, err := ReadEdgeValues(context.Background(), ssmc, defaultNamespace, environment.TierProduction, "fake")
 	if err != nil {
 		t.Fatalf("ReadEdgeValues: %v", err)
 	}

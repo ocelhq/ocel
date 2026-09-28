@@ -21,7 +21,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 	if err := boot.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(tier))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, tier)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingProvisioned(t *testing.T)
 			t.Errorf("%s still answers after Remove()", table)
 		}
 	}
-	origin, err := defaultNamespace.OriginSecretParamFor(string(tier))
+	origin, err := defaultNamespace.OriginSecretParamFor(tier)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,7 +32,7 @@ type apiGatewayEdgeShape struct {
 	} `yaml:"Outputs"`
 }
 
-func apiGatewayEdgeStack(t *testing.T, tier string) (featureStack, apiGatewayEdgeShape) {
+func apiGatewayEdgeStack(t *testing.T, tier environment.Tier) (featureStack, apiGatewayEdgeShape) {
 	t.Helper()
 	stack := featureStackFor(FeatureAPIGatewayEdge, tier, everyFeature())
 	var tmpl apiGatewayEdgeShape
@@ -52,9 +52,8 @@ func deploymentNamed(tmpl apiGatewayEdgeShape) string {
 }
 
 func TestAPIGatewayEdgeProvisionsWhatEveryRESTAPIInTheAccountShares(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
-			edgeTier := environment.Tier(tier)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			_, tmpl := apiGatewayEdgeStack(t, tier)
 
 			role, ok := tmpl.Resources["EdgeInvokeRole"]
@@ -64,7 +63,7 @@ func TestAPIGatewayEdgeProvisionsWhatEveryRESTAPIInTheAccountShares(t *testing.T
 			if role.Type != "AWS::IAM::Role" {
 				t.Errorf("EdgeInvokeRole Type = %q, want AWS::IAM::Role", role.Type)
 			}
-			if got, want := role.Properties.RoleName, defaultNamespace.EdgeInvokeRoleName(edgeTier); got != want {
+			if got, want := role.Properties.RoleName, defaultNamespace.EdgeInvokeRoleName(tier); got != want {
 				t.Errorf("invoke role name = %q, want %q", got, want)
 			}
 
@@ -75,7 +74,7 @@ func TestAPIGatewayEdgeProvisionsWhatEveryRESTAPIInTheAccountShares(t *testing.T
 			if api.Type != "AWS::ApiGateway::RestApi" {
 				t.Errorf("EdgeNotFoundApi Type = %q, want AWS::ApiGateway::RestApi", api.Type)
 			}
-			if got, want := api.Properties.Name, defaultNamespace.EdgeNotFoundAPIName(edgeTier); got != want {
+			if got, want := api.Properties.Name, defaultNamespace.EdgeNotFoundAPIName(tier); got != want {
 				t.Errorf("404 responder name = %q, want %q", got, want)
 			}
 
@@ -138,7 +137,7 @@ func TestAPIGatewayEdgeProvisionsWhatEveryRESTAPIInTheAccountShares(t *testing.T
 }
 
 func TestAPIGatewayEdgeReadsTheAssetBucketOffAParameter(t *testing.T) {
-	stack, tmpl := apiGatewayEdgeStack(t, TierProduction)
+	stack, tmpl := apiGatewayEdgeStack(t, environment.TierProduction)
 
 	if _, ok := tmpl.Parameters[paramAssetBucketARN]; !ok {
 		t.Fatalf("template declares parameters %v, want the asset bucket ARN among them", tmpl.Parameters)
@@ -158,9 +157,9 @@ func TestAPIGatewayEdgeReadsTheAssetBucketOffAParameter(t *testing.T) {
 }
 
 func TestAPIGatewayEdgeRepublishesA404ResponderThatMoved(t *testing.T) {
-	_, production := apiGatewayEdgeStack(t, TierProduction)
-	_, again := apiGatewayEdgeStack(t, TierProduction)
-	_, preview := apiGatewayEdgeStack(t, TierPreview)
+	_, production := apiGatewayEdgeStack(t, environment.TierProduction)
+	_, again := apiGatewayEdgeStack(t, environment.TierProduction)
+	_, preview := apiGatewayEdgeStack(t, environment.TierPreview)
 
 	if deploymentNamed(production) != deploymentNamed(again) {
 		t.Error("two renders of the same responder are published under different names, so every bootstrap leaves a deployment behind")
@@ -180,8 +179,8 @@ func containsString(haystack []string, want string) bool {
 }
 
 func TestTheAPIGatewayInvokeRoleReachesOnlyItsOwnTierOfAppFunctions(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			stack, _ := apiGatewayEdgeStack(t, tier)
 			var tmpl edgeUserTemplate
 			if err := yaml.Unmarshal([]byte(stack.body), &tmpl); err != nil {
@@ -202,7 +201,7 @@ func TestTheAPIGatewayInvokeRoleReachesOnlyItsOwnTierOfAppFunctions(t *testing.T
 				if equals["aws:ResourceTag/ocel:component"] != "function" {
 					t.Errorf("invoke condition = %v, want it gated on ocel:component being function, so API Gateway reaches no listener or other Ocel-run function", st.Condition)
 				}
-				if equals["aws:ResourceTag/ocel:env-tier"] != tier {
+				if equals["aws:ResourceTag/ocel:env-tier"] != string(tier) {
 					t.Errorf("invoke condition = %v, want it gated on ocel:env-tier being %s, or a %s REST API fronts the other tier's functions too", st.Condition, tier, tier)
 				}
 				return

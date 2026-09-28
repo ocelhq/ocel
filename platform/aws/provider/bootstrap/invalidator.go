@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -36,7 +37,7 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 	return payloads.Place(ctx, store, bucket, tagInvalidatorKeyPrefix, tagInvalidatorLabel, payloads.TagInvalidator())
 }
 
-func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier string) string {
+func tagInvalidatorResources(ns Namespace, code payloads.Placement, tier environment.Tier) string {
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:

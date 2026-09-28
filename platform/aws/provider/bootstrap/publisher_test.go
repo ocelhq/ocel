@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -89,8 +90,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, TierProduction)},
-			{"preview", featureTemplate(FeatureCloudflareEdge, TierPreview)},
+			{"production", featureTemplate(FeatureCloudflareEdge, environment.TierProduction)},
+			{"preview", featureTemplate(FeatureCloudflareEdge, environment.TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)
@@ -142,7 +143,7 @@ func TestTagPublisher(t *testing.T) {
 	})
 
 	t.Run("filter confines it to tag records", func(t *testing.T) {
-		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureCloudflareEdge, TierProduction))
+		tmpl := parsePublisherTemplate(t, featureTemplate(FeatureCloudflareEdge, environment.TierProduction))
 		filters := tmpl.Resources["TagPublisherStream"].Properties.FilterCriteria.Filters
 		if len(filters) != 1 {
 			t.Fatalf("FilterCriteria.Filters = %+v, want exactly one pattern", filters)
@@ -179,8 +180,8 @@ func TestTagPublisher(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, TierProduction)},
-			{"preview", featureTemplate(FeatureCloudflareEdge, TierPreview)},
+			{"production", featureTemplate(FeatureCloudflareEdge, environment.TierProduction)},
+			{"preview", featureTemplate(FeatureCloudflareEdge, environment.TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				for name, res := range parsePublisherTemplate(t, tc.template).Resources {
@@ -202,8 +203,8 @@ func TestTagPublisher(t *testing.T) {
 			seedParam  string
 			otherParam string
 		}{
-			{"production", featureTemplate(FeatureCloudflareEdge, TierProduction), cloudflareNames(TierProduction).isrWriterSeedParam, cloudflareNames(TierPreview).isrWriterSeedParam},
-			{"preview", featureTemplate(FeatureCloudflareEdge, TierPreview), cloudflareNames(TierPreview).isrWriterSeedParam, cloudflareNames(TierProduction).isrWriterSeedParam},
+			{"production", featureTemplate(FeatureCloudflareEdge, environment.TierProduction), cloudflareNames(environment.TierProduction).isrWriterSeedParam, cloudflareNames(environment.TierPreview).isrWriterSeedParam},
+			{"preview", featureTemplate(FeatureCloudflareEdge, environment.TierPreview), cloudflareNames(environment.TierPreview).isrWriterSeedParam, cloudflareNames(environment.TierProduction).isrWriterSeedParam},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parsePublisherTemplate(t, tc.template)

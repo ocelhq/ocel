@@ -45,11 +45,6 @@ const (
 	stateAbortMultipartDays = 7
 )
 
-const (
-	TierProduction = "production"
-	TierPreview    = "preview"
-)
-
 type Deployed struct {
 	Present            bool
 	Schema             int
@@ -64,7 +59,7 @@ type Deployed struct {
 	ImageOptimizerURL  string
 	RevalidateQueueURL string
 	AppBoundaryARN     string
-	Tier               string
+	Tier               environment.Tier
 	RuntimeLayers      map[string]string
 	RuntimeStack       StackStamp
 	Outputs            map[string]string
@@ -95,14 +90,14 @@ type Request struct {
 }
 
 func CheckDeployed(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ns, TierProduction)
+	return CheckDeployedFor(ctx, api, ns, environment.TierProduction)
 }
 
 func CheckDeployedPreview(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ns, TierPreview)
+	return CheckDeployedFor(ctx, api, ns, environment.TierPreview)
 }
 
-func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Deployed, error) {
+func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, error) {
 	deployed, _, err := readBootstrap(ctx, api, ns, tier)
 	return deployed, err
 }
@@ -110,15 +105,15 @@ func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier
 type Reading struct {
 	Deployed Deployed
 	ns       Namespace
-	tier     string
+	tier     environment.Tier
 	refs     stackRefs
 }
 
-func (r Reading) Tier() string { return r.tier }
+func (r Reading) Tier() environment.Tier { return r.tier }
 
 func (r Reading) Namespace() Namespace { return r.ns }
 
-func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Reading, error) {
+func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Reading, error) {
 	deployed, refs, err := readBootstrap(ctx, api, ns, tier)
 	if err != nil {
 		return Reading{}, err
@@ -126,7 +121,7 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Re
 	return Reading{Deployed: deployed, ns: ns, tier: tier, refs: refs}, nil
 }
 
-func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier, name string) (map[string]string, error) {
+func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier, name string) (map[string]string, error) {
 	f, ok := featureNamed(name)
 	if !ok {
 		return nil, fmt.Errorf("bootstrap: no feature named %q", name)
@@ -134,7 +129,7 @@ func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier, 
 	return cfn.StackOutputs(ctx, api, f.stackName(ns, tier))
 }
 
-func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (Deployed, stackRefs, error) {
+func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, stackRefs, error) {
 	coreStack, err := ns.StackNameFor(tier)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
@@ -216,7 +211,7 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier st
 	return d, refs, nil
 }
 
-func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs *stackRefs, ns Namespace, tier string) error {
+func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs *stackRefs, ns Namespace, tier environment.Tier) error {
 	intended, err := runtimeLayerTemplateAt(ns, tier, d.ArtifactBucket)
 	if err != nil {
 		return err
@@ -245,7 +240,7 @@ func broughtVarsKey(outputs map[string]string) string {
 	return outputs[outputVarsKeyARN]
 }
 
-func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (FeatureSet, error) {
+func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (FeatureSet, error) {
 	installed := FeatureSet{}
 	for _, f := range featureRegistry {
 		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, tier))
@@ -294,7 +289,7 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 		case outputAppBoundaryARN:
 			d.AppBoundaryARN = value
 		case outputInfraTier:
-			d.Tier = value
+			d.Tier = environment.Tier(value)
 		default:
 			if arch, isLayer := layers[key]; isLayer {
 				if d.RuntimeLayers == nil {
@@ -317,7 +312,7 @@ type stackPayloads struct {
 
 type spec struct {
 	ns        Namespace
-	tier      string
+	tier      environment.Tier
 	stackName string
 	stackStep string
 }
@@ -327,34 +322,34 @@ func (s spec) core(broughtKey string) string { return coreStackTemplate(s.ns, s.
 func productionBootstrap(ns Namespace) spec {
 	return spec{
 		ns:        ns,
-		tier:      TierProduction,
+		tier:      environment.TierProduction,
 		stackName: ns.CoreStackName(),
 		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
 	}
 }
 
 func previewBootstrap(ns Namespace) spec {
-	name, _ := ns.StackNameFor(TierPreview)
+	name, _ := ns.StackNameFor(environment.TierPreview)
 	return spec{
 		ns:        ns,
-		tier:      TierPreview,
+		tier:      environment.TierPreview,
 		stackName: name,
 		stackStep: "Ensuring preview infrastructure (CloudFormation)",
 	}
 }
 
-func bootstrapFor(ns Namespace, tier string) (spec, error) {
+func bootstrapFor(ns Namespace, tier environment.Tier) (spec, error) {
 	switch tier {
-	case TierProduction:
+	case environment.TierProduction:
 		return productionBootstrap(ns), nil
-	case TierPreview:
+	case environment.TierPreview:
 		return previewBootstrap(ns), nil
 	default:
 		return spec{}, fmt.Errorf("bootstrap: unknown tier %q", tier)
 	}
 }
 
-func Run(ctx context.Context, apis APIs, ns Namespace, tier string, req Request, progress progress.Progress) error {
+func Run(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req Request, progress progress.Progress) error {
 	target, err := specFor(ns, tier)
 	if err != nil {
 		return err
@@ -369,11 +364,11 @@ func ensureProgress(runProgress progress.Progress) progress.Progress {
 	return runProgress
 }
 
-func specFor(ns Namespace, tier string) (spec, error) {
+func specFor(ns Namespace, tier environment.Tier) (spec, error) {
 	switch tier {
-	case TierProduction:
+	case environment.TierProduction:
 		return productionBootstrap(ns), nil
-	case TierPreview:
+	case environment.TierPreview:
 		return previewBootstrap(ns), nil
 	default:
 		return spec{}, fmt.Errorf("there is no %s bootstrap; a bootstrap is either production or preview", tier)
@@ -565,7 +560,7 @@ func tearDownEdges(ctx context.Context, apis APIs, d stepDeps, dropped []string)
 
 func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	d.progress.Say(fmt.Sprintf("Tearing the %s edge down", front.Kind()))
-	if err := front.Teardown(ctx, environment.Tier(d.tier)); err != nil {
+	if err := front.Teardown(ctx, d.tier); err != nil {
 		return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 	}
 	return nil
@@ -573,7 +568,7 @@ func tearDownEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 
 func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 	d.progress.Say(fmt.Sprintf("Bootstrapping the %s edge", front.Kind()))
-	out, err := front.Bootstrap(ctx, environment.Tier(d.tier))
+	out, err := front.Bootstrap(ctx, d.tier)
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", front.Kind(), err)
 	}
@@ -668,7 +663,7 @@ func coreVarsKey(alongside FeatureSet, brought string) string {
 	return ""
 }
 
-func coreStackTemplate(ns Namespace, tier, broughtKey string) string {
+func coreStackTemplate(ns Namespace, tier environment.Tier, broughtKey string) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
 Resources:
@@ -685,22 +680,22 @@ Resources:
 		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraTier, tier)
 }
 
-func coreStackDescription(tier string) string {
+func coreStackDescription(tier environment.Tier) string {
 	apart := ""
-	if tier == TierPreview {
+	if tier == environment.TierPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
 	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with is installed in a feature stack of its own beside it.%s", tier, scopeOf(tier), apart)
 }
 
-func scopeOf(tier string) string {
-	if tier == TierPreview {
+func scopeOf(tier environment.Tier) string {
+	if tier == environment.TierPreview {
 		return "preview environment"
 	}
 	return "production app"
 }
 
-func stateBucketResource(tier string) string {
+func stateBucketResource(tier environment.Tier) string {
 	return fmt.Sprintf(`  StateBucket:
     Type: AWS::S3::Bucket
     Metadata:

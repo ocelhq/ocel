@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -64,7 +65,7 @@ func varsKeyAPIs(crypto *fakeKMS) ParamAPIs {
 
 func TestVarsKeyBrought(t *testing.T) {
 	t.Run("a stack owning no key still records the ARN", func(t *testing.T) {
-		stack := varsKeyFeature.template(featureInputs{ns: defaultNamespace, tier: TierProduction, varsKey: broughtKeyARN})
+		stack := varsKeyFeature.template(featureInputs{ns: defaultNamespace, tier: environment.TierProduction, varsKey: broughtKeyARN})
 		tmpl := parseVarsTemplate(t, stack.body)
 
 		for name, resource := range tmpl.Resources {
@@ -87,7 +88,7 @@ func TestVarsKeyValidation(t *testing.T) {
 
 	t.Run("a key that encrypts and decrypts is admitted", func(t *testing.T) {
 		crypto := workingKey()
-		if _, err := validateBroughtKey(ctx, varsKeyAPIs(crypto), defaultNamespace, TierProduction, Request{VarsKey: broughtKeyARN}); err != nil {
+		if _, err := validateBroughtKey(ctx, varsKeyAPIs(crypto), defaultNamespace, environment.TierProduction, Request{VarsKey: broughtKeyARN}); err != nil {
 			t.Fatalf("validateBroughtKey = %v, want a working key admitted", err)
 		}
 		if len(crypto.context) == 0 {
@@ -97,7 +98,7 @@ func TestVarsKeyValidation(t *testing.T) {
 
 	t.Run("a bootstrap that brings no key is checked against nothing", func(t *testing.T) {
 		crypto := &fakeKMS{describe: errors.New("DescribeKey should not be reached")}
-		if _, err := validateBroughtKey(ctx, varsKeyAPIs(crypto), defaultNamespace, TierProduction, Request{}); err != nil {
+		if _, err := validateBroughtKey(ctx, varsKeyAPIs(crypto), defaultNamespace, environment.TierProduction, Request{}); err != nil {
 			t.Fatalf("validateBroughtKey = %v, want nothing checked where nothing was brought", err)
 		}
 	})
@@ -172,7 +173,7 @@ func TestVarsKeyValidation(t *testing.T) {
 		},
 	} {
 		t.Run("a "+tc.name+" key is refused", func(t *testing.T) {
-			_, err := validateBroughtKey(ctx, varsKeyAPIs(tc.crypto()), defaultNamespace, TierProduction, Request{VarsKey: broughtKeyARN})
+			_, err := validateBroughtKey(ctx, varsKeyAPIs(tc.crypto()), defaultNamespace, environment.TierProduction, Request{VarsKey: broughtKeyARN})
 			if err == nil {
 				t.Fatal("validateBroughtKey = nil, want a refusal")
 			}

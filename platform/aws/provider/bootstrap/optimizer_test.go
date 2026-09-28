@@ -14,6 +14,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -174,8 +175,8 @@ func TestStackTemplateOptimizer(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", featureTemplate(FeatureImageOptimization, TierProduction)},
-			{"preview", featureTemplate(FeatureImageOptimization, TierPreview)},
+			{"production", featureTemplate(FeatureImageOptimization, environment.TierProduction)},
+			{"preview", featureTemplate(FeatureImageOptimization, environment.TierPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseOptimizerTemplate(t, tc.template)
@@ -241,7 +242,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 	})
 
 	t.Run("optimizer reads only its own bootstrap asset", func(t *testing.T) {
-		tmpl := parseOptimizerTemplate(t, featureTemplate(FeatureImageOptimization, TierProduction))
+		tmpl := parseOptimizerTemplate(t, featureTemplate(FeatureImageOptimization, environment.TierProduction))
 		role, ok := tmpl.Resources["ImageOptimizerRole"]
 		if !ok {
 			t.Fatal("no execution role for the optimizer")
@@ -289,7 +290,7 @@ func TestStackTemplateOptimizer(t *testing.T) {
 
 func TestEdgeUserOptimizer(t *testing.T) {
 	t.Run("optimizer invoke is its own named statement", func(t *testing.T) {
-		template := featureTemplate(FeatureCloudflareEdge, TierProduction)
+		template := featureTemplate(FeatureCloudflareEdge, environment.TierProduction)
 		tmpl := parseOptimizerTemplate(t, template)
 		user, ok := tmpl.Resources["EdgeUser"]
 		if !ok {
@@ -326,7 +327,7 @@ func TestEdgeUserOptimizer(t *testing.T) {
 	})
 
 	t.Run("no optimizer alongside is no invoke grant", func(t *testing.T) {
-		template := featureTemplateWith(FeatureCloudflareEdge, TierProduction, FeatureSet{FeatureISR: true, FeatureCloudflareEdge: true})
+		template := featureTemplateWith(FeatureCloudflareEdge, environment.TierProduction, FeatureSet{FeatureISR: true, FeatureCloudflareEdge: true})
 		if strings.Contains(template, paramImageOptimizerARN) {
 			t.Errorf("the edge reader is granted an optimizer this bootstrap does not include:\n%s", template)
 		}
@@ -345,7 +346,7 @@ func TestRunOptimizer(t *testing.T) {
 		if want := 2 + len(featureNames()); stacks.creates != want || stacks.updates != 0 {
 			t.Errorf("installed the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", stacks.creates, stacks.updates, len(featureNames()))
 		}
-		final := stacks.template(optStack(TierProduction))
+		final := stacks.template(optStack(environment.TierProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {
 			t.Errorf("the final template has no optimizer:\n%s", final)
 		}
@@ -372,13 +373,13 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 	t.Run("reads the optimizer URL", func(t *testing.T) {
 		stacks := newFakeCFN()
 		stacks.seed(coreStackName, "Outputs:\n")
-		stacks.seed(optStack(TierProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
+		stacks.seed(optStack(environment.TierProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
 
 		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if want := stacks.output(optStack(TierProduction), outputImageOptimizerURL); deployed.ImageOptimizerURL != want {
+		if want := stacks.output(optStack(environment.TierProduction), outputImageOptimizerURL); deployed.ImageOptimizerURL != want {
 			t.Errorf("ImageOptimizerURL = %q, want %q", deployed.ImageOptimizerURL, want)
 		}
 

@@ -16,6 +16,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type IAMAPI interface {
@@ -39,7 +40,7 @@ func (c EdgeCredentials) Stale(now time.Time) bool {
 	return !c.CreatedAt.IsZero() && now.Sub(c.CreatedAt) >= EdgeKeyMaxAge
 }
 
-func StaleEdgeKeyNotice(c EdgeCredentials, now time.Time, tier string) string {
+func StaleEdgeKeyNotice(c EdgeCredentials, now time.Time, tier environment.Tier) string {
 	if !c.Stale(now) {
 		return ""
 	}
@@ -75,7 +76,7 @@ func (n edgeNames) edgeParams() []string {
 	}
 }
 
-func edgeNamesFor(ns Namespace, tier string, kind edge.Kind) (edgeNames, error) {
+func edgeNamesFor(ns Namespace, tier environment.Tier, kind edge.Kind) (edgeNames, error) {
 	prefix, err := ns.EdgeParamPrefix(tier, kind)
 	if err != nil {
 		return edgeNames{}, err
@@ -100,7 +101,7 @@ func edgeNamesFor(ns Namespace, tier string, kind edge.Kind) (edgeNames, error) 
 	}, nil
 }
 
-func EdgeInstalled(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (bool, error) {
+func EdgeInstalled(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (bool, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return false, err
@@ -114,7 +115,7 @@ func EdgeInstalled(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier str
 	return false, nil
 }
 
-func DeploymentsStoreParamFor(ns Namespace, tier string, kind edge.Kind) (string, error) {
+func DeploymentsStoreParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return "", err
@@ -122,7 +123,7 @@ func DeploymentsStoreParamFor(ns Namespace, tier string, kind edge.Kind) (string
 	return names.deploymentsStoreParam, nil
 }
 
-func ISRWriterParamFor(ns Namespace, tier string, kind edge.Kind) (string, error) {
+func ISRWriterParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return "", err
@@ -130,7 +131,7 @@ func ISRWriterParamFor(ns Namespace, tier string, kind edge.Kind) (string, error
 	return names.isrWriterParam, nil
 }
 
-func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind, values map[string]string) error {
+func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return err
@@ -158,7 +159,7 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier s
 	return nil
 }
 
-func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (map[string]string, error) {
+func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (map[string]string, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return nil, err
@@ -181,7 +182,7 @@ func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier st
 	return values, nil
 }
 
-func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind, now time.Time) (edgeKeyOutcome, error) {
+func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, now time.Time) (edgeKeyOutcome, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return edgeKeyOutcome{}, err
@@ -272,7 +273,7 @@ func retireIdleEdgeKey(ctx context.Context, iamClient IAMAPI, userName, keyID st
 	return true, nil
 }
 
-func mintEdgeKey(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, paramName, userName, tier string, now time.Time) error {
+func mintEdgeKey(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, paramName, userName string, tier environment.Tier, now time.Time) error {
 	out, err := iamClient.CreateAccessKey(ctx, &iam.CreateAccessKeyInput{
 		UserName: aws.String(userName),
 	})
@@ -324,7 +325,7 @@ func strandedKeys(recorded, paramName string) string {
 	return fmt.Sprintf("%s, the one %s records, is not among them", recorded, paramName)
 }
 
-func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (EdgeCredentials, error) {
+func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (EdgeCredentials, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return EdgeCredentials{}, err
@@ -357,7 +358,7 @@ type DeploymentsStore struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind, values map[string]string) error {
+func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
 	paramName, err := DeploymentsStoreParamFor(ns, tier, kind)
 	if err != nil {
 		return err
@@ -403,7 +404,7 @@ func edgeCredUnrecorded(kind edge.Kind, surface, scriptName, paramName string) e
 		kind, surface, scriptName, paramName, scriptName, kind)
 }
 
-func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (DeploymentsStore, error) {
+func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (DeploymentsStore, error) {
 	paramName, err := DeploymentsStoreParamFor(ns, tier, kind)
 	if err != nil {
 		return DeploymentsStore{}, err
@@ -432,7 +433,7 @@ type ISRWriter struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind, values map[string]string) error {
+func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
 	paramName, err := ISRWriterParamFor(ns, tier, kind)
 	if err != nil {
 		return err
@@ -470,7 +471,7 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier st
 	return nil
 }
 
-func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (ISRWriter, error) {
+func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (ISRWriter, error) {
 	paramName, err := ISRWriterParamFor(ns, tier, kind)
 	if err != nil {
 		return ISRWriter{}, err
@@ -493,7 +494,7 @@ func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier 
 	return writer, nil
 }
 
-func ISRWriterSeedParamFor(ns Namespace, tier string, kind edge.Kind) (string, error) {
+func ISRWriterSeedParamFor(ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return "", err
@@ -501,7 +502,7 @@ func ISRWriterSeedParamFor(ns Namespace, tier string, kind edge.Kind) (string, e
 	return names.isrWriterSeedParam, nil
 }
 
-func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (string, error) {
+func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	paramName, err := ISRWriterSeedParamFor(ns, tier, kind)
 	if err != nil {
 		return "", err
@@ -509,7 +510,7 @@ func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, ns Namespace, ti
 	return ensureSecret(ctx, ssmClient, paramName, fmt.Sprintf("Ocel: the shared secret the tag publisher authenticates its writes to the %s edge's ISR writer with, read at runtime by name.", tier))
 }
 
-func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (string, error) {
+func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (string, error) {
 	paramName, err := ISRWriterSeedParamFor(ns, tier, kind)
 	if err != nil {
 		return "", err
@@ -528,7 +529,7 @@ func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, t
 	return aws.ToString(out.Parameter.Value), nil
 }
 
-func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind, values map[string]string) error {
+func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind, values map[string]string) error {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return err
@@ -576,7 +577,7 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier s
 	return nil
 }
 
-func ReadCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, kind edge.Kind) (CacheStore, error) {
+func ReadCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, kind edge.Kind) (CacheStore, error) {
 	names, err := edgeNamesFor(ns, tier, kind)
 	if err != nil {
 		return CacheStore{}, err

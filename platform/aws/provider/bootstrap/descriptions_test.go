@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"gopkg.in/yaml.v3"
 )
 
@@ -54,12 +55,12 @@ func propertyDescriptionLimit(resourceType string) int {
 
 func everyRenderedTemplate() map[string]string {
 	rendered := map[string]string{
-		"core/" + TierProduction: coreStackTemplate(defaultNamespace, TierProduction, ""),
-		"core/" + TierPreview:    coreStackTemplate(defaultNamespace, TierPreview, ""),
+		"core/" + string(environment.TierProduction): coreStackTemplate(defaultNamespace, environment.TierProduction, ""),
+		"core/" + string(environment.TierPreview):    coreStackTemplate(defaultNamespace, environment.TierPreview, ""),
 	}
 	for _, name := range featureNames() {
-		for _, tier := range []string{TierProduction, TierPreview} {
-			rendered[name+"/"+tier] = featureTemplateWith(name, tier, everyFeature())
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			rendered[name+"/"+string(tier)] = featureTemplateWith(name, tier, everyFeature())
 		}
 	}
 	return rendered
@@ -100,8 +101,8 @@ func TestRenderedDescriptionsFitTheirLimits(t *testing.T) {
 }
 
 func TestSSMDescriptionsFitTheirLimits(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			frontedBy(t, &fakeEdge{kind: "cloudflare"})
 

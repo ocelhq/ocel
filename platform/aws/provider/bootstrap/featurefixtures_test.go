@@ -1,16 +1,19 @@
 package bootstrap
 
-import "github.com/ocelhq/ocel/pkg/edge"
+import (
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
+)
 
-func namesFor(tier string, kind edge.Kind) edgeNames {
+func namesFor(tier environment.Tier, kind edge.Kind) edgeNames {
 	names, err := edgeNamesFor(defaultNamespace, tier, kind)
 	if err != nil {
-		panic("no edge parameter names for tier " + tier + " and kind " + string(kind))
+		panic("no edge parameter names for tier " + string(tier) + " and kind " + string(kind))
 	}
 	return names
 }
 
-func cloudflareNames(tier string) edgeNames { return namesFor(tier, KindCloudflare) }
+func cloudflareNames(tier environment.Tier) edgeNames { return namesFor(tier, KindCloudflare) }
 
 func fixtureRefs() stackRefs {
 	return stackRefs{
@@ -34,15 +37,15 @@ func everyFeature() FeatureSet {
 	return set
 }
 
-func featureTemplate(name, tier string) string {
+func featureTemplate(name string, tier environment.Tier) string {
 	return featureTemplateWith(name, tier, everyFeature())
 }
 
-func featureTemplateWith(name, tier string, alongside FeatureSet) string {
+func featureTemplateWith(name string, tier environment.Tier, alongside FeatureSet) string {
 	return featureStackFor(name, tier, alongside).body
 }
 
-func featureStackFor(name, tier string, alongside FeatureSet) featureStack {
+func featureStackFor(name string, tier environment.Tier, alongside FeatureSet) featureStack {
 	f, ok := featureNamed(name)
 	if !ok {
 		panic("no feature named " + name)

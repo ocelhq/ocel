@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 
 	"gopkg.in/yaml.v3"
@@ -76,31 +77,31 @@ func parseVarsTemplate(t *testing.T, template string) varsTemplate {
 
 func varsBootstraps() []struct {
 	name     string
-	tier     string
+	tier     environment.Tier
 	template string
 } {
 	return []struct {
 		name     string
-		tier     string
+		tier     environment.Tier
 		template string
 	}{
-		{"production", TierProduction, coreStackTemplate(defaultNamespace, TierProduction, "")},
-		{"preview", TierPreview, coreStackTemplate(defaultNamespace, TierPreview, "")},
+		{"production", environment.TierProduction, coreStackTemplate(defaultNamespace, environment.TierProduction, "")},
+		{"preview", environment.TierPreview, coreStackTemplate(defaultNamespace, environment.TierPreview, "")},
 	}
 }
 
 func varsKeyBootstraps() []struct {
 	name     string
-	tier     string
+	tier     environment.Tier
 	template string
 } {
 	return []struct {
 		name     string
-		tier     string
+		tier     environment.Tier
 		template string
 	}{
-		{"production", TierProduction, featureTemplate(provider.FeatureVarsKey, TierProduction)},
-		{"preview", TierPreview, featureTemplate(provider.FeatureVarsKey, TierPreview)},
+		{"production", environment.TierProduction, featureTemplate(provider.FeatureVarsKey, environment.TierProduction)},
+		{"preview", environment.TierPreview, featureTemplate(provider.FeatureVarsKey, environment.TierPreview)},
 	}
 }
 
@@ -163,7 +164,7 @@ func TestVarsTable(t *testing.T) {
 }
 
 func TestVarsKey(t *testing.T) {
-	aliases := map[string]string{}
+	aliases := map[environment.Tier]string{}
 	for _, tc := range varsKeyBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
@@ -216,8 +217,8 @@ func TestVarsKey(t *testing.T) {
 			}
 		})
 	}
-	if aliases[TierProduction] == aliases[TierPreview] {
-		t.Errorf("both tiers alias the key %q; each tier must own its own key", aliases[TierProduction])
+	if aliases[environment.TierProduction] == aliases[environment.TierPreview] {
+		t.Errorf("both tiers alias the key %q; each tier must own its own key", aliases[environment.TierProduction])
 	}
 }
 
@@ -283,7 +284,7 @@ func TestVarsDescriptions(t *testing.T) {
 			}
 
 			for _, name := range []string{"VarsKey", "VarsKeyAlias", "VarsTable"} {
-				if !strings.Contains(described[name], tc.tier) {
+				if !strings.Contains(described[name], string(tc.tier)) {
 					t.Errorf("%s description = %q, want it to name the %s tier it belongs to", name, described[name], tc.tier)
 				}
 			}
@@ -319,11 +320,11 @@ func TestRunVars(t *testing.T) {
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := Request{Features: []string{provider.FeatureVarsKey}}
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, TierProduction, req, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(provider.FeatureVarsKey, TierProduction)))
+		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(provider.FeatureVarsKey, environment.TierProduction)))
 		for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the vars-key stack does not declare %s", name)
@@ -338,11 +339,11 @@ func TestRunVars(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, TierProduction, Request{}, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, Request{}, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		stack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, TierProduction)
+		stack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, environment.TierProduction)
 		if slices.Contains(stacks.stacks(), stack) {
 			t.Errorf("%s exists after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}

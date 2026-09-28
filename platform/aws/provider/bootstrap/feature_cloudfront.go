@@ -41,7 +41,6 @@ var cloudFrontEdgeFeature = feature{
 }
 
 func cloudFrontEdgeTemplate(in featureInputs) featureStack {
-	edgeTier := environment.Tier(in.tier)
 	return featureStack{
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap feature (%s, %s) - what a CloudFront front needs in this account before any deployment is fronted with it: the key value store one entry per hostname is written into, the resolver function every distribution runs, the cache and response-headers policies they answer by, and the origin access control they read the asset bucket through."
@@ -49,12 +48,12 @@ Resources:
 %s%s%s%s%s%sOutputs:
 %s`,
 			FeatureCloudFrontEdge, in.tier,
-			routesStoreResource(in.ns, edgeTier),
-			resolverResource(in.ns, edgeTier),
-			emptyBodyResource(in.ns, edgeTier),
-			cachePolicyResource(in.ns, edgeTier),
-			headersPolicyResource(in.ns, edgeTier),
-			assetAccessResource(in.ns, edgeTier),
+			routesStoreResource(in.ns, in.tier),
+			resolverResource(in.ns, in.tier),
+			emptyBodyResource(in.ns, in.tier),
+			cachePolicyResource(in.ns, in.tier),
+			headersPolicyResource(in.ns, in.tier),
+			assetAccessResource(in.ns, in.tier),
 			cloudFrontEdgeOutputs()),
 	}
 }

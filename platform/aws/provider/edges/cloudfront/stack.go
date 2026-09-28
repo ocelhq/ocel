@@ -397,7 +397,7 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.P
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
 	command := provider.BootstrapCommand(s.tier())
-	name, err := s.p.ns.OriginSecretParamFor(string(s.tier()))
+	name, err := s.p.ns.OriginSecretParamFor(s.tier())
 	if err != nil {
 		return bootstrap.OriginSecret{}, err
 	}

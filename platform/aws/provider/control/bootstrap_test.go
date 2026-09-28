@@ -28,7 +28,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-func installedBootstrapper(t *testing.T, tier string) Bootstrap {
+func installedBootstrapper(t *testing.T, tier environment.Tier) Bootstrap {
 	t.Helper()
 
 	stackName, err := defaultNamespace.StackNameFor(tier)
@@ -350,7 +350,7 @@ func TestPlanAsksTheEdgeWhatItHandsThisAccountToStore(t *testing.T) {
 func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 	t.Parallel()
 
-	b := installedBootstrapper(t, bootstrap.TierProduction)
+	b := installedBootstrapper(t, environment.TierProduction)
 	cfn, buckets, iamfake := b.CFN.(*teardownCFN), b.Buckets.(*teardownBuckets), b.IAM.(*teardownIAM)
 
 	if err := b.Remove(context.Background(), environment.TierProduction, nil); err != nil {
@@ -373,8 +373,8 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 		t.Errorf("deleted access keys = %v, want the edge reader's", iamfake.deletedKeys)
 	}
 	for _, name := range []string{
-		edgeParam(t, bootstrap.TierProduction, "/credentials"),
-		edgeParam(t, bootstrap.TierProduction, "/values"),
+		edgeParam(t, environment.TierProduction, "/credentials"),
+		edgeParam(t, environment.TierProduction, "/values"),
 		passphraseParam,
 	} {
 		if _, still := b.SSM.(*teardownSSM).params[name]; still {
@@ -386,7 +386,7 @@ func TestRemoveTearsTheEdgeDownForTheTierThenTheAWSBootstrap(t *testing.T) {
 func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	t.Parallel()
 
-	b := installedBootstrapper(t, bootstrap.TierPreview)
+	b := installedBootstrapper(t, environment.TierPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
 	if err := b.Remove(context.Background(), environment.TierPreview, nil); err != nil {
@@ -395,7 +395,7 @@ func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	if _, kept := b.SSM.(*teardownSSM).params[passphraseParam]; !kept {
 		t.Error("the passphrase the production bootstrap still needs was deleted")
 	}
-	if _, kept := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.TierPreview, "/credentials")]; kept {
+	if _, kept := b.SSM.(*teardownSSM).params[edgeParam(t, environment.TierPreview, "/credentials")]; kept {
 		t.Error("the preview bootstrap's own parameters must go")
 	}
 }

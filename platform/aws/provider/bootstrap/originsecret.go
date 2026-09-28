@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -58,7 +59,7 @@ func OriginSecretOf(raw string) (OriginSecret, error) {
 	return secret, nil
 }
 
-func StaleOriginSecretNotice(s OriginSecret, now time.Time, tier string) string {
+func StaleOriginSecretNotice(s OriginSecret, now time.Time, tier environment.Tier) string {
 	switch {
 	case s.Rotating():
 		return fmt.Sprintf("The %s origin secret was rotated %d days ago; this deploy answers to the new one, and every other project in the tier must be re-deployed by %s, when `ocel bootstrap` retires the old one and a release still expecting it stops answering",
@@ -75,7 +76,7 @@ const (
 	originSecretRetired = "the secret it replaced %d days ago is retired; a release not re-deployed since stops answering its front"
 )
 
-func planOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, now time.Time) (provider.Change, error) {
+func planOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, now time.Time) (provider.Change, error) {
 	name, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
 		return provider.Change{}, err
@@ -103,7 +104,7 @@ type originSecretOutcome struct {
 	retired bool
 }
 
-func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier string, now time.Time) (originSecretOutcome, error) {
+func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, tier environment.Tier, now time.Time) (originSecretOutcome, error) {
 	paramName, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
 		return originSecretOutcome{}, err
