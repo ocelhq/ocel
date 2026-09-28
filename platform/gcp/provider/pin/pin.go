@@ -11,7 +11,7 @@ import (
 )
 
 type Pins interface {
-	Pin(ctx context.Context, service, revision string) error
+	Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error
 }
 
 func Flip(ctx context.Context, pins Pins, flip router.Flip, progress progress.Progress) error {
@@ -36,7 +36,7 @@ func Flip(ctx context.Context, pins Pins, flip router.Flip, progress progress.Pr
 			if progress != nil {
 				progress.Say("Pinning all of " + record.App + "'s traffic to revision " + revision + " of Cloud Run service " + service)
 			}
-			if err := pins.Pin(ctx, service, revision); err != nil {
+			if err := pins.Pin(ctx, service, revision, flip.StillActive); err != nil {
 				if !pinned {
 					return router.Unserved{Err: err}
 				}

@@ -61,9 +61,10 @@ func (w *world) clients() Clients {
 
 func (w *world) edge() *apiGateway {
 	return &apiGateway{
-		ns:     defaultNamespace,
-		open:   func(context.Context) (Clients, error) { return w.clients(), nil },
-		delete: w.deletion(30),
+		ns:        defaultNamespace,
+		open:      func(context.Context) (Clients, error) { return w.clients(), nil },
+		delete:    w.deletion(30),
+		leaseWait: func(context.Context, time.Duration) error { return nil },
 	}
 }
 

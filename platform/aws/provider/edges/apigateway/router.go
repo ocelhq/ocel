@@ -62,17 +62,25 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
-	if err := flip.RefuseInactive(ctx); err != nil {
-		return err
-	}
-	id, err := s.ensureAPI(ctx, c, pointer)
-	if err != nil {
+	moved := false
+	err = s.stageLease(c, pointer, flip.Promotion.PromotionID).hold(ctx, func() error {
+		if err := flip.RefuseInactive(ctx); err != nil {
+			return err
+		}
+		id, err := s.ensureAPI(ctx, c, pointer)
+		if err != nil {
+			return err
+		}
+		if err := moveStage(ctx, c, id, flip.Promotion.PromotionID, patch); err != nil {
+			return err
+		}
+		moved = true
+		return s.routePreview(ctx, c, pointer, id)
+	})
+	if err != nil && !moved {
 		return router.Unserved{Err: err}
 	}
-	if err := moveStage(ctx, c, id, flip.Promotion.PromotionID, patch); err != nil {
-		return router.Unserved{Err: err}
-	}
-	return s.routePreview(ctx, c, pointer, id)
+	return err
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) error {

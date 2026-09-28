@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
+const flipAttempts = 8
+
 type Routers struct {
 	edges  *Edges
 	planes map[router.Kind]*DataPlane
@@ -22,7 +25,7 @@ type Routers struct {
 func newRouters(edges *Edges) *Routers {
 	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
 	for _, kind := range edges.kinds() {
-		routers.planes[router.Kind(kind)] = &DataPlane{served: map[projectPointer]map[string]string{}}
+		routers.planes[router.Kind(kind)] = &DataPlane{served: map[projectPointer]map[string]string{}, writes: map[projectPointer]int{}}
 	}
 	return routers
 }
@@ -54,6 +57,7 @@ type DataPlane struct {
 	says     string
 	progress progress.Progress
 	served   map[projectPointer]map[string]string
+	writes   map[projectPointer]int
 }
 
 type projectPointer struct {
@@ -123,16 +127,28 @@ func (d *DataPlane) refuseFlip() error {
 	return router.Unserved{Err: failure}
 }
 
-func (d *DataPlane) serve(at projectPointer, builds map[string]string) {
+func (d *DataPlane) written(at projectPointer) int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	return d.writes[at]
+}
+
+func (d *DataPlane) serveOver(at projectPointer, builds map[string]string, read int) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.writes[at] != read {
+		return false
+	}
 	d.served[at] = maps.Clone(builds)
+	d.writes[at]++
+	return true
 }
 
 func (d *DataPlane) remove(at projectPointer) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	delete(d.served, at)
+	d.writes[at]++
 }
 
 type Router struct {
@@ -186,18 +202,24 @@ func (s *RouterStack) Disclaim(context.Context, string) error { return nil }
 
 func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
 	s.plane.beginFlip(progress)
-	if err := flip.RefuseInactive(ctx); err != nil {
-		return err
-	}
-	if err := s.plane.refuseFlip(); err != nil {
-		return err
-	}
 	builds := make(map[string]string, len(flip.Records))
 	for app, record := range flip.Records {
 		builds[app] = record.Build
 	}
-	s.plane.serve(pointerOf(s.stack.State(), flip.Pointer), builds)
-	return nil
+	at := pointerOf(s.stack.State(), flip.Pointer)
+	for range flipAttempts {
+		read := s.plane.written(at)
+		if err := flip.RefuseInactive(ctx); err != nil {
+			return err
+		}
+		if err := s.plane.refuseFlip(); err != nil {
+			return err
+		}
+		if s.plane.serveOver(at, builds, read) {
+			return nil
+		}
+	}
+	return router.Unserved{Err: fmt.Errorf("flip %s onto %s: another flip moved it on every one of %d attempts", flip.Promotion.PromotionID, at.pointer, flipAttempts)}
 }
 
 func (s *RouterStack) RemovePointer(_ context.Context, pointer string, _ progress.Progress) error {

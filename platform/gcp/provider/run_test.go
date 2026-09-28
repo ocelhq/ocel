@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -210,7 +211,7 @@ func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *te
 	server := &runServer{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
-	if err := server.open(t).Pin(context.Background(), first.service, one); err != nil {
+	if err := server.open(t).Pin(context.Background(), first.service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
@@ -220,6 +221,38 @@ func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *te
 
 	if service := server.serving(); !servedBy(service.Traffic, one) {
 		t.Errorf("the service serves %+v after the second release, want all of it still on %s: only a promotion moves traffic, and the ledger has promoted nothing new", service.Traffic, one)
+	}
+}
+
+func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	_, one := released(t, server, first)
+	p := server.open(t)
+	if err := p.Pin(context.Background(), first.service, one, nil); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, second)
+
+	displaced := errors.New("another promotion displaced this one")
+	asked := 0
+	stillActive := func(context.Context) error {
+		asked++
+		if asked == 1 {
+			server.mu.Lock()
+			server.patchConflicts = 1
+			server.mu.Unlock()
+			return nil
+		}
+		return displaced
+	}
+	if err := p.Pin(context.Background(), first.service, two, stillActive); !errors.Is(err, displaced) {
+		t.Fatalf("Pin(%s) over a service that moved while its promotion was displaced = %v, want that displacement", two, err)
+	}
+	if service := server.serving(); !servedBy(service.Traffic, one) {
+		t.Errorf("the service serves %+v, want all of it still on %s: a pin reads the service again after a conflicting write, and asks again whether its promotion is still active before it writes", service.Traffic, one)
 	}
 }
 

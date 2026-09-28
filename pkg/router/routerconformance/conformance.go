@@ -104,6 +104,43 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
+	t.Run("two promotes racing on one pointer leave it serving the release the ledger names", func(t *testing.T) {
+		ctx := context.Background()
+		fixture := suite.New(t)
+		stack := reconciled(t, fixture)
+		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+		racing, err := fixture.Router.Open(stack.State())
+		if err != nil {
+			t.Fatalf("Open a second stack onto the same state: %v", err)
+		}
+
+		pointed := &standInLedger{active: "conformance-b1"}
+		later := stage("conformance-b3", record(App, "b3"))
+		later.Pointer = pointer
+		earlier := stage("conformance-b2", record(App, "b2"))
+		earlier.Pointer = pointer
+		var raced error
+		checked := false
+		earlier.StillActive = func(ctx context.Context) error {
+			if !checked {
+				checked = true
+				raced = pointed.promote(ctx, racing, later, nil)
+				return nil
+			}
+			return pointed.stillActive(earlier.Promotion.PromotionID)(ctx)
+		}
+
+		flipped := pointed.promote(ctx, stack, earlier, earlier.StillActive)
+		if !checked {
+			t.Fatalf("Flip never asked StillActive (it returned %v), so no promote could race it", flipped)
+		}
+		builds := map[string]string{"conformance-b1": "b1", "conformance-b2": "b2", "conformance-b3": "b3"}
+		if served, named := fixture.Serving(pointer), builds[pointed.active]; served != named {
+			t.Errorf("%s serves %q while the ledger names %s (%s): a promote that checked StillActive before another promoted and flipped must not land over it (the flip it raced returned %v, its own flip %v)",
+				pointer, served, pointed.active, named, raced, flipped)
+		}
+	})
+
 	t.Run("a flip the data plane refuses is unserved and leaves the release it served", func(t *testing.T) {
 		fixture := suite.New(t)
 		if fixture.FailNextFlip == nil {
@@ -275,4 +312,32 @@ func roundTrip(t *testing.T, state router.StackState) router.StackState {
 		t.Fatalf("unmarshal %s: %v", payload, err)
 	}
 	return read
+}
+
+type standInLedger struct {
+	active string
+}
+
+func (l *standInLedger) stillActive(promotionID string) func(context.Context) error {
+	return func(context.Context) error {
+		if l.active != promotionID {
+			return errDisplaced
+		}
+		return nil
+	}
+}
+
+func (l *standInLedger) promote(ctx context.Context, stack router.Stack, flip router.Flip, stillActive func(context.Context) error) error {
+	displaced := l.active
+	l.active = flip.Promotion.PromotionID
+	if stillActive == nil {
+		stillActive = l.stillActive(flip.Promotion.PromotionID)
+	}
+	flip.StillActive = stillActive
+	err := stack.Flip(ctx, flip, progress.DiscardProgress())
+	var unserved router.Unserved
+	if errors.As(err, &unserved) && l.active == flip.Promotion.PromotionID {
+		l.active = displaced
+	}
+	return err
 }
