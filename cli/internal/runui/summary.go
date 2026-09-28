@@ -40,7 +40,7 @@ func (s summary) lines() []string {
 		out = s.failed(took)
 	}
 	if path := result.GetLogPath(); path != "" {
-		out = append(out, colorFor(s.present, color.Faint).Sprint(blockIndent+"Log: "+relLog(path)))
+		out = append(out, muted(s.present, blockIndent+"Log: "+relLog(path)))
 	}
 	return out
 }
@@ -57,7 +57,7 @@ func (s summary) succeeded(took string) []string {
 		out = append(out, blockIndent+note)
 	}
 	if note := FlipNote(result.GetFlipBound()); note != "" {
-		out = append(out, colorFor(s.present, color.Faint).Sprint(blockIndent+note))
+		out = append(out, muted(s.present, blockIndent+note))
 	}
 	return out
 }
@@ -129,7 +129,7 @@ func (s summary) unpromoted() []string {
 func missingPaint(present Presentation) envgate.Paint {
 	return envgate.Paint{
 		Fail:  func(text string) string { return colorFor(present, color.FgRed).Sprint(text) },
-		Faint: func(text string) string { return faint(present, text) },
+		Faint: func(text string) string { return muted(present, text) },
 	}
 }
 

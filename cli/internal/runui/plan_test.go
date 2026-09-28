@@ -120,9 +120,9 @@ func TestAPlanPaintsTheSigilAndDimsWhatSaysWhy(t *testing.T) {
 	}), "\n")
 
 	for _, want := range []string{
-		"\x1b[32m+\x1b[0m \x1b[1mocel-production-queues\x1b[22m  \x1b[2m[queues]\x1b[22m",
-		"\x1b[32m+\x1b[0m OcelQueue  \x1b[2mAWS::SQS::Queue\x1b[22m",
-		"\x1b[31m–\x1b[0m \x1b[1mocel-production-isr\x1b[22m  \x1b[2m[isr]\x1b[22m\x1b[2m  — web, api were deployed against it\x1b[22m",
+		"\x1b[32m+\x1b[0m \x1b[1mocel-production-queues\x1b[22m  \x1b[90m[queues]\x1b[0m",
+		"\x1b[32m+\x1b[0m OcelQueue  \x1b[90mAWS::SQS::Queue\x1b[0m",
+		"\x1b[31m–\x1b[0m \x1b[1mocel-production-isr\x1b[22m  \x1b[90m[isr]\x1b[0m\x1b[90m  — web, api were deployed against it\x1b[0m",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("projection = %q, want it to contain %q", got, want)

@@ -154,7 +154,7 @@ func groupLine(present Presentation, group *planv1.ChangeGroup) string {
 	}
 	b.WriteString(colorFor(present, color.Bold).Sprint(group.GetName()))
 	if tag := groupTag(group); named && tag != "" {
-		b.WriteString(planGutter + faint(present, "["+tag+"]"))
+		b.WriteString(planGutter + muted(present, "["+tag+"]"))
 	}
 	b.WriteString(trail(present, planGutter, group.GetReason(), group.GetSlow()))
 	return b.String()
@@ -169,7 +169,7 @@ func changeLines(present Presentation, changes []*planv1.Change) []string {
 	for _, change := range changes {
 		label := changeLabel(change)
 		if kind := change.GetKind(); kind != "" {
-			label += strings.Repeat(" ", width-utf8.RuneCountInString(label)) + planGutter + faint(present, kind)
+			label += strings.Repeat(" ", width-utf8.RuneCountInString(label)) + planGutter + muted(present, kind)
 		}
 		lines = append(lines, fmt.Sprintf("    %s %s%s",
 			sigil(present, change.GetAction()), label, trail(present, planTypeGutter, change.GetReason(), change.GetSlow())))
@@ -205,10 +205,10 @@ func groupTag(group *planv1.ChangeGroup) string {
 func trail(present Presentation, lead, reason string, slow bool) string {
 	var b strings.Builder
 	if reason != "" {
-		b.WriteString(faint(present, lead+"— "+reason))
+		b.WriteString(muted(present, lead+"— "+reason))
 	}
 	if slow {
-		b.WriteString(faint(present, slowNote))
+		b.WriteString(muted(present, slowNote))
 	}
 	return b.String()
 }
@@ -240,8 +240,6 @@ func sigil(present Presentation, action planv1.Change_Action) string {
 	}
 	return colorFor(present, attrs...).Sprint(glyph)
 }
-
-func faint(present Presentation, s string) string { return colorFor(present, color.Faint).Sprint(s) }
 
 type actionFace struct {
 	sigil   string

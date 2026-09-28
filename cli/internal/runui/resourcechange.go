@@ -73,7 +73,7 @@ func (c resourceChange) render(present Presentation) string {
 	if c.failed {
 		return unitMarks[progressv1.SpanStatus_SPAN_STATUS_ERROR].render(present) + " " + c.label + " failed to " + c.face.verb
 	}
-	return label{c.face.sigil, sigilAttrs[c.face.sigil]}.render(present) + " " + c.label + " " + resourceChangesDone[c.face.tallyAs]
+	return label{c.face.sigil, sigilAttrs[c.face.sigil]}.render(present) + " " + muted(present, c.label+" "+resourceChangesDone[c.face.tallyAs])
 }
 
 func (t *resourceTally) count(c resourceChange) {

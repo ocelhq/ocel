@@ -27,12 +27,12 @@ func TestMissingVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	painted := drawn(ev, Presentation{Color: true, Width: defaultWidth})
 	plain := drawn(ev, Presentation{Width: defaultWidth})
 
-	for _, want := range []string{"\x1b[31m✗\x1b[0m DATABASE_URL", "\x1b[31m✗\x1b[0m PORT", "\x1b[2m/web\x1b[22m"} {
+	for _, want := range []string{"\x1b[31m✗\x1b[0m DATABASE_URL", "\x1b[31m✗\x1b[0m PORT", "\x1b[90m/web\x1b[0m"} {
 		if !strings.Contains(painted, want) {
 			t.Errorf("painted = %q, want it to contain %q", painted, want)
 		}
 	}
-	if strings.Contains(painted, "\x1b[31mno value") || strings.Contains(painted, "\x1b[2mDATABASE_URL") {
+	if strings.Contains(painted, "\x1b[31mno value") || strings.Contains(painted, "\x1b[90mDATABASE_URL") {
 		t.Errorf("painted = %q, want the reason and the key left unpainted", painted)
 	}
 	if strings.Contains(plain, "\x1b[") {

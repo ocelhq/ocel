@@ -148,7 +148,7 @@ func (s *GroupedSink) beat(at time.Time) {
 		tally := s.tallies[phase]
 		message := fmt.Sprintf("Still %s %s — %d/%d done, %s elapsed",
 			phaseGerunds[phase], strings.Join(running[phase], ", "), tally.done, tally.units, formatDuration(at.Sub(tally.since)))
-		s.print(blockLine{text: line{level: progressv1.Level_LEVEL_INFO, phase: phase, message: message}.render(s.present)})
+		s.print(blockLine{text: line{level: progressv1.Level_LEVEL_INFO, phase: phase, message: message, quiet: true}.render(s.present)})
 	}
 	s.beatAt = at.Add(heartbeatEvery)
 }
@@ -214,7 +214,11 @@ func (s *GroupedSink) alone(ev *streamv1.RunEvent) blockLine {
 }
 
 func (s *GroupedSink) detail(ev *streamv1.RunEvent) blockLine {
-	text := strings.ReplaceAll(ev.GetMessage(), "\n", "\n"+continuationIndent)
+	text := ev.GetMessage()
+	if ev.GetLevel() == progressv1.Level_LEVEL_INFO {
+		text = muted(s.present, text)
+	}
+	text = strings.ReplaceAll(text, "\n", "\n"+continuationIndent)
 	if ev.GetLevel() != progressv1.Level_LEVEL_INFO {
 		text = levelLabels[ev.GetLevel()].render(s.present) + " " + text
 	}
@@ -250,22 +254,26 @@ func (s *GroupedSink) end(span string, ev *streamv1.RunEvent) {
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	partial := !failed && ev.GetLevel() >= progressv1.Level_LEVEL_WARN
-	result := pastTense(unit.opened.GetMessage())
-	if partial && ev.GetMessage() != "" {
-		result = ev.GetMessage()
+	head := line{
+		level:   ev.GetLevel(),
+		ends:    ended.GetStatus(),
+		message: pastTense(unit.opened.GetMessage()),
+		timing:  " in " + took + tally.finished(),
+		outcome: unit.resources.summary(),
 	}
-	message := fmt.Sprintf("%s in %s%s%s", result, took, tally.finished(), unit.resources.summary())
+	if partial && ev.GetMessage() != "" {
+		head.message = ev.GetMessage()
+	}
 	if failed {
-		message = fmt.Sprintf("%s failed after %s%s%s", unit.opened.GetMessage(), took, tally.finished(), unit.resources.summary())
+		head.message, head.timing = unit.opened.GetMessage()+" failed", " after "+took+tally.finished()
 		if reason := ev.GetMessage(); reason != "" {
-			message += ": " + reason
+			head.outcome += ": " + reason
 		}
 	}
-	status := ended.GetStatus()
 	if partial {
-		status = progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED
+		head.ends = progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED
 	}
-	header := unit.header(ev.GetLevel(), status, message, s.present)
+	header := unit.header(head, s.present)
 	if s.present.GitHubActions && !failed && !partial && len(unit.body) > 0 {
 		title := header.from.render(Presentation{})
 		header.text, header.command = "::group::"+workflowData.Replace(title), true
@@ -409,10 +417,9 @@ func (s *GroupedSink) forget(span string) {
 	maps.DeleteFunc(s.owners, func(_, owner string) bool { return owner == span })
 }
 
-func (u *unitBlock) header(level progressv1.Level, ends progressv1.SpanStatus, message string, present Presentation) blockLine {
-	head := lineOf(u.opened)
-	head.level, head.ends, head.message, head.heads = level, ends, message, true
-	return blockLine{text: head.render(present), from: head}
+func (u *unitBlock) header(ended line, present Presentation) blockLine {
+	ended.phase, ended.subject, ended.heads = u.opened.GetPhase(), u.opened.GetSubject(), true
+	return blockLine{text: ended.render(present), from: ended}
 }
 
 func (s *GroupedSink) Close() error {
@@ -433,7 +440,7 @@ func (s *GroupedSink) unfinished() {
 	for _, span := range slices.Clone(s.started) {
 		unit := s.units[span]
 		s.forget(span)
-		s.print(unit.header(progressv1.Level_LEVEL_WARN, progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED, unit.opened.GetMessage()+" did not finish", s.present))
+		s.print(unit.header(line{level: progressv1.Level_LEVEL_WARN, message: unit.opened.GetMessage() + " did not finish"}, s.present))
 		s.print(unit.body...)
 	}
 }

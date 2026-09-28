@@ -454,6 +454,20 @@ func TestOnATerminalAToolLineKeepsItsColourButNothingThatMovesTheCursorOrTalksTo
 	}
 }
 
+func TestWithColourAToolLineIsGrayWhereverItsOwnColourIsReset(t *testing.T) {
+	t.Parallel()
+
+	rig := newLineRig(t, Presentation{Width: 80, Color: true})
+	web := rig.run.Phase(progressv1.Phase_PHASE_BUILD).Unit("web", "Building web")
+	output(t, web, "warn \x1b[31mred\x1b[0m then \x1b[1;38;5;0mbold black\x1b[22m still black \x1b[39mplain")
+	web.End(nil)
+
+	want := "\n    \x1b[90mwarn \x1b[31mred\x1b[0m\x1b[90m then \x1b[1;38;5;0mbold black\x1b[22m still black \x1b[39m\x1b[90mplain\x1b[39m\n"
+	if got := rig.closed(t); !strings.Contains(got, want) {
+		t.Errorf("wrote\n%q\nwant the tool line gray between its own colours\n%q", got, want)
+	}
+}
+
 func TestOffATerminalAToolLineIsWrittenByteForByte(t *testing.T) {
 	t.Parallel()
 
