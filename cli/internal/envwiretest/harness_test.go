@@ -4,10 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -28,7 +28,7 @@ export const env = defineEnv({
 func setUpFixture(t *testing.T, fixture string) string {
 	t.Helper()
 	requireNode(t)
-	repo := repoRoot(t)
+	repo := fixturetest.RepoDir(t)
 	requireSDKBuild(t, repo)
 
 	root := t.TempDir()
@@ -57,15 +57,6 @@ func requireSDKBuild(t *testing.T, repo string) {
 	if _, err := os.Stat(entry); err != nil {
 		t.Fatalf("the ocel SDK is not built (%s is missing), so there is no wire to test.\nBuild it with: pnpm --filter ocel build", entry)
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot locate this test file")
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
 func link(t *testing.T, target, name string) {
