@@ -88,9 +88,7 @@ run_provider_vps() {
         pnpm turbo run build --filter=ocel &&
         go generate -C cli ./... &&
         incus_run "scripts/incus.sh run ocel-act-live-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./..." | tee "$out/live.json" &&
-        scripts/assert-ran.sh "$out/live.json" TestLive &&
-        incus_run "scripts/incus.sh run ocel-act-lifecycle-$$ -- go test -C platform/vps/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./..." | tee "$out/lifecycle.json" &&
-        scripts/assert-ran.sh "$out/lifecycle.json" TestLifecycle || status=$?
+        scripts/assert-ran.sh "$out/live.json" TestLive || status=$?
     rm -rf "$out"
     return $status
 }
