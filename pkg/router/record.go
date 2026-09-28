@@ -1,5 +1,7 @@
 package router
 
+import "github.com/ocelhq/ocel/pkg/edge"
+
 type DeploymentRecord struct {
 	App              string            `json:"app"`
 	Framework        string            `json:"framework"`
@@ -23,9 +25,9 @@ type DeploymentRecord struct {
 	Variables        []VariableRecord  `json:"variables,omitempty"`
 	Env              map[string]string `json:"env,omitempty"`
 	Envelope         string            `json:"envelope,omitempty"`
-	Needs            []string          `json:"needs,omitempty"`
-	SupportInEffect  []string          `json:"supportInEffect,omitempty"`
-	Waived           []string          `json:"waived,omitempty"`
+	Needs            []edge.Need       `json:"needs,omitempty"`
+	SupportInEffect  []edge.Need       `json:"supportInEffect,omitempty"`
+	Waived           []edge.Need       `json:"waived,omitempty"`
 }
 
 type VariableRecord struct {

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestADeploymentRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testing.T) {
@@ -58,9 +60,9 @@ func TestADeploymentRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testi
 		t.Parallel()
 
 		raw := marshalRecord(t, DeploymentRecord{
-			Needs:           []string{"streaming", "edge-cache"},
-			SupportInEffect: []string{"streaming"},
-			Waived:          []string{"edge-cache"},
+			Needs:           []edge.Need{edge.NeedStreaming, edge.NeedEdgeCache},
+			SupportInEffect: []edge.Need{edge.NeedStreaming},
+			Waived:          []edge.Need{edge.NeedEdgeCache},
 		})
 		for _, want := range []string{
 			`"needs":["streaming","edge-cache"]`,
@@ -76,7 +78,7 @@ func TestADeploymentRecordMarshalsUnderItsWireNamesAndOmitsWhatIsAbsent(t *testi
 	t.Run("need fields are omitted when empty", func(t *testing.T) {
 		t.Parallel()
 
-		raw := marshalRecord(t, DeploymentRecord{Needs: []string{}, SupportInEffect: []string{}, Waived: []string{}})
+		raw := marshalRecord(t, DeploymentRecord{Needs: []edge.Need{}, SupportInEffect: []edge.Need{}, Waived: []edge.Need{}})
 		for _, absent := range []string{`"needs"`, `"supportInEffect"`, `"waived"`} {
 			if strings.Contains(raw, absent) {
 				t.Errorf("record = %s, want no %s for a Deployment that declared no need", raw, absent)
