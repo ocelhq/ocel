@@ -372,7 +372,11 @@ func (s Store) storeSecret(ctx context.Context, manifest vars.Manifest) (string,
 	if err != nil {
 		return "", fmt.Errorf("the manifest's %s is not valid base64", vars.StoreSecretName)
 	}
-	opened, err := (vars.Cipher{Root: s.TierRoot}).Open(ctx, environment.Tier(manifest.Tier), vars.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env), sealed)
+	bound, err := vars.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
+	if err != nil {
+		return "", err
+	}
+	opened, err := (vars.Cipher{Root: s.TierRoot}).Open(ctx, environment.Tier(manifest.Tier), bound, sealed)
 	if err != nil {
 		return "", err
 	}

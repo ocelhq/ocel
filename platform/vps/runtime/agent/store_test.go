@@ -315,7 +315,10 @@ func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	bound := vars.NewStoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
+	bound, err := vars.NewStoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sealed, err := b.cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +349,10 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	elsewhere := vars.NewStoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
+	elsewhere, err := vars.NewStoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sealed, err := b.cipher.Seal(context.Background(), environment.TierProduction, elsewhere, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
