@@ -89,7 +89,11 @@ func linkOnATerminal(t *testing.T, console http.HandlerFunc, shown string) (scre
 	}
 	t.Cleanup(func() { ptmx.Close() })
 	var out terminalOutput
-	go func() { _, _ = io.Copy(&out, ptmx) }()
+	drained := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&out, ptmx)
+		close(drained)
+	}()
 
 	if !waitFor(func() bool { return strings.Contains(out.String(), shown) }, 10*time.Second) {
 		_ = cmd.Process.Kill()
@@ -102,6 +106,10 @@ func linkOnATerminal(t *testing.T, console http.HandlerFunc, shown string) (scre
 	go func() { done <- cmd.Wait() }()
 	select {
 	case exited = <-done:
+		select {
+		case <-drained:
+		case <-time.After(gracefulShutdownWindow / 2):
+		}
 	case <-time.After(gracefulShutdownWindow / 2):
 		_ = cmd.Process.Kill()
 		t.Fatalf("ocel link did not exit well within its %s shutdown window after Ctrl-C; the terminal shows %q", gracefulShutdownWindow, out.String())
