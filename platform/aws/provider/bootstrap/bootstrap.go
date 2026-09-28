@@ -672,7 +672,7 @@ Resources:
     Description: "S3 bucket storing the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
-    Description: "Tier this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
+    Description: "The tier this bootstrap was installed for: production or preview."
     Value: '%s'
 `, coreStackDescription(tier),
 		stateBucketResource(tier), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(tier), appBoundaryResource(ns, tier, broughtKey),
