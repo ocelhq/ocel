@@ -5,9 +5,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 func (p *Provider) forget() {
@@ -17,9 +17,9 @@ func (p *Provider) forget() {
 
 type forgetting struct {
 	provider.Bootstrap
-	forget  func()
-	key     func(context.Context, environment.Tier) (string, error)
-	records records.Store
+	forget    func()
+	key       func(context.Context, environment.Tier) (string, error)
+	keyValues keyvalue.Store
 }
 
 func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
@@ -38,7 +38,7 @@ func (s forgetting) Apply(ctx context.Context, req provider.BootstrapRequest, pr
 	if err != nil || now == sealing {
 		return err
 	}
-	return envsource.ForgetDigestKey(ctx, s.records, req.Tier)
+	return envsource.ForgetDigestKey(ctx, s.keyValues, req.Tier)
 }
 
 func (s forgetting) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {

@@ -65,8 +65,8 @@ func newSync(ctx context.Context, getenv func(string) string) (*envsource.Sync, 
 	}
 	return &envsource.Sync{
 		Store: envvars.Store{
-			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(table)},
-			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(key)},
+			KeyValues: awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(table)},
+			Cipher:    awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(key)},
 		},
 		Tier: tier,
 		Login: envsource.Login{

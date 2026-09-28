@@ -86,7 +86,7 @@ func TestADryDeployOrdersItsGroupsTheSameWayEveryRun(t *testing.T) {
 func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
-	records := p.Records().(*fake.Records)
+	records := p.KeyValues().(*fake.KeyValues)
 	before := records.Snapshot()
 
 	req := deployRequest()

@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
@@ -186,75 +186,97 @@ func TestTheBoxCipherReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 	}
 }
 
-func writeRecord(t *testing.T, root string, name records.Name, body string) {
+func writeEntry(t *testing.T, root string, key keyvalue.Key, value string) {
 	t.Helper()
-	tier, encoded, err := Located(name)
+	path, err := PathOf(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(RecordsDir(root, tier), encoded+recordSuffix)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	file := filepath.Join(RecordsDir(root, key.Partition.Tier), path+EntrySuffix)
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("0123456789abcdef0123456789abcdef\n"+base64.StdEncoding.EncodeToString([]byte(body))+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte(`{"revision":"0123456789abcdef0123456789abcdef","value":`+value+"}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestTheRecordsAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T) {
+var shop = keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootValues, Path: []string{"shop"}}
+
+func TestTheEntriesAreReadOffTheTierTheHelperWritesAndNeverWritten(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	one := records.Name{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"}
-	two := records.Name{"values", "shop", "production", "cells", "/apps/web", "SESSION", "pr-7"}
-	writeRecord(t, root, one, "one")
-	writeRecord(t, root, two, "two")
-	store := Records{Root: root}
+	one := shop.Key("cells", "/", "DATABASE_URL", "*")
+	two := shop.Key("cells", "/apps/web", "SESSION", "pr-7")
+	writeEntry(t, root, one, `"one"`)
+	writeEntry(t, root, two, `"two"`)
+	store := KeyValues{Root: root}
 
 	read, err := store.Read(context.Background(), one)
-	if err != nil || string(read.Bytes) != "one" || read.Revision == "" {
+	if err != nil || string(read.Value) != `"one"` || read.Revision == "" {
 		t.Fatalf("Read() = %+v, %v", read, err)
 	}
-	if _, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "MISSING", "*"}); !errors.Is(err, records.ErrNotFound) {
-		t.Errorf("Read() of nothing = %v, want %v", err, records.ErrNotFound)
+	if _, err := store.Read(context.Background(), shop.Key("cells", "/", "MISSING", "*")); !errors.Is(err, keyvalue.ErrNotFound) {
+		t.Errorf("Read() of nothing = %v, want %v", err, keyvalue.ErrNotFound)
 	}
-	listed, err := store.List(context.Background(), records.Name{"values", "shop", "production", "cells"})
+	listed, err := store.List(context.Background(), shop, "cells")
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want both cells", listed, err)
 	}
-	for _, record := range listed {
-		if record.Name.String() != one.String() && record.Name.String() != two.String() {
-			t.Errorf("List() named %s, which nothing wrote", record.Name)
+	for _, entry := range listed {
+		if entry.Key.String() != one.String() && entry.Key.String() != two.String() {
+			t.Errorf("List() named %s, which nothing wrote", entry.Key)
 		}
 	}
-	empty, err := store.List(context.Background(), records.Name{"values", "other", "production", "cells"})
+	other := keyvalue.Partition{Tier: shop.Tier, Root: shop.Root, Path: []string{"other"}}
+	empty, err := store.List(context.Background(), other, "cells")
 	if err != nil || len(empty) != 0 {
-		t.Errorf("List() under another project = %v, %v, want nothing", empty, err)
+		t.Errorf("List() in another project = %v, %v, want nothing", empty, err)
 	}
 	if _, err := store.Write(context.Background(), read); err == nil {
-		t.Error("the box-side records wrote something, and a deploy writes through the helper alone")
+		t.Error("the box-side entries wrote something, and a deploy writes through the helper alone")
 	}
 	if err := store.Remove(context.Background(), one, read.Revision); err == nil {
-		t.Error("the box-side records removed something")
+		t.Error("the box-side entries removed something")
 	}
 }
 
-func TestARecordNameRoundTripsThroughTheNameAFileAnswersTo(t *testing.T) {
+func TestAKeyRoundTripsThroughThePathAFileAnswersTo(t *testing.T) {
 	t.Parallel()
-	for _, name := range []records.Name{
-		{"conformance", "production", "TestOne/sub", "leaf"},
-		{"values", "shop", "production", "/apps/web", "DATABASE_URL"},
-		{"ledger", "production/shop", ".hidden", ".."},
+	for _, key := range []keyvalue.Key{
+		{Partition: keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance, Path: []string{"TestOne/sub"}}, Path: []string{"leaf"}},
+		shop.Key("cells", "/apps/web", "DATABASE_URL"),
+		{Partition: keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootLedger, Path: []string{"a+b"}}, Path: []string{".hidden", ".."}},
 	} {
-		encoded, err := EncodeName(name)
+		path, err := PathOf(key)
 		if err != nil {
-			t.Fatalf("EncodeName(%s) = %v", name, err)
+			t.Fatalf("PathOf(%s) = %v", key, err)
 		}
-		if strings.Contains(encoded, "/.") {
-			t.Errorf("EncodeName(%s) = %q, and a segment that starts a dot names something no record is", name, encoded)
+		if strings.Contains(path, "/.") || strings.HasPrefix(path, ".") {
+			t.Errorf("PathOf(%s) = %q, and a segment that starts a dot names something no entry is", key, path)
 		}
-		decoded, err := DecodeName(encoded)
-		if err != nil || decoded.String() != name.String() {
-			t.Errorf("DecodeName(EncodeName(%s)) = %s, %v", name, decoded, err)
+		dir, rest, _ := strings.Cut(path, "/")
+		if want, err := PartitionDir(key.Partition); err != nil || dir != want {
+			t.Errorf("PathOf(%s) = %q, want it under the partition's own directory %q", key, path, want)
 		}
+		decoded, err := KeyOf(key.Partition, rest)
+		if err != nil || decoded.String() != key.String() {
+			t.Errorf("KeyOf(PathOf(%s)) = %s, %v", key, decoded, err)
+		}
+	}
+}
+
+func TestTwoPartitionsNeverShareADirectory(t *testing.T) {
+	t.Parallel()
+	one, err := PartitionDir(keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootStacks, Path: []string{"a+b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := PartitionDir(keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootStacks, Path: []string{"a", "b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one == two {
+		t.Errorf("both partitions keep their entries in %q", one)
 	}
 }

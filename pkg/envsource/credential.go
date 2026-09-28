@@ -74,7 +74,7 @@ func readCredentialValue(ctx context.Context, store envvars.Store, scope envvars
 	if found.Project == scope.Project {
 		return found.Plaintext, nil
 	}
-	registration, registered, err := Registered(ctx, store.Records, scope.Tier, found.Project)
+	registration, registered, err := Registered(ctx, store.KeyValues, scope.Tier, found.Project)
 	if err != nil {
 		return "", err
 	}

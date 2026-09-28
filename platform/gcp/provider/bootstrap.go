@@ -1083,7 +1083,7 @@ func (b bootstrap) takeRecords(ctx context.Context, tier environment.Tier) error
 	if err != nil {
 		return err
 	}
-	documents := ports.TierRecords(client, tier).Select().Documents(ctx)
+	documents := ports.TierKeyValues(client, tier).Select().Documents(ctx)
 	defer documents.Stop()
 	for {
 		kept, err := documents.Next()

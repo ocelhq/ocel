@@ -60,8 +60,8 @@ func TestTheSyncStartsOnlyWithWhereItReadsAndWritesAndLogsInAsItsOwnRole(t *test
 		if sync.Login.Client == nil || sync.Login.Client.Timeout <= 0 {
 			t.Error("Login.Client has no timeout, so one Infisical that never answers keeps the invocation running until Lambda kills it")
 		}
-		if sync.Store.Records == nil || sync.Store.Cipher == nil {
-			t.Error("Store has no records or no cipher, so nothing read could be written")
+		if sync.Store.KeyValues == nil || sync.Store.Cipher == nil {
+			t.Error("Store has no key values or no cipher, so nothing read could be written")
 		}
 	})
 }

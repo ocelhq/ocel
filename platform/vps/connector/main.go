@@ -55,8 +55,8 @@ func run(listen, config string, printing, reporting bool) error {
 		Addr:       listen,
 		ConfigPath: config,
 		EnvVars: envvarsserver.Backend{
-			Records: boxstore.NewRecords(boxstore.LocalTransport{}),
-			Cipher:  boxstore.NewCipher(boxstore.LocalTransport{Elevation: []string{"sudo", "-n"}}),
+			KeyValues: boxstore.NewKeyValues(boxstore.LocalTransport{}),
+			Cipher:    boxstore.NewCipher(boxstore.LocalTransport{Elevation: []string{"sudo", "-n"}}),
 		},
 	})
 }

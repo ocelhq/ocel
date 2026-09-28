@@ -505,7 +505,7 @@ func staging(t *testing.T, vendor *fake.Provider) *stagingLedger {
 	t.Helper()
 	stager := &stagingLedger{}
 	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		stager.Ledger = ledger.New(vendor.Records(), state.Tier, state.Slug)
+		stager.Ledger = ledger.New(vendor.KeyValues(), state.Tier, state.Slug)
 		return stager
 	})
 	return stager
@@ -606,7 +606,7 @@ func TestTheStagedRecordNamesTheContainerTheReleaseProvisioned(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	entries, err := stackrecords.List(context.Background(), vendor.Records(), environment.TierProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}

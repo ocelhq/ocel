@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 )
 
 const registerAttempts = 5
@@ -31,8 +31,12 @@ func (r Registration) Credentials() []envvars.Cell {
 	return out
 }
 
-func registrationName(tier environment.Tier, project string) records.Name {
-	return records.Name{records.RootEnvSources, string(tier), project}
+func registrationsPartition(tier environment.Tier) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSources}
+}
+
+func registrationKey(tier environment.Tier, project string) keyvalue.Key {
+	return registrationsPartition(tier).Key(project)
 }
 
 func Register(ctx context.Context, store envvars.Store, tier environment.Tier, registration Registration) (Registration, error) {
@@ -46,9 +50,9 @@ func Register(ctx context.Context, store envvars.Store, tier environment.Tier, r
 	if err != nil {
 		return Registration{}, err
 	}
-	name := registrationName(tier, registration.Project)
+	name := registrationKey(tier, registration.Project)
 	for range registerAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store.Records, name)
+		recorded, err := keyvalue.ReadOrEmpty(ctx, store.KeyValues, name)
 		if err != nil {
 			return Registration{}, err
 		}
@@ -56,58 +60,58 @@ func Register(ctx context.Context, store envvars.Store, tier environment.Tier, r
 		if err != nil {
 			return Registration{}, err
 		}
-		recorded.Bytes = encoded
-		_, err = store.Records.Write(ctx, recorded)
-		if errors.Is(err, records.ErrStale) {
+		recorded.Value = encoded
+		_, err = store.KeyValues.Write(ctx, recorded)
+		if errors.Is(err, keyvalue.ErrStale) {
 			continue
 		}
 		if err != nil {
 			return Registration{}, err
 		}
-		return registration, moveSharer(ctx, store.Records, tier, registration.Project, previous.DedupeKey, key)
+		return registration, moveSharer(ctx, store.KeyValues, tier, registration.Project, previous.DedupeKey, key)
 	}
 	return Registration{}, fmt.Errorf("%s's env source registration was rewritten under every attempt to record it; another deploy of it is still running", registration.Project)
 }
 
 func RestoreRegistration(ctx context.Context, store envvars.Store, tier environment.Tier, replacing Registration, previous *Registration) error {
-	name := registrationName(tier, replacing.Project)
-	recorded, err := store.Records.Read(ctx, name)
-	if errors.Is(err, records.ErrNotFound) {
+	name := registrationKey(tier, replacing.Project)
+	recorded, err := store.KeyValues.Read(ctx, name)
+	if errors.Is(err, keyvalue.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	replaced, err := json.Marshal(replacing)
-	if err != nil || !bytes.Equal(recorded.Bytes, replaced) {
+	if err != nil || !bytes.Equal(recorded.Value, replaced) {
 		return err
 	}
 	if previous == nil {
-		err := store.Records.Remove(ctx, name, recorded.Revision)
-		if errors.Is(err, records.ErrStale) || errors.Is(err, records.ErrNotFound) {
+		err := store.KeyValues.Remove(ctx, name, recorded.Revision)
+		if errors.Is(err, keyvalue.ErrStale) || errors.Is(err, keyvalue.ErrNotFound) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		return release(ctx, store.Records, tier, replacing.DedupeKey, replacing.Project)
+		return release(ctx, store.KeyValues, tier, replacing.DedupeKey, replacing.Project)
 	}
-	if recorded.Bytes, err = json.Marshal(previous); err != nil {
+	if recorded.Value, err = json.Marshal(previous); err != nil {
 		return err
 	}
-	_, err = store.Records.Write(ctx, recorded)
-	if errors.Is(err, records.ErrStale) {
+	_, err = store.KeyValues.Write(ctx, recorded)
+	if errors.Is(err, keyvalue.ErrStale) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	return moveSharer(ctx, store.Records, tier, replacing.Project, replacing.DedupeKey, previous.DedupeKey)
+	return moveSharer(ctx, store.KeyValues, tier, replacing.Project, replacing.DedupeKey, previous.DedupeKey)
 }
 
 func rekey(ctx context.Context, store envvars.Store, tier environment.Tier, project string) error {
-	recorded, err := store.Records.Read(ctx, registrationName(tier, project))
-	if errors.Is(err, records.ErrNotFound) {
+	recorded, err := store.KeyValues.Read(ctx, registrationKey(tier, project))
+	if errors.Is(err, keyvalue.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
@@ -123,33 +127,33 @@ func rekey(ctx context.Context, store envvars.Store, tier environment.Tier, proj
 	}
 	previous := current.DedupeKey
 	current.DedupeKey = key
-	if recorded.Bytes, err = json.Marshal(current); err != nil {
+	if recorded.Value, err = json.Marshal(current); err != nil {
 		return err
 	}
-	_, err = store.Records.Write(ctx, recorded)
-	if errors.Is(err, records.ErrStale) {
+	_, err = store.KeyValues.Write(ctx, recorded)
+	if errors.Is(err, keyvalue.ErrStale) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	return moveSharer(ctx, store.Records, tier, project, previous, key)
+	return moveSharer(ctx, store.KeyValues, tier, project, previous, key)
 }
 
-func registrationOf(recorded records.Record) (Registration, error) {
+func registrationOf(recorded keyvalue.Entry) (Registration, error) {
 	var out Registration
-	if len(recorded.Bytes) == 0 {
+	if len(recorded.Value) == 0 {
 		return out, nil
 	}
-	if err := json.Unmarshal(recorded.Bytes, &out); err != nil {
-		return Registration{}, fmt.Errorf("read %s: %w", recorded.Name, err)
+	if err := json.Unmarshal(recorded.Value, &out); err != nil {
+		return Registration{}, fmt.Errorf("read %s: %w", recorded.Key, err)
 	}
 	return out, nil
 }
 
-func Registered(ctx context.Context, store records.Store, tier environment.Tier, project string) (Registration, bool, error) {
-	recorded, err := store.Read(ctx, registrationName(tier, project))
-	if errors.Is(err, records.ErrNotFound) {
+func Registered(ctx context.Context, store keyvalue.Store, tier environment.Tier, project string) (Registration, bool, error) {
+	recorded, err := store.Read(ctx, registrationKey(tier, project))
+	if errors.Is(err, keyvalue.ErrNotFound) {
 		return Registration{}, false, nil
 	}
 	if err != nil {
@@ -162,16 +166,16 @@ func Registered(ctx context.Context, store records.Store, tier environment.Tier,
 	return out, true, nil
 }
 
-func Registrations(ctx context.Context, store records.Store, tier environment.Tier) ([]Registration, error) {
-	recorded, err := store.List(ctx, records.Name{records.RootEnvSources, string(tier)})
+func Registrations(ctx context.Context, store keyvalue.Store, tier environment.Tier) ([]Registration, error) {
+	recorded, err := store.List(ctx, registrationsPartition(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the %s env source registrations: %w", tier, err)
 	}
 	out := make([]Registration, 0, len(recorded))
 	for _, record := range recorded {
 		var registration Registration
-		if err := json.Unmarshal(record.Bytes, &registration); err != nil {
-			return nil, fmt.Errorf("read %s: %w", record.Name, err)
+		if err := json.Unmarshal(record.Value, &registration); err != nil {
+			return nil, fmt.Errorf("read %s: %w", record.Key, err)
 		}
 		out = append(out, registration)
 	}

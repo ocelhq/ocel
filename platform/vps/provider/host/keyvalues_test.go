@@ -3,61 +3,26 @@ package host
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
-
-func TestARecordNameSurvivesTheNameAFileOnTheHostAnswersTo(t *testing.T) {
-	t.Parallel()
-
-	for _, name := range []records.Name{
-		{"conformance", "production", "TestOne/sub", "leaf"},
-		{"values", "shop", "production", "/apps/web", "DATABASE_URL"},
-		{"ledger", "production/shop", ".hidden", ".."},
-	} {
-		encoded, err := live.EncodeName(name)
-		if err != nil {
-			t.Fatalf("EncodeName(%s) = %v", name, err)
-		}
-		if strings.Contains(encoded, "/.") {
-			t.Errorf("EncodeName(%s) = %q, and a segment that starts a dot names something no record is", name, encoded)
-		}
-		decoded, err := live.DecodeName(encoded)
-		if err != nil {
-			t.Fatalf("DecodeName(%q) = %v", encoded, err)
-		}
-		if !reflect.DeepEqual(decoded, name) {
-			t.Errorf("live.DecodeName(live.EncodeName(%s)) = %s", name, decoded)
-		}
-	}
-}
-
-func TestARecordNameWithAnEmptySegmentIsRefused(t *testing.T) {
-	t.Parallel()
-
-	if _, err := live.EncodeName(records.Name{"conformance", "", "leaf"}); err == nil {
-		t.Fatal("EncodeName() of a name with an empty segment succeeded, and no file on a host answers to it")
-	}
-}
 
 func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	name := "conformance/production/compared"
+	name := "conformance+compared/compared"
 
 	first := helperWrite(t, dir, name, "", "one")
 	if first == "" {
@@ -90,15 +55,15 @@ func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	one, two := "conformance/production/pair/record", "conformance/production/pair/value"
+	one, two := "conformance+pair/record", "conformance+pair/value"
 
-	fed := encoded("one") + "\n" + encoded("one") + "\n"
+	fed := asJSON("one") + "\n" + asJSON("one") + "\n"
 	if _, code := helper(t, dir, fed, "pair", one, "", two, ""); code != 0 {
 		t.Fatalf("a pair of new records exited %d, want both stored", code)
 	}
 	current, _ := helperRead(t, dir, one)
 	moved := "a revision nobody wrote"
-	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, current, two, moved); code != boxstore.ExitStale {
+	if _, code := helper(t, dir, asJSON("two")+"\n"+asJSON("two")+"\n", "pair", one, current, two, moved); code != boxstore.ExitStale {
 		t.Fatalf("a pair where one half moved exited %d, want %d", code, boxstore.ExitStale)
 	}
 	for _, name := range []string{one, two} {
@@ -113,21 +78,27 @@ func TestTheRecordsHelperListsEverythingUnderAPrefixAndNothingBeside(t *testing.
 
 	dir := helperDir(t)
 	for _, name := range []string{
-		"conformance/production/tree/a",
-		"conformance/production/tree/b/one",
-		"conformance/production/tree/b/two",
-		"conformance/production/treeish",
+		"conformance+tree/tree",
+		"conformance+tree/tree/a",
+		"conformance+tree/tree/b/one",
+		"conformance+tree/tree/b/two",
+		"conformance+tree/treeish",
+		"conformance+tree+tree/a",
 	} {
 		helperWrite(t, dir, name, "", name)
 	}
 
 	for prefix, want := range map[string]int{
-		"conformance/production/tree":   3,
-		"conformance/production/tree/b": 2,
-		"conformance/production":        4,
-		"conformance/production/absent": 0,
+		"tree":   4,
+		"tree/b": 2,
+		"":       5,
+		"absent": 0,
 	} {
-		rendered, code := helper(t, dir, "", "list", prefix)
+		args := []string{"list", "conformance+tree"}
+		if prefix != "" {
+			args = append(args, prefix)
+		}
+		rendered, code := helper(t, dir, "", args...)
 		if code != 0 {
 			t.Fatalf("list %q exited %d", prefix, code)
 		}
@@ -190,7 +161,7 @@ func rows(rendered string) int {
 
 func helperWrite(t *testing.T, dir, name, expected, body string) string {
 	t.Helper()
-	rendered, code := helper(t, dir, encoded(body)+"\n", "write", name, expected)
+	rendered, code := helper(t, dir, asJSON(body)+"\n", "write", name, expected)
 	if code != 0 {
 		t.Fatalf("write %s exited %d", name, code)
 	}
@@ -204,11 +175,16 @@ func helperRead(t *testing.T, dir, name string) (string, string) {
 		t.Fatalf("read %s exited %d", name, code)
 	}
 	revision, body, _ := strings.Cut(strings.TrimRight(rendered, "\n"), "\t")
-	decoded, err := base64.StdEncoding.DecodeString(body)
-	if err != nil {
-		t.Fatalf("the helper answered %q, which no record was written as", body)
+	var decoded string
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		t.Fatalf("the helper answered %q, which no entry was written as", body)
 	}
-	return revision, string(decoded)
+	return revision, decoded
+}
+
+func asJSON(body string) string {
+	value, _ := json.Marshal(body)
+	return string(value)
 }
 
 func encoded(body string) string {
@@ -219,15 +195,15 @@ func TestAPairGivenOneBodyWritesNeitherHalf(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	one, two := "conformance/production/pair/record", "conformance/production/pair/value"
+	one, two := "conformance+pair/record", "conformance+pair/value"
 
-	if _, code := helper(t, dir, encoded("one")+"\n"+encoded("one")+"\n", "pair", one, "", two, ""); code != 0 {
+	if _, code := helper(t, dir, asJSON("one")+"\n"+asJSON("one")+"\n", "pair", one, "", two, ""); code != 0 {
 		t.Fatalf("a pair of new records exited %d, want both stored", code)
 	}
 	first, _ := helperRead(t, dir, one)
 	second, _ := helperRead(t, dir, two)
 
-	if _, code := helper(t, dir, encoded("two")+"\n", "pair", one, first, two, second); code == 0 {
+	if _, code := helper(t, dir, asJSON("two")+"\n", "pair", one, first, two, second); code == 0 {
 		t.Fatal("a pair fed one body exited 0, and the half it was never given was written away")
 	}
 	for _, name := range []string{one, two} {
@@ -241,14 +217,14 @@ func TestARecordThatNamesNoRevisionIsNotOverwritten(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	name := "conformance/production/truncated"
+	name := "conformance+truncated/truncated"
 	helperWrite(t, dir, name, "", "one")
 
-	f := filepath.Join(recordsDir(t, dir), name+".rec")
+	f := filepath.Join(recordsDir(t, dir), name+".json")
 	if err := os.Truncate(f, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, code := helper(t, dir, encoded("two")+"\n", "write", name, ""); code == 0 {
+	if _, code := helper(t, dir, asJSON("two")+"\n", "write", name, ""); code == 0 {
 		t.Fatal("a write over a record with no revision exited 0, and a compare-and-set that compares nothing is a lost update")
 	}
 }
@@ -257,10 +233,10 @@ func TestARecordIsReadableOnlyByTheUserThatWroteIt(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	name := "conformance/production/values/DATABASE_URL"
+	name := "values+shop/cells/DATABASE_URL"
 	helperWrite(t, dir, name, "", "postgres://example")
 
-	f := filepath.Join(recordsDir(t, dir), name+".rec")
+	f := filepath.Join(recordsDir(t, dir), name+".json")
 	info, err := os.Stat(f)
 	if err != nil {
 		t.Fatal(err)
@@ -290,12 +266,12 @@ func TestARecordsDirectoryThatIsASymlinkIsRefusedAndNothingLandsWhereItPoints(t 
 		t.Fatal(err)
 	}
 
-	for _, args := range [][]string{{"list", "conformance/production"}, {"read", "conformance/production/a"}} {
+	for _, args := range [][]string{{"list", "conformance+a"}, {"read", "conformance+a/a"}} {
 		if rendered, code := helper(t, root, "", args...); code == 0 {
 			t.Errorf("%s through a records directory that points at %s exited 0 with %q, want it refused", args[0], elsewhere, rendered)
 		}
 	}
-	if _, code := helper(t, root, encoded("one")+"\n", "write", "conformance/production/a", ""); code == 0 {
+	if _, code := helper(t, root, asJSON("one")+"\n", "write", "conformance+a/a", ""); code == 0 {
 		t.Error("a write through a records directory that is a symlink exited 0, want it refused")
 	}
 	left, err := os.ReadDir(elsewhere)
@@ -314,15 +290,15 @@ func TestAListingThatCannotBeReadIsNoEmptyListing(t *testing.T) {
 		t.Skip("root reads every directory, so nothing here can be made unreadable")
 	}
 	dir := helperDir(t)
-	helperWrite(t, dir, "conformance/production/tree/b/one", "", "one")
+	helperWrite(t, dir, "conformance+tree/tree/b/one", "", "one")
 
-	shut := filepath.Join(recordsDir(t, dir), "conformance/production/tree/b")
+	shut := filepath.Join(recordsDir(t, dir), "conformance+tree/tree/b")
 	if err := os.Chmod(shut, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(shut, 0o700) })
 
-	rendered, code := helper(t, dir, "", "list", "conformance/production/tree")
+	rendered, code := helper(t, dir, "", "list", "conformance+tree", "tree")
 	if code == 0 {
 		t.Fatalf("a listing over a directory nothing can read exited 0 with %q, and a reconciler reads that as a prefix that is empty", rendered)
 	}
@@ -340,17 +316,17 @@ func TestTheRecordTierIsReachedUnderNoElevationAtAll(t *testing.T) {
 		case strings.Contains(command, "echo present"):
 			return session.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, boxstore.RecordsHelper):
-			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t" + base64.StdEncoding.EncodeToString([]byte("{}")) + "\n"}, true
+			return session.Result{Stdout: "0123456789abcdef0123456789abcdef\t{}\n"}, true
 		}
 		return session.Result{}, false
 	}
 
-	record, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(environment.TierProduction, "shop"))
+	record, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
 	if err != nil {
 		t.Fatalf("Read() as the login every deploy runs as = %v", err)
 	}
-	if string(record.Bytes) != "{}" {
-		t.Errorf("the read answered %q, want the row the helper rendered", record.Bytes)
+	if string(record.Value) != "{}" {
+		t.Errorf("the read answered %q, want the row the helper rendered", record.Value)
 	}
 	reached := 0
 	for _, command := range b.commands() {
@@ -384,7 +360,7 @@ func TestARecordThisLoginCannotWriteNamesTheElevationItWasRefused(t *testing.T) 
 		return session.Result{}, false
 	}
 
-	_, err := NewRecords(b.host()).Read(context.Background(), stackrecords.ProjectRecord(environment.TierProduction, "shop"))
+	_, err := NewKeyValues(b.host()).Read(context.Background(), stackrecords.ProjectKey(environment.TierProduction, "shop"))
 	if err == nil {
 		t.Fatal("a record tier this login could neither read nor elevate to read answered a row")
 	}

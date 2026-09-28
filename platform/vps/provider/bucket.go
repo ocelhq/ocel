@@ -466,7 +466,7 @@ func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostCla
 }
 
 func (p *Provider) applyOrigins(ctx context.Context, project string, tier environment.Tier) error {
-	entries, err := stackrecords.List(ctx, p.records, tier, project)
+	entries, err := stackrecords.List(ctx, p.keyValues, tier, project)
 	if err != nil {
 		return err
 	}
@@ -562,7 +562,7 @@ func (p *Provider) reconcileStore(ctx context.Context, ref provider.StackRef, pr
 }
 
 func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool, error) {
-	entries, err := stackrecords.List(ctx, p.records, ref.Tier, ref.Project)
+	entries, err := stackrecords.List(ctx, p.keyValues, ref.Tier, ref.Project)
 	if err != nil {
 		return false, err
 	}
@@ -601,7 +601,7 @@ func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progr
 }
 
 func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]string, error) {
-	entries, err := stackrecords.List(ctx, p.records, ref.Tier, ref.Project)
+	entries, err := stackrecords.List(ctx, p.keyValues, ref.Tier, ref.Project)
 	if err != nil {
 		return nil, err
 	}

@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 )
 
 const (
@@ -30,13 +30,25 @@ type Status struct {
 	URLs                map[string]string `json:"urls,omitempty"`
 }
 
-func statusName(tier environment.Tier, dedupeKey string) records.Name {
-	sum := sha256.Sum256([]byte(dedupeKey))
-	return records.Name{records.RootEnvSourceStatus, string(tier), hex.EncodeToString(sum[:statusNameHashBytes])}
+func statusPartition(tier environment.Tier) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSourceStatus}
 }
 
-func sharersName(tier environment.Tier, dedupeKey string) records.Name {
-	return append(statusName(tier, dedupeKey), sharersSegment)
+func statusSegment(dedupeKey string) string {
+	sum := sha256.Sum256([]byte(dedupeKey))
+	return hex.EncodeToString(sum[:statusNameHashBytes])
+}
+
+func statusKey(tier environment.Tier, dedupeKey string) keyvalue.Key {
+	return statusPartition(tier).Key(statusSegment(dedupeKey))
+}
+
+func sharerKey(tier environment.Tier, dedupeKey, project string) keyvalue.Key {
+	return statusPartition(tier).Key(statusSegment(dedupeKey), sharersSegment, project)
+}
+
+type sharer struct {
+	Project string `json:"project"`
 }
 
 func StatusOf(ctx context.Context, store envvars.Store, tier environment.Tier, registration Registration) (Status, error) {
@@ -44,25 +56,25 @@ func StatusOf(ctx context.Context, store envvars.Store, tier environment.Tier, r
 	if err != nil {
 		return Status{}, err
 	}
-	status, _, err := readStatus(ctx, store.Records, tier, key)
+	status, _, err := readStatus(ctx, store.KeyValues, tier, key)
 	return status, err
 }
 
-func readStatus(ctx context.Context, store records.Store, tier environment.Tier, dedupeKey string) (Status, records.Record, error) {
-	recorded, err := records.ReadOrEmpty(ctx, store, statusName(tier, dedupeKey))
+func readStatus(ctx context.Context, store keyvalue.Store, tier environment.Tier, dedupeKey string) (Status, keyvalue.Entry, error) {
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, statusKey(tier, dedupeKey))
 	if err != nil {
-		return Status{}, records.Record{}, err
+		return Status{}, keyvalue.Entry{}, err
 	}
 	var status Status
-	if len(recorded.Bytes) > 0 {
-		if err := json.Unmarshal(recorded.Bytes, &status); err != nil {
-			return Status{}, records.Record{}, fmt.Errorf("read %s: %w", recorded.Name, err)
+	if len(recorded.Value) > 0 {
+		if err := json.Unmarshal(recorded.Value, &status); err != nil {
+			return Status{}, keyvalue.Entry{}, fmt.Errorf("read %s: %w", recorded.Key, err)
 		}
 	}
 	return status, recorded, nil
 }
 
-func writeStatus(ctx context.Context, store records.Store, tier environment.Tier, dedupeKey string, update func(*Status)) error {
+func writeStatus(ctx context.Context, store keyvalue.Store, tier environment.Tier, dedupeKey string, update func(*Status)) error {
 	for range statusAttempts {
 		status, recorded, err := readStatus(ctx, store, tier, dedupeKey)
 		if err != nil {
@@ -74,9 +86,9 @@ func writeStatus(ctx context.Context, store records.Store, tier environment.Tier
 			return err
 		}
 		created := recorded.Revision == ""
-		recorded.Bytes = encoded
+		recorded.Value = encoded
 		_, err = store.Write(ctx, recorded)
-		if errors.Is(err, records.ErrStale) {
+		if errors.Is(err, keyvalue.ErrStale) {
 			continue
 		}
 		if err != nil || !created {
@@ -88,24 +100,26 @@ func writeStatus(ctx context.Context, store records.Store, tier environment.Tier
 }
 
 func ForgetProject(ctx context.Context, store envvars.Store, tier environment.Tier, project string) error {
-	registration, registered, err := Registered(ctx, store.Records, tier, project)
+	registration, registered, err := Registered(ctx, store.KeyValues, tier, project)
 	if err != nil || !registered {
 		return err
 	}
-	if err := release(ctx, store.Records, tier, registration.DedupeKey, project); err != nil {
+	if err := release(ctx, store.KeyValues, tier, registration.DedupeKey, project); err != nil {
 		return err
 	}
-	return records.Forget(ctx, store.Records, registrationName(tier, project))
+	return keyvalue.Forget(ctx, store.KeyValues, registrationKey(tier, project))
 }
 
-func moveSharer(ctx context.Context, store records.Store, tier environment.Tier, project, from, to string) error {
-	marker, err := records.ReadOrEmpty(ctx, store, append(sharersName(tier, to), project))
+func moveSharer(ctx context.Context, store keyvalue.Store, tier environment.Tier, project, from, to string) error {
+	marker, err := keyvalue.ReadOrEmpty(ctx, store, sharerKey(tier, to, project))
 	if err != nil {
 		return err
 	}
 	if marker.Revision == "" {
-		marker.Bytes = []byte(project)
-		if _, err := store.Write(ctx, marker); err != nil && !errors.Is(err, records.ErrStale) {
+		if marker.Value, err = json.Marshal(sharer{Project: project}); err != nil {
+			return err
+		}
+		if _, err := store.Write(ctx, marker); err != nil && !errors.Is(err, keyvalue.ErrStale) {
 			return err
 		}
 	}
@@ -115,20 +129,20 @@ func moveSharer(ctx context.Context, store records.Store, tier environment.Tier,
 	return release(ctx, store, tier, from, project)
 }
 
-func release(ctx context.Context, store records.Store, tier environment.Tier, dedupeKey, project string) error {
+func release(ctx context.Context, store keyvalue.Store, tier environment.Tier, dedupeKey, project string) error {
 	if dedupeKey == "" {
 		return nil
 	}
-	if err := records.Forget(ctx, store, append(sharersName(tier, dedupeKey), project)); err != nil {
+	if err := keyvalue.Forget(ctx, store, sharerKey(tier, dedupeKey, project)); err != nil {
 		return err
 	}
 	return forgetUnshared(ctx, store, tier, dedupeKey)
 }
 
-func forgetUnshared(ctx context.Context, store records.Store, tier environment.Tier, dedupeKey string) error {
-	sharers, err := store.List(ctx, sharersName(tier, dedupeKey))
+func forgetUnshared(ctx context.Context, store keyvalue.Store, tier environment.Tier, dedupeKey string) error {
+	sharers, err := store.List(ctx, statusPartition(tier), statusSegment(dedupeKey), sharersSegment)
 	if err != nil || len(sharers) > 0 {
 		return err
 	}
-	return records.Forget(ctx, store, statusName(tier, dedupeKey))
+	return keyvalue.Forget(ctx, store, statusKey(tier, dedupeKey))
 }

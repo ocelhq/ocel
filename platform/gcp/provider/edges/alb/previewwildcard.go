@@ -8,9 +8,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -20,34 +20,34 @@ type previewEntry struct {
 	Certificate string `json:"certificate,omitempty"`
 }
 
-func (e *Edge) previewRecord() records.Name {
-	return append(stackrecords.EdgeStacksRecord(environment.TierPreview), string(Kind), "preview-wildcard")
+func (e *Edge) previewKey() keyvalue.Key {
+	return stackrecords.EdgeStacksPartition(environment.TierPreview).Key(string(Kind), "preview-wildcard")
 }
 
 func (e *Edge) recordedPreview(ctx context.Context) (previewEntry, error) {
-	record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
+	record, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
 	if err != nil {
 		return previewEntry{}, fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
 	var preview previewEntry
-	if len(record.Bytes) == 0 {
+	if len(record.Value) == 0 {
 		return preview, nil
 	}
-	if err := json.Unmarshal(record.Bytes, &preview); err != nil {
+	if err := json.Unmarshal(record.Value, &preview); err != nil {
 		return previewEntry{}, fmt.Errorf("decode which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
 	return preview, nil
 }
 
 func (e *Edge) rememberPreview(ctx context.Context, entry previewEntry) error {
-	record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
+	record, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
 	if err != nil {
 		return fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
-	if record.Bytes, err = json.Marshal(entry); err != nil {
+	if record.Value, err = json.Marshal(entry); err != nil {
 		return fmt.Errorf("encode which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
-	if _, err := e.deps.Records.Write(ctx, record); err != nil {
+	if _, err := e.deps.KeyValues.Write(ctx, record); err != nil {
 		return fmt.Errorf("record which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
 	return nil
@@ -83,7 +83,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	if wildcard == "" {
 		return nil
 	}
-	served, err := stackrecords.ProjectsServedOnPreview(ctx, e.deps.Records, baseDomain)
+	served, err := stackrecords.ProjectsServedOnPreview(ctx, e.deps.KeyValues, baseDomain)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 			return err
 		}
 	}
-	if err := records.Forget(ctx, e.deps.Records, e.previewRecord()); err != nil {
+	if err := keyvalue.Forget(ctx, e.deps.KeyValues, e.previewKey()); err != nil {
 		return fmt.Errorf("release which wildcard the %s edge served previews on: %w", Kind, err)
 	}
 	return nil

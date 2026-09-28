@@ -2,8 +2,8 @@ package gcp
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -13,7 +13,7 @@ import (
 
 type edges struct {
 	namespace provider.Namespace
-	records   records.Store
+	keyValues keyvalue.Store
 	pins      pin.Pins
 	stacks    alb.Stacks
 	routes    alb.Routes
@@ -27,16 +27,16 @@ var supportedEdges = []edge.Kind{direct.Kind, alb.Kind}
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	switch kind {
 	case direct.Kind:
-		return direct.New(e.records, e.pins), nil
+		return direct.New(e.keyValues, e.pins), nil
 	case alb.Kind:
 		return alb.New(alb.Deps{
-			Records: e.records,
-			Stacks:  e.stacks,
-			Routes:  e.routes,
-			Entries: e.entries,
-			Pins:    e.pins,
-			Project: e.project,
-			Region:  e.region,
+			KeyValues: e.keyValues,
+			Stacks:    e.stacks,
+			Routes:    e.routes,
+			Entries:   e.entries,
+			Pins:      e.pins,
+			Project:   e.project,
+			Region:    e.region,
 		}), nil
 	case cloudflare.Kind:
 		return nil, refusal.Refuse(refusal.CodeInvalid,

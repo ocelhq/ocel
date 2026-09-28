@@ -10,9 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
@@ -20,16 +20,16 @@ import (
 )
 
 type stores struct {
-	records records.Store
-	cipher  seal.Cipher
+	keyValues keyvalue.Store
+	cipher    seal.Cipher
 }
 
 func fakeStores() stores {
-	return stores{records: fake.NewRecords(), cipher: fake.NewCipher()}
+	return stores{keyValues: fake.NewKeyValues(), cipher: fake.NewCipher()}
 }
 
 func (s stores) store() envvars.Store {
-	return envvars.Store{Records: s.records, Cipher: s.cipher}
+	return envvars.Store{KeyValues: s.keyValues, Cipher: s.cipher}
 }
 
 func (s stores) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
@@ -94,7 +94,7 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheTierKey(t *testing.T) {
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION_SECRET", Folder: "/web"})
-	got := resolved(t, Over(manifest, fakes.records, fakes.cipher))
+	got := resolved(t, Over(manifest, fakes.keyValues, fakes.cipher))
 
 	if got["DATABASE_URL"] != "postgres://live" || got["SESSION_SECRET"] != "s3ss10n" {
 		t.Errorf("resolved %v, want both pinned cells opened, the folder-scoped one under its folder", got)
@@ -110,7 +110,7 @@ func TestAPreviewReadsItsEnvironmentsValueOverTheTierWideOne(t *testing.T) {
 
 	manifest := manifestOf("MARK")
 	manifest.Tier, manifest.Environment = "preview", "pr-7"
-	if got := resolved(t, Over(manifest, fakes.records, fakes.cipher)); got["MARK"] != "pr-7-only" {
+	if got := resolved(t, Over(manifest, fakes.keyValues, fakes.cipher)); got["MARK"] != "pr-7-only" {
 		t.Errorf("resolved MARK=%q, want the preview environment's own value to shadow the tier-wide one", got["MARK"])
 	}
 }
@@ -119,7 +119,7 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
 
-	values := Over(manifestOf("DATABASE_URL"), fakes.records, fakes.cipher)
+	values := Over(manifestOf("DATABASE_URL"), fakes.keyValues, fakes.cipher)
 	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v, want a cell nothing is stored for to resolve to nothing rather than fail", err)
 	}
@@ -139,7 +139,7 @@ func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 
 	manifest := manifestOf()
 	manifest.Bindings = []live.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
-	got := resolved(t, Over(manifest, fakes.records, fakes.cipher))
+	got := resolved(t, Over(manifest, fakes.keyValues, fakes.cipher))
 
 	record := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal([]byte(got["OCEL_RESOURCE_POSTGRES_main"]), record); err != nil {
@@ -179,7 +179,7 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	t.Parallel()
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
-	seeded := stores{records: ports.Records{Clients: clients}, cipher: ports.Cipher{Clients: clients}}
+	seeded := stores{keyValues: ports.KeyValues{Clients: clients}, cipher: ports.Cipher{Clients: clients}}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	seeded.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 

@@ -3,19 +3,19 @@ package envvars
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 type EnvironmentReader struct {
-	Records     records.Store
+	KeyValues   keyvalue.Store
 	Cipher      seal.Cipher
 	Scope       Scope
 	Environment string
 }
 
 func (r EnvironmentReader) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
-	store := Store{Records: r.Records, Cipher: r.Cipher}
+	store := Store{KeyValues: r.KeyValues, Cipher: r.Cipher}
 	wanted := make([]Coordinate, 0, len(cells)*2)
 	for _, at := range cells {
 		for _, environment := range shadowing(r.Environment) {
@@ -46,6 +46,6 @@ func (r EnvironmentReader) Values(ctx context.Context, cells []Cell) (map[string
 }
 
 func (r EnvironmentReader) Bindings(ctx context.Context, names []string) ([]StoredBinding, error) {
-	store := Store{Records: r.Records, Cipher: r.Cipher}
+	store := Store{KeyValues: r.KeyValues, Cipher: r.Cipher}
 	return store.ResolveBindings(ctx, r.Scope, r.Environment, names)
 }

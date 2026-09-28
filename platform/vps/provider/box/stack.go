@@ -28,7 +28,7 @@ var _ edge.EdgeStack = (*stack)(nil)
 func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
-	return ledger.New(s.e.records, s.state.Tier, s.state.Slug)
+	return ledger.New(s.e.keyValues, s.state.Tier, s.state.Slug)
 }
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }

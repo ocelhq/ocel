@@ -42,7 +42,7 @@ type Spec struct {
 }
 
 func Serve(spec Spec) error {
-	if spec.EnvVars.Records == nil {
+	if spec.EnvVars.KeyValues == nil {
 		return errors.New("connectorserver: Spec.EnvVars.Records is required")
 	}
 	if spec.EnvVars.Cipher == nil {

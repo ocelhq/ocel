@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -55,8 +55,8 @@ func ServedBindingTypes(hooks Hooks) []provider.BindingType {
 	return served
 }
 
-func NewHookStacks(store records.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
-	return &hookStacks{records: store, artifacts: artifacts, hooks: hooks}
+func NewHookStacks(store keyvalue.Store, artifacts provider.ArtifactStore, hooks Hooks) provider.Stacks {
+	return &hookStacks{keyValues: store, artifacts: artifacts, hooks: hooks}
 }
 
 type provisionFunc func(ctx context.Context, in ProvisionRequest, progress progress.Progress) (provider.Binding, error)
@@ -72,7 +72,7 @@ var primitives = []primitive{
 }
 
 type hookStacks struct {
-	records   records.Store
+	keyValues keyvalue.Store
 	artifacts provider.ArtifactStore
 	hooks     Hooks
 }
@@ -360,7 +360,7 @@ func (f *hookStacks) remove(ctx context.Context, ref provider.StackRef, binding 
 }
 
 func (f *hookStacks) recorded(ctx context.Context, ref provider.StackRef) (stackrecords.Stack, error) {
-	recorded, _, err := stackrecords.Read(ctx, f.records, ref.Tier, ref.Project, ref.Name)
+	recorded, _, err := stackrecords.Read(ctx, f.keyValues, ref.Tier, ref.Project, ref.Name)
 	return recorded, err
 }
 

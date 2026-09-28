@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
@@ -32,7 +32,7 @@ type Provider struct {
 
 	journal        *Journal
 	options        Options
-	records        *Records
+	keyValues      *KeyValues
 	artifacts      provider.ArtifactStore
 	images         *Images
 	cipher         *Cipher
@@ -55,14 +55,14 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 
 func NewProvider(options Options) *Provider {
 	journal := &Journal{}
-	store := NewRecords()
+	store := NewKeyValues()
 	store.journal = journal
 	artifacts := NewArtifacts()
 	artifacts.journal = journal
 	p := &Provider{
 		journal:   journal,
 		options:   options,
-		records:   store,
+		keyValues: store,
 		artifacts: artifacts,
 		images:    NewImages(),
 		cipher:    NewCipher(),
@@ -118,7 +118,7 @@ func (p *Provider) Stacks() provider.Stacks {
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return p.artifacts }
 
-func (p *Provider) Records() records.Store { return p.records }
+func (p *Provider) KeyValues() keyvalue.Store { return p.keyValues }
 
 func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 

@@ -112,7 +112,7 @@ func run(addr, region, config, keyParameter string) error {
 
 func envVars(cfg aws.Config, bootstraps *deployments) envvarsserver.Backend {
 	return envvarsserver.Backend{
-		Records:       awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
+		KeyValues:     awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
 		Cipher:        awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: bootstraps},
 		ProveIdentity: awsports.CallerIdentity{Config: cfg}.Prove,
 	}

@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -23,13 +23,13 @@ func fronting(t *testing.T) (*Edge, *world) {
 	t.Helper()
 	w := newWorld()
 	return New(Deps{
-		Records: fake.NewRecords(),
-		Stacks:  w,
-		Routes:  w,
-		Entries: w,
-		Pins:    w,
-		Project: "acme-prod",
-		Region:  "europe-west1",
+		KeyValues: fake.NewKeyValues(),
+		Stacks:    w,
+		Routes:    w,
+		Entries:   w,
+		Pins:      w,
+		Project:   "acme-prod",
+		Region:    "europe-west1",
 	}), w
 }
 
@@ -552,13 +552,13 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := stackrecords.EdgeStackRecord(environment.TierPreview, slug)
-	record, err := records.ReadOrEmpty(ctx, front.deps.Records, name)
+	name := stackrecords.EdgeStackKey(environment.TierPreview, slug)
+	record, err := keyvalue.ReadOrEmpty(ctx, front.deps.KeyValues, name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record.Bytes = encoded
-	if _, err := front.deps.Records.Write(ctx, record); err != nil {
+	record.Value = encoded
+	if _, err := front.deps.KeyValues.Write(ctx, record); err != nil {
 		t.Fatal(err)
 	}
 }

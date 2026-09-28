@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -20,7 +21,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -57,7 +57,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	store := edgeStateStore{records: vendor.Records(), name: stackrecords.EdgeStackRecord(tier, req.GetSlug())}
+	store := edgeStateStore{keyValues: vendor.KeyValues(), name: stackrecords.EdgeStackKey(tier, req.GetSlug())}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 			return nil, err
 		}
 	}
-	entries, err := stackrecords.List(ctx, vendor.Records(), tier, req.GetSlug())
+	entries, err := stackrecords.List(ctx, vendor.KeyValues(), tier, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +310,7 @@ func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, pr
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
-	return stackrecords.Forget(ctx, r.provider.Records(), r.tier, r.slug, stack)
+	return stackrecords.Forget(ctx, r.provider.KeyValues(), r.tier, r.slug, stack)
 }
 
 func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Progress) error {
@@ -344,7 +344,7 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, certificates [
 
 func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Progress) error {
 	progress.Say(fmt.Sprintf("Removing the stored variable values of %s in %s", r.slug, r.tier))
-	store := envvars.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
+	store := envvars.Store{KeyValues: r.provider.KeyValues(), Cipher: r.provider.Cipher()}
 	if err := envsource.ForgetProject(ctx, store, r.tier, r.slug); err != nil {
 		return fmt.Errorf("forget %s's env source: %w", r.slug, err)
 	}
@@ -378,7 +378,7 @@ func (r *projectRemoval) environments() []string {
 }
 
 func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress progress.Progress) error {
-	remaining, err := stackrecords.List(ctx, r.provider.Records(), r.tier, r.slug)
+	remaining, err := stackrecords.List(ctx, r.provider.KeyValues(), r.tier, r.slug)
 	if err != nil {
 		return err
 	}
@@ -386,8 +386,8 @@ func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress prog
 		return nil
 	}
 	progress.Say(fmt.Sprintf("Forgetting %s in %s: nothing of it is left", r.slug, r.tier))
-	if err := records.Forget(ctx, r.provider.Records(), stackrecords.EdgeStackRecord(r.tier, r.slug)); err != nil {
+	if err := keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.EdgeStackKey(r.tier, r.slug)); err != nil {
 		return err
 	}
-	return records.Forget(ctx, r.provider.Records(), stackrecords.ProjectRecord(r.tier, r.slug))
+	return keyvalue.Forget(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.tier, r.slug))
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -16,16 +16,16 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 	vm.purges(t)
 	bootstrapped(t, vm, environment.TierProduction)
 
-	store := vm.deploying(t).Records()
-	name := stackrecords.ProjectRecord(environment.TierProduction, "records-induction")
+	store := vm.deploying(t).KeyValues()
+	name := stackrecords.ProjectKey(environment.TierProduction, "records-induction")
 	ctx := context.Background()
 
-	record, err := records.ReadOrEmpty(ctx, store, name)
+	record, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		t.Fatalf("read %s as %s = %v, want the tier a bootstrap wrote as root readable by the login every deploy runs as: the whole deploy path reads before it writes, so a tier this login cannot open is a box nothing can deploy to",
 			name, deployLogin, err)
 	}
-	record.Bytes = []byte(`{}`)
+	record.Value = []byte(`{}`)
 	if _, err := store.Write(ctx, record); err != nil {
 		t.Fatalf("write %s as %s = %v, want the record tier a bootstrap wrote as root writable by the login every deploy runs as", name, deployLogin, err)
 	}
@@ -33,8 +33,8 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 	if err != nil {
 		t.Fatalf("read back %s as %s = %v", name, deployLogin, err)
 	}
-	if string(read.Bytes) != `{}` {
-		t.Errorf("%s reads %q after %s wrote it", name, read.Bytes, deployLogin)
+	if string(read.Value) != `{}` {
+		t.Errorf("%s reads %q after %s wrote it", name, read.Value, deployLogin)
 	}
 }
 

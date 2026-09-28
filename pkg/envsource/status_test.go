@@ -10,65 +10,70 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 )
 
+type listing struct {
+	in    keyvalue.Partition
+	under []string
+}
+
 type watchedRecords struct {
-	records.Store
+	keyvalue.Store
 
-	mu               sync.Mutex
-	listed           []records.Name
-	staleUnder       records.Name
-	failUnder        records.Name
-	failRemovesUnder records.Name
+	mu            sync.Mutex
+	listed        []listing
+	staleIn       string
+	failIn        string
+	failRemovesIn string
 }
 
-func (w *watchedRecords) List(ctx context.Context, under records.Name) ([]records.Record, error) {
+func (w *watchedRecords) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
 	w.mu.Lock()
-	w.listed = append(w.listed, under)
+	w.listed = append(w.listed, listing{in: in, under: under})
 	w.mu.Unlock()
-	return w.Store.List(ctx, under)
+	return w.Store.List(ctx, in, under...)
 }
 
-func (w *watchedRecords) Read(ctx context.Context, name records.Name) (records.Record, error) {
-	if _, under := name.Under(w.failUnder); w.failUnder != nil && under {
-		return records.Record{}, errors.New("the table is unreachable")
+func (w *watchedRecords) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	if w.failIn != "" && key.Partition.Root == w.failIn {
+		return keyvalue.Entry{}, errors.New("the table is unreachable")
 	}
-	return w.Store.Read(ctx, name)
+	return w.Store.Read(ctx, key)
 }
 
-func (w *watchedRecords) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	if _, under := record.Name.Under(w.staleUnder); w.staleUnder != nil && under {
-		return "", records.ErrStale
+func (w *watchedRecords) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+	if w.staleIn != "" && record.Key.Partition.Root == w.staleIn {
+		return "", keyvalue.ErrStale
 	}
 	return w.Store.Write(ctx, record)
 }
 
-func (w *watchedRecords) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
+func (w *watchedRecords) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
 	w.mu.Lock()
-	failing := w.failRemovesUnder
+	failing := w.failRemovesIn
 	w.mu.Unlock()
-	if _, under := name.Under(failing); failing != nil && under {
+	if failing != "" && key.Partition.Root == failing {
 		return errors.New("the table is unreachable")
 	}
-	return w.Store.Remove(ctx, name, expected)
+	return w.Store.Remove(ctx, key, expected)
 }
 
 func (w *watchedRecords) removeAgain() {
 	w.mu.Lock()
-	w.failRemovesUnder = nil
+	w.failRemovesIn = ""
 	w.mu.Unlock()
 }
 
-func (w *watchedRecords) lists() []records.Name {
+func (w *watchedRecords) lists() []listing {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return slices.Clone(w.listed)
 }
 
-func statusesIn(t *testing.T, store envvars.Store) []records.Record {
+func statusesIn(t *testing.T, store envvars.Store) []keyvalue.Entry {
 	t.Helper()
-	found, err := store.Records.List(context.Background(), records.Name{records.RootEnvSourceStatus, string(environment.TierProduction)})
+	found, err := store.KeyValues.List(context.Background(), keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootEnvSourceStatus})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +128,7 @@ func TestRegisteringAnotherEnvSourceForgetsTheStatusOfTheOneBefore(t *testing.T)
 
 	register(t, store, infisicalRegistration("shop", elsewhere.URL, cloudIdentity, ""))
 	left := statusesIn(t, store)
-	if len(left) != 1 || !slices.Equal(left[0].Name[3:], records.Name{"projects", "shop"}) {
+	if len(left) != 1 || !slices.Equal(left[0].Key.Path[1:], []string{"projects", "shop"}) {
 		t.Fatalf("status records = %v, want only shop's place under the env source it registered now", left)
 	}
 }
@@ -160,8 +165,8 @@ func TestAScheduledSyncMovesAProjectWhoseCredentialMovedToItsNewStatus(t *testin
 func TestForgettingAProjectReadsNoOtherProjectsRegistration(t *testing.T) {
 	t.Parallel()
 	store, _ := storeFixture()
-	watched := &watchedRecords{Store: store.Records}
-	store.Records = watched
+	watched := &watchedRecords{Store: store.KeyValues}
+	store.KeyValues = watched
 	for _, project := range []string{"shop", "admin", "blog"} {
 		register(t, store, infisicalRegistration(project, "https://infisical.example.com", cloudIdentity, ""))
 	}
@@ -170,8 +175,8 @@ func TestForgettingAProjectReadsNoOtherProjectsRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, under := range watched.lists() {
-		if len(under) <= 2 {
-			t.Errorf("ForgetProject() listed everything under %s, want it to reach only what names shop or its status", under)
+		if len(under.in.Path) == 0 && len(under.under) == 0 {
+			t.Errorf("ForgetProject() listed everything in %s, want it to reach only what names shop or its status", under.in)
 		}
 	}
 }
@@ -180,7 +185,7 @@ func TestADedupeKeyWhoseCredentialCannotBeReadIsAnError(t *testing.T) {
 	t.Parallel()
 	store, scope := storeFixture()
 	setCredentials(t, store, "shop", "client-id", "client-secret")
-	store.Records = &watchedRecords{Store: store.Records, failUnder: records.Name{records.RootValues}}
+	store.KeyValues = &watchedRecords{Store: store.KeyValues, failIn: keyvalue.RootValues}
 	descriptor := infisicalRegistration("shop", "https://infisical.example.com", universal, "").Descriptor
 	if key, err := envsource.DedupeKey(context.Background(), store, scope, descriptor); err == nil {
 		t.Fatalf("DedupeKey() over an unreadable store = %q, want the failure rather than a key naming the credential unset", key)
@@ -216,8 +221,8 @@ func TestForgettingAProjectAgainAfterItFailedPartWayLeavesNoStatusBehind(t *test
 	if _, err := sync.CopyProject(ctx, registration); err != nil {
 		t.Fatal(err)
 	}
-	watched := &watchedRecords{Store: store.Records, failRemovesUnder: records.Name{records.RootEnvSourceStatus}}
-	store.Records = watched
+	watched := &watchedRecords{Store: store.KeyValues, failRemovesIn: keyvalue.RootEnvSourceStatus}
+	store.KeyValues = watched
 
 	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err == nil {
 		t.Fatal("ForgetProject() whose status could not be removed = nil, want the failure")
@@ -237,7 +242,7 @@ func TestAStatusRewrittenUnderEveryAttemptToRecordItIsAnError(t *testing.T) {
 	fake.put("/", fakeSecret{id: "s1", key: "K", value: "v", version: 1})
 	registration := infisicalRegistration("shop", host, cloudIdentity, "")
 	register(t, store, registration)
-	sync.Store.Records = &watchedRecords{Store: store.Records, staleUnder: records.Name{records.RootEnvSourceStatus}}
+	sync.Store.KeyValues = &watchedRecords{Store: store.KeyValues, staleIn: keyvalue.RootEnvSourceStatus}
 
 	if _, err := sync.CopyProject(context.Background(), registration); err == nil {
 		t.Fatal("CopyProject() whose status was rewritten under every attempt = nil, want the lost status reported")

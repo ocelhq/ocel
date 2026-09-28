@@ -27,7 +27,7 @@ func infisicalRegistration(project, host string, auth envsource.InfisicalAuth, f
 func TestARegistrationIsReadBackPerProjectWithItsFoldersSortedOnce(t *testing.T) {
 	t.Parallel()
 	store, _ := storeFixture()
-	records := store.Records
+	records := store.KeyValues
 	ctx := context.Background()
 	for _, registration := range []envsource.Registration{
 		infisicalRegistration("shop", "https://infisical.example.com", universal, "/web", "", "/web"),
@@ -85,7 +85,7 @@ func TestRestoringARegistrationLeavesOneAnotherDeployRegisteredSince(t *testing.
 	if err := envsource.RestoreRegistration(ctx, store, tier, failed, &working); err != nil {
 		t.Fatal(err)
 	}
-	current, _, err := envsource.Registered(ctx, store.Records, tier, "shop")
+	current, _, err := envsource.Registered(ctx, store.KeyValues, tier, "shop")
 	if err != nil || current.Descriptor.Infisical.Host != "https://since.example.com" {
 		t.Fatalf("Registered() = %+v, %v, want the registration made since the failed one left in place", current, err)
 	}

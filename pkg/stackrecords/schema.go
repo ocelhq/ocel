@@ -2,22 +2,22 @@ package stackrecords
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 const schemaAttempts = 8
 
-func EnsureSchema(ctx context.Context, store records.Store, tier environment.Tier) error {
+func EnsureSchema(ctx context.Context, store keyvalue.Store, tier environment.Tier) error {
 	for range schemaAttempts {
-		recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(tier))
+		recorded, err := keyvalue.ReadOrEmpty(ctx, store, SchemaKey(tier))
 		if err != nil {
 			return fmt.Errorf("read the record schema: %w", err)
 		}
@@ -37,9 +37,11 @@ func EnsureSchema(ctx context.Context, store records.Store, tier environment.Tie
 				"this account's records are at schema %d and this build reads schema %d: an older ocel wrote them under a layout this build does not read, and there is no migration between the two. Remove what that ocel deployed with the ocel that deployed it, then bootstrap this account afresh",
 				written, SchemaVersion)
 		}
-		recorded.Bytes = []byte(strconv.Itoa(SchemaVersion))
+		if recorded.Value, err = json.Marshal(SchemaVersion); err != nil {
+			return fmt.Errorf("record the record schema: %w", err)
+		}
 		if _, err := store.Write(ctx, recorded); err != nil {
-			if errors.Is(err, records.ErrStale) {
+			if errors.Is(err, keyvalue.ErrStale) {
 				continue
 			}
 			return fmt.Errorf("record the record schema: %w", err)
@@ -49,21 +51,21 @@ func EnsureSchema(ctx context.Context, store records.Store, tier environment.Tie
 	return fmt.Errorf("record the record schema: it moved under %d attempts", schemaAttempts)
 }
 
-func WrittenSchema(ctx context.Context, store records.Store, tier environment.Tier) (int, error) {
-	recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(tier))
+func WrittenSchema(ctx context.Context, store keyvalue.Store, tier environment.Tier) (int, error) {
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, SchemaKey(tier))
 	if err != nil {
 		return 0, fmt.Errorf("read the record schema: %w", err)
 	}
 	return schemaVersionOf(recorded)
 }
 
-func schemaVersionOf(recorded records.Record) (int, error) {
-	if len(recorded.Bytes) == 0 {
+func schemaVersionOf(recorded keyvalue.Entry) (int, error) {
+	if len(recorded.Value) == 0 {
 		return 0, nil
 	}
-	written, err := strconv.Atoi(string(recorded.Bytes))
-	if err != nil {
-		return 0, fmt.Errorf("read the record schema: %q is not a schema version", recorded.Bytes)
+	var written int
+	if err := json.Unmarshal(recorded.Value, &written); err != nil {
+		return 0, fmt.Errorf("read the record schema: %s is not a schema version", recorded.Value)
 	}
 	return written, nil
 }

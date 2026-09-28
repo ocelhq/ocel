@@ -8,10 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -22,13 +22,13 @@ const Kind edge.Kind = "alb"
 const BaselineCost = "about $18 a month plus Premium-tier egress"
 
 type Deps struct {
-	Records records.Store
-	Stacks  Stacks
-	Routes  Routes
-	Entries Entries
-	Pins    pin.Pins
-	Project string
-	Region  string
+	KeyValues keyvalue.Store
+	Stacks    Stacks
+	Routes    Routes
+	Entries   Entries
+	Pins      pin.Pins
+	Project   string
+	Region    string
 }
 
 type Edge struct{ deps Deps }
@@ -192,8 +192,8 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 	return s, nil
 }
 
-func (e *Edge) claim(tier environment.Tier, hostname string) records.Name {
-	return append(stackrecords.EdgeStacksRecord(tier), string(Kind), "domains", hostname)
+func (e *Edge) claim(tier environment.Tier, hostname string) keyvalue.Key {
+	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "domains", hostname)
 }
 
 func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error) {
@@ -208,15 +208,15 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		return edge.PreviewEntryOwner, nil
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		record, err := records.ReadOrEmpty(ctx, e.deps.Records, e.claim(tier, hostname))
+		record, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.claim(tier, hostname))
 		if err != nil {
 			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
-		if len(record.Bytes) == 0 {
+		if len(record.Value) == 0 {
 			continue
 		}
 		var claimed claim
-		if err := json.Unmarshal(record.Bytes, &claimed); err != nil {
+		if err := json.Unmarshal(record.Value, &claimed); err != nil {
 			return "", fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
 		return claimed.Owner, nil
@@ -284,7 +284,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func ledgerFor(store records.Store, tier environment.Tier, slug string) *ledger.Ledger {
+func ledgerFor(store keyvalue.Store, tier environment.Tier, slug string) *ledger.Ledger {
 	return ledger.New(store, tier, slug)
 }
 

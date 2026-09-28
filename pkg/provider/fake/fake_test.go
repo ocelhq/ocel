@@ -3,120 +3,20 @@ package fake_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func TestRecordsWriteIsACompareAndSet(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	store := fake.NewRecords()
-	name := records.Name{"edgestacks", "production", "shop"}
-
-	first, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")})
-	if err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-
-	if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("two")}); !errors.Is(err, records.ErrStale) {
-		t.Fatalf("Write() over an existing record without its revision = %v, want ErrStale", err)
-	}
-
-	second, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("two"), Revision: first})
-	if err != nil {
-		t.Fatalf("Write() at the revision it was read at: error = %v", err)
-	}
-	if second == first {
-		t.Error("Write() reused the revision, so a lost update would go unnoticed")
-	}
-
-	if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("three"), Revision: first}); !errors.Is(err, records.ErrStale) {
-		t.Fatalf("Write() at a revision that moved = %v, want ErrStale", err)
-	}
-}
-
-func TestRecordsWriteRefusesARevisionForARecordThatIsNotThere(t *testing.T) {
-	t.Parallel()
-
-	store := fake.NewRecords()
-	_, err := store.Write(context.Background(), records.Record{
-		Name:     records.Name{"schema"},
-		Bytes:    []byte("{}"),
-		Revision: "1",
-	})
-	if !errors.Is(err, records.ErrStale) {
-		t.Fatalf("Write() = %v, want ErrStale", err)
-	}
-}
-
-func TestRecordsReadAndRemove(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	store := fake.NewRecords()
-	name := records.Name{"schema"}
-
-	if _, err := store.Read(ctx, name); !errors.Is(err, records.ErrNotFound) {
-		t.Fatalf("Read() of an absent record = %v, want ErrNotFound", err)
-	}
-
-	revision, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("{}")})
-	if err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	read, err := store.Read(ctx, name)
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
-	}
-	if string(read.Bytes) != "{}" || read.Revision != revision {
-		t.Errorf("Read() = %+v, want the bytes written at revision %q", read, revision)
-	}
-
-	if err := store.Remove(ctx, name, "not-the-revision"); !errors.Is(err, records.ErrStale) {
-		t.Fatalf("Remove() at the wrong revision = %v, want ErrStale", err)
-	}
-	if err := store.Remove(ctx, name, revision); err != nil {
-		t.Fatalf("Remove() error = %v", err)
-	}
-	if _, err := store.Read(ctx, name); !errors.Is(err, records.ErrNotFound) {
-		t.Fatalf("Read() after Remove = %v, want ErrNotFound", err)
-	}
-}
-
-func TestRecordsListIsScopedToThePrefix(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	store := fake.NewRecords()
-	for _, slug := range []string{"shop", "blog"} {
-		if _, err := store.Write(ctx, records.Record{Name: records.Name{"projects", slug}}); err != nil {
-			t.Fatalf("Write() error = %v", err)
-		}
-	}
-	if _, err := store.Write(ctx, records.Record{Name: records.Name{"schema"}}); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-
-	found, err := store.List(ctx, records.Name{"projects"})
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
-	}
-	if len(found) != 2 {
-		t.Fatalf("List() returned %d records, want the two under projects/", len(found))
-	}
-	if found[0].Name.String() != "projects/blog" || found[1].Name.String() != "projects/shop" {
-		t.Errorf("List() = %q, %q, want them sorted by name", found[0].Name, found[1].Name)
-	}
+func TestKeyValuesConformance(t *testing.T) {
+	conformance.RunStore(t, fake.NewKeyValues())
 }
 
 func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
@@ -159,7 +59,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	t.Parallel()
 
 	p := fake.NewProvider(fake.Options{})
-	stacks := resources.NewHookStacks(p.Records(), p.Artifacts(), p.ResourceHooks())
+	stacks := resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.ResourceHooks())
 	ref := provider.StackRef{
 		Project: "shop",
 		Tier:    environment.TierProduction,
@@ -199,7 +99,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a container app = %+v, want it to reach the Containers hooks alone", contained)
 	}
 
-	if err := stackrecords.Write(context.Background(), p.Records(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(context.Background(), p.KeyValues(), ref.Tier, ref.Project, ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		Containers: contained.Containers,
 	}); err != nil {

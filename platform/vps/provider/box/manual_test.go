@@ -55,7 +55,7 @@ func TestABindOnABoxOcelsOwnProxyFrontsAsksNothingOfYou(t *testing.T) {
 func TestAPreviewWildcardOnABoxYourProxyFrontsSaysWhatToRoute(t *testing.T) {
 	t.Parallel()
 
-	front := edgeOver(routedByHand(), fake.NewRecords())
+	front := edgeOver(routedByHand(), fake.NewKeyValues())
 	var warned []string
 	spec := previewSpec()
 	spec.Warn = func(line string) { warned = append(warned, line) }
@@ -70,7 +70,7 @@ func TestAPreviewWildcardOnABoxYourProxyFrontsSaysWhatToRoute(t *testing.T) {
 func TestACertificateYourProxyServesIsKeptAsYours(t *testing.T) {
 	t.Parallel()
 
-	front := edgeOver(routedByHand(), fake.NewRecords())
+	front := edgeOver(routedByHand(), fake.NewKeyValues())
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
 	})[0].Changes {

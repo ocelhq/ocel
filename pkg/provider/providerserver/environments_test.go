@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -28,7 +29,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -71,13 +71,13 @@ func TestAPreviewIdentityBesideProductionsIsTaken(t *testing.T) {
 func seedEnvironment(t *testing.T, vendor *fake.Provider, slug string, stacks ...naming.StackName) {
 	t.Helper()
 	for _, stack := range stacks {
-		name := stackrecords.StackRecord(environment.TierPreview, slug, stack)
-		recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
+		name := stackrecords.StackKey(environment.TierPreview, slug, stack)
+		recorded, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		recorded.Bytes = []byte("{}")
-		if _, err := vendor.Records().Write(context.Background(), recorded); err != nil {
+		recorded.Value = []byte("{}")
+		if _, err := vendor.KeyValues().Write(context.Background(), recorded); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,11 +123,11 @@ func TestListEnvironmentsReturnsWhatTheDeployRecordedAboutEachPreview(t *testing
 		naming.InfraStack("staging"),
 	)
 	before := time.Now().Unix()
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
 		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
 		environment.TierPreview, "shop", "staging", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -162,13 +162,13 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 	t.Parallel()
 	_, vendor := contractServed(t, "1.0.0")
 	ctx := context.Background()
-	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
 		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
 	first := readEnvironmentMeta(t, vendor, "shop", "pr-7")
 
-	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(ctx, vendor.KeyValues(),
 		environment.TierPreview, "shop", "pr-7", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -185,11 +185,11 @@ func TestRecordingAPreviewAgainKeepsWhenItWasCreatedAndWhatItIsCalled(t *testing
 
 func environmentRecordBytes(t *testing.T, vendor *fake.Provider, slug, env string) []byte {
 	t.Helper()
-	recorded, err := vendor.Records().Read(context.Background(), stackrecords.EnvironmentRecord(environment.TierPreview, slug, env))
+	recorded, err := vendor.KeyValues().Read(context.Background(), stackrecords.EnvironmentKey(environment.TierPreview, slug, env))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return recorded.Bytes
+	return recorded.Value
 }
 
 func readEnvironmentMeta(t *testing.T, vendor *fake.Provider, slug, env string) stackrecords.EnvironmentMeta {
@@ -207,7 +207,7 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	deployed(t, vendor, environment.TierPreview, "shop")
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
 
-	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
+	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
 		pair, err := envvarsserver.BindingPair(owner, binding)
@@ -264,7 +264,7 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1", "p2")
 	outlived := naming.AppStack("pr-7", "web", releaseOf(t, buildIdentity(7)))
 	seedEnvironment(t, vendor, "shop", outlived, naming.InfraStack("pr-7"))
-	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.Records(),
+	if err := stackrecords.RecordEnvironmentMeta(context.Background(), vendor.KeyValues(),
 		environment.TierPreview, "shop", "pr-7", "pr-123"); err != nil {
 		t.Fatal(err)
 	}
@@ -287,15 +287,15 @@ func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
 		t.Fatalf("RemoveEnvironment() = %q, want the pointer dropped", result.GetError())
 	}
 
-	history, err := ledger.New(vendor.Records(), environment.TierPreview, "shop").History(context.Background(), "pr-7")
+	history, err := ledger.New(vendor.KeyValues(), environment.TierPreview, "shop").History(context.Background(), "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(history) != 0 {
 		t.Errorf("pr-7 still has %v, want its promotions gone with the pointer", history)
 	}
-	name := stackrecords.EnvironmentRecord(environment.TierPreview, "shop", "pr-7")
-	if _, err := vendor.Records().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
+	name := stackrecords.EnvironmentKey(environment.TierPreview, "shop", "pr-7")
+	if _, err := vendor.KeyValues().Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("reading %s after the removal = %v, want it forgotten with the environment it described", name, err)
 	}
 
@@ -380,7 +380,7 @@ func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, imag
 
 	release := releaseOf(t, buildIdentity(1))
 	name := naming.AppStack(pointer, app, release)
-	if err := stackrecords.Write(context.Background(), p.Records(), environment.TierPreview, slug, name, stackrecords.Stack{
+	if err := stackrecords.Write(context.Background(), p.KeyValues(), environment.TierPreview, slug, name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    release.String(),
@@ -425,7 +425,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	if want := []string{"web ghcr.io/acme/web:pr-7"}; !slices.Equal(swept.swept(), want) {
 		t.Errorf("the teardown reconciled %v, want %v: this preview's ledger names none of its releases any more, and the sweep is otherwise a deploy's final act — a box that is never deployed to again keeps this image forever", swept.swept(), want)
 	}
-	if _, found, err := stackrecords.Read(context.Background(), vendor.Records(),
+	if _, found, err := stackrecords.Read(context.Background(), vendor.KeyValues(),
 		environment.TierPreview, "shop", stack); err != nil || found {
 		t.Errorf("%s still exists after its preview came down (%v): a teardown that reads only what the ledger last named reports success over every container it left running", stack, err)
 	}
@@ -437,11 +437,11 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
 	stack := seedContainerStack(t, vendor, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
-	store, ok := vendor.Records().(*fake.Records)
+	store, ok := vendor.KeyValues().(*fake.KeyValues)
 	if !ok {
-		t.Fatalf("this test drives the record store's removal refusal and the provider has a %T", vendor.Records())
+		t.Fatalf("this test drives the record store's removal refusal and the provider has a %T", vendor.KeyValues())
 	}
-	store.RefuseRemoval(stackrecords.StackRecord(environment.TierPreview, "shop", stack),
+	store.RefuseRemoval(stackrecords.StackKey(environment.TierPreview, "shop", stack),
 		errors.New("the record store answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
@@ -499,7 +499,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftInPlace(t *testing.T) 
 		t.Fatalf("the second RemoveEnvironment() = %q", result.GetError())
 	}
 
-	if _, found, err := stackrecords.Read(context.Background(), vendor.Records(),
+	if _, found, err := stackrecords.Read(context.Background(), vendor.KeyValues(),
 		environment.TierPreview, "shop", stack); err != nil || found {
 		t.Errorf("%s still exists after a second teardown that reported success (%v): the first run emptied the ledger before it fell over, so a reclaim driven off the ledger's diff has nothing left to name and every container of this preview keeps running", stack, err)
 	}

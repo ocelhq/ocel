@@ -17,7 +17,7 @@ import (
 const fromInfisical = "infisical:p/prod"
 
 func storeFixture() (envvars.Store, envvars.Scope) {
-	return envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
+	return envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: fake.NewCipher()},
 		envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 }
 

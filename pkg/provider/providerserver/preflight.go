@@ -8,10 +8,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -144,7 +144,7 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier e
 	if err != nil {
 		return nil, err
 	}
-	ours, err := boundHere(ctx, p.Records(), tier, req.GetSlug())
+	ours, err := boundHere(ctx, p.KeyValues(), tier, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +171,11 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, tier e
 	return claims, nil
 }
 
-func boundHere(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]string, error) {
+func boundHere(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
-	state, err := (edgeStateStore{records: store, name: stackrecords.EdgeStackRecord(tier, slug)}).read(ctx)
+	state, err := (edgeStateStore{keyValues: store, name: stackrecords.EdgeStackKey(tier, slug)}).read(ctx)
 	if err != nil {
 		return nil, err
 	}

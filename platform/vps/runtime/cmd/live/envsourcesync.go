@@ -37,7 +37,7 @@ func envSourceSync(argv []string, errs io.Writer) int {
 	defer stop()
 	local := boxstore.LocalTransport{}
 	sync := &envsource.Sync{
-		Store: envvars.Store{Records: boxstore.NewRecords(local), Cipher: boxstore.NewCipher(local)},
+		Store: envvars.Store{KeyValues: boxstore.NewKeyValues(local), Cipher: boxstore.NewCipher(local)},
 		Tier:  environment.Tier(*tier),
 		Login: envsource.Login{Client: &http.Client{Timeout: envSourceRequestTimeout}},
 	}

@@ -139,7 +139,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	if len(provisioned.Containers) != 1 {
 		t.Fatalf("Provision(%s) started %v", pointer, provisioned.Containers)
 	}
-	if err := stackrecords.Write(ctx, p.Records(), environment.TierPreview, slug, spec.Ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, p.KeyValues(), environment.TierPreview, slug, spec.Ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),

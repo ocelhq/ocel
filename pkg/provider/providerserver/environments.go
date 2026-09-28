@@ -8,13 +8,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -52,7 +52,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 	if err != nil {
 		return nil, err
 	}
-	environments, err := stackrecords.PreviewEnvironments(ctx, p.Records(), req.GetSlug())
+	environments, err := stackrecords.PreviewEnvironments(ctx, p.KeyValues(), req.GetSlug())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -98,7 +98,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 			return err
 		}
-		if err := records.Forget(ctx, session.provider.Records(), stackrecords.EnvironmentRecord(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
+		if err := keyvalue.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(removed) {
@@ -109,7 +109,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 }
 
 func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, preview string) error {
-	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
+	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	scope := envvars.Scope{Project: slug, Tier: environment.TierPreview}
 	published, err := store.ListBindings(ctx, scope, preview)
 	if err != nil {

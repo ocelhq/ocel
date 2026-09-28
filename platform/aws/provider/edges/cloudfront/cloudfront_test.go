@@ -108,7 +108,7 @@ var fakeFront = awsports.ContainerFront{
 
 func recordFront(t *testing.T, w *world, tier environment.Tier) {
 	t.Helper()
-	records := awsports.Records{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
+	records := awsports.KeyValues{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
 	if err := awsports.WriteContainerFront(context.Background(), records, tier, fakeFront); err != nil {
 		t.Fatalf("WriteContainerFront: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestPromote(t *testing.T) {
 
 		steps := w.trail.taken()
 		wrote := indexOf(t, steps, "kvs.UpdateKeys")
-		recorded := indexOf(t, steps, "PutItem ledger#production/conformance\x00pointers#@production#")
+		recorded := indexOf(t, steps, "PutItem ledger#conformance\x00pointers#@production#")
 		if wrote > recorded {
 			t.Errorf("the ledger pointer moved before the store did (%v); a hostname must never point at a release the edge cannot serve", steps)
 		}
@@ -732,7 +732,7 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 
-	targets := w.invalidationTargets(ledger.Scope(environment.TierProduction, conformanceSlug))
+	targets := w.invalidationTargets(ledger.Partition(environment.TierProduction, conformanceSlug))
 	if targets == nil {
 		t.Fatalf("the ledger names no front for the tag invalidator to reach; it contains %v", slices.Sorted(maps.Keys(w.dynamo.items)))
 	}

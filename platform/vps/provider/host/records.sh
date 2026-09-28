@@ -57,13 +57,28 @@ belongs "$lock"
 exec 9>"$lock"
 flock -x 9
 
-fileof() { printf '%s/%s.rec' "$dir" "$1"; }
+fileof() { printf '%s/%s.json' "$dir" "$1"; }
+
+revof() {
+	line=$(head -n1 "$1")
+	rest=${line#\{\"revision\":\"}
+	[ "$rest" != "$line" ] || abort "$1 is not an entry ocel wrote"
+	rev=${rest%%\"*}
+	[ -n "$rev" ] || abort "$1 names no revision"
+	printf '%s' "$rev"
+}
+
+valueof() {
+	line=$(head -n1 "$1")
+	rest=${line#*\",\"value\":}
+	[ "$rest" != "$line" ] || abort "$1 is not an entry ocel wrote"
+	printf '%s' "${rest%\}}"
+}
 
 readrev() {
 	current=
 	[ -f "$1" ] || return 0
-	current=$(head -n1 "$1")
-	[ -n "$current" ] || abort "$1 names no revision"
+	current=$(revof "$1")
 }
 
 mint() {
@@ -75,16 +90,14 @@ mint() {
 }
 
 checked() {
-	case $1 in
-	*[!A-Za-z0-9+/=]*) abort "a record body is not base64" ;;
-	esac
+	[ -n "$1" ] || abort "an entry's value is empty"
 }
 
 stage() {
 	staged="$1.staged"
 	mkdir -p "$(dirname "$1")"
 	ours "$staged"
-	printf '%s\n%s\n' "$2" "$3" >"$staged"
+	printf '{"revision":"%s","value":%s}\n' "$2" "$3" >"$staged"
 	belongs "$staged"
 }
 
@@ -97,7 +110,9 @@ prune() {
 }
 
 emit() {
-	printf '%s\t%s\t%s\n' "$1" "$(head -n1 "$2")" "$(sed -n 2p "$2")"
+	rev=$(revof "$2")
+	value=$(valueof "$2")
+	printf '%s\t%s\t%s\n' "$1" "$rev" "$value"
 }
 
 case "$verb" in
@@ -106,7 +121,9 @@ read)
 	f=$(fileof "$1")
 	ours "$f"
 	[ -f "$f" ] || exit 3
-	printf '%s\t%s\n' "$(head -n1 "$f")" "$(sed -n 2p "$f")"
+	rev=$(revof "$f")
+	value=$(valueof "$f")
+	printf '%s\t%s\n' "$rev" "$value"
 	;;
 write)
 	[ $# -eq 2 ] || usage
@@ -114,7 +131,7 @@ write)
 	ours "$f"
 	readrev "$f"
 	[ "$current" = "$2" ] || exit 4
-	body=$(cat)
+	IFS= read -r body || abort "a write sent no value"
 	checked "$body"
 	mint
 	stage "$f" "$rev" "$body"
@@ -158,20 +175,27 @@ remove)
 	echo removed
 	;;
 list)
-	[ $# -le 1 ] || usage
-	under=$dir
-	if [ $# -eq 1 ] && [ -n "$1" ]; then
-		under="$dir/$1"
+	[ $# -ge 1 ] && [ $# -le 2 ] || usage
+	partition="$dir/$1"
+	ours "$partition"
+	under=$partition
+	if [ $# -eq 2 ]; then
+		under="$partition/$2"
 		ours "$under"
 	fi
-	[ -d "$under" ] || exit 0
 	found="$dir/.list"
 	ours "$found"
-	find "$under" -type f -name '*.rec' >"$found"
+	: >"$found"
 	belongs "$found"
+	if [ "$under" != "$partition" ] && [ -f "$under.json" ]; then
+		printf '%s\n' "$under.json" >>"$found"
+	fi
+	if [ -d "$under" ]; then
+		find "$under" -type f -name '*.json' >>"$found"
+	fi
 	while IFS= read -r f; do
-		name=${f#"$dir/"}
-		emit "${name%.rec}" "$f"
+		name=${f#"$partition/"}
+		emit "${name%.json}" "$f"
 	done <"$found"
 	rm -f "$found"
 	;;

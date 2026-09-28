@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -70,7 +70,7 @@ func gated(t *testing.T, writer provider.WrittenBy) (providerserver.Gate, *fake.
 	p := fake.NewProvider(fake.Options{Region: "nowhere"})
 	return providerserver.Gate{
 		Bootstrap: p.FakeBootstrap(),
-		Records:   p.Records(),
+		KeyValues: p.KeyValues(),
 		WrittenBy: writer,
 	}, p
 }
@@ -131,13 +131,13 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 		t.Error("Status().AutoHeal is off after the record said it is on")
 	}
 
-	recorded, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(environment.TierProduction))
+	recorded, err := vendor.KeyValues().Read(ctx, stackrecords.BootstrapKey(environment.TierProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
 	var settings stackrecords.BootstrapSettings
-	if err := json.Unmarshal(recorded.Bytes, &settings); err != nil || !settings.AutoHeal {
-		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Bytes, err)
+	if err := json.Unmarshal(recorded.Value, &settings); err != nil || !settings.AutoHeal {
+		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Value, err)
 	}
 }
 
@@ -440,7 +440,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := vendor.Records().Write(ctx, records.Record{Name: stackrecords.ProjectRecord(environment.TierPreview, slug)}); err != nil {
+		if _, err := vendor.KeyValues().Write(ctx, keyvalue.Entry{Key: stackrecords.ProjectKey(environment.TierPreview, slug), Value: json.RawMessage("{}")}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -448,9 +448,9 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := vendor.Records().Write(ctx, records.Record{
-		Name:  stackrecords.WildcardRecord(environment.TierPreview),
-		Bytes: wildcard,
+	if _, err := vendor.KeyValues().Write(ctx, keyvalue.Entry{
+		Key:   stackrecords.WildcardKey(environment.TierPreview),
+		Value: wildcard,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -564,7 +564,7 @@ func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, p
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
-	return r.releaseContainerInfra(ctx, r.cfg.Records, ref, progress)
+	return r.releaseContainerInfra(ctx, r.cfg.KeyValues, ref, progress)
 }
 
 func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress progress.Progress) (provider.Plan, error) {

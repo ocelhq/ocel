@@ -16,10 +16,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -93,39 +93,40 @@ func containerInfraTags(tier environment.Tier) map[string]string {
 	}
 }
 
-func consumersRecord(tier environment.Tier) records.Name {
-	return append(stackrecords.StacksRecord(tier, ContainersSlug), consumersKey)
+func consumersPrefix(tier environment.Tier) keyvalue.Key {
+	return stackrecords.StacksPartition(tier, ContainersSlug).Key(consumersKey)
 }
 
-func consumerRecord(ref provider.StackRef) records.Name {
-	return append(consumersRecord(ref.Tier), ref.Project, ref.Name.String())
+func consumerAt(ref provider.StackRef) keyvalue.Key {
+	prefix := consumersPrefix(ref.Tier)
+	return prefix.Partition.Key(append(prefix.Path, ref.Project, ref.Name.String())...)
 }
 
-func leaseRecord(tier environment.Tier) records.Name {
-	return append(stackrecords.StacksRecord(tier, ContainersSlug), leaseKey)
+func leaseAt(tier environment.Tier) keyvalue.Key {
+	return stackrecords.StacksPartition(tier, ContainersSlug).Key(leaseKey)
 }
 
 type lease struct {
 	Destroying bool `json:"destroying,omitempty"`
 }
 
-func leaseOf(record records.Record) (lease, error) {
+func leaseOf(record keyvalue.Entry) (lease, error) {
 	var state lease
-	if len(record.Bytes) == 0 {
+	if len(record.Value) == 0 {
 		return state, nil
 	}
-	if err := json.Unmarshal(record.Bytes, &state); err != nil {
-		return lease{}, fmt.Errorf("read the container infrastructure lease %s: %w", record.Name, err)
+	if err := json.Unmarshal(record.Value, &state); err != nil {
+		return lease{}, fmt.Errorf("read the container infrastructure lease %s: %w", record.Key, err)
 	}
 	return state, nil
 }
 
-func writeLease(ctx context.Context, store records.Store, record records.Record, state lease) error {
+func writeLease(ctx context.Context, store keyvalue.Store, record keyvalue.Entry, state lease) error {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode the container infrastructure lease: %w", err)
 	}
-	record.Bytes = encoded
+	record.Value = encoded
 	_, err = store.Write(ctx, record)
 	return err
 }
@@ -139,7 +140,7 @@ func (r *Stacks) readContainerInfra(ctx context.Context, tier environment.Tier) 
 	if err != nil {
 		return containerInfra{}, false, err
 	}
-	_, present, err := stackrecords.Read(ctx, owner.cfg.Records, tier, ContainersSlug, containerInfraRef(tier).Name)
+	_, present, err := stackrecords.Read(ctx, owner.cfg.KeyValues, tier, ContainersSlug, containerInfraRef(tier).Name)
 	if err != nil || !present {
 		return containerInfra{}, false, err
 	}
@@ -167,7 +168,7 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		return containerInfra{}, err
 	}
 	if present {
-		if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, tier, infra.front()); err != nil {
+		if err := awsports.WriteContainerFront(ctx, owner.cfg.KeyValues, tier, infra.front()); err != nil {
 			return containerInfra{}, err
 		}
 		return infra, r.claimContainerInfra(ctx, ref)
@@ -186,7 +187,7 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 		Tags:        containerInfraTags(tier),
 		VendorState: work,
 	}
-	if err := stackrecords.Write(ctx, owner.cfg.Records, tier, ContainersSlug, containerInfraRef(tier).Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, owner.cfg.KeyValues, tier, ContainersSlug, containerInfraRef(tier).Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: provider.WrittenByVersion(""),
 	}); err != nil {
@@ -199,7 +200,7 @@ func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef
 	if err != nil {
 		return containerInfra{}, err
 	}
-	if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, tier, decoded.front()); err != nil {
+	if err := awsports.WriteContainerFront(ctx, owner.cfg.KeyValues, tier, decoded.front()); err != nil {
 		return containerInfra{}, err
 	}
 	return decoded, r.claimContainerInfra(ctx, ref)
@@ -214,9 +215,9 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 	if err != nil {
 		return err
 	}
-	store := owner.cfg.Records
+	store := owner.cfg.KeyValues
 	for range leaseAttempts {
-		leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Tier))
+		leased, err := keyvalue.ReadOrEmpty(ctx, store, leaseAt(ref.Tier))
 		if err != nil {
 			return err
 		}
@@ -228,21 +229,21 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 			return errors.Join(
 				refusal.Refuse(refusal.CodeBusy,
 					"the shared container infrastructure for the %s tier is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will provision a fresh one", ref.Tier),
-				records.Forget(ctx, store, consumerRecord(ref)))
+				keyvalue.Forget(ctx, store, consumerAt(ref)))
 		}
-		record, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
+		record, err := keyvalue.ReadOrEmpty(ctx, store, consumerAt(ref))
 		if err != nil {
 			return err
 		}
-		record.Bytes = []byte("{}")
-		if _, err := store.Write(ctx, record); err != nil && !errors.Is(err, records.ErrStale) {
+		record.Value = []byte("{}")
+		if _, err := store.Write(ctx, record); err != nil && !errors.Is(err, keyvalue.ErrStale) {
 			return fmt.Errorf("record %s as a consumer of the shared container infrastructure: %w", ref.Name, err)
 		}
 		err = writeLease(ctx, store, leased, state)
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, records.ErrStale) {
+		if !errors.Is(err, keyvalue.ErrStale) {
 			return fmt.Errorf("claim the shared container infrastructure for %s: %w", ref.Name, err)
 		}
 	}
@@ -250,20 +251,20 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 		"the shared container infrastructure for the %s tier changed hands %d times while %s was claiming it; re-run this deploy", ref.Tier, leaseAttempts, ref.Name)
 }
 
-func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store, ref provider.StackRef, progress progress.Progress) error {
+func (r *Stacks) releaseContainerInfra(ctx context.Context, store keyvalue.Store, ref provider.StackRef, progress progress.Progress) error {
 	if store == nil {
 		return nil
 	}
 	r.containerInfraLock.Lock()
 	defer r.containerInfraLock.Unlock()
-	consumer, err := records.ReadOrEmpty(ctx, store, consumerRecord(ref))
+	consumer, err := keyvalue.ReadOrEmpty(ctx, store, consumerAt(ref))
 	if err != nil {
 		return err
 	}
-	if len(consumer.Bytes) == 0 {
+	if len(consumer.Value) == 0 {
 		return nil
 	}
-	leased, err := records.ReadOrEmpty(ctx, store, leaseRecord(ref.Tier))
+	leased, err := keyvalue.ReadOrEmpty(ctx, store, leaseAt(ref.Tier))
 	if err != nil {
 		return err
 	}
@@ -271,14 +272,15 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store,
 	if err != nil {
 		return err
 	}
-	if err := records.Forget(ctx, store, consumerRecord(ref)); err != nil {
+	if err := keyvalue.Forget(ctx, store, consumerAt(ref)); err != nil {
 		return err
 	}
 	owner, err := r.containerInfraFor(ctx, ref.Tier)
 	if err != nil {
 		return err
 	}
-	remaining, err := store.List(ctx, consumersRecord(ref.Tier))
+	consumers := consumersPrefix(ref.Tier)
+	remaining, err := store.List(ctx, consumers.Partition, consumers.Path...)
 	if err != nil {
 		return err
 	}
@@ -287,7 +289,7 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store,
 	}
 	state.Destroying = true
 	if err := writeLease(ctx, store, leased, state); err != nil {
-		if errors.Is(err, records.ErrStale) {
+		if errors.Is(err, keyvalue.ErrStale) {
 			return nil
 		}
 		return fmt.Errorf("mark the shared container infrastructure for the %s tier as going down: %w", ref.Tier, err)
@@ -302,10 +304,10 @@ func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store,
 	if err := stackrecords.Forget(ctx, store, ref.Tier, ContainersSlug, stack.Name); err != nil {
 		return err
 	}
-	if err := records.Forget(ctx, store, awsports.ContainerFrontRecord(ref.Tier)); err != nil {
+	if err := keyvalue.Forget(ctx, store, awsports.ContainerFrontKey(ref.Tier)); err != nil {
 		return err
 	}
-	return records.Forget(ctx, store, leaseRecord(ref.Tier))
+	return keyvalue.Forget(ctx, store, leaseAt(ref.Tier))
 }
 
 func (w *containerInfraWork) run(ctx *pulumi.Context) error {

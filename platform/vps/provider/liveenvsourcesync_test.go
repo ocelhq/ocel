@@ -111,7 +111,7 @@ func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithT
 	}
 
 	vm.startsFakeInfisical(t)
-	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
+	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	scope := envvars.Scope{Project: "shop", Tier: tier}
 	for key, value := range map[string]string{"INFISICAL_CLIENT_ID": "id", "INFISICAL_CLIENT_SECRET": "secret"} {
 		if _, err := store.Set(ctx, scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, value, nil); err != nil {

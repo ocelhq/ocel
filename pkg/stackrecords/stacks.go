@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Stack struct {
@@ -33,30 +33,30 @@ type NamedStack struct {
 	Stack
 }
 
-func Read(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) (Stack, bool, error) {
-	name := StackRecord(tier, slug, stack)
-	row, err := records.ReadOrEmpty(ctx, store, name)
+func Read(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) (Stack, bool, error) {
+	name := StackKey(tier, slug, stack)
+	row, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
-	if len(row.Bytes) == 0 {
+	if len(row.Value) == 0 {
 		return Stack{}, false, nil
 	}
 	var recorded Stack
-	if err := json.Unmarshal(row.Bytes, &recorded); err != nil {
+	if err := json.Unmarshal(row.Value, &recorded); err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
 	return recorded, true, nil
 }
 
-func Write(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName, recorded Stack) error {
-	name := StackRecord(tier, slug, stack)
-	row, err := records.ReadOrEmpty(ctx, store, name)
+func Write(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName, recorded Stack) error {
+	name := StackKey(tier, slug, stack)
+	row, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
 	recorded.UpdatedAt = time.Now().Unix()
-	if row.Bytes, err = json.Marshal(recorded); err != nil {
+	if row.Value, err = json.Marshal(recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	if _, err := store.Write(ctx, row); err != nil {
@@ -65,30 +65,25 @@ func Write(ctx context.Context, store records.Store, tier environment.Tier, slug
 	return nil
 }
 
-func Forget(ctx context.Context, store records.Store, tier environment.Tier, slug string, stack naming.StackName) error {
-	return records.Forget(ctx, store, StackRecord(tier, slug, stack))
+func Forget(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string, stack naming.StackName) error {
+	return keyvalue.Forget(ctx, store, StackKey(tier, slug, stack))
 }
 
-func List(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]NamedStack, error) {
-	under := StacksRecord(tier, slug)
-	recorded, err := store.List(ctx, under)
+func List(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]NamedStack, error) {
+	recorded, err := store.List(ctx, StacksPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}
 	entries := make([]NamedStack, 0, len(recorded))
 	for _, record := range recorded {
-		rest, named := record.Name.Under(under)
-		if !named {
-			continue
-		}
-		name, err := naming.ParseStackName(rest[0])
+		name, err := naming.ParseStackName(record.Key.Path[0])
 		if err != nil {
 			continue
 		}
 		entry := NamedStack{Name: name}
-		if len(record.Bytes) > 0 {
-			if err := json.Unmarshal(record.Bytes, &entry.Stack); err != nil {
-				return nil, fmt.Errorf("read %s: %w", record.Name, err)
+		if len(record.Value) > 0 {
+			if err := json.Unmarshal(record.Value, &entry.Stack); err != nil {
+				return nil, fmt.Errorf("read %s: %w", record.Key, err)
 			}
 		}
 		entries = append(entries, entry)

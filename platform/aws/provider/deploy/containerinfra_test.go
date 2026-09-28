@@ -134,7 +134,7 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
-	cfg.Records = fake.NewRecords()
+	cfg.KeyValues = fake.NewKeyValues()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
@@ -155,7 +155,7 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 	if len(ran) != 2 || ran[0] != containerInfraRef(environment.TierProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
 		t.Fatalf("the first container deploy ran %v, want the container infrastructure stack before the app stack", ran)
 	}
-	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, environment.TierProduction)
+	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.KeyValues, environment.TierProduction)
 	if err != nil || !recorded {
 		t.Fatalf("the front is recorded %v (%v), want the edge able to read which VPC origin reaches the tier's containers", recorded, err)
 	}
@@ -185,10 +185,10 @@ func TestTheFirstContainerDeployProvisionsTheContainerInfraAndTheLastTakesItDown
 	if len(destroyed) != 3 || destroyed[2] != containerInfraRef(environment.TierProduction).Name.String() {
 		t.Fatalf("destroying the last container stack tore down %v, want the shared container infrastructure to go with it: nothing idle-billing survives the last container", destroyed)
 	}
-	if _, present, err := stackrecords.Read(ctx, cfg.Records, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || present {
+	if _, present, err := stackrecords.Read(ctx, cfg.KeyValues, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || present {
 		t.Errorf("the shared container infrastructure is still recorded (present %v, err %v) after its last consumer left", present, err)
 	}
-	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, environment.TierProduction); err != nil || recorded {
+	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.KeyValues, environment.TierProduction); err != nil || recorded {
 		t.Errorf("the front is still recorded (%v, err %v) after the shared container infrastructure went; a later promote would declare an origin that no longer exists", recorded, err)
 	}
 }
@@ -197,7 +197,7 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
-	cfg.Records = fake.NewRecords()
+	cfg.KeyValues = fake.NewKeyValues()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
@@ -208,7 +208,7 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if _, err := stacks.Provision(ctx, spec, progress.DiscardProgress()); err == nil {
 		t.Fatal("Provision succeeded with no container output, so a deploy would record a container with no origin")
 	}
-	remaining, err := cfg.Records.List(ctx, consumersRecord(environment.TierProduction))
+	remaining, err := listConsumers(ctx, cfg.KeyValues)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,7 +32,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/pricing":           true,
 	"github.com/ocelhq/ocel/pkg/progress":          true,
 	"github.com/ocelhq/ocel/pkg/proto":             true,
-	"github.com/ocelhq/ocel/pkg/records":           true,
+	"github.com/ocelhq/ocel/pkg/keyvalue":          true,
 	"github.com/ocelhq/ocel/pkg/refusal":           true,
 	"github.com/ocelhq/ocel/pkg/runtime":           true,
 	"github.com/ocelhq/ocel/pkg/seal":              true,

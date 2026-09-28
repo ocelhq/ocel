@@ -361,12 +361,12 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	return published, nil
 }
 
-func (s *stack) records(c Clients) awsports.Records {
-	return awsports.Records{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
+func (s *stack) keyValues(c Clients) awsports.KeyValues {
+	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
 }
 
 func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.Promotion, app, identity string) (awsports.ContainerFront, error) {
-	front, found, err := awsports.ReadContainerFront(ctx, s.records(c), s.tier())
+	front, found, err := awsports.ReadContainerFront(ctx, s.keyValues(c), s.tier())
 	if err != nil {
 		return awsports.ContainerFront{}, err
 	}

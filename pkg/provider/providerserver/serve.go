@@ -115,7 +115,7 @@ func (s sessionBackend) Read() (envvarsserver.Backend, error) {
 	}
 	hooks := vendor.Hooks()
 	return envvarsserver.Backend{
-		Records:       vendor.Records(),
+		KeyValues:     vendor.KeyValues(),
 		Cipher:        vendor.Cipher(),
 		VerifyGrants:  hooks.VerifyGrants,
 		ProveIdentity: hooks.ProveIdentity,

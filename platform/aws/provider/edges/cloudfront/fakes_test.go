@@ -27,7 +27,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -92,13 +94,13 @@ func (w *world) clients() Clients {
 	}
 }
 
-func (w *world) invalidationTargets(scope string) []string {
-	body, _ := w.dynamo.items["ledger#"+scope+"\x00invalidation#"]["body"].(*ddbtypes.AttributeValueMemberB)
-	if body == nil {
+func (w *world) invalidationTargets(in keyvalue.Partition) []string {
+	value, _ := w.dynamo.items[awsports.PartitionKey(in)+"\x00invalidation#"]["value"].(*ddbtypes.AttributeValueMemberS)
+	if value == nil {
 		return nil
 	}
 	var targets []string
-	if err := json.Unmarshal(body.Value, &targets); err != nil {
+	if err := json.Unmarshal([]byte(value.Value), &targets); err != nil {
 		return nil
 	}
 	return targets

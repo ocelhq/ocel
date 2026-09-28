@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -262,8 +262,8 @@ func TestForgettingARecordOnAHostThatHasNoStoreIsAlreadyForgotten(t *testing.T) 
 	t.Parallel()
 
 	box := machine(nil)
-	name := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
-	if err := records.Forget(context.Background(), NewRecords(box.host()), name); err != nil {
+	name := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance}.Key(t.Name())
+	if err := keyvalue.Forget(context.Background(), NewKeyValues(box.host()), name); err != nil {
 		t.Fatalf("Forget() over a host a destroy has cleared = %v, want cleanup that does not need the store back", err)
 	}
 	for _, command := range box.commands() {

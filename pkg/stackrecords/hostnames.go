@@ -9,8 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type EdgeState struct {
@@ -169,43 +169,41 @@ func (s *EdgeState) Forget(hostname string) {
 	}
 }
 
-func ReadWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
-	name := WildcardRecord(environment.TierPreview)
-	record, err := records.ReadOrEmpty(ctx, store, name)
+func ReadWildcard(ctx context.Context, store keyvalue.Store) (Wildcard, error) {
+	name := WildcardKey(environment.TierPreview)
+	record, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	var wildcard Wildcard
-	if len(record.Bytes) == 0 {
+	if len(record.Value) == 0 {
 		return wildcard, nil
 	}
-	if err := json.Unmarshal(record.Bytes, &wildcard); err != nil {
+	if err := json.Unmarshal(record.Value, &wildcard); err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	return wildcard, nil
 }
 
-func ProjectsServedOnPreview(ctx context.Context, store records.Store, baseDomain string) ([]string, error) {
+func ProjectsServedOnPreview(ctx context.Context, store keyvalue.Store, baseDomain string) ([]string, error) {
 	if baseDomain == "" {
 		return nil, nil
 	}
-	under := EdgeStacksRecord(environment.TierPreview)
-	recorded, err := store.List(ctx, under)
+	recorded, err := store.List(ctx, EdgeStacksPartition(environment.TierPreview))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
 	}
 	var served []string
 	for _, record := range recorded {
-		rest, named := record.Name.Under(under)
-		if !named || len(record.Bytes) == 0 {
+		if len(record.Key.Path) != 1 || len(record.Value) == 0 {
 			continue
 		}
 		var state EdgeState
-		if err := json.Unmarshal(record.Bytes, &state); err != nil {
-			return nil, fmt.Errorf("read %s: %w", record.Name, err)
+		if err := json.Unmarshal(record.Value, &state); err != nil {
+			return nil, fmt.Errorf("read %s: %w", record.Key, err)
 		}
 		if state.Edge.ServedOnGlobalPreview(baseDomain) {
-			served = append(served, rest[0])
+			served = append(served, record.Key.Path[0])
 		}
 	}
 	slices.Sort(served)

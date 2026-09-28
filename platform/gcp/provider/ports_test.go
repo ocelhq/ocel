@@ -145,7 +145,7 @@ func TestNoPortIsNilForProviderserverToCallThrough(t *testing.T) {
 	for name, port := range map[string]any{
 		"Stacks":      p.Stacks(),
 		"Artifacts":   p.Artifacts(),
-		"Records":     p.Records(),
+		"Records":     p.KeyValues(),
 		"Cipher":      p.Cipher(),
 		"Credentials": p.Credentials(),
 		"Edges":       p.Edges(),

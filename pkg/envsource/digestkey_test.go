@@ -12,9 +12,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 )
+
+func digestKeyAt(tier environment.Tier) keyvalue.Key {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvSourceDigestKey}.Key("digestkey")
+}
 
 func unkeyedDigests(plaintext string) []string {
 	sum := sha256.Sum256([]byte(plaintext))
@@ -25,13 +29,20 @@ func unkeyedDigests(plaintext string) []string {
 func everyRecord(t *testing.T, store envvars.Store) []byte {
 	t.Helper()
 	var all []byte
-	for _, root := range []string{records.RootValues, records.RootEnvSources, records.RootEnvSourceStatus, records.RootEnvSourceDigestKey} {
-		listed, err := store.Records.List(context.Background(), records.Name{root})
+	var partitions []keyvalue.Partition
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		partitions = append(partitions, envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: tier}))
+		for _, root := range []string{keyvalue.RootEnvSources, keyvalue.RootEnvSourceStatus, keyvalue.RootEnvSourceDigestKey} {
+			partitions = append(partitions, keyvalue.Partition{Tier: tier, Root: root})
+		}
+	}
+	for _, in := range partitions {
+		listed, err := store.KeyValues.List(context.Background(), in)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, recorded := range listed {
-			all = append(all, recorded.Bytes...)
+			all = append(all, recorded.Value...)
 		}
 	}
 	return all
@@ -150,12 +161,12 @@ func TestADigestKeyThatWillNotOpenStopsTheCopyAndIsNeverReplaced(t *testing.T) {
 	if _, err := envsource.EnsureDigestKey(ctx, store, scope.Tier); err != nil {
 		t.Fatal(err)
 	}
-	sealedBefore, err := store.Records.Read(ctx, records.Name{records.RootEnvSourceDigestKey, string(scope.Tier)})
+	sealedBefore, err := store.KeyValues.Read(ctx, digestKeyAt(scope.Tier))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	resealed := envvars.Store{Records: store.Records, Cipher: fake.NewCipher()}
+	resealed := envvars.Store{KeyValues: store.KeyValues, Cipher: fake.NewCipher()}
 	if _, err := envsource.EnsureDigestKey(ctx, resealed, scope.Tier); err == nil {
 		t.Fatal("EnsureDigestKey() over a key sealed by another cipher succeeded, want the failure to open it")
 	}
@@ -168,7 +179,7 @@ func TestADigestKeyThatWillNotOpenStopsTheCopyAndIsNeverReplaced(t *testing.T) {
 	if _, err := store.Get(ctx, scope, tierWide("", "K"), false); !errors.Is(err, envvars.ErrNotFound) {
 		t.Fatalf("K = %v, want nothing copied", err)
 	}
-	sealedAfter, err := store.Records.Read(ctx, records.Name{records.RootEnvSourceDigestKey, string(scope.Tier)})
+	sealedAfter, err := store.KeyValues.Read(ctx, digestKeyAt(scope.Tier))
 	if err != nil || sealedAfter.Revision != sealedBefore.Revision {
 		t.Fatalf("the digest key record moved from %s to %s (%v), want it kept", sealedBefore.Revision, sealedAfter.Revision, err)
 	}
@@ -196,12 +207,12 @@ func TestTheDigestKeyIsBoundToEveryProjectInItsTierAtTheEnvSourceBinding(t *test
 		t.Fatal(err)
 	}
 	store := envvars.Store{
-		Records: fake.NewRecords(),
-		Cipher:  fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}),
+		KeyValues: fake.NewKeyValues(),
+		Cipher:    fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}),
 	}
-	if _, err := store.Records.Write(ctx, records.Record{
-		Name:  records.Name{records.RootEnvSourceDigestKey, string(environment.TierProduction)},
-		Bytes: []byte(`{"sealed":"9F/RJPgNa4porS/1Q8ItSL/KGK95oGpw8VmDf5tE0cWEbE3WkZMbSiX44Znd7nOg83GJcnPO7ZR86eqg"}`),
+	if _, err := store.KeyValues.Write(ctx, keyvalue.Entry{
+		Key:   digestKeyAt(environment.TierProduction),
+		Value: []byte(`{"sealed":"9F/RJPgNa4porS/1Q8ItSL/KGK95oGpw8VmDf5tE0cWEbE3WkZMbSiX44Znd7nOg83GJcnPO7ZR86eqg"}`),
 	}); err != nil {
 		t.Fatal(err)
 	}

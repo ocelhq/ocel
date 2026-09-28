@@ -28,7 +28,7 @@ func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, k
 
 func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 	t.Helper()
-	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
+	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: key}}, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s): %v", key, err)

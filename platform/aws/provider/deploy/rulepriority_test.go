@@ -41,7 +41,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	t.Parallel()
 
 	cfg, spec := containerStackSpec(t)
-	cfg.Records = fake.NewRecords()
+	cfg.KeyValues = fake.NewKeyValues()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
@@ -80,7 +80,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a claimed priority tore down %v, want nothing: the deploy recovers rather than abandons", torn)
 	}
-	if _, present, err := stackrecords.Read(context.Background(), cfg.Records, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || !present {
+	if _, present, err := stackrecords.Read(context.Background(), cfg.KeyValues, environment.TierProduction, ContainersSlug, containerInfraRef(environment.TierProduction).Name); err != nil || !present {
 		t.Errorf("the shared container infrastructure is not recorded (present %v, err %v) after the deploy that recovered", present, err)
 	}
 }

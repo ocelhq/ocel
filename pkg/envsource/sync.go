@@ -76,7 +76,7 @@ func (s *Sync) budget() time.Duration {
 func (s *Sync) CopyScheduled(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, s.budget())
 	defer cancel()
-	registrations, err := Registrations(ctx, s.Store.Records, s.Tier)
+	registrations, err := Registrations(ctx, s.Store.KeyValues, s.Tier)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 	due := make([]string, 0, len(keys))
 	attemptedAt := map[string]time.Time{}
 	for _, key := range keys {
-		status, _, err := readStatus(ctx, s.Store.Records, s.Tier, key)
+		status, _, err := readStatus(ctx, s.Store.KeyValues, s.Tier, key)
 		if err != nil {
 			failed = append(failed, err)
 			continue
@@ -174,7 +174,7 @@ func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, 
 	}
 	statusCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), statusWriteTimeout)
 	defer cancel()
-	err := writeStatus(statusCtx, s.Store.Records, s.Tier, key, func(status *Status) {
+	err := writeStatus(statusCtx, s.Store.KeyValues, s.Tier, key, func(status *Status) {
 		status.LastAttemptAt = attemptedAt
 		if failure == nil {
 			status.EnvSource = results[0].EnvSource
