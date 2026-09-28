@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -83,17 +82,12 @@ func (s *sharedStack) routerState() router.StackState {
 func pairApps(facts provider.Facts, front edge.Kind, apps []provider.AppEntry) (map[string]router.Kind, error) {
 	paired := make(map[string]router.Kind, len(apps))
 	for _, entry := range apps {
-		compute := entry.Compute()
-		if compute == "" {
-			compute = provider.ComputeServerless
-		}
-		kind, found := facts.PairedRouter(front, compute)
+		kind, found := facts.PairedRouter(front, entry.Compute())
 		if !found {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"app %s runs as %s compute, and the %q edge serves no %s app on this provider", entry.App, compute, front, compute)
+			continue
 		}
 		if kind != router.Kind(front) {
-			return nil, fmt.Errorf("this provider pairs the %q edge with another kind for %s apps, and a release is flipped only through the stack the edge keeps", front, compute)
+			return nil, fmt.Errorf("this provider pairs the %q edge with %q for %s apps, and a release is flipped only through the stack the edge keeps", front, kind, entry.Compute())
 		}
 		paired[entry.App] = kind
 	}
