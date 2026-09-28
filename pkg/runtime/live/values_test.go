@@ -126,7 +126,7 @@ func eventually(t *testing.T, why string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", why)
 }
 
-func TestLiveValues(t *testing.T) {
+func TestValuesAreFetchedAndPushedToNodeAsGenerations(t *testing.T) {
 	t.Run("start kicks the fetch off without waiting on it", func(t *testing.T) {
 		source := &scriptedSource{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
 		out := &sink{}
@@ -404,7 +404,7 @@ func TestAValueResolvedUnderNoDeclaredKeyIsTheRuntimesAloneAndReachesNoChild(t *
 	}
 }
 
-func TestMissing(t *testing.T) {
+func TestMissingNamesOnlyTheKeysTheStoreHadNoValueFor(t *testing.T) {
 	t.Run("names the keys the store had no value for", func(t *testing.T) {
 		l := New(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD", "SESSION_SECRET", "API_KEY"}, nil, nil)
 
@@ -429,7 +429,7 @@ func TestMissing(t *testing.T) {
 	})
 }
 
-func TestProject(t *testing.T) {
+func TestEachValueIsProjectedAsAFileInADirectoryNamedToTheChild(t *testing.T) {
 	t.Run("a key is read back through the directory as the bytes the store has", func(t *testing.T) {
 		const value = "hunter2\n\x00 not a line"
 		root := filepath.Join(t.TempDir(), "live")
@@ -572,7 +572,7 @@ func TestProject(t *testing.T) {
 	})
 }
 
-func TestReread(t *testing.T) {
+func TestARereadReachesTheStoreInsideTheBoundButNotInsideItsOwnFloor(t *testing.T) {
 	t.Run("reaches the store inside the staleness bound and hands back what it now has", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		source := resolves(
@@ -611,12 +611,10 @@ func TestReread(t *testing.T) {
 	})
 }
 
-func TestLiveStalenessBound(t *testing.T) {
-	t.Run("is sixty seconds", func(t *testing.T) {
-		if StalenessBound != 60*time.Second {
-			t.Errorf("StalenessBound = %s, want 60s", StalenessBound)
-		}
-	})
+func TestTheStalenessBoundIsSixtySeconds(t *testing.T) {
+	if StalenessBound != 60*time.Second {
+		t.Errorf("StalenessBound = %s, want 60s", StalenessBound)
+	}
 }
 
 type slowClock struct {
@@ -675,7 +673,7 @@ func TestKeepRespectsTheBoundWhenAFetchTakesTime(t *testing.T) {
 	})
 }
 
-func TestKeep(t *testing.T) {
+func TestKeepingValuesStopsWhenTheProcessItKeepsThemForIsDone(t *testing.T) {
 	t.Run("stops when the process it keeps values for is done", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		l := New(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD"}, nil, nil)
@@ -729,7 +727,7 @@ func decodeBinding(t *testing.T, raw string) *bindingsv1.Binding {
 	return binding
 }
 
-func TestBindingColdStart(t *testing.T) {
+func TestABindingsRecordIsCheckedForDriftAndDeliveredAtColdStart(t *testing.T) {
 	t.Run("a binding's value arrives at cold start as the record the app reads", func(t *testing.T) {
 		binding := postgresBinding()
 		source := resolves(map[string]string{

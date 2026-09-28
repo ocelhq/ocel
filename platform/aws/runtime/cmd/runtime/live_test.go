@@ -53,7 +53,7 @@ type resolvedSource map[string]string
 
 func (f resolvedSource) Fetch(context.Context) (map[string]string, error) { return f, nil }
 
-func TestLiveValuesReachNode(t *testing.T) {
+func TestValuesArePushedUnderTheMessageTypeNodeWaitsFor(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "frameworks", "node", "runtime", "src", "live-values.mts"))
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func neverReady(_ []string, budget time.Duration, _ func(io.Writer), abandon <-c
 	return nil, fmt.Errorf("node did not signal ready within %s", budget)
 }
 
-func TestBringUpNode(t *testing.T) {
+func TestNodeStartsBesideThePrefetchAndAFailedPrefetchIsReportedAsItself(t *testing.T) {
 	t.Run("the spawn runs beside the prefetch rather than behind it", func(t *testing.T) {
 		l := &stubValues{released: make(chan struct{}), pushed: map[string]string{"DB_PASSWORD": "hunter2"}}
 		out := &sink{}
@@ -232,7 +232,7 @@ func TestBringUpNode(t *testing.T) {
 	})
 }
 
-func TestChildEnv(t *testing.T) {
+func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T) {
 	t.Run("passes the live declaration beside the delivered class", func(t *testing.T) {
 		bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 		l := &stubValues{env: []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}}
