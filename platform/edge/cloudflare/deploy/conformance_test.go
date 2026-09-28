@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func TestCloudflareEdgeConformance(t *testing.T) {
+func TestTheCloudflareEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
 			t.Setenv(envAccountID, "acct")

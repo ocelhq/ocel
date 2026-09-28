@@ -18,7 +18,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func TestRegistryConformance(t *testing.T) {
+func TestTheEdgeRegistryOpensWhatEveryRegistryMust(t *testing.T) {
 	t.Parallel()
 
 	conformance.RunEdges(t, provider.Facts{Edges: SupportedEdges(), DefaultEdge: DefaultKind}, Registry{})

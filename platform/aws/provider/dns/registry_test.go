@@ -12,7 +12,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-func TestRegistryConformance(t *testing.T) {
+func TestTheDNSRegistryOpensWhatEveryRegistryMust(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
 	conformance.RunDNS(t, provider.Facts{DNSKinds: Kinds()}, Registry{})

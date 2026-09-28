@@ -54,7 +54,7 @@ func bootstrapped(t *testing.T, w *world) *cloudFront {
 	return e
 }
 
-func TestConformance(t *testing.T) {
+func TestTheCloudFrontEdgeBehavesAsEveryEdgeMust(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
 			return bootstrapped(t, newWorld()), testSpec()

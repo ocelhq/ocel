@@ -333,7 +333,7 @@ func fakeEdgeOf(kind edge.Kind) edge.Edge {
 	return codelessEdge{f}
 }
 
-func TestOriginFakeEdgeConformance(t *testing.T) {
+func TestTheOriginsFakeEdgesBehaveAsEveryEdgeMust(t *testing.T) {
 	for _, kind := range edges.SupportedEdges() {
 		t.Run(string(kind), func(t *testing.T) {
 			edgeconformance.Run(t, edgeconformance.Suite{
