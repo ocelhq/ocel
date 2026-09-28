@@ -107,7 +107,11 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 		return Metadata{}, ErrStaleVersion
 	}
 
-	sealed, err := s.Cipher.Seal(ctx, scope.Tier, cellAssociatedData(scope, at), []byte(plaintext))
+	bound, err := newCellAssociatedData(scope, at)
+	if err != nil {
+		return Metadata{}, err
+	}
+	sealed, err := s.Cipher.Seal(ctx, scope.Tier, bound, []byte(plaintext))
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -185,7 +189,11 @@ func (s Store) open(ctx context.Context, scope Scope, at Coordinate, cell stored
 	if err != nil {
 		return "", err
 	}
-	plaintext, err := s.Cipher.Open(ctx, from.Tier, cellAssociatedData(from, sourceAt), source.Sealed)
+	bound, err := newCellAssociatedData(from, sourceAt)
+	if err != nil {
+		return "", err
+	}
+	plaintext, err := s.Cipher.Open(ctx, from.Tier, bound, source.Sealed)
 	if err != nil {
 		return "", err
 	}
@@ -304,7 +312,11 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	plaintexts := make([]string, len(opening))
 	if err := forEachConcurrently(ctx, len(opening), func(ctx context.Context, slot int) error {
 		i := opening[slot]
-		plaintext, err := s.Cipher.Open(ctx, from[i].Tier, cellAssociatedData(from[i], sourceCells[i]), sealed[i].Sealed)
+		bound, err := newCellAssociatedData(from[i], sourceCells[i])
+		if err != nil {
+			return err
+		}
+		plaintext, err := s.Cipher.Open(ctx, from[i].Tier, bound, sealed[i].Sealed)
 		if err != nil {
 			return err
 		}

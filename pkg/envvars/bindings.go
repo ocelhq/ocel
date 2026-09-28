@@ -171,7 +171,11 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 }
 
 func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair BindingWrite) (int64, error) {
-	sealed, err := s.Cipher.Seal(ctx, scope.Tier, bindingAssociatedData(scope, environment, name), pair.Value)
+	bound, err := newBindingAssociatedData(scope, environment, name)
+	if err != nil {
+		return 0, err
+	}
+	sealed, err := s.Cipher.Seal(ctx, scope.Tier, bound, pair.Value)
 	if err != nil {
 		return 0, err
 	}
@@ -344,7 +348,11 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 			continue
 		}
 		if err := forEachConcurrently(ctx, len(names), func(ctx context.Context, i int) error {
-			plaintext, err := s.Cipher.Open(ctx, scope.Tier, bindingAssociatedData(scope, out[i].Environment, names[i]), sealed[i])
+			bound, err := newBindingAssociatedData(scope, out[i].Environment, names[i])
+			if err != nil {
+				return err
+			}
+			plaintext, err := s.Cipher.Open(ctx, scope.Tier, bound, sealed[i])
 			if err != nil {
 				return fmt.Errorf("open binding %s's value: %w", names[i], err)
 			}
