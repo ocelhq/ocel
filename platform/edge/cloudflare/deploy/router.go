@@ -18,12 +18,13 @@ func (r Router) Kind() router.Kind { return router.Kind(Kind) }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
-		FlipBound:           router.FlipBound{Typical: recordTTL},
-		CachesRecords:       true,
-		SignsOriginForwards: true,
-		ReachesFunctions:    true,
-		Dispatches:          true,
-		AnswersHostnames:    true,
+		FlipBound:                   router.FlipBound{Typical: recordTTL},
+		CachesRecords:               true,
+		SignsOriginForwards:         true,
+		ReachesFunctions:            true,
+		Dispatches:                  true,
+		AnswersHostnames:            true,
+		StopsServingRemovedPointers: true,
 	}
 }
 

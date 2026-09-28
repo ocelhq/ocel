@@ -25,12 +25,11 @@ type Fixture struct {
 }
 
 type Suite struct {
-	New                 func(t *testing.T) Fixture
-	Previews            func(t *testing.T) Fixture
-	Pointer             string
-	Hostname            string
-	Record              func(app, build string) router.DeploymentRecord
-	TornDownWithCompute bool
+	New      func(t *testing.T) Fixture
+	Previews func(t *testing.T) Fixture
+	Pointer  string
+	Hostname string
+	Record   func(app, build string) router.DeploymentRecord
 }
 
 var errDisplaced = errors.New("conformance: another promotion displaced this one while it flipped")
@@ -138,14 +137,19 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("removing a pointer leaves nothing served on it", func(t *testing.T) {
+	t.Run("removing a pointer stops serving it on a router whose facts say so, and leaves it serving on one torn down with its compute", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
 		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		removesPointer(t, stack, pointer)
-		if served := fixture.Serving(pointer); served != "" && !suite.TornDownWithCompute {
-			t.Errorf("%s serves %q after it was removed, want nothing", pointer, served)
+		served := fixture.Serving(pointer)
+		if fixture.Router.Facts().StopsServingRemovedPointers {
+			if served != "" {
+				t.Errorf("%s serves %q after it was removed, want nothing: Facts().StopsServingRemovedPointers is true", pointer, served)
+			}
+		} else if served != "b1" {
+			t.Errorf("%s serves %q after it was removed, want the b1 it served: Facts().StopsServingRemovedPointers is false, so what serves it goes with its compute", pointer, served)
 		}
 		removesPointer(t, stack, pointer)
 	})
