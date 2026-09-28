@@ -175,7 +175,7 @@ func encodePath(path []string) (string, error) {
 func encodeSegment(segment string) string {
 	var written strings.Builder
 	for i := 0; i < len(segment); i++ {
-		if plain(segment[i]) && (i != 0 || segment[i] != '.') {
+		if isPlain(segment[i]) && (i != 0 || segment[i] != '.') {
 			written.WriteByte(segment[i])
 			continue
 		}
@@ -184,7 +184,7 @@ func encodeSegment(segment string) string {
 	return written.String()
 }
 
-func plain(c byte) bool {
+func isPlain(c byte) bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
 		return true

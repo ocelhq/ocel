@@ -97,7 +97,7 @@ mint() {
 	esac
 }
 
-checked() {
+refuseempty() {
 	[ -n "$1" ] || abort "an entry's value is empty"
 }
 
@@ -143,7 +143,7 @@ write)
 	readrev "$f"
 	[ "$current" = "$2" ] || exit 4
 	IFS= read -r body || abort "a write sent no value"
-	checked "$body"
+	refuseempty "$body"
 	mint
 	stage "$f" "$rev" "$body"
 	mv -f "$staged" "$f"
@@ -161,8 +161,8 @@ pair)
 	[ "$current" = "$4" ] || exit 4
 	IFS= read -r one || abort "a pair sent one body, want two"
 	IFS= read -r two || abort "a pair sent one body, want two"
-	checked "$one"
-	checked "$two"
+	refuseempty "$one"
+	refuseempty "$two"
 	mint
 	onerev=$rev
 	mint
