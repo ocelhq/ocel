@@ -59,14 +59,14 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 
 func (w *wildcards) save(ctx context.Context) error {
 	name := stackrecords.WildcardKey(environment.TierPreview)
-	record, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
+	entry, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if record.Value, err = json.Marshal(w.recorded); err != nil {
+	if entry.Value, err = json.Marshal(w.recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := w.keyValues.Write(ctx, record); err != nil {
+	if _, err := w.keyValues.Write(ctx, entry); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil

@@ -74,22 +74,22 @@ func List(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}
-	entries := make([]NamedStack, 0, len(recorded))
-	for _, record := range recorded {
-		name, err := naming.ParseStackName(record.Key.Path[0])
+	stacks := make([]NamedStack, 0, len(recorded))
+	for _, entry := range recorded {
+		name, err := naming.ParseStackName(entry.Key.Path[0])
 		if err != nil {
 			continue
 		}
-		entry := NamedStack{Name: name}
-		if len(record.Value) > 0 {
-			if err := json.Unmarshal(record.Value, &entry.Stack); err != nil {
-				return nil, fmt.Errorf("read %s: %w", record.Key, err)
+		stack := NamedStack{Name: name}
+		if len(entry.Value) > 0 {
+			if err := json.Unmarshal(entry.Value, &stack.Stack); err != nil {
+				return nil, fmt.Errorf("read %s: %w", entry.Key, err)
 			}
 		}
-		entries = append(entries, entry)
+		stacks = append(stacks, stack)
 	}
-	slices.SortFunc(entries, func(a, b NamedStack) int {
+	slices.SortFunc(stacks, func(a, b NamedStack) int {
 		return cmp.Compare(a.Name.String(), b.Name.String())
 	})
-	return entries, nil
+	return stacks, nil
 }

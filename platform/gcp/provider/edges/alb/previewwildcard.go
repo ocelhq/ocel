@@ -25,29 +25,29 @@ func (e *Edge) previewKey() keyvalue.Key {
 }
 
 func (e *Edge) recordedPreview(ctx context.Context) (previewEntry, error) {
-	record, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
+	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
 	if err != nil {
 		return previewEntry{}, fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
 	var preview previewEntry
-	if len(record.Value) == 0 {
+	if len(entry.Value) == 0 {
 		return preview, nil
 	}
-	if err := json.Unmarshal(record.Value, &preview); err != nil {
+	if err := json.Unmarshal(entry.Value, &preview); err != nil {
 		return previewEntry{}, fmt.Errorf("decode which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
 	return preview, nil
 }
 
-func (e *Edge) rememberPreview(ctx context.Context, entry previewEntry) error {
-	record, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
+func (e *Edge) rememberPreview(ctx context.Context, preview previewEntry) error {
+	entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.previewKey())
 	if err != nil {
 		return fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
-	if record.Value, err = json.Marshal(entry); err != nil {
+	if entry.Value, err = json.Marshal(preview); err != nil {
 		return fmt.Errorf("encode which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
-	if _, err := e.deps.KeyValues.Write(ctx, record); err != nil {
+	if _, err := e.deps.KeyValues.Write(ctx, entry); err != nil {
 		return fmt.Errorf("record which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
 	return nil

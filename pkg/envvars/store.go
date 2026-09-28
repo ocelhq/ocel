@@ -232,13 +232,13 @@ func (s Store) List(ctx context.Context, scope Scope) ([]Metadata, error) {
 		return nil, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
 	out := make([]Metadata, 0, len(recorded))
-	for _, record := range recorded {
-		at, ok := cellOf(record.Key)
+	for _, entry := range recorded {
+		at, ok := cellOf(entry.Key)
 		if !ok {
 			continue
 		}
 		var stored storedValue
-		if err := json.Unmarshal(record.Value, &stored); err != nil {
+		if err := json.Unmarshal(entry.Value, &stored); err != nil {
 			return nil, fmt.Errorf("read %s: %w", at, err)
 		}
 		if stored.Deleted {
@@ -339,12 +339,12 @@ func (s Store) storedCells(ctx context.Context, scope Scope) (map[string]storedV
 		return nil, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
 	out := make(map[string]storedValue, len(recorded))
-	for _, record := range recorded {
+	for _, entry := range recorded {
 		var stored storedValue
-		if err := json.Unmarshal(record.Value, &stored); err != nil {
-			return nil, fmt.Errorf("read %s: %w", record.Key, err)
+		if err := json.Unmarshal(entry.Value, &stored); err != nil {
+			return nil, fmt.Errorf("read %s: %w", entry.Key, err)
 		}
-		out[record.Key.String()] = stored
+		out[entry.Key.String()] = stored
 	}
 	return out, nil
 }
@@ -430,12 +430,12 @@ func (s Store) Versions(ctx context.Context, scope Scope, at Coordinate) ([]Vers
 		return nil, fmt.Errorf("read %s's versions: %w", at, err)
 	}
 	out := make([]Version, 0, len(recorded))
-	for _, record := range recorded {
-		var entry Version
-		if err := json.Unmarshal(record.Value, &entry); err != nil {
+	for _, entry := range recorded {
+		var version Version
+		if err := json.Unmarshal(entry.Value, &version); err != nil {
 			return nil, fmt.Errorf("read a version of %s: %w", at, err)
 		}
-		out = append(out, entry)
+		out = append(out, version)
 	}
 	slices.SortFunc(out, func(a, b Version) int { return int(a.Version - b.Version) })
 	return out, nil
@@ -459,8 +459,8 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
-	for _, record := range recorded {
-		if err := keyvalue.Forget(ctx, s.KeyValues, record.Key); err != nil {
+	for _, entry := range recorded {
+		if err := keyvalue.Forget(ctx, s.KeyValues, entry.Key); err != nil {
 			return 0, fmt.Errorf("remove %s's stored values: %w", scope.Project, err)
 		}
 	}
@@ -468,8 +468,8 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read what references %s: %w", scope.Project, err)
 	}
-	for _, record := range refs {
-		if err := keyvalue.Forget(ctx, s.KeyValues, record.Key); err != nil {
+	for _, entry := range refs {
+		if err := keyvalue.Forget(ctx, s.KeyValues, entry.Key); err != nil {
 			return 0, fmt.Errorf("remove what references %s: %w", scope.Project, err)
 		}
 	}

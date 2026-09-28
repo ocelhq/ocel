@@ -34,23 +34,23 @@ func (s *store) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, er
 	return recorded, nil
 }
 
-func (s *store) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+func (s *store) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := keyvalue.RefuseNonJSON(record); err != nil {
+	if err := keyvalue.RefuseNonJSON(entry); err != nil {
 		return "", err
 	}
 	if s.racing != nil {
-		s.racing(record.Key.String())
+		s.racing(entry.Key.String())
 	}
-	if recorded := s.rows[record.Key.String()]; recorded.Revision != record.Revision {
+	if recorded := s.rows[entry.Key.String()]; recorded.Revision != entry.Revision {
 		return "", keyvalue.ErrStale
 	}
 	s.rev++
-	record.Revision = keyvalue.Revision(strconv.Itoa(s.rev))
-	s.rows[record.Key.String()] = record
-	return record.Revision, nil
+	entry.Revision = keyvalue.Revision(strconv.Itoa(s.rev))
+	s.rows[entry.Key.String()] = entry
+	return entry.Revision, nil
 }
 
 func (s *store) WritePair(ctx context.Context, first, second keyvalue.Entry) error {

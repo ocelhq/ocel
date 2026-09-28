@@ -143,9 +143,9 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
-	for _, record := range stored {
-		if bytes.Contains(record.Value, []byte("sk_live_secret")) {
-			t.Fatalf("%s stores the plaintext at rest", record.Key)
+	for _, entry := range stored {
+		if bytes.Contains(entry.Value, []byte("sk_live_secret")) {
+			t.Fatalf("%s stores the plaintext at rest", entry.Key)
 		}
 	}
 }

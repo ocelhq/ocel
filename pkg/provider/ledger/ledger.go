@@ -516,8 +516,8 @@ func (l *Ledger) Pointers(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("read the pointers for %s: %w", l.partition, err)
 	}
 	names := make([]string, 0, len(recorded))
-	for _, record := range recorded {
-		rest, under := record.Key.Under("pointers")
+	for _, entry := range recorded {
+		rest, under := entry.Key.Under("pointers")
 		if !under || len(rest) != 1 {
 			continue
 		}
@@ -532,8 +532,8 @@ func (l *Ledger) Destroy(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read the deployments ledger for %s: %w", l.partition, err)
 	}
-	for _, record := range recorded {
-		if err := keyvalue.Forget(ctx, l.keyValues, record.Key); err != nil {
+	for _, entry := range recorded {
+		if err := keyvalue.Forget(ctx, l.keyValues, entry.Key); err != nil {
 			return fmt.Errorf("erase the deployments ledger for %s: %w", l.partition, err)
 		}
 	}
@@ -639,10 +639,10 @@ func (l *Ledger) promotions(ctx context.Context, pointer string) ([]promotionRec
 		return nil, fmt.Errorf("read the promotions for %s: %w", pointer, err)
 	}
 	rows := make([]promotionRecord, 0, len(recorded))
-	for _, record := range recorded {
+	for _, entry := range recorded {
 		var row promotionRecord
-		if err := json.Unmarshal(record.Value, &row); err != nil {
-			return nil, fmt.Errorf("decode promotion %s: %w", record.Key, err)
+		if err := json.Unmarshal(entry.Value, &row); err != nil {
+			return nil, fmt.Errorf("decode promotion %s: %w", entry.Key, err)
 		}
 		rows = append(rows, row)
 	}
@@ -661,8 +661,8 @@ func (l *Ledger) recordKeys(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("read the deployment records for %s: %w", l.partition, err)
 	}
 	keys := make([]string, 0, len(recorded))
-	for _, record := range recorded {
-		rest, under := record.Key.Under("records")
+	for _, entry := range recorded {
+		rest, under := entry.Key.Under("records")
 		if !under || len(rest) != 2 {
 			continue
 		}

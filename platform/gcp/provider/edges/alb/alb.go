@@ -208,15 +208,15 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		return edge.PreviewEntryOwner, nil
 	}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		record, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.claim(tier, hostname))
+		entry, err := keyvalue.ReadOrEmpty(ctx, e.deps.KeyValues, e.claim(tier, hostname))
 		if err != nil {
 			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
-		if len(record.Value) == 0 {
+		if len(entry.Value) == 0 {
 			continue
 		}
 		var claimed claim
-		if err := json.Unmarshal(record.Value, &claimed); err != nil {
+		if err := json.Unmarshal(entry.Value, &claimed); err != nil {
 			return "", fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
 		return claimed.Owner, nil

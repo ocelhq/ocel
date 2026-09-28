@@ -59,12 +59,12 @@ func EnvironmentMetas(ctx context.Context, store keyvalue.Store, tier environmen
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
 	meta := make(map[string]EnvironmentMeta, len(recorded))
-	for _, record := range recorded {
+	for _, entry := range recorded {
 		var recorded EnvironmentMeta
-		if err := json.Unmarshal(record.Value, &recorded); err != nil {
+		if err := json.Unmarshal(entry.Value, &recorded); err != nil {
 			continue
 		}
-		meta[record.Key.Path[0]] = recorded
+		meta[entry.Key.Path[0]] = recorded
 	}
 	return meta, nil
 }
@@ -75,8 +75,8 @@ func StackNames(ctx context.Context, store keyvalue.Store, tier environment.Tier
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
 	names := make([]naming.StackName, 0, len(recorded))
-	for _, record := range recorded {
-		stack, err := naming.ParseStackName(record.Key.Path[0])
+	for _, entry := range recorded {
+		stack, err := naming.ParseStackName(entry.Key.Path[0])
 		if err != nil {
 			continue
 		}

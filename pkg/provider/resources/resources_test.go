@@ -1038,7 +1038,7 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 type unreadable struct{ *fake.KeyValues }
 
 func (unreadable) Read(context.Context, keyvalue.Key) (keyvalue.Entry, error) {
-	return keyvalue.Entry{}, errors.New("this login reads no record tier")
+	return keyvalue.Entry{}, errors.New("this login reads no key values in the tier")
 }
 
 func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) {
