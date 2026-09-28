@@ -13,7 +13,6 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
@@ -182,11 +181,7 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 	builtEdgeBundle(t, "web", []byte(`{"version":1}`))
 	client, provider := deployServed(t)
 	direct := provider.Edges().(*fake.Edges).Edge(fake.KindDirect)
-	stager := &stagingLedger{}
-	direct.UseLedger(func(state edge.StackState) fake.Ledger {
-		stager.Ledger = ledger.New(provider.KeyValues(), state.Tier, state.Slug)
-		return stager
-	})
+	stager := staging(t, provider)
 	if !direct.Facts().Compatibility.IsZero() {
 		t.Fatal("the reference direct edge names a compatibility, so it cannot represent an edge that runs no code")
 	}

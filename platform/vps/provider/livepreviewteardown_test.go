@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -150,21 +151,28 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}); err != nil {
 		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
 	}
-	routes := routed(t, p, stack)
-	if err := routes.Ledger().PutStaged(ctx, router.DeploymentRecord{
+	record := router.DeploymentRecord{
 		App:        app,
 		Build:      build.String(),
 		Entry:      "/",
 		Image:      image,
 		Physical:   provisioned.Containers[0].Physical,
 		HealthPath: healthPath,
-	}); err != nil {
+	}
+	releases := ledger.New(p.KeyValues(), environment.TierPreview, slug)
+	if err := releases.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged(%s): %v", pointer, err)
 	}
-	if err := routes.Flip(ctx, router.Flip{Pointer: pointer, Promotion: router.Promotion{
-		PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()},
-	}}, progress.DiscardProgress()); err != nil {
+	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()}}
+	if err := releases.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
+	}
+	if err := routed(t, p, stack).Flip(ctx, router.Flip{
+		Pointer:   pointer,
+		Promotion: promotion,
+		Records:   map[string]router.DeploymentRecord{app: record},
+	}, progress.DiscardProgress()); err != nil {
+		t.Fatalf("Flip(%s): %v", pointer, err)
 	}
 }
 
@@ -177,9 +185,9 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err := routes.RemovePointer(ctx, pointer, spoken); err != nil {
 		t.Fatalf("RemovePointer(%s) = %v", pointer, err)
 	}
-	removed, err := routes.Ledger().RemovePointer(ctx, pointer)
+	removed, err := ledger.New(p.KeyValues(), environment.TierPreview, teardownSlug).RemovePointer(ctx, pointer)
 	if err != nil {
-		t.Fatalf("Ledger().RemovePointer(%s) = %v", pointer, err)
+		t.Fatalf("ledger RemovePointer(%s) = %v", pointer, err)
 	}
 	if err := providerserver.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)

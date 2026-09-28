@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -306,22 +305,6 @@ func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 	}
 	if _, err := l.claimTag(ctx, router.Promotion{PromotionID: "p3", Tag: "live"}); err != nil {
 		t.Fatalf("claim a tag whose promotion was pruned = %v, want it free", err)
-	}
-}
-
-func TestSchemaIsWrittenAndReadBack(t *testing.T) {
-	l, _ := fixture()
-	ctx := context.Background()
-
-	if _, err := l.SchemaVersion(ctx); !errors.Is(err, edge.ErrStoreSchemaUnreadable) {
-		t.Fatalf("SchemaVersion() before EnsureSchema = %v, want it unreadable", err)
-	}
-	if err := l.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	version, err := l.SchemaVersion(ctx)
-	if err != nil || version != edge.StoreSchemaVersion {
-		t.Fatalf("SchemaVersion() = %d, %v, want %d", version, err, edge.StoreSchemaVersion)
 	}
 }
 

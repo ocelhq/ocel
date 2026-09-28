@@ -109,7 +109,7 @@ func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.Deplo
 		FunctionURLs:  map[string]string{"/": url},
 		AssetPrefix:   assets,
 	}
-	if err := openRouter(stack).Ledger().PutStaged(context.Background(), record); err != nil {
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	return record
@@ -149,7 +149,7 @@ func stagedContainer(t *testing.T, stack edge.EdgeStack) router.DeploymentRecord
 		HealthPath:  "/",
 		AssetPrefix: fakeAssetPrefix,
 	}
-	if err := openRouter(stack).Ledger().PutStaged(context.Background(), record); err != nil {
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	return record
@@ -362,26 +362,6 @@ func TestReconcile(t *testing.T) {
 func TestPromote(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the store learns the release before the ledger records it", func(t *testing.T) {
-		t.Parallel()
-
-		w := newWorld()
-		stack := reconciled(t, w)
-		bound(t, stack)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
-			t.Fatalf("Promote: %v", err)
-		}
-
-		steps := w.trail.taken()
-		wrote := indexOf(t, steps, "kvs.UpdateKeys")
-		recorded := indexOf(t, steps, "PutItem ledger#conformance\x00pointers#@production#")
-		if wrote > recorded {
-			t.Errorf("the ledger pointer moved before the store did (%v); a hostname must never point at a release the edge cannot serve", steps)
-		}
-	})
-
 	t.Run("the published route names the release, its entry function and its assets", func(t *testing.T) {
 		t.Parallel()
 
@@ -504,7 +484,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		record.CreatedAt = rotatedAt.Unix() - 1
-		if err := openRouter(stack).Ledger().PutStaged(context.Background(), record); err != nil {
+		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 
@@ -516,7 +496,7 @@ func TestPromote(t *testing.T) {
 		}
 
 		record.CreatedAt = rotatedAt.Unix()
-		if err := openRouter(stack).Ledger().PutStaged(context.Background(), record); err != nil {
+		if err := openRouter(stack).Ledger.PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
@@ -527,25 +507,22 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
-	t.Run("a store that refuses the write records nothing", func(t *testing.T) {
+	t.Run("a store that refuses the write leaves the flip unserved", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.updateErr = &kvstypes.AccessDeniedException{Message: aws.String("no")}
 
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err == nil {
-			t.Fatal("Promote error = nil, want the refusal the store gave")
-		}
-
-		history, err := openRouter(stack).Ledger().History(context.Background(), "")
-		if err != nil {
-			t.Fatalf("History: %v", err)
-		}
-		if len(history) != 0 {
-			t.Errorf("history = %v, want nothing: the store never learned this release", history)
+		err := openRouter(stack).Stack.Flip(context.Background(), router.Flip{
+			Promotion: promotion(),
+			Records:   map[string]router.DeploymentRecord{record.App: record},
+		}, progress.DiscardProgress())
+		var unserved router.Unserved
+		if !errors.As(err, &unserved) {
+			t.Fatalf("Flip = %v, want router.Unserved: the store never learned this release, so the ledger must take it back", err)
 		}
 	})
 

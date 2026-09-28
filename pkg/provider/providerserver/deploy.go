@@ -221,7 +221,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	shared, err := openSharedStack(p, front)
+	shared, err := openSharedStack(p, front, spec.Tier, spec.Slug)
 	if err != nil {
 		return nil, err
 	}
@@ -1215,7 +1215,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 			record.Env = env
 		}
 	}
-	return r.putStaged(ctx, record)
+	return r.ledger.putStaged(ctx, record)
 }
 
 func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*router.Code, error) {
@@ -1276,7 +1276,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
 		return u.phase(func(progress progress.Progress) error {
-			if err := r.flip(ctx, router.Flip{Pointer: r.spec.Pointer, Promotion: promotion}, progress); err != nil {
+			if err := r.sharedStack.promote(ctx, r.spec.Pointer, promotion, progress); err != nil {
 				return err
 			}
 			if err := r.checkpoint(ctx); err != nil {

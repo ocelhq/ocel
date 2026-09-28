@@ -2,7 +2,6 @@ package cloudfront
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -49,28 +48,20 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (r routerStack) Ledger() router.Ledger { return &lazyLedger{s: r.s} }
-
 func (r routerStack) Claim(context.Context, string, string) error { return nil }
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
+func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Progress) error {
 	s := r.s
 	c, err := s.clients(ctx)
 	if err != nil {
-		return err
+		return router.Unserved{Err: err}
 	}
 	if err := flip.RefuseInactive(ctx); err != nil {
 		return err
 	}
-	if err := s.publish(ctx, c, flip.Promotion, flip.Pointer); err != nil {
-		return router.Unserved{Err: err}
-	}
-	if err := s.openLedger(c).Promote(ctx, flip.Promotion, flip.Pointer, progress); err != nil {
-		if restored := s.republish(ctx, c, flip.Pointer); restored != nil {
-			return errors.Join(err, restored)
-		}
+	if err := s.publishOn(ctx, c, flip.Promotion.PromotionID, flip.Records, s.servedHostnames(flip.Pointer)); err != nil {
 		return router.Unserved{Err: err}
 	}
 	return nil

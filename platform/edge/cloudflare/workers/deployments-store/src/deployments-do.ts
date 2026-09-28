@@ -2,13 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 
 import { matchesSecret } from "@platform/cf-auth";
 import type { Env } from "./env";
-import type {
-  DeploymentRecord,
-  HistoryEntry,
-  Initialization,
-  Promotion,
-  PruneResult,
-} from "./store";
+import type { Flip, Flipped, Initialization, PointerRecordResult } from "./store";
 import * as store from "./store";
 
 export class DeploymentsStore extends DurableObject<Env> {
@@ -32,46 +26,28 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.ensureSchema(this.ctx.storage);
   }
 
-  async putStaged(record: DeploymentRecord): Promise<void> {
-    store.putStaged(this.ctx.storage, record);
+  async flip(flipped: Flip): Promise<Flipped> {
+    return store.flip(this.ctx.storage, flipped);
   }
 
-  async promote(promotion: Promotion, pointer?: string): Promise<{ conflict?: string }> {
-    try {
-      store.promote(this.ctx.storage, promotion, pointer);
-      return {};
-    } catch (e) {
-      if (e instanceof store.TagConflictError) return { conflict: e.message };
-      throw e;
-    }
+  async servedPromotion(pointer?: string): Promise<string | undefined> {
+    return store.servedPromotion(this.ctx.storage, pointer);
   }
 
-  async pointerIdentity(app: string, pointer?: string): Promise<string | undefined> {
-    return store.pointerIdentity(this.ctx.storage, app, pointer);
+  async removePointer(pointer: string): Promise<void> {
+    store.removePointer(this.ctx.storage, pointer);
   }
 
-  async record(app: string, identity: string): Promise<DeploymentRecord | undefined> {
-    return store.record(this.ctx.storage, app, identity);
+  async apps(): Promise<string[]> {
+    return store.apps(this.ctx.storage);
   }
 
   async pointerRecord(
     app?: string,
     pointer?: string,
     knownIdentity?: string,
-  ): Promise<store.PointerRecordResult> {
+  ): Promise<PointerRecordResult> {
     return store.pointerRecord(this.ctx.storage, app, pointer, knownIdentity);
-  }
-
-  async history(pointer?: string): Promise<HistoryEntry[]> {
-    return store.history(this.ctx.storage, pointer);
-  }
-
-  async prune(keepN: number, pointer?: string): Promise<PruneResult> {
-    return store.prune(this.ctx.storage, keepN, pointer);
-  }
-
-  async removePointer(pointer?: string): Promise<PruneResult> {
-    return store.removePointer(this.ctx.storage, pointer);
   }
 
   async versionStamp(): Promise<string | undefined> {

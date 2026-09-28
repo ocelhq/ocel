@@ -31,26 +31,15 @@ func (s *stack) openLedger() *ledger.Ledger {
 	return ledgerFor(s.e.deps.KeyValues, s.state.Tier, s.state.Slug)
 }
 
-func (s *stack) released(ctx context.Context, promotion router.Promotion, progress progress.Progress) error {
+func (s *stack) released(ctx context.Context, records map[string]router.DeploymentRecord, progress progress.Progress) error {
 	hosts := maps.Clone(s.recorded.Hosts)
-	serving := map[string]string{}
 	var took []string
 	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
 		host := hosts[hostname]
 		if host.Service != "" {
 			continue
 		}
-		if _, promoted := promotion.Builds[host.App]; !promoted {
-			continue
-		}
-		service, known := serving[host.App]
-		if !known {
-			found, err := s.serving(ctx, host.App)
-			if err != nil {
-				return err
-			}
-			serving[host.App], service = found, found
-		}
+		service := records[host.App].Physical
 		if service == "" {
 			continue
 		}
@@ -288,9 +277,6 @@ func (s *stack) Destroy(ctx context.Context) error {
 		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), progress.DiscardProgress()); err != nil {
 			return err
 		}
-	}
-	if err := s.openLedger().Destroy(ctx); err != nil {
-		return err
 	}
 	s.recorded.Hosts = nil
 	s.keep()

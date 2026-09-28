@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -763,11 +764,18 @@ func ownState(t *testing.T, stack edge.EdgeStack) private {
 	return own
 }
 
-func openRouter(shared edge.EdgeStack) routerStack { return routerStack{s: shared.(*stack)} }
+func openRouter(shared edge.EdgeStack) fake.PromotingStack {
+	s := shared.(*stack)
+	c, err := s.clients(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	return fake.PromotingStack{Stack: routerStack{s: s}, Ledger: s.openLedger(c)}
+}
 
 func removePointer(ctx context.Context, stack edge.EdgeStack, pointer string, progress progress.Progress) (router.PruneResult, error) {
 	if err := openRouter(stack).RemovePointer(ctx, pointer, progress); err != nil {
 		return router.PruneResult{}, err
 	}
-	return openRouter(stack).Ledger().RemovePointer(ctx, pointer)
+	return openRouter(stack).Ledger.RemovePointer(ctx, pointer)
 }

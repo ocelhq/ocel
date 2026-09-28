@@ -502,25 +502,20 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		}
 	})
 
-	t.Run("a store that refuses the write records no promotion", func(t *testing.T) {
+	t.Run("a store that refuses the write leaves the flip unserved", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)
 		w.store.updateErr = errors.New("the store is closed")
 
-		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
-			PromotionID: "refused",
-			Ts:          1,
-			Builds:      map[string]string{"web": "d1.f1"},
-		}}, progress.DiscardProgress()); err == nil {
-			t.Fatal("Promote err = nil, want the refusal from the key value store")
-		}
-		history, err := openRouter(stack).Ledger().History(context.Background(), previewPointer)
-		if err != nil {
-			t.Fatalf("History: %v", err)
-		}
-		if len(history) != 0 {
-			t.Errorf("history = %v, want nothing recorded when the hostname was never published", history)
+		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		err := openRouter(stack).Stack.Flip(context.Background(), router.Flip{
+			Pointer:   previewPointer,
+			Promotion: router.Promotion{PromotionID: "refused", Ts: 1, Builds: map[string]string{"web": "d1.f1"}},
+			Records:   map[string]router.DeploymentRecord{record.App: record},
+		}, progress.DiscardProgress())
+		var unserved router.Unserved
+		if !errors.As(err, &unserved) {
+			t.Errorf("Flip = %v, want router.Unserved: the hostname was never published, so the ledger must take the promotion back", err)
 		}
 	})
 

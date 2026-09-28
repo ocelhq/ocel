@@ -4,15 +4,11 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sync"
 	"testing"
-	"time"
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -24,10 +20,10 @@ import (
 func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
 	releases := ledger.New(provider.KeyValues(), tier, slug)
-	if err := releases.EnsureSchema(context.Background()); err != nil {
-		t.Fatal(err)
-	}
 	for i, id := range ids {
+		if err := releases.PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: buildIdentity(i)}); err != nil {
+			t.Fatal(err)
+		}
 		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
 		if err := releases.Promote(context.Background(), promotion, pointer, progress.DiscardProgress()); err != nil {
 			t.Fatal(err)
@@ -40,7 +36,7 @@ func buildIdentity(seq int) string {
 	return fmt.Sprintf("%032x~%012x", seq+1, seq+1)
 }
 
-func TestListPromotionsReadsTheLedgerThroughTheEdgeStack(t *testing.T) {
+func TestListPromotionsReadsTheProjectsLedger(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, environment.TierProduction, "shop")
@@ -97,51 +93,24 @@ func TestRollbackFlipsThePointerToTheEarlierPromotion(t *testing.T) {
 	}
 }
 
-type capturingLedger struct {
-	fake.Ledger
-	marker string
-
-	mu       sync.Mutex
-	progress progress.Progress
-	heard    bool
-}
-
-func (c *capturingLedger) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	c.mu.Lock()
-	c.progress, c.heard = progress, true
-	c.mu.Unlock()
-	progress.Say(c.marker)
-	progress.Detail(c.marker)
-	progress.Span(c.marker, time.Now(), time.Now(), nil)
-	return c.Ledger.Promote(ctx, promotion, pointer, progress)
-}
-
-func (c *capturingLedger) flipped() (progress.Progress, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.progress, c.heard
-}
-
-func capturing(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, marker string) *capturingLedger {
-	t.Helper()
-	capturer := &capturingLedger{Ledger: ledger.New(provider.KeyValues(), tier, slug), marker: marker}
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return capturer })
-	return capturer
+func relayPlane(provider *fake.Provider) *fake.DataPlane {
+	return provider.Routers().(*fake.Routers).DataPlane(router.Kind(fake.KindRelay))
 }
 
 func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	const marker = "the flip said this through the reporter it was handed"
-	capturer := capturing(t, provider, environment.TierProduction, "shop", marker)
+	plane := relayPlane(provider)
+	plane.SayOnFlip(marker)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	flipped, heard := capturer.flipped()
-	if !heard {
-		t.Fatal("the deploy never reached Promote, so nothing was reported from the flip")
+	flipped := plane.FlipProgress()
+	if flipped == nil {
+		t.Fatal("the deploy never reached the router's flip, so nothing was reported from it")
 	}
 	if flipped == progress.DiscardProgress() {
 		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion stage's own")
@@ -173,15 +142,15 @@ func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
-	capturer := capturing(t, provider, environment.TierProduction, "shop",
-		"the flip said this into a rollback that streams nothing")
+	plane := relayPlane(provider)
+	plane.SayOnFlip("the flip said this into a rollback that streams nothing")
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	flipped, heard := capturer.flipped()
-	if !heard {
-		t.Fatal("the rollback never reached Promote")
+	flipped := plane.FlipProgress()
+	if flipped == nil {
+		t.Fatal("the rollback never reached the router's flip")
 	}
 	if flipped != progress.DiscardProgress() {
 		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", flipped)
@@ -207,10 +176,7 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
 	pointer := ledger.Partition(environment.TierProduction, "shop").Key("pointers", router.DefaultPointer)
-	jostled := &jostle{Store: provider.KeyValues(), at: pointer}
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		return ledger.New(jostled, state.Tier, state.Slug)
-	})
+	provider.KeyValues().(*fake.KeyValues).MoveBeforeNextWrite(pointer)
 
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("Rollback() against a pointer another promotion moved = %v, want it refused as busy", err)
@@ -225,84 +191,37 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	}
 }
 
-type jostle struct {
-	keyvalue.Store
-	at   keyvalue.Key
-	once sync.Once
-}
+func TestChangingAProjectsEdgeKeepsItsPromotionHistory(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
 
-func (j *jostle) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if entry.Key.String() == j.at.String() {
-		j.once.Do(func() {
-			recorded, err := keyvalue.ReadOrEmpty(ctx, j.Store, j.at)
-			if err != nil {
-				return
-			}
-			recorded.Value = append(slices.Clone(recorded.Value), ' ')
-			_, _ = j.Store.Write(ctx, recorded)
-		})
+	first, _ := deploy(t, client, deployRequest())
+	if first == nil || !first.GetSuccess() {
+		t.Fatalf("Deploy() through the relay edge = %q, want it to succeed", first.GetError())
 	}
-	return j.Store.Write(ctx, entry)
-}
+	moved := deployRequest()
+	moved.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	second, _ := deploy(t, client, moved)
+	if second == nil || !second.GetSuccess() {
+		t.Fatalf("Deploy() through the direct edge = %q, want it to succeed", second.GetError())
+	}
 
-func TestAnEdgeWithItsOwnLedgerStillWorks(t *testing.T) {
-	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
-	deployed(t, provider, environment.TierProduction, "shop")
-
-	own := &memoryLedger{}
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return own })
-
-	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{Slug: "shop"})
+	listed, err := client.ListPromotions(context.Background(), &contractv1.ListPromotionsRequest{
+		Slug: "shop",
+		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
+	})
 	if err != nil {
 		t.Fatalf("ListPromotions() error = %v", err)
 	}
-	if len(listed.GetPromotions()) != 1 || listed.GetPromotions()[0].GetPromotion().GetPromotionId() != "own-1" {
-		t.Fatalf("ListPromotions() = %v, want the edge's own ledger answering", listed.GetPromotions())
+	var ids []string
+	for _, entry := range listed.GetPromotions() {
+		ids = append(ids, entry.GetPromotion().GetPromotionId())
 	}
-
-	pruned, err := client.RemoveStalePromotions(context.Background(), &contractv1.RemoveStalePromotionsRequest{
-		Slug:        "shop",
-		KeepN:       1,
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result, err := drain(pruned); err != nil || !result.GetSuccess() {
-		t.Fatalf("RemoveStalePromotions() = %q, %v, want the edge's own ledger swept", result.GetError(), err)
-	}
-	if own.keptN != 1 {
-		t.Errorf("the edge's own ledger was asked to keep %d, want 1", own.keptN)
+	if !slices.Contains(ids, first.GetPromotionId()) || !slices.Contains(ids, second.GetPromotionId()) {
+		t.Errorf("ListPromotions() after the edge changed = %v, want both %s (through relay) and %s (through direct): the history belongs to the project, not to the edge it deploys through",
+			ids, first.GetPromotionId(), second.GetPromotionId())
 	}
 }
-
-type memoryLedger struct{ keptN int }
-
-func (*memoryLedger) SchemaVersion(context.Context) (int, error) { return edge.StoreSchemaVersion, nil }
-
-func (*memoryLedger) EnsureSchema(context.Context) error { return nil }
-
-func (*memoryLedger) PutStaged(context.Context, router.DeploymentRecord) error { return nil }
-
-func (*memoryLedger) History(context.Context, string) ([]router.HistoryEntry, error) {
-	return []router.HistoryEntry{{Promotion: router.Promotion{PromotionID: "own-1"}, Active: true}}, nil
-}
-
-func (m *memoryLedger) Prune(_ context.Context, keepN int, _ string) (router.PruneResult, error) {
-	m.keptN = keepN
-	return router.PruneResult{KeptPromotionIDs: []string{"own-1"}}, nil
-}
-
-func (*memoryLedger) Promote(context.Context, router.Promotion, string, progress.Progress) error {
-	return nil
-}
-
-func (*memoryLedger) RemovePointer(context.Context, string) (router.PruneResult, error) {
-	return router.PruneResult{}, nil
-}
-
-func (*memoryLedger) Destroy(context.Context) error { return nil }
 
 func TestRemoveStalePromotionsKeepsTheNewestN(t *testing.T) {
 	t.Parallel()

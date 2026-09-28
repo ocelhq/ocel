@@ -214,21 +214,35 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
+type boxEdge struct {
+	*box.Edge
+	keyValues keyvalue.Store
+}
+
+func edgeOver(m *machine, store keyvalue.Store) boxEdge {
+	return boxEdge{Edge: box.New(m, m.ApplyOrigins, sshScope), keyValues: store}
+}
+
 type boxStack struct {
 	edge.EdgeStack
 	router.Stack
+	ledger *ledger.Ledger
 }
 
 func (s boxStack) State() edge.StackState { return s.EdgeStack.State() }
 
 func (s boxStack) Destroy(ctx context.Context) error { return s.EdgeStack.Destroy(ctx) }
 
-func stackOn(front *box.Edge, stack edge.EdgeStack) boxStack {
-	opened, err := box.NewRouter(front).Open(router.NewStackState(stack.State()))
+func (s boxStack) Ledger() *ledger.Ledger { return s.ledger }
+
+func stackOn(front boxEdge, stack edge.EdgeStack) boxStack {
+	opened, err := box.NewRouter(front.Edge).Open(router.NewStackState(stack.State()))
 	if err != nil {
 		panic(err)
 	}
-	return boxStack{EdgeStack: stack, Stack: opened}
+	state := stack.State()
+	releases := ledger.New(front.keyValues, state.Tier, state.Slug)
+	return boxStack{EdgeStack: stack, Stack: fake.PromotingStack{Stack: opened, Ledger: releases}, ledger: releases}
 }
 
 func removePointer(ctx context.Context, stack boxStack, pointer string, progress progress.Progress) (router.PruneResult, error) {
@@ -236,10 +250,6 @@ func removePointer(ctx context.Context, stack boxStack, pointer string, progress
 		return router.PruneResult{}, err
 	}
 	return stack.Ledger().RemovePointer(ctx, pointer)
-}
-
-func edgeOver(m *machine, store keyvalue.Store) *box.Edge {
-	return box.New(m, m.ApplyOrigins, store, sshScope)
 }
 
 func (m *machine) ApplyOrigins(_ context.Context, project string, tier environment.Tier) error {
@@ -311,10 +321,10 @@ func TestTheBoxRouterBehavesAsEveryRouterMust(t *testing.T) {
 	})
 }
 
-func boxFixture(m *machine, front *box.Edge, stack boxStack) routerconformance.Fixture {
+func boxFixture(m *machine, front boxEdge, stack boxStack) routerconformance.Fixture {
 	state := stack.State()
 	return routerconformance.Fixture{
-		Router: box.NewRouter(front),
+		Router: box.NewRouter(front.Edge),
 		Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 		Prior:  router.NewStackState(state),
 		Serving: func(pointer string) string {
@@ -329,7 +339,7 @@ func boxFixture(m *machine, front *box.Edge, stack boxStack) routerconformance.F
 	}
 }
 
-func reconciled(t *testing.T) (*machine, *box.Edge, boxStack) {
+func reconciled(t *testing.T) (*machine, boxEdge, boxStack) {
 	t.Helper()
 
 	m := aMachine()
@@ -366,7 +376,7 @@ func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 
 	front := edgeOver(aMachine(), fake.NewKeyValues())
 	facts := front.Facts()
-	if facts.RunsCode || box.NewRouter(front).Facts().SignsOriginForwards || facts.InvalidatesByCacheTag {
+	if facts.RunsCode || box.NewRouter(front.Edge).Facts().SignsOriginForwards || facts.InvalidatesByCacheTag {
 		t.Errorf("Facts() = %+v; a box runs the container and nothing in front of it, its origin is one hop on a private network that verifies no signature, and there is no edge cache to tag", facts)
 	}
 	if facts.ServesUnbound {
@@ -383,7 +393,7 @@ func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 func TestTheFlipReturnsNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
-	bound := box.NewRouter(edgeOver(aMachine(), fake.NewKeyValues())).Facts().FlipBound
+	bound := box.NewRouter(edgeOver(aMachine(), fake.NewKeyValues()).Edge).Facts().FlipBound
 	if bound.Typical > 0 {
 		t.Errorf("Facts().FlipBound = %+v, and a bound above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
 	}
@@ -507,61 +517,6 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	}
 }
 
-type honouring struct{ keyvalue.Store }
-
-func (h honouring) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
-	if err := ctx.Err(); err != nil {
-		return keyvalue.Entry{}, err
-	}
-	return h.Store.Read(ctx, name)
-}
-
-func (h honouring) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	return h.Store.Write(ctx, entry)
-}
-
-func (h honouring) Remove(ctx context.Context, name keyvalue.Key, expected keyvalue.Revision) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return h.Store.Remove(ctx, name, expected)
-}
-
-func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T) {
-	t.Parallel()
-
-	m := aMachine()
-	front := edgeOver(m, honouring{fake.NewKeyValues()})
-	stackEdge, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Tier: environment.TierProduction, Slug: slug,
-	}, edge.StackState{})
-	if err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
-	stack := stackOn(front, stackEdge)
-	staged(t, stack, "web", "b1", "shop-web-1111")
-	staged(t, stack, "web", "b2", "shop-web-2222")
-	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
-		t.Fatalf("Promote(p1): %v", err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	m.releasing = func(host.Release) error {
-		cancel()
-		return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate was interrupted; the previous release is still live")}
-	}
-
-	if err := stack.Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}}, progress.DiscardProgress()); err == nil {
-		t.Fatal("a promotion interrupted before its flip succeeded")
-	}
-	if active := activePromotion(t, stack); active != "p1" {
-		t.Errorf("after a promotion interrupted before its flip the pointer is at %q, want p1: the interrupt that stopped the release is the context the unwind ran under", active)
-	}
-}
-
 func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOvertookIt(t *testing.T) {
 	t.Parallel()
 
@@ -648,47 +603,6 @@ func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 	want := []string{"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
 	if !slices.Equal(m.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", m.calls, want)
-	}
-}
-
-type staleAt struct {
-	keyvalue.Store
-	at string
-}
-
-func (s staleAt) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if slices.Contains(entry.Key.Path, s.at) {
-		return "", keyvalue.ErrStale
-	}
-	return s.Store.Write(ctx, entry)
-}
-
-func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
-	t.Parallel()
-
-	m := aMachine()
-	front := edgeOver(m, staleAt{Store: fake.NewKeyValues(), at: "pointers"})
-	stackEdge, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Tier: environment.TierProduction, Slug: slug,
-	}, edge.StackState{})
-	if err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
-	stack := stackOn(front, stackEdge)
-	staged(t, stack, "web", "b1", "shop-web-1111")
-
-	err = stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
-		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}}, progress.DiscardProgress())
-	if err == nil {
-		t.Fatal("Promote succeeded while the pointer moved under it")
-	}
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
-		t.Errorf("Promote refused with %v, want %s: the deploy that lost the race is told another one moved the pointer", err, refusal.CodeBusy)
-	}
-	if len(m.calls) != 0 {
-		t.Errorf("a deploy that lost the pointer still reached the box (%v); the flip rewrites the whole box's proxy configuration, so a deploy that lost the race would retire a live app's route on its way past", m.calls)
 	}
 }
 

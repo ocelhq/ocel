@@ -3,25 +3,29 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func openSharedStack(p provider.Provider, front edge.Edge) (*sharedStack, error) {
+func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier, slug string) (*sharedStack, error) {
 	paired, err := p.Routers().Open(router.Kind(front.Kind()))
 	if err != nil {
 		return nil, err
 	}
-	return &sharedStack{front: front, router: paired}, nil
+	return &sharedStack{front: front, router: paired, ledger: openProjectLedger(p, tier, slug)}, nil
 }
 
 type sharedStack struct {
 	front   edge.Edge
 	router  router.Router
+	ledger  projectLedger
 	mu      sync.Mutex
 	current edge.EdgeStack
 }
@@ -51,43 +55,14 @@ func (s *sharedStack) adopt(routed router.Stack) error {
 	return nil
 }
 
-func (s *sharedStack) useLedger(use func(router.Ledger) error) error {
+func (s *sharedStack) promote(ctx context.Context, pointer string, promoted router.Promotion, progress progress.Progress) error {
 	routed, err := s.openRouterStack()
 	if err != nil {
 		return err
 	}
-	return errors.Join(use(routed.Ledger()), s.adopt(routed))
-}
-
-func (s *sharedStack) putStaged(ctx context.Context, record router.DeploymentRecord) error {
-	return s.useLedger(func(ledger router.Ledger) error { return ledger.PutStaged(ctx, record) })
-}
-
-func (s *sharedStack) readHistory(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
-	var history []router.HistoryEntry
-	err := s.useLedger(func(ledger router.Ledger) (err error) {
-		history, err = ledger.History(ctx, pointer)
-		return err
-	})
-	return history, err
-}
-
-func (s *sharedStack) prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
-	var pruned router.PruneResult
-	err := s.useLedger(func(ledger router.Ledger) (err error) {
-		pruned, err = ledger.Prune(ctx, keepN, pointer)
-		return err
-	})
-	return pruned, err
-}
-
-func (s *sharedStack) flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
-	routed, err := s.openRouterStack()
-	if err != nil {
-		return err
-	}
-	flipped := routed.Flip(ctx, flip, progress)
-	return errors.Join(flipped, s.adopt(routed))
+	apps := slices.Sorted(maps.Keys(promoted.Builds))
+	err = promote(ctx, s.ledger, pointer, promoted, []appRouter{{stack: routed, apps: apps}}, progress)
+	return errors.Join(err, s.adopt(routed))
 }
 
 func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {
@@ -95,15 +70,10 @@ func (s *sharedStack) removePointer(ctx context.Context, pointer string, progres
 	if err != nil {
 		return router.PruneResult{}, err
 	}
-	var removed router.PruneResult
-	err = routed.RemovePointer(ctx, pointer, progress)
-	if err == nil {
-		removed, err = routed.Ledger().RemovePointer(ctx, pointer)
-	}
-	if err := errors.Join(err, s.adopt(routed)); err != nil {
+	if err := errors.Join(routed.RemovePointer(ctx, pointer, progress), s.adopt(routed)); err != nil {
 		return router.PruneResult{}, err
 	}
-	return removed, nil
+	return s.ledger.RemovePointer(ctx, pointer)
 }
 
 func (s *sharedStack) destroy(ctx context.Context) error {
@@ -114,7 +84,10 @@ func (s *sharedStack) destroy(ctx context.Context) error {
 	if err := errors.Join(routed.Destroy(ctx), s.adopt(routed)); err != nil {
 		return err
 	}
-	return s.edgeStack().Destroy(ctx)
+	if err := s.edgeStack().Destroy(ctx); err != nil {
+		return err
+	}
+	return s.ledger.Destroy(ctx)
 }
 
 func (s *sharedStack) routerState() router.StackState {

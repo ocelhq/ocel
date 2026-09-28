@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -21,9 +22,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -483,33 +484,33 @@ func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.
 	t.Errorf("no event says %q: a transfer onto a machine reported as a push to %q names the coordinate where the reader expects the destination", want, loadedCoordinate)
 }
 
-type stagingLedger struct {
-	fake.Ledger
-	mu     sync.Mutex
-	staged []router.DeploymentRecord
+type stagedLedger struct {
+	t         *testing.T
+	keyValues keyvalue.Store
 }
 
-func (l *stagingLedger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
-	l.mu.Lock()
-	l.staged = append(l.staged, record)
-	l.mu.Unlock()
-	return l.Ledger.PutStaged(ctx, record)
+func (l stagedLedger) records() []router.DeploymentRecord {
+	l.t.Helper()
+	var staged []router.DeploymentRecord
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		entries, err := l.keyValues.List(context.Background(), ledger.Partition(tier, "shop"), "records")
+		if err != nil {
+			l.t.Fatalf("list the records the ledger staged in %s: %v", tier, err)
+		}
+		for _, entry := range entries {
+			var record router.DeploymentRecord
+			if err := json.Unmarshal(entry.Value, &record); err != nil {
+				l.t.Fatalf("decode the record %s: %v", entry.Key, err)
+			}
+			staged = append(staged, record)
+		}
+	}
+	return staged
 }
 
-func (l *stagingLedger) records() []router.DeploymentRecord {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]router.DeploymentRecord(nil), l.staged...)
-}
-
-func staging(t *testing.T, vendor *fake.Provider) *stagingLedger {
+func staging(t *testing.T, vendor *fake.Provider) stagedLedger {
 	t.Helper()
-	stager := &stagingLedger{}
-	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
-		stager.Ledger = ledger.New(vendor.KeyValues(), state.Tier, state.Slug)
-		return stager
-	})
-	return stager
+	return stagedLedger{t: t, keyValues: vendor.KeyValues()}
 }
 
 func TestAnAppSpecNamesTheCoordinateTheProviderWillStoreRatherThanTheOneTheBuildLeft(t *testing.T) {

@@ -105,58 +105,6 @@ func (s *stack) routes(c Clients) routeStore {
 	return routeStore{clients: c, arn: s.own.KeyValueStore}
 }
 
-type lazyLedger struct{ s *stack }
-
-var _ router.Ledger = (*lazyLedger)(nil)
-
-func (l *lazyLedger) resolve(ctx context.Context) (*ledger.Ledger, error) {
-	c, err := l.s.clients(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return l.s.openLedger(c), nil
-}
-
-func (l *lazyLedger) SchemaVersion(ctx context.Context) (int, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return resolved.SchemaVersion(ctx)
-}
-
-func (l *lazyLedger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return err
-	}
-	return resolved.PutStaged(ctx, record)
-}
-
-func (l *lazyLedger) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.History(ctx, pointer)
-}
-
-func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	return resolved.Prune(ctx, keepN, pointer)
-}
-
-func (l *lazyLedger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil || !l.s.provisioned() {
-		return router.PruneResult{}, err
-	}
-	return resolved.RemovePointer(ctx, pointer)
-}
-
 func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, error) {
 	spec := s.spec()
 	dist, found, err := s.findDistributionFor(ctx, c, spec.name)
@@ -211,15 +159,11 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) publish(ctx context.Context, c Clients, promotion router.Promotion, pointer string) error {
-	return s.publishOn(ctx, c, promotion, s.servedHostnames(pointer))
-}
-
-func (s *stack) publishOn(ctx context.Context, c Clients, promotion router.Promotion, hostnames []string) error {
+func (s *stack) publishOn(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord, hostnames []string) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
-	published, err := s.routeFor(ctx, c, promotion)
+	published, err := s.routeFor(ctx, c, promotionID, records)
 	if err != nil {
 		return err
 	}
@@ -228,21 +172,6 @@ func (s *stack) publishOn(ctx context.Context, c Clients, promotion router.Promo
 		puts[hostname] = published
 	}
 	return s.routes(c).apply(ctx, puts, nil)
-}
-
-func (s *stack) republish(ctx context.Context, c Clients, pointer string) error {
-	hostnames := s.servedHostnames(pointer)
-	if len(hostnames) == 0 {
-		return nil
-	}
-	active, found, err := s.activePromotion(ctx, c, pointer)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return s.routes(c).apply(ctx, nil, hostnames)
-	}
-	return s.publish(ctx, c, active, pointer)
 }
 
 func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (router.Promotion, bool, error) {
@@ -313,31 +242,25 @@ func (s *stack) unroutePreviews(ctx context.Context, c Clients) error {
 	return s.routes(c).apply(ctx, nil, hosts)
 }
 
-func (s *stack) routeFor(ctx context.Context, c Clients, promotion router.Promotion) (route, error) {
-	apps := slices.Sorted(maps.Keys(promotion.Builds))
+func (s *stack) routeFor(ctx context.Context, c Clients, promotionID string, records map[string]router.DeploymentRecord) (route, error) {
+	apps := slices.Sorted(maps.Keys(records))
 	switch {
 	case len(apps) == 0:
-		return route{}, fmt.Errorf("promote %s: it names no app, and every hostname the %q edge answers on points at one app's entry function; deploy an app before promoting", promotion.PromotionID, Kind)
+		return route{}, fmt.Errorf("promote %s: it names no app, and every hostname the %q edge answers on points at one app's entry function; deploy an app before promoting", promotionID, Kind)
 	case len(apps) > 1:
-		return route{}, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge points a hostname at one release's entry function, so it cannot serve more than one of them. Split the apps into one project each, or give each app its own project domain", promotion.PromotionID, len(apps), strings.Join(apps, ", "), Kind)
+		return route{}, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge points a hostname at one release's entry function, so it cannot serve more than one of them. Split the apps into one project each, or give each app its own project domain", promotionID, len(apps), strings.Join(apps, ", "), Kind)
 	}
 
 	app := apps[0]
-	identity := promotion.Builds[app]
-	record, found, err := s.openLedger(c).Record(ctx, app, identity)
-	if err != nil {
-		return route{}, err
-	}
-	if !found {
-		return route{}, fmt.Errorf("promote %s: the deployments ledger has no record for %s/%s, so nothing names the release the edge would point at; re-run the deploy that built it", promotion.PromotionID, app, identity)
-	}
+	record := records[app]
+	identity := record.Build
 	secret, err := s.originSecret(ctx, c)
 	if err != nil {
 		return route{}, err
 	}
 	published := route{Stack: s.spec().name, Release: identity, Secret: secret.Presented(record.CreatedAt)}
 	if record.Origin != "" {
-		front, err := s.serveContainers(ctx, c, promotion, app, identity)
+		front, err := s.serveContainers(ctx, c, promotionID, app, identity)
 		if err != nil {
 			return route{}, err
 		}
@@ -346,11 +269,11 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion router.Promot
 		return published, nil
 	}
 	if record.EntryFunction == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotion.PromotionID, app, identity)
+		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, identity)
 	}
 	published.Origin = originHost(record.FunctionURLs[record.Entry])
 	if published.Origin == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotion.PromotionID, app, identity, record.EntryFunction, Kind)
+		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotionID, app, identity, record.EntryFunction, Kind)
 	}
 	published.Assets = assetOriginDomain(s.own.AssetBucket, s.own.Region)
 	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
@@ -361,13 +284,13 @@ func (s *stack) keyValues(c Clients) awsports.KeyValues {
 	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
 }
 
-func (s *stack) serveContainers(ctx context.Context, c Clients, promotion router.Promotion, app, identity string) (awsports.ContainerFront, error) {
+func (s *stack) serveContainers(ctx context.Context, c Clients, promotionID, app, identity string) (awsports.ContainerFront, error) {
 	front, found, err := awsports.ReadContainerFront(ctx, s.keyValues(c), s.tier())
 	if err != nil {
 		return awsports.ContainerFront{}, err
 	}
 	if !found {
-		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s tier records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotion.PromotionID, app, identity, s.tier())
+		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s tier records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotionID, app, identity, s.tier())
 	}
 	if s.onPreviewWildcard() {
 		base := s.previewBase()
@@ -380,7 +303,7 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotion router
 			return awsports.ContainerFront{}, err
 		}
 		if !found {
-			return awsports.ContainerFront{}, fmt.Errorf("promote %s: the %q edge serves previews from one wildcard distribution, and this account has none for %s; run `ocel domain use --preview %s` first", promotion.PromotionID, Kind, base, base)
+			return awsports.ContainerFront{}, fmt.Errorf("promote %s: the %q edge serves previews from one wildcard distribution, and this account has none for %s; run `ocel domain use --preview %s` first", promotionID, Kind, base, base)
 		}
 		return front, s.p.declareContainerFront(ctx, c, spec, kindWildcardDistribution, wildcard.id, front)
 	}
@@ -438,7 +361,18 @@ func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) err
 	if err != nil || !found {
 		return err
 	}
-	return s.publishOn(ctx, c, active, []string{hostname})
+	records := make(map[string]router.DeploymentRecord, len(active.Builds))
+	for app, build := range active.Builds {
+		record, staged, err := s.openLedger(c).Record(ctx, app, build)
+		if err != nil {
+			return err
+		}
+		if !staged {
+			return fmt.Errorf("serve %s: the deployments ledger has no record for %s/%s, the release promotion %s serves; re-run the deploy that built it", hostname, app, build, active.PromotionID)
+		}
+		records[app] = record
+	}
+	return s.publishOn(ctx, c, active.PromotionID, records, []string{hostname})
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
@@ -473,38 +407,27 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
-	unbound := true
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
-			unbound = false
 		}
 	}
-	unrouted := s.unroutePreviews(ctx, c)
-	if unrouted != nil {
-		errs = append(errs, fmt.Errorf("stop serving this project's previews before erasing the deployments ledger that names them, so a re-run still knows which hostnames to withdraw: %w", unrouted))
+	if err := s.unroutePreviews(ctx, c); err != nil {
+		errs = append(errs, fmt.Errorf("stop serving this project's previews before the deployments ledger that names them is erased, so a re-run still knows which hostnames to withdraw: %w", err))
 	}
-	gone := true
 	if !s.onPreviewWildcard() {
 		dist, found, err := s.findDistributionFor(ctx, c, s.spec().name)
 		switch {
 		case err != nil:
 			errs = append(errs, err)
-			gone = false
 		case found:
 			if err := s.p.deleteDistribution(ctx, c, kindDistribution, dist.id); err != nil {
 				errs = append(errs, err)
-				gone = false
 			} else if err := s.forgetInvalidationTarget(ctx, c, dist.id); err != nil {
 				errs = append(errs, err)
 			}
 		}
 	}
 	s.own.Distribution, s.state.Front = "", ""
-	if unbound && unrouted == nil && gone && s.provisioned() {
-		if err := s.openLedger(c).Destroy(ctx); err != nil {
-			errs = append(errs, err)
-		}
-	}
 	return errors.Join(errs...)
 }

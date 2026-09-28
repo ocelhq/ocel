@@ -25,17 +25,17 @@ func TestTheCloudflareRouterBehavesAsEveryRouterMust(t *testing.T) {
 func cloudflareRouterFixture(t *testing.T) routerconformance.Fixture {
 	t.Helper()
 	t.Setenv(envAccountID, "acct")
-	store := fakeStoreServer(t, "")
+	store, served := fakeStoreFor(t, "")
 	var failing atomic.Pointer[error]
-	served := store.Config.Handler
+	handler := store.Config.Handler
 	store.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/promote") {
+		if strings.HasSuffix(r.URL.Path, "/flip") {
 			if failure := failing.Swap(nil); failure != nil {
-				http.Error(w, (*failure).Error(), http.StatusConflict)
+				http.Error(w, (*failure).Error(), http.StatusUnprocessableEntity)
 				return
 			}
 		}
-		served.ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 	})
 	p := previewZoneMock().provider(t)
 	spec := previewSpec(store.URL, "v1")
@@ -49,16 +49,7 @@ func cloudflareRouterFixture(t *testing.T) routerconformance.Fixture {
 		Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 		Prior:  router.NewStackState(state),
 		Serving: func(pointer string) string {
-			history, err := stackOn(p, state).History(t.Context(), pointer)
-			if err != nil {
-				t.Fatalf("History(%q): %v", pointer, err)
-			}
-			for _, entry := range history {
-				if entry.Active {
-					return entry.Builds[routerconformance.App]
-				}
-			}
-			return ""
+			return served.serving(pointer, routerconformance.App)
 		},
 		FailNextFlip: func(err error) { failing.Store(&err) },
 	}

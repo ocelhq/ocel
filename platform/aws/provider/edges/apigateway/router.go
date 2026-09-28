@@ -2,7 +2,6 @@ package apigateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -49,42 +48,31 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (r routerStack) Ledger() router.Ledger { return &lazyLedger{s: r.s} }
-
 func (r routerStack) Claim(context.Context, string, string) error { return nil }
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
-func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
-	s, promotion, pointer := r.s, flip.Promotion, flip.Pointer
+func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Progress) error {
+	s, pointer := r.s, flip.Pointer
+	patch, err := stagePatch(flip.Promotion.PromotionID, flip.Records)
+	if err != nil {
+		return router.Unserved{Err: err}
+	}
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
-		return err
+		return router.Unserved{Err: err}
 	}
 	if err := flip.RefuseInactive(ctx); err != nil {
 		return err
 	}
 	id, err := s.ensureAPI(ctx, c, pointer)
 	if err != nil {
-		return err
-	}
-	patch, err := s.stagePatch(ctx, c, promotion)
-	if err != nil {
-		return err
-	}
-	if err := moveStage(ctx, c, id, promotion.PromotionID, patch); err != nil {
 		return router.Unserved{Err: err}
 	}
-	if err := s.routePreview(ctx, c, pointer, id); err != nil {
-		return err
-	}
-	if err := s.openLedger(c).Promote(ctx, promotion, pointer, progress); err != nil {
-		if restored := s.restage(ctx, c, pointer, id); restored != nil {
-			return errors.Join(err, restored)
-		}
+	if err := moveStage(ctx, c, id, flip.Promotion.PromotionID, patch); err != nil {
 		return router.Unserved{Err: err}
 	}
-	return nil
+	return s.routePreview(ctx, c, pointer, id)
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) error {

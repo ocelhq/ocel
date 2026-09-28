@@ -19,10 +19,6 @@ func NameUnderStem(stem, name string) bool {
 	return name == stem || strings.HasPrefix(name, stem+"-")
 }
 
-const StoreSchemaVersion = 2
-
-var ErrStoreSchemaUnreadable = errors.New("deployments store does not report a schema version")
-
 var ErrStoreAbsent = errors.New("the deployments store is not provisioned")
 
 type StackSpec struct {

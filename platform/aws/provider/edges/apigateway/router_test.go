@@ -14,7 +14,7 @@ func TestAFlipWhosePromotionIsNoLongerActiveCreatesNoAPIForItsPointer(t *testing
 	w := newWorld()
 	_, stack := previewing(t, w)
 	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
-	if err := openRouter(stack).Ledger().PutStaged(ctx, record); err != nil {
+	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	displaced := errors.New("another promotion displaced this one")

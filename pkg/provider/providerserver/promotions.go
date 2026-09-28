@@ -30,7 +30,7 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	history, err := session.readHistory(ctx, "")
+	history, err := session.ledger.History(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -42,7 +42,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	history, err := session.readHistory(ctx, "")
+	history, err := session.ledger.History(ctx, "")
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -59,7 +59,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Tag:         target.Tag,
 		Flip:        &flip,
 	}
-	if err := session.flip(ctx, router.Flip{Promotion: promoted}, progress.DiscardProgress()); err != nil {
+	if err := session.promote(ctx, "", promoted, progress.DiscardProgress()); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
@@ -120,7 +120,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		pruned, err := session.prune(ctx, int(req.GetKeepN()), pointer)
+		pruned, err := session.ledger.Prune(ctx, int(req.GetKeepN()), pointer)
 		if err != nil {
 			return err
 		}

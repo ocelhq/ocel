@@ -37,14 +37,12 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(r.s.State())
 }
 
-func (r routerStack) Ledger() router.Ledger { return r.s.openLedger() }
-
 func (r routerStack) Claim(context.Context, string, string) error { return unbindable("a domain") }
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
-	return pin.Flip(ctx, r.s.openLedger(), r.s.e.pins, flip, progress)
+	return pin.Flip(ctx, r.s.e.pins, flip, progress)
 }
 
 func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }

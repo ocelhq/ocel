@@ -2,8 +2,6 @@ package box
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"maps"
 	"slices"
 
@@ -40,38 +38,23 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(r.s.State())
 }
 
-func (r routerStack) Ledger() router.Ledger { return r.s.openLedger() }
-
 func (r routerStack) Claim(context.Context, string, string) error { return nil }
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
 	s := r.s
-	promotion, pointer := flip.Promotion, flip.Pointer
-	ready := make([]promotable, 0, len(promotion.Builds))
-	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
-		release, serves, err := s.readyRelease(ctx, app, pointer, promotion)
+	ready := make([]promotable, 0, len(flip.Records))
+	for _, app := range slices.Sorted(maps.Keys(flip.Records)) {
+		release, serves, err := s.readyRelease(ctx, flip.Pointer, flip.Promotion.PromotionID, flip.Records[app])
 		if err != nil {
-			return err
+			return router.Unserved{Err: err}
 		}
 		if serves {
 			ready = append(ready, release)
 		}
 	}
-	if err := s.openLedger().Promote(ctx, promotion, pointer, progress); err != nil {
-		return err
-	}
-	err := s.serve(ctx, flip, ready, progress)
-	var unserved router.Unserved
-	if !errors.As(err, &unserved) {
-		return err
-	}
-	if undo := s.openLedger().Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
-		return errors.Join(err, fmt.Errorf("the ledger still points %s at %s, which this box never served: %w",
-			named(pointer), promotion.PromotionID, undo))
-	}
-	return err
+	return s.serve(ctx, flip, ready, progress)
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) error {

@@ -41,8 +41,6 @@ type Router interface {
 type Stack interface {
 	State() StackState
 
-	Ledger() Ledger
-
 	Claim(ctx context.Context, hostname, app string) error
 
 	Disclaim(ctx context.Context, hostname string) error
