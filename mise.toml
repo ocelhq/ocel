@@ -14,6 +14,10 @@ OCEL_ENV = 'dev'
 GOFLAGS = "{{ (get_env(name='GOFLAGS', default='') | replace(from='-trimpath', to='') ~ ' -trimpath') | trim }}"
 _.path = "{{config_root}}/dist/bin"
 
+[tasks.check]
+description = "Test and lint what changed since origin/main, before a push"
+run = "node scripts/check/check.mjs"
+
 [tasks.oc]
 description = "Build ocel and its providers from this checkout, runnable as oc"
 run = '''

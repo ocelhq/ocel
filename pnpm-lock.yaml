@@ -1151,6 +1151,8 @@ importers:
 
   platform/vps/provider/host: {}
 
+  scripts/check: {}
+
   scripts/release: {}
 
   tests/fixtures/deploy/next:
