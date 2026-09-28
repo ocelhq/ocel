@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -100,11 +101,11 @@ func invokeRoleResource(ns Namespace, tier environment.Tier) string {
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/ocel:env-tier': '%s'
+                    'aws:ResourceTag/%s': '%s'
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub '${%s}/*'
-`, tier, ns.EdgeInvokeRoleName(tier), ns.PolicyName("edge-invoke"), tier, paramAssetBucketARN)
+`, tier, ns.EdgeInvokeRoleName(tier), ns.PolicyName("edge-invoke"), naming.EnvTierTagKey, tier, paramAssetBucketARN)
 }
 
 func notFoundAPIResource(ns Namespace, tier environment.Tier) string {

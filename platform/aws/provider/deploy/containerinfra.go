@@ -86,10 +86,10 @@ func containerInfraName(tier environment.Tier, parts ...string) string {
 
 func containerInfraTags(tier environment.Tier) map[string]string {
 	return map[string]string{
-		"ocel:managed-by": "ocel",
-		"ocel:project":    ContainersSlug,
-		"ocel:env-tier":   string(tier),
-		"ocel:stack":      containerInfraRef(tier).Name.String(),
+		"ocel:managed-by":    "ocel",
+		"ocel:project":       ContainersSlug,
+		naming.EnvTierTagKey: string(tier),
+		"ocel:stack":         containerInfraRef(tier).Name.String(),
 	}
 }
 
