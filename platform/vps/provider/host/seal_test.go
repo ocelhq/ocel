@@ -18,10 +18,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -274,21 +274,22 @@ func TestABindingValueTheSealHelperSealedUnderItsNameOpensThroughTheBoxCipher(t 
 	if err := os.WriteFile(filepath.Join(root, sealTier, "seal.key"), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	rows := fake.NewRecords()
+	rows := fake.NewKeyValues()
+	scope := envvars.Scope{Project: "shop", Tier: sealTier}
 	for name, body := range map[string]string{
 		"records": `{"version":1,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`,
 		"values":  `{"version":1,"sealed":"CX0mtCiLOU33J+IBAIofm6utJftVMG2ehAO1QnHkyAdwJtmaBxEIsCZIQtFxqRz0OdtdvSg0/g=="}`,
 	} {
-		if _, err := rows.Write(context.Background(), records.Record{
-			Name:  records.Name{"values", "shop", sealTier, "bindings", "orders", name, "*"},
-			Bytes: []byte(body),
+		if _, err := rows.Write(context.Background(), keyvalue.Entry{
+			Key:   envvars.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
+			Value: []byte(body),
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	store := envvars.Store{Records: rows, Cipher: boxstore.NewCipher(scratchHelper{script: writeRootedHelper(t, root)})}
+	store := envvars.Store{KeyValues: rows, Cipher: boxstore.NewCipher(scratchHelper{script: writeRootedHelper(t, root)})}
 
-	resolved, err := store.ResolveBinding(context.Background(), envvars.Scope{Project: "shop", Tier: sealTier}, "", "orders")
+	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
 		t.Fatalf("ResolveBinding() = %q, %v, want the value the helper sealed at shop/production/*/%%2F/orders/PROPERTIES/ to open: every binding on a box is bound to those bytes", resolved.Value, err)
 	}

@@ -165,7 +165,7 @@ func TestAValueSealedUnderItsTierKeyAndAssociatedDataBytesOpens(t *testing.T) {
 
 func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsBoundTo(t *testing.T) {
 	clients, kms := serveRecordingKMS(t)
-	store := envvars.Store{Records: fake.NewRecords(), Cipher: Cipher{Clients: clients}}
+	store := envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: Cipher{Clients: clients}}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_live_secret", nil); err != nil {

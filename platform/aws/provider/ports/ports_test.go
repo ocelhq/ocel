@@ -213,8 +213,9 @@ func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
 }
 
 func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
-	table, _ := newRecords(t)
+	table, _ := newKeyValues(t)
 	cipher, _ := newCipher()
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	sealed := fakeCipherMarker + keyARN + "#binding=orders,class=production,environment=*,folder=/,key=PROPERTIES,project=shop|" +
 		base64.StdEncoding.EncodeToString([]byte(`{"url":"postgres://orders"}`))
 	value, err := json.Marshal(map[string]any{"version": 1, "sealed": []byte(sealed)})
@@ -225,16 +226,16 @@ func TestABindingWhoseEncryptionContextNamesItOpens(t *testing.T) {
 		"records": []byte(`{"version":1,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`),
 		"values":  value,
 	} {
-		if _, err := table.Write(context.Background(), records.Record{
-			Name:  records.Name{"values", "shop", "production", "bindings", "orders", name, "*"},
-			Bytes: body,
+		if _, err := table.Write(context.Background(), keyvalue.Entry{
+			Key:   envvars.ValuesPartition(scope).Key("bindings", "orders", name, "*"),
+			Value: body,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	store := envvars.Store{Records: table, Cipher: cipher}
+	store := envvars.Store{KeyValues: table, Cipher: cipher}
 
-	resolved, err := store.ResolveBinding(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "", "orders")
+	resolved, err := store.ResolveBinding(context.Background(), scope, "", "orders")
 	if err != nil || string(resolved.Value) != `{"url":"postgres://orders"}` {
 		t.Fatalf("ResolveBinding() = %q, %v, want the value KMS sealed under binding=orders to open: the encryption context is data every stored binding is bound to", resolved.Value, err)
 	}
