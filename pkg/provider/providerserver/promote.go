@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	unwindWindow    = 60 * time.Second
+	unpromoteWindow = 60 * time.Second
 	restoreAttempts = 8
 )
 
@@ -21,18 +21,18 @@ type appRouter struct {
 	apps  []string
 }
 
-type movedPromotion struct{ refusal.Refusal }
+type inactivePromotion struct{ refusal.Refusal }
 
-func (m movedPromotion) Unwrap() error { return m.Refusal }
+func (i inactivePromotion) Unwrap() error { return i.Refusal }
 
 func promote(ctx context.Context, l projectLedger, pointer string, promoted router.Promotion, routers []appRouter, progress progress.Progress) error {
 	flips := make([]router.Flip, len(routers))
 	for i, routed := range routers {
-		records, err := l.records(ctx, promoted, routed.apps)
+		records, err := l.readRecords(ctx, promoted, routed.apps)
 		if err != nil {
 			return err
 		}
-		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: stillActive(l, pointer, promoted.PromotionID)}
+		flips[i] = router.Flip{Pointer: pointer, Promotion: promoted, Records: records, StillActive: newStillActive(l, pointer, promoted.PromotionID)}
 	}
 	if err := l.Promote(ctx, promoted, pointer, progress); err != nil {
 		return err
@@ -41,7 +41,7 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 		err := routed.stack.Flip(ctx, flips[i], progress)
 		var unserved router.Unserved
 		if errors.As(err, &unserved) {
-			return errors.Join(err, unwind(ctx, l, pointer, promoted.PromotionID, routers[:i]))
+			return errors.Join(err, unpromote(ctx, l, pointer, promoted.PromotionID, routers[:i]))
 		}
 		if err != nil {
 			return err
@@ -50,8 +50,8 @@ func promote(ctx context.Context, l projectLedger, pointer string, promoted rout
 	return nil
 }
 
-func unwind(ctx context.Context, l projectLedger, pointer, promotionID string, flipped []appRouter) error {
-	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
+func unpromote(ctx context.Context, l projectLedger, pointer, promotionID string, flipped []appRouter) error {
+	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
 	defer stop()
 	if err := l.Unpromote(ctx, promotionID, pointer); err != nil {
 		return fmt.Errorf("the ledger still names promotion %s on %s, which not every router serves: %w", promotionID, router.ResolvePointer(pointer), err)
@@ -81,7 +81,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			}
 			continue
 		}
-		records, err := l.records(ctx, active, routed.apps)
+		records, err := l.readRecords(ctx, active, routed.apps)
 		if err != nil {
 			return err
 		}
@@ -89,17 +89,17 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			Pointer:     pointer,
 			Promotion:   active,
 			Records:     records,
-			StillActive: stillActive(l, pointer, active.PromotionID),
+			StillActive: newStillActive(l, pointer, active.PromotionID),
 		}, progress.DiscardProgress())
-		var moved movedPromotion
-		if !errors.As(err, &moved) {
+		var inactive inactivePromotion
+		if !errors.As(err, &inactive) {
 			return err
 		}
 	}
 	return fmt.Errorf("another deploy moved %s on each of %d attempts to serve what the ledger names there", router.ResolvePointer(pointer), restoreAttempts)
 }
 
-func stillActive(l projectLedger, pointer, promotionID string) router.StillActive {
+func newStillActive(l projectLedger, pointer, promotionID string) router.StillActive {
 	return func(ctx context.Context) error {
 		active, err := l.ActivePromotionID(ctx, pointer)
 		if err != nil {
@@ -108,13 +108,13 @@ func stillActive(l projectLedger, pointer, promotionID string) router.StillActiv
 		if active == promotionID {
 			return nil
 		}
-		return movedPromotion{refusal.Refusal{Code: refusal.CodeBusy, Message: fmt.Sprintf(
+		return inactivePromotion{refusal.Refusal{Code: refusal.CodeBusy, Message: fmt.Sprintf(
 			"promotion %s is no longer active on %s, which now names %s: another deploy moved it while this one flipped, and this deploy stopped rather than serve a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
-			promotionID, router.ResolvePointer(pointer), activeOr(active))}}
+			promotionID, router.ResolvePointer(pointer), describeActive(active))}}
 	}
 }
 
-func activeOr(active string) string {
+func describeActive(active string) string {
 	if active == "" {
 		return "nothing"
 	}

@@ -268,7 +268,7 @@ func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, pr
 		switch {
 		case err == nil:
 			return storeIdentity{secret: secret, ownerToken: prior.OwnerToken}, decodeStampSet(current), nil
-		case !unauthorized(res):
+		case !isUnauthorized(res):
 			return storeIdentity{}, nil, fmt.Errorf("read stack version stamp: %w", err)
 		}
 	}
@@ -322,7 +322,7 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 	if secret := state.Secret; secret != "" {
 		stamped, res, err := p.getVersionStamp(ctx, state.Endpoint, state.Slug, secret)
 		if err != nil {
-			if unauthorized(res) {
+			if isUnauthorized(res) {
 				return nil, fmt.Errorf("read stack version stamp: the deployments store rejected project %q's secret, so the workers it deployed cannot be named: %w", state.Slug, err)
 			}
 			return nil, fmt.Errorf("read stack version stamp: %w", err)
@@ -330,7 +330,7 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 		for name := range decodeStampSet(stamped) {
 			named[name] = true
 		}
-		deployed, err := p.servedApps(ctx, state)
+		deployed, err := p.readServedApps(ctx, state)
 		if err != nil {
 			return nil, fmt.Errorf("read the apps the deployments store served, which names the workers they ran on: %w", err)
 		}

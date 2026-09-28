@@ -236,9 +236,9 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "shop.app.com/*" || m.createdRoutes[0]["script"] != domainEntryScript {
 		t.Fatalf("created routes = %v, want shop.app.com/* on %s, the entry worker that reads the promoted release", m.createdRoutes, domainEntryScript)
 	}
-	served, err := s.servedPromotion(t.Context(), router.DefaultPointer)
+	served, err := s.readServedPromotion(t.Context(), router.DefaultPointer)
 	if err != nil {
-		t.Fatalf("servedPromotion: %v", err)
+		t.Fatalf("readServedPromotion: %v", err)
 	}
 	if served != "promo-1" {
 		t.Errorf("the default pointer serves %q, want promo-1 still: the worker serves a bound hostname from it, with no promotion keyed by hostname to flip again", served)
@@ -357,7 +357,7 @@ func TestDestroyOutlivesAnUnbindThatCannotRun(t *testing.T) {
 	if !slices.Contains(m.deletedScripts, "ocel-preview") {
 		t.Errorf("deleted scripts = %v, want the workers destroyed even so", m.deletedScripts)
 	}
-	if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+	if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 		t.Error("reading the pointer after Destroy: err = nil, want the store instance gone even so")
 	}
 }

@@ -698,7 +698,7 @@ func TestDestroy(t *testing.T) {
 			"ocel--acme-web--prod--api",
 			"ocel--acme-web--prod--root",
 		})
-		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
@@ -718,7 +718,7 @@ func TestDestroy(t *testing.T) {
 		if !slices.Contains(m.deletedScripts, "ocel-preview") || !slices.Contains(m.deletedScripts, "ocel-preview--web") {
 			t.Errorf("deleted scripts = %v, want both stamped workers", m.deletedScripts)
 		}
-		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err == nil {
 			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
@@ -737,7 +737,7 @@ func TestDestroy(t *testing.T) {
 		if len(m.deletedScripts) != 0 {
 			t.Errorf("deleted scripts = %v, want none: the workers to destroy were never established", m.deletedScripts)
 		}
-		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).servedPromotion(t.Context(), ""); err != nil {
+		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).readServedPromotion(t.Context(), ""); err != nil {
 			t.Errorf("reading the pointer after a refused Destroy: %v, want the instance still keeping the record of what was deployed", err)
 		}
 	})
@@ -755,7 +755,7 @@ func TestDestroy(t *testing.T) {
 		if err := stackOn(p, state).Destroy(t.Context()); err == nil {
 			t.Fatal("Destroy err = nil, want the worker that survived reported")
 		}
-		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err != nil {
+		if _, err := stackOn(p, state).readServedPromotion(t.Context(), ""); err != nil {
 			t.Errorf("reading the pointer after a failed Destroy: %v, want the instance still naming the worker left behind", err)
 		}
 	})

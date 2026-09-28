@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	casAttempts  = 8
-	unwindWindow = 60 * time.Second
+	casAttempts     = 8
+	unpromoteWindow = 60 * time.Second
 )
 
-func detachedForUnwind(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
+func detachForUnpromote(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), unpromoteWindow)
 }
 
 type Ledger struct {
@@ -206,7 +206,7 @@ func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointe
 }
 
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
-	ctx, stop := detachedForUnwind(ctx)
+	ctx, stop := detachForUnpromote(ctx)
 	defer stop()
 	name := router.ResolvePointer(pointer)
 	for range casAttempts {
@@ -242,7 +242,7 @@ func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) err
 }
 
 func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error {
-	ctx, stop := detachedForUnwind(ctx)
+	ctx, stop := detachForUnpromote(ctx)
 	defer stop()
 	for range casAttempts {
 		recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.promotionKey(pointer, promotionID))

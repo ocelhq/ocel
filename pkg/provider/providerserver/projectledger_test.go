@@ -25,7 +25,7 @@ func TestAStagedEnvelopeIsSealedInTheLedgerAndHandedToARouterOpen(t *testing.T) 
 	if kept.Envelope == "" || kept.Envelope == envelope {
 		t.Errorf("the ledger keeps the envelope as %q, want it sealed: whoever reads the origin's table would otherwise hold the key to every secret the edge serves", kept.Envelope)
 	}
-	records, err := l.records(ctx, router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}, []string{"web"})
+	records, err := l.readRecords(ctx, router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}, []string{"web"})
 	if err != nil {
 		t.Fatalf("records: %v", err)
 	}

@@ -91,7 +91,7 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, spec distribu
 func wildcardInvalidationTargets(c Clients, tier environment.Tier, deployed bootstrap.Deployed) invalidationTargets {
 	return invalidationTargets{
 		keyValues: awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(deployed.StateTable)},
-		partition: invalidationPartition(tier, ""),
+		partition: newInvalidationPartition(tier, ""),
 	}
 }
 

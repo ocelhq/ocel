@@ -30,16 +30,16 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.flip(this.ctx.storage, flipped);
   }
 
-  async servedPromotion(pointer?: string): Promise<string | undefined> {
-    return store.servedPromotion(this.ctx.storage, pointer);
+  async readServedPromotion(pointer?: string): Promise<string | undefined> {
+    return store.readServedPromotion(this.ctx.storage, pointer);
   }
 
   async removePointer(pointer: string): Promise<void> {
     store.removePointer(this.ctx.storage, pointer);
   }
 
-  async apps(): Promise<string[]> {
-    return store.apps(this.ctx.storage);
+  async listApps(): Promise<string[]> {
+    return store.listApps(this.ctx.storage);
   }
 
   async pointerRecord(

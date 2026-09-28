@@ -51,7 +51,7 @@ func (r routerStack) Claim(context.Context, string, string) error { return nil }
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Progress) error {
-	records, err := r.s.served(flip.Records)
+	records, err := r.s.wrapEnvelopes(flip.Records)
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -61,20 +61,20 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 				return router.Unserved{Err: err}
 			}
 		}
-		replaces, err := r.s.servedPromotion(ctx, flip.Pointer)
+		replaces, err := r.s.readServedPromotion(ctx, flip.Pointer)
 		if err != nil {
 			return router.Unserved{Err: err}
 		}
 		if err := flip.RefuseInactive(ctx); err != nil {
 			return err
 		}
-		moved, err := r.s.flip(ctx, flipBody{
+		stale, err := r.s.flip(ctx, flipBody{
 			Pointer:     flip.Pointer,
 			Replaces:    replaces,
 			PromotionID: flip.Promotion.PromotionID,
 			Records:     records,
 		})
-		if err != nil || !moved {
+		if err != nil || !stale {
 			return err
 		}
 	}
@@ -82,7 +82,7 @@ func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Prog
 }
 
 func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) error {
-	return r.s.removeServed(ctx, pointer)
+	return r.s.removePointerRecords(ctx, pointer)
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }
