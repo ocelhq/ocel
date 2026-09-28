@@ -14,24 +14,24 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-type router struct {
+type dispatch struct {
 	own   bucketv1connect.BucketServiceHandler
 	bound func() ([]*Service, error)
 }
 
-var _ bucketv1connect.BucketServiceHandler = (*router)(nil)
+var _ bucketv1connect.BucketServiceHandler = (*dispatch)(nil)
 
-func route(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1connect.BucketServiceHandler {
-	return &router{own: own, bound: func() ([]*Service, error) { return bound, nil }}
+func newFixedDispatch(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1connect.BucketServiceHandler {
+	return &dispatch{own: own, bound: func() ([]*Service, error) { return bound, nil }}
 }
 
-func RouteRecords(own bucketv1connect.BucketServiceHandler, records Records, callbacks Poster) bucketv1connect.BucketServiceHandler {
+func NewDispatch(own bucketv1connect.BucketServiceHandler, records Records, callbacks Poster) bucketv1connect.BucketServiceHandler {
 	var mu sync.Mutex
 	var ready bool
 	var seen uint32
 	var read string
 	var built []*Service
-	return &router{own: own, bound: func() ([]*Service, error) {
+	return &dispatch{own: own, bound: func() ([]*Service, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		generation := records.Generation()
@@ -62,7 +62,7 @@ func bucketRecords(records Records) string {
 	return values.String()
 }
 
-func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, error) {
+func (r *dispatch) forBucket(name string) (bucketv1connect.BucketServiceHandler, error) {
 	bound, err := r.bound()
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, e
 	return r.own, nil
 }
 
-func (r *router) forSession(id string) (bucketv1connect.BucketServiceHandler, error) {
+func (r *dispatch) forSession(id string) (bucketv1connect.BucketServiceHandler, error) {
 	bound, err := r.bound()
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (r *router) forSession(id string) (bucketv1connect.BucketServiceHandler, er
 	return r.own, nil
 }
 
-func (r *router) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
+func (r *dispatch) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (r *router) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadR
 	return backend.PresignUpload(ctx, req)
 }
 
-func (r *router) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
+func (r *dispatch) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
 	backend, err := r.forSession(req.GetSessionId())
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (r *router) VerifyUploadSignature(ctx context.Context, req *bucketv1.Verify
 	return backend.VerifyUploadSignature(ctx, req)
 }
 
-func (r *router) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
+func (r *dispatch) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
 	backend, err := r.forSession(req.GetSessionId())
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (r *router) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadSta
 	return backend.GetUploadStatus(ctx, req)
 }
 
-func (r *router) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUploadRequest) (*bucketv1.CompleteUploadResponse, error) {
+func (r *dispatch) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUploadRequest) (*bucketv1.CompleteUploadResponse, error) {
 	backend, err := r.forSession(req.GetSessionId())
 	if err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func (r *router) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUploa
 	return backend.CompleteUpload(ctx, req)
 }
 
-func (r *router) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
+func (r *dispatch) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (r *router) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1
 	return backend.Head(ctx, req)
 }
 
-func (r *router) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
+func (r *dispatch) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (r *router) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1
 	return backend.List(ctx, req)
 }
 
-func (r *router) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
+func (r *dispatch) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func (r *router) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*buck
 	return backend.Delete(ctx, req)
 }
 
-func (r *router) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
+func (r *dispatch) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func (r *router) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1
 	return backend.Copy(ctx, req)
 }
 
-func (r *router) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
+func (r *dispatch) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (r *router) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1
 	return backend.Sign(ctx, req)
 }
 
-func (r *router) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
+func (r *dispatch) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -174,7 +174,7 @@ func (r *router) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultip
 	return backend.CreateMultipart(ctx, req)
 }
 
-func (r *router) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
+func (r *dispatch) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (r *router) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) 
 	return backend.SignParts(ctx, req)
 }
 
-func (r *router) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMultipartRequest) (*bucketv1.CompleteMultipartResponse, error) {
+func (r *dispatch) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMultipartRequest) (*bucketv1.CompleteMultipartResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err
@@ -190,7 +190,7 @@ func (r *router) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMu
 	return backend.CompleteMultipart(ctx, req)
 }
 
-func (r *router) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
+func (r *dispatch) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
 	backend, err := r.forBucket(req.GetBucket())
 	if err != nil {
 		return nil, err

@@ -193,7 +193,7 @@ func proxying(manifest vars.Manifest, values *live.Values, socket, app string) (
 	if manifest.Store.Volume != "" {
 		cfg.Volume = source.FreeSpace(socket)
 	}
-	return bindingproxy.Serve(s3store.RouteRecords(s3store.New(cfg), values, cfg.Callbacks))
+	return bindingproxy.Serve(s3store.NewDispatch(s3store.New(cfg), values, cfg.Callbacks))
 }
 
 const unclaimedWindow = 10 * time.Second
