@@ -7,9 +7,6 @@ import (
 	"os"
 	"sync"
 	"time"
-	"unicode/utf8"
-
-	"github.com/fatih/color"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
@@ -88,7 +85,7 @@ func newLineSink(w io.Writer, present Presentation, sources lineSources) *LineSi
 		present: present,
 		grouped: grouped,
 		commits: commits,
-		live:    newLiveLine(sources.now),
+		live:    newLiveLine(sources.now, present),
 		now:     sources.now,
 		width:   present.Width,
 		ticking: true,
@@ -131,18 +128,13 @@ func (s *LineSink) Receive(ev *streamv1.RunEvent) {
 	s.live.observe(ev)
 	switch {
 	case ev.GetResult() != nil:
-		s.live = newLiveLine(s.now)
+		s.live = newLiveLine(s.now, s.present)
 	case ev.GetWaiting() != nil:
 		s.held = true
 	case ev.GetResumed() != nil && !s.closed:
 		s.held = false
 	}
 	s.draw()
-}
-
-func (s *LineSink) paintGlyph(line string) string {
-	_, size := utf8.DecodeRuneInString(line)
-	return colorFor(s.present, color.FgCyan).Sprint(line[:size]) + line[size:]
 }
 
 func (s *LineSink) draw() {
@@ -174,7 +166,7 @@ func (s *LineSink) draw() {
 		if flushed || rowsAbove == 0 {
 			frame.WriteString(eraseLine)
 		}
-		frame.WriteString(s.paintGlyph(line))
+		frame.WriteString(line)
 	}
 	frame.WriteString(syncEnd)
 	_, _ = s.w.Write(frame.Bytes())

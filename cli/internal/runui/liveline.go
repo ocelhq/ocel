@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -24,8 +26,9 @@ func spinnerFrame(n int) string {
 }
 
 type liveLine struct {
-	now    func() time.Time
-	origin time.Time
+	now     func() time.Time
+	present Presentation
+	origin  time.Time
 
 	phase   progressv1.Phase
 	tallies map[progressv1.Phase]*phaseTally
@@ -47,9 +50,10 @@ func (u *liveUnit) said() string {
 	return cmp.Or(u.output, u.progress)
 }
 
-func newLiveLine(now func() time.Time) *liveLine {
+func newLiveLine(now func() time.Time, present Presentation) *liveLine {
 	return &liveLine{
 		now:     now,
+		present: present,
 		tallies: make(map[progressv1.Phase]*phaseTally),
 		units:   make(map[string]*liveUnit),
 		owners:  make(map[string]string),
@@ -149,31 +153,49 @@ func (l *liveLine) render(width int) string {
 	}
 	at := l.now()
 	l.pick(at)
-	head := spinnerFrame(int(at.Sub(l.origin) / frameRate))
-	if name := phaseNames[l.phase]; name != "" {
-		head += " [" + name + "]"
+	head := continuationIndent
+	if tag, ok := phaseTag(l.present, l.phase); ok {
+		head += tag + " "
 	}
-	if tally.units > 0 {
-		head += fmt.Sprintf(" %d/%d", tally.done, tally.units)
-	}
+	head += colorFor(l.present, color.FgCyan).Sprint(spinnerFrame(int(at.Sub(l.origin) / frameRate)))
+	spinnerEnds := displayWidth(head)
 	if unit := l.units[l.shown]; unit != nil {
-		head += " · " + cmp.Or(unit.opened.GetSubject(), unit.opened.GetMessage())
-		said := unit.said()
-		if said == "" && unit.opened.GetSubject() != "" {
-			title, _, _ := strings.Cut(unit.opened.GetMessage(), "\n")
-			said, _ = sanitize(title)
-		}
-		if said != "" {
-			head += liveGutter + said
-		}
+		head += " " + l.naming(unit)
 	}
 	took := formatDuration(at.Sub(tally.since))
+	if tally.units > 0 {
+		took = fmt.Sprintf("%d/%d · %s", tally.done, tally.units, took)
+	}
 	room := width - 1 - displayWidth(took) - len(liveGutter)
-	if room < 1 {
+	if room < spinnerEnds {
+		if width-1 < spinnerEnds {
+			return ""
+		}
 		return fitToWidth(head, width-1)
 	}
 	head = fitToWidth(head, room)
-	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + took
+	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + muted(l.present, took)
+}
+
+func (l *liveLine) naming(unit *liveUnit) string {
+	said := unit.said()
+	subject := unit.opened.GetSubject()
+	if subject == "" {
+		named := unit.opened.GetMessage()
+		if said != "" {
+			named += liveGutter + muted(l.present, said)
+		}
+		return named
+	}
+	if said == "" {
+		title, _, _ := strings.Cut(unit.opened.GetMessage(), "\n")
+		said, _ = sanitize(title)
+	}
+	named := colorFor(l.present, color.Bold).Sprint(subject) + ":"
+	if said != "" {
+		named += " " + muted(l.present, said)
+	}
+	return named
 }
 
 func isBareScope(ev *streamv1.RunEvent) bool {
