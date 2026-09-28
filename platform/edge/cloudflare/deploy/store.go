@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
@@ -44,61 +46,71 @@ func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName str
 	return err
 }
 
-func (s *stack) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
-	if record.Envelope != "" && s.own.wrapsEnvelopes() {
-		wrapped, err := wrapEnvelope(s.own.EnvelopeKey, record.Envelope)
-		if err != nil {
-			return fmt.Errorf("wrap %s's envelope for the worker that serves it: %w", record.App, err)
+func (s *stack) served(records map[string]router.DeploymentRecord) ([]router.DeploymentRecord, error) {
+	served := make([]router.DeploymentRecord, 0, len(records))
+	for _, app := range slices.Sorted(maps.Keys(records)) {
+		record := records[app]
+		if record.Envelope != "" && s.own.wrapsEnvelopes() {
+			wrapped, err := wrapEnvelope(s.own.EnvelopeKey, record.Envelope)
+			if err != nil {
+				return nil, fmt.Errorf("wrap %s's envelope for the worker that serves it: %w", record.App, err)
+			}
+			record.Envelope = wrapped
 		}
-		record.Envelope = wrapped
+		served = append(served, record)
 	}
-	_, err := s.p.storeRequest(ctx, s.state, http.MethodPut, "/staged", record, nil)
-	return err
+	return served, nil
 }
 
-type promoteBody struct {
-	router.Promotion
-	Pointer string `json:"pointer,omitempty"`
-}
-
-func (s *stack) promote(ctx context.Context, promotion router.Promotion, pointer string) error {
-	res, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
-	if err != nil && res != nil {
-		return router.Unserved{Err: err}
-	}
-	return err
-}
-
-func (s *stack) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
-	subpath := "/history"
+func (s *stack) servedPromotion(ctx context.Context, pointer string) (string, error) {
+	subpath := "/pointer"
 	if pointer != "" {
 		subpath += "?pointer=" + url.QueryEscape(pointer)
 	}
-	var history []router.HistoryEntry
-	if _, err := s.p.storeRequest(ctx, s.state, http.MethodGet, subpath, nil, &history); err != nil {
+	var out struct {
+		PromotionID *string `json:"promotionId"`
+	}
+	if _, err := s.p.storeRequest(ctx, s.state, http.MethodGet, subpath, nil, &out); err != nil {
+		return "", err
+	}
+	if out.PromotionID == nil {
+		return "", nil
+	}
+	return *out.PromotionID, nil
+}
+
+type flipBody struct {
+	Pointer     string                    `json:"pointer,omitempty"`
+	Replaces    string                    `json:"replaces,omitempty"`
+	PromotionID string                    `json:"promotionId"`
+	Records     []router.DeploymentRecord `json:"records"`
+}
+
+func (s *stack) flip(ctx context.Context, body flipBody) (bool, error) {
+	res, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/flip", body, nil)
+	switch {
+	case res != nil && res.StatusCode == http.StatusConflict:
+		return true, nil
+	case err != nil && res != nil:
+		return false, router.Unserved{Err: err}
+	}
+	return false, err
+}
+
+func (s *stack) removeServed(ctx context.Context, pointer string) error {
+	if pointer == "" {
+		pointer = router.DefaultPointer
+	}
+	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, nil)
+	return err
+}
+
+func (p *cloudflare) servedApps(ctx context.Context, state edge.StackState) ([]string, error) {
+	var apps []string
+	if _, err := p.storeRequest(ctx, state, http.MethodGet, "/apps", nil, &apps); err != nil {
 		return nil, err
 	}
-	return history, nil
-}
-
-func (s *stack) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
-	var result router.PruneResult
-	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
-		return router.PruneResult{}, err
-	}
-	return result, nil
-}
-
-func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
-	body := map[string]any{"keepN": keepN}
-	if pointer != "" {
-		body["pointer"] = pointer
-	}
-	var result router.PruneResult
-	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/prune", body, &result); err != nil {
-		return router.PruneResult{}, err
-	}
-	return result, nil
+	return apps, nil
 }
 
 var errStoreIdentityTaken = errors.New("the deployments store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this tier's edge to reset the store")
@@ -113,20 +125,6 @@ func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, boo
 		return storeIdentity{}, err
 	}
 	return present, nil
-}
-
-func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
-	var out struct {
-		SchemaVersion int `json:"schemaVersion"`
-	}
-	res, err := s.p.storeRequest(ctx, s.state, http.MethodGet, "/schema-version", nil, &out)
-	if err != nil {
-		if unauthorized(res) {
-			return 0, edge.ErrStoreSchemaUnreadable
-		}
-		return 0, err
-	}
-	return out.SchemaVersion, nil
 }
 
 func (p *cloudflare) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {

@@ -177,9 +177,6 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	if err := s.adopt(front); err != nil {
 		return nil, err
 	}
-	if err := s.openLedger().EnsureSchema(ctx); err != nil {
-		return nil, err
-	}
 	return s, nil
 }
 

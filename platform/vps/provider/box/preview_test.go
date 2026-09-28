@@ -119,7 +119,7 @@ func previewStack(t *testing.T, m *machine) boxStack {
 	return previewStackOn(t, edgeOver(m, fake.NewKeyValues()))
 }
 
-func previewStackOn(t *testing.T, front *box.Edge) boxStack {
+func previewStackOn(t *testing.T, front boxEdge) boxStack {
 	t.Helper()
 
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), previewSpec()); err != nil {

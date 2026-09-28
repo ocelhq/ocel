@@ -5,9 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -16,12 +14,11 @@ import (
 const Kind edge.Kind = "direct"
 
 type Edge struct {
-	keyValues keyvalue.Store
-	pins      pin.Pins
+	pins pin.Pins
 }
 
-func New(store keyvalue.Store, pins pin.Pins) *Edge {
-	return &Edge{keyValues: store, pins: pins}
+func New(pins pin.Pins) *Edge {
+	return &Edge{pins: pins}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }
@@ -44,7 +41,7 @@ func Surface(slug string, tier environment.Tier) string {
 	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), string(tier))
 }
 
-func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack names none", Kind)
@@ -52,11 +49,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next := prior
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
-	s := &stack{e: e, state: next}
-	if err := s.openLedger().EnsureSchema(ctx); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &stack{e: e, state: next}, nil
 }
 
 func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
@@ -114,10 +107,6 @@ var (
 
 func (s *stack) State() edge.StackState { return s.state }
 
-func (s *stack) openLedger() *ledger.Ledger {
-	return ledger.New(s.e.keyValues, s.state.Tier, s.state.Slug)
-}
-
 func (s *stack) BindDomain(context.Context, edge.DomainBinding) error {
 	return unbindable("a domain")
 }
@@ -128,4 +117,4 @@ func (s *stack) UnbindDomain(_ context.Context, hostname string) error {
 	return nil
 }
 
-func (s *stack) Destroy(ctx context.Context) error { return s.openLedger().Destroy(ctx) }
+func (s *stack) Destroy(context.Context) error { return nil }

@@ -2,10 +2,13 @@ package cloudflare
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
+
+const flipAttempts = 5
 
 type Router struct{ p *cloudflare }
 
@@ -43,19 +46,43 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (r routerStack) Ledger() router.Ledger { return r.s }
-
 func (r routerStack) Claim(context.Context, string, string) error { return nil }
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, _ progress.Progress) error {
-	if err := flip.RefuseInactive(ctx); err != nil {
-		return err
+	records, err := r.s.served(flip.Records)
+	if err != nil {
+		return router.Unserved{Err: err}
 	}
-	return r.s.promote(ctx, flip.Promotion, flip.Pointer)
+	for attempt := range flipAttempts {
+		if attempt > 0 {
+			if err := waitBeforeRetry(ctx, storeRetryDelay(nil, attempt-1, retryJitter())); err != nil {
+				return router.Unserved{Err: err}
+			}
+		}
+		replaces, err := r.s.servedPromotion(ctx, flip.Pointer)
+		if err != nil {
+			return router.Unserved{Err: err}
+		}
+		if err := flip.RefuseInactive(ctx); err != nil {
+			return err
+		}
+		moved, err := r.s.flip(ctx, flipBody{
+			Pointer:     flip.Pointer,
+			Replaces:    replaces,
+			PromotionID: flip.Promotion.PromotionID,
+			Records:     records,
+		})
+		if err != nil || !moved {
+			return err
+		}
+	}
+	return router.Unserved{Err: fmt.Errorf("flip promotion %s: the deployments store served another promotion on every one of %d attempts, so this flip stopped rather than overwrite it", flip.Promotion.PromotionID, flipAttempts)}
 }
 
-func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }
+func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) error {
+	return r.s.removeServed(ctx, pointer)
+}
 
 func (r routerStack) Destroy(context.Context) error { return nil }

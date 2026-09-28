@@ -297,9 +297,6 @@ func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	own.Region = c.Region
 
 	s := &stack{p: p, state: next, own: own}
-	if err := s.openLedger(c).EnsureSchema(ctx); err != nil {
-		return nil, err
-	}
 	if spec.PruneOnly {
 		return s, nil
 	}

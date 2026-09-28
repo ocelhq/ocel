@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -23,11 +22,12 @@ type Fixture struct {
 }
 
 type Suite struct {
-	New      func(t *testing.T) Fixture
-	Previews func(t *testing.T) Fixture
-	Pointer  string
-	Hostname string
-	Record   func(app, build string) router.DeploymentRecord
+	New                 func(t *testing.T) Fixture
+	Previews            func(t *testing.T) Fixture
+	Pointer             string
+	Hostname            string
+	Record              func(app, build string) router.DeploymentRecord
+	TornDownWithCompute bool
 }
 
 var errDisplaced = errors.New("conformance: another promotion displaced this one while it flipped")
@@ -88,7 +88,7 @@ func Run(t *testing.T, suite Suite) {
 		stack := reconciled(t, fixture)
 		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
-		displaced := stage(t, stack, "conformance-b2", record(App, "b2"))
+		displaced := stage("conformance-b2", record(App, "b2"))
 		displaced.Pointer = pointer
 		displaced.StillActive = func(context.Context) error { return errDisplaced }
 		err := stack.Flip(context.Background(), displaced, progress.DiscardProgress())
@@ -112,7 +112,7 @@ func Run(t *testing.T, suite Suite) {
 		stack := reconciled(t, fixture)
 		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
-		refused := stage(t, stack, "conformance-b2", record(App, "b2"))
+		refused := stage("conformance-b2", record(App, "b2"))
 		refused.Pointer = pointer
 		fixture.FailNextFlip(errDataPlane)
 		err := stack.Flip(context.Background(), refused, progress.DiscardProgress())
@@ -126,21 +126,15 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("removing a pointer leaves nothing served on it", func(t *testing.T) {
-		ctx := context.Background()
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
 		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		removesPointer(t, stack, pointer)
-		if served := fixture.Serving(pointer); served != "" {
+		if served := fixture.Serving(pointer); served != "" && !suite.TornDownWithCompute {
 			t.Errorf("%s serves %q after it was removed, want nothing", pointer, served)
 		}
-		if err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
-			t.Fatalf("RemovePointer again: %v", err)
-		}
-		if _, err := stack.Ledger().RemovePointer(ctx, pointer); err != nil {
-			t.Fatalf("Ledger().RemovePointer again: %v", err)
-		}
+		removesPointer(t, stack, pointer)
 	})
 
 	t.Run("a router that answers hostnames takes a claim, and one that does not refuses it", func(t *testing.T) {
@@ -167,136 +161,55 @@ func Run(t *testing.T, suite Suite) {
 		}
 	})
 
-	t.Run("a reconciled stack reopens onto the same ledger", func(t *testing.T) {
+	t.Run("a reconciled stack reopens onto the data plane it flipped", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, "", "conformance-reopen", functionRecord(App, "b1"))
+		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		reopened, err := fixture.Router.Open(stack.State())
 		if err != nil {
 			t.Fatalf("Open: %v", err)
 		}
-		requireInHistory(t, reopened, "", "conformance-reopen")
+		flips(t, reopened, pointer, "conformance-b2", record(App, "b2"))
+		if served := fixture.Serving(pointer); served != "b2" {
+			t.Errorf("%s serves %q after the reopened stack flipped onto b2, want b2", pointer, served)
+		}
 	})
 
 	t.Run("state survives the seam it is persisted through", func(t *testing.T) {
 		fixture := suite.New(t)
 		stack := reconciled(t, fixture)
-		flips(t, stack, "", "conformance-persisted", functionRecord(App, "b1"))
+		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
 
 		reopened, err := fixture.Router.Open(roundTrip(t, stack.State()))
 		if err != nil {
 			t.Fatalf("Open a persisted state: %v", err)
 		}
-		requireInHistory(t, reopened, "", "conformance-persisted")
-	})
-
-	t.Run("the ledger reports a schema version", func(t *testing.T) {
-		stack := reconciled(t, suite.New(t))
-		version, err := stack.Ledger().SchemaVersion(context.Background())
-		if err != nil {
-			t.Fatalf("SchemaVersion: %v", err)
-		}
-		if version <= 0 {
-			t.Errorf("SchemaVersion = %d, want the schema the store speaks", version)
+		flips(t, reopened, pointer, "conformance-b2", record(App, "b2"))
+		if served := fixture.Serving(pointer); served != "b2" {
+			t.Errorf("%s serves %q after a stack reopened from its persisted state flipped onto b2, want b2", pointer, served)
 		}
 	})
 
-	t.Run("pruning keeps the window and reports both sides", func(t *testing.T) {
-		ctx := context.Background()
-		stack := reconciled(t, suite.New(t))
-		ids := []string{"conformance-1", "conformance-2", "conformance-3"}
-		for _, id := range ids {
-			flips(t, stack, "", id, functionRecord(App, id))
-		}
-		result, err := stack.Ledger().Prune(ctx, 1, "")
-		if err != nil {
-			t.Fatalf("Prune: %v", err)
-		}
-		if len(result.KeptPromotionIDs) < 1 {
-			t.Errorf("KeptPromotionIDs = %v, want at least the one promotion asked for", result.KeptPromotionIDs)
-		}
-		if len(result.RemovedPromotionIDs) == 0 {
-			t.Errorf("RemovedPromotionIDs = %v, want the %d promotions outside a window of one", result.RemovedPromotionIDs, len(ids)-1)
-		}
-		if inEffect := ids[len(ids)-1]; !slices.Contains(result.KeptPromotionIDs, inEffect) {
-			t.Errorf("KeptPromotionIDs = %v, want the promotion in effect (%q) among them", result.KeptPromotionIDs, inEffect)
-		}
-		for _, id := range result.KeptPromotionIDs {
-			if slices.Contains(result.RemovedPromotionIDs, id) {
-				t.Errorf("promotion %q is reported both kept and removed", id)
-			}
-		}
-		for _, id := range ids {
-			if !slices.Contains(result.KeptPromotionIDs, id) && !slices.Contains(result.RemovedPromotionIDs, id) {
-				t.Errorf("promotion %q is reported neither kept nor removed", id)
-			}
-		}
-	})
-
-	t.Run("removing a pointer from the ledger takes its promotions and leaves the rest", func(t *testing.T) {
-		ctx := context.Background()
-		stack := reconciled(t, suite.New(t))
-		const pointed = "conformance-pointer"
-		flips(t, stack, "", "unpointed", functionRecord(App, "b1"))
-		flips(t, stack, pointed, "pointed", functionRecord(App, "b2"))
-
-		if err := stack.RemovePointer(ctx, pointed, progress.DiscardProgress()); err != nil {
-			t.Fatalf("RemovePointer: %v", err)
-		}
-		result, err := stack.Ledger().RemovePointer(ctx, pointed)
-		if err != nil {
-			t.Fatalf("Ledger().RemovePointer: %v", err)
-		}
-		if !slices.Contains(result.RemovedPromotionIDs, "pointed") {
-			t.Errorf("RemovedPromotionIDs = %v, want the pointer's promotion", result.RemovedPromotionIDs)
-		}
-		if slices.Contains(result.RemovedPromotionIDs, "unpointed") {
-			t.Errorf("RemovedPromotionIDs = %v, want nothing outside the pointer", result.RemovedPromotionIDs)
-		}
-		for _, key := range result.RemovedRecordKeys {
-			if slices.Contains(result.SurvivingRecordKeys, key) {
-				t.Errorf("record key %q is reported both removed and surviving", key)
-			}
-		}
-		if left := history(t, stack, pointed); len(left) != 0 {
-			t.Errorf("history under %q = %v, want nothing after the pointer was removed", pointed, left)
-		}
-		requireInHistory(t, stack, "", "unpointed")
-	})
-
-	runPreviews(t, suite)
+	runPreviews(t, suite, record)
 }
 
-func runPreviews(t *testing.T, suite Suite) {
-	t.Run("a preview pointer leaves nothing behind when it is removed", func(t *testing.T) {
+func runPreviews(t *testing.T, suite Suite, record func(app, build string) router.DeploymentRecord) {
+	t.Run("a preview pointer leaves nothing served when it is removed", func(t *testing.T) {
 		if suite.Previews == nil {
 			t.Skip("this router cannot be served on a preview wildcard from the conformance suite alone")
 		}
-		ctx := context.Background()
-		stack := reconciled(t, suite.Previews(t))
+		fixture := suite.Previews(t)
+		stack := reconciled(t, fixture)
 		const pointer = "conformance-preview"
-		flips(t, stack, pointer, "previewed", functionRecord(App, "b1"))
-
-		served := history(t, stack, pointer)
-		if !slices.ContainsFunc(served, func(entry router.HistoryEntry) bool {
-			return entry.PromotionID == "previewed" && entry.Active
-		}) {
-			t.Fatalf("history under %q = %v, want the promotion this preview serves marked active; a preview that never landed makes every assertion after it vacuous", pointer, served)
+		flips(t, stack, pointer, "previewed", record(App, "b1"))
+		if served := fixture.Serving(pointer); served != "b1" {
+			t.Fatalf("%s serves %q, want the b1 this preview flipped onto; a preview that never landed makes every assertion after it vacuous", pointer, served)
 		}
 
-		if err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
-			t.Fatalf("RemovePointer: %v", err)
-		}
-		pruned, err := stack.Ledger().RemovePointer(ctx, pointer)
-		if err != nil {
-			t.Fatalf("Ledger().RemovePointer: %v", err)
-		}
-		if len(pruned.SurvivingPointerRecordKeys) != 0 {
-			t.Errorf("RemovePointer left %v under %q, and a key per preview ever served is a retention term that grows with previews-ever", pruned.SurvivingPointerRecordKeys, pointer)
-		}
-		if left := history(t, stack, pointer); len(left) != 0 {
-			t.Errorf("history under %q = %v, want nothing once the preview is gone", pointer, left)
+		removesPointer(t, stack, pointer)
+		if served := fixture.Serving(pointer); served != "" {
+			t.Errorf("%s serves %q once the preview is gone, want nothing", pointer, served)
 		}
 		removesPointer(t, stack, pointer)
 	})
@@ -323,16 +236,12 @@ func reconciled(t *testing.T, fixture Fixture) router.Stack {
 	return stack
 }
 
-func stage(t *testing.T, stack router.Stack, promotionID string, records ...router.DeploymentRecord) router.Flip {
-	t.Helper()
+func stage(promotionID string, records ...router.DeploymentRecord) router.Flip {
 	flip := router.Flip{
 		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
 		Records:   map[string]router.DeploymentRecord{},
 	}
 	for _, record := range records {
-		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
-			t.Fatalf("PutStaged(%s/%s): %v", record.App, record.Build, err)
-		}
 		flip.Promotion.Builds[record.App] = record.Build
 		flip.Records[record.App] = record
 	}
@@ -341,7 +250,7 @@ func stage(t *testing.T, stack router.Stack, promotionID string, records ...rout
 
 func flips(t *testing.T, stack router.Stack, pointer, promotionID string, records ...router.DeploymentRecord) {
 	t.Helper()
-	flip := stage(t, stack, promotionID, records...)
+	flip := stage(promotionID, records...)
 	flip.Pointer = pointer
 	if err := stack.Flip(context.Background(), flip, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Flip(%s onto %q): %v", promotionID, pointer, err)
@@ -350,29 +259,8 @@ func flips(t *testing.T, stack router.Stack, pointer, promotionID string, record
 
 func removesPointer(t *testing.T, stack router.Stack, pointer string) {
 	t.Helper()
-	ctx := context.Background()
-	if err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
+	if err := stack.RemovePointer(context.Background(), pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer(%q): %v", pointer, err)
-	}
-	if _, err := stack.Ledger().RemovePointer(ctx, pointer); err != nil {
-		t.Fatalf("Ledger().RemovePointer(%q): %v", pointer, err)
-	}
-}
-
-func history(t *testing.T, stack router.Stack, pointer string) []router.HistoryEntry {
-	t.Helper()
-	entries, err := stack.Ledger().History(context.Background(), pointer)
-	if err != nil {
-		t.Fatalf("History(%q): %v", pointer, err)
-	}
-	return entries
-}
-
-func requireInHistory(t *testing.T, stack router.Stack, pointer, promotionID string) {
-	t.Helper()
-	entries := history(t, stack, pointer)
-	if !slices.ContainsFunc(entries, func(entry router.HistoryEntry) bool { return entry.PromotionID == promotionID }) {
-		t.Errorf("history under %q = %v, want promotion %q", pointer, entries, promotionID)
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -27,10 +26,6 @@ type stack struct {
 var _ edge.EdgeStack = (*stack)(nil)
 
 func (s *stack) State() edge.StackState { return s.state }
-
-func (s *stack) openLedger() *ledger.Ledger {
-	return ledger.New(s.e.keyValues, s.state.Tier, s.state.Slug)
-}
 
 func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Tier) }
 
@@ -52,8 +47,8 @@ type promotable struct {
 }
 
 func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable, progress progress.Progress) error {
-	pointer, promotion := flip.Pointer, flip.Promotion
-	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
+	pointer := flip.Pointer
+	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(flip.Records)))
 	if err != nil {
 		return router.Unserved{Err: err}
 	}
@@ -75,53 +70,19 @@ func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable,
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
-		StillActive: func(ctx context.Context) error {
-			if err := flip.RefuseInactive(ctx); err != nil {
-				return err
-			}
-			return s.stillActive(ctx, pointer, promotion.PromotionID)
-		},
+		StillActive:   flip.RefuseInactive,
 	}, progress)
 }
 
-func (s *stack) stillActive(ctx context.Context, pointer, promotionID string) error {
-	active, err := s.openLedger().ActivePromotionID(ctx, pointer)
-	if err != nil {
-		return err
-	}
-	if active == promotionID {
-		return nil
-	}
-	return refusal.Refuse(refusal.CodeBusy,
-		"promotion %s is no longer active on %s, which now names %s: another deploy moved it while this one gated, and this deploy stopped rather than flip the box onto a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
-		promotionID, named(pointer), activeOr(active))
-}
-
-func activeOr(active string) string {
-	if active == "" {
-		return "nothing"
-	}
-	return active
-}
-
-func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion router.Promotion) (promotable, bool, error) {
-	identity := promotion.Builds[app]
-	record, found, err := s.openLedger().Record(ctx, app, identity)
-	if err != nil {
-		return promotable{}, false, err
-	}
-	if !found {
-		return promotable{}, false, refusal.Refuse(refusal.CodeInvalid,
-			"promote %s: no deployment record for %s/%s\nRe-run the deploy that built it",
-			promotion.PromotionID, app, identity)
-	}
+func (s *stack) readyRelease(ctx context.Context, pointer, promotionID string, record router.DeploymentRecord) (promotable, bool, error) {
+	app, identity := record.App, record.Build
 	if record.Physical == "" {
 		return promotable{}, false, nil
 	}
 	if record.Image == "" || record.HealthPath == "" {
 		return promotable{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
-			promotion.PromotionID, app, identity, record.Physical, record.Image, record.HealthPath)
+			promotionID, app, identity, record.Physical, record.Image, record.HealthPath)
 	}
 	hasImage, err := s.e.machine.HasImage(ctx, record.Image)
 	if err != nil {
@@ -130,7 +91,7 @@ func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion
 	if !hasImage {
 		return promotable{}, false, refusal.Refuse(refusal.CodeNotReady,
 			"promote %s: this box no longer has %s for %s/%s; %s is unchanged\nDeploy again",
-			promotion.PromotionID, record.Image, app, identity, app)
+			promotionID, record.Image, app, identity, app)
 	}
 	return promotable{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
@@ -288,9 +249,6 @@ func (s *stack) Destroy(ctx context.Context) error {
 		errs = append(errs, err)
 	}
 	if err := s.e.machine.ForgetNetwork(ctx, s.state.Tier, s.state.Slug); err != nil {
-		errs = append(errs, err)
-	}
-	if err := s.openLedger().Destroy(ctx); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

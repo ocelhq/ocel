@@ -17,6 +17,7 @@ type KeyValues struct {
 	seq      uint64
 	rows     map[string]keyvalue.Entry
 	refusals map[string]error
+	moving   string
 }
 
 func NewKeyValues() *KeyValues {
@@ -32,6 +33,12 @@ func (s *KeyValues) SetRemovalError(key keyvalue.Key, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.refusals[encodeKey(key)] = err
+}
+
+func (s *KeyValues) MoveBeforeNextWrite(key keyvalue.Key) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.moving = encodeKey(key)
 }
 
 func (s *KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
@@ -53,6 +60,12 @@ func (s *KeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Rev
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if row := encodeKey(entry.Key); row == s.moving {
+		s.moving = ""
+		if prior, exists := s.rows[row]; exists {
+			s.store(prior)
+		}
+	}
 	if err := s.refuseMovedRevision(entry); err != nil {
 		return "", err
 	}

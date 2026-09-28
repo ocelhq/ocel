@@ -59,58 +59,6 @@ func (s *stack) openLedger(c Clients) *ledger.Ledger {
 	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.tier(), s.slug())
 }
 
-type lazyLedger struct{ s *stack }
-
-var _ router.Ledger = (*lazyLedger)(nil)
-
-func (l *lazyLedger) resolve(ctx context.Context) (*ledger.Ledger, error) {
-	c, err := l.s.p.clientsFor(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return l.s.openLedger(c), nil
-}
-
-func (l *lazyLedger) SchemaVersion(ctx context.Context) (int, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return resolved.SchemaVersion(ctx)
-}
-
-func (l *lazyLedger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return err
-	}
-	return resolved.PutStaged(ctx, record)
-}
-
-func (l *lazyLedger) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.History(ctx, pointer)
-}
-
-func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	return resolved.Prune(ctx, keepN, pointer)
-}
-
-func (l *lazyLedger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
-	resolved, err := l.resolve(ctx)
-	if err != nil {
-		return router.PruneResult{}, err
-	}
-	return resolved.RemovePointer(ctx, pointer)
-}
-
 func (s *stack) reconcileAPI(ctx context.Context, c Clients, pointer string) (string, error) {
 	spec, id, err := s.apiFor(ctx, c, pointer)
 	if err != nil {
@@ -181,41 +129,6 @@ func moveStage(ctx context.Context, c Clients, id, promotionID string, patch []a
 	return nil
 }
 
-func (s *stack) restage(ctx context.Context, c Clients, pointer, id string) error {
-	active, found, err := s.activePromotion(ctx, c, pointer)
-	if err != nil {
-		return err
-	}
-	if !found {
-		if err := s.unroutePreview(ctx, c, pointer); err != nil {
-			return err
-		}
-		return moveStage(ctx, c, id, "", unsetPatch())
-	}
-	patch, err := s.stagePatch(ctx, c, active)
-	if err != nil {
-		return err
-	}
-	return moveStage(ctx, c, id, active.PromotionID, patch)
-}
-
-func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (router.Promotion, bool, error) {
-	history, err := s.openLedger(c).History(ctx, pointer)
-	if err != nil {
-		return router.Promotion{}, false, err
-	}
-	for _, entry := range history {
-		if entry.Active {
-			return entry.Promotion, true, nil
-		}
-	}
-	return router.Promotion{}, false, nil
-}
-
-func unsetPatch() []agtypes.PatchOperation {
-	return variablePatch(unsetVariables())
-}
-
 func variablePatch(variables map[string]string) []agtypes.PatchOperation {
 	patch := make([]agtypes.PatchOperation, 0, len(variables))
 	for _, name := range slices.Sorted(maps.Keys(variables)) {
@@ -228,29 +141,23 @@ func variablePatch(variables map[string]string) []agtypes.PatchOperation {
 	return patch
 }
 
-func (s *stack) stagePatch(ctx context.Context, c Clients, promotion router.Promotion) ([]agtypes.PatchOperation, error) {
-	apps := slices.Sorted(maps.Keys(promotion.Builds))
+func stagePatch(promotionID string, records map[string]router.DeploymentRecord) ([]agtypes.PatchOperation, error) {
+	apps := slices.Sorted(maps.Keys(records))
 	switch {
 	case len(apps) == 0:
-		return nil, fmt.Errorf("promote %s: it names no app, and the %s stage serves one app's entry function; deploy an app before promoting", promotion.PromotionID, stageName)
+		return nil, fmt.Errorf("promote %s: it names no app, and the %s stage serves one app's entry function; deploy an app before promoting", promotionID, stageName)
 	case len(apps) > 1:
-		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in your config, such as `\"edge\": \"cloudflare\"`", promotion.PromotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
+		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in your config, such as `\"edge\": \"cloudflare\"`", promotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
 	}
 
 	app := apps[0]
-	identity := promotion.Builds[app]
-	record, found, err := s.openLedger(c).Record(ctx, app, identity)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, fmt.Errorf("promote %s: the deployments ledger has no record for %s/%s, so nothing names the function the %s stage would serve; re-run the deploy that built it", promotion.PromotionID, app, identity, stageName)
-	}
+	record := records[app]
+	identity := record.Build
 	if record.Origin != "" {
-		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": \"cloudfront\"`", promotion.PromotionID, app, identity, record.Origin, Kind)
+		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": \"cloudfront\"`", promotionID, app, identity, record.Origin, Kind)
 	}
 	if record.EntryFunction == "" {
-		return nil, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotion.PromotionID, app, identity, stageName)
+		return nil, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotionID, app, identity, stageName)
 	}
 
 	assets := record.AssetPrefix
@@ -431,15 +338,12 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
-	unbound := true
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
-			unbound = false
 		}
 	}
-	ledger := s.openLedger(c)
-	pointers, err := ledger.Pointers(ctx)
+	pointers, err := s.openLedger(c).Pointers(ctx)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
@@ -462,11 +366,5 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return errors.Join(append(errs, drained)...)
 	}
 	s.own.API = ""
-	if !unbound {
-		return errors.Join(errs...)
-	}
-	if err := ledger.Destroy(ctx); err != nil {
-		errs = append(errs, err)
-	}
 	return errors.Join(errs...)
 }

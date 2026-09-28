@@ -45,17 +45,15 @@ func (r routerStack) State() router.StackState {
 	return router.NewStackState(r.s.State())
 }
 
-func (r routerStack) Ledger() router.Ledger { return r.s.openLedger() }
-
 func (r routerStack) Claim(context.Context, string, string) error { return nil }
 
 func (r routerStack) Disclaim(context.Context, string) error { return nil }
 
 func (r routerStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
-	if err := pin.Flip(ctx, r.s.openLedger(), r.s.e.deps.Pins, flip, progress); err != nil {
+	if err := pin.Flip(ctx, r.s.e.deps.Pins, flip, progress); err != nil {
 		return err
 	}
-	return r.s.released(ctx, flip.Promotion, progress)
+	return r.s.released(ctx, flip.Records, progress)
 }
 
 func (r routerStack) RemovePointer(context.Context, string, progress.Progress) error { return nil }

@@ -79,7 +79,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: previewEntry}
-	if err := openRouter(stack).Ledger().PutStaged(ctx, record); err != nil {
+	if err := openRouter(stack).Ledger.PutStaged(ctx, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := router.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}

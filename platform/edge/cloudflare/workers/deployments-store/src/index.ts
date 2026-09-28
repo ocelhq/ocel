@@ -5,8 +5,7 @@ import { bearer } from "@platform/cf-auth";
 import { authorized } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
 import type { Env } from "./env";
-import type { DeploymentRecord, PointerRecordResult, Promotion } from "./store";
-import { SCHEMA_VERSION } from "./store";
+import type { Flip, PointerRecordResult } from "./store";
 
 export { DeploymentsStore };
 
@@ -58,39 +57,27 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (request.method === "GET" && sub === "/schema-version") {
-      return Response.json({ schemaVersion: SCHEMA_VERSION });
+    if (request.method === "GET" && sub === "/pointer") {
+      const pointer = url.searchParams.get("pointer") || undefined;
+      return Response.json({ promotionId: (await store.servedPromotion(pointer)) ?? null });
     }
 
-    if (request.method === "PUT" && sub === "/staged") {
-      const record = await readJson<DeploymentRecord>(request);
-      if (!record) return new Response("Bad Request", { status: 400 });
-      await store.putStaged(record);
+    if (request.method === "POST" && sub === "/flip") {
+      const body = await readJson<Flip>(request);
+      if (!body?.promotionId || !Array.isArray(body.records)) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      if ((await store.flip(body)) === "moved") {
+        return new Response(
+          `the pointer no longer serves ${body.replaces || "nothing"}, the promotion this flip replaces`,
+          { status: 409 },
+        );
+      }
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "POST" && sub === "/promote") {
-      const body = await readJson<Promotion & { pointer?: string }>(request);
-      if (!body?.promotionId || !body.builds) {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const { pointer, ...promotion } = body;
-      const { conflict } = await store.promote(promotion, pointer);
-      if (conflict) return new Response(conflict, { status: 409 });
-      return new Response(null, { status: 204 });
-    }
-
-    if (request.method === "GET" && sub === "/history") {
-      const pointer = url.searchParams.get("pointer") ?? undefined;
-      return Response.json(await store.history(pointer));
-    }
-
-    if (request.method === "POST" && sub === "/prune") {
-      const body = await readJson<{ keepN: number; pointer?: string }>(request);
-      if (typeof body?.keepN !== "number") {
-        return new Response("Bad Request", { status: 400 });
-      }
-      return Response.json(await store.prune(body.keepN, body.pointer));
+    if (request.method === "GET" && sub === "/apps") {
+      return Response.json(await store.apps());
     }
 
     if (request.method === "GET" && sub === "/version-stamp") {
@@ -107,7 +94,8 @@ export default class extends WorkerEntrypoint<Env> {
     if (request.method === "POST" && sub === "/remove-pointer") {
       const body = await readJson<{ pointer?: string }>(request);
       if (!body?.pointer) return new Response("Bad Request", { status: 400 });
-      return Response.json(await store.removePointer(body.pointer));
+      await store.removePointer(body.pointer);
+      return new Response(null, { status: 204 });
     }
 
     if (request.method === "POST" && sub === "/destroy") {

@@ -48,9 +48,12 @@ func (r *Routers) Open(kind router.Kind) (router.Router, error) {
 func (r *Routers) DataPlane(kind router.Kind) *DataPlane { return r.planes[kind] }
 
 type DataPlane struct {
-	mu      sync.Mutex
-	failure error
-	served  map[projectPointer]map[string]string
+	mu       sync.Mutex
+	failure  error
+	before   func()
+	says     string
+	progress progress.Progress
+	served   map[projectPointer]map[string]string
 }
 
 type projectPointer struct {
@@ -76,6 +79,37 @@ func (d *DataPlane) FailNextFlip(err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.failure = err
+}
+
+func (d *DataPlane) BeforeNextFlip(before func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.before = before
+}
+
+func (d *DataPlane) SayOnFlip(said string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.says = said
+}
+
+func (d *DataPlane) FlipProgress() progress.Progress {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.progress
+}
+
+func (d *DataPlane) beginFlip(progress progress.Progress) {
+	d.mu.Lock()
+	before, said := d.before, d.says
+	d.before, d.progress = nil, progress
+	d.mu.Unlock()
+	if said != "" {
+		progress.Say(said)
+	}
+	if before != nil {
+		before()
+	}
 }
 
 func (d *DataPlane) refuseFlip() error {
@@ -146,23 +180,23 @@ func (s *RouterStack) State() router.StackState {
 	return router.NewStackState(state)
 }
 
-func (s *RouterStack) Ledger() router.Ledger { return s.stack.ledger }
-
 func (s *RouterStack) Claim(context.Context, string, string) error { return nil }
 
 func (s *RouterStack) Disclaim(context.Context, string) error { return nil }
 
 func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
+	s.plane.beginFlip(progress)
 	if err := flip.RefuseInactive(ctx); err != nil {
 		return err
 	}
 	if err := s.plane.refuseFlip(); err != nil {
 		return err
 	}
-	if err := s.stack.ledger.Promote(ctx, flip.Promotion, flip.Pointer, progress); err != nil {
-		return err
+	builds := make(map[string]string, len(flip.Records))
+	for app, record := range flip.Records {
+		builds[app] = record.Build
 	}
-	s.plane.serve(pointerOf(s.stack.State(), flip.Pointer), flip.Promotion.Builds)
+	s.plane.serve(pointerOf(s.stack.State(), flip.Pointer), builds)
 	return nil
 }
 

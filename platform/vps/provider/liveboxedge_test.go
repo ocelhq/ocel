@@ -66,19 +66,18 @@ func promotes(t *testing.T, stack router.Stack, id, tag string, staged release, 
 	t.Helper()
 
 	ctx := context.Background()
-	if err := stack.Ledger().PutStaged(ctx, router.DeploymentRecord{
+	record := router.DeploymentRecord{
 		App:        liveApp,
 		Build:      tag,
 		Entry:      "/",
 		Image:      fixtureAt(tag),
 		Physical:   staged.physical,
 		HealthPath: healthPath,
-	}); err != nil {
-		t.Fatalf("PutStaged(%s): %v", tag, err)
 	}
-	if err := stack.Flip(ctx, router.Flip{Promotion: router.Promotion{
-		PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag},
-	}}, progress.DiscardProgress()); err != nil {
+	if err := stack.Flip(ctx, router.Flip{
+		Promotion: router.Promotion{PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag}},
+		Records:   map[string]router.DeploymentRecord{liveApp: record},
+	}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", id, err)
 	}
 }

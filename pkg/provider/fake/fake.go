@@ -58,7 +58,7 @@ func NewProvider(options Options) *Provider {
 	journal := &Journal{}
 	store := NewKeyValues()
 	store.journal = journal
-	edges := NewEdges(store)
+	edges := NewEdges()
 	artifacts := NewArtifacts()
 	artifacts.journal = journal
 	p := &Provider{

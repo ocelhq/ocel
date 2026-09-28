@@ -9,7 +9,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -32,8 +31,6 @@ type Ledger struct {
 	partition keyvalue.Partition
 }
 
-var _ router.Ledger = (*Ledger)(nil)
-
 func New(store keyvalue.Store, tier environment.Tier, slug string) *Ledger {
 	return &Ledger{keyValues: store, partition: Partition(tier, slug)}
 }
@@ -49,8 +46,6 @@ func Partition(tier environment.Tier, slug string) keyvalue.Partition {
 func RecordKey(app, build string) string { return "record:" + app + "/" + build }
 
 func (l *Ledger) key(path ...string) keyvalue.Key { return l.partition.Key(path...) }
-
-func (l *Ledger) schemaKey() keyvalue.Key { return l.key("schema") }
 
 func (l *Ledger) sequenceKey() keyvalue.Key { return l.key("seq") }
 
@@ -118,35 +113,6 @@ func (p pointerRecord) without(promotionID string) (pointerRecord, bool) {
 
 type tagRecord struct {
 	PromotionID string `json:"promotionId"`
-}
-
-func (l *Ledger) EnsureSchema(ctx context.Context) error {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.schemaKey())
-	if err != nil {
-		return fmt.Errorf("read the deployments ledger schema for %s: %w", l.partition, err)
-	}
-	if recorded.Value, err = json.Marshal(edge.StoreSchemaVersion); err != nil {
-		return fmt.Errorf("encode the deployments ledger schema for %s: %w", l.partition, err)
-	}
-	if _, err := l.keyValues.Write(ctx, recorded); err != nil {
-		return fmt.Errorf("record the deployments ledger schema for %s: %w", l.partition, err)
-	}
-	return nil
-}
-
-func (l *Ledger) SchemaVersion(ctx context.Context) (int, error) {
-	recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.schemaKey())
-	if err != nil {
-		return 0, fmt.Errorf("read the deployments ledger schema for %s: %w", l.partition, err)
-	}
-	if len(recorded.Value) == 0 {
-		return 0, edge.ErrStoreSchemaUnreadable
-	}
-	var version int
-	if err := json.Unmarshal(recorded.Value, &version); err != nil {
-		return 0, fmt.Errorf("read the deployments ledger schema for %s: %w", l.partition, err)
-	}
-	return version, nil
 }
 
 func (l *Ledger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {

@@ -37,7 +37,7 @@ func (p *Provider) edges() edges {
 	}
 }
 
-func (e edges) openDirect() *direct.Edge { return direct.New(e.keyValues, e.pins) }
+func (e edges) openDirect() *direct.Edge { return direct.New(e.pins) }
 
 func (e edges) openALB() *alb.Edge {
 	return alb.New(alb.Deps{

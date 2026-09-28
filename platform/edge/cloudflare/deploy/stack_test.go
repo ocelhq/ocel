@@ -623,38 +623,28 @@ func TestReconcileEnvelopeKey(t *testing.T) {
 	})
 }
 
-func TestPutStagedWrapsTheEnvelope(t *testing.T) {
+func TestAFlipWrapsTheEnvelope(t *testing.T) {
 	t.Parallel()
 
 	const dataKey = "Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8="
 
-	capture := func(t *testing.T) (*httptest.Server, *router.DeploymentRecord) {
+	flipped := func(t *testing.T, own private, record router.DeploymentRecord) router.DeploymentRecord {
 		t.Helper()
-		var got router.DeploymentRecord
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-		}))
-		t.Cleanup(srv.Close)
-		return srv, &got
+		srv, store := fakeStoreFor(t, "s3cr3t")
+		state := keyedState(srv.URL, "s3cr3t")
+		state.Private = edge.Own(own)
+		flips(t, &cloudflare{}, state, flipOf("promo-1", "", record))
+		return store.flipped()[0].Records[0]
 	}
 
-	t.Run("a stack with a worker of its own stages a wrapped envelope only its worker can open", func(t *testing.T) {
+	t.Run("a stack with a worker of its own serves a wrapped envelope only its worker can open", func(t *testing.T) {
 		t.Parallel()
 
-		srv, got := capture(t)
-		state := keyedState(srv.URL, "s3cr3t")
-		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
-
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
+		got := flipped(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
+			router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
 
 		if got.Envelope == dataKey || got.Envelope == "" {
-			t.Fatalf("staged envelope = %q, want the data key wrapped, never bare", got.Envelope)
+			t.Fatalf("served envelope = %q, want the data key wrapped, never bare", got.Envelope)
 		}
 		unwrapped, err := unwrapEnvelope(testEnvelopeKey, got.Envelope)
 		if err != nil {
@@ -668,32 +658,22 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		}
 	})
 
-	t.Run("a stack the shared entry serves stages the envelope as the origin sealed it", func(t *testing.T) {
+	t.Run("a stack the shared entry serves serves the envelope as the origin sealed it", func(t *testing.T) {
 		t.Parallel()
 
-		srv, got := capture(t)
-		state := keyedState(srv.URL, "s3cr3t")
-
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
+		got := flipped(t, private{}, router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey})
 		if got.Envelope != dataKey {
-			t.Errorf("staged envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Envelope)
+			t.Errorf("served envelope = %q, want the bare data key: the shared entry has no key to unwrap with", got.Envelope)
 		}
 	})
 
-	t.Run("a record with nothing sealed stages no envelope", func(t *testing.T) {
+	t.Run("a record with nothing sealed serves no envelope", func(t *testing.T) {
 		t.Parallel()
 
-		srv, got := capture(t)
-		state := keyedState(srv.URL, "s3cr3t")
-		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
-
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1"}); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
+		got := flipped(t, private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey},
+			router.DeploymentRecord{App: "web", Build: "b1"})
 		if got.Envelope != "" {
-			t.Errorf("staged envelope = %q, want none", got.Envelope)
+			t.Errorf("served envelope = %q, want none", got.Envelope)
 		}
 	})
 }
@@ -706,8 +686,8 @@ func TestDestroy(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		state := testState(store.URL, "s3cr3t")
-		promote(t, p, state, "api", "b1")
-		promote(t, p, state, "web", "b2")
+		flips(t, p, state, flipOf("api-1", "", router.DeploymentRecord{App: "api", Build: "b1"}))
+		flips(t, p, state, flipOf("web-1", "", router.DeploymentRecord{App: "web", Build: "b2"}))
 		putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel--acme-web--prod--web": "v1"})
 
 		if err := stackOn(p, state).Destroy(t.Context()); err != nil {
@@ -718,8 +698,8 @@ func TestDestroy(t *testing.T) {
 			"ocel--acme-web--prod--api",
 			"ocel--acme-web--prod--root",
 		})
-		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
-			t.Error("history after Destroy: err = nil, want the wiped instance to reject the secret")
+		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
 
@@ -738,8 +718,8 @@ func TestDestroy(t *testing.T) {
 		if !slices.Contains(m.deletedScripts, "ocel-preview") || !slices.Contains(m.deletedScripts, "ocel-preview--web") {
 			t.Errorf("deleted scripts = %v, want both stamped workers", m.deletedScripts)
 		}
-		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
-			t.Error("history after Destroy: err = nil, want the wiped instance to reject the secret")
+		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+			t.Error("reading the pointer after Destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
 
@@ -757,8 +737,8 @@ func TestDestroy(t *testing.T) {
 		if len(m.deletedScripts) != 0 {
 			t.Errorf("deleted scripts = %v, want none: the workers to destroy were never established", m.deletedScripts)
 		}
-		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).History(t.Context(), ""); err != nil {
-			t.Errorf("history after a refused Destroy: %v, want the instance still keeping the record of what was deployed", err)
+		if _, err := stackOn(p, testState(store.URL, "s3cr3t")).servedPromotion(t.Context(), ""); err != nil {
+			t.Errorf("reading the pointer after a refused Destroy: %v, want the instance still keeping the record of what was deployed", err)
 		}
 	})
 
@@ -775,8 +755,8 @@ func TestDestroy(t *testing.T) {
 		if err := stackOn(p, state).Destroy(t.Context()); err == nil {
 			t.Fatal("Destroy err = nil, want the worker that survived reported")
 		}
-		if _, err := stackOn(p, state).History(t.Context(), ""); err != nil {
-			t.Errorf("history after a failed Destroy: %v, want the instance still naming the worker left behind", err)
+		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err != nil {
+			t.Errorf("reading the pointer after a failed Destroy: %v, want the instance still naming the worker left behind", err)
 		}
 	})
 
@@ -787,17 +767,6 @@ func TestDestroy(t *testing.T) {
 			t.Fatal("destroyWorkers without an account id err = nil, want an error")
 		}
 	})
-}
-
-func promote(t *testing.T, p *cloudflare, state edge.StackState, app, build string) {
-	t.Helper()
-	s := stackOn(p, state)
-	if err := s.PutStaged(t.Context(), router.DeploymentRecord{App: app, Build: build}); err != nil {
-		t.Fatalf("PutStaged(%s): %v", app, err)
-	}
-	if err := s.promote(t.Context(), router.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, ""); err != nil {
-		t.Fatalf("Promote(%s): %v", app, err)
-	}
 }
 
 func reconcileState(t *testing.T, p *cloudflare, spec edge.StackSpec, prior edge.StackState) (edge.StackState, error) {

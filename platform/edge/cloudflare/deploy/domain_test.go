@@ -228,10 +228,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	state.Private = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
 	s := stackOn(m.provider(t), state)
 
-	promotion := router.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
-	if err := s.promote(t.Context(), promotion, router.DefaultPointer); err != nil {
-		t.Fatalf("Promote: %v", err)
-	}
+	flips(t, s.p, state, flipOf("promo-1", router.DefaultPointer, router.DeploymentRecord{App: "web", Build: "b1"}))
 	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
@@ -239,12 +236,12 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "shop.app.com/*" || m.createdRoutes[0]["script"] != domainEntryScript {
 		t.Fatalf("created routes = %v, want shop.app.com/* on %s, the entry worker that reads the promoted release", m.createdRoutes, domainEntryScript)
 	}
-	history, err := s.History(t.Context(), router.DefaultPointer)
+	served, err := s.servedPromotion(t.Context(), router.DefaultPointer)
 	if err != nil {
-		t.Fatalf("History: %v", err)
+		t.Fatalf("servedPromotion: %v", err)
 	}
-	if len(history) != 1 || history[0].PromotionID != promotion.PromotionID || !history[0].Active {
-		t.Errorf("the default pointer's history = %+v, want %s still active: the worker serves a bound hostname from it, with no promotion keyed by hostname to publish again", history, promotion.PromotionID)
+	if served != "promo-1" {
+		t.Errorf("the default pointer serves %q, want promo-1 still: the worker serves a bound hostname from it, with no promotion keyed by hostname to flip again", served)
 	}
 }
 
@@ -360,8 +357,8 @@ func TestDestroyOutlivesAnUnbindThatCannotRun(t *testing.T) {
 	if !slices.Contains(m.deletedScripts, "ocel-preview") {
 		t.Errorf("deleted scripts = %v, want the workers destroyed even so", m.deletedScripts)
 	}
-	if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
-		t.Error("history after Destroy: err = nil, want the store instance gone even so")
+	if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+		t.Error("reading the pointer after Destroy: err = nil, want the store instance gone even so")
 	}
 }
 

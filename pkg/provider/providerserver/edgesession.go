@@ -105,7 +105,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 	if err != nil {
 		return nil, err
 	}
-	shared, err := openSharedStack(vendor, front)
+	shared, err := openSharedStack(vendor, front, tier, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *edgeSession) checkpoint(ctx context.Context) error {
 }
 
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
-	history, err := s.readHistory(ctx, router.DefaultPointer)
+	history, err := s.ledger.History(ctx, router.DefaultPointer)
 	if err != nil {
 		return false, err
 	}

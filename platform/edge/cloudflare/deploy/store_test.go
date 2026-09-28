@@ -3,16 +3,16 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"regexp"
-	"strconv"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -21,34 +21,62 @@ const (
 	storeOwnerToken    = "owner-token"
 )
 
+type fakeStore struct {
+	mu       sync.Mutex
+	pointers map[string]string
+	served   map[string]map[string]router.DeploymentRecord
+	apps     map[string]bool
+	flips    []flipBody
+	version  *string
+	owner    string
+	live     string
+}
+
+func (f *fakeStore) serving(pointer, app string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if pointer == "" {
+		pointer = router.DefaultPointer
+	}
+	return f.served[pointer][app].Build
+}
+
+func (f *fakeStore) flipped() []flipBody {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.flips)
+}
+
 func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	t.Helper()
-	type pointed struct {
-		pointer string
-		entry   router.HistoryEntry
+	srv, _ := fakeStoreFor(t, secret)
+	return srv
+}
+
+func fakeStoreFor(t *testing.T, secret string) (*httptest.Server, *fakeStore) {
+	t.Helper()
+	f := &fakeStore{
+		pointers: map[string]string{},
+		served:   map[string]map[string]router.DeploymentRecord{},
+		apps:     map[string]bool{},
+		owner:    storeOwnerToken,
+		live:     secret,
 	}
-	var (
-		staged  []router.DeploymentRecord
-		history []pointed
-		version *string
-	)
-	under := func(pointer string) []router.HistoryEntry {
-		var out []router.HistoryEntry
-		for _, p := range history {
-			if p.pointer == pointer {
-				out = append(out, p.entry)
-			}
-		}
-		return out
-	}
-	owner, live := storeOwnerToken, secret
 	if secret == "" {
-		owner = ""
+		f.owner = ""
+	}
+	named := func(pointer string) string {
+		if pointer == "" {
+			return router.DefaultPointer
+		}
+		return pointer
 	}
 	mux := http.NewServeMux()
 	authed := func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			if live == "" || r.Header.Get("Authorization") != "Bearer "+live {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			if f.live == "" || r.Header.Get("Authorization") != "Bearer "+f.live {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -56,6 +84,8 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		}
 	}
 	mux.HandleFunc("POST /{slug}/initialize", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
 		if r.Header.Get("Authorization") != "Bearer "+storeBootstrapCred {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -69,89 +99,57 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if owner != "" && !body.Force {
+		if f.owner != "" && !body.Force {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		owner, live = body.OwnerToken, body.Secret
+		f.owner, f.live = body.OwnerToken, body.Secret
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("PUT /{slug}/staged", authed(func(w http.ResponseWriter, r *http.Request) {
-		var rec router.DeploymentRecord
-		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+	mux.HandleFunc("GET /{slug}/pointer", authed(func(w http.ResponseWriter, r *http.Request) {
+		var served *string
+		if id, found := f.pointers[named(r.URL.Query().Get("pointer"))]; found {
+			served = &id
+		}
+		_ = json.NewEncoder(w).Encode(map[string]*string{"promotionId": served})
+	}))
+	mux.HandleFunc("POST /{slug}/flip", authed(func(w http.ResponseWriter, r *http.Request) {
+		var body flipBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PromotionID == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		staged = append(staged, rec)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	mux.HandleFunc("POST /{slug}/promote", authed(func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			router.Promotion
-			Pointer string `json:"pointer"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+		pointer := named(body.Pointer)
+		if f.pointers[pointer] != body.Replaces {
+			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		history = append([]pointed{{pointer: body.Pointer, entry: router.HistoryEntry{Promotion: body.Promotion, Active: true}}}, history...)
-		seen := false
-		for i := range history {
-			if history[i].pointer != body.Pointer {
-				continue
-			}
-			history[i].entry.Active = !seen
-			seen = true
+		f.flips = append(f.flips, body)
+		f.served[pointer] = map[string]router.DeploymentRecord{}
+		for _, record := range body.Records {
+			f.served[pointer][record.App] = record
+			f.apps[record.App] = true
 		}
+		f.pointers[pointer] = body.PromotionID
 		w.WriteHeader(http.StatusNoContent)
-	}))
-	mux.HandleFunc("GET /{slug}/history", authed(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(under(r.URL.Query().Get("pointer")))
-	}))
-	mux.HandleFunc("GET /{slug}/schema-version", authed(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]int{"schemaVersion": edge.StoreSchemaVersion})
 	}))
 	mux.HandleFunc("POST /{slug}/remove-pointer", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Pointer string `json:"pointer"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Pointer == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		result := router.PruneResult{}
-		kept := make([]pointed, 0, len(history))
-		for _, p := range history {
-			if p.pointer == body.Pointer {
-				result.RemovedPromotionIDs = append(result.RemovedPromotionIDs, p.entry.PromotionID)
-				continue
-			}
-			kept = append(kept, p)
-		}
-		history = kept
-		_ = json.NewEncoder(w).Encode(result)
+		delete(f.pointers, body.Pointer)
+		delete(f.served, body.Pointer)
+		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("POST /{slug}/prune", authed(func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			KeepN   int    `json:"keepN"`
-			Pointer string `json:"pointer"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		result := router.PruneResult{}
-		for i, h := range under(body.Pointer) {
-			if i < body.KeepN || h.Active {
-				result.KeptPromotionIDs = append(result.KeptPromotionIDs, h.PromotionID)
-			} else {
-				result.RemovedPromotionIDs = append(result.RemovedPromotionIDs, h.PromotionID)
-			}
-		}
-		_ = json.NewEncoder(w).Encode(result)
+	mux.HandleFunc("GET /{slug}/apps", authed(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(slices.Sorted(maps.Keys(f.apps)))
 	}))
 	mux.HandleFunc("GET /{slug}/version-stamp", authed(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]*string{"version": version})
+		_ = json.NewEncoder(w).Encode(map[string]*string{"version": f.version})
 	}))
 	mux.HandleFunc("PUT /{slug}/version-stamp", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -161,17 +159,20 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		version = &body.Version
+		f.version = &body.Version
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	mux.HandleFunc("POST /{slug}/destroy", authed(func(w http.ResponseWriter, _ *http.Request) {
-		staged, history, version = nil, nil, nil
-		owner, live = "", ""
+		f.pointers = map[string]string{}
+		f.served = map[string]map[string]router.DeploymentRecord{}
+		f.apps = map[string]bool{}
+		f.version = nil
+		f.owner, f.live = "", ""
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, f
 }
 
 func stackOn(p *cloudflare, state edge.StackState) *stack {
@@ -195,180 +196,66 @@ func testState(endpoint, secret string) edge.StackState {
 	}
 }
 
-func TestPutStaged(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a deployment record round trips", func(t *testing.T) {
-		t.Parallel()
-
-		srv := fakeStoreServer(t, "s3cr3t")
-		record := router.DeploymentRecord{
-			App: "web", Build: "b1", FunctionURLs: map[string]string{"/": "https://fn"},
-			AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
-		}
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), record); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
-	})
-
-	t.Run("the wrong write secret is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		srv := fakeStoreServer(t, "s3cr3t")
-		err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1"})
-		if err == nil {
-			t.Fatal("expected an error for the wrong write secret")
-		}
-	})
+func flips(t *testing.T, p *cloudflare, state edge.StackState, flip router.Flip) {
+	t.Helper()
+	if err := (routerStack{s: stackOn(p, state)}).Flip(t.Context(), flip, progress.DiscardProgress()); err != nil {
+		t.Fatalf("Flip(%s): %v", flip.Promotion.PromotionID, err)
+	}
 }
 
-func TestPromotionHistory(t *testing.T) {
-	t.Parallel()
-
-	t.Run("the newest promotion is the active one", func(t *testing.T) {
-		t.Parallel()
-
-		srv := fakeStoreServer(t, "s3cr3t")
-		p := &cloudflare{}
-		state := testState(srv.URL, "s3cr3t")
-		promotion := router.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
-
-		if err := stackOn(p, state).promote(t.Context(), promotion, ""); err != nil {
-			t.Fatalf("Promote: %v", err)
-		}
-		history, err := stackOn(p, state).History(t.Context(), "")
-		if err != nil {
-			t.Fatalf("History: %v", err)
-		}
-		if len(history) != 1 {
-			t.Fatalf("history = %v, want 1 entry", history)
-		}
-		if history[0].PromotionID != "promo-1" || !history[0].Active {
-			t.Errorf("history[0] = %+v, want promo-1 active", history[0])
-		}
-	})
-
-	t.Run("pruning keeps the window and pins the active promotion", func(t *testing.T) {
-		t.Parallel()
-
-		srv := fakeStoreServer(t, "s3cr3t")
-		p := &cloudflare{}
-		state := testState(srv.URL, "s3cr3t")
-
-		for _, id := range []string{"p1", "p2", "p3"} {
-			if err := stackOn(p, state).promote(t.Context(), router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, ""); err != nil {
-				t.Fatalf("Promote(%s): %v", id, err)
-			}
-		}
-
-		result, err := stackOn(p, state).Prune(t.Context(), 1, "")
-		if err != nil {
-			t.Fatalf("Prune: %v", err)
-		}
-		want := []string{"p2", "p1"}
-		if len(result.RemovedPromotionIDs) != len(want) || result.RemovedPromotionIDs[0] != want[0] || result.RemovedPromotionIDs[1] != want[1] {
-			t.Errorf("RemovedPromotionIDs = %v, want %v", result.RemovedPromotionIDs, want)
-		}
-	})
+func flipOf(promotionID, pointer string, records ...router.DeploymentRecord) router.Flip {
+	flip := router.Flip{
+		Pointer:   pointer,
+		Promotion: router.Promotion{PromotionID: promotionID, Ts: 1, Builds: map[string]string{}},
+		Records:   map[string]router.DeploymentRecord{},
+	}
+	for _, record := range records {
+		flip.Promotion.Builds[record.App] = record.Build
+		flip.Records[record.App] = record
+	}
+	return flip
 }
 
-func TestStorePointer(t *testing.T) {
+func TestAFlipServesItsRecordsOnItsPointerInTheStore(t *testing.T) {
 	t.Parallel()
 
-	t.Run("promote, history and prune send the pointer only when there is one", func(t *testing.T) {
-		t.Parallel()
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	p := &cloudflare{}
+	state := testState(srv.URL, "s3cr3t")
 
-		var (
-			promoteBodies []map[string]any
-			historyQuery  []string
-			pruneBodies   []map[string]any
-		)
-		mux := http.NewServeMux()
-		mux.HandleFunc("POST /{slug}/promote", func(w http.ResponseWriter, r *http.Request) {
-			var b map[string]any
-			_ = json.NewDecoder(r.Body).Decode(&b)
-			promoteBodies = append(promoteBodies, b)
-			w.WriteHeader(http.StatusNoContent)
-		})
-		mux.HandleFunc("GET /{slug}/history", func(w http.ResponseWriter, r *http.Request) {
-			historyQuery = append(historyQuery, r.URL.Query().Get("pointer"))
-			_ = json.NewEncoder(w).Encode([]router.HistoryEntry{})
-		})
-		mux.HandleFunc("POST /{slug}/prune", func(w http.ResponseWriter, r *http.Request) {
-			var b map[string]any
-			_ = json.NewDecoder(r.Body).Decode(&b)
-			pruneBodies = append(pruneBodies, b)
-			_ = json.NewEncoder(w).Encode(router.PruneResult{})
-		})
-		srv := httptest.NewServer(mux)
-		t.Cleanup(srv.Close)
+	flips(t, p, state, flipOf("promo-1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
+	flips(t, p, state, flipOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b2"}))
+	flips(t, p, state, flipOf("promo-2", "", router.DeploymentRecord{App: "web", Build: "b3"}))
 
-		p := &cloudflare{}
-		state := testState(srv.URL, "s3cr3t")
-		ctx := t.Context()
+	if served := store.serving("", "web"); served != "b3" {
+		t.Errorf("the default pointer serves %q, want b3, the last promotion flipped onto it", served)
+	}
+	if served := store.serving("pr-42", "web"); served != "b2" {
+		t.Errorf("pr-42 serves %q, want b2: a flip moves only the pointer it names", served)
+	}
+	sent := store.flipped()
+	if last := sent[len(sent)-1]; last.Replaces != "promo-1" {
+		t.Errorf("the last flip replaced %q, want promo-1, the promotion the store served when it read the pointer", last.Replaces)
+	}
+	if sent[1].Pointer != "pr-42" || sent[0].Pointer != "" {
+		t.Errorf("flips named pointers %q and %q, want the preview pointer sent and the default one left out", sent[1].Pointer, sent[0].Pointer)
+	}
+}
 
-		if err := stackOn(p, state).promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
-			t.Fatalf("Promote(preview): %v", err)
-		}
-		if _, err := stackOn(p, state).History(ctx, "pr-42"); err != nil {
-			t.Fatalf("History(preview): %v", err)
-		}
-		if _, err := stackOn(p, state).Prune(ctx, 3, "pr-42"); err != nil {
-			t.Fatalf("Prune(preview): %v", err)
-		}
-		if err := stackOn(p, state).promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
-			t.Fatalf("Promote(prod): %v", err)
-		}
-		if _, err := stackOn(p, state).History(ctx, ""); err != nil {
-			t.Fatalf("History(prod): %v", err)
-		}
-		if _, err := stackOn(p, state).Prune(ctx, 3, ""); err != nil {
-			t.Fatalf("Prune(prod): %v", err)
-		}
+func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {
+	t.Parallel()
 
-		if promoteBodies[0]["pointer"] != "pr-42" || promoteBodies[0]["promotionId"] != "p1" {
-			t.Errorf("preview promote body = %v, want pointer pr-42 alongside the promotion", promoteBodies[0])
-		}
-		if _, ok := promoteBodies[1]["pointer"]; ok {
-			t.Errorf("production promote body included a pointer field: %v", promoteBodies[1])
-		}
-		if historyQuery[0] != "pr-42" || historyQuery[1] != "" {
-			t.Errorf("history pointer queries = %v, want [pr-42 <empty>]", historyQuery)
-		}
-		if pruneBodies[0]["pointer"] != "pr-42" {
-			t.Errorf("preview prune body = %v, want pointer pr-42", pruneBodies[0])
-		}
-		if _, ok := pruneBodies[1]["pointer"]; ok {
-			t.Errorf("production prune body included a pointer field: %v", pruneBodies[1])
-		}
-	})
+	srv, store := fakeStoreFor(t, "s3cr3t")
+	p := &cloudflare{}
+	state := testState(srv.URL, "s3cr3t")
+	flips(t, p, state, flipOf("promo-preview", "pr-42", router.DeploymentRecord{App: "web", Build: "b1"}))
 
-	t.Run("removing a pointer sends it and returns what there is to reclaim", func(t *testing.T) {
-		t.Parallel()
-
-		var body map[string]any
-		mux := http.NewServeMux()
-		mux.HandleFunc("POST /{slug}/remove-pointer", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			_ = json.NewEncoder(w).Encode(router.PruneResult{
-				RemovedPromotionIDs: []string{"promo-1"},
-				RemovedRecordKeys:   []string{"record:web/b1"},
-			})
-		})
-		srv := httptest.NewServer(mux)
-		t.Cleanup(srv.Close)
-
-		result, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42")
-		if err != nil {
-			t.Fatalf("RemovePointer: %v", err)
-		}
-		if body["pointer"] != "pr-42" {
-			t.Errorf("remove-pointer body = %v, want the pointer pr-42", body)
-		}
-		if len(result.RemovedRecordKeys) != 1 || result.RemovedRecordKeys[0] != "record:web/b1" {
-			t.Errorf("result = %+v, want the removed record keys to reclaim", result)
-		}
-	})
+	if err := (routerStack{s: stackOn(p, state)}).RemovePointer(t.Context(), "pr-42", progress.DiscardProgress()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if served := store.serving("pr-42", "web"); served != "" {
+		t.Errorf("pr-42 serves %q after it was removed, want nothing", served)
+	}
 }
 
 func TestStoreRequest(t *testing.T) {
@@ -377,7 +264,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state with no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1"})
+		_, err := stackOn(&cloudflare{}, edge.StackState{}).servedPromotion(t.Context(), "")
 		if err == nil {
 			t.Fatal("expected an error when the root-stack state has no endpoint")
 		}
@@ -388,20 +275,20 @@ func TestStoreRequest(t *testing.T) {
 
 		attempts := 0
 		mux := http.NewServeMux()
-		mux.HandleFunc("PUT /{slug}/staged", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc("GET /{slug}/pointer", func(w http.ResponseWriter, _ *http.Request) {
 			attempts++
 			if attempts < 3 {
 				w.Header().Set("Retry-After-Ms", "1")
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
-			w.WriteHeader(http.StatusNoContent)
+			_, _ = w.Write([]byte(`{"promotionId":null}`))
 		})
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), router.DeploymentRecord{App: "web"}); err != nil {
-			t.Fatalf("PutStaged: %v", err)
+		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).servedPromotion(t.Context(), ""); err != nil {
+			t.Fatalf("servedPromotion: %v", err)
 		}
 		if attempts != 3 {
 			t.Errorf("attempts = %d, want 3: the two unavailable answers must have been retried", attempts)
@@ -418,8 +305,8 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), router.DeploymentRecord{App: "web"}); err == nil {
-			t.Fatal("PutStaged err = nil, want the rejection surfaced")
+		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).servedPromotion(t.Context(), ""); err == nil {
+			t.Fatal("servedPromotion err = nil, want the rejection surfaced")
 		}
 		if attempts != 1 {
 			t.Errorf("attempts = %d, want 1", attempts)
@@ -438,8 +325,8 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(ctx, router.DeploymentRecord{App: "web"}); err == nil {
-			t.Fatal("PutStaged err = nil, want the failure surfaced")
+		if _, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).servedPromotion(ctx, ""); err == nil {
+			t.Fatal("servedPromotion err = nil, want the failure surfaced")
 		}
 		if attempts != 1 {
 			t.Errorf("attempts = %d, want 1: a cancelled context must not wait out the backoff", attempts)
@@ -498,14 +385,12 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
-		if err := stackOn(p, state).promote(t.Context(), router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
-			t.Fatalf("Promote: %v", err)
-		}
+		flips(t, p, state, flipOf("p1", "", router.DeploymentRecord{App: "web", Build: "b1"}))
 		if err := p.destroyInstance(t.Context(), state); err != nil {
 			t.Fatalf("destroyInstance: %v", err)
 		}
-		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
-			t.Error("history after destroy: err = nil, want the wiped instance to reject the secret")
+		if _, err := stackOn(p, state).servedPromotion(t.Context(), ""); err == nil {
+			t.Error("reading the pointer after destroy: err = nil, want the wiped instance to reject the secret")
 		}
 	})
 
@@ -522,39 +407,4 @@ func TestDestroyInstance(t *testing.T) {
 			t.Fatalf("destroyInstance on an already-wiped instance: err = %v, want nil", err)
 		}
 	})
-}
-
-func TestStoreSchemaVersionMatchesTheWorker(t *testing.T) {
-	t.Parallel()
-
-	const source = "../workers/deployments-store/src/store.ts"
-	src, err := os.ReadFile(source)
-	if err != nil {
-		t.Fatalf("read %s: %v", source, err)
-	}
-	match := regexp.MustCompile(`(?m)^export const SCHEMA_VERSION = (\d+);$`).FindSubmatch(src)
-	if match == nil {
-		t.Fatalf("%s declares no exported SCHEMA_VERSION", source)
-	}
-	got, err := strconv.Atoi(string(match[1]))
-	if err != nil {
-		t.Fatalf("parse SCHEMA_VERSION from %s: %v", source, err)
-	}
-	if got != edge.StoreSchemaVersion {
-		t.Errorf("%s speaks schema %d, the contract speaks %d; a deploy would refuse every store this worker serves", source, got, edge.StoreSchemaVersion)
-	}
-}
-
-func TestStoreSchemaVersionUnreadableWhenTheStorePredatesTheCheck(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	p := &cloudflare{}
-	if _, err := stackOn(p, testState(server.URL, "")).SchemaVersion(context.Background()); !errors.Is(err, edge.ErrStoreSchemaUnreadable) {
-		t.Errorf("SchemaVersion err = %v, want %v", err, edge.ErrStoreSchemaUnreadable)
-	}
 }

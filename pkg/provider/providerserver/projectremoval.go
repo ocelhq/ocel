@@ -70,7 +70,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	shared, err := openSharedStack(vendor, front)
+	shared, err := openSharedStack(vendor, front, tier, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

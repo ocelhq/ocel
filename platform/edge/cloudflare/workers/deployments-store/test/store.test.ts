@@ -1,7 +1,7 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import type { DeploymentRecord, Promotion } from "../src/store";
+import type { DeploymentRecord, Flip } from "../src/store";
 import { ensureSchema, SCHEMA_VERSION } from "../src/store";
 
 declare module "cloudflare:test" {
@@ -19,7 +19,6 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
     framework: "next",
     identity: "deploy-1",
     deploymentId: "deploy-1",
-    buildId: "build-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "deploy-1",
@@ -29,157 +28,116 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-function makePromotion(over: Partial<Promotion> = {}): Promotion {
+function makeFlip(over: Partial<Flip> = {}): Flip {
   return {
     promotionId: "promo-1",
-    ts: 1_000,
-    builds: { web: "deploy-1" },
+    records: [makeRecord()],
     ...over,
   };
 }
 
-describe("putStaged", () => {
-  it("stores a record without changing the active pointer", async () => {
+describe("flip", () => {
+  it("serves the records it carries on the pointer and names the promotion it serves", async () => {
     const store = storeStub();
-    await store.putStaged(makeRecord());
 
-    expect(await store.record("web", "deploy-1")).toEqual(makeRecord());
-    expect(await store.pointerIdentity("web")).toBeUndefined();
-    expect(await store.history()).toEqual([]);
-  });
-});
+    expect(await store.flip(makeFlip())).toBe("flipped");
 
-describe("promote", () => {
-  it("flips the active pointer atomically and appends to history", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord());
-
-    await store.promote(makePromotion());
-
-    expect(await store.pointerIdentity("web")).toBe("deploy-1");
-    expect(await store.history()).toEqual([
-      { promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" }, active: true },
-    ]);
-  });
-
-  it("moves the active pointer across successive promotions", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1" }));
-    await store.putStaged(makeRecord({ identity: "deploy-2" }));
-
-    await store.promote(
-      makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }),
-    );
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
-    );
-
-    expect(await store.pointerIdentity("web")).toBe("deploy-2");
-  });
-});
-
-describe("named pointers", () => {
-  it("promotes to a named pointer without moving the default one", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "prod-deploy" }));
-    await store.putStaged(makeRecord({ identity: "preview-deploy" }));
-
-    await store.promote(makePromotion({ promotionId: "prod", builds: { web: "prod-deploy" } }));
-    await store.promote(
-      makePromotion({ promotionId: "prev", builds: { web: "preview-deploy" } }),
-      "flaky-web-2626",
-    );
-
-    expect(await store.pointerIdentity("web")).toBe("prod-deploy");
-    expect(await store.pointerIdentity("web", "flaky-web-2626")).toBe("preview-deploy");
-  });
-
-  it("resolves a named pointer's record through pointerRecord", async () => {
-    const store = storeStub();
-    const record = makeRecord({ identity: "preview-deploy" });
-    await store.putStaged(record);
-    await store.promote(
-      makePromotion({ promotionId: "prev", builds: { web: "preview-deploy" } }),
-      "flaky-web-2626",
-    );
-
-    expect(await store.pointerRecord("web", "flaky-web-2626")).toEqual({
+    expect(await store.servedPromotion()).toBe("promo-1");
+    expect(await store.pointerRecord("web")).toEqual({
       kind: "record",
-      identity: "preview-deploy",
-      record,
-    });
-    expect(await store.pointerRecord("web", "no-such-preview")).toEqual({
-      kind: "no-pointer",
+      identity: "deploy-1",
+      record: makeRecord(),
     });
   });
 
-  it("re-promoting a named pointer moves only that pointer", async () => {
+  it("replaces the promotion it names and serves the new one", async () => {
     const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "preview-1" }));
-    await store.putStaged(makeRecord({ identity: "preview-2" }));
+    await store.flip(makeFlip());
 
-    await store.promote(
-      makePromotion({ promotionId: "p1", builds: { web: "preview-1" } }),
-      "preview",
+    const next = makeFlip({
+      promotionId: "promo-2",
+      replaces: "promo-1",
+      records: [makeRecord({ identity: "deploy-2" })],
+    });
+    expect(await store.flip(next)).toBe("flipped");
+
+    expect(await store.servedPromotion()).toBe("promo-2");
+    expect(await store.pointerRecord("web")).toMatchObject({
+      kind: "record",
+      identity: "deploy-2",
+    });
+  });
+
+  it("moves nothing when the pointer no longer serves the promotion it names", async () => {
+    const store = storeStub();
+    await store.flip(makeFlip());
+    await store.flip(
+      makeFlip({
+        promotionId: "promo-2",
+        replaces: "promo-1",
+        records: [makeRecord({ identity: "deploy-2" })],
+      }),
     );
-    await store.promote(
-      makePromotion({ promotionId: "p2", builds: { web: "preview-2" } }),
-      "preview",
+
+    const stale = makeFlip({
+      promotionId: "promo-3",
+      replaces: "promo-1",
+      records: [makeRecord({ identity: "deploy-3" })],
+    });
+    expect(await store.flip(stale)).toBe("moved");
+
+    expect(await store.servedPromotion()).toBe("promo-2");
+    expect(await store.pointerRecord("web")).toMatchObject({
+      kind: "record",
+      identity: "deploy-2",
+    });
+  });
+
+  it("moves nothing when it names a promotion on a pointer that serves none", async () => {
+    const store = storeStub();
+
+    expect(await store.flip(makeFlip({ replaces: "promo-0" }))).toBe("moved");
+
+    expect(await store.servedPromotion()).toBeUndefined();
+    expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
+  });
+
+  it("stops serving an app the new promotion leaves out", async () => {
+    const store = storeStub();
+    await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
+
+    await store.flip(makeFlip({ promotionId: "promo-2", replaces: "promo-1" }));
+
+    expect(await store.pointerRecord("admin")).toEqual({ kind: "no-pointer" });
+  });
+
+  it("moves only the pointer it names", async () => {
+    const store = storeStub();
+    await store.flip(makeFlip());
+
+    await store.flip(
+      makeFlip({
+        promotionId: "promo-preview",
+        pointer: "pr-42",
+        records: [makeRecord({ identity: "preview-1" })],
+      }),
     );
 
-    expect(await store.pointerIdentity("web", "preview")).toBe("preview-2");
-    expect(await store.pointerIdentity("web")).toBeUndefined();
-  });
-});
-
-describe("pointerIdentity / record", () => {
-  it("derives the active build id from the active promotion", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ app: "web", identity: "deploy-1" }));
-    await store.putStaged(makeRecord({ app: "docs", identity: "deploy-9" }));
-    await store.promote(makePromotion({ builds: { web: "deploy-1", docs: "deploy-9" } }));
-
-    expect(await store.pointerIdentity("web")).toBe("deploy-1");
-    expect(await store.pointerIdentity("docs")).toBe("deploy-9");
-  });
-
-  it("returns undefined for an app with no active promotion", async () => {
-    const store = storeStub();
-    expect(await store.pointerIdentity("nonexistent")).toBeUndefined();
-  });
-
-  it("returns the stored record for a given app and build id", async () => {
-    const store = storeStub();
-    const record = makeRecord({ isrPrefix: "custom-isr" });
-    await store.putStaged(record);
-
-    expect(await store.record("web", "deploy-1")).toEqual(record);
-    expect(await store.record("web", "no-such-build")).toBeUndefined();
+    expect(await store.servedPromotion()).toBe("promo-1");
+    expect(await store.servedPromotion("pr-42")).toBe("promo-preview");
+    expect(await store.pointerRecord("web", "pr-42")).toMatchObject({ identity: "preview-1" });
+    expect(await store.pointerRecord("web")).toMatchObject({ identity: "deploy-1" });
   });
 });
 
 describe("pointerRecord", () => {
-  it("returns no-pointer when the app has no active promotion", async () => {
-    const store = storeStub();
-    expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
+  it("returns no-pointer when nothing is served on the pointer", async () => {
+    expect(await storeStub().pointerRecord("web")).toEqual({ kind: "no-pointer" });
   });
 
-  it("returns the active build id and record when no build is known", async () => {
+  it("omits the record when the known build is still served", async () => {
     const store = storeStub();
-    await store.putStaged(makeRecord());
-    await store.promote(makePromotion());
-
-    expect(await store.pointerRecord("web")).toEqual({
-      kind: "record",
-      identity: "deploy-1",
-      record: makeRecord(),
-    });
-  });
-
-  it("omits the record when the known build is still active", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord());
-    await store.promote(makePromotion());
+    await store.flip(makeFlip());
 
     expect(await store.pointerRecord("web", undefined, "deploy-1")).toEqual({
       kind: "unchanged",
@@ -187,396 +145,67 @@ describe("pointerRecord", () => {
     });
   });
 
-  it("returns the new record when the known build is stale", async () => {
+  it("returns the served record when the known build is stale", async () => {
     const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1" }));
-    await store.putStaged(makeRecord({ identity: "deploy-2" }));
-    await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "deploy-1" } }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
-    );
+    await store.flip(makeFlip());
 
-    expect(await store.pointerRecord("web", undefined, "deploy-1")).toEqual({
-      kind: "record",
-      identity: "deploy-2",
-      record: makeRecord({ identity: "deploy-2" }),
-    });
-  });
-
-  it("returns dangling when the active pointer names a build with no record", async () => {
-    const store = storeStub();
-    await store.promote(makePromotion({ builds: { web: "ghost-build" } }));
-
-    expect(await store.pointerRecord("web")).toEqual({
-      kind: "dangling",
-      identity: "ghost-build",
-    });
-  });
-
-  it("resolves the promotion's sole app when no app is given", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord());
-    await store.promote(makePromotion());
-
-    expect(await store.pointerRecord(undefined)).toEqual({
+    expect(await store.pointerRecord("web", undefined, "deploy-0")).toEqual({
       kind: "record",
       identity: "deploy-1",
       record: makeRecord(),
     });
-    expect(await store.pointerRecord(undefined, undefined, "deploy-1")).toEqual({
-      kind: "unchanged",
+  });
+
+  it("resolves the pointer's sole app when no app is given", async () => {
+    const store = storeStub();
+    await store.flip(makeFlip({ pointer: "pr-42" }));
+
+    expect(await store.pointerRecord(undefined, "pr-42")).toMatchObject({
+      kind: "record",
       identity: "deploy-1",
     });
   });
 
-  it("returns ambiguous-app when the promotion names more than one app", async () => {
+  it("returns ambiguous-app when the pointer serves more than one app", async () => {
     const store = storeStub();
-    await store.putStaged(makeRecord());
-    await store.putStaged(makeRecord({ app: "admin", identity: "deploy-9" }));
-    await store.promote(makePromotion({ builds: { web: "deploy-1", admin: "deploy-9" } }));
+    await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
 
-    expect(await store.pointerRecord(undefined)).toEqual({
-      kind: "ambiguous-app",
-    });
-    expect(await store.pointerRecord("admin")).toEqual({
-      kind: "record",
-      identity: "deploy-9",
-      record: makeRecord({ app: "admin", identity: "deploy-9" }),
-    });
+    expect(await store.pointerRecord()).toEqual({ kind: "ambiguous-app" });
   });
 
-  it("returns no-pointer without an app when the pointer has no promotion", async () => {
+  it("returns no-pointer for an app the pointer does not serve", async () => {
     const store = storeStub();
-    expect(await store.pointerRecord(undefined, "flaky-web-2626")).toEqual({
-      kind: "no-pointer",
-    });
-  });
+    await store.flip(makeFlip());
 
-  it("resolves the sole app of a named pointer", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "preview-1" }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-p", builds: { web: "preview-1" } }),
-      "flaky-web-2626",
-    );
-
-    expect(await store.pointerRecord(undefined, "flaky-web-2626")).toEqual({
-      kind: "record",
-      identity: "preview-1",
-      record: makeRecord({ identity: "preview-1" }),
-    });
-  });
-});
-
-describe("history", () => {
-  it("returns promotions newest-first with the active one marked", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1" }));
-    await store.putStaged(makeRecord({ identity: "deploy-2" }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } }),
-    );
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
-    );
-
-    expect(await store.history()).toEqual([
-      { promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" }, active: true },
-      { promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" }, active: false },
-    ]);
-  });
-
-  it("keeps a promotion's tag through history", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord());
-    await store.promote(makePromotion({ tag: "v1.2.3" }));
-
-    expect(await store.history()).toEqual([
-      {
-        promotionId: "promo-1",
-        ts: 1_000,
-        builds: { web: "deploy-1" },
-        tag: "v1.2.3",
-        active: true,
-      },
-    ]);
-  });
-});
-
-describe("tags", () => {
-  it("rejects a tag already taken by a different promotion", async () => {
-    const store = storeStub();
-    await store.promote(makePromotion({ promotionId: "promo-1", tag: "v1.2.3" }));
-
-    const { conflict } = await store.promote(
-      makePromotion({ promotionId: "promo-2", tag: "v1.2.3" }),
-    );
-
-    expect(conflict).toMatch(/already used by promotion promo-1/);
-    expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1"]);
-    expect(await store.pointerIdentity("web")).toBe("deploy-1");
-  });
-
-  it("lets a rollback re-promote its own tagged id without a self-conflict", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1" }));
-    await store.putStaged(makeRecord({ identity: "deploy-2" }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-1", ts: 1_000, tag: "v1", builds: { web: "deploy-1" } }),
-    );
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
-    );
-
-    const { conflict } = await store.promote(
-      makePromotion({ promotionId: "promo-1", ts: 3_000, tag: "v1", builds: { web: "deploy-1" } }),
-    );
-
-    expect(conflict).toBeUndefined();
-    expect(await store.pointerIdentity("web")).toBe("deploy-1");
-    expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1", "promo-2"]);
-  });
-
-  it("frees a tag once its promotion is pruned", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1" }));
-    await store.putStaged(makeRecord({ identity: "deploy-2" }));
-    await store.putStaged(makeRecord({ identity: "deploy-3" }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-1", ts: 1_000, tag: "v1", builds: { web: "deploy-1" } }),
-    );
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
-    );
-    await store.prune(1); // keeps promo-2 (active); removes promo-1 and frees "v1"
-
-    const { conflict } = await store.promote(
-      makePromotion({ promotionId: "promo-3", ts: 3_000, tag: "v1", builds: { web: "deploy-3" } }),
-    );
-
-    expect(conflict).toBeUndefined();
-    expect((await store.history()).find((h) => h.tag === "v1")?.promotionId).toBe("promo-3");
-  });
-});
-
-describe("prune", () => {
-  async function seedPromotions(store: ReturnType<typeof storeStub>, n: number) {
-    for (let i = 1; i <= n; i++) {
-      await store.putStaged(makeRecord({ identity: `deploy-${i}` }));
-      await store.promote(
-        makePromotion({ promotionId: `promo-${i}`, ts: i * 1_000, builds: { web: `deploy-${i}` } }),
-      );
-    }
-  }
-
-  it("removes promotions beyond keepN, newest first", async () => {
-    const store = storeStub();
-    await seedPromotions(store, 5);
-
-    const result = await store.prune(3);
-
-    expect(result.keptPromotionIds).toEqual(["promo-5", "promo-4", "promo-3"]);
-    expect(result.removedPromotionIds).toEqual(["promo-2", "promo-1"]);
-    expect((await store.history()).map((h) => h.promotionId)).toEqual([
-      "promo-5",
-      "promo-4",
-      "promo-3",
-    ]);
-  });
-
-  it("deletes the records of removed promotions", async () => {
-    const store = storeStub();
-    await seedPromotions(store, 4);
-
-    const result = await store.prune(2);
-
-    expect(result.removedRecordKeys).toEqual(["record:web/deploy-2", "record:web/deploy-1"]);
-    expect(await store.record("web", "deploy-1")).toBeUndefined();
-    expect(await store.record("web", "deploy-2")).toBeUndefined();
-    expect(await store.record("web", "deploy-3")).toEqual(makeRecord({ identity: "deploy-3" }));
-  });
-
-  it("reports the record keys the store still contains", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1" }));
-    await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "deploy-1" } }));
-    await store.putStaged(makeRecord({ identity: "deploy-1~fp2" }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-1~fp2" } }),
-    );
-
-    const result = await store.prune(1);
-
-    expect(result.removedRecordKeys).toEqual(["record:web/deploy-1"]);
-    expect(result.survivingRecordKeys).toEqual(["record:web/deploy-1~fp2"]);
-  });
-
-  it("reports the pruned pointer's own surviving record keys separately", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1~fpP" }));
-    await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "deploy-1~fpP" } }));
-    await store.putStaged(makeRecord({ identity: "deploy-2" }));
-    await store.promote(
-      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "deploy-2" } }),
-    );
-    await store.putStaged(makeRecord({ identity: "deploy-1~fpV" }));
-    await store.promote(
-      makePromotion({ promotionId: "prev-1", ts: 3_000, builds: { web: "deploy-1~fpV" } }),
-      "pr-7",
-    );
-
-    const result = await store.prune(1);
-
-    expect(result.removedRecordKeys).toEqual(["record:web/deploy-1~fpP"]);
-    expect(result.survivingRecordKeys).toEqual(["record:web/deploy-1~fpV", "record:web/deploy-2"]);
-    expect(result.survivingPointerRecordKeys).toEqual(["record:web/deploy-2"]);
-  });
-
-  it("pins the active promotion even when it falls outside the keep window", async () => {
-    const store = storeStub();
-    await seedPromotions(store, 5);
-    await store.promote(
-      makePromotion({ promotionId: "promo-1", ts: 6_000, builds: { web: "deploy-1" } }),
-    );
-
-    const result = await store.prune(2);
-
-    expect(result.keptPromotionIds).toContain("promo-1");
-    expect(await store.record("web", "deploy-1")).toBeDefined();
-  });
-
-  it("never removes more than requested when history is already within the window", async () => {
-    const store = storeStub();
-    await seedPromotions(store, 2);
-
-    const result = await store.prune(10);
-
-    expect(result.removedPromotionIds).toEqual([]);
-    expect(result.keptPromotionIds).toEqual(["promo-2", "promo-1"]);
-  });
-
-  it("is scoped to a pointer: pruning one pointer leaves another untouched", async () => {
-    const store = storeStub();
-    for (let i = 1; i <= 3; i++) {
-      await store.putStaged(makeRecord({ identity: `prod-${i}` }));
-      await store.promote(
-        makePromotion({ promotionId: `prod-${i}`, ts: i * 1_000, builds: { web: `prod-${i}` } }),
-      );
-      await store.putStaged(makeRecord({ identity: `prev-${i}` }));
-      await store.promote(
-        makePromotion({
-          promotionId: `prev-${i}`,
-          ts: i * 1_000 + 500,
-          builds: { web: `prev-${i}` },
-        }),
-        "staging",
-      );
-    }
-
-    const result = await store.prune(1, "staging");
-
-    expect(result.removedPromotionIds).toEqual(["prev-2", "prev-1"]);
-    expect((await store.history("staging")).map((h) => h.promotionId)).toEqual(["prev-3"]);
-    expect((await store.history()).map((h) => h.promotionId)).toEqual([
-      "prod-3",
-      "prod-2",
-      "prod-1",
-    ]);
-    expect(await store.record("web", "prod-1")).toBeDefined();
-    expect(await store.record("web", "prev-1")).toBeUndefined();
+    expect(await store.pointerRecord("admin")).toEqual({ kind: "no-pointer" });
   });
 });
 
 describe("removePointer", () => {
-  it("removes a whole pointer (active included) and reports what to reclaim", async () => {
+  it("leaves nothing served on the pointer and every other pointer as it was", async () => {
     const store = storeStub();
-    for (let i = 1; i <= 2; i++) {
-      await store.putStaged(makeRecord({ identity: `prod-${i}` }));
-      await store.promote(
-        makePromotion({ promotionId: `prod-${i}`, ts: i * 1_000, builds: { web: `prod-${i}` } }),
-      );
-      await store.putStaged(makeRecord({ identity: `prev-${i}` }));
-      await store.promote(
-        makePromotion({
-          promotionId: `prev-${i}`,
-          ts: i * 1_000 + 500,
-          builds: { web: `prev-${i}` },
-        }),
-        "staging",
-      );
-    }
+    await store.flip(makeFlip());
+    await store.flip(makeFlip({ promotionId: "promo-preview", pointer: "pr-42" }));
 
-    const result = await store.removePointer("staging");
+    await store.removePointer("pr-42");
 
-    expect(result.keptPromotionIds).toEqual([]);
-    expect(result.removedPromotionIds).toEqual(["prev-2", "prev-1"]);
-    expect(result.removedRecordKeys.sort()).toEqual(
-      ["record:web/prev-1", "record:web/prev-2"].sort(),
-    );
-    expect(await store.history("staging")).toEqual([]);
-    expect(await store.pointerIdentity("web", "staging")).toBeUndefined();
-    expect(await store.record("web", "prev-1")).toBeUndefined();
-    expect((await store.history()).map((h) => h.promotionId)).toEqual(["prod-2", "prod-1"]);
-    expect(await store.record("web", "prod-1")).toBeDefined();
+    expect(await store.servedPromotion("pr-42")).toBeUndefined();
+    expect(await store.pointerRecord("web", "pr-42")).toEqual({ kind: "no-pointer" });
+    expect(await store.servedPromotion()).toBe("promo-1");
   });
 
-  it("leaves the removed pointer with no surviving record keys of its own", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "deploy-1~fpP" }));
-    await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "deploy-1~fpP" } }));
-    await store.putStaged(makeRecord({ identity: "deploy-1~fpV" }));
-    await store.promote(
-      makePromotion({ promotionId: "prev-1", ts: 2_000, builds: { web: "deploy-1~fpV" } }),
-      "staging",
-    );
-
-    const result = await store.removePointer("staging");
-
-    expect(result.survivingRecordKeys).toEqual(["record:web/deploy-1~fpP"]);
-    expect(result.survivingPointerRecordKeys).toEqual([]);
-  });
-
-  it("removing an unknown pointer is a clean no-op", async () => {
-    const store = storeStub();
-    const result = await store.removePointer("never-existed");
-    expect(result.removedPromotionIds).toEqual([]);
-    expect(result.removedRecordKeys).toEqual([]);
-  });
-
-  it("leaves every other pointer intact", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "prod-1" }));
-    await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "prod-1" } }));
-    for (const p of ["pr-1", "pr-2"]) {
-      await store.putStaged(makeRecord({ identity: p }));
-      await store.promote(makePromotion({ promotionId: p, builds: { web: p } }), p);
-    }
-
-    await store.removePointer("pr-1");
-
-    expect(await store.pointerIdentity("web", "pr-1")).toBeUndefined();
-    expect(await store.pointerIdentity("web", "pr-2")).toBe("pr-2");
-    expect(await store.pointerIdentity("web")).toBe("prod-1");
+  it("removing a pointer that serves nothing is a clean no-op", async () => {
+    await storeStub().removePointer("never-flipped");
   });
 });
 
-describe("pointer-scoped history", () => {
-  it("returns only the given pointer's promotions, active marked per pointer", async () => {
+describe("apps", () => {
+  it("names every app ever flipped, even one no pointer serves any more", async () => {
     const store = storeStub();
-    await store.putStaged(makeRecord({ identity: "prod-1" }));
-    await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "prod-1" } }));
-    await store.putStaged(makeRecord({ identity: "prev-1" }));
-    await store.promote(
-      makePromotion({ promotionId: "prev-1", ts: 2_000, builds: { web: "prev-1" } }),
-      "staging",
-    );
+    await store.flip(makeFlip({ records: [makeRecord(), makeRecord({ app: "admin" })] }));
+    await store.flip(makeFlip({ promotionId: "promo-2", replaces: "promo-1" }));
 
-    expect(await store.history()).toEqual([
-      { promotionId: "prod-1", ts: 1_000, builds: { web: "prod-1" }, active: true },
-    ]);
-    expect(await store.history("staging")).toEqual([
-      { promotionId: "prev-1", ts: 2_000, builds: { web: "prev-1" }, active: true },
-    ]);
+    expect(await store.apps()).toEqual(["admin", "web"]);
   });
 });
 
@@ -636,16 +265,16 @@ describe("initialize / authorized", () => {
 });
 
 describe("destroy", () => {
-  it("clears history, records, ownership and secret, and frees the slug", async () => {
+  it("clears what it serves, ownership and secret, and frees the slug", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
-    await store.putStaged(makeRecord());
-    await store.promote(makePromotion());
+    await store.flip(makeFlip());
 
     await store.destroy();
 
-    expect(await store.history()).toEqual([]);
-    expect(await store.record("web", "deploy-1")).toBeUndefined();
+    expect(await store.servedPromotion()).toBeUndefined();
+    expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
+    expect(await store.apps()).toEqual([]);
     expect(await store.authorized("s3cret")).toBe(false);
 
     await store.initialize("owner-2", "fresh", false);
@@ -658,15 +287,15 @@ describe("ensureSchema", () => {
     const stub = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName("legacy"));
     await runInDurableObject(stub, (_instance, ctx) => {
       const storage = ctx.storage;
-      for (const table of ["records", "promotions", "pointers"]) {
+      for (const table of ["records", "promotions", "pointers", "served", "apps"]) {
         storage.sql.exec(`DROP TABLE IF EXISTS ${table}`);
       }
       storage.sql.exec(
         `CREATE TABLE records (
            app TEXT NOT NULL,
-           build_id TEXT NOT NULL,
+           identity TEXT NOT NULL,
            data TEXT NOT NULL,
-           PRIMARY KEY (app, build_id)
+           PRIMARY KEY (app, identity)
          );
          CREATE TABLE promotions (
            promotion_id TEXT PRIMARY KEY,
@@ -682,17 +311,10 @@ describe("ensureSchema", () => {
          );`,
       );
       storage.sql.exec(
-        `INSERT INTO records (app, build_id, data) VALUES (?, ?, ?)`,
+        `INSERT INTO records (app, identity, data) VALUES (?, ?, ?)`,
         "web",
-        "build-1",
+        "deploy-1",
         JSON.stringify(makeRecord()),
-      );
-      storage.sql.exec(
-        `INSERT INTO promotions (promotion_id, ts, builds, seq) VALUES (?, ?, ?, ?)`,
-        "promo-1",
-        1_000,
-        JSON.stringify({ web: "build-1" }),
-        1,
       );
       storage.sql.exec(
         `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)`,
@@ -705,15 +327,25 @@ describe("ensureSchema", () => {
         "secret",
         "s3cret",
       );
-      storage.sql.exec(`DELETE FROM meta WHERE key = ?`, "schemaVersion");
+      storage.sql.exec(
+        `INSERT INTO meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        "schemaVersion",
+        "2",
+      );
 
       ensureSchema(storage);
 
+      const tables = storage.sql
+        .exec<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
+        .toArray()
+        .map((t) => t.name);
+      expect(tables).not.toContain("records");
+      expect(tables).not.toContain("promotions");
       const count = (table: string) =>
         storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).one().n;
-      expect(count("records")).toBe(0);
-      expect(count("promotions")).toBe(0);
       expect(count("pointers")).toBe(0);
+      expect(count("served")).toBe(0);
 
       const meta = (key: string) =>
         storage.sql
@@ -721,28 +353,22 @@ describe("ensureSchema", () => {
           .toArray()[0]?.value;
       expect(meta("secret")).toBe("s3cret");
       expect(meta("schemaVersion")).toBe(String(SCHEMA_VERSION));
-
-      const columns = storage.sql
-        .exec<{ name: string }>(`PRAGMA table_info(records)`)
-        .toArray()
-        .map((c) => c.name);
-      expect(columns).toContain("identity");
-      expect(columns).not.toContain("build_id");
     });
   });
 
   it("leaves a current schema's rows alone", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
-    await store.putStaged(makeRecord());
-    await store.promote(makePromotion());
+    await store.flip(makeFlip());
 
     await runInDurableObject(storeStub(), (_instance, ctx) => {
       ensureSchema(ctx.storage);
     });
 
-    expect(await store.record("web", "deploy-1")).toEqual(makeRecord());
-    expect(await store.pointerIdentity("web")).toBe("deploy-1");
+    expect(await store.pointerRecord("web")).toMatchObject({
+      kind: "record",
+      identity: "deploy-1",
+    });
     expect(await store.authorized("s3cret")).toBe(true);
   });
 });

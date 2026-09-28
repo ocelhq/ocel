@@ -330,9 +330,9 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 		for name := range decodeStampSet(stamped) {
 			named[name] = true
 		}
-		deployed, err := p.deployedApps(ctx, state)
+		deployed, err := p.servedApps(ctx, state)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read the apps the deployments store served, which names the workers they ran on: %w", err)
 		}
 		apps = deployed
 	}
@@ -345,20 +345,6 @@ func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([
 		named[name] = true
 	}
 	return slices.Sorted(maps.Keys(named)), nil
-}
-
-func (p *cloudflare) deployedApps(ctx context.Context, state edge.StackState) ([]string, error) {
-	history, err := (&stack{p: p, state: state}).History(ctx, "")
-	if err != nil {
-		return nil, fmt.Errorf("read the project's promotion history, which names the workers it deployed: %w", err)
-	}
-	apps := map[string]bool{}
-	for _, entry := range history {
-		for app := range entry.Builds {
-			apps[app] = true
-		}
-	}
-	return slices.Sorted(maps.Keys(apps)), nil
 }
 
 func (p *cloudflare) destroyWorkers(ctx context.Context, names []string) error {

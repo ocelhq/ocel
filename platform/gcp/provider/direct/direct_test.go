@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
@@ -50,31 +50,23 @@ const webService = "ocel-shop-prod-web"
 func TestTheDirectRouterBehavesAsEveryRouterMust(t *testing.T) {
 	routerconformance.Run(t, routerconformance.Suite{
 		New: func(t *testing.T) routerconformance.Fixture {
-			store, pins := fake.NewKeyValues(), &pinRecorder{}
-			front := direct.New(store, pins)
+			pins := &pinRecorder{}
+			front := direct.New(pins)
 			stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 			if err != nil {
 				t.Fatalf("Reconcile(shop) = %v", err)
 			}
 			state := stack.State()
-			records := ledger.New(store, state.Tier, state.Slug)
 			return routerconformance.Fixture{
 				Router: direct.NewRouter(front),
 				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
 				Prior:  router.NewStackState(state),
-				Serving: func(pointer string) string {
-					history, err := records.History(context.Background(), pointer)
-					if err != nil {
-						t.Fatalf("History(%q) = %v", pointer, err)
-					}
+				Serving: func(string) string {
 					calls := pins.calls()
-					for _, entry := range history {
-						build := entry.Builds[routerconformance.App]
-						if entry.Active && len(calls) > 0 && calls[len(calls)-1] == webService+"@rev-"+build {
-							return build
-						}
+					if len(calls) == 0 {
+						return ""
 					}
-					return ""
+					return strings.TrimPrefix(calls[len(calls)-1], webService+"@rev-")
 				},
 				FailNextFlip: func(err error) {
 					pins.mu.Lock()
@@ -87,17 +79,13 @@ func TestTheDirectRouterBehavesAsEveryRouterMust(t *testing.T) {
 		Record: func(app, build string) router.DeploymentRecord {
 			return router.DeploymentRecord{App: app, Build: build, Physical: webService, Revisions: map[string]string{webService: "rev-" + build}}
 		},
+		TornDownWithCompute: true,
 	})
 }
 
-func fronting(t *testing.T, pins *pinRecorder) router.Stack {
+func fronting(t *testing.T, pins *pinRecorder) fake.PromotingStack {
 	t.Helper()
-	return frontingOn(t, fake.NewKeyValues(), pins)
-}
-
-func frontingOn(t *testing.T, store keyvalue.Store, pins *pinRecorder) router.Stack {
-	t.Helper()
-	front := direct.New(store, pins)
+	front := direct.New(pins)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
@@ -106,12 +94,12 @@ func frontingOn(t *testing.T, store keyvalue.Store, pins *pinRecorder) router.St
 	if err != nil {
 		t.Fatalf("Open the router = %v", err)
 	}
-	return opened
+	return fake.PromotingStack{Stack: opened, Ledger: ledger.New(fake.NewKeyValues(), environment.TierProduction, "shop")}
 }
 
-func staged(t *testing.T, stack router.Stack, identity, revision string) {
+func staged(t *testing.T, stack fake.PromotingStack, identity, revision string) {
 	t.Helper()
-	err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
+	err := stack.Ledger.PutStaged(context.Background(), router.DeploymentRecord{
 		App:       "web",
 		Build:     identity,
 		Physical:  webService,
@@ -122,7 +110,7 @@ func staged(t *testing.T, stack router.Stack, identity, revision string) {
 	}
 }
 
-func promoted(t *testing.T, stack router.Stack, id, identity string) error {
+func promoted(t *testing.T, stack fake.PromotingStack, id, identity string) error {
 	t.Helper()
 	return stack.Flip(context.Background(), router.Flip{Promotion: router.Promotion{
 		PromotionID: id,
@@ -148,15 +136,6 @@ func TestARollbackPinsCloudRunBackToTheRevisionThePromotionRecorded(t *testing.T
 	if got := pins.calls(); !slices.Equal(got, want) {
 		t.Errorf("the promotions pinned %v, want %v: a rollback that only writes the ledger leaves the newest revision serving every request", got, want)
 	}
-	history, err := stack.Ledger().History(context.Background(), "")
-	if err != nil {
-		t.Fatalf("History() = %v", err)
-	}
-	for _, entry := range history {
-		if entry.Active && entry.PromotionID != "p3" {
-			t.Errorf("the ledger records %s as active, want p3", entry.PromotionID)
-		}
-	}
 }
 
 func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
@@ -181,7 +160,7 @@ func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *
 
 	pins := &pinRecorder{}
 	stack := fronting(t, pins)
-	if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
+	if err := stack.Ledger.PutStaged(context.Background(), router.DeploymentRecord{
 		App: "web", Build: "b1", Physical: webService,
 	}); err != nil {
 		t.Fatalf("PutStaged(b1) = %v", err)
@@ -197,7 +176,7 @@ func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *
 	}
 }
 
-func TestAPromotionThatCannotPinLeavesTheLedgerPointingWhereItDid(t *testing.T) {
+func TestAPromotionThatCannotPinIsUnserved(t *testing.T) {
 	t.Parallel()
 
 	pins := &pinRecorder{}
@@ -209,88 +188,9 @@ func TestAPromotionThatCannotPinLeavesTheLedgerPointingWhereItDid(t *testing.T) 
 
 	staged(t, stack, "b2", "web-00002-def")
 	pins.refuse = errors.New("cloud run said no")
-	if err := promoted(t, stack, "p2", "b2"); err == nil {
-		t.Fatal("Promote(p2) = nil, want the pin's error: the ledger must not name a promotion that serves nothing")
-	}
-	history, err := stack.Ledger().History(context.Background(), "")
-	if err != nil {
-		t.Fatalf("History() = %v", err)
-	}
-	for _, entry := range history {
-		if entry.Active && entry.PromotionID != "p1" {
-			t.Errorf("the ledger records %s as active after a pin that failed, want p1", entry.PromotionID)
-		}
-	}
-}
-
-type staleAt struct {
-	keyvalue.Store
-	at string
-}
-
-func (s staleAt) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if slices.Contains(entry.Key.Path, s.at) {
-		return "", keyvalue.ErrStale
-	}
-	return s.Store.Write(ctx, entry)
-}
-
-func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
-	t.Parallel()
-
-	pins := &pinRecorder{}
-	stack := frontingOn(t, staleAt{Store: fake.NewKeyValues(), at: "pointers"}, pins)
-	staged(t, stack, "b1", "web-00001-abc")
-
-	var refused refusal.Refusal
-	if err := promoted(t, stack, "p1", "b1"); !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
-		t.Fatalf("Promote(p1) while the pointer moved = %v, want a %s refusal", err, refusal.CodeBusy)
-	}
-	if got := pins.calls(); len(got) != 0 {
-		t.Errorf("a promotion that lost the pointer pinned %v: Cloud Run then serves the loser while the ledger names the winner", got)
-	}
-}
-
-type honouring struct{ keyvalue.Store }
-
-func (h honouring) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
-	if err := ctx.Err(); err != nil {
-		return keyvalue.Entry{}, err
-	}
-	return h.Store.Read(ctx, name)
-}
-
-func (h honouring) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	return h.Store.Write(ctx, entry)
-}
-
-func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
-	t.Parallel()
-
-	pins := &pinRecorder{}
-	stack := frontingOn(t, honouring{fake.NewKeyValues()}, pins)
-	staged(t, stack, "b1", "web-00001-abc")
-	staged(t, stack, "b2", "web-00002-def")
-	if err := promoted(t, stack, "p1", "b1"); err != nil {
-		t.Fatalf("Promote(p1) = %v", err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pins.interrupt, pins.refuse = cancel, context.Canceled
-
-	if err := stack.Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}}, progress.DiscardProgress()); err == nil {
-		t.Fatal("Promote(p2) interrupted at its pin = nil")
-	}
-	history, err := stack.Ledger().History(context.Background(), "")
-	if err != nil {
-		t.Fatalf("History() = %v", err)
-	}
-	for _, entry := range history {
-		if entry.Active && entry.PromotionID != "p1" {
-			t.Errorf("the ledger records %s as active after a pin that was interrupted, want p1: the interrupt is the context the take-back ran under", entry.PromotionID)
-		}
+	err := promoted(t, stack, "p2", "b2")
+	var unserved router.Unserved
+	if !errors.As(err, &unserved) {
+		t.Fatalf("Promote(p2) = %v, want router.Unserved: nothing was pinned, so the ledger must take the promotion back", err)
 	}
 }

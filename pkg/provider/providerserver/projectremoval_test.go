@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -110,6 +111,30 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("the project still records %v, want every stack forgotten", entries)
+	}
+}
+
+func TestRemoveProjectErasesItsLedger(t *testing.T) {
+	client, vendor := deployedProject(t)
+	partition := ledger.Partition(environment.TierProduction, "shop")
+	if kept, err := vendor.KeyValues().List(context.Background(), partition); err != nil || len(kept) == 0 {
+		t.Fatalf("the deploy left %d ledger entries (%v), and a removal that erases none proves nothing", len(kept), err)
+	}
+
+	stream, err := client.RemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveProject() = %q, %v, want the project removed", result.GetError(), err)
+	}
+
+	kept, err := vendor.KeyValues().List(context.Background(), partition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 0 {
+		t.Errorf("the ledger keeps %d entries after the project was removed, want none: a destroyed project leaves no bytes behind", len(kept))
 	}
 }
 

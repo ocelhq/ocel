@@ -30,9 +30,13 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	live := routeOn(t, w, stack, boundHost)
 	wrote := w.store.count("kvs.UpdateKeys")
 
+	next := router.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}}
+	if err := openRouter(stack).Ledger.PutStaged(context.Background(), next); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
 	preview := promotion()
 	preview.PromotionID = "p2"
-	preview.Builds = map[string]string{"web": "d2.f2"}
+	preview.Builds = map[string]string{"web": next.Build}
 	if err := openRouter(stack).Flip(context.Background(), router.Flip{Pointer: "pr-7", Promotion: preview}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote onto a preview pointer: %v", err)
 	}
@@ -537,8 +541,8 @@ func TestARemovalRunsThroughWhenTheBootstrapItWasFrontedByIsGone(t *testing.T) {
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err != nil {
 		t.Errorf("UnbindDomain with no bootstrap installed = %v, want the hostname let go: there is no store left to withdraw it from", err)
 	}
-	if _, err := removePointer(context.Background(), orphaned, "", progress.DiscardProgress()); err != nil {
-		t.Errorf("RemovePointer with no bootstrap installed = %v, want no complaint: there is no ledger left to read", err)
+	if err := openRouter(orphaned).RemovePointer(context.Background(), "", progress.DiscardProgress()); err != nil {
+		t.Errorf("RemovePointer with no bootstrap installed = %v, want no complaint: there is no store left to withdraw a hostname from", err)
 	}
 	if err := orphaned.Destroy(context.Background()); err != nil {
 		t.Errorf("Destroy with no bootstrap installed = %v, want the stack given up: nothing it owned outlives the bootstrap", err)

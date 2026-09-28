@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -47,16 +46,15 @@ type Machine interface {
 type Origins func(ctx context.Context, project string, tier environment.Tier) error
 
 type Edge struct {
-	machine   Machine
-	origins   Origins
-	keyValues keyvalue.Store
-	scope     string
+	machine Machine
+	origins Origins
+	scope   string
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, store keyvalue.Store, scope string) *Edge {
-	return &Edge{machine: machine, origins: origins, keyValues: store, scope: scope}
+func New(machine Machine, origins Origins, scope string) *Edge {
+	return &Edge{machine: machine, origins: origins, scope: scope}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }
@@ -89,11 +87,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	next.PreviewBase = declaredPreviewBase(spec)
-	s := &stack{e: e, state: next}
-	if err := s.openLedger().EnsureSchema(ctx); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &stack{e: e, state: next}, nil
 }
 
 func declaredPreviewBase(spec edge.StackSpec) string {
