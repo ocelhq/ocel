@@ -85,9 +85,11 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 		scope:       scope,
 	}
 	if !removal.state.Edge.Empty() {
-		if removal.stack, err = front.Open(removal.state.Edge); err != nil {
+		stack, err := front.Open(removal.state.Edge)
+		if err != nil {
 			return nil, err
 		}
+		removal.setEdgeStack(stack)
 	}
 	entries, err := stackrecords.List(ctx, vendor.KeyValues(), tier, req.GetSlug())
 	if err != nil {
@@ -254,7 +256,7 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) er
 	stacks := append(slices.Clone(r.apps), r.infra...)
 	for i, stack := range stacks {
 		progress.Say(fmt.Sprintf("Destroying stack %s (%d of %d)", stack, i+1, len(stacks)))
-		if err := r.destroy(ctx, stack, progress); err != nil {
+		if err := r.destroyStack(ctx, stack, progress); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -283,13 +285,14 @@ func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) er
 }
 
 func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progress) error {
-	if r.stack == nil || r.stack.State().Empty() {
+	stack := r.edgeStack()
+	if stack == nil || stack.State().Empty() {
 		return nil
 	}
 	var errs []error
-	for _, hostname := range r.stack.State().Bound {
+	for _, hostname := range stack.State().Bound {
 		runProgress.Say(fmt.Sprintf("Unbinding %s from the %s edge", hostname, r.front.Kind()))
-		if err := progress.Heeded(r.stack.UnbindDomain(ctx, hostname), runProgress); err != nil {
+		if err := progress.Heeded(stack.UnbindDomain(ctx, hostname), runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
 	}
@@ -309,7 +312,7 @@ func (r *projectRemoval) pointers() []string {
 	return r.pointer
 }
 
-func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress progress.Progress) error {
+func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName, progress progress.Progress) error {
 	ref := provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
@@ -318,11 +321,11 @@ func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, pr
 }
 
 func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Progress) error {
-	if r.stack == nil || r.stack.State().Empty() {
+	if stack := r.edgeStack(); stack == nil || stack.State().Empty() {
 		return nil
 	}
 	progress.Say(fmt.Sprintf("Destroying the %s edge stack of %s", r.front.Kind(), r.slug))
-	if err := r.sharedStack.destroy(ctx); err != nil {
+	if err := r.destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}
 	r.state = stackrecords.EdgeState{}
