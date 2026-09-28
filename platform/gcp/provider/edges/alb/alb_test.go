@@ -62,7 +62,7 @@ func TestTheAlbRouterIsARouter(t *testing.T) {
 			return routerconformance.Fixture{
 				Router: NewRouter(front),
 				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-				Prior:  router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state},
+				Prior:  router.NewStackState(state),
 				Serving: func(pointer string) string {
 					return pinnedBuild(t, records, pointer, w.pinnedRevision(conformanceService))
 				},

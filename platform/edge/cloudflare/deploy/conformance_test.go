@@ -47,7 +47,7 @@ func cloudflareRouterFixture(t *testing.T) routerconformance.Fixture {
 	return routerconformance.Fixture{
 		Router: Router{p: p},
 		Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-		Prior:  router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state},
+		Prior:  router.NewStackState(state),
 		Serving: func(pointer string) string {
 			history, err := stackOn(p, state).History(t.Context(), pointer)
 			if err != nil {

@@ -16,7 +16,7 @@ func routed(t *testing.T, p *vps.Provider, stack edge.EdgeStack) router.Stack {
 		t.Fatalf("Routers().Open(%q) = %v", boxedge.Kind, err)
 	}
 	state := stack.State()
-	opened, err := routes.Open(router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state})
+	opened, err := routes.Open(router.NewStackState(state))
 	if err != nil {
 		t.Fatalf("Open the router = %v", err)
 	}

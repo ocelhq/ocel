@@ -28,7 +28,7 @@ func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router
 	}
 	state := prior.Edge
 	state.Slug, state.Tier = spec.Slug, spec.Tier
-	return r.Open(router.StackState{Slug: spec.Slug, Tier: spec.Tier, Edge: state})
+	return r.Open(router.NewStackState(state))
 }
 
 func (r Router) Open(state router.StackState) (router.Stack, error) {
@@ -38,7 +38,7 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 type routerStack struct{ s *stack }
 
 func (r routerStack) State() router.StackState {
-	return router.StackState{Slug: r.s.state.Slug, Tier: r.s.state.Tier, Edge: r.s.state}
+	return router.NewStackState(r.s.State())
 }
 
 func (r routerStack) Ledger() router.Ledger { return r.s.openLedger() }
