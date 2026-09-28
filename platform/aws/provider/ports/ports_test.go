@@ -27,7 +27,7 @@ func newRecords(t *testing.T) (awsports.Records, *fakeDynamo) {
 	return awsports.Records{Dynamo: ddb, Tables: awsports.Table("ocel-state")}, ddb
 }
 
-func newSealer() (awsports.Cipher, *fakeKMS) {
+func newCipher() (awsports.Cipher, *fakeKMS) {
 	crypto := &fakeKMS{}
 	return awsports.Cipher{KMS: crypto, Keys: awsports.Key(keyARN)}, crypto
 }
@@ -37,15 +37,15 @@ func TestRecordsConformance(t *testing.T) {
 	conformance.RunStore(t, table)
 }
 
-func TestSealerConformance(t *testing.T) {
-	sealer, _ := newSealer()
-	conformance.RunCipher(t, sealer)
+func TestCipherConformance(t *testing.T) {
+	cipher, _ := newCipher()
+	conformance.RunCipher(t, cipher)
 }
 
 func TestValueRecordsPartitionOnTheProjectAndTier(t *testing.T) {
 	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: mustSealer()}
+	store := envvars.Store{Records: table, Cipher: mustCipher()}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -75,9 +75,9 @@ func TestARecordNameShorterThanItsPartitionIsRefused(t *testing.T) {
 
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	table, _ := newRecords(t)
-	sealer, _ := newSealer()
+	cipher, _ := newCipher()
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: sealer}
+	store := envvars.Store{Records: table, Cipher: cipher}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -95,7 +95,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 }
 
 func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
-	sealer, crypto := newSealer()
+	cipher, crypto := newCipher()
 
 	at := records.SealScope{
 		Project: "shop",
@@ -104,7 +104,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 		Folder:  "/web",
 		Name:    "STRIPE_API_KEY",
 	}
-	if _, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret")); err != nil {
+	if _, err := cipher.Seal(context.Background(), at, []byte("sk_live_secret")); err != nil {
 		t.Fatalf("Seal err = %v", err)
 	}
 
@@ -124,19 +124,19 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 }
 
 func TestAValueAlreadySealedUnderTheStoredEncryptionContextStillOpens(t *testing.T) {
-	sealer, _ := newSealer()
+	cipher, _ := newCipher()
 
 	at := records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
 	sealed := fakeCipherMarker + "class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
 		base64.StdEncoding.EncodeToString([]byte("sk_live_secret"))
-	opened, err := sealer.Open(context.Background(), at, []byte(sealed))
+	opened, err := cipher.Open(context.Background(), at, []byte(sealed))
 	if err != nil || string(opened) != "sk_live_secret" {
 		t.Fatalf("Open() = %q, %v, want the value KMS sealed under class=production to open: the encryption context is data every stored value is bound to", opened, err)
 	}
 }
 
 func TestABindingSealsUnderItsOwnName(t *testing.T) {
-	sealer, crypto := newSealer()
+	cipher, crypto := newCipher()
 
 	at := records.SealScope{
 		Project: "shop",
@@ -146,7 +146,7 @@ func TestABindingSealsUnderItsOwnName(t *testing.T) {
 		Binding: "orders",
 		Name:    "PROPERTIES",
 	}
-	if _, err := sealer.Seal(context.Background(), at, []byte("{}")); err != nil {
+	if _, err := cipher.Seal(context.Background(), at, []byte("{}")); err != nil {
 		t.Fatalf("Seal err = %v", err)
 	}
 	if crypto.contexts[0]["binding"] != "orders" {
@@ -155,7 +155,7 @@ func TestABindingSealsUnderItsOwnName(t *testing.T) {
 }
 
 func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
-	sealer, _ := newSealer()
+	cipher, _ := newCipher()
 
 	for name, at := range map[string]records.SealScope{
 		"no project":     {Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "K"},
@@ -165,16 +165,16 @@ func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 		"no key":         {Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := sealer.Seal(context.Background(), at, []byte("v")); err == nil {
+			if _, err := cipher.Seal(context.Background(), at, []byte("v")); err == nil {
 				t.Fatal("Seal() at a coordinate missing a component succeeded, so two cells could seal alike")
 			}
 		})
 	}
 }
 
-func mustSealer() records.Cipher {
-	sealer, _ := newSealer()
-	return sealer
+func mustCipher() records.Cipher {
+	cipher, _ := newCipher()
+	return cipher
 }
 
 func TestAnAccountWithNoBootstrapHasNoRecords(t *testing.T) {
@@ -279,7 +279,7 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: mustSealer()}
+	store := envvars.Store{Records: table, Cipher: mustCipher()}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",
 		envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
