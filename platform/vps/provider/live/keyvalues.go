@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -173,15 +171,11 @@ func encodePath(path []string) (string, error) {
 }
 
 func encodeSegment(segment string) string {
-	var written strings.Builder
-	for i := 0; i < len(segment); i++ {
-		if isPlain(segment[i]) && (i != 0 || segment[i] != '.') {
-			written.WriteByte(segment[i])
-			continue
-		}
-		fmt.Fprintf(&written, "%%%02X", segment[i])
+	escaped := keyvalue.EscapeSegment(segment, isPlain)
+	if strings.HasPrefix(escaped, ".") {
+		return "%2E" + escaped[1:]
 	}
-	return written.String()
+	return escaped
 }
 
 func isPlain(c byte) bool {
@@ -196,35 +190,13 @@ func isPlain(c byte) bool {
 func KeyOf(in keyvalue.Partition, encoded string) (keyvalue.Key, error) {
 	var path []string
 	for _, segment := range strings.Split(encoded, "/") {
-		decoded, err := decodeSegment(segment)
+		decoded, err := keyvalue.UnescapeSegment(segment)
 		if err != nil {
 			return keyvalue.Key{}, err
 		}
 		path = append(path, decoded)
 	}
 	return in.Key(path...), nil
-}
-
-func decodeSegment(segment string) (string, error) {
-	var written strings.Builder
-	for i := 0; i < len(segment); i++ {
-		if segment[i] != '%' {
-			written.WriteByte(segment[i])
-			continue
-		}
-		if i+2 >= len(segment) {
-			return "", refusal.Refuse(refusal.CodeDenied,
-				"the key-value helper returned %q, which ocel did not write", segment)
-		}
-		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
-		if err != nil {
-			return "", refusal.Refuse(refusal.CodeDenied,
-				"the key-value helper returned %q, which ocel did not write", segment)
-		}
-		written.WriteByte(byte(value))
-		i += 2
-	}
-	return written.String(), nil
 }
 
 var _ keyvalue.Store = KeyValues{}

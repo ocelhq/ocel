@@ -82,25 +82,30 @@ func (k Key) String() string {
 }
 
 func JoinSegments(segments []string, separator, reserved string) string {
+	isPlain := func(c byte) bool { return strings.IndexByte(separator+reserved, c) < 0 }
 	escaped := make([]string, 0, len(segments))
 	for _, segment := range segments {
-		escaped = append(escaped, escapeSegment(segment, separator+reserved))
+		escaped = append(escaped, EscapeSegment(segment, isPlain))
 	}
 	return strings.Join(escaped, separator)
 }
 
-func SplitSegments(joined, separator string) []string {
+func SplitSegments(joined, separator string) ([]string, error) {
 	segments := strings.Split(joined, separator)
 	for i, segment := range segments {
-		segments[i] = unescapeSegment(segment)
+		unescaped, err := UnescapeSegment(segment)
+		if err != nil {
+			return nil, err
+		}
+		segments[i] = unescaped
 	}
-	return segments
+	return segments, nil
 }
 
-func escapeSegment(segment, reserved string) string {
+func EscapeSegment(segment string, isPlain func(c byte) bool) string {
 	var escaped strings.Builder
 	for i := 0; i < len(segment); i++ {
-		if segment[i] == '%' || strings.IndexByte(reserved, segment[i]) >= 0 {
+		if segment[i] == '%' || !isPlain(segment[i]) {
 			fmt.Fprintf(&escaped, "%%%02X", segment[i])
 			continue
 		}
@@ -109,19 +114,28 @@ func escapeSegment(segment, reserved string) string {
 	return escaped.String()
 }
 
-func unescapeSegment(segment string) string {
+func UnescapeSegment(segment string) (string, error) {
 	var unescaped strings.Builder
 	for i := 0; i < len(segment); i++ {
-		if segment[i] == '%' && i+2 < len(segment) {
-			if value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8); err == nil {
-				unescaped.WriteByte(byte(value))
-				i += 2
-				continue
-			}
+		if segment[i] != '%' {
+			unescaped.WriteByte(segment[i])
+			continue
 		}
-		unescaped.WriteByte(segment[i])
+		if i+2 >= len(segment) {
+			return "", refuseUnescaped(segment)
+		}
+		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
+		if err != nil {
+			return "", refuseUnescaped(segment)
+		}
+		unescaped.WriteByte(byte(value))
+		i += 2
 	}
-	return unescaped.String()
+	return unescaped.String(), nil
+}
+
+func refuseUnescaped(segment string) error {
+	return refusal.Refuse(refusal.CodeDenied, "%q holds a %% that escapes no byte, so ocel did not write it", segment)
 }
 
 const revisionBytes = 16

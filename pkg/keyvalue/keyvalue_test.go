@@ -141,8 +141,19 @@ func TestASegmentIsJoinedWholeWhateverSeparatorOrReservedCharacterItCarries(t *t
 	if want := "ghcr.io%2Facme%2Fweb@sha256:ab#50%25%23off#a%7Cb"; joined != want {
 		t.Errorf("JoinSegments(%q) = %q, want %q", segments, joined, want)
 	}
-	if split := keyvalue.SplitSegments(joined, "#"); !slices.Equal(split, segments) {
-		t.Errorf("SplitSegments(%q) = %q, want the segments it was joined from, %q", joined, split, segments)
+	if split, err := keyvalue.SplitSegments(joined, "#"); err != nil || !slices.Equal(split, segments) {
+		t.Errorf("SplitSegments(%q) = %q, %v, want the segments it was joined from, %q", joined, split, err, segments)
+	}
+}
+
+func TestASegmentHoldingAPercentThatEscapesNoByteIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, joined := range []string{"50%", "50%2", "a#50%zzoff"} {
+		var refused refusal.Refusal
+		if split, err := keyvalue.SplitSegments(joined, "#"); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+			t.Errorf("SplitSegments(%q) = %q, %v, want a %s refusal: JoinSegments escapes every %%, so ocel never wrote it", joined, split, err, refusal.CodeDenied)
+		}
 	}
 }
 
