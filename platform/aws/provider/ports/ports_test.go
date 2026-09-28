@@ -103,30 +103,19 @@ func TestAnEntryIsKeptAsTheJSONItHoldsInAStringAttribute(t *testing.T) {
 	}
 }
 
-func TestAnItemThisLayoutDidNotWriteIsNotReadAsEmpty(t *testing.T) {
+func TestAnItemWithNoValueIsRefusedRatherThanReadAsEmpty(t *testing.T) {
 	table, ddb := newKeyValues(t)
-	ddb.items["ocel-production-state"] = map[string]map[string]map[string]ddbtypes.AttributeValue{"schema": {"production#": {
-		"pk":   &ddbtypes.AttributeValueMemberS{Value: "schema"},
-		"sk":   &ddbtypes.AttributeValueMemberS{Value: "production#"},
-		"body": &ddbtypes.AttributeValueMemberB{Value: []byte("2")},
-		"rev":  &ddbtypes.AttributeValueMemberS{Value: "older"},
+	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
+	ddb.items["ocel-production-state"] = map[string]map[string]map[string]ddbtypes.AttributeValue{"projects": {"shop#": {
+		"pk":  &ddbtypes.AttributeValueMemberS{Value: "projects"},
+		"sk":  &ddbtypes.AttributeValueMemberS{Value: "shop#"},
+		"rev": &ddbtypes.AttributeValueMemberS{Value: "0123456789abcdef"},
 	}}}
 
-	err := stackrecords.EnsureSchema(context.Background(), table, environment.TierProduction)
-	if err == nil {
-		t.Fatal("EnsureSchema() over a schema an older layout wrote = nil, and it stamps this build's schema over records it cannot read")
+	var refused refusal.Refusal
+	if entry, err := table.Read(context.Background(), key); !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Fatalf("Read(%s) of an item with no value = %+v, %v, want a %s refusal: an empty entry reads as one never written", key, entry, err, refusal.CodeDenied)
 	}
-	if item := ddb.item("schema", "production#"); stringOf(item["rev"]) != "older" {
-		t.Errorf("the older schema item moved to revision %q, want it left as that ocel wrote it", stringOf(item["rev"]))
-	}
-}
-
-func stringOf(value ddbtypes.AttributeValue) string {
-	s, _ := value.(*ddbtypes.AttributeValueMemberS)
-	if s == nil {
-		return ""
-	}
-	return s.Value
 }
 
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
@@ -344,16 +333,6 @@ func TestAPartitionIsItsRootAndPathAndNothingElse(t *testing.T) {
 		if got := awsports.PartitionKey(c.in); got != c.want {
 			t.Errorf("PartitionKey(%s) = %q, want %q", c.in, got, c.want)
 		}
-	}
-}
-
-func TestTheSchemaSitsOnTheKeyEveryLayoutWroteIt(t *testing.T) {
-	table, ddb := newKeyValues(t)
-	if err := stackrecords.EnsureSchema(context.Background(), table, environment.TierPreview); err != nil {
-		t.Fatal(err)
-	}
-	if item := ddb.item("schema", "preview#"); item == nil {
-		t.Fatalf("the preview schema landed at %v, want pk schema and sk preview#: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records", ddb.partitions())
 	}
 }
 

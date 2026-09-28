@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const SchemaVersion = 3
+const SchemaVersion = 2
 
 const schemaAttempts = 8
 
