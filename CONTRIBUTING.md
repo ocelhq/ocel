@@ -18,7 +18,8 @@ A maintainer closes a pull request without review when it:
 
 `mise install` installs the versions `mise.toml` pins: Go, Node, Bun, golangci-lint, buf,
 changie and act. pnpm installs the version `package.json` pins. The Python packages need
-[uv](https://docs.astral.sh/uv/) and the Rust crates need cargo.
+[uv](https://docs.astral.sh/uv/) and the Rust crates need cargo. Run Go in the environment
+`mise.toml` sets (`mise activate`), which adds `-trimpath` to `GOFLAGS` as CI does.
 
 Build what the Go tests embed:
 
@@ -31,15 +32,21 @@ for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider
 done
 ```
 
-Check a change before you push it:
+While you change a Go package, test that package:
 
 ```sh
-pnpm exec biome ci
-pnpm test
-for dir in $(go list -m -f '{{.Dir}}'); do go test -C "$dir" -race -count=1 ./...; done
-(cd python && uv sync --all-extras && uv run pytest -q)
-(cd crates && cargo test --all-features)
+go test ./cli/internal/discovery/
 ```
+
+Before you push, check what the change reaches:
+
+```sh
+mise run check
+```
+
+It tests and lints the Go modules the change touches and every module that requires them,
+runs biome on the changed files and the tests of the changed workspace packages, and runs
+the Python and Rust tests when `python/` or `crates/` changed. CI is the full gate.
 
 ## Contract paths
 
@@ -94,9 +101,9 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 - A bug fix adds a regression test that fails without the fix.
 - Test names follow the Test row of [Naming](.greptile/rules.md#naming).
 - CI runs every workflow in `.github/workflows/` whose paths a change touches.
-  `scripts/act.sh` replays `go.yml` and the dev and aws lanes of `journey.yml` through act,
-  and runs `provider-vps.yml` and the journey's vps lane on the host, which needs KVM and
-  incus. No other workflow has a local replay.
+- The VM and emulator suites (`scripts/incus.sh`, `scripts/incus-fanout.sh`,
+  `scripts/floci.sh` and the `scripts/act.sh` replays) run in CI. Run one locally only to
+  reproduce a failure CI reported, with `OCEL_LIVE_LOCAL=1` set.
 - Suites that need cloud credentials (the `journey:real` label, the nightly run) are run by
   maintainers.
 
