@@ -191,6 +191,83 @@ const halfway = () =>
     [{ key: "github", required: false }],
   );
 
+const storedGithub = () =>
+  stateOf(
+    [
+      pair("GITHUB_ID", { set: true, version: 1 }),
+      pair("GITHUB_SECRET", { set: true, version: 1 }),
+    ],
+    [{ key: "github", required: false }],
+  );
+
+describe("switchVariableGroup", () => {
+  it("switches a group on in every folder and focuses the first key to fill", () => {
+    store.switchVariableGroup("github", true);
+    expect([switchedOn("github", ""), switchedOn("github", "/web")]).toEqual([true, true]);
+    expect(store.focusing.value).toBe("GITHUB_ID  ");
+  });
+
+  it("adds no folder rows that would only inherit the root the same switch fills", () => {
+    store.switchVariableGroup("github", true);
+    expect(store.extras.value).toEqual([]);
+    expect(store.expanded.value.has("/web")).toBe(false);
+  });
+
+  it("adds and opens a folder's rows when the group reaches that folder alone", () => {
+    reset(
+      stateOf(
+        [row("GITHUB_ID", [cell({ folder: "/web" })], { group: "github" })],
+        [{ key: "github", required: false }],
+      ),
+    );
+    store.switchVariableGroup("github", true);
+    expect(store.extras.value.map(addressKey)).toEqual(["GITHUB_ID /web "]);
+    expect(store.expanded.value.has("/web")).toBe(true);
+  });
+
+  it("switches a group off in every folder, staging its stored values for removal", () => {
+    reset(storedGithub());
+    store.switchVariableGroup("github", false);
+    expect([...store.variableGroupRemovals.value]).toEqual(["GITHUB_ID  ", "GITHUB_SECRET  "]);
+  });
+});
+
+describe("the listing", () => {
+  const listed = () => store.listing.value.keys.map((line) => line.row.key);
+
+  it("leaves out the keys of an optional group nobody has switched on", () => {
+    expect(listed()).toEqual([]);
+  });
+
+  it("lists a group's keys once it is switched on", () => {
+    store.switchVariableGroup("github", true);
+    expect(listed()).toEqual(["GITHUB_ID", "GITHUB_SECRET"]);
+  });
+
+  it("names the group a search would have matched while it is off", () => {
+    store.setSearch("secret");
+    expect(store.listing.value.hidden).toEqual([{ key: "GITHUB_SECRET", group: "github" }]);
+  });
+});
+
+describe("pending", () => {
+  it("counts a stored value a switched-off group will remove as a change to save", () => {
+    reset(storedGithub());
+    expect(store.pending.value).toBe(0);
+    store.switchVariableGroup("github", false);
+    expect(store.pending.value).toBe(2);
+  });
+
+  it("is emptied by discard, switched groups included", () => {
+    reset(storedGithub());
+    store.switchVariableGroup("github", false);
+    store.discard();
+    expect(store.pending.value).toBe(0);
+    expect(store.variableGroupRemovals.value.size).toBe(0);
+    expect(store.variableGroupsOn.value.size).toBe(0);
+  });
+});
+
 describe("save", () => {
   it("saves only the columns whose group is not partial", async () => {
     const current = halfway();

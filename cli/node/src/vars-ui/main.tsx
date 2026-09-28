@@ -11,6 +11,6 @@ createRoot(root).render(<App />);
 void store.load().finally(() => root.setAttribute("aria-busy", "false"));
 
 window.addEventListener("beforeunload", (event) => {
-  if (store.dirty.value.length === 0) return;
+  if (store.pending.value === 0) return;
   event.preventDefault();
 });

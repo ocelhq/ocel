@@ -565,6 +565,62 @@ export function variableGroupBlockLine(states: readonly VariableGroupState[]): s
     : `${line} must be complete before saving.`;
 }
 
+export type OptionalGroupSwitch = "on" | "off" | "mixed";
+
+export interface OptionalGroup {
+  group: VariableGroup;
+  on: OptionalGroupSwitch;
+  onIn: string[];
+  keys: number;
+  missing: number;
+  stored: number;
+  removing: number;
+}
+
+export function optionalGroupsOf(
+  current: State,
+  states: readonly VariableGroupState[],
+  variants: ReadonlyMap<string, Variant>,
+  removals: ReadonlySet<string>,
+): OptionalGroup[] {
+  return variableGroupsOf(current)
+    .filter((group) => !group.required)
+    .flatMap((group) => {
+      const rows = current.matrix.rows.filter((row) => row.group === group.key);
+      if (rows.length === 0) return [];
+      const mine = states.filter((derived) => derived.group.key === group.key);
+      const lit = mine.filter(variableGroupOn);
+      const missing = new Set(
+        lit.flatMap((derived) => derived.missing.map((member) => member.at.key)),
+      );
+      const stored = new Set(
+        lit.flatMap((derived) =>
+          derived.members.flatMap((member) =>
+            member.addresses.map(addressKey).filter((key) => {
+              const variant = variants.get(key);
+              return variant?.set === true && !variant.reference && !variant.owner;
+            }),
+          ),
+        ),
+      );
+      const keys = new Set(rows.map((row) => row.key));
+      return [
+        {
+          group,
+          on: lit.length === 0 ? "off" : lit.length === mine.length ? "on" : "mixed",
+          onIn: lit.map((derived) => derived.folder),
+          keys: keys.size,
+          missing: missing.size,
+          stored: stored.size,
+          removing: [...removals].filter((key) => {
+            const variant = variants.get(key);
+            return variant !== undefined && keys.has(variant.at.key);
+          }).length,
+        } satisfies OptionalGroup,
+      ];
+    });
+}
+
 export interface Environment {
   name: string;
   orphaned: boolean;
@@ -590,6 +646,7 @@ export interface Lens {
   environment: string;
   query: string;
   unfilledOnly: boolean;
+  off: ReadonlySet<string>;
 }
 
 export type Inherits = "root" | "base" | null;
@@ -603,19 +660,6 @@ export interface KeyLine {
   needed: boolean;
 }
 
-export interface BundleFolder {
-  folder: string;
-  lines: KeyLine[];
-}
-
-export interface Bundle {
-  group: VariableGroup;
-  root: KeyLine[];
-  folders: BundleFolder[];
-  keys: number;
-  unfilled: number;
-}
-
 export interface Group {
   folder: string;
   keys: number;
@@ -627,8 +671,13 @@ export interface Listing {
   flat: boolean;
   groups: Group[];
   keys: KeyLine[];
-  bundles: Bundle[];
   credentials: KeyLine[];
+  hidden: HiddenKey[];
+}
+
+export interface HiddenKey {
+  key: string;
+  group: string;
 }
 
 function lineOf(
@@ -680,22 +729,22 @@ export function listingOf(
   lens: Lens,
 ): Listing {
   const flat = lens.unfilledOnly || lens.query.trim() !== "";
-  const optional = new Map(
-    variableGroupsOf(current)
-      .filter((group) => !group.required)
-      .map((group) => [group.key, group] as const),
-  );
-  const bundled = (row: MatrixRow): VariableGroup | undefined =>
-    flat ? undefined : optional.get(row.group ?? "");
+  const shut = (row: MatrixRow, folder: string): boolean =>
+    row.group !== undefined &&
+    lens.off.has(variableGroupColumnKey(row.group, folder, lens.environment));
   const keys: KeyLine[] = [];
   const credentials: KeyLine[] = [];
+  const hidden: HiddenKey[] = [];
   for (const row of current.matrix.rows) {
     if (lens.unfilledOnly) {
       for (const cell of row.cells) {
         const refused = missing.has(
           addressKey({ key: row.key, folder: cell.folder, environment: "" }),
         );
-        if (refused || (!catalogue.unknown && unfilledCell(row, cell, catalogue.off))) {
+        if (
+          refused ||
+          (!catalogue.unknown && !shut(row, cell.folder) && unfilledCell(row, cell, catalogue.off))
+        ) {
           keys.push(lineOf(catalogue, missing, row, cell, ""));
         }
       }
@@ -704,17 +753,22 @@ export function listingOf(
     if (flat) {
       if (!matches(row.key, lens.query)) continue;
       for (const cell of row.cells) {
-        if (listed(cell)) keys.push(lineOf(catalogue, missing, row, cell, lens.environment));
+        if (!listed(cell)) continue;
+        if (!shut(row, cell.folder)) {
+          keys.push(lineOf(catalogue, missing, row, cell, lens.environment));
+        } else if (!hidden.some((found) => found.key === row.key)) {
+          hidden.push({ key: row.key, group: row.group! });
+        }
       }
       continue;
     }
-    if (bundled(row)) continue;
     const root = cellOf(row, "") ?? forbiddenRoot;
+    const reach = listed(root) ? [""] : (row.scope ?? []);
+    if (reach.length > 0 && reach.every((folder) => shut(row, folder))) continue;
     const into = row.group === envSourceGroup ? credentials : keys;
     into.push(lineOf(catalogue, missing, row, root, listed(root) ? lens.environment : ""));
   }
   const groups: Group[] = [];
-  const bundles: Bundle[] = [];
   if (!flat) {
     const inCatalogue = (row: MatrixRow, folder: string): boolean =>
       catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" }));
@@ -723,7 +777,7 @@ export function listingOf(
       const lines: KeyLine[] = [];
       let unfilled = 0;
       for (const row of current.matrix.rows) {
-        if (bundled(row)) continue;
+        if (shut(row, folder)) continue;
         const cell = cellOf(row, folder);
         if (!cell || !listed(cell) || !inCatalogue(row, folder)) continue;
         lines.push(lineOf(catalogue, missing, row, cell, lens.environment));
@@ -731,36 +785,8 @@ export function listingOf(
       }
       groups.push({ folder, keys: lines.length, unfilled, lines });
     }
-    for (const group of optional.values()) {
-      const rows = current.matrix.rows.filter((row) => row.group === group.key);
-      if (rows.length === 0) continue;
-      const root: KeyLine[] = [];
-      const folders: BundleFolder[] = [];
-      let count = 0;
-      let unfilled = 0;
-      const take = (row: MatrixRow, cell: MatrixCell, into: KeyLine[]): void => {
-        into.push(lineOf(catalogue, missing, row, cell, lens.environment));
-        count += 1;
-        if (!catalogue.unknown && unfilledCell(row, cell, catalogue.off)) unfilled += 1;
-      };
-      for (const row of rows) {
-        const cell = cellOf(row, "");
-        if (cell && listed(cell)) take(row, cell, root);
-      }
-      for (const folder of current.matrix.columns) {
-        if (folder === "") continue;
-        const lines: KeyLine[] = [];
-        for (const row of rows) {
-          const cell = cellOf(row, folder);
-          if (!cell || !listed(cell) || !inCatalogue(row, folder)) continue;
-          take(row, cell, lines);
-        }
-        if (lines.length > 0) folders.push({ folder, lines });
-      }
-      bundles.push({ group, root, folders, keys: count, unfilled });
-    }
   }
-  return { flat, groups, keys, bundles, credentials };
+  return { flat, groups, keys, credentials, hidden };
 }
 
 export interface UndeclaredKey extends UndeclaredCell {

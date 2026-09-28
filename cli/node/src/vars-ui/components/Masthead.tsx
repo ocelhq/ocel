@@ -17,7 +17,7 @@ import { cn } from "../lib/utils";
 export function Masthead({ current }: { current: State }) {
   const unfilled = unfilledCount(current);
   const recovery = current.recovery !== undefined;
-  const pending = useValue(store.dirty).length;
+  const pending = useValue(store.pending);
   const isSaving = useValue(store.saving);
   const isFinishing = useValue(store.finishing);
   const busy = isSaving || isFinishing;

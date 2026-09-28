@@ -80,6 +80,7 @@ const lens = (over: Partial<Lens> = {}): Lens => ({
   environment: "",
   query: "",
   unfilledOnly: false,
+  off: new Set(),
   ...over,
 });
 
@@ -391,27 +392,47 @@ describe("listingOf", () => {
     ["", "/web"],
   );
 
-  it("pulls an optional group into one bundle that contains its root keys and its folders", () => {
-    const withGroup: State = {
-      ...grouped,
-      matrix: { ...grouped.matrix, groups: [{ key: "github", required: false }] },
-    };
-    const listing = listingOf(withGroup, catalogueOf(withGroup, []), none, lens());
-    expect(listing.keys.map((line) => line.row.key)).toEqual(["A"]);
-    expect(listing.groups.map((group) => [group.folder, group.keys, group.lines])).toEqual([
-      ["/web", 0, []],
+  const optional: State = {
+    ...grouped,
+    matrix: { ...grouped.matrix, groups: [{ key: "github", required: false }] },
+  };
+  const githubOff = new Set(["github  ", "github /web "]);
+
+  it("lists an optional group's keys in their folders like any other key while the group is on", () => {
+    const listing = listingOf(optional, catalogueOf(optional, []), none, lens());
+    expect(listing.keys.map((line) => line.row.key)).toEqual(["A", "G"]);
+    expect(listing.groups[0]?.lines.map((line) => addressKey(line.variant.at))).toEqual([
+      "G /web ",
     ]);
-    expect(listing.bundles).toHaveLength(1);
-    const bundle = listing.bundles[0]!;
-    expect(bundle.group.key).toBe("github");
-    expect(bundle.root.map((line) => addressKey(line.variant.at))).toEqual(["G  "]);
-    expect(
-      bundle.folders.map((within) => [
-        within.folder,
-        within.lines.map((line) => addressKey(line.variant.at)),
-      ]),
-    ).toEqual([["/web", ["G /web "]]]);
-    expect([bundle.keys, bundle.unfilled]).toEqual([2, 0]);
+    expect(listing.hidden).toEqual([]);
+  });
+
+  it("leaves an optional group's keys out wherever the group is off", () => {
+    const listing = listingOf(optional, catalogueOf(optional, []), none, lens({ off: githubOff }));
+    expect(listing.keys.map((line) => line.row.key)).toEqual(["A"]);
+    expect(listing.groups.map((group) => [group.folder, group.keys])).toEqual([["/web", 0]]);
+  });
+
+  it("lists a folder's keys of a group that is on there while the root has it off", () => {
+    const listing = listingOf(
+      optional,
+      catalogueOf(optional, []),
+      none,
+      lens({ off: new Set(["github  "]) }),
+    );
+    expect(listing.keys.map((line) => line.row.key)).toEqual(["A"]);
+    expect(listing.groups[0]?.lines.map((line) => line.row.key)).toEqual(["G"]);
+  });
+
+  it("keeps a search from matching a group that is off, and names the group it hid", () => {
+    const listing = listingOf(
+      optional,
+      catalogueOf(optional, []),
+      none,
+      lens({ query: "g", off: githubOff }),
+    );
+    expect(listing.keys).toEqual([]);
+    expect(listing.hidden).toEqual([{ key: "G", group: "github" }]);
   });
 
   it("leaves a required group's keys as ordinary rows, since nothing can switch them off", () => {
@@ -421,7 +442,6 @@ describe("listingOf", () => {
     };
     const listing = listingOf(withGroup, catalogueOf(withGroup, []), none, lens());
     expect(listing.keys.map((line) => line.row.key)).toEqual(["A", "G"]);
-    expect(listing.bundles).toEqual([]);
     expect(listing.groups[0]?.lines.map((line) => line.row.key)).toEqual(["G"]);
   });
 
@@ -1057,7 +1077,7 @@ describe("the env source's own rows", () => {
     row("DATABASE_URL", [cell({ state: "required", set: true, envSource: infisical.id })]),
     credentialRow(),
   ]);
-  const lens: Lens = { environment: "", query: "", unfilledOnly: false };
+  const lens: Lens = { environment: "", query: "", unfilledOnly: false, off: new Set() };
 
   it("lists the credentials apart from the values the env source has", () => {
     const listing = listingOf(current, catalogueOf(current, []), new Set(), lens);
