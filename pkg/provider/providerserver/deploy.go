@@ -1204,9 +1204,9 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: entry.Build.Fingerprint(),
 		Variables:        declaredVariables(entry.Manifest.GetClientBundle(), values),
-		Needs:            edge.NeedNames(r.needs[entry.App].Needs),
-		SupportInEffect:  edge.NeedNames(r.needs[entry.App].InEffect),
-		Waived:           edge.NeedNames(r.needs[entry.App].Waived),
+		Needs:            r.needs[entry.App].Needs,
+		SupportInEffect:  r.needs[entry.App].InEffect,
+		Waived:           r.needs[entry.App].Waived,
 	}
 	code, err := r.edgeCode(entry, result)
 	if err != nil {
