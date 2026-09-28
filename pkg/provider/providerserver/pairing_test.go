@@ -51,7 +51,7 @@ func TestAnAppWhoseComputeNoRouterIsPairedForDeploysThroughItsEdgeAsBefore(t *te
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() of a serverless app on a provider that pairs its edge for containers only = %q, want it to deploy and flip through the edge's stack as it did before pairings were declared", result.GetError())
 	}
-	routed := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Routed("shop", environment.TierProduction, router.DefaultPointer)
+	routed := p.Routers().(*fake.Routers).DataPlane(router.Kind(fake.KindRelay)).Builds("shop", environment.TierProduction, router.DefaultPointer)
 	if routed["web"] == "" {
 		t.Errorf("the relay edge routes %v on %s after the deploy, want web's build", routed, router.DefaultPointer)
 	}
@@ -80,7 +80,7 @@ func TestAnAppPairedWithARouterOfAnotherKindDeploysThroughItsEdgeAsBefore(t *tes
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() on a provider that pairs its edge with a router of another kind = %q, want it to deploy and flip through the edge's stack as it did before pairings were declared", result.GetError())
 	}
-	routed := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Routed("shop", environment.TierProduction, router.DefaultPointer)
+	routed := p.Routers().(*fake.Routers).DataPlane(router.Kind(fake.KindRelay)).Builds("shop", environment.TierProduction, router.DefaultPointer)
 	if routed["web"] == "" {
 		t.Errorf("the relay edge routes %v on %s after the deploy, want web's build", routed, router.DefaultPointer)
 	}

@@ -41,6 +41,7 @@ type Provider struct {
 	resourceStacks provider.Stacks
 	creds          *Credentials
 	edges          *Edges
+	routers        *Routers
 	dns            *DNS
 }
 
@@ -57,6 +58,7 @@ func NewProvider(options Options) *Provider {
 	journal := &Journal{}
 	store := NewKeyValues()
 	store.journal = journal
+	edges := NewEdges(store)
 	artifacts := NewArtifacts()
 	artifacts.journal = journal
 	p := &Provider{
@@ -69,7 +71,8 @@ func NewProvider(options Options) *Provider {
 		bootstrap: NewBootstrap(),
 		stacks:    NewStacks(artifacts).journalling(journal),
 		creds:     NewCredentials(options.Region),
-		edges:     NewEdges(store),
+		edges:     edges,
+		routers:   newRouters(edges),
 		dns:       NewDNS(),
 
 		runtimeArch:   "amd64",
@@ -127,7 +130,7 @@ func (p *Provider) Credentials() provider.Credentials { return p.creds }
 
 func (p *Provider) Edges() provider.Edges { return p.edges }
 
-func (p *Provider) Routers() provider.Routers { return Routers{edges: p.edges} }
+func (p *Provider) Routers() provider.Routers { return p.routers }
 
 func (p *Provider) DNS() provider.DNS { return p.dns }
 

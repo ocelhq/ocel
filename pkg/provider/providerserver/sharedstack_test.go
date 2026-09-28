@@ -22,7 +22,7 @@ func TestADeployFlipsItsPromotionThroughTheRouterItsEdgePairsWith(t *testing.T) 
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	routed := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Routed("shop", environment.TierProduction, router.DefaultPointer)
+	routed := p.Routers().(*fake.Routers).DataPlane(router.Kind(fake.KindRelay)).Builds("shop", environment.TierProduction, router.DefaultPointer)
 	if routed["web"] == "" {
 		t.Errorf("the relay router routes %v on %s after the deploy, want web's build: the promotion is flipped through the router its edge pairs with", routed, router.DefaultPointer)
 	}

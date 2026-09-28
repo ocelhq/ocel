@@ -38,14 +38,14 @@ func fakeFixture(t *testing.T, kind edge.Kind) routerconformance.Fixture {
 	if err != nil {
 		t.Fatalf("Routers().Open(%q): %v", kind, err)
 	}
-	edges := p.Edges().(*fake.Edges)
+	plane := p.Routers().(*fake.Routers).DataPlane(router.Kind(kind))
 	return routerconformance.Fixture{
 		Router: opened,
 		Spec:   router.StackSpec{Tier: spec.Tier, Slug: spec.Slug},
 		Prior:  router.NewStackState(stack.State()),
 		Serving: func(pointer string) string {
-			return edges.Edge(kind).Routed(spec.Slug, spec.Tier, pointer)[routerconformance.App]
+			return plane.Builds(spec.Slug, spec.Tier, pointer)[routerconformance.App]
 		},
-		FailNextFlip: edges.Edge(kind).FailNextFlip,
+		FailNextFlip: plane.FailNextFlip,
 	}
 }
