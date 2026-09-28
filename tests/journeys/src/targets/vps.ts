@@ -36,7 +36,8 @@ import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
-const PROJECT_RECORDS = "/var/lib/ocel/production/records/projects/production";
+const RECORDS_TIER = "/var/lib/ocel/production/records";
+const PROJECT_RECORDS = `${RECORDS_TIER}/projects/production`;
 const NO_RECORDS_TIER = "no-records-tier";
 const CONTAINER_APP_ROOT = "/app";
 const CONTAINER_LIVE_DIR = "/ocel/live";
@@ -123,10 +124,14 @@ export function recordFile(slug: string): string {
   return `${encoded}.rec`;
 }
 
+export function projectListing(prefix: string): string {
+  return `test -d '${RECORDS_TIER}' && { ls -1d '${PROJECT_RECORDS}'/${prefix}*.rec 2>/dev/null || true; } || echo ${NO_RECORDS_TIER}`;
+}
+
 export function slugsOf(listing: string): string[] {
   if (listing.trim() === NO_RECORDS_TIER) {
     throw new Error(
-      `${PROJECT_RECORDS} does not exist on the box, so nothing here can tell a box that has ` +
+      `${RECORDS_TIER} does not exist on the box, so nothing here can tell a box that has ` +
         "no harness project from one this listing failed to read",
     );
   }
@@ -689,12 +694,7 @@ export class VpsTarget implements Target, ReleaseCycle {
   }
 
   private async recordedSlugs(): Promise<string[]> {
-    const listing = await ssh(
-      this.box(),
-      DEPLOY_LOGIN,
-      `test -d '${PROJECT_RECORDS}' && { ls -1d '${PROJECT_RECORDS}'/${HARNESS_PREFIX}*.rec 2>/dev/null || true; } || echo ${NO_RECORDS_TIER}`,
-    );
-    return slugsOf(listing);
+    return slugsOf(await ssh(this.box(), DEPLOY_LOGIN, projectListing(HARNESS_PREFIX)));
   }
 
   private async sweepStale(runId: string): Promise<void> {

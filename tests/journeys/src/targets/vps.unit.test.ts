@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
-import { boxLane, hostnamesWithoutUrl, recordFile, slugsOf, ssh, stampRewritten } from "./vps";
+import {
+  boxLane,
+  hostnamesWithoutUrl,
+  projectListing,
+  recordFile,
+  slugsOf,
+  ssh,
+  stampRewritten,
+} from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 
@@ -69,7 +77,19 @@ describe("slugsOf", () => {
 
   it("refuses to read a box with no records tier as a box storing nothing", () => {
     expect(() => slugsOf("no-records-tier\n")).toThrow(
-      /records\/projects\/production does not exist/,
+      /\/var\/lib\/ocel\/production\/records does not exist/,
+    );
+  });
+});
+
+describe("projectListing", () => {
+  it("asks whether the records tier exists, since forgetting the last project prunes its directory", () => {
+    expect(projectListing("j-")).toStartWith("test -d '/var/lib/ocel/production/records' &&");
+  });
+
+  it("lists the harness records under the projects directory", () => {
+    expect(projectListing("j-")).toContain(
+      "ls -1d '/var/lib/ocel/production/records/projects/production'/j-*.rec",
     );
   });
 });
