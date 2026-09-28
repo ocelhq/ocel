@@ -61,7 +61,7 @@ func TestTheDirectRouterIsARouter(t *testing.T) {
 			return routerconformance.Fixture{
 				Router: direct.NewRouter(front),
 				Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-				Prior:  router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state},
+				Prior:  router.NewStackState(state),
 				Serving: func(pointer string) string {
 					history, err := records.History(context.Background(), pointer)
 					if err != nil {
@@ -102,7 +102,7 @@ func frontingOn(t *testing.T, store keyvalue.Store, pins *pinRecorder) router.St
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
 	}
-	routes, err := direct.NewRouter(front).Open(router.StackState{Edge: stack.State()})
+	routes, err := direct.NewRouter(front).Open(router.NewStackState(stack.State()))
 	if err != nil {
 		t.Fatalf("Open the router = %v", err)
 	}

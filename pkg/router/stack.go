@@ -15,3 +15,7 @@ type StackState struct {
 	Tier environment.Tier `json:"tier,omitempty"`
 	Edge edge.StackState  `json:"edge,omitzero"`
 }
+
+func NewStackState(shared edge.StackState) StackState {
+	return StackState{Slug: shared.Slug, Tier: shared.Tier, Edge: shared}
+}

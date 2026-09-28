@@ -70,7 +70,7 @@ func TestTheAPIGatewayRouterBehavesAsEveryRouterMust(t *testing.T) {
 		return routerconformance.Fixture{
 			Router: Router{p: e},
 			Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-			Prior:  router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state},
+			Prior:  router.NewStackState(state),
 			Serving: func(pointer string) string {
 				name := apiName(e.ns, state.Slug, state.Tier, pointer)
 				w.gateway.mu.Lock()

@@ -42,7 +42,7 @@ func fakeFixture(t *testing.T, kind edge.Kind) routerconformance.Fixture {
 	return routerconformance.Fixture{
 		Router: routes,
 		Spec:   router.StackSpec{Tier: spec.Tier, Slug: spec.Slug},
-		Prior:  router.StackState{Slug: spec.Slug, Tier: spec.Tier, Edge: stack.State()},
+		Prior:  router.NewStackState(stack.State()),
 		Serving: func(pointer string) string {
 			return edges.Edge(kind).Routed(spec.Slug, spec.Tier, pointer)[routerconformance.App]
 		},

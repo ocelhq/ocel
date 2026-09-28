@@ -224,7 +224,7 @@ func (s boxStack) State() edge.StackState { return s.EdgeStack.State() }
 func (s boxStack) Destroy(ctx context.Context) error { return s.EdgeStack.Destroy(ctx) }
 
 func stackOn(front *box.Edge, stack edge.EdgeStack) boxStack {
-	routes, err := box.NewRouter(front).Open(router.StackState{Edge: stack.State()})
+	routes, err := box.NewRouter(front).Open(router.NewStackState(stack.State()))
 	if err != nil {
 		panic(err)
 	}
@@ -316,7 +316,7 @@ func boxFixture(m *machine, front *box.Edge, stack boxStack) routerconformance.F
 	return routerconformance.Fixture{
 		Router: box.NewRouter(front),
 		Spec:   router.StackSpec{Tier: state.Tier, Slug: state.Slug},
-		Prior:  router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state},
+		Prior:  router.NewStackState(state),
 		Serving: func(pointer string) string {
 			if pointer == "" {
 				pointer = router.DefaultPointer

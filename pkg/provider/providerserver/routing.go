@@ -30,8 +30,7 @@ type sharedStack struct {
 func (s *sharedStack) openRouter() (router.Stack, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state := s.stack.State()
-	return s.router.Open(router.StackState{Slug: state.Slug, Tier: state.Tier, Edge: state})
+	return s.router.Open(router.NewStackState(s.stack.State()))
 }
 
 func (s *sharedStack) adopt(routed router.Stack) error {
