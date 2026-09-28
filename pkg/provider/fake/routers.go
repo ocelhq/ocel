@@ -2,16 +2,30 @@ package fake
 
 import (
 	"context"
+	"maps"
+	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-type Routers struct{ edges *Edges }
+type Routers struct {
+	edges  *Edges
+	planes map[router.Kind]*DataPlane
+}
+
+func newRouters(edges *Edges) *Routers {
+	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
+	for _, kind := range edges.kinds() {
+		routers.planes[router.Kind(kind)] = &DataPlane{served: map[projectPointer]map[string]string{}}
+	}
+	return routers
+}
 
 func (e *Edges) pairings() []provider.Pairing {
 	kinds := e.kinds()
@@ -22,16 +36,75 @@ func (e *Edges) pairings() []provider.Pairing {
 	return pairings
 }
 
-func (r Routers) Open(kind router.Kind) (router.Router, error) {
+func (r *Routers) Open(kind router.Kind) (router.Router, error) {
 	shared := r.edges.Edge(edge.Kind(kind))
 	if shared == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the reference provider serves no edge %q; it serves %s", kind, kindList(r.edges.kinds()))
 	}
-	return Router{edge: shared}, nil
+	return Router{edge: shared, plane: r.planes[kind]}, nil
 }
 
-type Router struct{ edge *Edge }
+func (r *Routers) DataPlane(kind router.Kind) *DataPlane { return r.planes[kind] }
+
+type DataPlane struct {
+	mu      sync.Mutex
+	failure error
+	served  map[projectPointer]map[string]string
+}
+
+type projectPointer struct {
+	slug    string
+	tier    environment.Tier
+	pointer string
+}
+
+func pointerOf(state edge.StackState, pointer string) projectPointer {
+	if pointer == "" {
+		pointer = router.DefaultPointer
+	}
+	return projectPointer{slug: state.Slug, tier: state.Tier, pointer: pointer}
+}
+
+func (d *DataPlane) Builds(slug string, tier environment.Tier, pointer string) map[string]string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.served[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
+}
+
+func (d *DataPlane) FailNextFlip(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.failure = err
+}
+
+func (d *DataPlane) refuseFlip() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	failure := d.failure
+	d.failure = nil
+	if failure == nil {
+		return nil
+	}
+	return router.Unserved{Err: failure}
+}
+
+func (d *DataPlane) serve(at projectPointer, builds map[string]string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.served[at] = maps.Clone(builds)
+}
+
+func (d *DataPlane) remove(at projectPointer) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.served, at)
+}
+
+type Router struct {
+	edge  *Edge
+	plane *DataPlane
+}
 
 func (r Router) Kind() router.Kind { return router.Kind(r.edge.kind) }
 
@@ -60,10 +133,13 @@ func (r Router) Open(state router.StackState) (router.Stack, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RouterStack{stack: shared}, nil
+	return &RouterStack{stack: shared, plane: r.plane}, nil
 }
 
-type RouterStack struct{ stack *Stack }
+type RouterStack struct {
+	stack *Stack
+	plane *DataPlane
+}
 
 func (s *RouterStack) State() router.StackState {
 	state := s.stack.State()
@@ -80,20 +156,18 @@ func (s *RouterStack) Flip(ctx context.Context, flip router.Flip, progress progr
 	if err := flip.RefuseInactive(ctx); err != nil {
 		return err
 	}
-	if err := s.stack.front.refuseFlip(); err != nil {
+	if err := s.plane.refuseFlip(); err != nil {
 		return err
 	}
 	if err := s.stack.ledger.Promote(ctx, flip.Promotion, flip.Pointer, progress); err != nil {
 		return err
 	}
-	state := s.stack.State()
-	s.stack.front.route(state.Slug, state.Tier, flip.Pointer, flip.Promotion.Builds)
+	s.plane.serve(pointerOf(s.stack.State(), flip.Pointer), flip.Promotion.Builds)
 	return nil
 }
 
 func (s *RouterStack) RemovePointer(_ context.Context, pointer string, _ progress.Progress) error {
-	state := s.stack.State()
-	s.stack.front.unroute(state.Slug, state.Tier, pointer)
+	s.plane.remove(pointerOf(s.stack.State(), pointer))
 	return nil
 }
 

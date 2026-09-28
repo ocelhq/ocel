@@ -130,8 +130,6 @@ type Edge struct {
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
-	flipFailure error
-	routed      map[string]map[string]string
 }
 
 func (e *Edge) Bindings() []edge.DomainBinding {
@@ -173,52 +171,7 @@ func (e *Edge) Serving(certificate string) bool {
 }
 
 func newEdge(kind edge.Kind, store keyvalue.Store) *Edge {
-	return &Edge{
-		kind: kind, keyValues: store, owners: map[string]string{}, serving: map[string]string{},
-		routed: map[string]map[string]string{},
-	}
-}
-
-func routeKey(slug string, tier environment.Tier, pointer string) string {
-	if pointer == "" {
-		pointer = router.DefaultPointer
-	}
-	return string(tier) + "/" + slug + "/" + pointer
-}
-
-func (e *Edge) Routed(slug string, tier environment.Tier, pointer string) map[string]string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return maps.Clone(e.routed[routeKey(slug, tier, pointer)])
-}
-
-func (e *Edge) FailNextFlip(err error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.flipFailure = err
-}
-
-func (e *Edge) refuseFlip() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	failure := e.flipFailure
-	e.flipFailure = nil
-	if failure == nil {
-		return nil
-	}
-	return router.Unserved{Err: failure}
-}
-
-func (e *Edge) route(slug string, tier environment.Tier, pointer string, builds map[string]string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.routed[routeKey(slug, tier, pointer)] = maps.Clone(builds)
-}
-
-func (e *Edge) unroute(slug string, tier environment.Tier, pointer string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	delete(e.routed, routeKey(slug, tier, pointer))
+	return &Edge{kind: kind, keyValues: store, owners: map[string]string{}, serving: map[string]string{}}
 }
 
 func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
