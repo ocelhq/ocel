@@ -298,6 +298,11 @@ func TestAForeignListenerOnAServingPortIsRefusedByName(t *testing.T) {
 	if !strings.Contains(err.Error(), "not-ocels") {
 		t.Errorf("PreflightDeploy() = %q, want the container publishing the port named", err)
 	}
+	for _, want := range []string{"stop it", "move it off " + caddy.HTTPPort} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("PreflightDeploy() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
+		}
+	}
 }
 
 func TestAProcessOutsideDockerOnAServingPortIsRefusedByWhereItIsBound(t *testing.T) {

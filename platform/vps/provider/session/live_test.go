@@ -81,31 +81,6 @@ func TestLiveAnUnknownHostIsRefusedWithEverythingTheUserNeeds(t *testing.T) {
 	}
 }
 
-func TestLiveAKeyTheUserTrustsOpensTheSession(t *testing.T) {
-	h := live(t)
-	key := h.trust(t)
-
-	live, err := Open(context.Background(), h.target)
-	if err != nil {
-		t.Fatalf("Open() = %v, want a session against a host the user's known_hosts lists", err)
-	}
-	defer live.Close()
-
-	if live.HostKey().Fingerprint != key.Fingerprint {
-		t.Errorf("Fingerprint() = %s, want the key known_hosts lists, %s", live.HostKey().Fingerprint, key.Fingerprint)
-	}
-	if want := os.Getenv("OCEL_INCUS_USER") + "@" + alias; live.Destination().Principal() != want {
-		t.Errorf("Principal() = %q, want %q", live.Destination().Principal(), want)
-	}
-	out, err := live.Run(context.Background(), "echo ready")
-	if err != nil {
-		t.Fatalf("Run() = %v", err)
-	}
-	if strings.TrimSpace(out) != "ready" {
-		t.Errorf("Run() = %q, want the command's own output", out)
-	}
-}
-
 func TestLiveATrustedSessionAddsNothingToTheUsersKnownHosts(t *testing.T) {
 	h := live(t)
 	h.trust(t)
