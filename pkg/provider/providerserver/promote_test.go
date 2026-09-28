@@ -3,6 +3,8 @@ package providerserver
 import (
 	"context"
 	"errors"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -212,5 +214,86 @@ func TestAPromoteInterruptedWhileItFlipsStillTakesItsPromotionBack(t *testing.T)
 	}
 	if served := w.serves(fake.KindRelay, "web"); served != "web-p1" {
 		t.Errorf("the relay router serves web %q after an interrupted promote, want web-p1 again", served)
+	}
+}
+
+type sequenceInterleaving struct {
+	keyvalue.Store
+	mu     sync.Mutex
+	before func()
+}
+
+func (s *sequenceInterleaving) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	s.mu.Lock()
+	before := s.before
+	if slices.Equal(key.Path, []string{"seq"}) {
+		s.before = nil
+	} else {
+		before = nil
+	}
+	s.mu.Unlock()
+	if before != nil {
+		before()
+	}
+	return s.Store.Read(ctx, key)
+}
+
+func (w *promoteWorld) interleaveBeforeTheNextSequence(t *testing.T) *sequenceInterleaving {
+	t.Helper()
+	vendor := fake.NewProvider(fake.Options{})
+	interleaving := &sequenceInterleaving{Store: vendor.KeyValues()}
+	w.ledger = projectLedger{
+		Ledger: ledger.New(interleaving, environment.TierProduction, promotedSlug),
+		cipher: vendor.Cipher(),
+		tier:   environment.TierProduction,
+		slug:   promotedSlug,
+	}
+	return interleaving
+}
+
+func TestAnUnservedPromoteRestoresTheRoutersItFlippedToWhatTheLedgerNamesOnceItIsTakenBack(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		prior string
+	}{
+		{name: "over an earlier promotion", prior: "p1"},
+		{name: "as the first promotion", prior: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newPromoteWorld(t)
+			interleaving := w.interleaveBeforeTheNextSequence(t)
+			if tc.prior != "" {
+				if err := w.promotes(t, tc.prior); err != nil {
+					t.Fatalf("promote(%s) = %v", tc.prior, err)
+				}
+			}
+
+			var raced error
+			earlier := w.staged(t, "p2")
+			interleaving.mu.Lock()
+			interleaving.before = func() {
+				raced = w.promotes(t, "p3")
+				w.routers.DataPlane(router.Kind(fake.KindDirect)).FailNextFlip(errors.New("the data plane refused the write"))
+			}
+			interleaving.mu.Unlock()
+			err := promote(context.Background(), w.ledger, "", earlier, w.appRouters(), progress.DiscardProgress())
+
+			if raced != nil {
+				t.Fatalf("the promote that landed while p2 began = %v, want it served", raced)
+			}
+			var unserved router.Unserved
+			if !errors.As(err, &unserved) {
+				t.Fatalf("promote(p2) with a router that refused = %v, want router.Unserved", err)
+			}
+			if active := w.active(t); active != "p3" {
+				t.Fatalf("the ledger names %q once p2 was taken back, want p3, the promotion p2 displaced", active)
+			}
+			if served := w.serves(fake.KindRelay, "web"); served != "web-p3" {
+				t.Errorf("the relay router serves web %q once p2 was taken back, want web-p3, the release the ledger names", served)
+			}
+			if served := w.serves(fake.KindDirect, "api"); served != "api-p3" {
+				t.Errorf("the direct router serves api %q, want api-p3, the release the ledger names", served)
+			}
+		})
 	}
 }
