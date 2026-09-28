@@ -1,8 +1,8 @@
-export const targetsSortKey = "META#invalidation";
+export const targetsSortKey = "invalidation#";
 
-export const targetsAttribute = "distributions";
+export const targetsAttribute = "value";
 
-export const partitionPrefix = "EDGELEDGER#";
+export const ledgerRoot = "ledger";
 
 export interface DynamoLike {
   send(command: any): Promise<any>;
@@ -12,12 +12,12 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
-export function bootstrapPartition(bootstrapTier: string): string {
-  return `${partitionPrefix}${bootstrapTier}`;
+export function bootstrapPartition(): string {
+  return ledgerRoot;
 }
 
-export function ledgerPartition(bootstrapTier: string, project: string): string {
-  return `${bootstrapPartition(bootstrapTier)}/${project}`;
+export function ledgerPartition(project: string): string {
+  return `${ledgerRoot}#${project.replaceAll("%", "%25").replaceAll("#", "%23")}`;
 }
 
 async function notedAt(
@@ -36,8 +36,10 @@ async function notedAt(
       },
     }),
   );
-  const distributions = out?.Item?.[targetsAttribute]?.SS;
-  return Array.isArray(distributions) ? distributions : [];
+  const noted = out?.Item?.[targetsAttribute]?.S;
+  if (typeof noted !== "string") return [];
+  const distributions = JSON.parse(noted);
+  return Array.isArray(distributions) ? distributions.filter((d) => typeof d === "string") : [];
 }
 
 export async function targetsOf(
@@ -48,8 +50,8 @@ export async function targetsOf(
   project: string,
 ): Promise<string[]> {
   const [wildcard, owned] = await Promise.all([
-    notedAt(dynamo, commands, table, bootstrapPartition(bootstrapTier)),
-    notedAt(dynamo, commands, table, ledgerPartition(bootstrapTier, project)),
+    notedAt(dynamo, commands, table, bootstrapPartition()),
+    notedAt(dynamo, commands, table, ledgerPartition(project)),
   ]);
   const targets = [...new Set([...wildcard, ...owned])].sort();
   if (targets.length === 0) {

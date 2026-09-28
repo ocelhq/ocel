@@ -3,13 +3,13 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { invalidateAll } from "../src/invalidate.mjs";
 import type { Raises } from "../src/records.mjs";
 import { pathsPerInvalidation } from "../src/tags.mjs";
-import { bootstrapPartition, targetsSortKey } from "../src/targets.mjs";
 
 const TABLE = "ocel-state";
 const TIER = "production";
 const PREFIX = "prod/acme/web/r0a1b2c3d/isr";
 const RELEASE = "r0a1b2c3d";
-const PROJECT = "EDGELEDGER#production/acme";
+const PROJECT = "ledger#acme";
+const WILDCARD = "ledger";
 
 class FakeDynamo {
   reads: any[] = [];
@@ -20,7 +20,9 @@ class FakeDynamo {
     this.reads.push(command.input);
     if (this.fail !== null) throw this.fail;
     const distributions = this.items.get(command.input.Key.pk.S);
-    return distributions === undefined ? {} : { Item: { distributions: { SS: distributions } } };
+    return distributions === undefined
+      ? {}
+      : { Item: { value: { S: JSON.stringify(distributions) } } };
   }
 }
 
@@ -84,12 +86,12 @@ it("invalidates every distribution the ledger names for the project", async () =
     {
       TableName: TABLE,
       ConsistentRead: true,
-      Key: { pk: { S: bootstrapPartition(TIER) }, sk: { S: targetsSortKey } },
+      Key: { pk: { S: WILDCARD }, sk: { S: "invalidation#" } },
     },
     {
       TableName: TABLE,
       ConsistentRead: true,
-      Key: { pk: { S: PROJECT }, sk: { S: targetsSortKey } },
+      Key: { pk: { S: PROJECT }, sk: { S: "invalidation#" } },
     },
   ]);
   expect(cloudfront.calls.map((call) => call.DistributionId).sort()).toEqual([
@@ -105,7 +107,7 @@ it("invalidates every distribution the ledger names for the project", async () =
 it("reaches the bootstrap's wildcard as well as the project's own front", async () => {
   const both = new FakeDynamo(
     new Map([
-      [bootstrapPartition(TIER), ["EWILDCARD"]],
+      [WILDCARD, ["EWILDCARD"]],
       [PROJECT, ["E1PROD"]],
     ]),
   );
@@ -119,7 +121,7 @@ it("reaches the bootstrap's wildcard as well as the project's own front", async 
 });
 
 it("reaches the wildcard for a project that names no front of its own", async () => {
-  const wildcardOnly = new FakeDynamo(new Map([[bootstrapPartition(TIER), ["EWILDCARD"]]]));
+  const wildcardOnly = new FakeDynamo(new Map([[WILDCARD, ["EWILDCARD"]]]));
 
   await invalidateAll(invalidator(wildcardOnly, cloudfront), raises(["products"]));
 
