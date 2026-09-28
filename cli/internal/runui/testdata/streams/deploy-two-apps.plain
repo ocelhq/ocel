@@ -1,6 +1,8 @@
 ocel  dev  acme › production
 
-INFO  [check] Signed in to aws as deploy (123456789012, us-east-1) and cloudfront (a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4)
+  aws         123456789012 · us-east-1 · as deploy
+  cloudfront  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+
 INFO  [check] ✓ aws: Checked your credentials and the production bootstrap for acme in 1s
 WARN  [check] web: OCEL_API_URL is set in .env but is not declared in ocel.config.ts
 
@@ -42,5 +44,6 @@ ERROR [deploy] ✗ api: Deploying the serverless app to production failed after 
 INFO  [deploy] ✓ web: Deployed the serverless app to production in 12s (2/2) — 1 resource created
 
 ✗ Deploy failed in 21s — internal: provision api: update failed
+  on aws 123456789012 · us-east-1 · as deploy
   web deployed but was not promoted: promotion needs every app, and api failed
   production still serves what it served before this run

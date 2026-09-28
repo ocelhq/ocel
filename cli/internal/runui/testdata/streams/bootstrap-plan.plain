@@ -1,6 +1,8 @@
 ocel  dev  acme › production
 
-INFO  [check] Signed in to aws as deploy (123456789012, us-east-1) and cloudflare (a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4)
+  aws         123456789012 · us-east-1 · as deploy
+  cloudflare  a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+
 INFO  [check] ✓ aws: Checked your credentials and the production bootstrap for acme in 1s
 INFO  [plan] ✓ production: Planned the changes to the production bootstrap in 1s
 
@@ -24,3 +26,4 @@ INFO  [provision] ✓ production: Updated bootstrap stacks ocel-bootstrap and oc
       Ensuring the Pulumi passphrase (SSM SecureString)
 
 ✓ Bootstrapped the production environment in 11s
+  on aws 123456789012 · us-east-1 · as deploy

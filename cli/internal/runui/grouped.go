@@ -66,6 +66,7 @@ type GroupedSink struct {
 	blank         bool
 	gated         bool
 	tier          environmentv1.Tier
+	origin        *streamv1.Party
 	promotion     string
 	changeStarted bool
 
@@ -173,12 +174,8 @@ func (s *GroupedSink) Receive(ev *streamv1.RunEvent) {
 		s.silenceBroke = true
 		s.resume(ev)
 	case ev.GetIdentity() != nil:
-		s.tier = ev.GetIdentity().GetTier()
+		s.tier, s.origin = ev.GetIdentity().GetTier(), ev.GetIdentity().GetOrigin()
 		s.gate(identityLines(s.present, ev.GetIdentity()))
-		if who := signedIn(ev.GetIdentity()); who != "" {
-			signed := line{level: ev.GetLevel(), phase: ev.GetPhase(), message: who}
-			s.print(blockLine{text: signed.render(s.present), from: signed})
-		}
 	case ev.GetPlan() != nil:
 		s.gate(planLines(s.present, ev.GetPlan()))
 	case ev.GetDnsManualRecords() != nil:
