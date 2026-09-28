@@ -91,8 +91,8 @@ var deployRoles = []string{
 	"roles/run.admin",
 }
 
-func rolesFor(tier edge.CredentialTier) []string {
-	if tier != edge.TierBootstrap {
+func rolesFor(purpose edge.CredentialPurpose) []string {
+	if purpose != edge.PurposeBootstrap {
 		return deployRoles
 	}
 	granted := slices.Clone(deployRoles)
@@ -123,9 +123,9 @@ func permissionsFor(features []string) []string {
 
 func rolesCovering(features []string) []string {
 	if !slices.Contains(features, albFeature) {
-		return rolesFor(edge.TierBootstrap)
+		return rolesFor(edge.PurposeBootstrap)
 	}
-	return slices.Concat(rolesFor(edge.TierBootstrap), alb.Roles())
+	return slices.Concat(rolesFor(edge.PurposeBootstrap), alb.Roles())
 }
 
 func (b bootstrap) servicesOn(ctx context.Context, features []string) error {

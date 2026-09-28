@@ -69,15 +69,15 @@ func named(details []provider.PrincipalDetail) []provider.PrincipalDetail {
 	return out
 }
 
-func (c credentials) Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
-	switch tier {
-	case edge.TierBootstrap:
+func (c credentials) Permissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
+	switch purpose {
+	case edge.PurposeBootstrap:
 		return edge.CredentialDocument{Document: bootstrapDocument(c.login())}, nil
-	case edge.TierDeploy:
+	case edge.PurposeDeploy:
 		return edge.CredentialDocument{Document: deployDocument()}, nil
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
-			"unknown credential tier: want bootstrap or deploy")
+			"unknown credential purpose: want bootstrap or deploy")
 	}
 }
 

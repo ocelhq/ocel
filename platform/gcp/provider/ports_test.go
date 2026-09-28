@@ -213,18 +213,18 @@ func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
 
 func errorOf[T any](_ T, err error) error { return err }
 
-func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
+func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 	t.Parallel()
 
 	credentials := testProvider(t).Credentials()
-	for tier, named := range map[edge.CredentialTier][]string{
-		edge.TierDeploy: {
+	for purpose, named := range map[edge.CredentialPurpose][]string{
+		edge.PurposeDeploy: {
 			"roles/run.admin",
 			"roles/storage.objectAdmin",
 			"roles/artifactregistry.writer",
 			"roles/iam.serviceAccountUser",
 		},
-		edge.TierBootstrap: {
+		edge.PurposeBootstrap: {
 			"roles/run.admin",
 			"roles/storage.admin",
 			"roles/artifactregistry.admin",
@@ -232,17 +232,17 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 			"roles/cloudkms.admin",
 		},
 	} {
-		document, err := credentials.Permissions(tier)
+		document, err := credentials.Permissions(purpose)
 		if err != nil {
-			t.Errorf("Permissions(%s) = %v, want the roles that tier is granted", tier, err)
+			t.Errorf("Permissions(%s) = %v, want the roles that purpose is granted", purpose, err)
 			continue
 		}
 		if document.Heading == "" {
-			t.Errorf("Permissions(%s) returned a document under no heading, so nothing says what the run is looking at", tier)
+			t.Errorf("Permissions(%s) returned a document under no heading, so nothing says what the run is looking at", purpose)
 		}
 		for _, role := range named {
 			if !strings.Contains(document.Document, role) {
-				t.Errorf("Permissions(%s) does not name %s, and a credential granted what it renders would fail on the resources that role covers", tier, role)
+				t.Errorf("Permissions(%s) does not name %s, and a credential granted what it renders would fail on the resources that role covers", purpose, role)
 			}
 		}
 	}
@@ -251,7 +251,7 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	t.Parallel()
 
-	document, err := testProvider(t).Credentials().Permissions(edge.TierDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.PurposeDeploy)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -265,11 +265,11 @@ func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	}
 }
 
-func TestACredentialTierNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
+func TestACredentialPurposeNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := testProvider(t).Credentials().Permissions(edge.CredentialTier("root"))
+	_, err := testProvider(t).Credentials().Permissions(edge.CredentialPurpose("root"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}

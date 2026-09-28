@@ -484,7 +484,7 @@ func codeBucketResource() map[string]any {
 	}
 }
 
-func tier(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
+func grants(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 	r := ns.ScopedARNs()
 	return []bootstrap.GrantStatement{
 		{
@@ -520,5 +520,5 @@ func tier(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 }
 
 func statements(ns bootstrap.Namespace, keys []string) []map[string]any {
-	return bootstrap.PolicyStatements(tier(ns, keys))
+	return bootstrap.PolicyStatements(grants(ns, keys))
 }

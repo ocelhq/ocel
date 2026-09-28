@@ -798,7 +798,7 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 func (s *deployFakeProviderServer) GetCredentialPermissions(ctx context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
 	groups := []*contractv1.CredentialGroup{{
 		Heading:  "AWS credentials",
-		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetTier().String()),
+		Document: fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Sid":%q}]}`, req.GetPurpose().String()),
 	}}
 	if resolvedEdgeKind(req.GetEdge().GetKind()) == "cloudflare" {
 		groups = append(groups, &contractv1.CredentialGroup{

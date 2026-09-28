@@ -30,7 +30,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 		Example: "  $ ocel permissions deploy",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tier, err := tierArg(args)
+			purpose, err := purposeArg(args)
 			if err != nil {
 				_ = cmd.Help()
 				return err
@@ -41,17 +41,17 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
 
-			return Run(cmd.Context(), deps, cwd, tier, cmd.OutOrStdout())
+			return Run(cmd.Context(), deps, cwd, purpose, cmd.OutOrStdout())
 		},
 	})
 }
 
-func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.CredentialTier, stdout io.Writer) error {
+func Run(ctx context.Context, deps cmddeps.Deps, cwd string, purpose contractv1.CredentialPurpose, stdout io.Writer) error {
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
 		return err
 	}
-	groups, err := credentialPermissions(ctx, deps, cfg, tier)
+	groups, err := credentialPermissions(ctx, deps, cfg, purpose)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.Cre
 	return nil
 }
 
-func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, tier contractv1.CredentialTier) (groups []*contractv1.CredentialGroup, err error) {
+func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, purpose contractv1.CredentialPurpose) (groups []*contractv1.CredentialGroup, err error) {
 	if _, err := cfg.RequireProvider(); err != nil {
 		return nil, err
 	}
@@ -94,8 +94,8 @@ func credentialPermissions(ctx context.Context, deps cmddeps.Deps, cfg *projectc
 	var permissions *contractv1.CredentialPermissionsResponse
 	err = prov.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		permissions, err = client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{
-			Tier: tier,
-			Edge: edgewire.Selection(cfg),
+			Purpose: purpose,
+			Edge:    edgewire.Selection(cfg),
 		})
 		return err
 	})
@@ -115,18 +115,18 @@ func predates(pkg string) error {
 	return fmt.Errorf("%s cannot say what permissions these credentials need; it predates them. Upgrade the provider pinned in this project and try again", pkg)
 }
 
-func tierArg(args []string) (contractv1.CredentialTier, error) {
+func purposeArg(args []string) (contractv1.CredentialPurpose, error) {
 	if len(args) == 0 {
-		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
+		return contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_UNSPECIFIED,
 			errors.New("name the credentials to print, bootstrap or deploy")
 	}
 	switch args[0] {
 	case "bootstrap":
-		return contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, nil
+		return contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP, nil
 	case "deploy":
-		return contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, nil
+		return contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, nil
 	default:
-		return contractv1.CredentialTier_CREDENTIAL_TIER_UNSPECIFIED,
+		return contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_UNSPECIFIED,
 			fmt.Errorf("the credentials to print are bootstrap or deploy, not %q", args[0])
 	}
 }

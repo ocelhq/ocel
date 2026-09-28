@@ -163,11 +163,11 @@ const (
 	EntitlementWithheld Entitlement = "withheld"
 )
 
-type CredentialTier string
+type CredentialPurpose string
 
 const (
-	TierBootstrap CredentialTier = "bootstrap"
-	TierDeploy    CredentialTier = "deploy"
+	PurposeBootstrap CredentialPurpose = "bootstrap"
+	PurposeDeploy    CredentialPurpose = "deploy"
 )
 
 type CredentialDocument struct {

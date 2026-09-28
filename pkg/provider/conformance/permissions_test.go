@@ -16,7 +16,7 @@ func (permissionsPort) Whoami(context.Context) (provider.Principal, error) {
 	return provider.Principal{Vendor: "test"}, nil
 }
 
-func (s permissionsPort) Permissions(edge.CredentialTier) (edge.CredentialDocument, error) {
+func (s permissionsPort) Permissions(edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	return edge.CredentialDocument{}, s.err
 }
 
@@ -27,15 +27,15 @@ func TestPermissionsMayBeUnwrittenSoLongAsTheProviderSaysSo(t *testing.T) {
 		err   error
 		named bool
 	}{
-		"a document":              {err: nil, named: true},
-		"none written yet":        {err: refusal.Refuse(refusal.CodeNotReady, "no permissions document yet"), named: true},
-		"a tier it will not name": {err: refusal.Refuse(refusal.CodeInvalid, "no such tier"), named: false},
-		"something broken":        {err: errors.New("the document would not render"), named: false},
+		"a document":                 {err: nil, named: true},
+		"none written yet":           {err: refusal.Refuse(refusal.CodeNotReady, "no permissions document yet"), named: true},
+		"a purpose it will not name": {err: refusal.Refuse(refusal.CodeInvalid, "no such purpose"), named: false},
+		"something broken":           {err: errors.New("the document would not render"), named: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := permissionsRendered(permissionsPort{err: tc.err}, edge.TierBootstrap)
+			err := permissionsRendered(permissionsPort{err: tc.err}, edge.PurposeBootstrap)
 			if named := err == nil; named != tc.named {
 				t.Errorf("permissionsRendered() = %v, want named = %v", err, tc.named)
 			}

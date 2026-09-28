@@ -43,19 +43,19 @@ var Permissions = []string{
 	"certificatemanager.operations.get",
 }
 
-func (e *Edge) credentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+func (e *Edge) credentialPermissions(purpose edge.CredentialPurpose) (edge.CredentialDocument, error) {
 	var does string
-	switch tier {
-	case edge.TierBootstrap:
+	switch purpose {
+	case edge.PurposeBootstrap:
 		does = "provisions the load balancer and takes it down"
-	case edge.TierDeploy:
+	case edge.PurposeDeploy:
 		does = "binds a hostname: a certificate and its map entry, a backend onto a serverless NEG, and a host rule in the url map"
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
-			"the %s edge lists its roles for the bootstrap tier or the deploy tier, not %q", Kind, string(tier))
+			"the %s edge lists its roles for bootstrap or deploy credentials, not %q", Kind, string(purpose))
 	}
 	return edge.CredentialDocument{
-		Heading:  fmt.Sprintf("the roles the %s edge adds on project %s, since a %s credential %s", Kind, e.deps.Project, tier, does),
+		Heading:  fmt.Sprintf("the roles the %s edge adds on project %s, since a %s credential %s", Kind, e.deps.Project, purpose, does),
 		Document: strings.Join(roles, "\n"),
 	}, nil
 }

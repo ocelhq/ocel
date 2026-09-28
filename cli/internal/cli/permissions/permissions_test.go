@@ -24,8 +24,8 @@ func TestPermissionsNeedsATier(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"no tier", nil},
-		{"a tier that is neither", []string{"admin"}},
+		{"no purpose", nil},
+		{"a purpose that is neither", []string{"admin"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -37,11 +37,11 @@ func TestPermissionsNeedsATier(t *testing.T) {
 			cmd.SetArgs(tc.args)
 			err := cmd.Execute()
 			if err == nil {
-				t.Fatal("Execute err = nil, want permissions without a credential tier to be a failure")
+				t.Fatal("Execute err = nil, want permissions without a credential purpose to be a failure")
 			}
 			for _, want := range []string{"bootstrap", "deploy"} {
 				if !strings.Contains(err.Error(), want) {
-					t.Errorf("err = %v, want it to name the %s tier", err, want)
+					t.Errorf("err = %v, want it to name the %s purpose", err, want)
 				}
 			}
 			if !strings.Contains(out.String(), "permissions <bootstrap|deploy>") {
@@ -51,28 +51,28 @@ func TestPermissionsNeedsATier(t *testing.T) {
 	}
 }
 
-func TestPermissionsTierArg(t *testing.T) {
+func TestPermissionsPurposeArg(t *testing.T) {
 	t.Parallel()
 
-	for typed, want := range map[string]contractv1.CredentialTier{
-		"deploy":    contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY,
-		"bootstrap": contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP,
+	for typed, want := range map[string]contractv1.CredentialPurpose{
+		"deploy":    contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY,
+		"bootstrap": contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP,
 	} {
-		got, err := tierArg([]string{typed})
+		got, err := purposeArg([]string{typed})
 		if err != nil {
-			t.Fatalf("tierArg(%q) err = %v", typed, err)
+			t.Fatalf("purposeArg(%q) err = %v", typed, err)
 		}
 		if got != want {
-			t.Errorf("tierArg(%q) = %v, want %v", typed, got, want)
+			t.Errorf("purposeArg(%q) = %v, want %v", typed, got, want)
 		}
 	}
-	if _, err := tierArg([]string{"admin"}); err == nil || !strings.Contains(err.Error(), `"admin"`) {
-		t.Errorf("tierArg err = %v, want it to name what was typed", err)
+	if _, err := purposeArg([]string{"admin"}); err == nil || !strings.Contains(err.Error(), `"admin"`) {
+		t.Errorf("purposeArg err = %v, want it to name what was typed", err)
 	}
 }
 
 func TestRunPermissions(t *testing.T) {
-	t.Run("it writes the document the provider renders for the tier", func(t *testing.T) {
+	t.Run("it writes the document the provider renders for the purpose", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -80,18 +80,18 @@ func TestRunPermissions(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
+		if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_DEPLOY") {
-			t.Errorf("stdout = %q, want the deploy tier's document", stdout.String())
+		if !strings.Contains(stdout.String(), "CREDENTIAL_PURPOSE_DEPLOY") {
+			t.Errorf("stdout = %q, want the deploy purpose's document", stdout.String())
 		}
 		if strings.Contains(stdout.String(), "AWS credentials") {
 			t.Errorf("stdout = %q, want a lone group to print pipeable, without its heading", stdout.String())
 		}
 	})
 
-	t.Run("it writes the bootstrap document when the bootstrap tier is asked for", func(t *testing.T) {
+	t.Run("it writes the bootstrap document when the bootstrap purpose is asked for", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
@@ -99,11 +99,11 @@ func TestRunPermissions(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP, &stdout); err != nil {
+		if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_BOOTSTRAP, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "CREDENTIAL_TIER_BOOTSTRAP") {
-			t.Errorf("stdout = %q, want the bootstrap tier's document", stdout.String())
+		if !strings.Contains(stdout.String(), "CREDENTIAL_PURPOSE_BOOTSTRAP") {
+			t.Errorf("stdout = %q, want the bootstrap purpose's document", stdout.String())
 		}
 	})
 
@@ -112,12 +112,12 @@ func TestRunPermissions(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(deps, &stderr)
-		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
+		if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 			t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		for _, want := range []string{
 			"AWS credentials",
-			"CREDENTIAL_TIER_DEPLOY",
+			"CREDENTIAL_PURPOSE_DEPLOY",
 			"Cloudflare API token",
 			"Account · Workers Scripts · Edit",
 		} {
@@ -138,7 +138,7 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(deps, &stderr)
-	if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout); err != nil {
+	if err := Run(context.Background(), deps, root, contractv1.CredentialPurpose_CREDENTIAL_PURPOSE_DEPLOY, &stdout); err != nil {
 		t.Fatalf("Run err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -162,7 +162,7 @@ func TestPermissionsStartsTheProviderInTheCheckPhaseOfItsRunAndPrintsTheDocument
 	if !result.GetSuccess() {
 		t.Errorf("result = %v, want the run to succeed", result)
 	}
-	if strings.TrimSpace(stdout.String()) == "" || strings.Contains(stderr.String(), "CREDENTIAL_TIER_DEPLOY") {
+	if strings.TrimSpace(stdout.String()) == "" || strings.Contains(stderr.String(), "CREDENTIAL_PURPOSE_DEPLOY") {
 		t.Errorf("stdout = %q, stream = %q: want the document on stdout and not on the stream", stdout.String(), stderr.String())
 	}
 }

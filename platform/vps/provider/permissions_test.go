@@ -10,15 +10,15 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-func rendered(t *testing.T, tier edge.CredentialTier) edge.CredentialDocument {
+func rendered(t *testing.T, purpose edge.CredentialPurpose) edge.CredentialDocument {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}})
-	document, err := p.Credentials().Permissions(tier)
+	document, err := p.Credentials().Permissions(purpose)
 	if err != nil {
-		t.Fatalf("Permissions(%q) = %v", tier, err)
+		t.Fatalf("Permissions(%q) = %v", purpose, err)
 	}
 	if strings.TrimSpace(document.Document) == "" {
-		t.Fatalf("Permissions(%q) rendered nothing", tier)
+		t.Fatalf("Permissions(%q) rendered nothing", purpose)
 	}
 	return document
 }
@@ -26,9 +26,9 @@ func rendered(t *testing.T, tier edge.CredentialTier) edge.CredentialDocument {
 func TestBothDocumentsAreBareStringsAShellCanPipe(t *testing.T) {
 	t.Parallel()
 
-	for _, tier := range []edge.CredentialTier{edge.TierBootstrap, edge.TierDeploy} {
-		if heading := rendered(t, tier).Heading; heading != "" {
-			t.Errorf("the %s document is headed %q, and a host has one credential set, not several", tier, heading)
+	for _, purpose := range []edge.CredentialPurpose{edge.PurposeBootstrap, edge.PurposeDeploy} {
+		if heading := rendered(t, purpose).Heading; heading != "" {
+			t.Errorf("the %s document is headed %q, and a host has one credential set, not several", purpose, heading)
 		}
 	}
 }
@@ -36,7 +36,7 @@ func TestBothDocumentsAreBareStringsAShellCanPipe(t *testing.T) {
 func TestTheBootstrapDocumentNamesEveryRequirementPreflightChecks(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierBootstrap).Document
+	document := rendered(t, edge.PurposeBootstrap).Document
 	for _, need := range session.Requirements() {
 		for _, want := range []string{need.Name, need.Detail} {
 			if !strings.Contains(document, want) {
@@ -49,7 +49,7 @@ func TestTheBootstrapDocumentNamesEveryRequirementPreflightChecks(t *testing.T) 
 func TestTheBootstrapDocumentIncludesTheSudoersFragmentTheLoginNeeds(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierBootstrap).Document
+	document := rendered(t, edge.PurposeBootstrap).Document
 	for _, want := range []string{"/etc/sudoers.d/", "NOPASSWD:", "deployer ALL="} {
 		if !strings.Contains(document, want) {
 			t.Errorf("the bootstrap document does not include %q, and it is what a human is meant to paste:\n%s", want, document)
@@ -61,7 +61,7 @@ func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Alias: "prod-box"}})
-	document, err := p.Credentials().Permissions(edge.TierBootstrap)
+	document, err := p.Credentials().Permissions(edge.PurposeBootstrap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierDeploy).Document
+	document := rendered(t, edge.PurposeDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, grant := range host.Grants(class) {
 			for _, want := range []string{grant.Name, grant.Detail} {
@@ -88,7 +88,7 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierDeploy).Document
+	document := rendered(t, edge.PurposeDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
@@ -139,7 +139,7 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	if !strings.Contains(claim.Detail, "become root") {
 		t.Errorf("the document describes membership of %s as:\n%s\nand never says the group is root on the machine under another name", group, claim.Detail)
 	}
-	if document := rendered(t, edge.TierDeploy).Document; !strings.Contains(document, claim.Detail) {
+	if document := rendered(t, edge.PurposeDeploy).Document; !strings.Contains(document, claim.Detail) {
 		t.Errorf("the document does not include the %s grant word for word:\n%s", group, document)
 	}
 }
@@ -147,7 +147,7 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierDeploy).Document
+	document := rendered(t, edge.PurposeDeploy).Document
 	for _, item := range host.Items(edge.ClassProduction, nil, host.ArchAMD64, host.Front{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
@@ -163,7 +163,7 @@ func TestTheDeployDocumentIncludesTheOneSudoersLineTheSealHelperNeeds(t *testing
 func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierDeploy).Document
+	document := rendered(t, edge.PurposeDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if !strings.Contains(document, host.SealKeyPath(class)) {
 			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never reads:\n%s",
@@ -175,17 +175,17 @@ func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T)
 func TestTheDeployDocumentSaysTheKeyIsNeverRotated(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, edge.TierDeploy).Document
+	document := rendered(t, edge.PurposeDeploy).Document
 	if !strings.Contains(document, "rotat") {
 		t.Errorf("the document never says whether a seal key can be rotated, and a key nothing rotates is a fact a user needs before they seal to it:\n%s", document)
 	}
 }
 
-func TestCredentialsThatAreNeitherTierAreRefused(t *testing.T) {
+func TestCredentialsThatAreNeitherPurposeAreRefused(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	if _, err := p.Credentials().Permissions("admin"); err == nil {
-		t.Error("Permissions() rendered a document for a tier this provider has no credentials for")
+		t.Error("Permissions() rendered a document for a purpose this provider has no credentials for")
 	}
 }
