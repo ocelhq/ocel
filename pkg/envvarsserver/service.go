@@ -12,16 +12,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type Backend struct {
-	Records       records.Store
+	KeyValues     keyvalue.Store
 	Cipher        seal.Cipher
 	VerifyGrants  func(ctx context.Context, binding provider.Binding) error
 	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
@@ -49,7 +49,7 @@ func (h *Service) values(requested environmentv1.Tier) (envvars.Store, environme
 	if err != nil {
 		return envvars.Store{}, "", err
 	}
-	return envvars.Store{Records: backend.Records, Cipher: backend.Cipher}, tier, nil
+	return envvars.Store{KeyValues: backend.KeyValues, Cipher: backend.Cipher}, tier, nil
 }
 
 func decodeTier(tier environmentv1.Tier) (environment.Tier, error) {
@@ -105,7 +105,7 @@ func (h *Service) namedEnvironments(ctx context.Context, slug string) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	stacks, err := stackrecords.StackNames(ctx, backend.Records, environment.TierPreview, slug)
+	stacks, err := stackrecords.StackNames(ctx, backend.KeyValues, environment.TierPreview, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

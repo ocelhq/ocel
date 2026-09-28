@@ -7,14 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 
+	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -26,10 +28,20 @@ const (
 	previewKeyARN = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars-preview"
 )
 
-func newRecords(t *testing.T) (awsports.Records, *fakeDynamo) {
+type tierTables struct{}
+
+func (tierTables) Table(_ context.Context, tier environment.Tier) (string, error) {
+	return "ocel-" + string(tier) + "-state", nil
+}
+
+func (tierTables) ValuesTable(_ context.Context, tier environment.Tier) (string, error) {
+	return "ocel-" + string(tier) + "-vars", nil
+}
+
+func newRecords(t *testing.T) (awsports.KeyValues, *fakeDynamo) {
 	t.Helper()
 	ddb := newFakeDynamo()
-	return awsports.Records{Dynamo: ddb, Tables: awsports.Table("ocel-state")}, ddb
+	return awsports.KeyValues{Dynamo: ddb, Tables: tierTables{}}, ddb
 }
 
 type tierKeys map[environment.Tier]string
@@ -57,51 +69,83 @@ func TestCipherConformance(t *testing.T) {
 func TestValueRecordsPartitionOnTheProjectAndTier(t *testing.T) {
 	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}
+	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	partition, err := awsports.Partition(envvars.ScopedRecordName(scope))
-	if err != nil {
-		t.Fatalf("Partition err = %v", err)
-	}
+	partition := awsports.PartitionKey(envvars.ValuesPartition(scope))
 	for _, written := range ddb.partitions() {
 		if written != partition {
 			t.Errorf("a value write landed in partition %q, and a function's role is scoped to %q alone", written, partition)
 		}
 	}
-	if !strings.Contains(partition, scope.Project) || !strings.Contains(partition, string(scope.Tier)) {
-		t.Errorf("value partition = %q, want it to name both the project and the tier a role is granted", partition)
+	if partition != "values#shop" {
+		t.Errorf("value partition = %q, want it to name the project a role is granted", partition)
+	}
+	if got := ddb.tablesUsed(); !slices.Equal(got, []string{"ocel-production-vars"}) {
+		t.Errorf("a production value reached tables %v, want the production values table alone: the table is the tier a role is granted", got)
 	}
 }
 
-func TestARecordNameShorterThanItsPartitionIsRefused(t *testing.T) {
-	store, _ := newRecords(t)
+func TestAnEntryIsKeptAsTheJSONItHoldsInAStringAttribute(t *testing.T) {
+	table, ddb := newRecords(t)
+	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
 
-	if _, err := store.List(context.Background(), records.Name{"values", "shop"}); err == nil {
-		t.Fatal("List() under half a value partition succeeded, and answering it would have to walk the whole table")
+	if _, err := table.Write(context.Background(), keyvalue.Entry{Key: key, Value: []byte(`{"features":["cache"]}`)}); err != nil {
+		t.Fatal(err)
 	}
+	item := ddb.item("projects", "shop#")
+	value, ok := item["value"].(*ddbtypes.AttributeValueMemberS)
+	if !ok || value.Value != `{"features":["cache"]}` {
+		t.Fatalf("the item holds value %#v, want the JSON as a string a reader of the table sees as written", item["value"])
+	}
+}
+
+func TestAnItemThisLayoutDidNotWriteIsNotReadAsEmpty(t *testing.T) {
+	table, ddb := newRecords(t)
+	ddb.items["ocel-production-state"] = map[string]map[string]map[string]ddbtypes.AttributeValue{"schema": {"production#": {
+		"pk":   &ddbtypes.AttributeValueMemberS{Value: "schema"},
+		"sk":   &ddbtypes.AttributeValueMemberS{Value: "production#"},
+		"body": &ddbtypes.AttributeValueMemberB{Value: []byte("2")},
+		"rev":  &ddbtypes.AttributeValueMemberS{Value: "older"},
+	}}}
+
+	err := stackrecords.EnsureSchema(context.Background(), table, environment.TierProduction)
+	if err == nil {
+		t.Fatal("EnsureSchema() over a schema an older layout wrote = nil, and it stamps this build's schema over records it cannot read")
+	}
+	if item := ddb.item("schema", "production#"); stringOf(item["rev"]) != "older" {
+		t.Errorf("the older schema item moved to revision %q, want it left as that ocel wrote it", stringOf(item["rev"]))
+	}
+}
+
+func stringOf(value ddbtypes.AttributeValue) string {
+	s, _ := value.(*ddbtypes.AttributeValueMemberS)
+	if s == nil {
+		return ""
+	}
+	return s.Value
 }
 
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	table, _ := newRecords(t)
 	cipher, _ := newCipher()
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: cipher}
+	store := envvars.Store{KeyValues: table, Cipher: cipher}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	stored, err := table.List(context.Background(), envvars.ScopedRecordName(scope))
+	stored, err := table.List(context.Background(), envvars.ValuesPartition(scope))
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
 	for _, record := range stored {
-		if bytes.Contains(record.Bytes, []byte("sk_live_secret")) {
-			t.Fatalf("%s stores the plaintext at rest", record.Name)
+		if bytes.Contains(record.Value, []byte("sk_live_secret")) {
+			t.Fatalf("%s stores the plaintext at rest", record.Key)
 		}
 	}
 }
@@ -109,7 +153,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFolderAndKey(t *testing.T) {
 	table, _ := newRecords(t)
 	cipher, crypto := newCipher()
-	store := envvars.Store{Records: table, Cipher: cipher}
+	store := envvars.Store{KeyValues: table, Cipher: cipher}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
 
@@ -141,13 +185,13 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := table.Write(context.Background(), records.Record{
-		Name:  records.Name{"values", "shop", "production", "cells", "%2Fweb", "STRIPE_API_KEY", "staging"},
-		Bytes: body,
+	if _, err := table.Write(context.Background(), keyvalue.Entry{
+		Key:   envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: environment.TierProduction}).Key("cells", "/web", "STRIPE_API_KEY", "staging"),
+		Value: body,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	store := envvars.Store{Records: table, Cipher: cipher}
+	store := envvars.Store{KeyValues: table, Cipher: cipher}
 	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
 
 	value, err := store.Get(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, at, true)
@@ -159,7 +203,7 @@ func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
 	table, _ := newRecords(t)
 	cipher, crypto := newCipher()
-	store := envvars.Store{Records: table, Cipher: cipher}
+	store := envvars.Store{KeyValues: table, Cipher: cipher}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "orders", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
@@ -240,21 +284,21 @@ func newCipherIgnoringKMSCalls() seal.Cipher {
 func TestAnAccountWithNoBootstrapHasNoRecords(t *testing.T) {
 	t.Parallel()
 
-	store := awsports.Records{Dynamo: newFakeDynamo()}
-	name := records.Name{"bootstrap", "production"}
+	store := awsports.KeyValues{Dynamo: newFakeDynamo()}
+	name := stackrecords.BootstrapKey(environment.TierProduction)
 
-	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
+	if _, err := store.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Read() with no bootstrap installed = %v, want ErrNotFound", err)
 	}
-	listed, err := store.List(context.Background(), records.Name{"projects", "production"})
+	listed, err := store.List(context.Background(), stackrecords.ProjectsPartition(environment.TierProduction))
 	if err != nil || len(listed) != 0 {
 		t.Errorf("List() with no bootstrap installed = %v, %v, want nothing", listed, err)
 	}
-	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
+	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Remove() with no bootstrap installed = %v, want ErrNotFound", err)
 	}
 
-	_, err = store.Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")})
+	_, err = store.Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte("{}")})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Write() with no bootstrap installed = %v, want a %s refusal rather than a silent no-op", err, refusal.CodeNotReady)
@@ -269,65 +313,53 @@ func TestATableDeletedMidTeardownHasNoRecords(t *testing.T) {
 
 	dynamo := newFakeDynamo()
 	dynamo.gone = true
-	store := awsports.Records{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
-	name := records.Name{"bootstrap", "production"}
+	store := awsports.KeyValues{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
+	name := stackrecords.BootstrapKey(environment.TierProduction)
 
-	if _, err := store.Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
+	if _, err := store.Read(context.Background(), name); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Read() against a deleted table = %v, want ErrNotFound", err)
 	}
-	listed, err := store.List(context.Background(), records.Name{"projects", "production"})
+	listed, err := store.List(context.Background(), stackrecords.ProjectsPartition(environment.TierProduction))
 	if err != nil || len(listed) != 0 {
 		t.Errorf("List() against a deleted table = %v, %v, want nothing", listed, err)
 	}
-	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, records.ErrNotFound) {
+	if err := store.Remove(context.Background(), name, "whatever"); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Remove() against a deleted table = %v, want ErrNotFound", err)
 	}
-	if _, err := store.Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")}); err == nil {
+	if _, err := store.Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte("{}")}); err == nil {
 		t.Error("Write() against a deleted table = nil, want the failure surfaced")
 	}
 }
 
-func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
-	for _, name := range []records.Name{
-		stackrecords.ProjectsRecord(environment.TierProduction),
-		stackrecords.BootstrapRecord(environment.TierProduction),
-		stackrecords.WildcardRecord(environment.TierPreview),
-		stackrecords.EdgeStacksRecord(environment.TierPreview),
-		stackrecords.StacksRecord(environment.TierProduction, "shop"),
-		stackrecords.EnvironmentsRecord(environment.TierPreview, "shop"),
+func TestAPartitionIsItsRootAndPathAndNothingElse(t *testing.T) {
+	for _, c := range []struct {
+		in   keyvalue.Partition
+		want string
+	}{
+		{stackrecords.ProjectsPartition(environment.TierProduction), "projects"},
+		{stackrecords.StacksPartition(environment.TierProduction, "shop"), "stacks#shop"},
+		{stackrecords.EnvironmentsPartition(environment.TierPreview, "shop"), "environments#shop"},
+		{envvars.ValuesPartition(envvars.Scope{Project: "a#b", Tier: environment.TierPreview}), "values#a%23b"},
 	} {
-		partition, err := awsports.Partition(name)
-		if err != nil {
-			t.Fatalf("Partition(%s) err = %v", name, err)
-		}
-		if partition == name[0] {
-			t.Errorf("%s partitions on %q alone, so every account's %s records share one key", name, partition, name[0])
+		if got := awsports.PartitionKey(c.in); got != c.want {
+			t.Errorf("PartitionKey(%s) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
 
-func TestTheSchemaRecordSitsOnTheSameKeyEveryLayoutWrote(t *testing.T) {
-	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		partition, err := awsports.Partition(stackrecords.SchemaRecord(tier))
-		if err != nil {
-			t.Fatalf("Partition(%s) err = %v", stackrecords.SchemaRecord(tier), err)
-		}
-		if partition != records.RootSchema {
-			t.Errorf("the %s schema record partitions on %q, want %q: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records",
-				tier, partition, records.RootSchema)
-		}
+func TestTheSchemaSitsOnTheKeyEveryLayoutWroteIt(t *testing.T) {
+	table, ddb := newRecords(t)
+	if err := stackrecords.EnsureSchema(context.Background(), table, environment.TierPreview); err != nil {
+		t.Fatal(err)
+	}
+	if item := ddb.item("schema", "preview#"); item == nil {
+		t.Fatalf("the preview schema landed at %v, want pk schema and sk preview#: a build that cannot find the schema an older layout wrote reads it as unwritten and stamps its own over live records", ddb.partitions())
 	}
 }
 
 func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
-	shop, err := awsports.Partition(stackrecords.StackRecord(environment.TierProduction, "shop", naming.InfraStack("shop")))
-	if err != nil {
-		t.Fatalf("Partition err = %v", err)
-	}
-	web, err := awsports.Partition(stackrecords.StackRecord(environment.TierProduction, "web", naming.InfraStack("web")))
-	if err != nil {
-		t.Fatalf("Partition err = %v", err)
-	}
+	shop := awsports.PartitionKey(stackrecords.StacksPartition(environment.TierProduction, "shop"))
+	web := awsports.PartitionKey(stackrecords.StacksPartition(environment.TierProduction, "web"))
 	if shop == web {
 		t.Errorf("both projects' stacks land in %q, and one project's deploys then throttle the other's", shop)
 	}
@@ -339,17 +371,14 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}
+	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",
 		envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatalf("SetBinding err = %v", err)
 	}
 
-	partition, err := awsports.Partition(envvars.ScopedRecordName(scope))
-	if err != nil {
-		t.Fatalf("Partition err = %v", err)
-	}
+	partition := awsports.PartitionKey(envvars.ValuesPartition(scope))
 	for _, written := range ddb.partitions() {
 		if written != partition {
 			t.Errorf("a binding write landed in partition %q, and a function's role is scoped to %q alone", written, partition)

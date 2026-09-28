@@ -6,22 +6,22 @@ import (
 	"io"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 )
 
 //go:embed records.sh
 var recordsScript []byte
 
-func NewRecords(h *Host) *boxstore.Records { return boxstore.NewRecords(sshRecords{host: h}) }
+func NewKeyValues(h *Host) *boxstore.KeyValues { return boxstore.NewKeyValues(sshKeyValues{host: h}) }
 
-type sshRecords struct{ host *Host }
+type sshKeyValues struct{ host *Host }
 
-func (s sshRecords) HasStore(ctx context.Context, tier environment.Tier) (bool, error) {
+func (s sshKeyValues) HasStore(ctx context.Context, tier environment.Tier) (bool, error) {
 	return s.host.hasStore(ctx, tier)
 }
 
-func (s sshRecords) Records(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+func (s sshKeyValues) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
 	command := quoted(boxstore.RecordsHelper) + " " + quoted(string(tier))
 	for _, arg := range argv {
 		command += " " + quoted(arg)
@@ -35,9 +35,9 @@ func (s sshRecords) Records(ctx context.Context, tier environment.Tier, stdin io
 	case 0:
 		return result.Stdout, nil
 	case boxstore.ExitNoRecord:
-		return "", records.ErrNotFound
+		return "", keyvalue.ErrNotFound
 	case boxstore.ExitStale:
-		return "", records.ErrStale
+		return "", keyvalue.ErrStale
 	default:
 		return "", unelevated(refused, s.host.refuse("records "+argv[0], result, elevation))
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -18,14 +19,13 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type wildcards struct {
 	provider       provider.Provider
-	records        records.Store
+	keyValues      keyvalue.Store
 	recorded       stackrecords.Wildcard
 	sel            *contractv1.EdgeSelection
 	progressStream *eventStream
@@ -37,12 +37,12 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	if err != nil {
 		return nil, err
 	}
-	store := vendor.Records()
+	store := vendor.KeyValues()
 	wildcard, err := stackrecords.ReadWildcard(ctx, store)
 	if err != nil {
 		return nil, err
 	}
-	return &wildcards{provider: vendor, records: store, recorded: wildcard, sel: sel}, nil
+	return &wildcards{provider: vendor, keyValues: store, recorded: wildcard, sel: sel}, nil
 }
 
 func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
@@ -58,15 +58,15 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 }
 
 func (w *wildcards) save(ctx context.Context) error {
-	name := stackrecords.WildcardRecord(environment.TierPreview)
-	record, err := records.ReadOrEmpty(ctx, w.records, name)
+	name := stackrecords.WildcardKey(environment.TierPreview)
+	record, err := keyvalue.ReadOrEmpty(ctx, w.keyValues, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if record.Bytes, err = json.Marshal(w.recorded); err != nil {
+	if record.Value, err = json.Marshal(w.recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := w.records.Write(ctx, record); err != nil {
+	if _, err := w.keyValues.Write(ctx, record); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
@@ -223,14 +223,14 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 }
 
 func recordedPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.PreviewWildcard, error) {
-	recorded, err := stackrecords.ReadWildcard(ctx, p.Records())
+	recorded, err := stackrecords.ReadWildcard(ctx, p.KeyValues())
 	if err != nil {
 		return nil, err
 	}
 	if recorded.BaseDomain == "" {
 		return nil, nil
 	}
-	w := &wildcards{provider: p, records: p.Records(), recorded: recorded}
+	w := &wildcards{provider: p, keyValues: p.KeyValues(), recorded: recorded}
 	wildcard := w.proto(ctx)
 	health, err := p.Certificates().Inspect(ctx, recorded.Edge, recorded.Hostname(), recorded.Host.Certificate)
 	if err != nil {
@@ -273,7 +273,7 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 }
 
 func (w *wildcards) served(ctx context.Context) ([]string, error) {
-	return stackrecords.ProjectsServedOnPreview(ctx, w.records, w.recorded.BaseDomain)
+	return stackrecords.ProjectsServedOnPreview(ctx, w.keyValues, w.recorded.BaseDomain)
 }
 
 func (w *wildcards) projectsWithLivePreviews(ctx context.Context) ([]string, error) {
@@ -283,7 +283,7 @@ func (w *wildcards) projectsWithLivePreviews(ctx context.Context) ([]string, err
 	}
 	var live []string
 	for _, slug := range served {
-		environments, err := stackrecords.PreviewEnvironments(ctx, w.records, slug)
+		environments, err := stackrecords.PreviewEnvironments(ctx, w.keyValues, slug)
 		if err != nil {
 			return nil, err
 		}
@@ -427,5 +427,5 @@ func (w *wildcards) release(ctx context.Context, progress progress.Progress) err
 			return err
 		}
 	}
-	return records.Forget(ctx, w.records, stackrecords.WildcardRecord(environment.TierPreview))
+	return keyvalue.Forget(ctx, w.keyValues, stackrecords.WildcardKey(environment.TierPreview))
 }

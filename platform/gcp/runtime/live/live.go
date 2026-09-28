@@ -6,8 +6,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
@@ -63,13 +63,13 @@ func FromManifest(raw []byte) (*live.Values, error) {
 		Region:    manifest.Region,
 		Endpoint:  manifest.Endpoint,
 	}
-	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
+	return Over(manifest, ports.KeyValues{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, store records.Store, cipher seal.Cipher) *live.Values {
+func Over(manifest vars.Manifest, store keyvalue.Store, cipher seal.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: envvars.EnvironmentReader{
-			Records:     store,
+			KeyValues:   store,
 			Cipher:      cipher,
 			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,

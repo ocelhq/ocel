@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -23,30 +23,30 @@ type ContainerFront struct {
 	Host      string `json:"host"`
 }
 
-func ContainerFrontRecord(tier environment.Tier) records.Name {
-	return append(stackrecords.StacksRecord(tier, ContainersSlug), containerFrontRecord)
+func ContainerFrontKey(tier environment.Tier) keyvalue.Key {
+	return stackrecords.StacksPartition(tier, ContainersSlug).Key(containerFrontRecord)
 }
 
-func ReadContainerFront(ctx context.Context, store records.Store, tier environment.Tier) (ContainerFront, bool, error) {
-	record, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(tier))
+func ReadContainerFront(ctx context.Context, store keyvalue.Store, tier environment.Tier) (ContainerFront, bool, error) {
+	record, err := keyvalue.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
 	if err != nil {
 		return ContainerFront{}, false, err
 	}
-	if len(record.Bytes) == 0 {
+	if len(record.Value) == 0 {
 		return ContainerFront{}, false, nil
 	}
 	var front ContainerFront
-	if err := json.Unmarshal(record.Bytes, &front); err != nil {
-		return ContainerFront{}, false, fmt.Errorf("read the container front %s records: %w", record.Name, err)
+	if err := json.Unmarshal(record.Value, &front); err != nil {
+		return ContainerFront{}, false, fmt.Errorf("read the container front %s records: %w", record.Key, err)
 	}
 	if front.VPCOrigin == "" || front.Host == "" {
-		return ContainerFront{}, false, fmt.Errorf("the container front %s records names no VPC origin or host", record.Name)
+		return ContainerFront{}, false, fmt.Errorf("the container front %s records names no VPC origin or host", record.Key)
 	}
 	return front, true, nil
 }
 
-func WriteContainerFront(ctx context.Context, store records.Store, tier environment.Tier, front ContainerFront) error {
-	current, err := records.ReadOrEmpty(ctx, store, ContainerFrontRecord(tier))
+func WriteContainerFront(ctx context.Context, store keyvalue.Store, tier environment.Tier, front ContainerFront) error {
+	current, err := keyvalue.ReadOrEmpty(ctx, store, ContainerFrontKey(tier))
 	if err != nil {
 		return err
 	}
@@ -54,10 +54,10 @@ func WriteContainerFront(ctx context.Context, store records.Store, tier environm
 	if err != nil {
 		return fmt.Errorf("encode the container front: %w", err)
 	}
-	if string(current.Bytes) == string(encoded) {
+	if string(current.Value) == string(encoded) {
 		return nil
 	}
-	current.Bytes = encoded
+	current.Value = encoded
 	if _, err := store.Write(ctx, current); err != nil {
 		return fmt.Errorf("record the container front the %s tier answers behind: %w", tier, err)
 	}

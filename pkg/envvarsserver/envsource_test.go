@@ -161,7 +161,7 @@ func servedWithIdentity(t *testing.T) envvarsv1connect.EnvVarsServiceClient {
 	t.Helper()
 	provider := fake.NewProvider(fake.Options{})
 	return serve(t, &envvarsserver.Service{CallerNamesEnvSource: true, Source: envvarsserver.FixedBackend{
-		Records:       provider.Records(),
+		KeyValues:     provider.KeyValues(),
 		Cipher:        provider.Cipher(),
 		ProveIdentity: provider.ProveIdentity,
 	}})
@@ -170,7 +170,7 @@ func servedWithIdentity(t *testing.T) envvarsv1connect.EnvVarsServiceClient {
 func servedToDeployAndConnector(t *testing.T) (deploy, connector envvarsv1connect.EnvVarsServiceClient) {
 	t.Helper()
 	provider := fake.NewProvider(fake.Options{})
-	backend := envvarsserver.FixedBackend{Records: provider.Records(), Cipher: provider.Cipher()}
+	backend := envvarsserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher()}
 	return serve(t, &envvarsserver.Service{Source: backend, CallerNamesEnvSource: true}), serve(t, &envvarsserver.Service{Source: backend})
 }
 

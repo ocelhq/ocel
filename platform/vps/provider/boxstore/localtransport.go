@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -28,7 +28,7 @@ func (LocalTransport) HasStore(_ context.Context, tier environment.Tier) (bool, 
 	return err == nil && info.IsDir(), nil
 }
 
-func (LocalTransport) Records(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+func (LocalTransport) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
 	stdout, stderr, code, err := runCommand(ctx, stdin, RecordsHelper, append([]string{string(tier)}, argv...)...)
 	switch {
 	case err != nil:
@@ -36,9 +36,9 @@ func (LocalTransport) Records(ctx context.Context, tier environment.Tier, stdin 
 	case code == 0:
 		return stdout, nil
 	case code == ExitNoRecord:
-		return "", records.ErrNotFound
+		return "", keyvalue.ErrNotFound
 	case code == ExitStale:
-		return "", records.ErrStale
+		return "", keyvalue.ErrStale
 	default:
 		return "", refusal.Refuse(refusal.CodeDenied, "records %s on this host: %s", argv[0], describeFailure(stderr, code))
 	}
@@ -83,6 +83,6 @@ func describeFailure(stderr string, code int) string {
 }
 
 var (
-	_ RecordTransport = LocalTransport{}
-	_ SealTransport   = LocalTransport{}
+	_ KeyValueTransport = LocalTransport{}
+	_ SealTransport     = LocalTransport{}
 )

@@ -11,9 +11,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -32,14 +34,14 @@ func (splitTables) ValuesTable(context.Context, environment.Tier) (string, error
 	return fakeVarsTable, nil
 }
 
-func newSplitRecords() (awsports.Records, *fakeDynamo) {
+func newSplitRecords() (awsports.KeyValues, *fakeDynamo) {
 	ddb := newFakeDynamo()
-	return awsports.Records{Dynamo: ddb, Tables: splitTables{}}, ddb
+	return awsports.KeyValues{Dynamo: ddb, Tables: splitTables{}}, ddb
 }
 
 func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 	table, ddb := newSplitRecords()
-	store := envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}
+	store := envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
@@ -55,7 +57,7 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 	table, ddb := newSplitRecords()
 	ctx := context.Background()
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
-	registration, err := envsource.Register(ctx, envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}, environment.TierProduction, registration)
+	registration, err := envsource.Register(ctx, envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}, environment.TierProduction, registration)
 	if err != nil {
 		t.Fatalf("Register err = %v", err)
 	}
@@ -63,7 +65,7 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 	if err != nil || len(listed) != 1 || listed[0].Project != "shop" {
 		t.Fatalf("Registrations = %+v, %v", listed, err)
 	}
-	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}, Tier: environment.TierProduction}
+	sync := &envsource.Sync{Store: envvars.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}, Tier: environment.TierProduction}
 	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[envvars.Cell]envsource.Value{{Key: "K"}: {Plaintext: []byte("v")}})); err != nil {
 		t.Fatalf("CopyProjectFrom err = %v", err)
 	}
@@ -76,9 +78,9 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 func TestDeployStateStaysInTheStateTable(t *testing.T) {
 	store, ddb := newSplitRecords()
 
-	if _, err := store.Write(context.Background(), records.Record{
-		Name:  records.Name{records.RootStacks, string(environment.TierProduction), "shop"},
-		Bytes: []byte("{}"),
+	if _, err := store.Write(context.Background(), keyvalue.Entry{
+		Key:   stackrecords.StackKey(environment.TierProduction, "shop", naming.InfraStack("shop")),
+		Value: []byte("{}"),
 	}); err != nil {
 		t.Fatalf("Write err = %v", err)
 	}
@@ -128,7 +130,7 @@ func TestTheDigestKeyIsSealedUnderAnEncryptionContextNamingEveryProjectItsClassA
 	table, _ := newSplitRecords()
 	cipher, crypto := newCipher()
 
-	if _, err := envsource.EnsureDigestKey(context.Background(), envvars.Store{Records: table, Cipher: cipher}, environment.TierProduction); err != nil {
+	if _, err := envsource.EnsureDigestKey(context.Background(), envvars.Store{KeyValues: table, Cipher: cipher}, environment.TierProduction); err != nil {
 		t.Fatalf("EnsureDigestKey err = %v", err)
 	}
 

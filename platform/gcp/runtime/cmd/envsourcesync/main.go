@@ -83,8 +83,8 @@ func newSync(getenv func(string) string) (*envsource.Sync, error) {
 	}
 	return &envsource.Sync{
 		Store: envvars.Store{
-			Records: ports.Records{Clients: clients},
-			Cipher:  ports.Cipher{Clients: clients},
+			KeyValues: ports.KeyValues{Clients: clients},
+			Cipher:    ports.Cipher{Clients: clients},
 		},
 		Tier: tier,
 		Login: envsource.Login{

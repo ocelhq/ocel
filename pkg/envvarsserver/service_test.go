@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -19,7 +20,6 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -29,7 +29,7 @@ func served(t *testing.T) (envvarsv1connect.EnvVarsServiceClient, *fake.Provider
 	t.Helper()
 
 	provider := fake.NewProvider(fake.Options{})
-	backend := envvarsserver.FixedBackend{Records: provider.Records(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}
+	backend := envvarsserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}
 	return serve(t, &envvarsserver.Service{Source: backend, CallerNamesEnvSource: true}), provider
 }
 
@@ -429,8 +429,8 @@ func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
 
 func deployPreview(t *testing.T, provider *fake.Provider, preview string) {
 	t.Helper()
-	name := stackrecords.StackRecord(environment.TierPreview, slug, naming.InfraStack(preview))
-	if _, err := provider.Records().Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")}); err != nil {
+	name := stackrecords.StackKey(environment.TierPreview, slug, naming.InfraStack(preview))
+	if _, err := provider.KeyValues().Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte("{}")}); err != nil {
 		t.Fatalf("record a deployed preview environment: %v", err)
 	}
 }

@@ -30,7 +30,7 @@ func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
 	}
 	return p, Gate{
 		Bootstrap: bootstrap,
-		Records:   p.Records(),
+		KeyValues: p.KeyValues(),
 		WrittenBy: h.session.writer,
 		Edge:      kind,
 	}, nil

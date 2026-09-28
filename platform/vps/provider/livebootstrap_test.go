@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -274,8 +274,8 @@ func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
 	p := liveMachine(t).provider(t)
 	defer closing(t, p)
 
-	name := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
-	if err := records.Forget(context.Background(), p.Records(), name); err != nil {
+	name := keyvalue.Partition{Tier: environment.TierProduction, Root: keyvalue.RootConformance}.Key(t.Name())
+	if err := keyvalue.Forget(context.Background(), p.KeyValues(), name); err != nil {
 		t.Fatalf("Forget() of a record nothing wrote = %v, want cleanup idempotent from the store's point of view", err)
 	}
 }

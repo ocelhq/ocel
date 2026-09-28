@@ -12,10 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -207,7 +207,7 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
-func edgeOver(m *machine, store records.Store) *box.Edge {
+func edgeOver(m *machine, store keyvalue.Store) *box.Edge {
 	return box.New(m, m.ApplyOrigins, store, sshScope)
 }
 
@@ -248,11 +248,11 @@ func TestTheBoxEdge(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		Hostname: "shop.example.com",
 		New: func(*testing.T) (edge.Edge, edge.StackSpec) {
-			return edgeOver(aMachine(), fake.NewRecords()),
+			return edgeOver(aMachine(), fake.NewKeyValues()),
 				edge.StackSpec{Version: "test", Tier: environment.TierProduction, Slug: slug}
 		},
 		Previews: func(*testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
-			return edgeOver(aMachine(), fake.NewRecords()),
+			return edgeOver(aMachine(), fake.NewKeyValues()),
 				edge.StackSpec{Version: "test", Tier: environment.TierPreview, Slug: slug},
 				previewSpec()
 		},
@@ -263,7 +263,7 @@ func reconciled(t *testing.T) (*machine, *box.Edge, edge.EdgeStack) {
 	t.Helper()
 
 	m := aMachine()
-	front := edgeOver(m, fake.NewRecords())
+	front := edgeOver(m, fake.NewKeyValues())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
@@ -293,7 +293,7 @@ func imageFor(app, identity string) string { return "ghcr.io/acme/" + app + ":" 
 func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 	t.Parallel()
 
-	front := edgeOver(aMachine(), fake.NewRecords())
+	front := edgeOver(aMachine(), fake.NewKeyValues())
 	facts := front.Facts()
 	if facts.RunsCode || facts.SignsOriginForwards || facts.InvalidatesByCacheTag {
 		t.Errorf("Facts() = %+v; a box runs the container and nothing in front of it, its origin is one hop on a private network that verifies no signature, and there is no edge cache to tag", facts)
@@ -312,7 +312,7 @@ func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 func TestTheFlipReturnsNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
-	bound := edgeOver(aMachine(), fake.NewRecords()).Facts().FlipBound
+	bound := edgeOver(aMachine(), fake.NewKeyValues()).Facts().FlipBound
 	if bound.Typical > 0 {
 		t.Errorf("Facts().FlipBound = %+v, and a bound above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
 	}
@@ -325,7 +325,7 @@ func TestBootstrappingTheEdgeTouchesTheBoxNotAtAll(t *testing.T) {
 	t.Parallel()
 
 	m := aMachine()
-	front := edgeOver(m, fake.NewRecords())
+	front := edgeOver(m, fake.NewKeyValues())
 	out, err := front.Bootstrap(context.Background(), environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
@@ -436,23 +436,23 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	}
 }
 
-type honouring struct{ records.Store }
+type honouring struct{ keyvalue.Store }
 
-func (h honouring) Read(ctx context.Context, name records.Name) (records.Record, error) {
+func (h honouring) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return records.Record{}, err
+		return keyvalue.Entry{}, err
 	}
 	return h.Store.Read(ctx, name)
 }
 
-func (h honouring) Write(ctx context.Context, record records.Record) (records.Revision, error) {
+func (h honouring) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	return h.Store.Write(ctx, record)
 }
 
-func (h honouring) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
+func (h honouring) Remove(ctx context.Context, name keyvalue.Key, expected keyvalue.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -463,7 +463,7 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 	t.Parallel()
 
 	m := aMachine()
-	front := edgeOver(m, honouring{fake.NewRecords()})
+	front := edgeOver(m, honouring{fake.NewKeyValues()})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
@@ -494,7 +494,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	t.Parallel()
 
 	m := aMachine()
-	store := fake.NewRecords()
+	store := fake.NewKeyValues()
 	front := edgeOver(m, store)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: slug,
@@ -579,13 +579,13 @@ func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 }
 
 type staleAt struct {
-	records.Store
+	keyvalue.Store
 	at string
 }
 
-func (s staleAt) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	if slices.Contains(record.Name, s.at) {
-		return "", records.ErrStale
+func (s staleAt) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+	if slices.Contains(record.Key.Path, s.at) {
+		return "", keyvalue.ErrStale
 	}
 	return s.Store.Write(ctx, record)
 }
@@ -594,7 +594,7 @@ func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	t.Parallel()
 
 	m := aMachine()
-	front := edgeOver(m, staleAt{Store: fake.NewRecords(), at: "pointers"})
+	front := edgeOver(m, staleAt{Store: fake.NewKeyValues(), at: "pointers"})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: slug,
 	}, edge.StackState{})
@@ -757,7 +757,7 @@ func TestATeardownTakesTheClaimsTheBoxRecordsRatherThanTheOnesItsStateRemembers(
 	const hostname = "moving.example.com"
 	ctx := context.Background()
 	m := aMachine()
-	front := edgeOver(m, fake.NewRecords())
+	front := edgeOver(m, fake.NewKeyValues())
 	first := reconciledOn(t, m, "shop")
 	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
@@ -795,7 +795,7 @@ func TestAHostnameAnotherProjectStillClaimsIsRefusedNamingWhoClaimsIt(t *testing
 	if !strings.Contains(err.Error(), box.Surface("shop", environment.TierProduction)) {
 		t.Errorf("the refusal reads %q and never names the surface claiming %q, so nobody knows where to unbind it", err, hostname)
 	}
-	owner, err := edgeOver(m, fake.NewRecords()).DomainOwner(ctx, hostname)
+	owner, err := edgeOver(m, fake.NewKeyValues()).DomainOwner(ctx, hostname)
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
@@ -807,7 +807,7 @@ func TestAHostnameAnotherProjectStillClaimsIsRefusedNamingWhoClaimsIt(t *testing
 func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testing.T) {
 	t.Parallel()
 
-	front := edgeOver(aMachine(), fake.NewRecords())
+	front := edgeOver(aMachine(), fake.NewKeyValues())
 	groups := front.ProjectRemovals(edge.ProjectScope{
 		Slug: slug, Tier: environment.TierProduction, Hostnames: []string{"shop.example.com"}, Front: address,
 	})
@@ -846,7 +846,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *t
 	at := caddy.PinsDir + "/wildcard"
 	m := aMachine()
 	m.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
-	front := edgeOver(m, fake.NewRecords())
+	front := edgeOver(m, fake.NewKeyValues())
 
 	kept := map[string]edge.PlanChange{}
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
@@ -876,7 +876,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 	t.Parallel()
 
 	const wildcard = "*.preview.example.com"
-	front := edgeOver(aMachine(), fake.NewRecords())
+	front := edgeOver(aMachine(), fake.NewKeyValues())
 	removed, kept := front.PreviewWildcardRemovals(wildcard)
 
 	if removed.Action != edge.PlanDelete {
@@ -898,7 +898,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 	t.Parallel()
 
-	shared := edgeOver(aMachine(), fake.NewRecords()).SharedPreviewRemoval()
+	shared := edgeOver(aMachine(), fake.NewKeyValues()).SharedPreviewRemoval()
 	if shared.Action != edge.PlanKeep {
 		t.Errorf("the shared catch-all is actioned %q, want %q: it is a bootstrap item and it answers for every project this box serves", shared.Action, edge.PlanKeep)
 	}
@@ -916,7 +916,7 @@ func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 func reconciledOn(t *testing.T, m *machine, named string) edge.EdgeStack {
 	t.Helper()
 
-	front := edgeOver(m, fake.NewRecords())
+	front := edgeOver(m, fake.NewKeyValues())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Tier: environment.TierProduction, Slug: named,
 	}, edge.StackState{})

@@ -133,8 +133,8 @@ func servedConnector(t *testing.T, at *console, grants []string) *httptest.Serve
 		Version: "test",
 		Vendor:  "fake",
 		EnvVars: envvarsserver.Backend{
-			Records: fake.NewRecords(),
-			Cipher:  fake.NewCipher(),
+			KeyValues: fake.NewKeyValues(),
+			Cipher:    fake.NewCipher(),
 		},
 	})
 	if err != nil {

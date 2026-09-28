@@ -5,14 +5,12 @@ import (
 	"context"
 	"errors"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -73,41 +71,11 @@ func TestLiveCredentials(t *testing.T) {
 func TestLiveStacks(t *testing.T) {
 	p := live(t)
 
-	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.Records())
+	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.KeyValues())
 }
 
-func TestLiveRecordStore(t *testing.T) {
-	conformance.RunStore(t, live(t).Records())
-}
-
-func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.T) {
-	ctx := context.Background()
-	store := live(t).Records()
-
-	for _, segment := range []string{"a#b", "a%b", "a/b", "a%23b"} {
-		name := records.Name{records.RootConformance, string(environment.TierProduction), t.Name(), segment}
-		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte(segment)}); err != nil {
-			t.Fatalf("Write(%s) = %v", name, err)
-		}
-	}
-
-	under := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
-	listed, err := store.List(ctx, under)
-	if err != nil {
-		t.Fatalf("List(%s) = %v", under, err)
-	}
-	if len(listed) != 4 {
-		t.Fatalf("List(%s) returned %d records, want the 4 written under it: a name a document id cannot contain collides with its neighbours", under, len(listed))
-	}
-	for _, record := range listed {
-		if len(record.Name) != 4 {
-			t.Errorf("List() returned %v, want the four segments written", record.Name)
-			continue
-		}
-		if !bytes.Equal(record.Bytes, []byte(record.Name[3])) {
-			t.Errorf("List() returned %s containing %q, want the segment read back as it was written", record.Name, record.Bytes)
-		}
-	}
+func TestLiveKeyValueStore(t *testing.T) {
+	conformance.RunStore(t, live(t).KeyValues())
 }
 
 func TestLiveTheCipherSealsAsEveryCipherMust(t *testing.T) {
@@ -217,25 +185,5 @@ func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) 
 	stored, err := artifacts.Has(ctx, ref)
 	if err != nil || !stored {
 		t.Fatalf("Has() after RemovePrefix(\"\") = %v, %v, want the artifact left where it was", stored, err)
-	}
-}
-
-func TestLiveListingUnderANameReturnsTheRecordStoredAtIt(t *testing.T) {
-	ctx := context.Background()
-	store := live(t).Records()
-
-	under := records.Name{records.RootConformance, string(environment.TierProduction), t.Name()}
-	for _, name := range []records.Name{under, append(slices.Clone(under), "beneath")} {
-		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte(name.String())}); err != nil {
-			t.Fatalf("Write(%s) = %v", name, err)
-		}
-	}
-
-	listed, err := store.List(ctx, under)
-	if err != nil {
-		t.Fatalf("List(%s) = %v", under, err)
-	}
-	if len(listed) != 2 {
-		t.Fatalf("List(%s) returned %d records, want the record at the name and the one beneath it: the sibling store answers with both", under, len(listed))
 	}
 }

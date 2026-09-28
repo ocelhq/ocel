@@ -14,11 +14,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -88,28 +88,28 @@ func keyedAs(keys ...string) func(context.Context, environment.Tier) (string, er
 func digestKeyAfter(t *testing.T, req provider.BootstrapRequest, keys ...string) error {
 	t.Helper()
 	ctx := context.Background()
-	store := envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()}
+	store := envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: fake.NewCipher()}
 	if _, err := envsource.EnsureDigestKey(ctx, store, req.Tier); err != nil {
 		t.Fatal(err)
 	}
-	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: func() {}, key: keyedAs(keys...), records: store.Records}).
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: func() {}, key: keyedAs(keys...), keyValues: store.KeyValues}).
 		Apply(ctx, req, nil); err != nil {
 		t.Fatal(err)
 	}
-	_, err := store.Records.Read(ctx, records.Name{records.RootEnvSourceDigestKey, string(req.Tier)})
+	_, err := store.KeyValues.Read(ctx, keyvalue.Partition{Tier: req.Tier, Root: keyvalue.RootEnvSourceDigestKey}.Key("digestkey"))
 	return err
 }
 
 func TestAnApplyThatTakesTheVarsKeyAwayForgetsTheDigestKeySealedUnderIt(t *testing.T) {
 	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{provider.FeatureVarsKey}}
-	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, records.ErrNotFound) {
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", ""); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Fatalf("the digest key after the vars key was removed reads %v, want it forgotten: nothing opens it once its key is gone, and a sync never replaces a key it cannot open", err)
 	}
 }
 
 func TestAnApplyThatBringsAnotherVarsKeyForgetsTheDigestKeySealedUnderTheOldOne(t *testing.T) {
 	req := provider.BootstrapRequest{Tier: environment.TierPreview}
-	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, records.ErrNotFound) {
+	if err := digestKeyAfter(t, req, "arn:aws:kms:us-east-1:111122223333:key/one", "arn:aws:kms:us-east-1:111122223333:key/two"); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Fatalf("the digest key after the vars key changed reads %v, want it forgotten", err)
 	}
 }

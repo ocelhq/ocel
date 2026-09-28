@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -21,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -152,16 +152,16 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		AutoHeal: &healing,
 	})
 
-	recorded, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(environment.TierProduction))
+	recorded, err := vendor.KeyValues().Read(ctx, stackrecords.BootstrapKey(environment.TierProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
 	var state stackrecords.BootstrapSettings
-	if err := json.Unmarshal(recorded.Bytes, &state); err != nil || !state.AutoHeal {
-		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Bytes, err)
+	if err := json.Unmarshal(recorded.Value, &state); err != nil || !state.AutoHeal {
+		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Value, err)
 	}
 
-	written, err := stackrecords.WrittenSchema(ctx, vendor.Records(), environment.TierProduction)
+	written, err := stackrecords.WrittenSchema(ctx, vendor.KeyValues(), environment.TierProduction)
 	if err != nil || written != stackrecords.SchemaVersion {
 		t.Fatalf("WrittenSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, stackrecords.SchemaVersion)
 	}
@@ -276,9 +276,9 @@ func recordProject(t *testing.T, vendor *fake.Provider, slug string, features ..
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := vendor.Records().Write(context.Background(), records.Record{
-		Name:  stackrecords.ProjectRecord(environment.TierProduction, slug),
-		Bytes: body,
+	if _, err := vendor.KeyValues().Write(context.Background(), keyvalue.Entry{
+		Key:   stackrecords.ProjectKey(environment.TierProduction, slug),
+		Value: body,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -732,7 +732,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	if planned.GetBootstrap().GetPresent() {
 		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
 	}
-	if _, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(environment.TierProduction)); !errors.Is(err, records.ErrNotFound) {
+	if _, err := vendor.KeyValues().Read(ctx, stackrecords.BootstrapKey(environment.TierProduction)); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
 	}
 }

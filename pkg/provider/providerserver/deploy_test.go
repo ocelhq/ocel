@@ -307,7 +307,7 @@ func TestDeployRecordsEveryStackItProvisioned(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), vendor.Records(), environment.TierProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
-	if entries, rerr := stackrecords.List(context.Background(), base.Records(), environment.TierProduction, "shop"); rerr != nil || len(entries) != 0 {
+	if entries, rerr := stackrecords.List(context.Background(), base.KeyValues(), environment.TierProduction, "shop"); rerr != nil || len(entries) != 0 {
 		t.Errorf("the refused deploy recorded %v, want nothing written for a binding providerserver would not accept", entries)
 	}
 }

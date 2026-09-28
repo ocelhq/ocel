@@ -8,42 +8,42 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type edgeStateStore struct {
-	records records.Store
-	name    records.Name
+	keyValues keyvalue.Store
+	name      keyvalue.Key
 }
 
 func (s edgeStateStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
-	recorded, err := records.ReadOrEmpty(ctx, s.records, s.name)
+	recorded, err := keyvalue.ReadOrEmpty(ctx, s.keyValues, s.name)
 	if err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
 	var state stackrecords.EdgeState
-	if len(recorded.Bytes) == 0 {
+	if len(recorded.Value) == 0 {
 		return state, nil
 	}
-	if err := json.Unmarshal(recorded.Bytes, &state); err != nil {
+	if err := json.Unmarshal(recorded.Value, &state); err != nil {
 		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
 	return state, nil
 }
 
 func (s edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState) error {
-	recorded, err := records.ReadOrEmpty(ctx, s.records, s.name)
+	recorded, err := keyvalue.ReadOrEmpty(ctx, s.keyValues, s.name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
 	}
-	if recorded.Bytes, err = json.Marshal(state); err != nil {
+	if recorded.Value, err = json.Marshal(state); err != nil {
 		return fmt.Errorf("record %s: %w", s.name, err)
 	}
-	if _, err := s.records.Write(ctx, recorded); err != nil {
+	if _, err := s.keyValues.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record %s: %w", s.name, err)
 	}
 	return nil
@@ -93,7 +93,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 	if err != nil {
 		return nil, err
 	}
-	store := edgeStateStore{records: vendor.Records(), name: stackrecords.EdgeStackRecord(tier, slug)}
+	store := edgeStateStore{keyValues: vendor.KeyValues(), name: stackrecords.EdgeStackKey(tier, slug)}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err

@@ -10,9 +10,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -97,7 +97,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VarsKey, p.namespace), forget: p.forget, key: p.Key, records: p.Records()}, nil
+	return forgetting{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VarsKey, p.namespace), forget: p.forget, key: p.Key, keyValues: p.KeyValues()}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks { return p.stacks }
@@ -106,8 +106,8 @@ func (p *Provider) Artifacts() provider.ArtifactStore {
 	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}
 }
 
-func (p *Provider) Records() records.Store {
-	return awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
+func (p *Provider) KeyValues() keyvalue.Store {
+	return awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
 }
 
 func (p *Provider) Cipher() seal.Cipher {

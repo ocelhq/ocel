@@ -9,9 +9,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
@@ -46,7 +46,7 @@ const webService = "ocel-shop-prod-web"
 
 func fronting(t *testing.T, pins *pinRecorder) edge.EdgeStack {
 	t.Helper()
-	front := direct.New(fake.NewRecords(), pins)
+	front := direct.New(fake.NewKeyValues(), pins)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
@@ -169,13 +169,13 @@ func TestAPromotionThatCannotPinLeavesTheLedgerPointingWhereItDid(t *testing.T) 
 }
 
 type staleAt struct {
-	records.Store
+	keyvalue.Store
 	at string
 }
 
-func (s staleAt) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	if slices.Contains(record.Name, s.at) {
-		return "", records.ErrStale
+func (s staleAt) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+	if slices.Contains(record.Key.Path, s.at) {
+		return "", keyvalue.ErrStale
 	}
 	return s.Store.Write(ctx, record)
 }
@@ -184,7 +184,7 @@ func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
 	t.Parallel()
 
 	pins := &pinRecorder{}
-	front := direct.New(staleAt{Store: fake.NewRecords(), at: "pointers"}, pins)
+	front := direct.New(staleAt{Store: fake.NewKeyValues(), at: "pointers"}, pins)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)
@@ -200,16 +200,16 @@ func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
 	}
 }
 
-type honouring struct{ records.Store }
+type honouring struct{ keyvalue.Store }
 
-func (h honouring) Read(ctx context.Context, name records.Name) (records.Record, error) {
+func (h honouring) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return records.Record{}, err
+		return keyvalue.Entry{}, err
 	}
 	return h.Store.Read(ctx, name)
 }
 
-func (h honouring) Write(ctx context.Context, record records.Record) (records.Revision, error) {
+func (h honouring) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -220,7 +220,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 	t.Parallel()
 
 	pins := &pinRecorder{}
-	front := direct.New(honouring{fake.NewRecords()}, pins)
+	front := direct.New(honouring{fake.NewKeyValues()}, pins)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile(shop) = %v", err)

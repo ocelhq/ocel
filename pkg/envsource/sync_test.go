@@ -409,7 +409,7 @@ func TestForgettingAProjectKeepsTheStatusAnotherProjectShares(t *testing.T) {
 	if err := envsource.ForgetProject(ctx, store, environment.TierProduction, "shop"); err != nil {
 		t.Fatal(err)
 	}
-	if _, registered, _ := envsource.Registered(ctx, store.Records, environment.TierProduction, "shop"); registered {
+	if _, registered, _ := envsource.Registered(ctx, store.KeyValues, environment.TierProduction, "shop"); registered {
 		t.Fatal("a forgotten project is still registered")
 	}
 	if status := statusOf(t, store, admin); status.LastSuccessAt.IsZero() {

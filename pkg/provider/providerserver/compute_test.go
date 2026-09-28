@@ -136,7 +136,7 @@ func TestTheContainerAProvisionedAppRunsOnIsRecordedAgainstItsStack(t *testing.T
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), p.Records(), environment.TierProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), p.KeyValues(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 		t.Fatalf("Deploy() of a container app = %q", result.GetError())
 	}
 
-	releases := ledger.New(vendor.Records(), environment.TierProduction, "shop")
+	releases := ledger.New(vendor.KeyValues(), environment.TierProduction, "shop")
 	record, found, err := releases.Record(context.Background(), "web", containerTestImage)
 	if err != nil {
 		t.Fatal(err)

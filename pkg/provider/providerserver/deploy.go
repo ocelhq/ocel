@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -34,7 +35,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -227,7 +227,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		edgeSession: &edgeSession{
 			provider: p,
 			front:    front,
-			store:    edgeStateStore{records: p.Records(), name: stackrecords.EdgeStackRecord(spec.Tier, spec.Slug)},
+			store:    edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
 		},
 		gate:           gate,
 		features:       features,
@@ -237,7 +237,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		manifest:       req.GetManifest(),
 		spec:           spec,
 		selection:      req.GetEdge(),
-		values:         envvars.Store{Records: p.Records(), Cipher: p.Cipher()},
+		values:         envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()},
 		scope:          envvars.Scope{Project: spec.Slug, Tier: spec.Tier},
 		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
@@ -321,7 +321,7 @@ func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Progr
 func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	hosts := r.hostnames()
 	if r.spec.Tier == environment.TierPreview {
-		wildcard, err := stackrecords.ReadWildcard(ctx, r.provider.Records())
+		wildcard, err := stackrecords.ReadWildcard(ctx, r.provider.KeyValues())
 		if err != nil {
 			return err
 		}
@@ -364,15 +364,15 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
-	name := stackrecords.ProjectRecord(r.spec.Tier, r.spec.Slug)
-	recorded, err := records.ReadOrEmpty(ctx, r.provider.Records(), name)
+	name := stackrecords.ProjectKey(r.spec.Tier, r.spec.Slug)
+	recorded, err := keyvalue.ReadOrEmpty(ctx, r.provider.KeyValues(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if recorded.Bytes, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
+	if recorded.Value, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := r.provider.Records().Write(ctx, recorded); err != nil {
+	if _, err := r.provider.KeyValues().Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
@@ -803,7 +803,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			r.bindings = result.Bindings
-			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
+			return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, r.spec.Infra, stackrecords.Stack{
 				Kind:      provider.StackInfra,
 				Bindings:  result.Bindings,
 				WrittenBy: provider.WrittenByVersion(""),
@@ -895,7 +895,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.recordStagedDeployment(ctx, entry, facts, images, values, result); err != nil {
 				return err
 			}
-			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
+			return stackrecords.Write(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, entry.Stack, stackrecords.Stack{
 				Kind:       provider.StackApp,
 				App:        entry.App,
 				Release:    entry.Build.Release().String(),
@@ -913,7 +913,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 	if inspectStack == nil {
 		return nil
 	}
-	_, recorded, err := stackrecords.Read(ctx, r.provider.Records(), r.spec.Tier, r.spec.Slug, stack)
+	_, recorded, err := stackrecords.Read(ctx, r.provider.KeyValues(), r.spec.Tier, r.spec.Slug, stack)
 	if err != nil || recorded {
 		return err
 	}
@@ -1274,7 +1274,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if r.spec.Tier != environment.TierPreview {
 				return nil
 			}
-			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.Records(),
+			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.KeyValues(),
 				r.spec.Tier, r.spec.Slug, r.spec.Env, r.spec.Label)
 		})
 	}); err != nil {

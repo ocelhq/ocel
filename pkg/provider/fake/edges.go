@@ -10,10 +10,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -38,7 +38,7 @@ type Edges struct {
 	edges map[edge.Kind]*Edge
 }
 
-func NewEdges(store records.Store) *Edges {
+func NewEdges(store keyvalue.Store) *Edges {
 	registry := &Edges{edges: map[edge.Kind]*Edge{}}
 	for _, kind := range []edge.Kind{KindRelay, KindDirect} {
 		registry.order = append(registry.order, kind)
@@ -110,23 +110,23 @@ func kindList(kinds []edge.Kind) string {
 }
 
 type Edge struct {
-	mu       sync.Mutex
-	kind     edge.Kind
-	records  records.Store
-	ledgers  func(edge.StackState) Ledger
-	owners   map[string]string
-	wildcard string
-	specs    []edge.PreviewWildcardSpec
-	stacks   []edge.StackSpec
-	bindings []edge.DomainBinding
-	serving  map[string]string
-	serves   *[]edge.Need
-	byLabel  bool
-	refusal  error
-	unbound  error
-	bindSays string
-	warns    string
-	verify   func(context.Context) (edge.CredentialIdentity, error)
+	mu        sync.Mutex
+	kind      edge.Kind
+	keyValues keyvalue.Store
+	ledgers   func(edge.StackState) Ledger
+	owners    map[string]string
+	wildcard  string
+	specs     []edge.PreviewWildcardSpec
+	stacks    []edge.StackSpec
+	bindings  []edge.DomainBinding
+	serving   map[string]string
+	serves    *[]edge.Need
+	byLabel   bool
+	refusal   error
+	unbound   error
+	bindSays  string
+	warns     string
+	verify    func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
@@ -170,8 +170,8 @@ func (e *Edge) Serving(certificate string) bool {
 	return certificate != "" && slices.Contains(slices.Collect(maps.Values(e.serving)), certificate)
 }
 
-func newEdge(kind edge.Kind, store records.Store) *Edge {
-	return &Edge{kind: kind, records: store, owners: map[string]string{}, serving: map[string]string{}}
+func newEdge(kind edge.Kind, store keyvalue.Store) *Edge {
+	return &Edge{kind: kind, keyValues: store, owners: map[string]string{}, serving: map[string]string{}}
 }
 
 func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
@@ -323,7 +323,7 @@ func (e *Edge) open(state edge.StackState) (*Stack, error) {
 	}
 	build := e.ledgers
 	if build == nil {
-		store := e.records
+		store := e.keyValues
 		build = func(stack edge.StackState) Ledger {
 			return ledger.New(store, stack.Tier, stack.Slug)
 		}

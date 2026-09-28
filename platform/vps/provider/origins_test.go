@@ -50,7 +50,7 @@ func provisionedWithABucketDeclared(t *testing.T, declared ...string) (*box, *vp
 	ctx := context.Background()
 	machine := &box{kept: sealedRootKey()}
 	p := over(machine)
-	records := fake.NewRecords()
+	records := fake.NewKeyValues()
 	p.Recording(records)
 
 	bucket := aBucket(t, "uploads", false)

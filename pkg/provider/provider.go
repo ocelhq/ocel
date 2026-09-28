@@ -3,8 +3,8 @@ package provider
 import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
@@ -15,7 +15,7 @@ type Provider interface {
 	Bootstrap(kind edge.Kind) (Bootstrap, error)
 	Stacks() Stacks
 	Artifacts() ArtifactStore
-	Records() records.Store
+	KeyValues() keyvalue.Store
 	Cipher() seal.Cipher
 	Credentials() Credentials
 	Edges() Edges

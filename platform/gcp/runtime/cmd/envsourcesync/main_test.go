@@ -66,9 +66,9 @@ func TestTheSyncReadsItsTierFromThatProjectsRecordsAndLogsInAsItsOwnAccount(t *t
 	if sync.Tier != environment.TierPreview {
 		t.Errorf("Tier = %q, want preview", sync.Tier)
 	}
-	records, isFirestore := sync.Store.Records.(ports.Records)
+	records, isFirestore := sync.Store.KeyValues.(ports.KeyValues)
 	if !isFirestore || records.Clients.Project != "acme-prod" || records.Clients.Region != "europe-west1" || records.Clients.Namespace != "ocel" {
-		t.Errorf("Records = %+v, want the ocel database of acme-prod in europe-west1", sync.Store.Records)
+		t.Errorf("KeyValues = %+v, want the ocel database of acme-prod in europe-west1", sync.Store.KeyValues)
 	}
 	if _, isKMS := sync.Store.Cipher.(ports.Cipher); !isKMS {
 		t.Errorf("Cipher = %T, want the tier key in KMS", sync.Store.Cipher)

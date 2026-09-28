@@ -135,7 +135,7 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 	}
 	return live.New(&storeSource{
 		reader: envvars.EnvironmentReader{
-			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
+			KeyValues:   awsports.KeyValues{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
 			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,

@@ -9,10 +9,10 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -115,12 +115,12 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.NewHookStacks(p.Records(), p.Artifacts(), p.resourceHooks())
+	return resources.NewHookStacks(p.KeyValues(), p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
 
-func (p *Provider) Records() records.Store { return recordStore{p: p} }
+func (p *Provider) KeyValues() keyvalue.Store { return keyValues{p: p} }
 
 func (p *Provider) Cipher() seal.Cipher { return cipher{p: p} }
 
@@ -137,7 +137,7 @@ func (p *Provider) Credentials() provider.Credentials {
 func (p *Provider) Edges() provider.Edges {
 	return edges{
 		namespace: p.namespace,
-		records:   p.Records(),
+		keyValues: p.KeyValues(),
 		pins:      p,
 		stacks:    albStacks{p: p},
 		routes:    p,

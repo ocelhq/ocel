@@ -184,7 +184,7 @@ func TestTheStagedRecordIncludesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 	direct := provider.Edges().(*fake.Edges).Edge(fake.KindDirect)
 	stager := &stagingLedger{}
 	direct.UseLedger(func(state edge.StackState) fake.Ledger {
-		stager.Ledger = ledger.New(provider.Records(), state.Tier, state.Slug)
+		stager.Ledger = ledger.New(provider.KeyValues(), state.Tier, state.Slug)
 		return stager
 	})
 	if !direct.Facts().Compatibility.IsZero() {

@@ -49,7 +49,7 @@ func publishRecord(t *testing.T, vendor *fake.Provider, tier environment.Tier, o
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}
-	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
+	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	scope := envvars.Scope{Project: "shop", Tier: tier}
 	if _, err := store.SetBindings(context.Background(), scope, "", owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 		t.Fatalf("SetBindings: %v", err)

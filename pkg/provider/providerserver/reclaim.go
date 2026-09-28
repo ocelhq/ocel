@@ -31,7 +31,7 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 }
 
 func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress progress.Progress) error {
-	entries, err := stackrecords.List(ctx, p.Records(), environment.TierPreview, slug)
+	entries, err := stackrecords.List(ctx, p.KeyValues(), environment.TierPreview, slug)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointe
 			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
 			continue
 		}
-		if err := stackrecords.Forget(ctx, p.Records(), environment.TierPreview, slug, entry.Name); err != nil {
+		if err := stackrecords.Forget(ctx, p.KeyValues(), environment.TierPreview, slug, entry.Name); err != nil {
 			errs = append(errs, err)
 		}
 		if entry.Name.IsInfra() {
@@ -184,7 +184,7 @@ func destroyReclaimTargets(
 			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
 			continue
 		}
-		if err := stackrecords.Forget(ctx, p.Records(), tier, slug, target.Stack); err != nil {
+		if err := stackrecords.Forget(ctx, p.KeyValues(), tier, slug, target.Stack); err != nil {
 			errs = append(errs, err)
 		}
 		for _, prefix := range target.Prefixes {

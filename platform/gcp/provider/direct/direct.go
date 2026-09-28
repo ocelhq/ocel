@@ -5,10 +5,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
@@ -17,12 +17,12 @@ import (
 const Kind edge.Kind = "direct"
 
 type Edge struct {
-	records records.Store
-	pins    pin.Pins
+	keyValues keyvalue.Store
+	pins      pin.Pins
 }
 
-func New(store records.Store, pins pin.Pins) *Edge {
-	return &Edge{records: store, pins: pins}
+func New(store keyvalue.Store, pins pin.Pins) *Edge {
+	return &Edge{keyValues: store, pins: pins}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }
@@ -117,7 +117,7 @@ var (
 func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
-	return ledger.New(s.e.records, s.state.Tier, s.state.Slug)
+	return ledger.New(s.e.keyValues, s.state.Tier, s.state.Slug)
 }
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }

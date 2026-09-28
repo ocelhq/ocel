@@ -17,10 +17,10 @@ import (
 	"google.golang.org/api/serviceusage/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -103,7 +103,7 @@ func TestLiveTheBootstrapProvisionsTheStackTheDataPortsRead(t *testing.T) {
 
 	t.Run("Cipher", func(t *testing.T) { conformance.RunCipher(t, p.Cipher()) })
 	t.Run("ArtifactStore", func(t *testing.T) { conformance.RunArtifactStore(t, p.Facts(), p.Artifacts()) })
-	t.Run("Store", func(t *testing.T) { conformance.RunStore(t, p.Records()) })
+	t.Run("Store", func(t *testing.T) { conformance.RunStore(t, p.KeyValues()) })
 }
 
 func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItProvisioned(t *testing.T) {
@@ -865,15 +865,15 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", tier, err)
 	}
-	kept := map[environment.Tier]records.Name{}
+	kept := map[environment.Tier]keyvalue.Key{}
 	for _, each := range []environment.Tier{environment.TierProduction, tier} {
-		kept[each] = records.Name{records.RootEnvSourceDigestKey, string(each)}
-		if _, err := p.Records().Write(ctx, records.Record{Name: kept[each], Bytes: []byte("sealed")}); err != nil {
+		kept[each] = keyvalue.Partition{Tier: each, Root: keyvalue.RootEnvSourceDigestKey}.Key("digestkey")
+		if _, err := p.KeyValues().Write(ctx, keyvalue.Entry{Key: kept[each], Value: []byte(`{"sealed":"c2VhbGVk"}`)}); err != nil {
 			t.Fatalf("Write(%s) = %v", kept[each], err)
 		}
 	}
 	t.Cleanup(func() {
-		if err := records.Forget(ctx, p.Records(), kept[environment.TierProduction]); err != nil {
+		if err := keyvalue.Forget(ctx, p.KeyValues(), kept[environment.TierProduction]); err != nil {
 			t.Errorf("Forget(%s) = %v", kept[environment.TierProduction], err)
 		}
 	})
@@ -881,11 +881,11 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 	if err := bootstrap.Remove(ctx, tier, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", tier, err)
 	}
-	if _, err := p.Records().Read(ctx, kept[tier]); !errors.Is(err, records.ErrNotFound) {
+	if _, err := p.KeyValues().Read(ctx, kept[tier]); !errors.Is(err, keyvalue.ErrNotFound) {
 		t.Errorf("Read(%s) after its tier was removed = %v, want it gone: it was sealed under the key the removal destroyed, and the database outlives the tier while %s stays",
 			kept[tier], err, environment.TierProduction)
 	}
-	if _, err := p.Records().Read(ctx, kept[environment.TierProduction]); err != nil {
+	if _, err := p.KeyValues().Read(ctx, kept[environment.TierProduction]); err != nil {
 		t.Errorf("Read(%s) after the other tier was removed = %v, want it kept", kept[environment.TierProduction], err)
 	}
 }

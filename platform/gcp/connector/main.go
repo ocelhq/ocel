@@ -76,7 +76,7 @@ func run(listen, config string, reporting bool) error {
 
 func envVars(bindings *ports.Clients) envvarsserver.Backend {
 	return envvarsserver.Backend{
-		Records:       ports.Records{Clients: bindings},
+		KeyValues:     ports.KeyValues{Clients: bindings},
 		Cipher:        ports.Cipher{Clients: bindings},
 		ProveIdentity: ports.ProveIdentity,
 	}

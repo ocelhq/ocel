@@ -2,10 +2,11 @@ package envvars
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 )
 
 const (
@@ -75,68 +76,75 @@ func plainFolder(folder string) string {
 	return folder
 }
 
-func ScopedRecordName(scope Scope, rest ...string) records.Name {
-	return append(records.Name{records.RootValues, scope.Project, string(scope.Tier)}, rest...)
+func ValuesPartition(scope Scope) keyvalue.Partition {
+	return keyvalue.Partition{Tier: scope.Tier, Root: keyvalue.RootValues, Path: []string{scope.Project}}
 }
 
-func cellsName(scope Scope) records.Name { return ScopedRecordName(scope, "cells") }
+func cellsPrefix(scope Scope) keyvalue.Key { return ValuesPartition(scope).Key("cells") }
 
-func cellName(scope Scope, at Coordinate) records.Name {
+func cellKey(scope Scope, at Coordinate) keyvalue.Key {
 	at = at.canonical()
-	return ScopedRecordName(scope, "cells", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
+	return ValuesPartition(scope).Key("cells", at.Folder, at.Key, at.Environment)
 }
 
-func historyName(scope Scope, at Coordinate) records.Name {
+func historyPrefix(scope Scope, at Coordinate) keyvalue.Key {
 	at = at.canonical()
-	return ScopedRecordName(scope, "history", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
+	return ValuesPartition(scope).Key("history", at.Folder, at.Key, at.Environment)
 }
 
-func versionName(scope Scope, at Coordinate, version int64) records.Name {
-	return append(historyName(scope, at), fmt.Sprintf("%0*d", versionDigits, version))
+func versionKey(scope Scope, at Coordinate, version int64) keyvalue.Key {
+	history := historyPrefix(scope, at)
+	return history.Partition.Key(append(history.Path, fmt.Sprintf("%0*d", versionDigits, version))...)
 }
 
-func bindingsName(scope Scope) records.Name { return ScopedRecordName(scope, "bindings") }
+func bindingsPrefix(scope Scope) keyvalue.Key { return ValuesPartition(scope).Key("bindings") }
 
-func bindingName(scope Scope, binding string) records.Name {
-	return ScopedRecordName(scope, "bindings", records.Escape(binding))
+func bindingPrefix(scope Scope, binding string) keyvalue.Key {
+	return ValuesPartition(scope).Key("bindings", binding)
 }
 
-func bindingRecordName(scope Scope, binding, environment string) records.Name {
-	return append(bindingName(scope, binding), "records", records.Escape(canonicalEnvironment(environment)))
+func bindingRecordAt(scope Scope, binding, environment string) keyvalue.Key {
+	return ValuesPartition(scope).Key("bindings", binding, "records", canonicalEnvironment(environment))
 }
 
-func bindingValueName(scope Scope, binding, environment string) records.Name {
-	return append(bindingName(scope, binding), "values", records.Escape(canonicalEnvironment(environment)))
+func bindingValueAt(scope Scope, binding, environment string) keyvalue.Key {
+	return ValuesPartition(scope).Key("bindings", binding, "values", canonicalEnvironment(environment))
 }
 
-func bindingOwnersName(scope Scope) records.Name { return ScopedRecordName(scope, "bindingowners") }
-
-func bindingOwnerName(scope Scope, owner, environment string) records.Name {
-	return ScopedRecordName(scope, "bindingowners", records.Escape(owner), records.Escape(canonicalEnvironment(environment)))
+func bindingOwnersPrefix(scope Scope) keyvalue.Key {
+	return ValuesPartition(scope).Key("bindingowners")
 }
 
-func ReferencesRecordName(scope Scope) records.Name {
-	return records.Name{records.RootValueRefs, string(scope.Tier), scope.Project}
+func bindingOwnerKey(scope Scope, owner, environment string) keyvalue.Key {
+	return ValuesPartition(scope).Key("bindingowners", owner, canonicalEnvironment(environment))
 }
 
-func refsName(target Scope, at Coordinate) records.Name {
+func ReferencesPartition(scope Scope) keyvalue.Partition {
+	return keyvalue.Partition{Tier: scope.Tier, Root: keyvalue.RootValueRefs, Path: []string{scope.Project}}
+}
+
+func refsPrefix(target Scope, at Coordinate) keyvalue.Key {
 	at = at.canonical()
-	return append(ReferencesRecordName(target), records.Escape(at.Folder), records.Escape(at.Key))
+	return ReferencesPartition(target).Key(at.Folder, at.Key)
 }
 
-func refName(target Scope, at Coordinate, from Scope, sourceAt Coordinate) records.Name {
-	sourceAt = sourceAt.canonical()
-	return append(refsName(target, at), from.Project, records.Escape(sourceAt.Folder), records.Escape(sourceAt.Key), records.Escape(sourceAt.Environment))
+func refKey(target Scope, at Coordinate, from Scope, sourceAt Coordinate) keyvalue.Key {
+	at, sourceAt = at.canonical(), sourceAt.canonical()
+	return ReferencesPartition(target).Key(at.Folder, at.Key, from.Project, sourceAt.Folder, sourceAt.Key, sourceAt.Environment)
 }
 
-func cellOf(name records.Name) (Coordinate, bool) {
-	if len(name) < 3 {
+func (s Store) listUnder(ctx context.Context, prefix keyvalue.Key) ([]keyvalue.Entry, error) {
+	return s.KeyValues.List(ctx, prefix.Partition, prefix.Path...)
+}
+
+func cellOf(key keyvalue.Key) (Coordinate, bool) {
+	if len(key.Path) < 3 {
 		return Coordinate{}, false
 	}
-	tail := name[len(name)-3:]
-	folder, key, environment := records.Unescape(tail[0]), records.Unescape(tail[1]), records.Unescape(tail[2])
-	if folder == "" || key == "" || environment == "" {
+	tail := key.Path[len(key.Path)-3:]
+	folder, name, environment := tail[0], tail[1], tail[2]
+	if folder == "" || name == "" || environment == "" {
 		return Coordinate{}, false
 	}
-	return Coordinate{Cell: Cell{Folder: plainFolder(folder), Key: key}, Environment: plainEnvironment(environment)}, true
+	return Coordinate{Cell: Cell{Folder: plainFolder(folder), Key: name}, Environment: plainEnvironment(environment)}, true
 }

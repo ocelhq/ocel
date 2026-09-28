@@ -94,7 +94,7 @@ func (b *box) proxied() string {
 
 func withBuckets(t *testing.T, p *vps.Provider, stack naming.StackName, named ...string) {
 	t.Helper()
-	records := fake.NewRecords()
+	records := fake.NewKeyValues()
 	bindings := make([]provider.Binding, 0, len(named))
 	for _, name := range named {
 		binding := bindingBucket()

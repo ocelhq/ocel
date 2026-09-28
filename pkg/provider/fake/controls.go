@@ -47,7 +47,7 @@ func (p *Provider) FakeBootstrap() *Bootstrap { return p.bootstrap }
 func (p *Provider) Journal() []string { return p.journal.Entries() }
 
 func (p *Provider) ResourceStacks(hooks resources.Hooks) *Provider {
-	p.resourceStacks = resources.NewHookStacks(p.records, p.artifacts, hooks)
+	p.resourceStacks = resources.NewHookStacks(p.keyValues, p.artifacts, hooks)
 	return p
 }
 

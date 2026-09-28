@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -20,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -36,7 +36,7 @@ func deployed(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug s
 func promoted(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
-	if err := ledger.New(vendor.Records(), tier, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
+	if err := ledger.New(vendor.KeyValues(), tier, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -47,26 +47,26 @@ func seedStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug 
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := stackrecords.EdgeStackRecord(tier, slug)
-	recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
+	name := stackrecords.EdgeStackKey(tier, slug)
+	recorded, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recorded.Bytes = encoded
-	if _, err := vendor.Records().Write(context.Background(), recorded); err != nil {
+	recorded.Value = encoded
+	if _, err := vendor.KeyValues().Write(context.Background(), recorded); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func readStack(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) stackrecords.EdgeState {
 	t.Helper()
-	recorded, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.EdgeStackRecord(tier, slug))
+	recorded, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.EdgeStackKey(tier, slug))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var state stackrecords.EdgeState
-	if len(recorded.Bytes) > 0 {
-		if err := json.Unmarshal(recorded.Bytes, &state); err != nil {
+	if len(recorded.Value) > 0 {
+		if err := json.Unmarshal(recorded.Value, &state); err != nil {
 			t.Fatal(err)
 		}
 	}

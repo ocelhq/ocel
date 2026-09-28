@@ -38,11 +38,7 @@ func liveConfig() Config {
 
 func partitionOf(t *testing.T, slug string) string {
 	t.Helper()
-	partition, err := valuePartition(slug, varsTier)
-	if err != nil {
-		t.Fatalf("valuePartition: %v", err)
-	}
-	return partition
+	return valuePartition(slug, varsTier)
 }
 
 func scopedVariable(key, folder string, class resourcesv1.VariableClass) *contractv1.ManifestVariable {

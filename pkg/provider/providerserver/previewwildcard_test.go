@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -20,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -47,26 +47,26 @@ func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wil
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := stackrecords.WildcardRecord(environment.TierPreview)
-	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
+	name := stackrecords.WildcardKey(environment.TierPreview)
+	record, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record.Bytes = encoded
-	if _, err := vendor.Records().Write(context.Background(), record); err != nil {
+	record.Value = encoded
+	if _, err := vendor.KeyValues().Write(context.Background(), record); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func readRecordedWildcard(t *testing.T, vendor *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
-	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.WildcardRecord(environment.TierPreview))
+	record, err := keyvalue.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.WildcardKey(environment.TierPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var wildcard stackrecords.Wildcard
-	if len(record.Bytes) > 0 {
-		if err := json.Unmarshal(record.Bytes, &wildcard); err != nil {
+	if len(record.Value) > 0 {
+		if err := json.Unmarshal(record.Value, &wildcard); err != nil {
 			t.Fatal(err)
 		}
 	}

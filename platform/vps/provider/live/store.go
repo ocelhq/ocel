@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,10 +14,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
-	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const (
@@ -26,11 +25,13 @@ const (
 )
 
 const (
-	recordSuffix = ".rec"
+	EntrySuffix  = ".json"
 	sealKeyFile  = "seal.key"
 	sealKeyBytes = 32
 	sealNonce    = 12
 	sealTag      = 16
+
+	partitionJoiner = "+"
 )
 
 func RecordsDir(root string, tier environment.Tier) string {
@@ -41,63 +42,62 @@ func KeyPath(root string, tier environment.Tier) string {
 	return filepath.Join(root, string(tier), sealKeyFile)
 }
 
-var errReadOnly = errors.New("the box's records are read-only here")
+var errReadOnly = errors.New("the box's entries are read-only here")
 
-type Records struct{ Root string }
+type KeyValues struct{ Root string }
 
-func (r Records) Read(_ context.Context, name records.Name) (records.Record, error) {
-	tier, encoded, err := Located(name)
+func (s KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	path, err := PathOf(key)
 	if err != nil {
-		return records.Record{}, err
+		return keyvalue.Entry{}, err
 	}
-	raw, err := os.ReadFile(filepath.Join(RecordsDir(r.Root, tier), encoded+recordSuffix))
+	raw, err := os.ReadFile(filepath.Join(RecordsDir(s.Root, key.Partition.Tier), path+EntrySuffix))
 	if errors.Is(err, fs.ErrNotExist) {
-		return records.Record{}, records.ErrNotFound
+		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
 	if err != nil {
-		return records.Record{}, err
+		return keyvalue.Entry{}, err
 	}
-	revision, body, err := row(string(raw))
-	if err != nil {
-		return records.Record{}, fmt.Errorf("%s: %w", name, err)
-	}
-	return records.Record{Name: name, Bytes: body, Revision: revision}, nil
+	return entryOf(key, raw)
 }
 
-func (r Records) List(_ context.Context, under records.Name) ([]records.Record, error) {
-	tier, encoded, err := Located(under)
+func (s KeyValues) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	dir, err := PartitionDir(in)
 	if err != nil {
 		return nil, err
 	}
-	dir := RecordsDir(r.Root, tier)
-	var found []records.Record
-	err = filepath.WalkDir(filepath.Join(dir, encoded), func(path string, entry fs.DirEntry, err error) error {
+	partition := filepath.Join(RecordsDir(s.Root, in.Tier), dir)
+	beneath := partition
+	var found []keyvalue.Entry
+	if len(under) > 0 {
+		prefix, err := encodePath(under)
+		if err != nil {
+			return nil, err
+		}
+		beneath = filepath.Join(partition, prefix)
+		entry, err := s.entryAt(in, partition, beneath+EntrySuffix)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		if err == nil {
+			found = append(found, entry)
+		}
+	}
+	err = filepath.WalkDir(beneath, func(path string, visited fs.DirEntry, err error) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), recordSuffix) {
+		if visited.IsDir() || !strings.HasSuffix(visited.Name(), EntrySuffix) {
 			return nil
 		}
-		relative, err := filepath.Rel(dir, strings.TrimSuffix(path, recordSuffix))
+		entry, err := s.entryAt(in, partition, path)
 		if err != nil {
 			return err
 		}
-		name, err := DecodeName(filepath.ToSlash(relative))
-		if err != nil {
-			return err
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		revision, body, err := row(string(raw))
-		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		found = append(found, records.Record{Name: name, Bytes: body, Revision: revision})
+		found = append(found, entry)
 		return nil
 	})
 	if err != nil {
@@ -106,28 +106,45 @@ func (r Records) List(_ context.Context, under records.Name) ([]records.Record, 
 	return found, nil
 }
 
-func (Records) Write(context.Context, records.Record) (records.Revision, error) {
+func (s KeyValues) entryAt(in keyvalue.Partition, partition, path string) (keyvalue.Entry, error) {
+	relative, err := filepath.Rel(partition, strings.TrimSuffix(path, EntrySuffix))
+	if err != nil {
+		return keyvalue.Entry{}, err
+	}
+	key, err := KeyOf(in, filepath.ToSlash(relative))
+	if err != nil {
+		return keyvalue.Entry{}, err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return keyvalue.Entry{}, err
+	}
+	return entryOf(key, raw)
+}
+
+func (KeyValues) Write(context.Context, keyvalue.Entry) (keyvalue.Revision, error) {
 	return "", errReadOnly
 }
 
-func (Records) WritePair(context.Context, records.Record, records.Record) error {
+func (KeyValues) WritePair(context.Context, keyvalue.Entry, keyvalue.Entry) error {
 	return errReadOnly
 }
 
-func (Records) Remove(context.Context, records.Name, records.Revision) error {
+func (KeyValues) Remove(context.Context, keyvalue.Key, keyvalue.Revision) error {
 	return errReadOnly
 }
 
-func row(raw string) (records.Revision, []byte, error) {
-	revision, encoded, split := strings.Cut(strings.TrimRight(raw, "\n"), "\n")
-	if !split || revision == "" {
-		return "", nil, errors.New("the record on disk has no revision line")
+type entryFile struct {
+	Revision keyvalue.Revision `json:"revision"`
+	Value    json.RawMessage   `json:"value"`
+}
+
+func entryOf(key keyvalue.Key, raw []byte) (keyvalue.Entry, error) {
+	var file entryFile
+	if err := json.Unmarshal(raw, &file); err != nil || file.Revision == "" || len(file.Value) == 0 {
+		return keyvalue.Entry{}, refusal.Refuse(refusal.CodeDenied, "%s is not an entry ocel wrote", key)
 	}
-	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
-	if err != nil {
-		return "", nil, errors.New("the record on disk is not in ocel's format")
-	}
-	return records.Revision(revision), body, nil
+	return keyvalue.Entry{Key: key, Value: file.Value, Revision: file.Revision}, nil
 }
 
 type Cipher struct{ Root string }
@@ -169,25 +186,37 @@ func Open(key []byte, bound seal.AssociatedData, sealed []byte) ([]byte, error) 
 	return plaintext, nil
 }
 
-func Located(name records.Name) (environment.Tier, string, error) {
-	tier, named := stackrecords.TierOf(name)
-	if !named {
-		return "", "", refusal.Refuse(refusal.CodeInvalid,
-			"%s names no tier", name)
+func PartitionDir(in keyvalue.Partition) (string, error) {
+	if err := keyvalue.RefuseMalformedPartition(in); err != nil {
+		return "", err
 	}
-	encoded, err := EncodeName(name)
-	if err != nil {
-		return "", "", err
+	segments := make([]string, 0, 1+len(in.Path))
+	for _, segment := range append([]string{in.Root}, in.Path...) {
+		segments = append(segments, encodeSegment(segment))
 	}
-	return tier, encoded, nil
+	return strings.Join(segments, partitionJoiner), nil
 }
 
-func EncodeName(name records.Name) (string, error) {
-	segments := make([]string, 0, len(name))
-	for _, segment := range name {
+func PathOf(key keyvalue.Key) (string, error) {
+	if err := keyvalue.RefuseMalformedKey(key); err != nil {
+		return "", err
+	}
+	dir, err := PartitionDir(key.Partition)
+	if err != nil {
+		return "", err
+	}
+	path, err := encodePath(key.Path)
+	if err != nil {
+		return "", err
+	}
+	return dir + "/" + path, nil
+}
+
+func encodePath(path []string) (string, error) {
+	segments := make([]string, 0, len(path))
+	for _, segment := range path {
 		if segment == "" {
-			return "", refusal.Refuse(refusal.CodeInvalid,
-				"%s has an empty segment", name)
+			return "", refusal.Refuse(refusal.CodeInvalid, "%q has an empty segment", path)
 		}
 		segments = append(segments, encodeSegment(segment))
 	}
@@ -215,16 +244,16 @@ func plain(c byte) bool {
 	}
 }
 
-func DecodeName(encoded string) (records.Name, error) {
-	var name records.Name
+func KeyOf(in keyvalue.Partition, encoded string) (keyvalue.Key, error) {
+	var path []string
 	for _, segment := range strings.Split(encoded, "/") {
 		decoded, err := decodeSegment(segment)
 		if err != nil {
-			return nil, err
+			return keyvalue.Key{}, err
 		}
-		name = append(name, decoded)
+		path = append(path, decoded)
 	}
-	return name, nil
+	return in.Key(path...), nil
 }
 
 func decodeSegment(segment string) (string, error) {
@@ -250,6 +279,6 @@ func decodeSegment(segment string) (string, error) {
 }
 
 var (
-	_ records.Store = Records{}
-	_ seal.Cipher   = Cipher{}
+	_ keyvalue.Store = KeyValues{}
+	_ seal.Cipher    = Cipher{}
 )

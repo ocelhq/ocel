@@ -8,8 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
@@ -25,11 +25,13 @@ func newFixtureKeyCipher(t *testing.T) *fake.Cipher {
 	return fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key})
 }
 
-func newRecordsHolding(t *testing.T, rows map[string]records.Name) *fake.Records {
+var shop = envvars.ValuesPartition(envvars.Scope{Project: "shop", Tier: environment.TierProduction})
+
+func newRecordsHolding(t *testing.T, rows map[string]keyvalue.Key) *fake.KeyValues {
 	t.Helper()
-	store := fake.NewRecords()
+	store := fake.NewKeyValues()
 	for body, name := range rows {
-		if _, err := store.Write(context.Background(), records.Record{Name: name, Bytes: []byte(body)}); err != nil {
+		if _, err := store.Write(context.Background(), keyvalue.Entry{Key: name, Value: []byte(body)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -40,8 +42,8 @@ func TestACellsValueIsBoundToItsProjectClassEnvironmentFolderEmptyBindingAndKeyI
 	t.Parallel()
 
 	store := envvars.Store{
-		Records: newRecordsHolding(t, map[string]records.Name{
-			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+VgAViEpXXIk4f9gdIkzfy1DSDSCljR35ULyG/f4QqTpm7DEoFaNMcm+"}`: {"values", "shop", "production", "cells", "%2Fweb", "STRIPE_API_KEY", "staging"},
+		KeyValues: newRecordsHolding(t, map[string]keyvalue.Key{
+			`{"version":1,"updatedAt":1790580978,"size":14,"sealed":"+VgAViEpXXIk4f9gdIkzfy1DSDSCljR35ULyG/f4QqTpm7DEoFaNMcm+"}`: shop.Key("cells", "/web", "STRIPE_API_KEY", "staging"),
 		}),
 		Cipher: newFixtureKeyCipher(t),
 	}
@@ -58,9 +60,9 @@ func TestABindingsValueIsBoundToTheRootFolderItsNameAndThePropertiesKey(t *testi
 	t.Parallel()
 
 	store := envvars.Store{
-		Records: newRecordsHolding(t, map[string]records.Name{
-			`{"version":1,"updatedAt":1790580978,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`:               {"values", "shop", "production", "bindings", "orders", "records", "*"},
-			`{"version":1,"sealed":"kH20mriYvg2PFri7a1XPVAmM0y9YqXkDfsjQMCWX6gyemVuOD8Ro1RkBDEdPnJpRyqOs/YGNHQ=="}`: {"values", "shop", "production", "bindings", "orders", "values", "*"},
+		KeyValues: newRecordsHolding(t, map[string]keyvalue.Key{
+			`{"version":1,"updatedAt":1790580978,"record":"eyJuYW1lIjoib3JkZXJzIn0=","owner":"ocel"}`:               shop.Key("bindings", "orders", "records", "*"),
+			`{"version":1,"sealed":"kH20mriYvg2PFri7a1XPVAmM0y9YqXkDfsjQMCWX6gyemVuOD8Ro1RkBDEdPnJpRyqOs/YGNHQ=="}`: shop.Key("bindings", "orders", "values", "*"),
 		}),
 		Cipher: newFixtureKeyCipher(t),
 	}
@@ -103,7 +105,7 @@ func TestAValueThatNamesNoProjectOrKeyIsRefusedBeforeItIsSealed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			cipher := &countedCipher{Cipher: fake.NewCipher()}
-			store := envvars.Store{Records: fake.NewRecords(), Cipher: cipher}
+			store := envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: cipher}
 
 			err := write(store)
 			var refused refusal.Refusal
@@ -121,7 +123,7 @@ func TestABindingThatNamesNoBindingIsRefusedBeforeItIsSealed(t *testing.T) {
 	t.Parallel()
 
 	cipher := &countedCipher{Cipher: fake.NewCipher()}
-	store := envvars.Store{Records: fake.NewRecords(), Cipher: cipher}
+	store := envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: cipher}
 
 	_, err := store.SetBinding(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, "", envvars.OwnerOcel, "",
 		envvars.BindingWrite{Record: []byte(`{}`), Value: []byte(`{}`)})

@@ -1,4 +1,4 @@
-package records_test
+package keyvalue_test
 
 import (
 	"os/exec"
@@ -13,7 +13,7 @@ var wire = []string{
 	"buf.build/",
 }
 
-func TestARuntimeBinaryReadsRecordsWithoutLinkingTheWire(t *testing.T) {
+func TestARuntimeBinaryReadsEntriesWithoutLinkingTheWire(t *testing.T) {
 	t.Parallel()
 
 	out, err := exec.Command("go", "list", "-deps", ".").CombinedOutput()
@@ -24,7 +24,7 @@ func TestARuntimeBinaryReadsRecordsWithoutLinkingTheWire(t *testing.T) {
 	for _, pkg := range strings.Fields(string(out)) {
 		for _, linked := range wire {
 			if strings.HasPrefix(pkg, linked) {
-				t.Errorf("reading a record reaches %s: a runtime binary that only reads records must not link the wire", pkg)
+				t.Errorf("reading an entry reaches %s: a runtime binary that only reads entries must not link the wire", pkg)
 			}
 		}
 	}

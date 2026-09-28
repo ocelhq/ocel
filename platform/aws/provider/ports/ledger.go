@@ -6,21 +6,21 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 func Ledger(dynamo DynamoAPI, tables Tables, tier environment.Tier, slug string) *ledger.Ledger {
-	return ledger.New(ledgerRecords{Records{Dynamo: dynamo, Tables: tables}}, tier, slug)
+	return ledger.New(ledgerKeyValues{KeyValues{Dynamo: dynamo, Tables: tables}}, tier, slug)
 }
 
-type ledgerRecords struct{ Records }
+type ledgerKeyValues struct{ KeyValues }
 
-func (r ledgerRecords) provisioned(ctx context.Context, name records.Name) error {
-	if r.Dynamo == nil {
+func (s ledgerKeyValues) provisioned(ctx context.Context, in keyvalue.Partition) error {
+	if s.Dynamo == nil {
 		return fmt.Errorf("%w: the deployments ledger has no DynamoDB client; bootstrap the account first", edge.ErrStoreAbsent)
 	}
-	table, err := r.table(ctx, name)
+	table, err := s.table(ctx, in)
 	if err != nil {
 		return err
 	}
@@ -30,30 +30,30 @@ func (r ledgerRecords) provisioned(ctx context.Context, name records.Name) error
 	return nil
 }
 
-func (r ledgerRecords) Read(ctx context.Context, name records.Name) (records.Record, error) {
-	if err := r.provisioned(ctx, name); err != nil {
-		return records.Record{}, err
+func (s ledgerKeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, error) {
+	if err := s.provisioned(ctx, key.Partition); err != nil {
+		return keyvalue.Entry{}, err
 	}
-	return r.Records.Read(ctx, name)
+	return s.KeyValues.Read(ctx, key)
 }
 
-func (r ledgerRecords) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	if err := r.provisioned(ctx, record.Name); err != nil {
+func (s ledgerKeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if err := s.provisioned(ctx, entry.Key.Partition); err != nil {
 		return "", err
 	}
-	return r.Records.Write(ctx, record)
+	return s.KeyValues.Write(ctx, entry)
 }
 
-func (r ledgerRecords) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
-	if err := r.provisioned(ctx, name); err != nil {
+func (s ledgerKeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
+	if err := s.provisioned(ctx, key.Partition); err != nil {
 		return err
 	}
-	return r.Records.Remove(ctx, name, expected)
+	return s.KeyValues.Remove(ctx, key, expected)
 }
 
-func (r ledgerRecords) List(ctx context.Context, under records.Name) ([]records.Record, error) {
-	if err := r.provisioned(ctx, under); err != nil {
+func (s ledgerKeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	if err := s.provisioned(ctx, in); err != nil {
 		return nil, err
 	}
-	return r.Records.List(ctx, under)
+	return s.KeyValues.List(ctx, in, under...)
 }

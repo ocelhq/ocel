@@ -11,10 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -28,7 +28,7 @@ type stack struct {
 func (s *stack) State() edge.StackState { return s.state }
 
 func (s *stack) openLedger() *ledger.Ledger {
-	return ledgerFor(s.e.deps.Records, s.state.Tier, s.state.Slug)
+	return ledgerFor(s.e.deps.KeyValues, s.state.Tier, s.state.Slug)
 }
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
@@ -232,14 +232,14 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Tier, hostname)
-	record, err := records.ReadOrEmpty(ctx, s.e.deps.Records, name)
+	record, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
 	owner := Surface(s.state.Slug, s.state.Tier)
-	if len(record.Bytes) > 0 {
+	if len(record.Value) > 0 {
 		var existing claim
-		if err := json.Unmarshal(record.Bytes, &existing); err != nil {
+		if err := json.Unmarshal(record.Value, &existing); err != nil {
 			return false, fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 		}
 		if existing.Owner == owner {
@@ -251,9 +251,9 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
-	record.Bytes = encoded
-	_, err = s.e.deps.Records.Write(ctx, record)
-	if errors.Is(err, records.ErrStale) {
+	record.Value = encoded
+	_, err = s.e.deps.KeyValues.Write(ctx, record)
+	if errors.Is(err, keyvalue.ErrStale) {
 		return false, s.claimedMeanwhile(ctx, hostname, name)
 	}
 	if err != nil {
@@ -262,14 +262,14 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	return true, nil
 }
 
-func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name records.Name) error {
-	record, err := records.ReadOrEmpty(ctx, s.e.deps.Records, name)
-	if err != nil || len(record.Bytes) == 0 {
+func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name keyvalue.Key) error {
+	record, err := keyvalue.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
+	if err != nil || len(record.Value) == 0 {
 		return refusal.Refuse(refusal.CodeBusy,
 			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
 	}
 	var existing claim
-	if err := json.Unmarshal(record.Bytes, &existing); err != nil {
+	if err := json.Unmarshal(record.Value, &existing); err != nil {
 		return fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
 	return claimedBy(hostname, existing.Owner)
@@ -282,7 +282,7 @@ func claimedBy(hostname, owner string) error {
 }
 
 func (s *stack) disown(ctx context.Context, hostname string) error {
-	if err := records.Forget(ctx, s.e.deps.Records, s.e.claim(s.state.Tier, hostname)); err != nil {
+	if err := keyvalue.Forget(ctx, s.e.deps.KeyValues, s.e.claim(s.state.Tier, hostname)); err != nil {
 		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, Kind, err)
 	}
 	return nil

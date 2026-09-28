@@ -10,17 +10,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type Gate struct {
 	Bootstrap provider.Bootstrap
-	Records   records.Store
+	KeyValues keyvalue.Store
 	WrittenBy provider.WrittenBy
 	Edge      edge.Kind
 }
@@ -255,7 +255,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, tier environment.T
 	if err := g.RecordBootstrap(ctx, tier, stackrecords.BootstrapSettings{AutoHeal: autoHeal}); err != nil {
 		return err
 	}
-	return stackrecords.EnsureSchema(ctx, g.Records, tier)
+	return stackrecords.EnsureSchema(ctx, g.KeyValues, tier)
 }
 
 func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.Tier, progress progress.Progress) error {
@@ -274,7 +274,7 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, tier environment.
 	if err := g.Bootstrap.Remove(ctx, tier, progress); err != nil {
 		return err
 	}
-	return records.Forget(ctx, g.Records, stackrecords.BootstrapRecord(tier))
+	return keyvalue.Forget(ctx, g.KeyValues, stackrecords.BootstrapKey(tier))
 }
 
 func (g Gate) RefuseIfInUse(ctx context.Context, tier environment.Tier) error {
@@ -303,19 +303,19 @@ func (g Gate) admitRemovals(ctx context.Context, tier environment.Tier, removing
 }
 
 func (g Gate) RecordedFeatures(ctx context.Context, tier environment.Tier) (map[string][]string, error) {
-	projects, err := g.Records.List(ctx, stackrecords.ProjectsRecord(tier))
+	projects, err := g.KeyValues.List(ctx, stackrecords.ProjectsPartition(tier))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
 	for _, record := range projects {
-		rest, under := record.Name.Under(stackrecords.ProjectsRecord(tier))
-		if !under || len(rest) != 1 || len(record.Bytes) == 0 {
+		rest := record.Key.Path
+		if len(rest) != 1 || len(record.Value) == 0 {
 			continue
 		}
 		var project stackrecords.Project
-		if err := json.Unmarshal(record.Bytes, &project); err != nil {
-			return nil, fmt.Errorf("read %s's record: %w", record.Name, err)
+		if err := json.Unmarshal(record.Value, &project); err != nil {
+			return nil, fmt.Errorf("read %s's record: %w", record.Key, err)
 		}
 		recorded[rest[0]] = project.Features
 	}
@@ -413,30 +413,30 @@ func denied(refused refusal.Refusal) string {
 }
 
 func (g Gate) autoHeal(ctx context.Context, tier environment.Tier) (bool, error) {
-	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(tier))
+	recorded, err := keyvalue.ReadOrEmpty(ctx, g.KeyValues, stackrecords.BootstrapKey(tier))
 	if err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
-	if len(recorded.Bytes) == 0 {
+	if len(recorded.Value) == 0 {
 		return false, nil
 	}
 	var state stackrecords.BootstrapSettings
-	if err := json.Unmarshal(recorded.Bytes, &state); err != nil {
+	if err := json.Unmarshal(recorded.Value, &state); err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
 	return state.AutoHeal, nil
 }
 
 func (g Gate) RecordBootstrap(ctx context.Context, tier environment.Tier, state stackrecords.BootstrapSettings) error {
-	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(tier))
+	recorded, err := keyvalue.ReadOrEmpty(ctx, g.KeyValues, stackrecords.BootstrapKey(tier))
 	if err != nil {
 		return fmt.Errorf("read the %s bootstrap record: %w", tier, err)
 	}
-	recorded.Bytes, err = json.Marshal(state)
+	recorded.Value, err = json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
 	}
-	if _, err := g.Records.Write(ctx, recorded); err != nil {
+	if _, err := g.KeyValues.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record the %s bootstrap: %w", tier, err)
 	}
 	return nil
@@ -448,14 +448,14 @@ type BootstrapUsers struct {
 }
 
 func (g Gate) BootstrapUsers(ctx context.Context, tier environment.Tier) (BootstrapUsers, error) {
-	recorded, err := g.Records.List(ctx, stackrecords.ProjectsRecord(tier))
+	recorded, err := g.KeyValues.List(ctx, stackrecords.ProjectsPartition(tier))
 	if err != nil {
 		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
 	for _, record := range recorded {
-		rest, under := record.Name.Under(stackrecords.ProjectsRecord(tier))
-		if !under || rest[0] == "" {
+		rest := record.Key.Path
+		if len(rest) != 1 {
 			continue
 		}
 		projects = append(projects, rest[0])
@@ -463,13 +463,13 @@ func (g Gate) BootstrapUsers(ctx context.Context, tier environment.Tier) (Bootst
 	slices.Sort(projects)
 	users := BootstrapUsers{Projects: slices.Compact(projects)}
 
-	wildcard, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.WildcardRecord(tier))
+	wildcard, err := keyvalue.ReadOrEmpty(ctx, g.KeyValues, stackrecords.WildcardKey(tier))
 	if err != nil {
 		return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 	}
-	if len(wildcard.Bytes) > 0 {
+	if len(wildcard.Value) > 0 {
 		var recorded stackrecords.Wildcard
-		if err := json.Unmarshal(wildcard.Bytes, &recorded); err != nil {
+		if err := json.Unmarshal(wildcard.Value, &recorded); err != nil {
 			return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", tier, err)
 		}
 		users.Wildcard = recorded.BaseDomain

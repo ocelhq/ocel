@@ -62,7 +62,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 	if !slices.Contains(folders, "") {
 		folders = append(slices.Clone(folders), "")
 	}
-	previous, wasRegistered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
+	previous, wasRegistered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -93,7 +93,7 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvSourc
 }
 
 func switchToBuiltin(ctx context.Context, store envvars.Store, scope envvars.Scope) error {
-	_, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
+	_, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil || !registered {
 		return err
 	}
@@ -104,7 +104,7 @@ func switchToBuiltin(ctx context.Context, store envvars.Store, scope envvars.Sco
 }
 
 func (h *Service) syncRegistered(ctx context.Context, store envvars.Store, scope envvars.Scope) (*envvarsv1.SyncEnvSourceResponse, error) {
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -154,7 +154,7 @@ func (h *Service) DescribeEnvSource(ctx context.Context, req *envvarsv1.Describe
 	if err != nil {
 		return nil, err
 	}
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -180,7 +180,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *envvarsv1.SetEnvSo
 	if err != nil {
 		return nil, err
 	}
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -326,7 +326,7 @@ func refuseEnvSourceOwned(ctx context.Context, store envvars.Store, scope envvar
 	if at.Environment != "" {
 		return nil
 	}
-	registration, registered, err := envsource.Registered(ctx, store.Records, scope.Tier, scope.Project)
+	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
 		return provider.RefusalError(err)
 	}

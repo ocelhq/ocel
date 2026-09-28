@@ -308,7 +308,7 @@ type Store struct {
 
 func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error) {
 	reader := envvars.EnvironmentReader{
-		Records:     vars.Records{Root: s.StateRoot},
+		KeyValues:   vars.KeyValues{Root: s.StateRoot},
 		Cipher:      vars.Cipher{Root: s.TierRoot},
 		Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 		Environment: manifest.Environment,

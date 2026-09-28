@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 )
 
 type Reference struct {
@@ -65,17 +65,17 @@ func (s Store) References(ctx context.Context, scope Scope, at Coordinate) ([]Re
 	if at.Environment != "" && at.Environment != TierWideEnvironment {
 		return nil, nil
 	}
-	recorded, err := s.Records.List(ctx, refsName(scope, at))
+	recorded, err := s.listUnder(ctx, refsPrefix(scope, at))
 	if err != nil {
 		return nil, fmt.Errorf("read what references %s: %w", at, err)
 	}
 	out := make([]Reference, 0, len(recorded))
 	for _, record := range recorded {
-		sourceAt, ok := cellOf(record.Name)
-		if !ok || len(record.Name) < 4 {
+		sourceAt, ok := cellOf(record.Key)
+		if !ok || len(record.Key.Path) < 4 {
 			continue
 		}
-		out = append(out, Reference{Project: record.Name[len(record.Name)-4], Coordinate: sourceAt})
+		out = append(out, Reference{Project: record.Key.Path[len(record.Key.Path)-4], Coordinate: sourceAt})
 	}
 	slices.SortFunc(out, func(a, b Reference) int { return strings.Compare(a.String(), b.String()) })
 	return out, nil
@@ -97,13 +97,13 @@ func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate
 
 func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, target Target) error {
 	to := Scope{Project: target.Project, Tier: scope.Tier}
-	name := refName(to, Coordinate{Cell: target.Cell}, scope, at)
-	recorded, err := records.ReadOrEmpty(ctx, s.Records, name)
+	name := refKey(to, Coordinate{Cell: target.Cell}, scope, at)
+	recorded, err := keyvalue.ReadOrEmpty(ctx, s.KeyValues, name)
 	if err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}
-	recorded.Bytes = []byte("{}")
-	if _, err := s.Records.Write(ctx, recorded); err != nil {
+	recorded.Value = []byte("{}")
+	if _, err := s.KeyValues.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}
 	return nil
@@ -111,7 +111,7 @@ func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, t
 
 func (s Store) unindexReference(ctx context.Context, scope Scope, at Coordinate, target *Target) error {
 	to := Scope{Project: target.Project, Tier: scope.Tier}
-	if err := records.Forget(ctx, s.Records, refName(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
+	if err := keyvalue.Forget(ctx, s.KeyValues, refKey(to, Coordinate{Cell: target.Cell}, scope, at)); err != nil {
 		return fmt.Errorf("forget that %s references %s: %w", at, target, err)
 	}
 	return nil

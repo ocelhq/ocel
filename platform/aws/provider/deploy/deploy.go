@@ -10,9 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -27,9 +27,9 @@ type Config struct {
 	PulumiProject string
 	Secrets       SecretsAPI
 
-	Tags    TagClock
-	Records records.Store
-	Rules   RulesAPI
+	Tags      TagClock
+	KeyValues keyvalue.Store
+	Rules     RulesAPI
 
 	RequiredFeatures []string
 

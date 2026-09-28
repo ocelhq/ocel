@@ -21,7 +21,7 @@ const fakePageSize = 2
 type fakeDynamo struct {
 	mu     sync.Mutex
 	gone   bool
-	items  map[string]map[string]map[string]ddbtypes.AttributeValue
+	items  map[string]map[string]map[string]map[string]ddbtypes.AttributeValue
 	tables map[string]bool
 }
 
@@ -33,7 +33,7 @@ func (f *fakeDynamo) missing() error {
 }
 
 func newFakeDynamo() *fakeDynamo {
-	return &fakeDynamo{items: map[string]map[string]map[string]ddbtypes.AttributeValue{}}
+	return &fakeDynamo{items: map[string]map[string]map[string]map[string]ddbtypes.AttributeValue{}}
 }
 
 func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -43,7 +43,7 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sawTable(in.TableName)
-	item, ok := f.items[stringAttr(in.Key, "pk")][stringAttr(in.Key, "sk")]
+	item, ok := f.table(in.TableName)[stringAttr(in.Key, "pk")][stringAttr(in.Key, "sk")]
 	if !ok {
 		return &dynamodb.GetItemOutput{}, nil
 	}
@@ -61,14 +61,15 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 		return nil, err
 	}
 	pk, sk := stringAttr(in.Item, "pk"), stringAttr(in.Item, "sk")
-	existing, exists := f.items[pk][sk]
+	items := f.table(in.TableName)
+	existing, exists := items[pk][sk]
 	if !f.satisfies(aws.ToString(in.ConditionExpression), existing, exists, in.ExpressionAttributeValues) {
 		return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("fakeDynamo: the condition did not hold")}
 	}
-	if f.items[pk] == nil {
-		f.items[pk] = map[string]map[string]ddbtypes.AttributeValue{}
+	if items[pk] == nil {
+		items[pk] = map[string]map[string]ddbtypes.AttributeValue{}
 	}
-	f.items[pk][sk] = maps.Clone(in.Item)
+	items[pk][sk] = maps.Clone(in.Item)
 	return &dynamodb.PutItemOutput{}, nil
 }
 
@@ -83,7 +84,8 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 		return nil, err
 	}
 	pk, sk := stringAttr(in.Key, "pk"), stringAttr(in.Key, "sk")
-	existing, exists := f.items[pk][sk]
+	items := f.table(in.TableName)
+	existing, exists := items[pk][sk]
 	if !f.satisfies(aws.ToString(in.ConditionExpression), existing, exists, in.ExpressionAttributeValues) {
 		failed := &ddbtypes.ConditionalCheckFailedException{Message: aws.String("fakeDynamo: the condition did not hold")}
 		if exists && in.ReturnValuesOnConditionCheckFailure == ddbtypes.ReturnValuesOnConditionCheckFailureAllOld {
@@ -91,7 +93,7 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 		}
 		return nil, failed
 	}
-	delete(f.items[pk], sk)
+	delete(items[pk], sk)
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
@@ -109,7 +111,7 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 			return nil, err
 		}
 		pk, sk := stringAttr(write.Put.Item, "pk"), stringAttr(write.Put.Item, "sk")
-		existing, exists := f.items[pk][sk]
+		existing, exists := f.table(write.Put.TableName)[pk][sk]
 		if f.satisfies(aws.ToString(write.Put.ConditionExpression), existing, exists, write.Put.ExpressionAttributeValues) {
 			continue
 		}
@@ -120,10 +122,11 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 	}
 	for _, write := range in.TransactItems {
 		pk, sk := stringAttr(write.Put.Item, "pk"), stringAttr(write.Put.Item, "sk")
-		if f.items[pk] == nil {
-			f.items[pk] = map[string]map[string]ddbtypes.AttributeValue{}
+		items := f.table(write.Put.TableName)
+		if items[pk] == nil {
+			items[pk] = map[string]map[string]ddbtypes.AttributeValue{}
 		}
-		f.items[pk][sk] = maps.Clone(write.Put.Item)
+		items[pk][sk] = maps.Clone(write.Put.Item)
 	}
 	return &dynamodb.TransactWriteItemsOutput{}, nil
 }
@@ -174,8 +177,9 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 		return nil, fmt.Errorf("fakeDynamo: DynamoDB refuses an empty value for the key attribute sk")
 	}
 
+	items := f.table(in.TableName)
 	var sks []string
-	for sk := range f.items[pk] {
+	for sk := range items[pk] {
 		if strings.HasPrefix(sk, prefix) {
 			sks = append(sks, sk)
 		}
@@ -194,21 +198,51 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 			}
 			break
 		}
-		out.Items = append(out.Items, maps.Clone(f.items[pk][sk]))
+		out.Items = append(out.Items, maps.Clone(items[pk][sk]))
 	}
 	return out, nil
+}
+
+func (f *fakeDynamo) table(name *string) map[string]map[string]map[string]ddbtypes.AttributeValue {
+	items := f.items[aws.ToString(name)]
+	if items == nil {
+		items = map[string]map[string]map[string]ddbtypes.AttributeValue{}
+		f.items[aws.ToString(name)] = items
+	}
+	return items
 }
 
 func (f *fakeDynamo) partitions() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Sorted(maps.Keys(f.items))
+	var pks []string
+	for _, items := range f.items {
+		pks = append(pks, slices.Collect(maps.Keys(items))...)
+	}
+	slices.Sort(pks)
+	return slices.Compact(pks)
 }
 
 func (f *fakeDynamo) sortKeys(pk string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Sorted(maps.Keys(f.items[pk]))
+	var sks []string
+	for _, items := range f.items {
+		sks = append(sks, slices.Collect(maps.Keys(items[pk]))...)
+	}
+	slices.Sort(sks)
+	return slices.Compact(sks)
+}
+
+func (f *fakeDynamo) item(pk, sk string) map[string]ddbtypes.AttributeValue {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, items := range f.items {
+		if item, ok := items[pk][sk]; ok {
+			return maps.Clone(item)
+		}
+	}
+	return nil
 }
 
 func stringAttr(item map[string]ddbtypes.AttributeValue, name string) string {

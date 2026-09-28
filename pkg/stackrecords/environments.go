@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 const ProductionEnv = "prod"
@@ -26,15 +26,15 @@ type EnvironmentMeta struct {
 	CreatedAt int64  `json:"created_at,omitempty"`
 }
 
-func RecordEnvironmentMeta(ctx context.Context, store records.Store, tier environment.Tier, slug, env, label string) error {
-	name := EnvironmentRecord(tier, slug, env)
-	recorded, err := records.ReadOrEmpty(ctx, store, name)
+func RecordEnvironmentMeta(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug, env, label string) error {
+	name := EnvironmentKey(tier, slug, env)
+	recorded, err := keyvalue.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
 	var meta EnvironmentMeta
-	if len(recorded.Bytes) > 0 {
-		if err := json.Unmarshal(recorded.Bytes, &meta); err != nil {
+	if len(recorded.Value) > 0 {
+		if err := json.Unmarshal(recorded.Value, &meta); err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
 		}
 	}
@@ -44,7 +44,7 @@ func RecordEnvironmentMeta(ctx context.Context, store records.Store, tier enviro
 	if label != "" {
 		meta.Label = label
 	}
-	if recorded.Bytes, err = json.Marshal(meta); err != nil {
+	if recorded.Value, err = json.Marshal(meta); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	if _, err := store.Write(ctx, recorded); err != nil {
@@ -53,30 +53,30 @@ func RecordEnvironmentMeta(ctx context.Context, store records.Store, tier enviro
 	return nil
 }
 
-func EnvironmentMetas(ctx context.Context, store records.Store, tier environment.Tier, slug string) (map[string]EnvironmentMeta, error) {
-	recorded, err := store.List(ctx, EnvironmentsRecord(tier, slug))
+func EnvironmentMetas(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) (map[string]EnvironmentMeta, error) {
+	recorded, err := store.List(ctx, EnvironmentsPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
 	meta := make(map[string]EnvironmentMeta, len(recorded))
 	for _, record := range recorded {
 		var recorded EnvironmentMeta
-		if err := json.Unmarshal(record.Bytes, &recorded); err != nil {
+		if err := json.Unmarshal(record.Value, &recorded); err != nil {
 			continue
 		}
-		meta[record.Name[len(record.Name)-1]] = recorded
+		meta[record.Key.Path[0]] = recorded
 	}
 	return meta, nil
 }
 
-func StackNames(ctx context.Context, store records.Store, tier environment.Tier, slug string) ([]naming.StackName, error) {
-	recorded, err := store.List(ctx, StacksRecord(tier, slug))
+func StackNames(ctx context.Context, store keyvalue.Store, tier environment.Tier, slug string) ([]naming.StackName, error) {
+	recorded, err := store.List(ctx, StacksPartition(tier, slug))
 	if err != nil {
 		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
 	}
 	names := make([]naming.StackName, 0, len(recorded))
 	for _, record := range recorded {
-		stack, err := naming.ParseStackName(record.Name[len(record.Name)-1])
+		stack, err := naming.ParseStackName(record.Key.Path[0])
 		if err != nil {
 			continue
 		}
@@ -85,7 +85,7 @@ func StackNames(ctx context.Context, store records.Store, tier environment.Tier,
 	return names, nil
 }
 
-func PreviewEnvironments(ctx context.Context, store records.Store, slug string) ([]Environment, error) {
+func PreviewEnvironments(ctx context.Context, store keyvalue.Store, slug string) ([]Environment, error) {
 	stacks, err := StackNames(ctx, store, environment.TierPreview, slug)
 	if err != nil {
 		return nil, err

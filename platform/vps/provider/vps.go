@@ -6,11 +6,11 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -22,11 +22,11 @@ import (
 const Vendor provider.Vendor = "vps"
 
 type Provider struct {
-	options Options
-	project string
-	host    *host.Host
-	records records.Store
-	cipher  *boxstore.Cipher
+	options   Options
+	project   string
+	host      *host.Host
+	keyValues keyvalue.Store
+	cipher    *boxstore.Cipher
 
 	transform transform.Pass
 	resolve   Lookup
@@ -107,12 +107,12 @@ func (p *Provider) Bootstrap(edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.NewHookStacks(p.records, p.Artifacts(), p.resourceHooks())
+	return resources.NewHookStacks(p.keyValues, p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtifacts{} }
 
-func (p *Provider) Records() records.Store { return p.records }
+func (p *Provider) KeyValues() keyvalue.Store { return p.keyValues }
 
 func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 

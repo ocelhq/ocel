@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -50,25 +50,28 @@ func TestWhatTheRecordsHelperWritesTheBoxReadsNatively(t *testing.T) {
 	t.Parallel()
 
 	dir := helperDir(t)
-	names := []string{
-		"values/shop/production/cells/%2F/DATABASE_URL/%2A",
-		"values/shop/production/cells/%2F/SESSION/pr-7",
-	}
-	for _, name := range names {
+	shop := keyvalue.Partition{Tier: helperTier, Root: keyvalue.RootValues, Path: []string{"shop"}}
+	var names []string
+	for _, key := range []keyvalue.Key{shop.Key("cells", "/", "DATABASE_URL", "*"), shop.Key("cells", "/", "SESSION", "pr-7")} {
+		name, err := live.PathOf(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
 		helperWrite(t, dir, name, "", "body of "+name)
 	}
-	store := live.Records{Root: dir}
-	record, err := store.Read(context.Background(), records.Name{"values", "shop", "production", "cells", "/", "DATABASE_URL", "*"})
+	store := live.KeyValues{Root: dir}
+	record, err := store.Read(context.Background(), shop.Key("cells", "/", "DATABASE_URL", "*"))
 	if err != nil {
 		t.Fatalf("Read() of what the helper wrote = %v", err)
 	}
-	if string(record.Bytes) != "body of "+names[0] {
-		t.Errorf("Read() = %q, want what the helper wrote", record.Bytes)
+	if string(record.Value) != asJSON("body of "+names[0]) {
+		t.Errorf("Read() = %q, want what the helper wrote", record.Value)
 	}
 	if revision, _ := helperRead(t, dir, names[0]); string(record.Revision) != revision {
 		t.Errorf("Read() returns revision %q, and the helper says %q", record.Revision, revision)
 	}
-	listed, err := store.List(context.Background(), records.Name{"values", "shop", "production", "cells"})
+	listed, err := store.List(context.Background(), shop, "cells")
 	if err != nil || len(listed) != 2 {
 		t.Fatalf("List() = %v, %v, want the two cells the helper wrote", listed, err)
 	}

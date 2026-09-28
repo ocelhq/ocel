@@ -12,17 +12,17 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
 func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
 	t.Helper()
-	releases := ledger.New(provider.Records(), tier, slug)
+	releases := ledger.New(provider.KeyValues(), tier, slug)
 	if err := releases.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func (c *capturingLedger) flipped() (progress.Progress, bool) {
 
 func capturing(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, marker string) *capturingLedger {
 	t.Helper()
-	capturer := &capturingLedger{Ledger: ledger.New(provider.Records(), tier, slug), marker: marker}
+	capturer := &capturingLedger{Ledger: ledger.New(provider.KeyValues(), tier, slug), marker: marker}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(edge.StackState) fake.Ledger { return capturer })
 	return capturer
 }
@@ -205,8 +205,8 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	deployed(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
-	pointer := records.Name{"ledger", ledger.Scope(environment.TierProduction, "shop"), "pointers", edge.DefaultPointer}
-	jostled := &jostle{Store: provider.Records(), at: pointer}
+	pointer := ledger.Partition(environment.TierProduction, "shop").Key("pointers", edge.DefaultPointer)
+	jostled := &jostle{Store: provider.KeyValues(), at: pointer}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
 		return ledger.New(jostled, state.Tier, state.Slug)
 	})
@@ -225,19 +225,19 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 }
 
 type jostle struct {
-	records.Store
-	at   records.Name
+	keyvalue.Store
+	at   keyvalue.Key
 	once sync.Once
 }
 
-func (j *jostle) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	if record.Name.String() == j.at.String() {
+func (j *jostle) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+	if record.Key.String() == j.at.String() {
 		j.once.Do(func() {
-			recorded, err := records.ReadOrEmpty(ctx, j.Store, j.at)
+			recorded, err := keyvalue.ReadOrEmpty(ctx, j.Store, j.at)
 			if err != nil {
 				return
 			}
-			recorded.Bytes = append(slices.Clone(recorded.Bytes), ' ')
+			recorded.Value = append(slices.Clone(recorded.Value), ' ')
 			_, _ = j.Store.Write(ctx, recorded)
 		})
 	}

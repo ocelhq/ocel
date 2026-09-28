@@ -465,7 +465,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	if len(policies) != 1 {
 		t.Fatalf("the task role has %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
 	}
-	own, _ := valuePartition("shop", string(environment.TierProduction))
+	own := valuePartition("shop", string(environment.TierProduction))
 	for _, want := range []string{"kms:Decrypt", cfg.VarsKeyARN, "dynamodb:Query", cfg.VarsTableARN, own} {
 		if !strings.Contains(policies[0], want) {
 			t.Errorf("policy = %s, want it to contain %q: the read is fenced to this project's partition and the tier key", policies[0], want)

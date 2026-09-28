@@ -47,7 +47,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
+	store := envvars.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	referenced, err := store.ReferenceOwners(ctx, envvars.Scope{Project: scope.Slug, Tier: scope.Tier})
 	if err != nil {
 		return deploy.Config{}, err
@@ -61,9 +61,9 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		PulumiProject: naming.PulumiProject(scope.Slug),
 		Secrets:       secretsmanager.NewFromConfig(p.aws),
 
-		Tags:    &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
-		Records: p.Records(),
-		Rules:   elasticloadbalancingv2.NewFromConfig(p.aws),
+		Tags:      &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
+		KeyValues: p.KeyValues(),
+		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
 
 		Tier:           scope.Tier,
 		Slug:           scope.Slug,

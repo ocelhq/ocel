@@ -9,13 +9,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 func fixture() (envvars.Store, envvars.Scope) {
-	return envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
+	return envvars.Store{KeyValues: fake.NewKeyValues(), Cipher: fake.NewCipher()},
 		envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 }
 
@@ -129,13 +129,13 @@ func TestAnEnvironmentValueShadowsTheTierWideOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
+	reader := envvars.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
 	seen, err := reader.Values(ctx, []envvars.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "pr-7 only" {
 		t.Fatalf("the environment's reader saw %q, %v, want the environment's own value", seen["KEY"], err)
 	}
 
-	tierWide := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	tierWide := envvars.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope}
 	seen, err = tierWide.Values(ctx, []envvars.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "tier-wide" {
 		t.Fatalf("the tier-wide reader saw %q, %v", seen["KEY"], err)
@@ -280,7 +280,7 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 		t.Fatalf("the failure does not name the broken reference: %v", err)
 	}
 
-	reader := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	reader := envvars.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope}
 	if _, err := reader.Values(ctx, []envvars.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, envvars.ErrDangling) {
 		t.Fatalf("a reader over a broken reference = %v, want it to refuse to boot the app", err)
 	}
@@ -455,7 +455,7 @@ func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
 		t.Fatal(err)
 	}
-	reader := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	reader := envvars.EnvironmentReader{KeyValues: store.KeyValues, Cipher: store.Cipher, Scope: scope}
 
 	found, err := reader.Bindings(ctx, []string{"db"})
 	if err != nil || len(found) != 1 || string(found[0].Value) != "the sealed record" {
@@ -515,28 +515,28 @@ func TestTheTierWideEnvironmentIsReserved(t *testing.T) {
 }
 
 type counted struct {
-	records.Store
+	keyvalue.Store
 	seal.Cipher
 	mu     sync.Mutex
 	reads  int
 	lists  int
 	opened int
-	under  []records.Name
+	under  [][]string
 }
 
-func (c *counted) Read(ctx context.Context, name records.Name) (records.Record, error) {
+func (c *counted) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
 	return c.Store.Read(ctx, name)
 }
 
-func (c *counted) List(ctx context.Context, under records.Name) ([]records.Record, error) {
+func (c *counted) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
 	c.mu.Lock()
 	c.lists++
-	c.under = append(c.under, under)
+	c.under = append(c.under, append([]string{in.String()}, under...))
 	c.mu.Unlock()
-	return c.Store.List(ctx, under)
+	return c.Store.List(ctx, in, under...)
 }
 
 func (c *counted) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
@@ -566,8 +566,8 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 		}
 	}
 
-	watched := &counted{Store: store.Records, Cipher: store.Cipher}
-	store.Records, store.Cipher = watched, watched
+	watched := &counted{Store: store.KeyValues, Cipher: store.Cipher}
+	store.KeyValues, store.Cipher = watched, watched
 	found, err := store.Reveal(ctx, scope, []envvars.Coordinate{
 		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
 	})
@@ -597,8 +597,8 @@ func TestResolvingABatchOfBindingsReadsEachEnvironmentOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	watched := &counted{Store: store.Records, Cipher: store.Cipher}
-	store.Records, store.Cipher = watched, watched
+	watched := &counted{Store: store.KeyValues, Cipher: store.Cipher}
+	store.KeyValues, store.Cipher = watched, watched
 	resolved, err := store.ResolveBindings(ctx, scope, "", []string{"db", "cache", "queue"})
 	if err != nil || len(resolved) != 3 {
 		t.Fatalf("ResolveBindings() = %+v, %v, want all three", resolved, err)
@@ -626,8 +626,8 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	watched := &counted{Store: store.Records, Cipher: store.Cipher}
-	store.Records, store.Cipher = watched, watched
+	watched := &counted{Store: store.KeyValues, Cipher: store.Cipher}
+	store.KeyValues, store.Cipher = watched, watched
 	resolved, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
 	if err != nil || string(resolved.Value) != `"pr-7 db"` {
 		t.Fatalf("ResolveBinding() = %q, %v, want the pair published to the environment", resolved.Value, err)
@@ -635,7 +635,7 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 	if watched.reads != 0 || watched.lists != 1 {
 		t.Fatalf("ResolveBinding() made %d point reads and %d queries, want one query returning the whole pair", watched.reads, watched.lists)
 	}
-	if under := watched.under[0].String(); !strings.HasSuffix(under, "bindings/db") {
+	if under := strings.Join(watched.under[0], "/"); !strings.HasSuffix(under, "bindings/db") {
 		t.Errorf("ResolveBinding() queried under %q, want the prefix one binding's records and values share", under)
 	}
 }

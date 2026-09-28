@@ -10,6 +10,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,51 +20,51 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-type memRecords struct {
+type memKeyValues struct {
 	mu      sync.Mutex
-	records map[string]records.Record
+	records map[string]keyvalue.Entry
 }
 
-func (m *memRecords) Read(_ context.Context, name records.Name) (records.Record, error) {
+func (m *memKeyValues) Read(_ context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	stored, ok := m.records[name.String()]
 	if !ok {
-		return records.Record{}, records.ErrNotFound
+		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
 	return stored, nil
 }
 
-func (m *memRecords) Write(_ context.Context, record records.Record) (records.Revision, error) {
+func (m *memKeyValues) Write(_ context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.put(record)
 }
 
-func (m *memRecords) put(record records.Record) (records.Revision, error) {
+func (m *memKeyValues) put(record keyvalue.Entry) (keyvalue.Revision, error) {
 	if m.records == nil {
-		m.records = map[string]records.Record{}
+		m.records = map[string]keyvalue.Entry{}
 	}
-	if stored, ok := m.records[record.Name.String()]; ok && stored.Revision != record.Revision {
-		return "", records.ErrStale
+	if stored, ok := m.records[record.Key.String()]; ok && stored.Revision != record.Revision {
+		return "", keyvalue.ErrStale
 	}
 	minted := make([]byte, 16)
 	if _, err := rand.Read(minted); err != nil {
 		return "", err
 	}
-	record.Revision = records.Revision(hex.EncodeToString(minted))
-	m.records[record.Name.String()] = record
+	record.Revision = keyvalue.Revision(hex.EncodeToString(minted))
+	m.records[record.Key.String()] = record
 	return record.Revision, nil
 }
 
-func (m *memRecords) WritePair(_ context.Context, first, second records.Record) error {
+func (m *memKeyValues) WritePair(_ context.Context, first, second keyvalue.Entry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, err := m.put(first); err != nil {
@@ -73,21 +74,22 @@ func (m *memRecords) WritePair(_ context.Context, first, second records.Record) 
 	return err
 }
 
-func (m *memRecords) Remove(_ context.Context, name records.Name, _ records.Revision) error {
+func (m *memKeyValues) Remove(_ context.Context, name keyvalue.Key, _ keyvalue.Revision) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.records, name.String())
 	return nil
 }
 
-func (m *memRecords) List(_ context.Context, under records.Name) ([]records.Record, error) {
+func (m *memKeyValues) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var out []records.Record
+	var out []keyvalue.Entry
 	for _, record := range m.records {
-		if _, beneath := record.Name.Under(under); beneath {
-			out = append(out, record)
+		if record.Key.Partition.String() != in.String() || len(record.Key.Path) < len(under) || !slices.Equal(record.Key.Path[:len(under)], under) {
+			continue
 		}
+		out = append(out, record)
 	}
 	return out, nil
 }
@@ -118,7 +120,7 @@ type box struct {
 	tierRoot     string
 	stateRoot    string
 	routingTable string
-	records      *memRecords
+	records      *memKeyValues
 	cipher       goCipher
 }
 
@@ -128,7 +130,7 @@ func aBox(t *testing.T, root string) *box {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, cipher: goCipher{key: key}}
+	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memKeyValues{}, cipher: goCipher{key: key}}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
 			t.Fatal(err)
@@ -140,7 +142,7 @@ func aBox(t *testing.T, root string) *box {
 	return b
 }
 
-func (b *box) store() envvars.Store { return envvars.Store{Records: b.records, Cipher: b.cipher} }
+func (b *box) store() envvars.Store { return envvars.Store{KeyValues: b.records, Cipher: b.cipher} }
 
 func (b *box) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
 	t.Helper()
@@ -165,15 +167,15 @@ func (b *box) dump(t *testing.T) {
 	b.records.mu.Lock()
 	defer b.records.mu.Unlock()
 	for _, record := range b.records.records {
-		tier, encoded, err := vars.Located(record.Name)
+		encoded, err := vars.PathOf(record.Key)
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(vars.RecordsDir(b.stateRoot, tier), encoded+".rec")
+		path := filepath.Join(vars.RecordsDir(b.stateRoot, record.Key.Partition.Tier), encoded+vars.EntrySuffix)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(string(record.Revision)+"\n"+base64.StdEncoding.EncodeToString(record.Bytes)+"\n"), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(`{"revision":"`+string(record.Revision)+`","value":`+string(record.Value)+"}\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -35,20 +35,12 @@ func varsReadPolicy(r executionRole) (string, error) {
 		})
 	}
 	if r.ValuesTableARN != "" {
-		own, err := valuePartition(r.Slug, r.VarsTier)
-		if err != nil {
-			return "", err
-		}
-		partitions := []string{own}
+		partitions := []string{valuePartition(r.Slug, r.VarsTier)}
 		for _, owner := range r.VarsReferenced {
 			if owner == r.Slug {
 				continue
 			}
-			partition, err := valuePartition(owner, r.VarsTier)
-			if err != nil {
-				return "", err
-			}
-			partitions = append(partitions, partition)
+			partitions = append(partitions, valuePartition(owner, r.VarsTier))
 		}
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
@@ -68,8 +60,8 @@ func varsReadPolicy(r executionRole) (string, error) {
 	return string(out), nil
 }
 
-func valuePartition(slug, tier string) (string, error) {
-	return awsports.Partition(envvars.ScopedRecordName(envvars.Scope{Project: slug, Tier: environment.Tier(tier)}))
+func valuePartition(slug, tier string) string {
+	return awsports.PartitionKey(envvars.ValuesPartition(envvars.Scope{Project: slug, Tier: environment.Tier(tier)}))
 }
 
 type appBundle struct {

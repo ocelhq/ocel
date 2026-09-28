@@ -491,7 +491,7 @@ func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress pr
 			return err
 		}
 	}
-	return r.releaseContainerInfra(ctx, opened.cfg.Records, ref, progress)
+	return r.releaseContainerInfra(ctx, opened.cfg.KeyValues, ref, progress)
 }
 
 func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {

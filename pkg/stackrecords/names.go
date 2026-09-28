@@ -1,91 +1,56 @@
 package stackrecords
 
 import (
-	"strings"
-
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/records"
 )
 
-func rooted(root string, tier environment.Tier, rest ...string) records.Name {
-	return append(records.Name{root, string(tier)}, rest...)
+const (
+	bootstrapKey = "settings"
+	wildcardKey  = "preview"
+)
+
+func SchemaKey(tier environment.Tier) keyvalue.Key {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootSchema}.Key(string(tier))
 }
 
-func SchemaRecord(tier environment.Tier) records.Name { return rooted(records.RootSchema, tier) }
-
-func ProjectsRecord(tier environment.Tier) records.Name { return rooted(records.RootProjects, tier) }
-
-func ProjectRecord(tier environment.Tier, slug string) records.Name {
-	return rooted(records.RootProjects, tier, slug)
+func ProjectsPartition(tier environment.Tier) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootProjects}
 }
 
-func BootstrapRecord(tier environment.Tier) records.Name {
-	return rooted(records.RootBootstrap, tier)
+func ProjectKey(tier environment.Tier, slug string) keyvalue.Key {
+	return ProjectsPartition(tier).Key(slug)
 }
 
-func StackRecord(tier environment.Tier, slug string, stack naming.StackName) records.Name {
-	return append(StacksRecord(tier, slug), stack.String())
+func BootstrapKey(tier environment.Tier) keyvalue.Key {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootBootstrap}.Key(bootstrapKey)
 }
 
-func StacksRecord(tier environment.Tier, slug string) records.Name {
-	return rooted(records.RootStacks, tier, slug)
+func StacksPartition(tier environment.Tier, slug string) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootStacks, Path: []string{slug}}
 }
 
-func EnvironmentsRecord(tier environment.Tier, slug string) records.Name {
-	return rooted(records.RootEnvironments, tier, slug)
+func StackKey(tier environment.Tier, slug string, stack naming.StackName) keyvalue.Key {
+	return StacksPartition(tier, slug).Key(stack.String())
 }
 
-func EnvironmentRecord(tier environment.Tier, slug, env string) records.Name {
-	return append(EnvironmentsRecord(tier, slug), env)
+func EnvironmentsPartition(tier environment.Tier, slug string) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEnvironments, Path: []string{slug}}
 }
 
-func EdgeStackRecord(tier environment.Tier, slug string) records.Name {
-	return rooted(records.RootEdgeStacks, tier, slug)
+func EnvironmentKey(tier environment.Tier, slug, env string) keyvalue.Key {
+	return EnvironmentsPartition(tier, slug).Key(env)
 }
 
-func EdgeStacksRecord(tier environment.Tier) records.Name {
-	return rooted(records.RootEdgeStacks, tier)
+func EdgeStacksPartition(tier environment.Tier) keyvalue.Partition {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootEdgeStacks}
 }
 
-func WildcardRecord(tier environment.Tier) records.Name { return rooted(records.RootWildcard, tier) }
-
-func LedgerRecord(scope string, rest ...string) records.Name {
-	return append(records.Name{records.RootLedger, scope}, rest...)
+func EdgeStackKey(tier environment.Tier, slug string) keyvalue.Key {
+	return EdgeStacksPartition(tier).Key(slug)
 }
 
-var tierSegment = map[string]int{
-	records.RootSchema:             1,
-	records.RootProjects:           1,
-	records.RootStacks:             1,
-	records.RootEnvironments:       1,
-	records.RootBootstrap:          1,
-	records.RootEdgeStacks:         1,
-	records.RootWildcard:           1,
-	records.RootLedger:             1,
-	records.RootConformance:        1,
-	records.RootValueRefs:          1,
-	records.RootEnvSources:         1,
-	records.RootEnvSourceStatus:    1,
-	records.RootEnvSourceDigestKey: 1,
-	records.RootValues:             2,
-}
-
-func TierOf(name records.Name) (environment.Tier, bool) {
-	if len(name) == 0 {
-		return "", false
-	}
-	at, named := tierSegment[name[0]]
-	if !named || len(name) <= at {
-		return "", false
-	}
-	segment := name[at]
-	if name[0] == records.RootLedger {
-		segment, _, _ = strings.Cut(segment, naming.PathSeparator)
-	}
-	switch environment.Tier(segment) {
-	case environment.TierProduction, environment.TierPreview:
-		return environment.Tier(segment), true
-	}
-	return "", false
+func WildcardKey(tier environment.Tier) keyvalue.Key {
+	return keyvalue.Partition{Tier: tier, Root: keyvalue.RootWildcard}.Key(wildcardKey)
 }

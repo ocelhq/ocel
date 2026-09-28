@@ -104,7 +104,7 @@ func TestRemoveProjectDestroysEveryStackAndForgetsTheProject(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), vendor.Records(), environment.TierProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.KeyValues(), environment.TierProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 		t.Errorf("the artifact at %s survived the removal, want the project's whole prefix gone", ref.Key)
 	}
 
-	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
+	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Tier: environment.TierProduction}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 	client, vendor := deployedProject(t)
 	ctx := context.Background()
-	store := envvars.Store{Records: vendor.Records(), Cipher: vendor.Cipher()}
+	store := envvars.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
 	if _, err := envsource.Register(ctx, store, environment.TierProduction, registration); err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, %v", result.GetError(), err)
 	}
 
-	if _, registered, err := envsource.Registered(ctx, store.Records, environment.TierProduction, "shop"); err != nil || registered {
+	if _, registered, err := envsource.Registered(ctx, store.KeyValues, environment.TierProduction, "shop"); err != nil || registered {
 		t.Errorf("Registered() after the removal = %v, %v, want a scheduled sync to stop reading for a project that is gone", registered, err)
 	}
 	if status, err := envsource.StatusOf(ctx, store, environment.TierProduction, registration); err != nil || !status.LastAttemptAt.IsZero() {
@@ -349,7 +349,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	}
 
 	admin := naming.AppStack(stackrecords.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
-	if err := stackrecords.Write(ctx, vendor.Records(), environment.TierProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
+	if err := stackrecords.Write(ctx, vendor.KeyValues(), environment.TierProduction, "shop", admin, stackrecords.Stack{App: "admin"}); err != nil {
 		t.Fatalf("stackrecords.Write() error = %v", err)
 	}
 

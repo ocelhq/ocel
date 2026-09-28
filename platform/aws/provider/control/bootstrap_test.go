@@ -563,7 +563,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)
-	gate := providerserver.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
+	gate := providerserver.Gate{Bootstrap: b, KeyValues: fake.NewKeyValues(), Edge: cloudflareKind}
 
 	status, err := gate.Status(context.Background(), environment.TierProduction)
 	if err != nil {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -47,16 +47,16 @@ type Machine interface {
 type Origins func(ctx context.Context, project string, tier environment.Tier) error
 
 type Edge struct {
-	machine Machine
-	origins Origins
-	records records.Store
-	scope   string
+	machine   Machine
+	origins   Origins
+	keyValues keyvalue.Store
+	scope     string
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, store records.Store, scope string) *Edge {
-	return &Edge{machine: machine, origins: origins, records: store, scope: scope}
+func New(machine Machine, origins Origins, store keyvalue.Store, scope string) *Edge {
+	return &Edge{machine: machine, origins: origins, keyValues: store, scope: scope}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }

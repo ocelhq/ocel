@@ -10,49 +10,52 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type store struct {
-	rows   map[string]records.Record
+	rows   map[string]keyvalue.Entry
 	rev    int
 	racing func(name string)
 }
 
-func newStore() *store { return &store{rows: map[string]records.Record{}} }
+func newStore() *store { return &store{rows: map[string]keyvalue.Entry{}} }
 
-func (s *store) Read(ctx context.Context, name records.Name) (records.Record, error) {
+func (s *store) Read(ctx context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
 	if err := ctx.Err(); err != nil {
-		return records.Record{}, err
+		return keyvalue.Entry{}, err
 	}
 	recorded, ok := s.rows[name.String()]
 	if !ok {
-		return records.Record{}, records.ErrNotFound
+		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
 	return recorded, nil
 }
 
-func (s *store) Write(ctx context.Context, record records.Record) (records.Revision, error) {
+func (s *store) Write(ctx context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if s.racing != nil {
-		s.racing(record.Name.String())
+	if err := keyvalue.RefuseNonJSON(record); err != nil {
+		return "", err
 	}
-	if recorded := s.rows[record.Name.String()]; recorded.Revision != record.Revision {
-		return "", records.ErrStale
+	if s.racing != nil {
+		s.racing(record.Key.String())
+	}
+	if recorded := s.rows[record.Key.String()]; recorded.Revision != record.Revision {
+		return "", keyvalue.ErrStale
 	}
 	s.rev++
-	record.Revision = records.Revision(strconv.Itoa(s.rev))
-	s.rows[record.Name.String()] = record
+	record.Revision = keyvalue.Revision(strconv.Itoa(s.rev))
+	s.rows[record.Key.String()] = record
 	return record.Revision, nil
 }
 
-func (s *store) WritePair(ctx context.Context, first, second records.Record) error {
-	if recorded := s.rows[second.Name.String()]; recorded.Revision != second.Revision {
-		return records.ErrStale
+func (s *store) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
+	if recorded := s.rows[second.Key.String()]; recorded.Revision != second.Revision {
+		return keyvalue.ErrStale
 	}
 	if _, err := s.Write(ctx, first); err != nil {
 		return err
@@ -61,27 +64,28 @@ func (s *store) WritePair(ctx context.Context, first, second records.Record) err
 	return err
 }
 
-func (s *store) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
+func (s *store) Remove(ctx context.Context, name keyvalue.Key, expected keyvalue.Revision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	recorded, ok := s.rows[name.String()]
 	if !ok {
-		return records.ErrNotFound
+		return keyvalue.ErrNotFound
 	}
 	if recorded.Revision != expected {
-		return records.ErrStale
+		return keyvalue.ErrStale
 	}
 	delete(s.rows, name.String())
 	return nil
 }
 
-func (s *store) List(_ context.Context, under records.Name) ([]records.Record, error) {
-	var out []records.Record
-	for key, record := range s.rows {
-		if strings.HasPrefix(key, under.String()+"/") {
-			out = append(out, record)
+func (s *store) List(_ context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {
+	var out []keyvalue.Entry
+	for _, entry := range s.rows {
+		if entry.Key.Partition.String() != in.String() || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
+			continue
 		}
+		out = append(out, entry)
 	}
 	return out, nil
 }
@@ -99,15 +103,15 @@ func TestNextSequenceRetriesPastAClaimerThatGotThereFirst(t *testing.T) {
 	if err != nil || first != 1 {
 		t.Fatalf("first sequence = %d, %v", first, err)
 	}
-	stale, err := records.ReadOrEmpty(ctx, recordStore, l.sequenceName())
+	stale, err := keyvalue.ReadOrEmpty(ctx, recordStore, l.sequenceKey())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.nextSequence(ctx); err != nil {
 		t.Fatal(err)
 	}
-	stale.Bytes = []byte("99")
-	if _, err := recordStore.Write(ctx, stale); !errors.Is(err, records.ErrStale) {
+	stale.Value = []byte("99")
+	if _, err := recordStore.Write(ctx, stale); !errors.Is(err, keyvalue.ErrStale) {
 		t.Fatalf("a write at a revision that moved = %v, want ErrStale", err)
 	}
 	third, err := l.nextSequence(ctx)
@@ -152,7 +156,7 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", progress.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
-	pointer := l.pointerName(edge.DefaultPointer).String()
+	pointer := l.pointerKey(edge.DefaultPointer).String()
 	store.racing = func(name string) {
 		if name != pointer {
 			return
@@ -338,6 +342,32 @@ func TestPointersAndDestroy(t *testing.T) {
 	}
 	if len(store.rows) != 0 {
 		t.Fatalf("Destroy() left %d records behind", len(store.rows))
+	}
+}
+
+func TestAContainerBuildNamedByItsImageReferenceIsOneRecord(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+
+	build := "ocel/web@sha256:0123"
+	if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Build: build}); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": build}}, "", progress.DiscardProgress()); err != nil {
+		t.Fatal(err)
+	}
+	if got, found, err := l.Record(ctx, "web", build); err != nil || !found || got.Build != build {
+		t.Fatalf("Record(web, %s) = %+v, %v, %v, want the record staged", build, got, found, err)
+	}
+	pruned, err := l.Prune(ctx, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{RecordKey("web", build)}; !slices.Equal(pruned.SurvivingRecordKeys, want) {
+		t.Fatalf("Prune() kept records %q, want %q: the image reference is one build, not a path beneath the app", pruned.SurvivingRecordKeys, want)
+	}
+	if key := l.deploymentKey("web", build); len(key.Path) != 3 || key.Path[2] != build {
+		t.Fatalf("the record for web at %s is keyed %s, want the image reference as one segment", build, key)
 	}
 }
 
@@ -548,7 +578,7 @@ func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
 	l, store := fixture()
 	ctx := context.Background()
 	promoting(t, l, edge.Promotion{PromotionID: "p1"})
-	pointer := l.pointerName(edge.DefaultPointer).String()
+	pointer := l.pointerKey(edge.DefaultPointer).String()
 	store.racing = func(name string) {
 		if name != pointer {
 			return
@@ -573,14 +603,14 @@ func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
 	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", progress.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
-	pointer := l.pointerName(edge.DefaultPointer).String()
-	promotion := l.promotionName(edge.DefaultPointer, "p2").String()
+	pointer := l.pointerKey(edge.DefaultPointer).String()
+	promotion := l.promotionKey(edge.DefaultPointer, "p2").String()
 	recordStore.racing = func(name string) {
 		if name != promotion {
 			return
 		}
 		recordStore.racing = nil
-		racer := records.Record{Name: l.pointerName(edge.DefaultPointer), Bytes: []byte(`{"promotionId":"p9"}`), Revision: recordStore.rows[pointer].Revision}
+		racer := keyvalue.Entry{Key: l.pointerKey(edge.DefaultPointer), Value: []byte(`{"promotionId":"p9"}`), Revision: recordStore.rows[pointer].Revision}
 		if _, err := recordStore.Write(ctx, racer); err != nil {
 			t.Fatal(err)
 		}
