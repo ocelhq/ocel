@@ -39,17 +39,6 @@ type TeardownAPIs struct {
 	Buckets cfn.BucketEmptierAPI
 }
 
-func SiblingTierOf(tier environment.Tier) (environment.Tier, error) {
-	switch tier {
-	case environment.TierProduction:
-		return environment.TierPreview, nil
-	case environment.TierPreview:
-		return environment.TierProduction, nil
-	default:
-		return "", fmt.Errorf("bootstrap: unknown tier %q", tier)
-	}
-}
-
 func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
 	secret, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
@@ -67,11 +56,7 @@ func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
 }
 
 func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (bool, error) {
-	sibling, err := SiblingTierOf(tier)
-	if err != nil {
-		return false, err
-	}
-	stackName, err := ns.StackNameFor(sibling)
+	stackName, err := ns.StackNameFor(tier.Sibling())
 	if err != nil {
 		return false, err
 	}
@@ -207,7 +192,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		return err
 	}
 	if shared {
-		progress.Say(fmt.Sprintf("Keeping the Pulumi passphrase in %s: the %s bootstrap is still installed and its Pulumi state is encrypted under it", ns.PassphraseParamName(), siblingName(tier)))
+		progress.Say(fmt.Sprintf("Keeping the Pulumi passphrase in %s: the %s bootstrap is still installed and its Pulumi state is encrypted under it", ns.PassphraseParamName(), tier.Sibling()))
 	} else {
 		params = append(params, ns.PassphraseParamName())
 	}
@@ -217,14 +202,6 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		}
 	}
 	return nil
-}
-
-func siblingName(tier environment.Tier) environment.Tier {
-	sibling, err := SiblingTierOf(tier)
-	if err != nil {
-		return ""
-	}
-	return sibling
 }
 
 func deleteParam(ctx context.Context, ssmClient SSMAPI, name string) error {

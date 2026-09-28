@@ -84,7 +84,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 
-	sibling, err := gate.Status(ctx, siblingOf(tier))
+	sibling, err := gate.Status(ctx, tier.Sibling())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -198,13 +198,6 @@ func slugsBesides(ctx context.Context, gate Gate, tier environment.Tier, slug st
 	}
 	slices.Sort(slugs)
 	return slugs, nil
-}
-
-func siblingOf(tier environment.Tier) environment.Tier {
-	if tier == environment.TierPreview {
-		return environment.TierProduction
-	}
-	return environment.TierPreview
 }
 
 func PrincipalProto(vendor provider.Vendor, principal provider.Principal) *contractv1.Identity {
