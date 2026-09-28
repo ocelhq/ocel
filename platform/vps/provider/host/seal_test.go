@@ -196,6 +196,29 @@ func TestTheSealHelperOpensNothingWhoseBytesMoved(t *testing.T) {
 	}
 }
 
+func TestTheSealHelperStillOpensAValueSealedUnderTheKeyAndCoordinateItWasSealedWith(t *testing.T) {
+	t.Parallel()
+
+	root := sealDir(t)
+	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "production", "seal.key"), key, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	at := records.SealScope{Project: "shop", Class: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+	sealed := "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg78hOZr+SZv+OoHsggDIp1z"
+
+	opened, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(at)...)...)
+	if code != 0 {
+		t.Fatalf("open exited %d, want the value sealed at shop/production/staging/%%2Fweb//STRIPE_API_KEY/ to open: every value on a box is bound to those bytes", code)
+	}
+	if got := decoded(t, opened); got != "sk_live_secret" {
+		t.Errorf("open answered %q, want %q", got, "sk_live_secret")
+	}
+}
+
 func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 	t.Parallel()
 

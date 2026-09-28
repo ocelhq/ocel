@@ -3,6 +3,7 @@ package ports_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"maps"
 	"strings"
@@ -109,7 +110,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 
 	want := map[string]string{
 		"project":     "shop",
-		"class":       string(edge.ClassProduction),
+		"class":       "production",
 		"environment": "staging",
 		"folder":      "/web",
 		"key":         "STRIPE_API_KEY",
@@ -119,6 +120,18 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 	}
 	if len(crypto.keyIDs) != 1 || crypto.keyIDs[0] != keyARN {
 		t.Errorf("sealed under %v, want %q", crypto.keyIDs, keyARN)
+	}
+}
+
+func TestAValueAlreadySealedUnderTheStoredEncryptionContextStillOpens(t *testing.T) {
+	sealer, _ := newSealer()
+
+	at := records.SealScope{Project: "shop", Class: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
+	sealed := fakeCipherMarker + "class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
+		base64.StdEncoding.EncodeToString([]byte("sk_live_secret"))
+	opened, err := sealer.Open(context.Background(), at, []byte(sealed))
+	if err != nil || string(opened) != "sk_live_secret" {
+		t.Fatalf("Open() = %q, %v, want the value KMS sealed under class=production to open: the encryption context is data every stored value is bound to", opened, err)
 	}
 }
 
