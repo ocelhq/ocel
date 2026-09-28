@@ -9,6 +9,15 @@ import (
 
 const DefaultPointer = "@production"
 
+func ResolvePointer(pointer string) string {
+	if pointer == "" {
+		return DefaultPointer
+	}
+	return pointer
+}
+
+func IsDefaultPointer(pointer string) bool { return ResolvePointer(pointer) == DefaultPointer }
+
 type Kind string
 
 type FlipBound struct {

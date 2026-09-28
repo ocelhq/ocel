@@ -30,14 +30,7 @@ func (s *stack) State() edge.StackState { return s.state }
 func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Tier) }
 
 func (s *stack) routeKey(pointer, app string) host.RouteKey {
-	return host.RouteKey{Owner: s.surface(), Pointer: named(pointer), App: app}
-}
-
-func named(pointer string) string {
-	if pointer == "" {
-		return router.DefaultPointer
-	}
-	return pointer
+	return host.RouteKey{Owner: s.surface(), Pointer: router.ResolvePointer(pointer), App: app}
 }
 
 type promotable struct {
@@ -134,10 +127,10 @@ func (s *stack) previewSite() edge.PreviewSite {
 
 func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string) ([]host.HostClaim, error) {
 	site := s.previewSite()
-	if !site.Serves() || len(apps) == 0 || named(pointer) == router.DefaultPointer {
+	if !site.Serves() || len(apps) == 0 || router.IsDefaultPointer(pointer) {
 		return nil, nil
 	}
-	stores, err := s.stores(ctx, named(pointer))
+	stores, err := s.stores(ctx, router.ResolvePointer(pointer))
 	if err != nil {
 		return nil, err
 	}

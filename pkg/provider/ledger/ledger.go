@@ -63,13 +63,6 @@ func (l *Ledger) deploymentKey(app, build string) keyvalue.Key {
 
 func (l *Ledger) tagKey(tag string) keyvalue.Key { return l.key("tags", tag) }
 
-func pointerOr(pointer string) string {
-	if pointer == "" {
-		return router.DefaultPointer
-	}
-	return pointer
-}
-
 const displacedDepth = 16
 
 type promotionRecord struct {
@@ -150,7 +143,7 @@ func (l *Ledger) Record(ctx context.Context, app, build string) (router.Deployme
 }
 
 func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointer string, _ progress.Progress) error {
-	name := pointerOr(pointer)
+	name := router.ResolvePointer(pointer)
 	claimed, err := l.claimTag(ctx, promotion)
 	if err != nil {
 		return err
@@ -215,7 +208,7 @@ func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointe
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
 	ctx, stop := detachedForUnwind(ctx)
 	defer stop()
-	name := pointerOr(pointer)
+	name := router.ResolvePointer(pointer)
 	for range casAttempts {
 		at, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.pointerKey(name))
 		if err != nil {
@@ -399,7 +392,7 @@ func (l *Ledger) nextSequence(ctx context.Context) (int64, error) {
 }
 
 func (l *Ledger) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
-	name := pointerOr(pointer)
+	name := router.ResolvePointer(pointer)
 	rows, err := l.promotions(ctx, name)
 	if err != nil {
 		return nil, err
@@ -416,7 +409,7 @@ func (l *Ledger) History(ctx context.Context, pointer string) ([]router.HistoryE
 }
 
 func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
-	name := pointerOr(pointer)
+	name := router.ResolvePointer(pointer)
 	rows, err := l.promotions(ctx, name)
 	if err != nil {
 		return router.PruneResult{}, err
@@ -455,7 +448,7 @@ func Retain[T any](rows []T, keepN int, active string, id func(T) string) (kept,
 }
 
 func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
-	name := pointerOr(pointer)
+	name := router.ResolvePointer(pointer)
 	rows, err := l.promotions(ctx, name)
 	if err != nil {
 		return router.PruneResult{}, err
@@ -529,7 +522,7 @@ func (l *Ledger) deletePromotions(ctx context.Context, pointer string, rows []pr
 }
 
 func (l *Ledger) ReadActive(ctx context.Context, pointer string) (router.Promotion, bool, error) {
-	name := pointerOr(pointer)
+	name := router.ResolvePointer(pointer)
 	active, err := l.pointerAt(ctx, name)
 	if err != nil || active == "" {
 		return router.Promotion{}, false, err
@@ -549,7 +542,7 @@ func (l *Ledger) ReadActive(ctx context.Context, pointer string) (router.Promoti
 }
 
 func (l *Ledger) ActivePromotionID(ctx context.Context, pointer string) (string, error) {
-	return l.pointerAt(ctx, pointerOr(pointer))
+	return l.pointerAt(ctx, router.ResolvePointer(pointer))
 }
 
 func (l *Ledger) pointerAt(ctx context.Context, pointer string) (string, error) {

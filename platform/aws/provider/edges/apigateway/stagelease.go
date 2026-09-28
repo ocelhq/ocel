@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -51,8 +52,8 @@ func (s *stack) stateKeyValues(c Clients) keyvalue.Store {
 func (s *stack) newStageLease(c Clients, pointer, holder string) stageLease {
 	return stageLease{
 		keyValues: s.stateKeyValues(c),
-		key:       s.stagePartition().Key("stage", pointerOr(pointer)),
-		pointer:   pointerOr(pointer),
+		key:       s.stagePartition().Key("stage", router.ResolvePointer(pointer)),
+		pointer:   router.ResolvePointer(pointer),
 		holder:    holder,
 		now:       time.Now,
 		wait:      s.p.leaseWait,

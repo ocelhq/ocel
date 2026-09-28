@@ -193,7 +193,7 @@ func (s *stack) servedHostnames(pointer string) []string {
 	if host := s.previewHost(pointer); host != "" {
 		return []string{host}
 	}
-	if pointerOr(pointer) != router.DefaultPointer {
+	if !router.IsDefaultPointer(pointer) {
 		return nil
 	}
 	return s.state.Bound
@@ -218,7 +218,7 @@ func (s *stack) onPreviewWildcard() bool {
 }
 
 func (s *stack) previewHost(pointer string) string {
-	if pointerOr(pointer) == router.DefaultPointer {
+	if router.IsDefaultPointer(pointer) {
 		return ""
 	}
 	return s.previewSite().Host(pointer, "")

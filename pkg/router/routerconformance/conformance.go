@@ -43,10 +43,7 @@ func Run(t *testing.T, suite Suite) {
 	if suite.Hostname == "" {
 		t.Fatal("the suite names no hostname for the claim checks")
 	}
-	pointer := suite.Pointer
-	if pointer == "" {
-		pointer = router.DefaultPointer
-	}
+	pointer := router.ResolvePointer(suite.Pointer)
 	record := suite.Record
 	if record == nil {
 		record = functionRecord

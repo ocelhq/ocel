@@ -54,12 +54,12 @@ func unwind(ctx context.Context, l projectLedger, pointer, promotionID string, f
 	ctx, stop := context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
 	defer stop()
 	if err := l.Unpromote(ctx, promotionID, pointer); err != nil {
-		return fmt.Errorf("the ledger still names promotion %s on %s, which not every router serves: %w", promotionID, pointerName(pointer), err)
+		return fmt.Errorf("the ledger still names promotion %s on %s, which not every router serves: %w", promotionID, router.ResolvePointer(pointer), err)
 	}
 	var errs []error
 	for _, routed := range flipped {
 		if err := restore(ctx, l, pointer, routed); err != nil {
-			errs = append(errs, fmt.Errorf("a router still serves promotion %s on %s, which the ledger no longer names: %w", promotionID, pointerName(pointer), err))
+			errs = append(errs, fmt.Errorf("a router still serves promotion %s on %s, which the ledger no longer names: %w", promotionID, router.ResolvePointer(pointer), err))
 		}
 	}
 	return errors.Join(errs...)
@@ -96,7 +96,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 			return err
 		}
 	}
-	return fmt.Errorf("another deploy moved %s on each of %d attempts to serve what the ledger names there", pointerName(pointer), restoreAttempts)
+	return fmt.Errorf("another deploy moved %s on each of %d attempts to serve what the ledger names there", router.ResolvePointer(pointer), restoreAttempts)
 }
 
 func stillActive(l projectLedger, pointer, promotionID string) func(context.Context) error {
@@ -110,15 +110,8 @@ func stillActive(l projectLedger, pointer, promotionID string) func(context.Cont
 		}
 		return movedPromotion{refusal.Refusal{Code: refusal.CodeBusy, Message: fmt.Sprintf(
 			"promotion %s is no longer active on %s, which now names %s: another deploy moved it while this one flipped, and this deploy stopped rather than serve a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
-			promotionID, pointerName(pointer), activeOr(active))}}
+			promotionID, router.ResolvePointer(pointer), activeOr(active))}}
 	}
-}
-
-func pointerName(pointer string) string {
-	if pointer == "" {
-		return router.DefaultPointer
-	}
-	return pointer
 }
 
 func activeOr(active string) string {
