@@ -17,6 +17,7 @@ import (
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -37,11 +38,11 @@ type route struct {
 }
 
 type routeStore struct {
-	clients Clients
-	arn     string
-	wait    func(context.Context, time.Duration) error
-	jitter  func() float64
-	guard   func(context.Context) error
+	clients     Clients
+	arn         string
+	wait        func(context.Context, time.Duration) error
+	jitter      func() float64
+	stillActive router.StillActive
 }
 
 func (w routeStore) backoff(ctx context.Context, attempt int) error {
@@ -107,8 +108,8 @@ func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []
 			last = err
 			continue
 		}
-		if w.guard != nil {
-			if err := w.guard(ctx); err != nil {
+		if w.stillActive != nil {
+			if err := w.stillActive(ctx); err != nil {
 				return err
 			}
 		}

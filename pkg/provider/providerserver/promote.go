@@ -99,7 +99,7 @@ func restore(ctx context.Context, l projectLedger, pointer string, routed appRou
 	return fmt.Errorf("another deploy moved %s on each of %d attempts to serve what the ledger names there", router.ResolvePointer(pointer), restoreAttempts)
 }
 
-func stillActive(l projectLedger, pointer, promotionID string) func(context.Context) error {
+func stillActive(l projectLedger, pointer, promotionID string) router.StillActive {
 	return func(ctx context.Context) error {
 		active, err := l.ActivePromotionID(ctx, pointer)
 		if err != nil {

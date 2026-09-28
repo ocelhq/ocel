@@ -337,7 +337,7 @@ type standInLedger struct {
 	active string
 }
 
-func (l *standInLedger) stillActive(promotionID string) func(context.Context) error {
+func (l *standInLedger) stillActive(promotionID string) router.StillActive {
 	return func(context.Context) error {
 		if l.active != promotionID {
 			return errDisplaced
@@ -346,7 +346,7 @@ func (l *standInLedger) stillActive(promotionID string) func(context.Context) er
 	}
 }
 
-func (l *standInLedger) promote(ctx context.Context, stack router.Stack, flip router.Flip, stillActive func(context.Context) error) error {
+func (l *standInLedger) promote(ctx context.Context, stack router.Stack, flip router.Flip, stillActive router.StillActive) error {
 	displaced := l.active
 	l.active = flip.Promotion.PromotionID
 	if stillActive == nil {

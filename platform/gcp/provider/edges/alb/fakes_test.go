@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const frontAddress = "34.117.0.7"
@@ -154,7 +155,7 @@ func (w *world) enter(certificateMap, hostname string) {
 	w.entries[certificateMap][hostname] = true
 }
 
-func (w *world) Pin(ctx context.Context, service, revision string, stillActive func(context.Context) error) error {
+func (w *world) Pin(ctx context.Context, service, revision string, stillActive router.StillActive) error {
 	for {
 		w.mu.Lock()
 		read, refused := len(w.pinned), w.pinning
