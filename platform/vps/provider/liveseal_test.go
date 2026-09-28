@@ -111,7 +111,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 	}
 
 	if moved, err := cipher.Open(ctx, tier, sealedAt("API_KEY"), written); err == nil {
-		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the coordinate authenticates nothing", moved)
+		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the associated data authenticates nothing", moved)
 	}
 }
 

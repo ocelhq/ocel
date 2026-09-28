@@ -104,7 +104,7 @@ var bound = seal.AssociatedData{
 	{Name: "key", Value: "DATABASE_URL"},
 }
 
-func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
+func TestAValueOpensUnderItsOwnAssociatedDataAndNoOther(t *testing.T) {
 	t.Parallel()
 	key := aKey(t)
 	sealed := sealFor(t, key, bound, "postgres://example")
@@ -116,7 +116,7 @@ func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
 	elsewhere := slices.Clone(bound)
 	elsewhere[0].Value = "other"
 	if _, err := Open(key, elsewhere, sealed); err == nil {
-		t.Error("a value sealed for shop opened for other, so the coordinate authenticates nothing")
+		t.Error("a value sealed for shop opened for other, so the associated data authenticates nothing")
 	}
 	sealed[len(sealed)-1] ^= 0xff
 	if _, err := Open(key, bound, sealed); err == nil {
@@ -132,7 +132,7 @@ const (
 	valueSealedAlready = "oKGio6SlpqeoqaqrlXMjQSy9Z+ARAOShYg78hOZr+SZv+OoHsggDIp1z"
 )
 
-func TestAValueAlreadySealedOnTheBoxStillOpensUnderTheKeyAndCoordinateItWasSealedWith(t *testing.T) {
+func TestAValueOnTheBoxOpensUnderTheKeyAndAssociatedDataItWasSealedWith(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	key, err := base64.StdEncoding.DecodeString(keySealedWith)
@@ -163,7 +163,7 @@ func TestAValueAlreadySealedOnTheBoxStillOpensUnderTheKeyAndCoordinateItWasSeale
 	}
 }
 
-func TestAStoreSecretSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+func TestAStoreSecretIsBoundToItsProjectTierStackAndTheStoreKeyUnderResources(t *testing.T) {
 	t.Parallel()
 	key, err := base64.StdEncoding.DecodeString(keySealedWith)
 	if err != nil {
@@ -175,13 +175,13 @@ func TestAStoreSecretSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpen
 	}
 	manifest := Manifest{Slug: "shop", Tier: "production", Store: &Store{Env: "shop-prod"}}
 
-	opened, err := Open(key, manifest.StoreSecretAssociatedData(), sealed)
+	opened, err := Open(key, NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env), sealed)
 	if err != nil || string(opened) != "s3cr3t-store" {
 		t.Fatalf("Open() = %q, %v, want the store secret sealed at shop/production/shop-prod/resources/store/storekey/ to open: every box's store secret is bound to those bytes", opened, err)
 	}
 }
 
-func TestTheSealerReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
+func TestTheBoxCipherReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	key := aKey(t)
@@ -200,7 +200,7 @@ func TestTheSealerReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 		t.Error("a preview value opened under the production key, and each tier is sealed to its own")
 	}
 	if _, err := vault.Seal(context.Background(), environment.TierProduction, bound, []byte("x")); err == nil {
-		t.Error("the box-side sealer sealed something, and sealing is the helper's under sudo alone")
+		t.Error("the box-side cipher sealed something, and sealing is the helper's under sudo alone")
 	}
 }
 

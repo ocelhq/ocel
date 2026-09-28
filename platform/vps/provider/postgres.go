@@ -107,12 +107,12 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 	}, nil
 }
 
-func postgresSecretAssociatedData(ref provider.StackRef, resource string) seal.AssociatedData {
-	return live.SecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), postgresSecretFolder, resource, postgresSecretName)
+func newPostgresSecretAssociatedData(ref provider.StackRef, resource string) seal.AssociatedData {
+	return live.NewSecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), postgresSecretFolder, resource, postgresSecretName)
 }
 
 func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
-	bound := postgresSecretAssociatedData(in.Ref, in.Resource.Name)
+	bound := newPostgresSecretAssociatedData(in.Ref, in.Resource.Name)
 	sealed, err := p.host.Kept(ctx, in.Ref.Tier, name)
 	if err != nil {
 		return "", err

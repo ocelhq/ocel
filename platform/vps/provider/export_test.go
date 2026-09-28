@@ -14,11 +14,11 @@ var ProviderOver = newProvider
 
 var MintStoreSecret = mintStoreSecret
 
-func StoreSecretAssociatedData(ref provider.StackRef) seal.AssociatedData {
-	return storeSecretAssociatedData(ref)
+func NewStoreSecretAssociatedData(ref provider.StackRef) seal.AssociatedData {
+	return newStoreSecretAssociatedData(ref)
 }
 
-var PostgresSecretAssociatedData = postgresSecretAssociatedData
+var NewPostgresSecretAssociatedData = newPostgresSecretAssociatedData
 
 func StoreName(ref provider.StackRef) string { return storeName(ref) }
 

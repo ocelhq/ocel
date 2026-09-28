@@ -57,7 +57,7 @@ func TestCipherConformance(t *testing.T) {
 func TestValueRecordsPartitionOnTheProjectAndTier(t *testing.T) {
 	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: mustCipher()}
+	store := envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -106,7 +106,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	}
 }
 
-func TestACellIsSealedUnderTheEncryptionContextItWasBoundToBeforeThePackageMoved(t *testing.T) {
+func TestACellIsSealedUnderAnEncryptionContextNamingItsProjectClassEnvironmentFolderAndKey(t *testing.T) {
 	table, _ := newRecords(t)
 	cipher, crypto := newCipher()
 	store := envvars.Store{Records: table, Cipher: cipher}
@@ -132,7 +132,7 @@ func TestACellIsSealedUnderTheEncryptionContextItWasBoundToBeforeThePackageMoved
 	}
 }
 
-func TestACellSealedUnderTheEncryptionContextItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+func TestACellWhoseEncryptionContextNamesItsTierClassOpens(t *testing.T) {
 	table, _ := newRecords(t)
 	cipher, _ := newCipher()
 	sealed := fakeCipherMarker + keyARN + "#class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
@@ -204,7 +204,7 @@ func TestAValueNamingNoTierIsRefusedRatherThanSealedUnderSomeKey(t *testing.T) {
 	}
 }
 
-func mustCipher() seal.Cipher {
+func newCipherIgnoringKMSCalls() seal.Cipher {
 	cipher, _ := newCipher()
 	return cipher
 }
@@ -311,7 +311,7 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
-	store := envvars.Store{Records: table, Cipher: mustCipher()}
+	store := envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",
 		envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {

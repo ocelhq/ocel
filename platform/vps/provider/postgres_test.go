@@ -397,7 +397,7 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 	}
 }
 
-func TestAPostgresPasswordSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(t *testing.T) {
 	t.Parallel()
 	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
 	if err != nil {
@@ -413,7 +413,7 @@ func TestAPostgresPasswordSealedUnderTheCoordinateItHadBeforeThePackageMovedStil
 	}
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: infra}
 
-	opened, err := live.Open(key, vps.PostgresSecretAssociatedData(ref, "main"), sealed)
+	opened, err := live.Open(key, vps.NewPostgresSecretAssociatedData(ref, "main"), sealed)
 	if err != nil || string(opened) != "s3cr3t-postgres" {
 		t.Fatalf("Open() = %q, %v, want the password sealed at shop/production/prod--infra/resources/main/password/ to open: every box's Postgres password is bound to those bytes", opened, err)
 	}

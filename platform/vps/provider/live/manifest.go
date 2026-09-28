@@ -55,19 +55,15 @@ type Manifest struct {
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
 
-func (m Manifest) StoreSecretAssociatedData() seal.AssociatedData {
-	return StoreSecretAssociatedData(m.Slug, environment.Tier(m.Tier), m.Store.Env)
+func NewStoreSecretAssociatedData(project string, tier environment.Tier, stack string) seal.AssociatedData {
+	return NewSecretAssociatedData(project, tier, stack, StoreSecretFolder, StoreSecretBinding, StoreSecretName)
 }
 
-func StoreSecretAssociatedData(project string, tier environment.Tier, env string) seal.AssociatedData {
-	return SecretAssociatedData(project, tier, env, StoreSecretFolder, StoreSecretBinding, StoreSecretName)
-}
-
-func SecretAssociatedData(project string, tier environment.Tier, env, folder, binding, name string) seal.AssociatedData {
+func NewSecretAssociatedData(project string, tier environment.Tier, stack, folder, binding, name string) seal.AssociatedData {
 	return seal.AssociatedData{
 		{Name: "project", Value: project},
 		{Name: "tier", Value: string(tier)},
-		{Name: "env", Value: env},
+		{Name: "stack", Value: stack},
 		{Name: "folder", Value: folder},
 		{Name: "binding", Value: binding},
 		{Name: "name", Value: name},

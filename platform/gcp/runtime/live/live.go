@@ -66,11 +66,11 @@ func FromManifest(raw []byte) (*live.Values, error) {
 	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, store records.Store, sealer seal.Cipher) *live.Values {
+func Over(manifest vars.Manifest, store records.Store, cipher seal.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: envvars.EnvironmentReader{
 			Records:     store,
-			Cipher:      sealer,
+			Cipher:      cipher,
 			Scope:       envvars.Scope{Project: manifest.Slug, Tier: environment.Tier(manifest.Tier)},
 			Environment: manifest.Environment,
 		},

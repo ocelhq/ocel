@@ -96,7 +96,7 @@ def additional(values):
     return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in values).encode()
 
 
-def bound(args):
+def parse_associated_data(args):
     fields = []
     named = set()
     while args:
@@ -164,7 +164,7 @@ def main(argv):
     if verb not in ("seal", "open"):
         abort("unknown verb %s" % verb)
 
-    aad = bound(rest)
+    aad = parse_associated_data(rest)
     key = key_of(path)
     fed = sys.stdin.buffer.read().strip()
     try:

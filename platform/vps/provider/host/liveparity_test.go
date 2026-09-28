@@ -12,14 +12,14 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func TestWhatTheSealHelperSealsTheBoxOpensNativelyAtTheSameCoordinate(t *testing.T) {
+func TestWhatTheSealHelperSealsTheBoxOpensNativelyUnderTheSameAssociatedData(t *testing.T) {
 	t.Parallel()
 
 	root := sealDir(t)
 	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
 		t.Fatalf("init exited %d", code)
 	}
-	sealed, code := sealHelperAt(t, root, encoded("postgres://example"), append([]string{"seal"}, aCoordinate...)...)
+	sealed, code := sealHelperAt(t, root, encoded("postgres://example"), append([]string{"seal"}, boundFlags...)...)
 	if code != 0 {
 		t.Fatalf("seal exited %d", code)
 	}

@@ -110,7 +110,7 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 	}
 }
 
-func TestLiveSealer(t *testing.T) {
+func TestLiveTheCipherSealsAsEveryCipherMust(t *testing.T) {
 	vendor := live(t)
 	bootstrapped(t, vendor, environment.TierProduction)
 
