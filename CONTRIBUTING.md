@@ -103,7 +103,7 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 - CI runs every workflow in `.github/workflows/` whose paths a change touches.
 - The VM and emulator suites (`scripts/incus.sh`, `scripts/incus-fanout.sh`,
   `scripts/floci.sh` and the `scripts/act.sh` replays) run in CI. Run one locally only to
-  reproduce a failure CI reported, with `OCEL_LIVE_LOCAL=1` set.
+  reproduce a failure CI reported.
 - Suites that need cloud credentials (the `journey:real` label, the nightly run) are run by
   maintainers.
 
