@@ -3,14 +3,11 @@ package providerserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
-	"strings"
 
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -20,19 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
-
-func tierOf(tier environmentv1.Tier) (environment.Tier, error) {
-	switch tier {
-	case environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_UNSPECIFIED:
-		return environment.TierProduction, nil
-	case environmentv1.Tier_TIER_PREVIEW:
-		return environment.TierPreview, nil
-	default:
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"there is no %s bootstrap; a bootstrap is either production or preview",
-			strings.ToLower(strings.TrimPrefix(tier.String(), "TIER_"))))
-	}
-}
 
 func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
 	p, err := h.session.use()
@@ -53,7 +37,7 @@ func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
 }
 
 func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	tier, err := tierOf(req.GetTier())
+	tier, err := decodeTier(req.GetTier())
 	if err != nil {
 		return err
 	}
@@ -104,7 +88,7 @@ func applyRequestOf(req *contractv1.BootstrapRequest) ApplyRequest {
 }
 
 func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
-	tier, err := tierOf(req.GetTier())
+	tier, err := decodeTier(req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +220,7 @@ func BootstrapStatusProto(current BootstrapStatus, writing provider.WrittenBy, t
 }
 
 func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope) (*planv1.ChangePlan, error) {
-	tier, err := tierOf(req.GetTier())
+	tier, err := decodeTier(req.GetTier())
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +255,7 @@ func soleRaisedEdge(plan provider.Plan) string {
 }
 
 func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.BootstrapScope, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	tier, err := tierOf(req.GetTier())
+	tier, err := decodeTier(req.GetTier())
 	if err != nil {
 		return err
 	}

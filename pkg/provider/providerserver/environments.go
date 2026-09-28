@@ -20,7 +20,7 @@ import (
 )
 
 func envName(env *environmentv1.Environment) (string, error) {
-	tier, err := tierOf(env.GetTier())
+	tier, err := decodeTier(env.GetTier())
 	if err != nil {
 		return "", err
 	}

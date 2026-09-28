@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -18,7 +17,7 @@ import (
 )
 
 func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
-	tier, err := tierOf(req.GetRequiredTier())
+	tier, err := decodeTier(req.GetRequiredTier())
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +60,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	resp.Bootstrap = BootstrapStatusProto(status, h.session.writer, req.GetRequiredTier(), required)
 
 	if status.Present {
-		resp.InfraTier, resp.InfrastructurePresent = wireTier(tier), true
+		resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
 		if err := checkCompat(status.Schema, true, provider.BootstrapSchema).explain(status.Schema, provider.BootstrapSchema, provider.BootstrapCommand(tier)); err != nil {
 			return nil, provider.RefusalError(err)
 		}
@@ -90,7 +89,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, provider.RefusalError(err)
 	}
 	if sibling.Present {
-		resp.InfraTier, resp.InfrastructurePresent = wireTier(sibling.Tier), true
+		resp.InfraTier, resp.InfrastructurePresent = encodeTier(sibling.Tier), true
 	}
 	return resp, nil
 }
@@ -206,13 +205,6 @@ func siblingOf(tier environment.Tier) environment.Tier {
 		return environment.TierProduction
 	}
 	return environment.TierPreview
-}
-
-func wireTier(tier environment.Tier) environmentv1.Tier {
-	if tier == environment.TierPreview {
-		return environmentv1.Tier_TIER_PREVIEW
-	}
-	return environmentv1.Tier_TIER_PRODUCTION
 }
 
 func PrincipalProto(vendor provider.Vendor, principal provider.Principal) *contractv1.Identity {

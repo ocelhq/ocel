@@ -567,7 +567,7 @@ func (r *deployRun) domainApps() map[string]string {
 }
 
 func (r *deployRun) hostnames() []string {
-	tier := wireTier(r.spec.Tier)
+	tier := encodeTier(r.spec.Tier)
 	seen := map[string]bool{}
 	hosts := unseen(tierHostnames(r.manifest.GetDomains(), tier), seen)
 	for _, app := range r.manifest.GetApps() {
@@ -612,7 +612,7 @@ func (r *deployRun) servedHostnames() [][]string {
 		}
 		return served
 	}
-	tier := wireTier(r.spec.Tier)
+	tier := encodeTier(r.spec.Tier)
 	own := make([][]string, len(r.spec.Apps))
 	for slot, entry := range r.spec.Apps {
 		own[slot] = tierHostnames(entry.Manifest.GetDomains(), tier)

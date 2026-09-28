@@ -49,7 +49,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if req.GetSlug() == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and a removal plan is drawn for one")
 	}
-	tier, err := tierOf(req.GetEnvironment().GetTier())
+	tier, err := decodeTier(req.GetEnvironment().GetTier())
 	if err != nil {
 		return nil, err
 	}

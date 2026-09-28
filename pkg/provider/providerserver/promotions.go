@@ -100,7 +100,7 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
 	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
-		tier, err := tierOf(req.GetEnvironment().GetTier())
+		tier, err := decodeTier(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err
 		}
