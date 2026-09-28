@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
@@ -169,7 +169,7 @@ func benched(t *testing.T, gate, cutover session.Result) *flipped {
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func released(t *testing.T, rel Release, gate, cutover session.Result, progress edge.Progress) (*flipped, error) {
+func released(t *testing.T, rel Release, gate, cutover session.Result, progress progress.Progress) (*flipped, error) {
 	t.Helper()
 	box := benched(t, gate, cutover)
 	return box, box.host().Release(context.Background(), rel, progress)

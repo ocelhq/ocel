@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/constants"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func pythonApp(t *testing.T, files map[string]string) string {

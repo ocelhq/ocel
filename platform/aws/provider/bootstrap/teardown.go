@@ -1,8 +1,8 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 
 	"context"
 	"errors"
@@ -101,7 +101,7 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, names []string, progress edge.Progress) error {
+func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, names []string, progress progress.Progress) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
@@ -123,7 +123,7 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 	return nil
 }
 
-func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress edge.Progress) error {
+func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress progress.Progress) error {
 	progress = ensureProgress(progress)
 
 	stackName, err := ns.StackNameFor(class)
@@ -261,7 +261,7 @@ func deleteAccessKeys(ctx context.Context, iamClient IAMKeyAPI, userName string)
 	return nil
 }
 
-func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, progress edge.Progress) error {
+func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, progress progress.Progress) error {
 	var marker *string
 	for {
 		out, err := iamClient.ListEntitiesForPolicy(ctx, &iam.ListEntitiesForPolicyInput{

@@ -7,12 +7,13 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type interceptedRecords struct {
@@ -51,7 +52,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 	shared := fake.NewRecords()
 	store := &interceptedRecords{Store: shared}
 	stacks, engine, shop := containerStacks(t, store)
-	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(ctx, shop, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
@@ -63,12 +64,12 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 			return
 		}
 		claimed = true
-		if _, err := other.Provision(ctx, blog, edge.DiscardProgress()); err != nil {
+		if _, err := other.Provision(ctx, blog, progress.DiscardProgress()); err != nil {
 			t.Errorf("Provision(blog) during shop's release = %v", err)
 		}
 	}
 
-	if err := stacks.Destroy(ctx, shop.Ref, edge.DiscardProgress()); err != nil {
+	if err := stacks.Destroy(ctx, shop.Ref, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if !claimed {
@@ -94,7 +95,7 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 	ctx := context.Background()
 	shared := fake.NewRecords()
 	stacks, engine, shop := containerStacks(t, shared)
-	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(ctx, shop, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	leased, err := records.ReadOrEmpty(ctx, shared, leaseRecord(edge.ClassProduction))
@@ -107,7 +108,7 @@ func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T
 
 	other, _, blog := containerStacks(t, shared)
 	blog.Ref = provider.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
-	_, err = other.Provision(ctx, blog, edge.DiscardProgress())
+	_, err = other.Provision(ctx, blog, progress.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Provision(blog) = %v, want the busy refusal shared container infrastructure on its way down earns", err)

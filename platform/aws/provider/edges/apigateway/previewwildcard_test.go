@@ -11,8 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -80,7 +81,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := edge.Promotion{PromotionID: "p-" + pointer, Ts: 1, Builds: map[string]string{"web": record.Build}}
-	if err := stack.Promote(ctx, promotion, pointer, edge.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -348,7 +349,7 @@ func TestRemovePointerTakesTheRuleAndTheAPI(t *testing.T) {
 	api := w.gateway.named(previewAPIName)
 	w.gateway.calls = nil
 
-	if _, err := stack.RemovePointer(ctx, previewPoint, edge.DiscardProgress()); err != nil {
+	if _, err := stack.RemovePointer(ctx, previewPoint, progress.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 

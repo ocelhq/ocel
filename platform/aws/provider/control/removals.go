@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {

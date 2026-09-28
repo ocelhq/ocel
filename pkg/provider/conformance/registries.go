@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {

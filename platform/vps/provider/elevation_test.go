@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
@@ -27,7 +28,7 @@ func (r *reached) Plan(context.Context, provider.BootstrapRequest) (provider.Pla
 	return provider.Plan{}, nil
 }
 
-func (r *reached) Apply(context.Context, provider.BootstrapRequest, edge.Progress) error {
+func (r *reached) Apply(context.Context, provider.BootstrapRequest, progress.Progress) error {
 	r.applied++
 	return nil
 }
@@ -37,7 +38,7 @@ func (r *reached) PlanRemove(context.Context, edge.Class) (provider.Plan, error)
 	return provider.Plan{}, nil
 }
 
-func (r *reached) Remove(context.Context, edge.Class, edge.Progress) error {
+func (r *reached) Remove(context.Context, edge.Class, progress.Progress) error {
 	r.removed++
 	return nil
 }

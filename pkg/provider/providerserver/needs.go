@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const configFileName = "ocel.json"

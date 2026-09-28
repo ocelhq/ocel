@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var everyEdgeKind = []edge.Kind{KindCloudflare, KindCloudFront, KindAPIGateway}

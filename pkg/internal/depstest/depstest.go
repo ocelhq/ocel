@@ -14,7 +14,6 @@ const repo = "github.com/ocelhq/ocel"
 
 var OpenToPkg = []string{
 	repo + "/pkg",
-	repo + "/platform/edge/contract",
 }
 
 var ClosedToPkg = []string{

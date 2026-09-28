@@ -11,10 +11,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func nextManifest() *contractv1.Manifest {
@@ -147,7 +147,7 @@ func (quietProgress) Detail(string) {}
 
 func (quietProgress) Debug(string) {}
 
-func (quietProgress) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (quietProgress) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func pushSet(ctx context.Context, set *assetSet, err error) error {
 	if err != nil || set == nil {

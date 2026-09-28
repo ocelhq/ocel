@@ -8,7 +8,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {

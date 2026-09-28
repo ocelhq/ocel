@@ -9,10 +9,11 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const eventSenderBuffer = 256
@@ -118,7 +119,7 @@ func streamed(
 	ctx context.Context,
 	stream *connect.ServerStream[progressv1.OperationEvent],
 	unit Stage,
-	do func(*eventStream, edge.Progress) error,
+	do func(*eventStream, progress.Progress) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		if err := inUnit(sender, unit, do); err != nil {
@@ -131,10 +132,10 @@ func streamed(
 func inUnit(
 	sender *eventStream,
 	unit Stage,
-	do func(*eventStream, edge.Progress) error,
+	do func(*eventStream, progress.Progress) error,
 ) error {
 	return newStageScope(sender).unit(unit, func(u *unitRun) error {
-		return u.phase(func(progress edge.Progress) error {
+		return u.phase(func(progress progress.Progress) error {
 			return do(sender, progress)
 		})
 	})
@@ -150,7 +151,7 @@ type stageProgress struct {
 	stage  Stage
 }
 
-func newProgress(sender *eventStream, stage Stage) edge.Progress {
+func newProgress(sender *eventStream, stage Stage) progress.Progress {
 	return &stageProgress{sender: sender, trace: newEventTrace(sender), stage: stage}
 }
 
@@ -180,7 +181,7 @@ func (r *stageProgress) Debug(line string) {
 	r.sender.send(r.stage.scoped(outputEvent(progressv1.Level_LEVEL_DEBUG, sanitizeMessage(line))))
 }
 
-func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...edge.Attr) {
+func (r *stageProgress) Span(name string, start, end time.Time, err error, attrs ...progress.Attr) {
 	detail := NewStage(r.stage, name)
 	r.trace.Start(start, detail)
 	r.trace.End(detail, start, end, err, attrs...)

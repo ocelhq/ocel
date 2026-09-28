@@ -8,11 +8,11 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func unkeyedDigests(plaintext string) []string {

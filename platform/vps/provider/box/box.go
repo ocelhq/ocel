@@ -5,9 +5,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -27,7 +28,7 @@ type Machine interface {
 	ForgetNetwork(ctx context.Context, class edge.Class, project string) error
 	Promote(ctx context.Context, class edge.Class, project, app, imageRef string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
-	Release(ctx context.Context, rel host.Release, progress edge.Progress) error
+	Release(ctx context.Context, rel host.Release, progress progress.Progress) error
 	UnroutePointer(ctx context.Context, owner, pointer string) error
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)

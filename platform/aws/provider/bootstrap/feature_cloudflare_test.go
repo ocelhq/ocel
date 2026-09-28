@@ -6,7 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type edgeUserTemplate struct {

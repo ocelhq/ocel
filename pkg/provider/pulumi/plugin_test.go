@@ -8,10 +8,10 @@ import (
 	"github.com/pulumi/pulumi-go-provider/infer"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type pushCounter struct{ created atomic.Int64 }

@@ -13,7 +13,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/ssl"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

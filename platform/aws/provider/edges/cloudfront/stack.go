@@ -11,11 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type private struct {
@@ -199,7 +200,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	c, err := s.clients(ctx)
 	if err != nil {
 		return err
@@ -413,7 +414,7 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSe
 	return secret, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	c, err := s.clients(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err

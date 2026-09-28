@@ -3,9 +3,9 @@ package stackrecords
 import (
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/records"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func rooted(root string, class edge.Class, rest ...string) records.Name {

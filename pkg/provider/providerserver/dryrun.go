@@ -4,10 +4,10 @@ import (
 	"context"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (

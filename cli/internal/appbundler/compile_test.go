@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func goModule(t *testing.T) string {

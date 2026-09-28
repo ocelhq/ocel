@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestTheItemDigestTellsTwoNamespacesApart(t *testing.T) {

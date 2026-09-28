@@ -7,9 +7,10 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Pins interface {
@@ -22,7 +23,7 @@ func Promote(
 	pins Pins,
 	promotion edge.Promotion,
 	pointer string,
-	progress edge.Progress,
+	progress progress.Progress,
 ) error {
 	var pinning []edge.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {

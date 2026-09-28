@@ -17,8 +17,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const lifecycleSlug = "ocel-aws-e2e"

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -40,7 +40,7 @@ func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) 
 	return p.host.HasImage(ctx, push.ImageRef)
 }
 
-func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress edge.Progress) error {
+func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress progress.Progress) error {
 	present, err := p.from.Has(ctx, push)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress edge
 	return nil
 }
 
-func echo(progress edge.Progress, said string) {
+func echo(progress progress.Progress, said string) {
 	if progress == nil {
 		return
 	}

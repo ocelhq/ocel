@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -93,7 +93,7 @@ func (u Unserved) Error() string { return u.Err.Error() }
 
 func (u Unserved) Unwrap() error { return u.Err }
 
-func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress) error {
+func (h *Host) Release(ctx context.Context, rel Release, progress progress.Progress) error {
 	for _, app := range rel.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
 			return Unserved{refusal.Refuse(refusal.CodeInvalid,
@@ -158,7 +158,7 @@ func (h *Host) Release(ctx context.Context, rel Release, progress edge.Progress)
 	return h.stopRetired(ctx, rel, cut, progress, elevation)
 }
 
-func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progress edge.Progress, elevation string) error {
+func (h *Host) stopRetired(ctx context.Context, rel Release, cut cutover, progress progress.Progress, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -288,7 +288,7 @@ func (c cutover) back(table RoutingTable) (RoutingTable, error) {
 	return table, nil
 }
 
-func tellDrain(progress edge.Progress, said string, window time.Duration) {
+func tellDrain(progress progress.Progress, said string, window time.Duration) {
 	if progress == nil {
 		return
 	}

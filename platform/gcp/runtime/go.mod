@@ -6,7 +6,6 @@ require (
 	cloud.google.com/go/firestore v1.24.0
 	cloud.google.com/go/kms v1.33.0
 	github.com/ocelhq/ocel/pkg v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/ocelhq/ocel/platform/gcp/provider v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	google.golang.org/grpc v1.83.2
@@ -71,8 +70,6 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 

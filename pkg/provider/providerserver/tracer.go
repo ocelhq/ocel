@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type StageID [naming.StageIDLen]byte
@@ -134,7 +134,7 @@ type unitRun struct {
 
 func (u *unitRun) recordPartial(result string) { u.partial = result }
 
-func (u *unitRun) phase(do func(edge.Progress) error) error {
+func (u *unitRun) phase(do func(progress.Progress) error) error {
 	progress := newProgress(u.scope.sender, u.stage)
 	err := do(progress)
 	if err != nil {
@@ -164,11 +164,11 @@ func (t *eventTrace) Start(at time.Time, stages ...Stage) {
 	}
 }
 
-func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...edge.Attr) {
+func (t *eventTrace) End(stage Stage, start, end time.Time, err error, attrs ...progress.Attr) {
 	status, level := progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_INFO
 	if err != nil {
 		status, level = progressv1.SpanStatus_SPAN_STATUS_ERROR, progressv1.Level_LEVEL_ERROR
-		attrs = append(attrs, edge.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
+		attrs = append(attrs, progress.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
 	}
 	t.ended(stage, start, end, status, level, "", attrs)
 }
@@ -177,7 +177,7 @@ func (t *eventTrace) EndPartial(stage Stage, start, end time.Time, result string
 	t.ended(stage, start, end, progressv1.SpanStatus_SPAN_STATUS_OK, progressv1.Level_LEVEL_WARN, result, nil)
 }
 
-func (t *eventTrace) ended(stage Stage, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, message string, attrs []edge.Attr) {
+func (t *eventTrace) ended(stage Stage, start, end time.Time, status progressv1.SpanStatus, level progressv1.Level, message string, attrs []progress.Attr) {
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))
 	for i, a := range attrs {
 		pbAttrs[i] = &progressv1.SpanAttribute{Key: attributeKeys[a.Key], Value: a.Value}

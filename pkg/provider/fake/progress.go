@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Progress struct {
@@ -13,7 +13,7 @@ type Progress struct {
 	lines []string
 }
 
-var _ edge.Progress = (*Progress)(nil)
+var _ progress.Progress = (*Progress)(nil)
 
 func (p *Progress) record(level, message string) {
 	p.mu.Lock()
@@ -31,7 +31,7 @@ func (p *Progress) Detail(message string) { p.record("OUTPUT", message) }
 
 func (p *Progress) Debug(line string) { p.record("DEBUG", line) }
 
-func (p *Progress) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (p *Progress) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func (p *Progress) Lines() []string {
 	p.mu.Lock()

@@ -1,13 +1,13 @@
 package edges
 
 import (
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var shapes = map[edge.Kind]func(bootstrap.Namespace, pricing.EdgeSite) (pricing.EdgeShape, error){

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func Ledger(dynamo DynamoAPI, tables Tables, class edge.Class, slug string) *ledger.Ledger {

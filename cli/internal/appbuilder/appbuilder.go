@@ -25,8 +25,8 @@ import (
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const outputDirName = "output"

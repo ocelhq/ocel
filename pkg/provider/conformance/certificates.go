@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type CertificateChecks struct {
@@ -76,7 +77,7 @@ func RunCertificates(t *testing.T, certificates provider.Certificates, checks Ce
 				t.Errorf("Issue(%s).Requested = true: Requested is a claim of delete authority and not a record of who did the work, and a provider that places no key material has authority to remove none",
 					hostname)
 			}
-			if err := certificates.Discard(ctx, cert, edge.DiscardProgress()); err != nil {
+			if err := certificates.Discard(ctx, cert, progress.DiscardProgress()); err != nil {
 				t.Errorf("Discard(%s) = %v, want nil: providerserver short-circuits on Requested, so this is unreachable and must not refuse if it is ever reached",
 					cert.ID, err)
 			}
@@ -115,7 +116,7 @@ func issued(t *testing.T, ctx context.Context, certificates provider.Certificate
 	cert, err := certificates.Issue(ctx, provider.CertificateRequest{
 		Kind:     checks.Kind,
 		Hostname: hostname,
-		Progress: edge.DiscardProgress(),
+		Progress: progress.DiscardProgress(),
 		Prove: func(context.Context, provider.Certificate, []edge.Record) (provider.Certificate, error) {
 			t.Errorf("Issue(%s) asked for a validation record to be proved, and a provider that issues nothing proves nothing", hostname)
 			return provider.Certificate{}, nil

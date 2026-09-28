@@ -8,9 +8,11 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -20,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type projectRemoval struct {
@@ -197,7 +198,7 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		removal, err := h.openRemoval(ctx, req)
 		if err != nil {
 			return err
@@ -239,7 +240,7 @@ func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
 	return bootstrapplan.RefuseUnconsentedChanges(shown, drawn)
 }
 
-func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) run(ctx context.Context, progress progress.Progress) error {
 	var errs []error
 
 	if err := r.unbind(ctx, progress); err != nil {
@@ -276,20 +277,20 @@ func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error 
 	return r.forgetProjectIfEmpty(ctx, progress)
 }
 
-func (r *projectRemoval) unbind(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progress) error {
 	if r.stack == nil || r.stack.State().Empty() {
 		return nil
 	}
 	var errs []error
 	for _, hostname := range r.stack.State().Bound {
-		progress.Say(fmt.Sprintf("Unbinding %s from the %s edge", hostname, r.front.Kind()))
-		if err := edge.Heeded(r.stack.UnbindDomain(ctx, hostname), progress); err != nil {
+		runProgress.Say(fmt.Sprintf("Unbinding %s from the %s edge", hostname, r.front.Kind()))
+		if err := progress.Heeded(r.stack.UnbindDomain(ctx, hostname), runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
 	}
 	for _, pointer := range r.pointers() {
-		progress.Say(fmt.Sprintf("Removing the %s routing pointer from the %s edge", pointer, r.front.Kind()))
-		if _, err := r.stack.RemovePointer(ctx, pointer, progress); err != nil {
+		runProgress.Say(fmt.Sprintf("Removing the %s routing pointer from the %s edge", pointer, r.front.Kind()))
+		if _, err := r.stack.RemovePointer(ctx, pointer, runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
 	}
@@ -303,7 +304,7 @@ func (r *projectRemoval) pointers() []string {
 	return r.pointer
 }
 
-func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress edge.Progress) error {
+func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress progress.Progress) error {
 	ref := provider.StackRef{Project: r.slug, Class: r.class, Name: stack}
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
@@ -311,7 +312,7 @@ func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, pr
 	return stackrecords.Forget(ctx, r.provider.Records(), r.class, r.slug, stack)
 }
 
-func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Progress) error {
 	if r.stack == nil || r.stack.State().Empty() {
 		return nil
 	}
@@ -323,14 +324,14 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress edge.Progres
 	return r.store.write(ctx, r.state)
 }
 
-func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress edge.Progress) error {
+func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Record, progress progress.Progress) error {
 	if err := r.cutover.release(ctx, written, progress.Say); err != nil {
 		return fmt.Errorf("remove the DNS records pointing at what this project served: %w", err)
 	}
 	return nil
 }
 
-func (r *projectRemoval) discardCertificates(ctx context.Context, certificates []provider.Certificate, progress edge.Progress) error {
+func (r *projectRemoval) discardCertificates(ctx context.Context, certificates []provider.Certificate, progress progress.Progress) error {
 	var errs []error
 	for _, cert := range certificates {
 		if err := discardCertificateAndRecords(ctx, r.provider, r.cutover, cert, provider.Certificate{}, progress); err != nil {
@@ -340,7 +341,7 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, certificates [
 	return errors.Join(errs...)
 }
 
-func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) purgeValues(ctx context.Context, progress progress.Progress) error {
 	progress.Say(fmt.Sprintf("Removing the stored variable values of %s in %s", r.slug, r.class))
 	store := envvars.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
 	if err := envsource.ForgetProject(ctx, store, r.class, r.slug); err != nil {
@@ -352,7 +353,7 @@ func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress
 	return nil
 }
 
-func (r *projectRemoval) purgeObjects(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) purgeObjects(ctx context.Context, progress progress.Progress) error {
 	var errs []error
 	for _, env := range r.environments() {
 		prefix := naming.Coordinate{Project: naming.Sanitize(r.slug), Env: env}.StoragePrefix()
@@ -375,7 +376,7 @@ func (r *projectRemoval) environments() []string {
 	return envs
 }
 
-func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress progress.Progress) error {
 	remaining, err := stackrecords.List(ctx, r.provider.Records(), r.class, r.slug)
 	if err != nil {
 		return err

@@ -3,7 +3,7 @@ package aws
 import (
 	"context"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func (p *Provider) Key(ctx context.Context, class edge.Class) (string, error) {

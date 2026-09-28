@@ -11,8 +11,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func isrWriteSecret(seed, isrPrefix string) string {

@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/pkg/constants"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )

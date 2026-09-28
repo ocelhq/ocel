@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Credential interface {

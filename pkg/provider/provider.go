@@ -1,8 +1,9 @@
 package provider
 
 import (
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Provider interface {
@@ -54,7 +55,7 @@ type DeployPreflight struct {
 	Resources []Resource
 	Grants    []Binding
 	Apps      []AppUsage
-	Progress  edge.Progress
+	Progress  progress.Progress
 	WrittenBy WrittenBy
 	Dry       bool
 }

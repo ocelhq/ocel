@@ -14,7 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 const (
@@ -298,7 +299,7 @@ func outstanding(records []edge.Record) string {
 	return strings.Join(wanted, "; ")
 }
 
-func (i ACM) Discard(ctx context.Context, cert Certificate, progress edge.Progress) error {
+func (i ACM) Discard(ctx context.Context, cert Certificate, progress progress.Progress) error {
 	if i.API == nil || cert.ARN == "" {
 		return nil
 	}

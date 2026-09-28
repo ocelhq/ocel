@@ -12,10 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider.ChangeGroup {

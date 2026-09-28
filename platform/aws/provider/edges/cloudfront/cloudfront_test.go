@@ -16,13 +16,14 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
 
 const (
@@ -344,7 +345,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -364,7 +365,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix+"/")
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -399,7 +400,7 @@ func TestPromote(t *testing.T) {
 		recordFront(t, w, edge.ClassProduction)
 		w.front.calls = nil
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -429,7 +430,7 @@ func TestPromote(t *testing.T) {
 		}
 
 		w.front.calls = nil
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote (again): %v", err)
 		}
 		if made := w.front.mutations(); len(made) != 0 {
@@ -459,7 +460,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		stagedContainer(t, stack)
 
-		err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress())
+		err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress())
 		if err == nil || !strings.Contains(err.Error(), "container front") {
 			t.Fatalf("Promote error = %v, want a refusal naming the missing front", err)
 		}
@@ -482,7 +483,7 @@ func TestPromote(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != w.ssm.secret.Previous {
@@ -493,7 +494,7 @@ func TestPromote(t *testing.T) {
 		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if published := routeOn(t, w, stack, boundHost); published.Secret != fakeSecret {
@@ -510,7 +511,7 @@ func TestPromote(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.updateErr = &kvstypes.AccessDeniedException{Message: aws.String("no")}
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err == nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err == nil {
 			t.Fatal("Promote error = nil, want the refusal the store gave")
 		}
 
@@ -532,7 +533,7 @@ func TestPromote(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.conflicts = 2
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
@@ -555,7 +556,7 @@ func TestPromote(t *testing.T) {
 		bound(t, stack)
 		staged(t, stack, "", fakeAssetPrefix)
 
-		err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress())
+		err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote error = nil, want a refusal: nothing names a URL the edge can reach")
 		}
@@ -571,7 +572,7 @@ func TestPromote(t *testing.T) {
 		stack := reconciled(t, w)
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if got := w.store.count("kvs.UpdateKeys"); got != 0 {
@@ -613,7 +614,7 @@ func TestUnbindDomainTakesTheRouteAndTheAlias(t *testing.T) {
 	stack := reconciled(t, w)
 	bound(t, stack)
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
+	if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 

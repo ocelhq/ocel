@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/arch"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const rustCrateManifest = "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n"

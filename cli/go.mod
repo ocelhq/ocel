@@ -28,7 +28,6 @@ require (
 	github.com/moby/patternmatcher v0.6.1
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/aws/runtime v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -250,8 +249,6 @@ tool (
 	github.com/air-verse/air
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contract
 
 replace github.com/ocelhq/ocel/platform/aws/runtime => ../platform/aws/runtime
 

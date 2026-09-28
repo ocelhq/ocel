@@ -20,7 +20,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/shared"
 	"github.com/cloudflare/cloudflare-go/v4/user"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const testAccountID = "acct-123"

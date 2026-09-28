@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func TestCredentialPermissionsListsWhatEachTierMints(t *testing.T) {

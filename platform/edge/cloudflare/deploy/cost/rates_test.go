@@ -5,11 +5,11 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func shapedSet(t *testing.T, class edge.Class) *costv1.ResourceSet {

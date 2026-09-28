@@ -25,7 +25,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/r2"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 const Kind edge.Kind = "cloudflare"

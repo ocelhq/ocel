@@ -3,9 +3,9 @@ package providerserver
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func edgeProgramFor(ctx context.Context, p provider.Provider, front edge.Edge, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {

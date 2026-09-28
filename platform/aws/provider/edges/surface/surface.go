@@ -4,9 +4,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func Name(ns bootstrap.Namespace, slug string, class edge.Class, tail ...string) string {

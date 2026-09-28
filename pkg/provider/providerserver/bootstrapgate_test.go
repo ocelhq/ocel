@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -17,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type recorder struct {
@@ -49,7 +50,7 @@ func (r *recorder) Detail(message string) {
 
 func (r *recorder) Debug(line string) { r.Detail(line) }
 
-func (r *recorder) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (r *recorder) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func (r *recorder) sayings() string {
 	r.mu.Lock()

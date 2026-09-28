@@ -15,13 +15,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -153,7 +154,7 @@ func (r *Stacks) readContainerInfra(ctx context.Context, class edge.Class) (cont
 	return decoded, err == nil, err
 }
 
-func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress edge.Progress) (containerInfra, error) {
+func (r *Stacks) ensureContainerInfra(ctx context.Context, ref provider.StackRef, progress progress.Progress) (containerInfra, error) {
 	r.containerInfraLock.Lock()
 	defer r.containerInfraLock.Unlock()
 	class := ref.Class
@@ -249,7 +250,7 @@ func (r *Stacks) claimContainerInfra(ctx context.Context, ref provider.StackRef)
 		"the shared container infrastructure for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
 }
 
-func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store, ref provider.StackRef, progress edge.Progress) error {
+func (r *Stacks) releaseContainerInfra(ctx context.Context, store records.Store, ref provider.StackRef, progress progress.Progress) error {
 	if store == nil {
 		return nil
 	}

@@ -2,8 +2,6 @@ module github.com/ocelhq/ocel/platform/s3
 
 go 1.27.0
 
-replace github.com/ocelhq/ocel/platform/edge/contract => ../edge/contract
-
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/aws/aws-sdk-go-v2 v1.46.0

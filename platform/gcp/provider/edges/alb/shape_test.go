@@ -4,8 +4,8 @@ import (
 	"maps"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var pulumiTokens = map[string]string{

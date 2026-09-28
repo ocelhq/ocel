@@ -1,9 +1,9 @@
 package cloudflare
 
 import (
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const entryWorker = "entry"

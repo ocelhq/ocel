@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -16,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, key, value string) *contractv1.DeployRequest {

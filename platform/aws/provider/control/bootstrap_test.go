@@ -19,12 +19,12 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func installedBootstrapper(t *testing.T, class string) Bootstrap {

@@ -7,8 +7,8 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ImageKind = "image"
@@ -29,7 +29,7 @@ type ImageStore interface {
 
 	Has(ctx context.Context, push ImagePush) (bool, error)
 
-	Push(ctx context.Context, push ImagePush, progress edge.Progress) error
+	Push(ctx context.Context, push ImagePush, progress progress.Progress) error
 }
 
 type ImagePushes struct {
@@ -62,7 +62,7 @@ func (p ImagePushes) Rows(ctx context.Context) ([]Change, error) {
 	return rows, nil
 }
 
-func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) error {
+func (p ImagePushes) PushMissing(ctx context.Context, progress progress.Progress) error {
 	var missing []ImagePush
 	for _, push := range p.Pushes {
 		present, err := p.inStore(ctx, push)
@@ -85,7 +85,7 @@ func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) er
 	return nil
 }
 
-func (p ImagePushes) push(ctx context.Context, push ImagePush, progress edge.Progress) error {
+func (p ImagePushes) push(ctx context.Context, push ImagePush, progress progress.Progress) error {
 	if push.Wrap != nil {
 		if progress != nil {
 			progress.Say("Wrapping " + push.App + "'s image in the ocel runtime")

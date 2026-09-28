@@ -13,9 +13,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -83,7 +84,7 @@ func provisioned(t *testing.T, p *vps.Provider, tag string) release {
 	return release{physical: started[0].Physical, address: started[0].Physical + ":" + appbuild.InjectedPortText}
 }
 
-func releasing(p *vps.Provider, next release, drain time.Duration, progress edge.Progress) error {
+func releasing(p *vps.Provider, next release, drain time.Duration, progress progress.Progress) error {
 	return p.Host().Release(context.Background(), host.Release{
 		Apps: []host.AppRelease{{
 			RouteKey:   host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},

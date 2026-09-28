@@ -13,9 +13,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const environmentTitle = "Checking the bootstrap, domains and bindings for shop"
@@ -274,7 +274,7 @@ func TestAFailedUnitSaysWhyAtErrorInItsUnitOnceBeforeTheUnitEnds(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	unit := UnitStage("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
 	_ = newStageScope(sender).unit(unit, func(u *unitRun) error {
-		return u.phase(func(edge.Progress) error {
+		return u.phase(func(progress.Progress) error {
 			return errors.New("the web stack could not be provisioned\x1b[0m")
 		})
 	})
@@ -314,7 +314,7 @@ func TestAUnitsWorkSpeaksInTheUnitsOwnSpanWithNoSpanOfItsOwn(t *testing.T) {
 	sender := newEventStream(context.Background(), stream.send)
 	unit := UnitStage("web", "web", "Deploying the serverless app to production", progressv1.Phase_PHASE_DEPLOY)
 	_ = newStageScope(sender).unit(unit, func(u *unitRun) error {
-		return u.phase(func(progress edge.Progress) error {
+		return u.phase(func(progress progress.Progress) error {
 			progress.Say("Uploading function web's artifact (1.2 MiB)")
 			return nil
 		})

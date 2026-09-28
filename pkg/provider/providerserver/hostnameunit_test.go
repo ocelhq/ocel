@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type hostnameUnit struct {

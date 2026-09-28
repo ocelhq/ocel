@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -67,7 +68,7 @@ func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string,
 	return p.servedHealth(ctx, served, hostname, health)
 }
 
-func (p certificates) Discard(context.Context, provider.Certificate, edge.Progress) error {
+func (p certificates) Discard(context.Context, provider.Certificate, progress.Progress) error {
 	return nil
 }
 

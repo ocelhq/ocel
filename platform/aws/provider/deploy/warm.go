@@ -15,8 +15,8 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const warmPayload = `{"ocel":{"warm":1}}`
@@ -55,7 +55,7 @@ type warmPass struct {
 	invoker  InvokeAPI
 	targets  []warmTarget
 	budget   time.Duration
-	progress edge.Progress
+	progress progress.Progress
 }
 
 func (p warmPass) run(ctx context.Context) []warmResult {
@@ -113,14 +113,14 @@ type warmResult struct {
 	Reply  warmReply
 }
 
-func bundleOutcome(progress edge.Progress, ok bool) func(string) {
+func bundleOutcome(progress progress.Progress, ok bool) func(string) {
 	if ok {
 		return progress.Debug
 	}
 	return progress.Warn
 }
 
-func passOutcome(progress edge.Progress, done, of int) func(string) {
+func passOutcome(progress progress.Progress, done, of int) func(string) {
 	if done == of {
 		return progress.Say
 	}

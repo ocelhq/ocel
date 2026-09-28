@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/records"
@@ -18,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const Vendor provider.Vendor = "aws"

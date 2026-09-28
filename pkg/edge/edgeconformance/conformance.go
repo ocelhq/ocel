@@ -8,7 +8,8 @@ import (
 	"slices"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Suite struct {
@@ -36,7 +37,7 @@ func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, point
 			t.Fatalf("PutStaged(%s/%s): %v", app, identity, err)
 		}
 	}
-	if err := stack.Promote(ctx, promotion, pointer, edge.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 	}
 }
@@ -219,7 +220,7 @@ func Run(t *testing.T, suite Suite) {
 		promote(t, stack, edge.Promotion{PromotionID: "unpointed", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
 		promote(t, stack, edge.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
 
-		result, err := stack.RemovePointer(ctx, pointer, edge.DiscardProgress())
+		result, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress())
 		if err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
@@ -712,7 +713,7 @@ func runPreviews(t *testing.T, suite Suite) {
 				t.Fatalf("history under %q = %v, want the promotion this preview serves marked active; a preview that never landed makes every assertion after it vacuous", pointer, served)
 			}
 
-			pruned, err := stack.RemovePointer(ctx, pointer, edge.DiscardProgress())
+			pruned, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress())
 			if err != nil {
 				t.Fatalf("RemovePointer: %v", err)
 			}
@@ -726,7 +727,7 @@ func runPreviews(t *testing.T, suite Suite) {
 			if len(left) != 0 {
 				t.Errorf("history under %q = %v, want nothing once the preview is gone", pointer, left)
 			}
-			if _, err := stack.RemovePointer(ctx, pointer, edge.DiscardProgress()); err != nil {
+			if _, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
 				t.Fatalf("RemovePointer again: %v", err)
 			}
 		})

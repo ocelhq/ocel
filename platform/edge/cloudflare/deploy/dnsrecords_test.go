@@ -11,7 +11,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/packages/pagination"
 	"github.com/cloudflare/cloudflare-go/v4/zones"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type fakeRecords struct {

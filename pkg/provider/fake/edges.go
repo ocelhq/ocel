@@ -8,11 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -23,7 +24,7 @@ const (
 type Ledger interface {
 	edge.Ledger
 
-	Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error
+	Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error
 
 	RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error)
 
@@ -150,7 +151,7 @@ func (e *Edge) release(hostname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.serving, hostname)
-	return edge.Warned(e.unbound)
+	return progress.Warned(e.unbound)
 }
 
 func (e *Edge) answers(hostname string) bool {
@@ -436,11 +437,11 @@ func (s *Stack) State() edge.StackState {
 
 func (s *Stack) Ledger() edge.Ledger { return s.ledger }
 
-func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	return s.ledger.Promote(ctx, promotion, pointer, progress)
 }
 
-func (s *Stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *Stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	return s.ledger.RemovePointer(ctx, pointer)
 }
 

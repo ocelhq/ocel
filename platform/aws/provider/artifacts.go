@@ -7,9 +7,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) Buckets(ctx context.Context, class edge.Class) (awsports.Buckets, error) {

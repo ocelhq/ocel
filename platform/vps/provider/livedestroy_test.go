@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -31,7 +32,7 @@ func (s *said) Error(message string)  { s.lines = append(s.lines, message) }
 func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
 func (s *said) Debug(line string)     { s.lines = append(s.lines, line) }
 
-func (s *said) Span(name string, _, _ time.Time, err error, attrs ...edge.Attr) {
+func (s *said) Span(name string, _, _ time.Time, err error, attrs ...progress.Attr) {
 	s.lines = append(s.lines, name)
 	if err != nil {
 		s.lines = append(s.lines, err.Error())

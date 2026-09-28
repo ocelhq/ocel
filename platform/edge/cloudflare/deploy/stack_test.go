@@ -14,7 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectWorker, deployedClasses []string) map[string]any {
@@ -793,7 +794,7 @@ func promote(t *testing.T, p *cloudflare, state edge.StackState, app, build stri
 	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Build: build}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", app, err)
 	}
-	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", edge.DiscardProgress()); err != nil {
+	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", app, err)
 	}
 }

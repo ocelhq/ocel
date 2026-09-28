@@ -3,9 +3,9 @@ package cloudfront
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type edgeSet struct {

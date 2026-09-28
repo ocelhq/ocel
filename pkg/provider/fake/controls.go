@@ -3,9 +3,9 @@ package fake
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
@@ -16,8 +16,8 @@ func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
 }
 
 func (p *Provider) everyHook(hooks *provider.Hooks) {
-	hooks.WarmFunctions = func(context.Context, []string, edge.Progress) error { return nil }
-	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, edge.Progress) error { return nil }
+	hooks.WarmFunctions = func(context.Context, []string, progress.Progress) error { return nil }
+	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, progress.Progress) error { return nil }
 	hooks.InspectStack = p.InspectStack
 	hooks.VerifyGrants = func(context.Context, provider.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy

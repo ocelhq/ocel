@@ -9,9 +9,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Artifacts struct {
@@ -59,7 +60,7 @@ func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, class edge.Class, prefix string, progress edge.Progress) error {
+func (a *Artifacts) RemovePrefix(_ context.Context, class edge.Class, prefix string, progress progress.Progress) error {
 	a.journal.note("remove-prefix " + prefix)
 	a.mu.Lock()
 	defer a.mu.Unlock()

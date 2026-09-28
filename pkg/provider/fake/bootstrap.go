@@ -5,9 +5,10 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -168,7 +169,7 @@ func (b *Bootstrap) withDefaultStackNames(described provider.BootstrapDescriptio
 	})
 }
 
-func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.refusal != nil {
@@ -231,7 +232,7 @@ func (b *Bootstrap) raisedEdges() []edge.Kind {
 	return []edge.Kind{b.front}
 }
 
-func (b *Bootstrap) Remove(_ context.Context, class edge.Class, progress edge.Progress) error {
+func (b *Bootstrap) Remove(_ context.Context, class edge.Class, progress progress.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.applied, class)

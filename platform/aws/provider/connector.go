@@ -8,10 +8,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const connectorCompute = provider.ComputeServerless
@@ -56,7 +56,7 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 }
 
 func (p connector) Install(ctx context.Context, install provider.ConnectorInstall,
-	progress edge.Progress) (provider.ConnectorAddress, error) {
+	progress progress.Progress) (provider.ConnectorAddress, error) {
 	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return provider.ConnectorAddress{}, err
@@ -72,7 +72,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	return provider.ConnectorAddress{URL: installation.URL, PublicKey: installation.PublicKey, Compute: compute}, nil
 }
 
-func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
+func (p connector) Remove(ctx context.Context, progress progress.Progress) error {
 	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, progress)
 }
 

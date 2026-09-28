@@ -4,9 +4,10 @@ import (
 	"context"
 	"io"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type NoArtifacts struct{}
@@ -21,6 +22,8 @@ func (NoArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadClo
 	return nil, refusal.Refuse(refusal.CodeInvalid, "this provider keeps no artifact store, so there is no artifact at %s", ref.Key)
 }
 
-func (NoArtifacts) RemovePrefix(context.Context, edge.Class, string, edge.Progress) error { return nil }
+func (NoArtifacts) RemovePrefix(context.Context, edge.Class, string, progress.Progress) error {
+	return nil
+}
 
 var _ provider.ArtifactStore = NoArtifacts{}

@@ -3,8 +3,9 @@ package vps
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (p *Provider) elevated(ctx context.Context) error {
@@ -21,7 +22,7 @@ type elevating struct {
 	elevated func(context.Context) error
 }
 
-func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
+func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
 	if !req.Heal {
 		if err := e.elevated(ctx); err != nil {
 			return err
@@ -30,7 +31,7 @@ func (e elevating) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	return e.Bootstrap.Apply(ctx, req, progress)
 }
 
-func (e elevating) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
+func (e elevating) Remove(ctx context.Context, class edge.Class, progress progress.Progress) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}

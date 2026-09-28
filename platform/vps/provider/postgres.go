@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -74,7 +74,7 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress edge.Progress) (provider.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress progress.Progress) (provider.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
 		return provider.Binding{}, err

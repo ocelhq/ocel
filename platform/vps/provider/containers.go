@@ -6,17 +6,18 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress progress.Progress) ([]provider.AppContainer, error) {
 	app := spec.App
 	if app == nil {
 		return nil, nil
@@ -71,7 +72,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress edge.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress progress.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue

@@ -8,7 +8,6 @@ require (
 	github.com/aws/smithy-go v1.27.3
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0
 	github.com/ocelhq/ocel/pkg v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/shopspring/decimal v1.4.0
 )
 
@@ -28,7 +27,5 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../../contract
 
 replace github.com/ocelhq/ocel/pkg => ../../../../pkg

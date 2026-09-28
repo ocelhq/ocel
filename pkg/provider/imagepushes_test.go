@@ -7,9 +7,9 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type holdingStore struct{ held []string }
@@ -20,7 +20,7 @@ func (s holdingStore) Has(_ context.Context, push provider.ImagePush) (bool, err
 	return slices.Contains(s.held, push.App), nil
 }
 
-func (holdingStore) Push(context.Context, provider.ImagePush, edge.Progress) error { return nil }
+func (holdingStore) Push(context.Context, provider.ImagePush, progress.Progress) error { return nil }
 
 func TestEachImageSentNamesItsAppWhereItGoesAndHowManyAreSent(t *testing.T) {
 	t.Parallel()

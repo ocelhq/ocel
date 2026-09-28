@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -187,13 +187,13 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 	}
 }
 
-func say(progress edge.Progress, line string) {
+func say(progress progress.Progress, line string) {
 	if progress != nil {
 		progress.Say(line)
 	}
 }
 
-func emitUploadBatch(progress edge.Progress, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
+func emitUploadBatch(progress progress.Progress, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
 	if progress == nil || stats == nil {
 		return
 	}

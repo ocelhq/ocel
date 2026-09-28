@@ -8,9 +8,10 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -50,7 +51,7 @@ type promotable struct {
 	record edge.DeploymentRecord
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	ready := make([]promotable, 0, len(promotion.Builds))
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		release, serves, err := s.readyRelease(ctx, app, pointer, promotion)
@@ -76,7 +77,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	return err
 }
 
-func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []promotable, progress edge.Progress) error {
+func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []promotable, progress progress.Progress) error {
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
 		return host.Unserved{Err: err}
@@ -166,7 +167,7 @@ func declaredBy(record edge.DeploymentRecord) []string {
 	return declared
 }
 
-func (s *stack) rerun(ctx context.Context, release promotable, progress edge.Progress) error {
+func (s *stack) rerun(ctx context.Context, release promotable, progress progress.Progress) error {
 	record := release.record
 	if progress != nil {
 		progress.Say("Starting " + release.app + "'s container " + record.Physical + " again")
@@ -223,7 +224,7 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 	return claims, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, progress edge.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (edge.PruneResult, error) {
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -297,7 +298,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	s.state.Release(hostname)
 	s.state.PublishFront(hostname, "")
 	if err := s.applyOrigins(ctx); err != nil {
-		return edge.Warned(s.released(hostname, err))
+		return progress.Warned(s.released(hostname, err))
 	}
 	return nil
 }

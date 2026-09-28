@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 func testPoller(lookup Lookup) (Propagation, *int) {

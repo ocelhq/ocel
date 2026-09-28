@@ -11,6 +11,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -20,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func deployed(t *testing.T, vendor *fake.Provider, class edge.Class, slug string) {
@@ -34,7 +35,7 @@ func deployed(t *testing.T, vendor *fake.Provider, class edge.Class, slug string
 func promoted(t *testing.T, vendor *fake.Provider, class edge.Class, slug string) {
 	t.Helper()
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
-	if err := ledger.New(vendor.Records(), class, slug).Promote(context.Background(), promotion, "", edge.DiscardProgress()); err != nil {
+	if err := ledger.New(vendor.Records(), class, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 }

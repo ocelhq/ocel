@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/registry"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func heardAll(t *testing.T, progress *fake.Progress, want ...string) {

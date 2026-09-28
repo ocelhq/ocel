@@ -5,8 +5,8 @@ import (
 
 	"github.com/cloudflare/cloudflare-go/v4/r2"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 )
 
 func TestCloudflareEdgeConformance(t *testing.T) {

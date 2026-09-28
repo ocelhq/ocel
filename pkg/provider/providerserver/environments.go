@@ -6,8 +6,10 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -15,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func envName(env *environmentv1.Environment) (string, error) {
@@ -70,7 +71,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	unit := UnitStage(naming.UnitEnvironment, req.GetEnvironment().GetIdentity(),
 		"Removing the preview environment of "+req.GetSlug(), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		pointer, err := envName(req.GetEnvironment())
 		if err != nil {
 			return err

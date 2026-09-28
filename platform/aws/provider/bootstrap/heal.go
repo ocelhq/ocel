@@ -11,9 +11,9 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var healPrincipals = map[string]bool{
@@ -78,7 +78,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 	return nil
 }
 
-func AdmitReplacements(ns Namespace, accept bool, progress edge.Progress) cfn.ChangeReview {
+func AdmitReplacements(ns Namespace, accept bool, progress progress.Progress) cfn.ChangeReview {
 	progress = ensureProgress(progress)
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
@@ -128,7 +128,7 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRequest, progress edge.Progress) (bool, error) {
+func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRequest, progress progress.Progress) (bool, error) {
 	target, err := specFor(ns, class)
 	if err != nil {
 		return false, err
@@ -136,7 +136,7 @@ func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRe
 	return heal(ctx, apis, target, req, ensureProgress(progress))
 }
 
-func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress edge.Progress) (bool, error) {
+func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress progress.Progress) (bool, error) {
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
 	if err != nil {
 		return false, err
@@ -177,7 +177,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress edge.Progress) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Progress) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
@@ -211,7 +211,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 	return true, nil
 }
 
-func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress edge.Progress) error {
+func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress progress.Progress) error {
 	idle, err := awaitStackIdle(ctx, stacks, stale.Name, progress)
 	if err != nil {
 		return err
@@ -233,7 +233,7 @@ func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, progress 
 
 const idleAttempts = 6
 
-func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, progress edge.Progress) (bool, error) {
+func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, progress progress.Progress) (bool, error) {
 	for attempt := 0; ; attempt++ {
 		stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 		if err != nil {

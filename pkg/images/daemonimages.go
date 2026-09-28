@@ -9,8 +9,8 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type daemonStore struct{}
@@ -38,7 +38,7 @@ func (daemonStore) Has(ctx context.Context, push provider.ImagePush) (bool, erro
 	return true, nil
 }
 
-func (daemonStore) Push(ctx context.Context, push provider.ImagePush, _ edge.Progress) error {
+func (daemonStore) Push(ctx context.Context, push provider.ImagePush, _ progress.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is written straight into the local docker daemon, and this release has no image it was built into", push.App)

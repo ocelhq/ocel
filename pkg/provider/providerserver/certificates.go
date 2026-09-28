@@ -5,19 +5,20 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func discardCertificate(ctx context.Context, p provider.Provider, cert provider.Certificate, progress edge.Progress) error {
+func discardCertificate(ctx context.Context, p provider.Provider, cert provider.Certificate, progress progress.Progress) error {
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
 	return p.Certificates().Discard(ctx, cert, progress)
 }
 
-func discardCertificateAndRecords(ctx context.Context, p provider.Provider, cutover dnsCutover, cert, active provider.Certificate, progress edge.Progress) error {
+func discardCertificateAndRecords(ctx context.Context, p provider.Provider, cutover dnsCutover, cert, active provider.Certificate, progress progress.Progress) error {
 	if !cert.Issued() || cert.ID == active.ID {
 		return nil
 	}
@@ -39,7 +40,7 @@ type hostCertificates struct {
 	notes     []string
 }
 
-func (c hostCertificates) certify(ctx context.Context, hostname string, progress edge.Progress) error {
+func (c hostCertificates) certify(ctx context.Context, hostname string, progress progress.Progress) error {
 	cert, err := c.provider.Certificates().Issue(ctx, provider.CertificateRequest{
 		Kind:     c.cutover.kind,
 		Hostname: hostname,
@@ -65,7 +66,7 @@ func (c hostCertificates) adoptCertificate(ctx context.Context, cert provider.Ce
 	return c.persist(ctx)
 }
 
-func (c hostCertificates) discardSuperseded(ctx context.Context, progress edge.Progress) error {
+func (c hostCertificates) discardSuperseded(ctx context.Context, progress progress.Progress) error {
 	if len(c.hostState.Superseded) == 0 {
 		return nil
 	}

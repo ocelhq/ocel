@@ -18,9 +18,10 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type fakeCFN struct {
@@ -696,7 +697,7 @@ func apisAcross(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore
 func everything() Request { return Request{Features: featureNames()} }
 
 func runAll(ctx context.Context, apis APIs, target spec) error {
-	return run(ctx, apis, target, everything(), edge.DiscardProgress())
+	return run(ctx, apis, target, everything(), progress.DiscardProgress())
 }
 
 func isrStack(class string) string { return defaultNamespace.FeatureStackName(FeatureISR, class) }

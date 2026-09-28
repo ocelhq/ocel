@@ -23,8 +23,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const embedCacheCeiling = 32 << 20
@@ -85,7 +85,7 @@ type embedPass struct {
 	targets    []embedTarget
 	budget     time.Duration
 	updateWait time.Duration
-	progress   edge.Progress
+	progress   progress.Progress
 }
 
 func (p embedPass) run(ctx context.Context) {

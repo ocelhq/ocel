@@ -9,11 +9,12 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/secretmanager/v1"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -34,7 +35,7 @@ func (s albStacks) Up(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-	progress edge.Progress,
+	progress progress.Progress,
 ) (map[string]string, error) {
 	automation, spec, err := s.opened(ctx, target, program)
 	if err != nil {
@@ -46,7 +47,7 @@ func (s albStacks) Up(
 	return outputsOf(ctx, automation, spec.Ref)
 }
 
-func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress edge.Progress) error {
+func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress progress.Progress) error {
 	automation, spec, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return err
@@ -63,7 +64,7 @@ func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]s
 }
 
 func outputsOf(ctx context.Context, automation *pulumi.Automation, ref provider.StackRef) (map[string]string, error) {
-	outputs, err := automation.Outputs(ctx, ref, edge.DiscardProgress())
+	outputs, err := automation.Outputs(ctx, ref, progress.DiscardProgress())
 	if err != nil {
 		return nil, err
 	}

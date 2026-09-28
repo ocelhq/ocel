@@ -6,10 +6,10 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (h *handlers) connector() (provider.Connector, error) {
@@ -53,7 +53,7 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 		sender.refusing(connect.CodeUnimplemented)
 		var at provider.ConnectorAddress
 		unit := UnitStage(naming.UnitConnector, naming.UnitConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
-		err := inUnit(sender, unit, func(_ *eventStream, progress edge.Progress) error {
+		err := inUnit(sender, unit, func(_ *eventStream, progress progress.Progress) error {
 			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
@@ -75,7 +75,7 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 		return err
 	}
 	unit := UnitStage(naming.UnitConnector, naming.UnitConnector, "Removing the connector from this account", progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Progress) error {
 		sender.refusing(connect.CodeUnimplemented)
 		return connector.Remove(ctx, progress)
 	})

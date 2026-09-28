@@ -6,14 +6,15 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) error {
+func (r *deployRun) admitBindings(ctx context.Context, progress progress.Progress) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -128,7 +129,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 	return found
 }
 
-func (r *deployRun) warnShadowed(progress edge.Progress, resources []provider.Resource, published map[string]provider.Binding) {
+func (r *deployRun) warnShadowed(progress progress.Progress, resources []provider.Resource, published map[string]provider.Binding) {
 	for _, resource := range resources {
 		if resource.Binding != "" {
 			continue

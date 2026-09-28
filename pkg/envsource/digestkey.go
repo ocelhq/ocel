@@ -13,9 +13,9 @@ import (
 	"hash"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/records"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (

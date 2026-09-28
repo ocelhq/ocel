@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type servedFunction struct {
@@ -68,7 +68,7 @@ func (s *servedApps) warmed(physical string, reply warmReply) {
 	}
 }
 
-func (r *Stacks) Warm(ctx context.Context, targets []string, progress edge.Progress) error {
+func (r *Stacks) Warm(ctx context.Context, targets []string, progress progress.Progress) error {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
@@ -89,7 +89,7 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress edge.Progr
 	return nil
 }
 
-func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provider.ArtifactRef, progress edge.Progress) error {
+func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provider.ArtifactRef, progress progress.Progress) error {
 	if !bytecodeEmbedRequested() {
 		return nil
 	}

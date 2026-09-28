@@ -11,10 +11,10 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -139,7 +139,7 @@ func runtimeStackDescription(class string) string {
 	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", class)
 }
 
-func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progress edge.Progress) error {
+func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progress progress.Progress) error {
 	progress.Say(runtimeStackStep)
 	code, err := placeRuntimeLayers(ctx, apis.Store, bucket)
 	if err != nil {
@@ -160,8 +160,8 @@ type RuntimeLayerRequest struct {
 	Writer         provider.WrittenBy
 }
 
-func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, progress edge.Progress) (map[string]string, error) {
-	progress = ensureProgress(progress)
+func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, runProgress progress.Progress) (map[string]string, error) {
+	runProgress = ensureProgress(runProgress)
 	stackName := ns.runtimeStackName(class)
 	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
 	if err != nil || len(missingRuntimeLayers(current)) == 0 {
@@ -173,13 +173,13 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	}
 
 	published := true
-	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, edge.DiscardProgress()); err != nil {
+	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, progress.DiscardProgress()); err != nil {
 		if !runtimeStackWrittenElsewhere(err) {
-			progress.Warn(fmt.Sprintf("Could not publish this build's runtime into stack %s: %v", stackName, err))
+			runProgress.Warn(fmt.Sprintf("Could not publish this build's runtime into stack %s: %v", stackName, err))
 			return current, nil
 		}
 		published = false
-		if _, err := awaitStackIdle(ctx, apis.CFN, stackName, progress); err != nil {
+		if _, err := awaitStackIdle(ctx, apis.CFN, stackName, runProgress); err != nil {
 			return nil, err
 		}
 	}
@@ -195,7 +195,7 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	if published {
 		who = "This deploy"
 	}
-	progress.Say(fmt.Sprintf("%s published this build's runtime for %s into stack %s", who, strings.Join(shippedRuntimeArches(), ", "), stackName))
+	runProgress.Say(fmt.Sprintf("%s published this build's runtime for %s into stack %s", who, strings.Join(shippedRuntimeArches(), ", "), stackName))
 	return latest, nil
 }
 
@@ -264,7 +264,7 @@ func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) prov
 	return planDelete(ctx, stacks, group, body)
 }
 
-func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, progress edge.Progress) error {
+func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, progress progress.Progress) error {
 	stackName := ns.runtimeStackName(class)
 	stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 	if err != nil || stack == nil {

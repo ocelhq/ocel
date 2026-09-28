@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -137,7 +137,7 @@ tail -n ` + strconv.Itoa(engineTailLines) + ` "$log" >&2
 exit 1`
 }
 
-func (h *Host) installEngine(ctx context.Context, progress edge.Progress) error {
+func (h *Host) installEngine(ctx context.Context, progress progress.Progress) error {
 	elevation, err := h.elevate(ctx)
 	if err != nil {
 		return err

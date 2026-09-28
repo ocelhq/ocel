@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 const staticAssetsDir = "static"
@@ -168,13 +168,13 @@ func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) 
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, progress edge.Progress) error {
+		push: func(ctx context.Context, progress progress.Progress) error {
 			return pushStaticAssets(ctx, app, uploads, progress)
 		},
 	}, nil
 }
 
-func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, progress edge.Progress) error {
+func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, progress progress.Progress) error {
 	say(progress, "Uploading "+app+"'s "+plural(len(uploads), "static asset", "static assets"))
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)

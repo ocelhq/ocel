@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestEdgeGroupKeepsTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {

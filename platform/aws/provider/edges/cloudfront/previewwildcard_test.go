@@ -12,10 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestTheSharedPreviewNameFitsTheCommentCloudFrontAccepts(t *testing.T) {
@@ -100,7 +101,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
-	}, pointer, edge.DiscardProgress()); err != nil {
+	}, pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -455,7 +456,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer, edge.DiscardProgress()); err != nil {
+		}, previewPointer, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(%s): %v", previewPointer, err)
 		}
 
@@ -510,7 +511,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "refused",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer, edge.DiscardProgress()); err == nil {
+		}, previewPointer, progress.DiscardProgress()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the key value store")
 		}
 		history, err := stack.Ledger().History(context.Background(), previewPointer)
@@ -527,7 +528,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		_, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 
-		if _, err := stack.RemovePointer(context.Background(), previewPointer, edge.DiscardProgress()); err != nil {
+		if _, err := stack.RemovePointer(context.Background(), previewPointer, progress.DiscardProgress()); err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {
@@ -601,7 +602,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer, edge.DiscardProgress()); err == nil {
+		}, previewPointer, progress.DiscardProgress()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the deployments ledger")
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type Lookup func(ctx context.Context, hostname string) ([]string, error)

@@ -9,9 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -54,7 +55,7 @@ type stepDeps struct {
 	class    string
 	ssm      SSMAPI
 	iam      IAMAPI
-	progress edge.Progress
+	progress progress.Progress
 }
 
 type feature struct {

@@ -6,12 +6,13 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) pushImage(ctx context.Context, class edge.Class, app, ref string, built v1.Image, progress edge.Progress) error {
+func (p *Provider) pushImage(ctx context.Context, class edge.Class, app, ref string, built v1.Image, progress progress.Progress) error {
 	digest, err := built.Digest()
 	if err != nil {
 		return fmt.Errorf("read the digest of the %s image: %w", app, err)

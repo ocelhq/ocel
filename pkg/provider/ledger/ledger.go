@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -189,7 +190,7 @@ func (l *Ledger) Record(ctx context.Context, app, build string) (edge.Deployment
 	return record, true, nil
 }
 
-func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Progress) error {
+func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ progress.Progress) error {
 	name := pointerOr(pointer)
 	claimed, err := l.claimTag(ctx, promotion)
 	if err != nil {

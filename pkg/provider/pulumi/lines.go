@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"strings"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-func engineLines(progress edge.Progress) *lineLog {
+func engineLines(progress progress.Progress) *lineLog {
 	if progress == nil {
 		return nil
 	}

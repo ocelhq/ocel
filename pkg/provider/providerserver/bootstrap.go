@@ -9,14 +9,15 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func classOf(tier environmentv1.Tier) (edge.Class, error) {
@@ -81,7 +82,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		}
 		unit := UnitStage(naming.UnitEnvironment, string(class), bootstrapTitle("Updating", plan), progressv1.Phase_PHASE_PROVISION)
 		err = inUnit(sender, unit,
-			func(_ *eventStream, progress edge.Progress) error {
+			func(_ *eventStream, progress progress.Progress) error {
 				return gate.Apply(ctx, plan, class, intent, progress)
 			})
 		if err != nil {
@@ -280,7 +281,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
 	unit := UnitStage(naming.UnitEnvironment, string(class), bootstrapTitle("Removing", shown), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		if shownErr != nil {
 			return shownErr
 		}

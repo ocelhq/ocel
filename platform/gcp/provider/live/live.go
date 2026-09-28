@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const EnvVar = "OCEL_LIVE_MANIFEST"

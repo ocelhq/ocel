@@ -17,11 +17,12 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -352,7 +353,7 @@ func bootstrapFor(ns Namespace, class string) (spec, error) {
 	}
 }
 
-func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request, progress edge.Progress) error {
+func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request, progress progress.Progress) error {
 	target, err := specFor(ns, class)
 	if err != nil {
 		return err
@@ -360,11 +361,11 @@ func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request
 	return run(ctx, apis, target, req, ensureProgress(progress))
 }
 
-func ensureProgress(progress edge.Progress) edge.Progress {
-	if progress == nil {
-		return edge.DiscardProgress()
+func ensureProgress(runProgress progress.Progress) progress.Progress {
+	if runProgress == nil {
+		return progress.DiscardProgress()
 	}
-	return progress
+	return runProgress
 }
 
 func specFor(ns Namespace, class string) (spec, error) {
@@ -378,7 +379,7 @@ func specFor(ns Namespace, class string) (spec, error) {
 	}
 }
 
-func run(ctx context.Context, apis APIs, target spec, req Request, progress edge.Progress) error {
+func run(ctx context.Context, apis APIs, target spec, req Request, progress progress.Progress) error {
 	requested := req.Features
 	levels, err := featureLevels(requested)
 	if err != nil {

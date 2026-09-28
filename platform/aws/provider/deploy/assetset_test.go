@@ -12,9 +12,9 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func createRequest(args assetSetArgs, planning bool) infer.CreateRequest[assetSetArgs] {
@@ -197,7 +197,7 @@ func TestAPlannedAssetSetPushesNothing(t *testing.T) {
 	pushed := 0
 	pending.add("prod.web.rel-1", []assetSet{{
 		name: staticAssetSetName,
-		push: func(context.Context, edge.Progress) error { pushed++; return nil },
+		push: func(context.Context, progress.Progress) error { pushed++; return nil },
 	}}, nil)
 
 	resource := &assetSetResource{pending: pending}

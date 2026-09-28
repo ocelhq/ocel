@@ -7,10 +7,11 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type fakeEngine struct {
@@ -19,17 +20,17 @@ type fakeEngine struct {
 
 var _ pulumi.Engine = (*fakeEngine)(nil)
 
-func (f *fakeEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
+func (f *fakeEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ progress.Progress) ([]provider.Change, error) {
 	f.record("preview-" + string(op) + " " + setup.Stack)
 	return nil, nil
 }
 
-func (f *fakeEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
+func (f *fakeEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) (auto.OutputMap, error) {
 	f.record("up-stack " + setup.Stack)
 	return auto.OutputMap{}, nil
 }
 
-func (f *fakeEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) error {
+func (f *fakeEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Progress) error {
 	f.record("destroy-stack " + setup.Stack)
 	return nil
 }

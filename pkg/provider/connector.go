@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ConnectorConfigEnvVar = "OCEL_CONNECTOR_CONFIG_JSON"
@@ -40,9 +40,9 @@ type ConnectorAddress struct {
 type Connector interface {
 	Target(ctx context.Context) (ConnectorTarget, error)
 
-	Install(ctx context.Context, install ConnectorInstall, progress edge.Progress) (ConnectorAddress, error)
+	Install(ctx context.Context, install ConnectorInstall, progress progress.Progress) (ConnectorAddress, error)
 
-	Remove(ctx context.Context, progress edge.Progress) error
+	Remove(ctx context.Context, progress progress.Progress) error
 }
 
 func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) {

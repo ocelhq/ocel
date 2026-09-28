@@ -7,12 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -149,7 +150,7 @@ func TestTheNextDeployLimitsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCou
 	}
 	machine.mu.Unlock()
 
-	var warned edge.Warning
+	var warned progress.Warning
 	if err := stack.UnbindDomain(ctx, "shop.example.com"); !errors.As(err, &warned) {
 		t.Fatalf("UnbindDomain() = %v, want the hostname released with a warning", err)
 	}

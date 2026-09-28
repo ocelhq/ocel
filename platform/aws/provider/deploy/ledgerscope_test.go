@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestLedgerScopeNamesTheProjectTheISRPrefixDoes(t *testing.T) {

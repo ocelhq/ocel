@@ -5,8 +5,9 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Program func(ctx *pulumi.Context, project string) error
@@ -31,9 +32,9 @@ func (t Target) Prefix() string {
 }
 
 type Stacks interface {
-	Up(ctx context.Context, target Target, program Program, progress edge.Progress) (map[string]string, error)
+	Up(ctx context.Context, target Target, program Program, progress progress.Progress) (map[string]string, error)
 
-	Destroy(ctx context.Context, target Target, progress edge.Progress) error
+	Destroy(ctx context.Context, target Target, progress progress.Progress) error
 
 	Outputs(ctx context.Context, target Target) (map[string]string, error)
 }

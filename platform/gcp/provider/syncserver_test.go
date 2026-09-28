@@ -13,7 +13,7 @@ import (
 	"google.golang.org/api/cloudscheduler/v1"
 	run "google.golang.org/api/run/v2"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
 )
 
 type syncServer struct {

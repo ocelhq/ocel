@@ -11,10 +11,11 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func siblingAppRoot(t *testing.T, apps ...string) string {
@@ -48,7 +49,7 @@ func (r *recordingProgress) Detail(message string) { r.Say(message) }
 
 func (r *recordingProgress) Debug(line string) { r.Say(line) }
 
-func (r *recordingProgress) Span(name string, _, _ time.Time, err error, _ ...edge.Attr) {
+func (r *recordingProgress) Span(name string, _, _ time.Time, err error, _ ...progress.Attr) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err != nil {

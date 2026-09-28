@@ -7,8 +7,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type cloudFrontEdgeShape struct {

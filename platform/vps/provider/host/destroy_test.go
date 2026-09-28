@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -26,7 +27,7 @@ func (s *said) Error(message string)  { s.lines = append(s.lines, message) }
 func (s *said) Detail(message string) { s.lines = append(s.lines, message) }
 func (s *said) Debug(line string)     { s.lines = append(s.lines, line) }
 
-func (s *said) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
+func (s *said) Span(string, time.Time, time.Time, error, ...progress.Attr) {}
 
 func (s *said) at(fragment string) int {
 	return slices.IndexFunc(s.lines, func(line string) bool { return strings.Contains(line, fragment) })

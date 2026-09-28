@@ -12,8 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -318,7 +319,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{}
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, edge.DiscardProgress()); err != nil {
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if len(api.deleted) != 1 || api.deleted[0] != testARN {
@@ -346,7 +347,7 @@ func TestIssuerDiscard(t *testing.T) {
 		t.Parallel()
 
 		api := &fakeACM{refusals: 2}
-		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, edge.DiscardProgress()); err != nil {
+		if err := testIssuer(api, 1).Discard(t.Context(), Certificate{ARN: testARN}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Discard: %v", err)
 		}
 		if api.deletes != 3 {

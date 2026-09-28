@@ -27,7 +27,6 @@ require (
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
 	github.com/pulumi/pulumi-go-provider v1.6.0
 	github.com/pulumi/pulumi/sdk/v3 v3.259.0
@@ -199,8 +198,6 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	lukechampine.com/frand v1.5.1 // indirect
 )
-
-replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 

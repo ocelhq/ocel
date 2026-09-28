@@ -47,10 +47,9 @@ which are tooling.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
   has its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
-- **`platform/edge/`** — the edge role. `contract/` is what any edge must satisfy and what
-  an edge and an origin agree on; both sides depend on it, neither owns it. Siblings are
-  edges bought _independently of an origin cloud_ — a vendor's native edge belongs under
-  that vendor instead.
+- **`platform/edge/`** — the edge role. `contract/` is the TypeScript an edge and an origin
+  both run; the Go they agree on is `pkg/edge`. Siblings are edges bought _independently
+  of an origin cloud_ — a vendor's native edge belongs under that vendor instead.
 - **`platform/s3/`** — the S3 protocol as a store any origin can reach with a static
   credential: the plain-S3 bucket backend and its in-bucket upload sessions. The one
   `platform/` path every vendor may import, and it imports none of them.
@@ -70,8 +69,7 @@ which are tooling.
   else. `ocel` is public API.
 - **`pkg/`** — one Go module of shared packages any module may depend on;
   `provider/pulumi` is a module of its own. Its packages may import each other and
-  `platform/edge/contract`, the one `platform/` path open to them, and nothing else in
-  the repo — never a vendor SDK, the CLI, the SDK or the console.
+  nothing else in the repo — never a vendor SDK, the CLI, the SDK or the console.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the emulator and ladder scripts.

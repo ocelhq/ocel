@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type certificates struct{ *Provider }
@@ -139,7 +140,7 @@ func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname stri
 	return health, nil
 }
 
-func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress edge.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress progress.Progress) error {
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
@@ -147,7 +148,7 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws}).Discard(ctx, discarded, progress)
 }
 
-func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress edge.Progress) (certs.Certificates, error) {
+func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress progress.Progress) (certs.Certificates, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {

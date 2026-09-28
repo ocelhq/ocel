@@ -9,13 +9,14 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type hostnames struct {
@@ -44,7 +45,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	title := "Attaching " + namedList("production hostname", "production hostnames", requestedHosts(req))
 	unit := UnitStage(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, unit, func(sender *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(sender *eventStream, progress progress.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -65,7 +66,7 @@ func requestedHosts(req *contractv1.HostnameRequest) []string {
 	return hosts
 }
 
-func (d *hostnames) add(ctx context.Context, progress edge.Progress) error {
+func (d *hostnames) add(ctx context.Context, progress progress.Progress) error {
 	if len(d.configured) == 0 {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project declares no domains.production, so there is no production hostname to add; declare one in the config and run this again — no command edits the config")
@@ -107,7 +108,7 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 	return slices.DeleteFunc(slices.Clone(d.configured), func(configured ConfiguredHost) bool { return configured.Hostname != d.host })
 }
 
-func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress edge.Progress) (bool, error) {
+func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, progress progress.Progress) (bool, error) {
 	host := target.Hostname
 	hostState := d.state.Host(host)
 	serving := hostState.Serving()
@@ -173,7 +174,7 @@ func (d *hostnames) hostCertificates(host string, hostState *stackrecords.Hostna
 	}
 }
 
-func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving edge.Kind, progress edge.Progress) error {
+func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving edge.Kind, runProgress progress.Progress) error {
 	if serving == "" || serving == d.cutover.kind {
 		return nil
 	}
@@ -181,11 +182,11 @@ func (d *hostnames) unbindPreviousEdge(ctx context.Context, host string, serving
 	if err != nil {
 		return err
 	}
-	progress.Say(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
-	if err := edge.Heeded(stack.UnbindDomain(ctx, host), progress); err != nil {
+	runProgress.Say(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
+	if err := progress.Heeded(stack.UnbindDomain(ctx, host), runProgress); err != nil {
 		return err
 	}
-	progress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they cached: %s",
+	runProgress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they cached: %s",
 		host, flipWindow(d.cutover.dns)))
 	return nil
 }
@@ -196,7 +197,7 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 		title = "Detaching " + req.GetHost() + " from production"
 	}
 	unit := UnitStage(naming.UnitEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, unit, func(_ *eventStream, progress edge.Progress) error {
+	return streamed(ctx, stream, unit, func(_ *eventStream, progress progress.Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -205,26 +206,26 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 	})
 }
 
-func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
+func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) error {
 	targets, err := d.removeTargets()
 	if err != nil {
 		return err
 	}
 	if len(targets) == 0 {
 		if len(d.state.Hosts) == 0 {
-			progress.Say("Nothing to remove: this project serves no production hostname")
+			runProgress.Say("Nothing to remove: this project serves no production hostname")
 			return nil
 		}
-		progress.Say("Nothing to remove: every hostname this project serves is still declared in its config")
+		runProgress.Say("Nothing to remove: every hostname this project serves is still declared in its config")
 		return nil
 	}
 	for _, host := range targets {
-		progress.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.cutover.kind))
-		if err := edge.Heeded(d.stack.UnbindDomain(ctx, host), progress); err != nil {
+		runProgress.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.cutover.kind))
+		if err := progress.Heeded(d.stack.UnbindDomain(ctx, host), runProgress); err != nil {
 			return err
 		}
 		hostState := d.state.Host(host)
-		if err := d.cutover.release(ctx, hostState.Written, progress.Say); err != nil {
+		if err := d.cutover.release(ctx, hostState.Written, runProgress.Say); err != nil {
 			return err
 		}
 		d.state.Forget(host)
@@ -235,7 +236,7 @@ func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
 			if d.state.Uses(cert.ID) {
 				continue
 			}
-			if err := discardCertificateAndRecords(ctx, d.provider, d.cutover, cert, provider.Certificate{}, progress); err != nil {
+			if err := discardCertificateAndRecords(ctx, d.provider, d.cutover, cert, provider.Certificate{}, runProgress); err != nil {
 				return err
 			}
 		}

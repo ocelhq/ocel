@@ -3,7 +3,8 @@ package provider
 import (
 	"context"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Certificate struct {
@@ -20,7 +21,7 @@ type CertificateRequest struct {
 	Hostname string
 	Current  Certificate
 	Prove    func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
-	Progress edge.Progress
+	Progress progress.Progress
 }
 
 type CertificateHealth struct {
@@ -39,5 +40,5 @@ type Certificates interface {
 
 	Inspect(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
 
-	Discard(ctx context.Context, cert Certificate, progress edge.Progress) error
+	Discard(ctx context.Context, cert Certificate, progress progress.Progress) error
 }

@@ -3,11 +3,12 @@ package direct
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -120,11 +121,11 @@ func (s *stack) openLedger() *ledger.Ledger {
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
 	return pin.Promote(ctx, s.openLedger(), s.e.pins, promotion, pointer, progress)
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
 	return s.openLedger().RemovePointer(ctx, pointer)
 }
 

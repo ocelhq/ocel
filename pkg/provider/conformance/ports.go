@@ -12,15 +12,16 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func runPorts(t *testing.T, suite Suite) {
@@ -768,7 +769,7 @@ func (c *countedImages) Destination() string { return "the counted store" }
 
 func (c *countedImages) Has(context.Context, provider.ImagePush) (bool, error) { return false, nil }
 
-func (c *countedImages) Push(_ context.Context, _ provider.ImagePush, _ edge.Progress) error {
+func (c *countedImages) Push(_ context.Context, _ provider.ImagePush, _ progress.Progress) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pushed++

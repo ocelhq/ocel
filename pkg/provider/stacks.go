@@ -9,18 +9,19 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Stacks interface {
-	Plan(ctx context.Context, spec StackSpec, progress edge.Progress) (Plan, error)
+	Plan(ctx context.Context, spec StackSpec, progress progress.Progress) (Plan, error)
 
-	Provision(ctx context.Context, spec StackSpec, progress edge.Progress) (StackResult, error)
+	Provision(ctx context.Context, spec StackSpec, progress progress.Progress) (StackResult, error)
 
-	PlanDestroy(ctx context.Context, ref StackRef, progress edge.Progress) (Plan, error)
+	PlanDestroy(ctx context.Context, ref StackRef, progress progress.Progress) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, progress edge.Progress) error
+	Destroy(ctx context.Context, ref StackRef, progress progress.Progress) error
 }
 
 type StackRef struct {
