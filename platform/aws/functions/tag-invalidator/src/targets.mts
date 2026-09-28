@@ -12,10 +12,6 @@ export interface DynamoCommands {
   GetItemCommand: new (input: any) => any;
 }
 
-export function bootstrapPartition(): string {
-  return ledgerRoot;
-}
-
 export function ledgerPartition(project: string): string {
   return `${ledgerRoot}#${project.replaceAll("%", "%25").replaceAll("#", "%23")}`;
 }
@@ -50,7 +46,7 @@ export async function targetsOf(
   project: string,
 ): Promise<string[]> {
   const [wildcard, owned] = await Promise.all([
-    notedAt(dynamo, commands, table, bootstrapPartition()),
+    notedAt(dynamo, commands, table, ledgerRoot),
     notedAt(dynamo, commands, table, ledgerPartition(project)),
   ]);
   const targets = [...new Set([...wildcard, ...owned])].sort();

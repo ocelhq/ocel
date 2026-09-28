@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func TestKeyValuesConformance(t *testing.T) {
+func TestTheFakeKeyValueStoreConformsAsEveryStoreMust(t *testing.T) {
 	conformance.RunStore(t, fake.NewKeyValues())
 }
 

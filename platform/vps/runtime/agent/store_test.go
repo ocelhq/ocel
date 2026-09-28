@@ -29,39 +29,39 @@ import (
 
 type memKeyValues struct {
 	mu      sync.Mutex
-	records map[string]keyvalue.Entry
+	entries map[string]keyvalue.Entry
 }
 
 func (m *memKeyValues) Read(_ context.Context, name keyvalue.Key) (keyvalue.Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	stored, ok := m.records[name.String()]
+	stored, ok := m.entries[name.String()]
 	if !ok {
 		return keyvalue.Entry{}, keyvalue.ErrNotFound
 	}
 	return stored, nil
 }
 
-func (m *memKeyValues) Write(_ context.Context, record keyvalue.Entry) (keyvalue.Revision, error) {
+func (m *memKeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.put(record)
+	return m.put(entry)
 }
 
-func (m *memKeyValues) put(record keyvalue.Entry) (keyvalue.Revision, error) {
-	if m.records == nil {
-		m.records = map[string]keyvalue.Entry{}
+func (m *memKeyValues) put(entry keyvalue.Entry) (keyvalue.Revision, error) {
+	if m.entries == nil {
+		m.entries = map[string]keyvalue.Entry{}
 	}
-	if stored, ok := m.records[record.Key.String()]; ok && stored.Revision != record.Revision {
+	if stored, ok := m.entries[entry.Key.String()]; ok && stored.Revision != entry.Revision {
 		return "", keyvalue.ErrStale
 	}
 	minted := make([]byte, 16)
 	if _, err := rand.Read(minted); err != nil {
 		return "", err
 	}
-	record.Revision = keyvalue.Revision(hex.EncodeToString(minted))
-	m.records[record.Key.String()] = record
-	return record.Revision, nil
+	entry.Revision = keyvalue.Revision(hex.EncodeToString(minted))
+	m.entries[entry.Key.String()] = entry
+	return entry.Revision, nil
 }
 
 func (m *memKeyValues) WritePair(_ context.Context, first, second keyvalue.Entry) error {
@@ -77,7 +77,7 @@ func (m *memKeyValues) WritePair(_ context.Context, first, second keyvalue.Entry
 func (m *memKeyValues) Remove(_ context.Context, name keyvalue.Key, _ keyvalue.Revision) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.records, name.String())
+	delete(m.entries, name.String())
 	return nil
 }
 
@@ -85,11 +85,11 @@ func (m *memKeyValues) List(_ context.Context, in keyvalue.Partition, under ...s
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []keyvalue.Entry
-	for _, record := range m.records {
-		if record.Key.Partition.String() != in.String() || len(record.Key.Path) < len(under) || !slices.Equal(record.Key.Path[:len(under)], under) {
+	for _, entry := range m.entries {
+		if entry.Key.Partition.String() != in.String() || len(entry.Key.Path) < len(under) || !slices.Equal(entry.Key.Path[:len(under)], under) {
 			continue
 		}
-		out = append(out, record)
+		out = append(out, entry)
 	}
 	return out, nil
 }
@@ -120,7 +120,7 @@ type box struct {
 	tierRoot     string
 	stateRoot    string
 	routingTable string
-	records      *memKeyValues
+	keyValues    *memKeyValues
 	cipher       goCipher
 }
 
@@ -130,7 +130,7 @@ func aBox(t *testing.T, root string) *box {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memKeyValues{}, cipher: goCipher{key: key}}
+	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), keyValues: &memKeyValues{}, cipher: goCipher{key: key}}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
 			t.Fatal(err)
@@ -142,7 +142,7 @@ func aBox(t *testing.T, root string) *box {
 	return b
 }
 
-func (b *box) store() envvars.Store { return envvars.Store{KeyValues: b.records, Cipher: b.cipher} }
+func (b *box) store() envvars.Store { return envvars.Store{KeyValues: b.keyValues, Cipher: b.cipher} }
 
 func (b *box) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
 	t.Helper()
@@ -164,18 +164,18 @@ func (b *box) bind(t *testing.T, scope envvars.Scope, environment, name string, 
 
 func (b *box) dump(t *testing.T) {
 	t.Helper()
-	b.records.mu.Lock()
-	defer b.records.mu.Unlock()
-	for _, record := range b.records.records {
-		encoded, err := vars.PathOf(record.Key)
+	b.keyValues.mu.Lock()
+	defer b.keyValues.mu.Unlock()
+	for _, entry := range b.keyValues.entries {
+		encoded, err := vars.PathOf(entry.Key)
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(vars.KeyValuesDir(b.stateRoot, record.Key.Partition.Tier), encoded+vars.EntrySuffix)
+		path := filepath.Join(vars.KeyValuesDir(b.stateRoot, entry.Key.Partition.Tier), encoded+vars.EntrySuffix)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, []byte(`{"revision":"`+string(record.Revision)+`","value":`+string(record.Value)+"}\n"), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(`{"revision":"`+string(entry.Revision)+`","value":`+string(entry.Value)+"}\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -291,9 +291,9 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	record := resolved["OCEL_RESOURCE_POSTGRES_main"]
-	if !strings.Contains(record, "hunter2") || !strings.Contains(record, "db.internal") {
-		t.Errorf("Resolve() handed %q under the binding's key, want the full record the app connects with", record)
+	entry := resolved["OCEL_RESOURCE_POSTGRES_main"]
+	if !strings.Contains(entry, "hunter2") || !strings.Contains(entry, "db.internal") {
+		t.Errorf("Resolve() handed %q under the binding's key, want the full entry the app connects with", entry)
 	}
 	if err := live.Conform(bindings, resolved); err != nil {
 		t.Errorf("what the store resolved does not conform to what the runtime was built to read: %v", err)
@@ -393,11 +393,11 @@ func resolvedBucket(t *testing.T, b *box, bindings []live.Binding) *bindingsv1.B
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	record := &bindingsv1.Binding{}
-	if err := protojson.Unmarshal([]byte(resolved["OCEL_RESOURCE_BUCKET_uploads"]), record); err != nil {
-		t.Fatalf("the binding the runtime reads is no record: %v", err)
+	entry := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal([]byte(resolved["OCEL_RESOURCE_BUCKET_uploads"]), entry); err != nil {
+		t.Fatalf("the binding the runtime reads is no entry: %v", err)
 	}
-	return record.GetBucket()
+	return entry.GetBucket()
 }
 
 func TestAPublicBucketIsDeliveredTheAddressTheBoxClaimsForItNow(t *testing.T) {

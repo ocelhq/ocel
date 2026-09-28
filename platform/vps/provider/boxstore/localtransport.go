@@ -28,7 +28,7 @@ func (LocalTransport) HasStore(_ context.Context, tier environment.Tier) (bool, 
 	return err == nil && info.IsDir(), nil
 }
 
-func (LocalTransport) KeyValues(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
+func (LocalTransport) Run(ctx context.Context, tier environment.Tier, stdin io.Reader, argv ...string) (string, error) {
 	stdout, stderr, code, err := runCommand(ctx, stdin, KeyValuesHelper, append([]string{string(tier)}, argv...)...)
 	switch {
 	case err != nil:
