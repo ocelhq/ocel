@@ -10,7 +10,6 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -19,6 +18,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -52,7 +52,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	}
 
 	flip := session.front.Facts().FlipBound
-	promoted := edge.Promotion{
+	promoted := router.Promotion{
 		PromotionID: target.PromotionID,
 		Ts:          time.Now().Unix(),
 		Builds:      target.Builds,
@@ -68,14 +68,14 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 	return &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}, nil
 }
 
-func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion, error) {
+func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promotion, error) {
 	if tag != "" {
 		for _, entry := range history {
 			if entry.Tag == tag {
 				return entry.Promotion, nil
 			}
 		}
-		return edge.Promotion{}, refusal.Refuse(refusal.CodeInvalid, "no promotion tagged %q in this project's history", tag)
+		return router.Promotion{}, refusal.Refuse(refusal.CodeInvalid, "no promotion tagged %q in this project's history", tag)
 	}
 	if to != "" {
 		for _, entry := range history {
@@ -83,18 +83,18 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 				return entry.Promotion, nil
 			}
 		}
-		return edge.Promotion{}, refusal.Refuse(refusal.CodeInvalid, "no promotion %q in this project's history", to)
+		return router.Promotion{}, refusal.Refuse(refusal.CodeInvalid, "no promotion %q in this project's history", to)
 	}
 	for i, entry := range history {
 		if !entry.Active {
 			continue
 		}
 		if i+1 >= len(history) {
-			return edge.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no earlier promotion to roll back to")
+			return router.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no earlier promotion to roll back to")
 		}
 		return history[i+1].Promotion, nil
 	}
-	return edge.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no active promotion to roll back from")
+	return router.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no active promotion to roll back from")
 }
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
@@ -160,7 +160,7 @@ func undeployed(err error) bool {
 	return errors.As(err, &absent)
 }
 
-func pruneLines(result edge.PruneResult) []string {
+func pruneLines(result router.PruneResult) []string {
 	kept := len(result.KeptPromotionIDs)
 	switch {
 	case len(result.RemovedPromotionIDs) > 0:
@@ -176,7 +176,7 @@ func pruneLines(result edge.PruneResult) []string {
 	}
 }
 
-func promotionHistoryProto(history []edge.HistoryEntry) []*contractv1.PromotionHistoryEntry {
+func promotionHistoryProto(history []router.HistoryEntry) []*contractv1.PromotionHistoryEntry {
 	out := make([]*contractv1.PromotionHistoryEntry, 0, len(history))
 	for _, entry := range history {
 		out = append(out, &contractv1.PromotionHistoryEntry{
@@ -187,7 +187,7 @@ func promotionHistoryProto(history []edge.HistoryEntry) []*contractv1.PromotionH
 	return out
 }
 
-func promotionProto(promotion edge.Promotion) *contractv1.Promotion {
+func promotionProto(promotion router.Promotion) *contractv1.Promotion {
 	return &contractv1.Promotion{
 		PromotionId: promotion.PromotionID,
 		Ts:          promotion.Ts,
@@ -197,7 +197,7 @@ func promotionProto(promotion edge.Promotion) *contractv1.Promotion {
 	}
 }
 
-func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
+func flipBoundProto(flip *router.FlipBound) *progressv1.FlipBound {
 	if flip == nil {
 		return nil
 	}

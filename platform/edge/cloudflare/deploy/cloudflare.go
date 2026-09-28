@@ -27,6 +27,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const Kind edge.Kind = "cloudflare"
@@ -90,7 +91,7 @@ func (p *cloudflare) cacheStore() cacheStore {
 func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:           edge.AllNeeds(),
-		FlipBound:           edge.FlipBound{Typical: recordTTL},
+		FlipBound:           router.FlipBound{Typical: recordTTL},
 		Compatibility:       edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
 		RunsCode:            true,
 		ServesUnbound:       true,

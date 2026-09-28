@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -28,8 +29,8 @@ type recordingEdge struct {
 	secret       string
 	version      string
 
-	staged          []edge.DeploymentRecord
-	promotions      []edge.Promotion
+	staged          []router.DeploymentRecord
+	promotions      []router.Promotion
 	promotePointers []string
 	pruned          []int
 	prunePointers   []string
@@ -44,16 +45,16 @@ type recordingEdge struct {
 	storeSchemaVersionErr error
 
 	bound       map[string]string
-	history     []edge.HistoryEntry
+	history     []router.HistoryEntry
 	historyErr  error
-	pruneResult edge.PruneResult
+	pruneResult router.PruneResult
 
 	promoted []pointedPromotion
 }
 
 type pointedPromotion struct {
 	pointer   string
-	promotion edge.Promotion
+	promotion router.Promotion
 }
 
 var _ edge.Edge = (*recordingEdge)(nil)
@@ -196,7 +197,7 @@ func (s *recordingStack) SchemaVersion(context.Context) (int, error) {
 	return *s.edge.storeSchemaVersion, nil
 }
 
-func (s *recordingStack) PutStaged(_ context.Context, record edge.DeploymentRecord) error {
+func (s *recordingStack) PutStaged(_ context.Context, record router.DeploymentRecord) error {
 	if err := s.checkAuth(); err != nil {
 		return err
 	}
@@ -204,7 +205,7 @@ func (s *recordingStack) PutStaged(_ context.Context, record edge.DeploymentReco
 	return nil
 }
 
-func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, pointer string, _ progress.Progress) error {
+func (s *recordingStack) Promote(_ context.Context, promotion router.Promotion, pointer string, _ progress.Progress) error {
 	if err := s.checkAuth(); err != nil {
 		return err
 	}
@@ -214,7 +215,7 @@ func (s *recordingStack) Promote(_ context.Context, promotion edge.Promotion, po
 	return nil
 }
 
-func (s *recordingStack) History(_ context.Context, pointer string) ([]edge.HistoryEntry, error) {
+func (s *recordingStack) History(_ context.Context, pointer string) ([]router.HistoryEntry, error) {
 	if s.edge.historyErr != nil {
 		return nil, s.edge.historyErr
 	}
@@ -225,13 +226,13 @@ func (s *recordingStack) History(_ context.Context, pointer string) ([]edge.Hist
 	return s.edge.historyFor(pointer), nil
 }
 
-func (f *recordingEdge) historyFor(pointer string) []edge.HistoryEntry {
-	var out []edge.HistoryEntry
+func (f *recordingEdge) historyFor(pointer string) []router.HistoryEntry {
+	var out []router.HistoryEntry
 	for _, p := range f.promoted {
 		if p.pointer != pointer {
 			continue
 		}
-		out = append(out, edge.HistoryEntry{Promotion: p.promotion, Active: len(out) == 0})
+		out = append(out, router.HistoryEntry{Promotion: p.promotion, Active: len(out) == 0})
 	}
 	if pointer == "" {
 		out = append(out, f.history...)
@@ -239,16 +240,16 @@ func (f *recordingEdge) historyFor(pointer string) []edge.HistoryEntry {
 	return out
 }
 
-func (s *recordingStack) Prune(_ context.Context, keepN int, pointer string) (edge.PruneResult, error) {
+func (s *recordingStack) Prune(_ context.Context, keepN int, pointer string) (router.PruneResult, error) {
 	if err := s.checkAuth(); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	s.edge.pruned = append(s.edge.pruned, keepN)
 	s.edge.prunePointers = append(s.edge.prunePointers, pointer)
 	if !isZeroPruneResult(s.edge.pruneResult) {
 		return s.edge.pruneResult, nil
 	}
-	var result edge.PruneResult
+	var result router.PruneResult
 	for i, h := range s.edge.historyFor(pointer) {
 		if i < keepN || h.Active {
 			result.KeptPromotionIDs = append(result.KeptPromotionIDs, h.PromotionID)
@@ -259,9 +260,9 @@ func (s *recordingStack) Prune(_ context.Context, keepN int, pointer string) (ed
 	return result, nil
 }
 
-func (s *recordingStack) RemovePointer(_ context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
+func (s *recordingStack) RemovePointer(_ context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
 	if err := s.checkAuth(); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	s.edge.recordCall("remove-pointer " + pointer)
 	s.edge.removedPointers = append(s.edge.removedPointers, pointer)
@@ -278,7 +279,7 @@ func (s *recordingStack) RemovePointer(_ context.Context, pointer string, _ prog
 	if !isZeroPruneResult(s.edge.pruneResult) {
 		return s.edge.pruneResult, nil
 	}
-	return edge.PruneResult{RemovedPromotionIDs: removed}, nil
+	return router.PruneResult{RemovedPromotionIDs: removed}, nil
 }
 
 func (s *recordingStack) BindDomain(_ context.Context, binding edge.DomainBinding) error {
@@ -319,7 +320,7 @@ func (s *recordingStack) Destroy(ctx context.Context) error {
 	return s.edge.destroyErr
 }
 
-func isZeroPruneResult(r edge.PruneResult) bool {
+func isZeroPruneResult(r router.PruneResult) bool {
 	return len(r.KeptPromotionIDs) == 0 && len(r.RemovedPromotionIDs) == 0 &&
 		len(r.RemovedRecordKeys) == 0 && len(r.SurvivingRecordKeys) == 0 &&
 		len(r.SurvivingPointerRecordKeys) == 0
@@ -402,7 +403,7 @@ func TestRecordingEdge(t *testing.T) {
 		f := &recordingEdge{kind: cloudflare.Kind}
 		stack := f.opened(t, edge.StackState{})
 
-		if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{App: "web", Build: "b1"}); err == nil {
+		if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{App: "web", Build: "b1"}); err == nil {
 			t.Error("expected PutStaged to reject a state no reconcile ever produced")
 		}
 		if len(f.staged) != 0 {
@@ -413,15 +414,15 @@ func TestRecordingEdge(t *testing.T) {
 	t.Run("store ops record calls after reconcile", func(t *testing.T) {
 		t.Parallel()
 
-		f := &recordingEdge{kind: cloudflare.Kind, history: []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "p1"}, Active: true}}}
+		f := &recordingEdge{kind: cloudflare.Kind, history: []router.HistoryEntry{{Promotion: router.Promotion{PromotionID: "p1"}, Active: true}}}
 		ctx := context.Background()
 		stack := f.reconciled(t, edge.StackSpec{Version: "v1"})
 
-		record := edge.DeploymentRecord{App: "web", Build: "b1"}
+		record := router.DeploymentRecord{App: "web", Build: "b1"}
 		if err := stack.Ledger().PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
-		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
+		promotion := router.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
 		if err := stack.Promote(ctx, promotion, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
@@ -439,7 +440,7 @@ func TestRecordingEdge(t *testing.T) {
 		if len(f.promotions) != 1 || f.promotions[0].PromotionID != promotion.PromotionID {
 			t.Errorf("promotions = %v, want [%v]", f.promotions, promotion)
 		}
-		if !slices.ContainsFunc(history, func(h edge.HistoryEntry) bool { return h.PromotionID == "p1" }) {
+		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == "p1" }) {
 			t.Errorf("History = %v, want the seeded entry", history)
 		}
 		if len(f.pruned) != 1 || f.pruned[0] != 3 {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const domainEntryScript = "ocel-acme-web-prod"
@@ -228,8 +229,8 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	state.Private = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
 	s := stackOn(m.provider(t), state)
 
-	promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
-	if err := s.Promote(t.Context(), promotion, edge.DefaultPointer, progress.DiscardProgress()); err != nil {
+	promotion := router.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
+	if err := s.Promote(t.Context(), promotion, router.DefaultPointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
@@ -239,7 +240,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "shop.app.com/*" || m.createdRoutes[0]["script"] != domainEntryScript {
 		t.Fatalf("created routes = %v, want shop.app.com/* on %s, the entry worker that reads the promoted release", m.createdRoutes, domainEntryScript)
 	}
-	history, err := s.History(t.Context(), edge.DefaultPointer)
+	history, err := s.History(t.Context(), router.DefaultPointer)
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}

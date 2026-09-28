@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/edgeconformance"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -64,7 +65,7 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, staged release
 	t.Helper()
 
 	ctx := context.Background()
-	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+	if err := stack.Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App:        liveApp,
 		Build:      tag,
 		Entry:      "/",
@@ -74,7 +75,7 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, staged release
 	}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", tag, err)
 	}
-	if err := stack.Promote(ctx, edge.Promotion{
+	if err := stack.Promote(ctx, router.Promotion{
 		PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", id, err)
@@ -231,7 +232,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	vm.ssh(t, "sudo docker rm --force "+quote(one.physical)+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker rmi "+quote(fixtureAt("one")))
 
-	err := stack.Promote(context.Background(), edge.Promotion{
+	err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"},
 	}, "", progress.DiscardProgress())
 	if err == nil {

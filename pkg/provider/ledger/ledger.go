@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -69,7 +70,7 @@ func (l *Ledger) tagKey(tag string) keyvalue.Key { return l.key("tags", tag) }
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
-		return edge.DefaultPointer
+		return router.DefaultPointer
 	}
 	return pointer
 }
@@ -77,7 +78,7 @@ func pointerOr(pointer string) string {
 const displacedDepth = 16
 
 type promotionRecord struct {
-	edge.Promotion
+	router.Promotion
 	Seq     int64          `json:"seq"`
 	Claimed bool           `json:"claimed,omitempty"`
 	Prior   *priorPosition `json:"was,omitempty"`
@@ -148,7 +149,7 @@ func (l *Ledger) SchemaVersion(ctx context.Context) (int, error) {
 	return version, nil
 }
 
-func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+func (l *Ledger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
 	if record.App == "" || record.Build == "" {
 		return fmt.Errorf("stage a deployment record: it names app %q and build %q, and the ledger keys records by both", record.App, record.Build)
 	}
@@ -167,22 +168,22 @@ func (l *Ledger) PutStaged(ctx context.Context, record edge.DeploymentRecord) er
 	return nil
 }
 
-func (l *Ledger) Record(ctx context.Context, app, build string) (edge.DeploymentRecord, bool, error) {
+func (l *Ledger) Record(ctx context.Context, app, build string) (router.DeploymentRecord, bool, error) {
 	recorded, err := keyvalue.ReadOrEmpty(ctx, l.keyValues, l.deploymentKey(app, build))
 	if err != nil {
-		return edge.DeploymentRecord{}, false, fmt.Errorf("read the deployment record for %s/%s: %w", app, build, err)
+		return router.DeploymentRecord{}, false, fmt.Errorf("read the deployment record for %s/%s: %w", app, build, err)
 	}
 	if len(recorded.Value) == 0 {
-		return edge.DeploymentRecord{}, false, nil
+		return router.DeploymentRecord{}, false, nil
 	}
-	var record edge.DeploymentRecord
+	var record router.DeploymentRecord
 	if err := json.Unmarshal(recorded.Value, &record); err != nil {
-		return edge.DeploymentRecord{}, false, fmt.Errorf("decode the deployment record for %s/%s: %w", app, build, err)
+		return router.DeploymentRecord{}, false, fmt.Errorf("decode the deployment record for %s/%s: %w", app, build, err)
 	}
 	return record, true, nil
 }
 
-func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ progress.Progress) error {
+func (l *Ledger) Promote(ctx context.Context, promotion router.Promotion, pointer string, _ progress.Progress) error {
 	name := pointerOr(pointer)
 	claimed, err := l.claimTag(ctx, promotion)
 	if err != nil {
@@ -351,7 +352,7 @@ func (l *Ledger) freeTag(ctx context.Context, tag, promotionID string) error {
 	return fmt.Errorf("free the tag %q: it moved under %d attempts", tag, casAttempts)
 }
 
-func (l *Ledger) claimTag(ctx context.Context, promotion edge.Promotion) (bool, error) {
+func (l *Ledger) claimTag(ctx context.Context, promotion router.Promotion) (bool, error) {
 	if promotion.Tag == "" {
 		return false, nil
 	}
@@ -394,7 +395,7 @@ func (l *Ledger) tagOwner(ctx context.Context, tag string) string {
 	return claimed.PromotionID
 }
 
-func (l *Ledger) tagTaken(promotion edge.Promotion, owner string) error {
+func (l *Ledger) tagTaken(promotion router.Promotion, owner string) error {
 	if owner == "" {
 		owner = "another promotion"
 	}
@@ -431,7 +432,7 @@ func (l *Ledger) nextSequence(ctx context.Context) (int64, error) {
 	return 0, fmt.Errorf("advance the promotion sequence for %s: it moved under %d attempts", l.partition, casAttempts)
 }
 
-func (l *Ledger) History(ctx context.Context, pointer string) ([]edge.HistoryEntry, error) {
+func (l *Ledger) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
 	name := pointerOr(pointer)
 	rows, err := l.promotions(ctx, name)
 	if err != nil {
@@ -441,33 +442,33 @@ func (l *Ledger) History(ctx context.Context, pointer string) ([]edge.HistoryEnt
 	if err != nil {
 		return nil, err
 	}
-	entries := make([]edge.HistoryEntry, 0, len(rows))
+	entries := make([]router.HistoryEntry, 0, len(rows))
 	for _, row := range rows {
-		entries = append(entries, edge.HistoryEntry{Promotion: row.Promotion, Active: row.PromotionID == active})
+		entries = append(entries, router.HistoryEntry{Promotion: row.Promotion, Active: row.PromotionID == active})
 	}
 	return entries, nil
 }
 
-func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (edge.PruneResult, error) {
+func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
 	name := pointerOr(pointer)
 	rows, err := l.promotions(ctx, name)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	active, err := l.pointerAt(ctx, name)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	kept, removed := Retain(rows, keepN, active, func(row promotionRecord) string { return row.PromotionID })
 	keptKeys := recordKeysOf(kept)
 	if err := l.deletePromotions(ctx, name, removed, keptKeys); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	surviving, err := l.recordKeys(ctx)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
-	return edge.PruneResult{
+	return router.PruneResult{
 		KeptPromotionIDs:           promotionIDs(kept),
 		RemovedPromotionIDs:        promotionIDs(removed),
 		RemovedRecordKeys:          without(recordKeysOf(removed), keptKeys),
@@ -487,23 +488,23 @@ func Retain[T any](rows []T, keepN int, active string, id func(T) string) (kept,
 	return kept, removed
 }
 
-func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error) {
+func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
 	name := pointerOr(pointer)
 	rows, err := l.promotions(ctx, name)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	if err := l.deletePromotions(ctx, name, rows, nil); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	if err := keyvalue.Forget(ctx, l.keyValues, l.pointerKey(name)); err != nil {
-		return edge.PruneResult{}, fmt.Errorf("forget pointer %s: %w", name, err)
+		return router.PruneResult{}, fmt.Errorf("forget pointer %s: %w", name, err)
 	}
 	surviving, err := l.recordKeys(ctx)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
-	return edge.PruneResult{
+	return router.PruneResult{
 		RemovedPromotionIDs: promotionIDs(rows),
 		RemovedRecordKeys:   recordKeysOf(rows),
 		SurvivingRecordKeys: surviving,

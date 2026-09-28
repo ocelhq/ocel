@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -300,7 +301,7 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Progre
 
 func (r *projectRemoval) pointers() []string {
 	if r.tier == environment.TierProduction {
-		return []string{edge.DefaultPointer}
+		return []string{router.DefaultPointer}
 	}
 	return r.pointer
 }

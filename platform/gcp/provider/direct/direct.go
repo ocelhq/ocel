@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -122,11 +123,11 @@ func (s *stack) openLedger() *ledger.Ledger {
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
 	return pin.Promote(ctx, s.openLedger(), s.e.pins, promotion, pointer, progress)
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
 	return s.openLedger().RemovePointer(ctx, pointer)
 }
 

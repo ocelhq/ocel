@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 var errStoreRequestUnbuildable = errors.New("build deployments-store request")
@@ -44,7 +45,7 @@ func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName str
 	return err
 }
 
-func (s *stack) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+func (s *stack) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
 	if record.Envelope != "" && s.own.wrapsEnvelopes() {
 		wrapped, err := wrapEnvelope(s.own.EnvelopeKey, record.Envelope)
 		if err != nil {
@@ -57,43 +58,43 @@ func (s *stack) PutStaged(ctx context.Context, record edge.DeploymentRecord) err
 }
 
 type promoteBody struct {
-	edge.Promotion
+	router.Promotion
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ progress.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, _ progress.Progress) error {
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
 	return err
 }
 
-func (s *stack) History(ctx context.Context, pointer string) ([]edge.HistoryEntry, error) {
+func (s *stack) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
 	subpath := "/history"
 	if pointer != "" {
 		subpath += "?pointer=" + url.QueryEscape(pointer)
 	}
-	var history []edge.HistoryEntry
+	var history []router.HistoryEntry
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodGet, subpath, nil, &history); err != nil {
 		return nil, err
 	}
 	return history, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
-	var result edge.PruneResult
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
+	var result router.PruneResult
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	return result, nil
 }
 
-func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (edge.PruneResult, error) {
+func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
 	body := map[string]any{"keepN": keepN}
 	if pointer != "" {
 		body["pointer"] = pointer
 	}
-	var result edge.PruneResult
+	var result router.PruneResult
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/prune", body, &result); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	return result, nil
 }

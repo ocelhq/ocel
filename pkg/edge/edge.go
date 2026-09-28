@@ -3,10 +3,10 @@ package edge
 import (
 	"context"
 	"slices"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Kind string
@@ -45,11 +45,6 @@ func ValidNeed(need Need) bool {
 	return slices.Contains(AllNeeds(), need)
 }
 
-type FlipBound struct {
-	Typical   time.Duration `json:"typical"`
-	Published bool          `json:"published"`
-}
-
 type Compatibility struct {
 	Date  string
 	Flags []string
@@ -61,7 +56,7 @@ func (c Compatibility) IsZero() bool {
 
 type Facts struct {
 	Supported             []Need
-	FlipBound             FlipBound
+	FlipBound             router.FlipBound
 	Compatibility         Compatibility
 	RunsCode              bool
 	AddressesItself       bool
@@ -111,16 +106,14 @@ type ProjectScope struct {
 	Front     string
 }
 
-const DefaultPointer = "@production"
-
 type EdgeStack interface {
 	State() StackState
 
 	Ledger() Ledger
 
-	Promote(ctx context.Context, promotion Promotion, pointer string, progress progress.Progress) error
+	Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error
 
-	RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (PruneResult, error)
+	RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error)
 
 	BindDomain(ctx context.Context, binding DomainBinding) error
 
@@ -139,11 +132,11 @@ type DomainBinding struct {
 type Ledger interface {
 	SchemaVersion(ctx context.Context) (int, error)
 
-	PutStaged(ctx context.Context, record DeploymentRecord) error
+	PutStaged(ctx context.Context, record router.DeploymentRecord) error
 
-	History(ctx context.Context, pointer string) ([]HistoryEntry, error)
+	History(ctx context.Context, pointer string) ([]router.HistoryEntry, error)
 
-	Prune(ctx context.Context, keepN int, pointer string) (PruneResult, error)
+	Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error)
 }
 
 type CredentialIdentity struct {

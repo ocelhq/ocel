@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
@@ -130,7 +131,7 @@ func (p *apiGateway) Kind() edge.Kind { return Kind }
 func (p *apiGateway) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:           []edge.Need{edge.NeedStreaming},
-		FlipBound:           edge.FlipBound{Typical: propagationBound},
+		FlipBound:           router.FlipBound{Typical: propagationBound},
 		SignsOriginForwards: true,
 	}
 }
@@ -363,7 +364,7 @@ func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, 
 }
 
 func apiName(ns bootstrap.Namespace, slug string, tier environment.Tier, pointer string) string {
-	if p := pointerOr(pointer); p != edge.DefaultPointer {
+	if p := pointerOr(pointer); p != router.DefaultPointer {
 		return surface.Name(ns, slug, tier, p)
 	}
 	return surface.Name(ns, slug, tier)
@@ -371,7 +372,7 @@ func apiName(ns bootstrap.Namespace, slug string, tier environment.Tier, pointer
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
-		return edge.DefaultPointer
+		return router.DefaultPointer
 	}
 	return pointer
 }

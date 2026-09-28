@@ -8,16 +8,16 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed edge.PruneResult, progress progress.Progress) error {
+func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed router.PruneResult, progress progress.Progress) error {
 	targets, err := ReclaimTargets(slug, pointer,
 		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
 	if err != nil {

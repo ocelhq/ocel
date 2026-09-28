@@ -5,11 +5,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func lastPlan(events []*progressv1.OperationEvent) *planv1.ChangePlan {
@@ -73,7 +73,7 @@ func TestADryDeployOrdersItsGroupsTheSameWayEveryRun(t *testing.T) {
 		"stack:prod--web--r7dad1fc0",
 		"stack:prod--admin--r027a305d",
 		"edge:relay/edge",
-		"promotion:" + edge.DefaultPointer,
+		"promotion:" + router.DefaultPointer,
 	}
 	for run, got := range drawn {
 		if !slices.Equal(got, want) {
@@ -101,7 +101,7 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 		t.Fatal("a dry deploy streamed no plan, and drawing the plan is all it is for")
 	}
 	names := groupNames(plan)
-	for _, want := range []string{"parameters:values", "edge:relay/edge", "promotion:" + edge.DefaultPointer} {
+	for _, want := range []string{"parameters:values", "edge:relay/edge", "promotion:" + router.DefaultPointer} {
 		if !slices.Contains(names, want) {
 			t.Errorf("the plan shows %v, want a %q row: every remote mutation the apply makes is on the plan", names, want)
 		}

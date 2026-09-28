@@ -8,9 +8,9 @@ import (
 
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath(t *testing.T) {
@@ -21,11 +21,11 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	stack := reconciled(t, w)
 	bound(t, stack)
 	first := staged(t, stack, fakeEntryURL, "assets/one")
-	second := edge.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}, AssetPrefix: "assets/two"}
+	second := router.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}, AssetPrefix: "assets/two"}
 	if err := stack.Ledger().PutStaged(ctx, second); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.dynamo.beforePut = func(key string, items map[string]map[string]ddbtypes.AttributeValue) {
@@ -34,7 +34,7 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 
-	err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}, "", progress.DiscardProgress())
+	err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}, "", progress.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Promote(p2) = %v, want the busy refusal a moved pointer earns", err)

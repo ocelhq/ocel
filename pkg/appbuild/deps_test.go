@@ -15,6 +15,7 @@ var reachable = []string{
 	repo + "pkg/edge",
 	repo + "pkg/environment",
 	repo + "pkg/progress",
+	repo + "pkg/router",
 }
 
 var wire = []string{

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -137,7 +138,7 @@ func previewed(t *testing.T, stack edge.EdgeStack, pointer string, apps ...strin
 		staged(t, stack, app, "b1", slug+"-"+app+"-"+pointer)
 		builds[app] = "b1"
 	}
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,
 	}, pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
@@ -237,7 +238,7 @@ func TestAPreviewHostnameDnsWillNotResolveIsRefusedRatherThanClaimed(t *testing.
 	over := strings.Repeat("b", edge.PreviewLabelMaxLen)
 	staged(t, stack, "web", "b1", slug+"-web-1")
 
-	err := stack.Promote(context.Background(), edge.Promotion{
+	err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, over, progress.DiscardProgress())
 	if err == nil {
@@ -296,7 +297,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	staged(t, pointed, "web", "b2", "shop-web-2222")
-	if err := pointed.Promote(context.Background(), edge.Promotion{
+	if err := pointed.Promote(context.Background(), router.Promotion{
 		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
 	}, "pr-7", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)

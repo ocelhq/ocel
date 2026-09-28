@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -149,7 +150,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}); err != nil {
 		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
 	}
-	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+	if err := stack.Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App:        app,
 		Build:      build.String(),
 		Entry:      "/",
@@ -159,7 +160,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", pointer, err)
 	}
-	if err := stack.Promote(ctx, edge.Promotion{
+	if err := stack.Promote(ctx, router.Promotion{
 		PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()},
 	}, pointer, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)

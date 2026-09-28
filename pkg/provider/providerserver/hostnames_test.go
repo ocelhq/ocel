@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -35,7 +36,7 @@ func deployed(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug s
 
 func promoted(t *testing.T, vendor *fake.Provider, tier environment.Tier, slug string) {
 	t.Helper()
-	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
 	if err := ledger.New(vendor.KeyValues(), tier, slug).Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}

@@ -26,6 +26,7 @@ on:
       - "pkg/proto/**"
       - "pkg/provider/**"
       - "pkg/refusal/**"
+      - "pkg/router/**"
       - "pkg/runtime/**"
       - "pkg/seal/**"
       - "pkg/stackrecords/**"

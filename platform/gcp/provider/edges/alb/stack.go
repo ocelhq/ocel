@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -33,14 +34,14 @@ func (s *stack) openLedger() *ledger.Ledger {
 
 func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
 	if err := pin.Promote(ctx, s.openLedger(), s.e.deps.Pins, promotion, pointer, progress); err != nil {
 		return err
 	}
 	return s.released(ctx, promotion, progress)
 }
 
-func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress progress.Progress) error {
+func (s *stack) released(ctx context.Context, promotion router.Promotion, progress progress.Progress) error {
 	hosts := maps.Clone(s.recorded.Hosts)
 	serving := map[string]string{}
 	var took []string
@@ -86,7 +87,7 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress
 	return nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
 	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
@@ -215,7 +216,7 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	at := slices.IndexFunc(history, func(entry edge.HistoryEntry) bool { return entry.Active })
+	at := slices.IndexFunc(history, func(entry router.HistoryEntry) bool { return entry.Active })
 	if at < 0 {
 		return "", nil
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectWorker, deployedClasses []string) map[string]any {
@@ -628,9 +629,9 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 
 	const dataKey = "Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8="
 
-	capture := func(t *testing.T) (*httptest.Server, *edge.DeploymentRecord) {
+	capture := func(t *testing.T) (*httptest.Server, *router.DeploymentRecord) {
 		t.Helper()
-		var got edge.DeploymentRecord
+		var got router.DeploymentRecord
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -649,7 +650,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		state := keyedState(srv.URL, "s3cr3t")
 		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
 
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 
@@ -674,7 +675,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		srv, got := capture(t)
 		state := keyedState(srv.URL, "s3cr3t")
 
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1", Envelope: dataKey}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != dataKey {
@@ -689,7 +690,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		state := keyedState(srv.URL, "s3cr3t")
 		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
 
-		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1"}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != "" {
@@ -792,10 +793,10 @@ func TestDestroy(t *testing.T) {
 func promote(t *testing.T, p *cloudflare, state edge.StackState, app, build string) {
 	t.Helper()
 	s := stackOn(p, state)
-	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Build: build}); err != nil {
+	if err := s.PutStaged(t.Context(), router.DeploymentRecord{App: app, Build: build}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", app, err)
 	}
-	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", progress.DiscardProgress()); err != nil {
+	if err := s.Promote(t.Context(), router.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", app, err)
 	}
 }

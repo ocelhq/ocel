@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -41,7 +42,7 @@ func (s *stack) routeKey(pointer, app string) host.RouteKey {
 
 func named(pointer string) string {
 	if pointer == "" {
-		return edge.DefaultPointer
+		return router.DefaultPointer
 	}
 	return pointer
 }
@@ -49,10 +50,10 @@ func named(pointer string) string {
 type promotable struct {
 	key    host.RouteKey
 	app    string
-	record edge.DeploymentRecord
+	record router.DeploymentRecord
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
 	ready := make([]promotable, 0, len(promotion.Builds))
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		release, serves, err := s.readyRelease(ctx, app, pointer, promotion)
@@ -78,7 +79,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	return err
 }
 
-func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []promotable, progress progress.Progress) error {
+func (s *stack) serve(ctx context.Context, pointer string, promotion router.Promotion, ready []promotable, progress progress.Progress) error {
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
 		return host.Unserved{Err: err}
@@ -125,7 +126,7 @@ func activeOr(active string) string {
 	return active
 }
 
-func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion edge.Promotion) (promotable, bool, error) {
+func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion router.Promotion) (promotable, bool, error) {
 	identity := promotion.Builds[app]
 	record, found, err := s.openLedger().Record(ctx, app, identity)
 	if err != nil {
@@ -156,7 +157,7 @@ func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion
 	return promotable{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
 
-func declaredBy(record edge.DeploymentRecord) []string {
+func declaredBy(record router.DeploymentRecord) []string {
 	declared := make([]string, 0, len(record.Variables)+len(record.Env))
 	for _, variable := range record.Variables {
 		declared = append(declared, variable.Key)
@@ -194,7 +195,7 @@ func (s *stack) previewSite() edge.PreviewSite {
 
 func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string) ([]host.HostClaim, error) {
 	site := s.previewSite()
-	if !site.Serves() || len(apps) == 0 || named(pointer) == edge.DefaultPointer {
+	if !site.Serves() || len(apps) == 0 || named(pointer) == router.DefaultPointer {
 		return nil, nil
 	}
 	stores, err := s.stores(ctx, named(pointer))
@@ -225,15 +226,15 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 	return claims, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	if err := s.applyOrigins(ctx); err != nil {
 		progress.Warn(s.released("Preview "+pointer, err).Error())
 	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	return s.openLedger().RemovePointer(ctx, pointer)
 }
@@ -247,16 +248,16 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		return err
 	}
 	claims := []host.HostClaim{{
-		Hostname: binding.Hostname, Owner: s.surface(), Pointer: edge.DefaultPointer, App: binding.App,
+		Hostname: binding.Hostname, Owner: s.surface(), Pointer: router.DefaultPointer, App: binding.App,
 	}}
-	stores, err := s.stores(ctx, edge.DefaultPointer)
+	stores, err := s.stores(ctx, router.DefaultPointer)
 	if err != nil {
 		return err
 	}
 	if stores {
 		claims = append(claims, host.HostClaim{
 			Hostname: live.StoreHostname(binding.Hostname), Owner: s.surface(),
-			Pointer: edge.DefaultPointer, App: switchboard.StoreLabel,
+			Pointer: router.DefaultPointer, App: switchboard.StoreLabel,
 		})
 	}
 	if err := s.claim(ctx, claims); err != nil {

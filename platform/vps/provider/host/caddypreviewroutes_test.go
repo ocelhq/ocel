@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider/enginetest"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -85,7 +85,7 @@ func TestAProductionBindClaimsUnderTheDefaultPointerAndKeepsItsRoute(t *testing.
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: edge.DefaultPointer}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: router.DefaultPointer}}
 	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)

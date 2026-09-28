@@ -31,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -485,20 +486,20 @@ func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.
 type stagingLedger struct {
 	fake.Ledger
 	mu     sync.Mutex
-	staged []edge.DeploymentRecord
+	staged []router.DeploymentRecord
 }
 
-func (l *stagingLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+func (l *stagingLedger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
 	l.mu.Lock()
 	l.staged = append(l.staged, record)
 	l.mu.Unlock()
 	return l.Ledger.PutStaged(ctx, record)
 }
 
-func (l *stagingLedger) records() []edge.DeploymentRecord {
+func (l *stagingLedger) records() []router.DeploymentRecord {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return append([]edge.DeploymentRecord(nil), l.staged...)
+	return append([]router.DeploymentRecord(nil), l.staged...)
 }
 
 func staging(t *testing.T, vendor *fake.Provider) *stagingLedger {

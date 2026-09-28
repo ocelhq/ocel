@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
@@ -69,9 +70,9 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	return stack
 }
 
-func staged(t *testing.T, stack edge.EdgeStack, function, assets string) edge.DeploymentRecord {
+func staged(t *testing.T, stack edge.EdgeStack, function, assets string) router.DeploymentRecord {
 	t.Helper()
-	record := edge.DeploymentRecord{
+	record := router.DeploymentRecord{
 		App:           "web",
 		Build:         "d1.f1",
 		Entry:         "/",
@@ -227,12 +228,12 @@ func TestPromoteRefusesAContainerReleaseByName(t *testing.T) {
 
 	w := newWorld()
 	stack := reconciled(t, w)
-	record := edge.DeploymentRecord{App: "web", Build: "d1.f1", Image: "ocel/web:sha256-abc", Origin: "https://abc.eu-west-1.awsapprunner.com"}
+	record := router.DeploymentRecord{App: "web", Build: "d1.f1", Image: "ocel/web:sha256-abc", Origin: "https://abc.eu-west-1.awsapprunner.com"}
 	if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 
-	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
 	err := stack.Promote(context.Background(), promotion, "", progress.DiscardProgress())
 	if err == nil || !strings.Contains(err.Error(), "container") || !strings.Contains(err.Error(), "cloudfront") {
 		t.Fatalf("Promote of a container release = %v, want it refused with the edge that can front one: this edge invokes a function, and a container has none", err)
@@ -249,7 +250,7 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 	stack := reconciled(t, w)
 	record := staged(t, stack, entryFunction, "assets/shop/web/r1234abcd")
 
-	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
 	if err := stack.Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -278,7 +279,7 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 
 	w := newWorld()
 	stack := reconciled(t, w)
-	record := edge.DeploymentRecord{
+	record := router.DeploymentRecord{
 		App:           "web",
 		Build:         "d1.f1",
 		Entry:         "/",
@@ -288,7 +289,7 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 		t.Fatalf("PutStaged: %v", err)
 	}
 
-	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
 	if err := stack.Promote(context.Background(), promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
@@ -313,7 +314,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 
-		err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}, "", progress.DiscardProgress())
+		err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}, "", progress.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote succeeded against a promotion nothing was staged for")
 		}
@@ -327,7 +328,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		stack := reconciled(t, w)
 		record := staged(t, stack, "", "assets/one")
 
-		err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress())
+		err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote succeeded on a record naming no entry function")
 		}
@@ -343,13 +344,13 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 		for _, app := range []string{"api", "web"} {
-			record := edge.DeploymentRecord{App: app, Build: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-" + app + "-r1234abcd"}
+			record := router.DeploymentRecord{App: app, Build: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-" + app + "-r1234abcd"}
 			if err := stack.Ledger().PutStaged(ctx, record); err != nil {
 				t.Fatalf("PutStaged(%s): %v", app, err)
 			}
 		}
 
-		promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"api": "d1.f1", "web": "d1.f1"}}
+		promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"api": "d1.f1", "web": "d1.f1"}}
 		err := stack.Promote(ctx, promotion, "", progress.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote succeeded on two apps, want the one-app limit surfaced rather than one app silently served")
@@ -389,7 +390,7 @@ func TestPromoteRecordsNothingWhenTheStageRefuses(t *testing.T) {
 	record := staged(t, stack, entryFunction, "assets/shop/web/r1234abcd")
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
-	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}
 	if err := stack.Promote(context.Background(), promotion, "", progress.DiscardProgress()); err == nil {
 		t.Fatal("Promote succeeded, want the stage failure surfaced")
 	}
@@ -409,22 +410,22 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 	ctx := context.Background()
 	w := newWorld()
 	stack := reconciled(t, w)
-	first := edge.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
-	second := edge.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
-	for _, record := range []edge.DeploymentRecord{first, second} {
+	first := router.DeploymentRecord{App: "web", Build: "d1.f1", Entry: "/", EntryFunction: "conformance-prod-web-r1111aaaa", AssetPrefix: "assets/one"}
+	second := router.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: "conformance-prod-web-r2222bbbb", AssetPrefix: "assets/two"}
+	for _, record := range []router.DeploymentRecord{first, second} {
 		if err := stack.Ledger().PutStaged(ctx, record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p2): %v", err)
 	}
 
 	before := w.gateway.count("UpdateStage")
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 3, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 3, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("rollback to p1: %v", err)
 	}
 	if got := w.gateway.count("UpdateStage") - before; got != 1 {
@@ -451,12 +452,12 @@ func TestRollbackRecordsNothingWhenTheStageRefuses(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	record := staged(t, stack, entryFunction, "assets/one")
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress()); err == nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress()); err == nil {
 		t.Fatal("rollback succeeded, want the stage failure surfaced")
 	}
 	history, err := stack.Ledger().History(ctx, "")
@@ -522,7 +523,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	record := staged(t, stack, entryFunction, "assets/one")
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Build}}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -965,7 +966,7 @@ func TestALedgerOpenedOnStateThatNamesNoTableRefuses(t *testing.T) {
 	if _, err := stack.Ledger().History(ctx, ""); !errors.Is(err, edge.ErrStoreAbsent) {
 		t.Errorf("History err = %v, want %v: a ledger over no table must refuse, not read an empty history", err, edge.ErrStoreAbsent)
 	}
-	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{App: "web", Build: "d1.f1"}); !errors.Is(err, edge.ErrStoreAbsent) {
+	if err := stack.Ledger().PutStaged(ctx, router.DeploymentRecord{App: "web", Build: "d1.f1"}); !errors.Is(err, edge.ErrStoreAbsent) {
 		t.Errorf("PutStaged err = %v, want %v", err, edge.ErrStoreAbsent)
 	}
 }
@@ -977,7 +978,7 @@ func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) 
 	w := newWorld()
 	stack := reconciled(t, w)
 	staged(t, stack, entryFunction, "")
-	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
+	promotion := router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
 	if err := stack.Promote(ctx, promotion, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}

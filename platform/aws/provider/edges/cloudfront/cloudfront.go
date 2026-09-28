@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -115,7 +116,7 @@ func (p *cloudFront) Kind() edge.Kind { return Kind }
 func (p *cloudFront) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
-		FlipBound:             edge.FlipBound{Typical: propagationBound},
+		FlipBound:             router.FlipBound{Typical: propagationBound},
 		InvalidatesByCacheTag: true,
 	}
 }
@@ -380,7 +381,7 @@ func originHost(rawURL string) string {
 
 func pointerOr(pointer string) string {
 	if pointer == "" {
-		return edge.DefaultPointer
+		return router.DefaultPointer
 	}
 	return pointer
 }

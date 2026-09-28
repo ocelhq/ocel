@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -75,9 +76,9 @@ func reconciled(t *testing.T, w *world) edge.EdgeStack {
 	return stack
 }
 
-func staged(t *testing.T, stack edge.EdgeStack, url, assets string) edge.DeploymentRecord {
+func staged(t *testing.T, stack edge.EdgeStack, url, assets string) router.DeploymentRecord {
 	t.Helper()
-	record := edge.DeploymentRecord{
+	record := router.DeploymentRecord{
 		App:           "web",
 		Build:         "d1.f1",
 		Entry:         "/",
@@ -114,9 +115,9 @@ func recordFront(t *testing.T, w *world, tier environment.Tier) {
 	}
 }
 
-func stagedContainer(t *testing.T, stack edge.EdgeStack) edge.DeploymentRecord {
+func stagedContainer(t *testing.T, stack edge.EdgeStack) router.DeploymentRecord {
 	t.Helper()
-	record := edge.DeploymentRecord{
+	record := router.DeploymentRecord{
 		App:         "web",
 		Build:       "d1.f1",
 		Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
@@ -131,8 +132,8 @@ func stagedContainer(t *testing.T, stack edge.EdgeStack) edge.DeploymentRecord {
 	return record
 }
 
-func promotion() edge.Promotion {
-	return edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
+func promotion() router.Promotion {
+	return router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
 }
 
 func routeOn(t *testing.T, w *world, stack edge.EdgeStack, hostname string) route {

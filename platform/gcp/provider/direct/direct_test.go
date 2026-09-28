@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
@@ -56,7 +57,7 @@ func fronting(t *testing.T, pins *pinRecorder) edge.EdgeStack {
 
 func staged(t *testing.T, stack edge.EdgeStack, identity, revision string) {
 	t.Helper()
-	err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
+	err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
 		App:       "web",
 		Build:     identity,
 		Physical:  webService,
@@ -69,7 +70,7 @@ func staged(t *testing.T, stack edge.EdgeStack, identity, revision string) {
 
 func promoted(t *testing.T, stack edge.EdgeStack, id, identity string) error {
 	t.Helper()
-	return stack.Promote(context.Background(), edge.Promotion{
+	return stack.Promote(context.Background(), router.Promotion{
 		PromotionID: id,
 		Builds:      map[string]string{"web": identity},
 	}, "", progress.DiscardProgress())
@@ -111,7 +112,7 @@ func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
 	staged(t, stack, "b1", "web-00001-abc")
 	progress := &fake.Progress{}
 
-	promotion := edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
+	promotion := router.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}
 	if err := stack.Promote(context.Background(), promotion, "", progress); err != nil {
 		t.Fatalf("Promote(p1) = %v", err)
 	}
@@ -126,7 +127,7 @@ func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *
 
 	pins := &pinRecorder{}
 	stack := fronting(t, pins)
-	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
+	if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
 		App: "web", Build: "b1", Physical: webService,
 	}); err != nil {
 		t.Fatalf("PutStaged(b1) = %v", err)
@@ -234,7 +235,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 	defer cancel()
 	pins.interrupt, pins.refuse = cancel, context.Canceled
 
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
 		t.Fatal("Promote(p2) interrupted at its pin = nil")
 	}
 	history, err := stack.Ledger().History(context.Background(), "")

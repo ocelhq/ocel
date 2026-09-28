@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -260,7 +260,7 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store == nil {
 		t.Fatal("the manifest names no store, so the runtime in front of the app has nothing to sign against")
 	}
-	if manifest.Store.Pointer != edge.DefaultPointer {
+	if manifest.Store.Pointer != router.DefaultPointer {
 		t.Errorf("the manifest names pointer %q, and the box answers the store's public address out of what that pointer claims", manifest.Store.Pointer)
 	}
 	if manifest.Store.Endpoint != "http://prod-infra-store-s3:9000" || !manifest.Store.PathStyle {
@@ -437,7 +437,7 @@ func TestAProvisionedStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T
 		t.Fatalf("provisioning a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
 	}
 	route := state.Routes[at]
-	if route.Owner != vars.Surface("shop", "production") || route.Pointer != edge.DefaultPointer {
+	if route.Owner != vars.Surface("shop", "production") || route.Pointer != router.DefaultPointer {
 		t.Errorf("the store is routed under %s/%s, want the surface and pointer its project's domains are claimed under", route.Owner, route.Pointer)
 	}
 	if !strings.HasSuffix(route.Upstream, ":9000") || !strings.Contains(route.Upstream, "store-s3") {

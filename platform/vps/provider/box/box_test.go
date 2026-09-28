@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -276,7 +277,7 @@ func reconciled(t *testing.T) (*machine, *box.Edge, edge.EdgeStack) {
 func staged(t *testing.T, stack edge.EdgeStack, app, identity, physical string) {
 	t.Helper()
 
-	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
+	if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
 		App:        app,
 		Build:      identity,
 		Entry:      "/",
@@ -347,7 +348,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -369,7 +370,7 @@ func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "api", "b1", "shop-api-1111")
 
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "api": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -482,7 +483,7 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 		return host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate was interrupted; the previous release is still live")}
 	}
 
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
+	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
 		t.Fatal("a promotion interrupted before its flip succeeded")
 	}
 	if active := activePromotion(t, stack); active != "p1" {
@@ -511,7 +512,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	m.releasing = func(rel host.Release) error {
 		m.releasing = nil
 		overtaking := ledger.New(store, environment.TierProduction, slug)
-		if err := overtaking.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", progress.DiscardProgress()); err != nil {
+		if err := overtaking.Promote(context.Background(), router.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}
 		if rel.StillActive == nil {
@@ -541,7 +542,7 @@ func activePromotion(t *testing.T, stack edge.EdgeStack) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := slices.IndexFunc(entries, func(entry edge.HistoryEntry) bool { return entry.Active })
+	at := slices.IndexFunc(entries, func(entry router.HistoryEntry) bool { return entry.Active })
 	if at < 0 {
 		return ""
 	}
@@ -556,7 +557,7 @@ func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 	staged(t, stack, "web", "b2", "shop-web-2222")
 
 	ctx := context.Background()
-	for _, promotion := range []edge.Promotion{
+	for _, promotion := range []router.Promotion{
 		{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}},
 		{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}},
 	} {
@@ -566,7 +567,7 @@ func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 	}
 	m.calls = nil
 
-	if err := stack.Promote(ctx, edge.Promotion{
+	if err := stack.Promote(ctx, router.Promotion{
 		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(rollback): %v", err)
@@ -603,7 +604,7 @@ func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	}
 	staged(t, stack, "web", "b1", "shop-web-1111")
 
-	err = stack.Promote(context.Background(), edge.Promotion{
+	err = stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress())
 	if err == nil {
@@ -624,7 +625,7 @@ func TestAnAppWithNoContainerOnThisBoxFlipsNothing(t *testing.T) {
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "")
 
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -638,13 +639,13 @@ func TestARecordNamingAContainerAndNoHealthPathIsRefusedRatherThanGatedOnAGuess(
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
-	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
+	if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
 		App: "web", Build: "b1", Image: "ghcr.io/acme/web:b1", Physical: "shop-web-1111",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	err := stack.Promote(context.Background(), edge.Promotion{
+	err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress())
 	if err == nil {
@@ -928,7 +929,7 @@ func reconciledOn(t *testing.T, m *machine, named string) edge.EdgeStack {
 
 func promoted(t *testing.T, stack edge.EdgeStack, id, app, identity string) error {
 	t.Helper()
-	return stack.Promote(context.Background(), edge.Promotion{
+	return stack.Promote(context.Background(), router.Promotion{
 		PromotionID: id, Ts: 1, Builds: map[string]string{app: identity},
 	}, "", progress.DiscardProgress())
 }
@@ -974,7 +975,7 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	m.swept[imageFor("web", "b1")] = true
 	m.calls = nil
 
-	err := stack.Promote(context.Background(), edge.Promotion{
+	err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress())
 	if err == nil {
@@ -995,7 +996,7 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := slices.IndexFunc(entries, func(entry edge.HistoryEntry) bool { return entry.Active })
+	at := slices.IndexFunc(entries, func(entry router.HistoryEntry) bool { return entry.Active })
 	if at < 0 {
 		t.Fatalf("the ledger records no active promotion after a refused rollback (%v), and a pointer at nothing is not the release still serving", entries)
 	}
@@ -1031,7 +1032,7 @@ func TestAPromotionSaysItIsRestartingTheContainerBeforeItStartsIt(t *testing.T) 
 	_, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	heard := &fake.Progress{}
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", heard); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -1067,7 +1068,7 @@ func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testi
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "worker", "b1", "shop-worker-1111")
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "worker": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
@@ -1104,7 +1105,7 @@ func TestDestroyingAStackLeavesNoRouteOnTheBoxAtAll(t *testing.T) {
 	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "worker", "b1", "shop-worker-1111")
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "worker": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -1132,7 +1133,7 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, environment.TierProduction), Pointer: edge.DefaultPointer, App: "api"}
+	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, environment.TierProduction), Pointer: router.DefaultPointer, App: "api"}
 	if len(claims) != 1 || claims[0] != want {
 		t.Errorf("the box records %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
 	}
@@ -1197,20 +1198,20 @@ func TestAPromotionPassesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t
 	t.Parallel()
 
 	m, _, stack := reconciled(t)
-	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
+	if err := stack.Ledger().PutStaged(context.Background(), router.DeploymentRecord{
 		App:        "web",
 		Build:      "b1",
 		Entry:      "/",
 		Image:      imageFor("web", "b1"),
 		Physical:   "shop-web-1111",
 		HealthPath: "/healthz",
-		Variables:  []edge.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}},
+		Variables:  []router.VariableRecord{{Key: "API_TOKEN"}, {Key: "DATABASE_URL"}},
 		Env:        map[string]string{"orders": "postgres"},
 	}); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
 
-	if err := stack.Promote(context.Background(), edge.Promotion{
+	if err := stack.Promote(context.Background(), router.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, "", progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)

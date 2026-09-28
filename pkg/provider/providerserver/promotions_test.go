@@ -18,6 +18,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier, slug, pointer string, ids ...string) *ledger.Ledger {
@@ -27,7 +28,7 @@ func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier
 		t.Fatal(err)
 	}
 	for i, id := range ids {
-		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
+		promotion := router.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
 		if err := releases.Promote(context.Background(), promotion, pointer, progress.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +106,7 @@ type capturingLedger struct {
 	heard    bool
 }
 
-func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
+func (c *capturingLedger) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
 	c.mu.Lock()
 	c.progress, c.heard = progress, true
 	c.mu.Unlock()
@@ -205,7 +206,7 @@ func TestAContendedFlipLosesExactlyOnceAndTheRetryWins(t *testing.T) {
 	deployed(t, provider, environment.TierProduction, "shop")
 	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
 
-	pointer := ledger.Partition(environment.TierProduction, "shop").Key("pointers", edge.DefaultPointer)
+	pointer := ledger.Partition(environment.TierProduction, "shop").Key("pointers", router.DefaultPointer)
 	jostled := &jostle{Store: provider.KeyValues(), at: pointer}
 	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).UseLedger(func(state edge.StackState) fake.Ledger {
 		return ledger.New(jostled, state.Tier, state.Slug)
@@ -280,23 +281,23 @@ type memoryLedger struct{ keptN int }
 
 func (*memoryLedger) SchemaVersion(context.Context) (int, error) { return edge.StoreSchemaVersion, nil }
 
-func (*memoryLedger) PutStaged(context.Context, edge.DeploymentRecord) error { return nil }
+func (*memoryLedger) PutStaged(context.Context, router.DeploymentRecord) error { return nil }
 
-func (*memoryLedger) History(context.Context, string) ([]edge.HistoryEntry, error) {
-	return []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "own-1"}, Active: true}}, nil
+func (*memoryLedger) History(context.Context, string) ([]router.HistoryEntry, error) {
+	return []router.HistoryEntry{{Promotion: router.Promotion{PromotionID: "own-1"}, Active: true}}, nil
 }
 
-func (m *memoryLedger) Prune(_ context.Context, keepN int, _ string) (edge.PruneResult, error) {
+func (m *memoryLedger) Prune(_ context.Context, keepN int, _ string) (router.PruneResult, error) {
 	m.keptN = keepN
-	return edge.PruneResult{KeptPromotionIDs: []string{"own-1"}}, nil
+	return router.PruneResult{KeptPromotionIDs: []string{"own-1"}}, nil
 }
 
-func (*memoryLedger) Promote(context.Context, edge.Promotion, string, progress.Progress) error {
+func (*memoryLedger) Promote(context.Context, router.Promotion, string, progress.Progress) error {
 	return nil
 }
 
-func (*memoryLedger) RemovePointer(context.Context, string) (edge.PruneResult, error) {
-	return edge.PruneResult{}, nil
+func (*memoryLedger) RemovePointer(context.Context, string) (router.PruneResult, error) {
+	return router.PruneResult{}, nil
 }
 
 func (*memoryLedger) Destroy(context.Context) error { return nil }
