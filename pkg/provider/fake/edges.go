@@ -513,12 +513,10 @@ func (s *Stack) Destroy(ctx context.Context) error {
 }
 
 var (
-	_ provider.Edges   = (*Edges)(nil)
-	_ provider.DNS     = (*DNS)(nil)
-	_ edge.Edge        = (*Edge)(nil)
-	_ edge.EdgeStack   = (*Stack)(nil)
-	_ router.Stack     = (*RouterStack)(nil)
-	_ provider.Routers = (*Routers)(nil)
-	_ edge.DNSRecords  = (*DNSRecords)(nil)
-	_ Ledger           = (*ledger.Ledger)(nil)
+	_ provider.Edges  = (*Edges)(nil)
+	_ provider.DNS    = (*DNS)(nil)
+	_ edge.Edge       = (*Edge)(nil)
+	_ edge.EdgeStack  = (*Stack)(nil)
+	_ edge.DNSRecords = (*DNSRecords)(nil)
+	_ Ledger          = (*ledger.Ledger)(nil)
 )

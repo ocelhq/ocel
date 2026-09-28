@@ -76,10 +76,8 @@ func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
 		StillActive: func(ctx context.Context) error {
-			if flip.StillActive != nil {
-				if err := flip.StillActive(ctx); err != nil {
-					return err
-				}
+			if err := flip.RefuseInactive(ctx); err != nil {
+				return err
 			}
 			return s.stillActive(ctx, pointer, promotion.PromotionID)
 		},

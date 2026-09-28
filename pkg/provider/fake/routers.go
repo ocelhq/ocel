@@ -35,16 +35,18 @@ type Router struct{ edge *Edge }
 
 func (r Router) Kind() router.Kind { return router.Kind(r.edge.kind) }
 
-func (r Router) Facts() router.Facts {
-	r.edge.mu.Lock()
-	defer r.edge.mu.Unlock()
+func (r Router) Facts() router.Facts { return r.edge.routerFacts() }
+
+func (e *Edge) routerFacts() router.Facts {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return router.Facts{
 		FlipBound:             router.FlipBound{Typical: 30 * time.Second, Published: true},
 		SignsOriginForwards:   true,
-		RoutesPreviewsByLabel: r.edge.byLabel,
+		RoutesPreviewsByLabel: e.byLabel,
 		ReachesFunctions:      true,
 		ReachesContainers:     true,
-		Dispatches:            r.edge.kind == KindRelay,
+		Dispatches:            e.kind == KindRelay,
 		AnswersHostnames:      true,
 	}
 }
