@@ -23,8 +23,6 @@ type Routers struct {
 	Deps Deps
 }
 
-var _ provider.Routers = Routers{}
-
 func (r Routers) Open(kind router.Kind) (router.Router, error) {
 	construct, ok := routerConstructors[kind]
 	if !ok {
