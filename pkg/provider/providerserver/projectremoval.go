@@ -27,7 +27,7 @@ import (
 )
 
 type projectRemoval struct {
-	sharedStack
+	*sharedStack
 	provider provider.Provider
 	store    edgeStateStore
 	state    stackrecords.EdgeState
@@ -70,12 +70,12 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	paired, err := sharedRouter(vendor, front)
+	shared, err := openSharedStack(vendor, front)
 	if err != nil {
 		return nil, err
 	}
 	removal := &projectRemoval{
-		sharedStack: sharedStack{front: front, router: paired},
+		sharedStack: shared,
 		provider:    vendor,
 		cutover:     newDNSCutover(front, writer, req.GetEdge().GetDns().GetZone(), vendor.Liveness()),
 		store:       store,
@@ -322,7 +322,7 @@ func (r *projectRemoval) tearDownEdge(ctx context.Context, progress progress.Pro
 		return nil
 	}
 	progress.Say(fmt.Sprintf("Destroying the %s edge stack of %s", r.front.Kind(), r.slug))
-	if err := r.destroyStack(ctx); err != nil {
+	if err := r.sharedStack.destroy(ctx); err != nil {
 		return fmt.Errorf("destroy the edge stack: %w", err)
 	}
 	r.state = stackrecords.EdgeState{}
