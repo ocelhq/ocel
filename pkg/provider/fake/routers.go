@@ -161,13 +161,14 @@ func (e *Edge) routerFacts() router.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return router.Facts{
-		FlipBound:             router.FlipBound{Typical: 30 * time.Second, Published: true},
-		SignsOriginForwards:   true,
-		RoutesPreviewsByLabel: e.byLabel,
-		ReachesFunctions:      true,
-		ReachesContainers:     true,
-		Dispatches:            e.kind == KindRelay,
-		AnswersHostnames:      true,
+		FlipBound:                   router.FlipBound{Typical: 30 * time.Second, Published: true},
+		SignsOriginForwards:         true,
+		RoutesPreviewsByLabel:       e.byLabel,
+		ReachesFunctions:            true,
+		ReachesContainers:           true,
+		Dispatches:                  e.kind == KindRelay,
+		AnswersHostnames:            true,
+		StopsServingRemovedPointers: true,
 	}
 }
 

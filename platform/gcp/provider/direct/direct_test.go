@@ -89,7 +89,6 @@ func TestTheDirectRouterBehavesAsEveryRouterMust(t *testing.T) {
 		Record: func(app, build string) router.DeploymentRecord {
 			return router.DeploymentRecord{App: app, Build: build, Physical: webService, Revisions: map[string]string{webService: "rev-" + build}}
 		},
-		TornDownWithCompute: true,
 	})
 }
 

@@ -26,15 +26,16 @@ type FlipBound struct {
 }
 
 type Facts struct {
-	FlipBound             FlipBound
-	CachesRecords         bool
-	RoutesPreviewsByLabel bool
-	AddressesItself       bool
-	SignsOriginForwards   bool
-	ReachesFunctions      bool
-	ReachesContainers     bool
-	Dispatches            bool
-	AnswersHostnames      bool
+	FlipBound                   FlipBound
+	CachesRecords               bool
+	RoutesPreviewsByLabel       bool
+	AddressesItself             bool
+	SignsOriginForwards         bool
+	ReachesFunctions            bool
+	ReachesContainers           bool
+	Dispatches                  bool
+	AnswersHostnames            bool
+	StopsServingRemovedPointers bool
 }
 
 type Router interface {

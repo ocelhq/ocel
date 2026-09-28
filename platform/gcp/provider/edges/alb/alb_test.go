@@ -72,7 +72,6 @@ func TestTheALBRouterBehavesAsEveryRouterMust(t *testing.T) {
 		Record: func(app, build string) router.DeploymentRecord {
 			return router.DeploymentRecord{App: app, Build: build, Revisions: map[string]string{conformanceService: "rev-" + build}}
 		},
-		TornDownWithCompute: true,
 	})
 }
 
