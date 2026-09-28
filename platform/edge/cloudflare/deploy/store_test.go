@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const (
@@ -25,15 +26,15 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	t.Helper()
 	type pointed struct {
 		pointer string
-		entry   edge.HistoryEntry
+		entry   router.HistoryEntry
 	}
 	var (
-		staged  []edge.DeploymentRecord
+		staged  []router.DeploymentRecord
 		history []pointed
 		version *string
 	)
-	under := func(pointer string) []edge.HistoryEntry {
-		var out []edge.HistoryEntry
+	under := func(pointer string) []router.HistoryEntry {
+		var out []router.HistoryEntry
 		for _, p := range history {
 			if p.pointer == pointer {
 				out = append(out, p.entry)
@@ -77,7 +78,7 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("PUT /{slug}/staged", authed(func(w http.ResponseWriter, r *http.Request) {
-		var rec edge.DeploymentRecord
+		var rec router.DeploymentRecord
 		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -87,14 +88,14 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	}))
 	mux.HandleFunc("POST /{slug}/promote", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			edge.Promotion
+			router.Promotion
 			Pointer string `json:"pointer"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		history = append([]pointed{{pointer: body.Pointer, entry: edge.HistoryEntry{Promotion: body.Promotion, Active: true}}}, history...)
+		history = append([]pointed{{pointer: body.Pointer, entry: router.HistoryEntry{Promotion: body.Promotion, Active: true}}}, history...)
 		seen := false
 		for i := range history {
 			if history[i].pointer != body.Pointer {
@@ -119,7 +120,7 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		result := edge.PruneResult{}
+		result := router.PruneResult{}
 		kept := make([]pointed, 0, len(history))
 		for _, p := range history {
 			if p.pointer == body.Pointer {
@@ -140,7 +141,7 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		result := edge.PruneResult{}
+		result := router.PruneResult{}
 		for i, h := range under(body.Pointer) {
 			if i < body.KeepN || h.Active {
 				result.KeptPromotionIDs = append(result.KeptPromotionIDs, h.PromotionID)
@@ -202,7 +203,7 @@ func TestPutStaged(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		record := edge.DeploymentRecord{
+		record := router.DeploymentRecord{
 			App: "web", Build: "b1", FunctionURLs: map[string]string{"/": "https://fn"},
 			AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
 		}
@@ -215,7 +216,7 @@ func TestPutStaged(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"})
+		err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1"})
 		if err == nil {
 			t.Fatal("expected an error for the wrong write secret")
 		}
@@ -231,7 +232,7 @@ func TestPromotionHistory(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
-		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
+		promotion := router.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
 
 		if err := stackOn(p, state).Promote(t.Context(), promotion, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
@@ -256,7 +257,7 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 
 		for _, id := range []string{"p1", "p2", "p3"} {
-			if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, "", progress.DiscardProgress()); err != nil {
+			if err := stackOn(p, state).Promote(t.Context(), router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, "", progress.DiscardProgress()); err != nil {
 				t.Fatalf("Promote(%s): %v", id, err)
 			}
 		}
@@ -292,13 +293,13 @@ func TestStorePointer(t *testing.T) {
 		})
 		mux.HandleFunc("GET /{slug}/history", func(w http.ResponseWriter, r *http.Request) {
 			historyQuery = append(historyQuery, r.URL.Query().Get("pointer"))
-			_ = json.NewEncoder(w).Encode([]edge.HistoryEntry{})
+			_ = json.NewEncoder(w).Encode([]router.HistoryEntry{})
 		})
 		mux.HandleFunc("POST /{slug}/prune", func(w http.ResponseWriter, r *http.Request) {
 			var b map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&b)
 			pruneBodies = append(pruneBodies, b)
-			_ = json.NewEncoder(w).Encode(edge.PruneResult{})
+			_ = json.NewEncoder(w).Encode(router.PruneResult{})
 		})
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
@@ -307,7 +308,7 @@ func TestStorePointer(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		ctx := t.Context()
 
-		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(preview): %v", err)
 		}
 		if _, err := stackOn(p, state).History(ctx, "pr-42"); err != nil {
@@ -316,7 +317,7 @@ func TestStorePointer(t *testing.T) {
 		if _, err := stackOn(p, state).Prune(ctx, 3, "pr-42"); err != nil {
 			t.Fatalf("Prune(preview): %v", err)
 		}
-		if err := stackOn(p, state).Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(prod): %v", err)
 		}
 		if _, err := stackOn(p, state).History(ctx, ""); err != nil {
@@ -350,7 +351,7 @@ func TestStorePointer(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("POST /{slug}/remove-pointer", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			_ = json.NewEncoder(w).Encode(edge.PruneResult{
+			_ = json.NewEncoder(w).Encode(router.PruneResult{
 				RemovedPromotionIDs: []string{"promo-1"},
 				RemovedRecordKeys:   []string{"record:web/b1"},
 			})
@@ -377,7 +378,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state with no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"})
+		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), router.DeploymentRecord{App: "web", Build: "b1"})
 		if err == nil {
 			t.Fatal("expected an error when the root-stack state has no endpoint")
 		}
@@ -400,7 +401,7 @@ func TestStoreRequest(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err != nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), router.DeploymentRecord{App: "web"}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if attempts != 3 {
@@ -418,7 +419,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err == nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), router.DeploymentRecord{App: "web"}); err == nil {
 			t.Fatal("PutStaged err = nil, want the rejection surfaced")
 		}
 		if attempts != 1 {
@@ -438,7 +439,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(ctx, edge.DeploymentRecord{App: "web"}); err == nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(ctx, router.DeploymentRecord{App: "web"}); err == nil {
 			t.Fatal("PutStaged err = nil, want the failure surfaced")
 		}
 		if attempts != 1 {
@@ -498,7 +499,7 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
-		if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).Promote(t.Context(), router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "", progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if err := p.destroyInstance(t.Context(), state); err != nil {

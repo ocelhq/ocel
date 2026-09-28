@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -40,8 +40,8 @@ func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	if len(spec.Apps) != 2 {
 		t.Fatalf("spec has %d app stacks, want one per app", len(spec.Apps))
 	}
-	if spec.Pointer != edge.DefaultPointer {
-		t.Errorf("a production spec points at %q, want %q", spec.Pointer, edge.DefaultPointer)
+	if spec.Pointer != router.DefaultPointer {
+		t.Errorf("a production spec points at %q, want %q", spec.Pointer, router.DefaultPointer)
 	}
 	for _, entry := range spec.Apps {
 		if spec.Builds[entry.App] != entry.Build.String() {

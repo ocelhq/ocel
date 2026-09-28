@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Suite struct {
@@ -20,13 +21,13 @@ type Suite struct {
 	Bootstrap func(t *testing.T) (edge.Edge, environment.Tier)
 }
 
-func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, pointer string) {
+func promote(t *testing.T, stack edge.EdgeStack, promotion router.Promotion, pointer string) {
 	t.Helper()
 
 	ctx := context.Background()
 	for app, identity := range promotion.Builds {
 		entry := "conformance-prod-" + app + "-r0a1b2c3d"
-		staged := edge.DeploymentRecord{
+		staged := router.DeploymentRecord{
 			App:           app,
 			Build:         identity,
 			Entry:         "/",
@@ -141,7 +142,7 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		promotion := edge.Promotion{PromotionID: "conformance-reopen", Ts: 1, Builds: map[string]string{"web": "b1"}}
+		promotion := router.Promotion{PromotionID: "conformance-reopen", Ts: 1, Builds: map[string]string{"web": "b1"}}
 		promote(t, stack, promotion, "")
 
 		reopened, err := e.Open(stack.State())
@@ -152,7 +153,7 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("History through the reopened stack: %v", err)
 		}
-		if !slices.ContainsFunc(history, func(h edge.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
+		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
 			t.Errorf("history through the reopened stack = %v, want the promotion the reconciled stack made", history)
 		}
 	})
@@ -171,13 +172,13 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("a promoted record shows up in history", func(t *testing.T) {
 		ctx := context.Background()
 		stack := reconciled(t, suite)
-		promotion := edge.Promotion{PromotionID: "conformance-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
+		promotion := router.Promotion{PromotionID: "conformance-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
 		promote(t, stack, promotion, "")
 		history, err := stack.Ledger().History(ctx, "")
 		if err != nil {
 			t.Fatalf("History: %v", err)
 		}
-		if !slices.ContainsFunc(history, func(h edge.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
+		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
 			t.Errorf("history = %v, want the promotion just made", history)
 		}
 	})
@@ -187,7 +188,7 @@ func Run(t *testing.T, suite Suite) {
 		stack := reconciled(t, suite)
 		ids := []string{"conformance-1", "conformance-2", "conformance-3"}
 		for i, id := range ids {
-			promote(t, stack, edge.Promotion{PromotionID: id, Ts: int64(i), Builds: map[string]string{"web": id}}, "")
+			promote(t, stack, router.Promotion{PromotionID: id, Ts: int64(i), Builds: map[string]string{"web": id}}, "")
 		}
 		result, err := stack.Ledger().Prune(ctx, 1, "")
 		if err != nil {
@@ -218,8 +219,8 @@ func Run(t *testing.T, suite Suite) {
 		ctx := context.Background()
 		stack := reconciled(t, suite)
 		const pointer = "conformance-pointer"
-		promote(t, stack, edge.Promotion{PromotionID: "unpointed", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
-		promote(t, stack, edge.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
+		promote(t, stack, router.Promotion{PromotionID: "unpointed", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
+		promote(t, stack, router.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
 
 		result, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress())
 		if err != nil {
@@ -248,7 +249,7 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("History(production): %v", err)
 		}
-		if !slices.ContainsFunc(production, func(h edge.HistoryEntry) bool { return h.PromotionID == "unpointed" }) {
+		if !slices.ContainsFunc(production, func(h router.HistoryEntry) bool { return h.PromotionID == "unpointed" }) {
 			t.Errorf("history outside the pointer = %v, want the promotion the pointer never pointed at", production)
 		}
 	})
@@ -338,7 +339,7 @@ func Run(t *testing.T, suite Suite) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
 		binds(t, stack, suite.Hostname)
-		promotion := edge.Promotion{PromotionID: "conformance-persisted", Ts: 1, Builds: map[string]string{"web": "b1"}}
+		promotion := router.Promotion{PromotionID: "conformance-persisted", Ts: 1, Builds: map[string]string{"web": "b1"}}
 		promote(t, stack, promotion, "")
 
 		written := stack.State()
@@ -356,7 +357,7 @@ func Run(t *testing.T, suite Suite) {
 		if err != nil {
 			t.Fatalf("History through a persisted state: %v", err)
 		}
-		if !slices.ContainsFunc(history, func(h edge.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
+		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
 			t.Errorf("history through a persisted state = %v, want the promotion made before it was written", history)
 		}
 	})
@@ -699,7 +700,7 @@ func runPreviews(t *testing.T, suite Suite) {
 			}
 
 			const pointer = "conformance-preview"
-			promote(t, stack, edge.Promotion{PromotionID: "previewed", Ts: 1, Builds: map[string]string{"web": "b1"}}, pointer)
+			promote(t, stack, router.Promotion{PromotionID: "previewed", Ts: 1, Builds: map[string]string{"web": "b1"}}, pointer)
 
 			if host := edge.SharedPreview(spec.Slug, wildcard.BaseDomain).Host(pointer, ""); host == "" {
 				t.Fatalf("a preview promoted under %q on %q is addressed by no hostname, so nothing was published for anyone to reach", pointer, wildcard.BaseDomain)
@@ -708,7 +709,7 @@ func runPreviews(t *testing.T, suite Suite) {
 			if err != nil {
 				t.Fatalf("History(%s): %v", pointer, err)
 			}
-			if !slices.ContainsFunc(served, func(entry edge.HistoryEntry) bool {
+			if !slices.ContainsFunc(served, func(entry router.HistoryEntry) bool {
 				return entry.PromotionID == "previewed" && entry.Active
 			}) {
 				t.Fatalf("history under %q = %v, want the promotion this preview serves marked active; a preview that never landed makes every assertion after it vacuous", pointer, served)

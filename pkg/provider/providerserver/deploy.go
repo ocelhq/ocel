@@ -36,6 +36,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -1125,7 +1126,7 @@ func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Func
 	return warmFunctions(ctx, targets, progress)
 }
 
-func declaredVariables(clientBundle bool, values provider.AppValues) []edge.VariableRecord {
+func declaredVariables(clientBundle bool, values provider.AppValues) []router.VariableRecord {
 	names := make([]string, 0, len(values.Plain)+len(values.Sensitive)+len(values.Secrets))
 	for _, key := range slices.Sorted(maps.Keys(values.Plain)) {
 		if !appbuild.IsOcelInjectedEnv(clientBundle, key) {
@@ -1139,9 +1140,9 @@ func declaredVariables(clientBundle bool, values provider.AppValues) []edge.Vari
 		folders[secret.Key] = secret.Folder
 	}
 	slices.Sort(names)
-	declared := make([]edge.VariableRecord, 0, len(names))
+	declared := make([]router.VariableRecord, 0, len(names))
 	for _, name := range names {
-		declared = append(declared, edge.VariableRecord{Key: name, Folder: folders[name]})
+		declared = append(declared, router.VariableRecord{Key: name, Folder: folders[name]})
 	}
 	return declared
 }
@@ -1169,7 +1170,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 	if facts.EdgeDispatch != nil {
 		routing = json.RawMessage(facts.EdgeDispatch.Manifest)
 	}
-	record := edge.DeploymentRecord{
+	record := router.DeploymentRecord{
 		RoutingManifest:  routing,
 		App:              entry.App,
 		Framework:        entry.Manifest.GetFramework().GetName(),
@@ -1189,9 +1190,9 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: entry.Build.Fingerprint(),
 		Variables:        declaredVariables(entry.Manifest.GetClientBundle(), values),
-		Needs:            r.needs[entry.App].Needs,
-		SupportInEffect:  r.needs[entry.App].InEffect,
-		Waived:           r.needs[entry.App].Waived,
+		Needs:            edge.NeedNames(r.needs[entry.App].Needs),
+		SupportInEffect:  edge.NeedNames(r.needs[entry.App].InEffect),
+		Waived:           edge.NeedNames(r.needs[entry.App].Waived),
 	}
 	code, err := r.edgeCode(entry, result)
 	if err != nil {
@@ -1207,7 +1208,7 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 	return r.stack.Ledger().PutStaged(ctx, record)
 }
 
-func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*edge.Code, error) {
+func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*router.Code, error) {
 	if result.EdgeBundleKey == "" {
 		return nil, nil
 	}
@@ -1224,7 +1225,7 @@ func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResul
 	if err != nil {
 		return nil, fmt.Errorf("read the edge bundle %s runs: %w", entry.App, err)
 	}
-	return &edge.Code{
+	return &router.Code{
 		BundleKey:   result.EdgeBundleKey,
 		ID:          loaderID(bundle, compatibility.Date, compatibility.Flags),
 		CompatDate:  compatibility.Date,
@@ -1256,7 +1257,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		return okResult(), nil
 	}
 	flip := r.front.Facts().FlipBound
-	promotion := edge.Promotion{
+	promotion := router.Promotion{
 		PromotionID: r.spec.PromotionID,
 		Ts:          time.Now().Unix(),
 		Builds:      r.spec.Builds,
@@ -1283,7 +1284,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	return r.result(promotion, flip)
 }
 
-func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*progressv1.OperationEvent, error) {
+func (r *deployRun) result(promotion router.Promotion, flip router.FlipBound) (*progressv1.OperationEvent, error) {
 	result := &progressv1.ResultEvent{
 		Success:     true,
 		PromotionId: promotion.PromotionID,

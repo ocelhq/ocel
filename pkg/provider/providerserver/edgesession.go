@@ -12,6 +12,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
@@ -125,11 +126,11 @@ func (s *edgeSession) checkpoint(ctx context.Context) error {
 }
 
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
-	history, err := s.stack.Ledger().History(ctx, edge.DefaultPointer)
+	history, err := s.stack.Ledger().History(ctx, router.DefaultPointer)
 	if err != nil {
 		return false, err
 	}
-	return slices.ContainsFunc(history, func(entry edge.HistoryEntry) bool { return entry.Active }), nil
+	return slices.ContainsFunc(history, func(entry router.HistoryEntry) bool { return entry.Active }), nil
 }
 
 func (s *edgeSession) on(kind edge.Kind) (edge.EdgeStack, error) {

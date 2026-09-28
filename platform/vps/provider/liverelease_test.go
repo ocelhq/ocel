@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -47,7 +47,7 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 		}
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	})
-	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: caddy.Container, Owner: liveOwner, Pointer: edge.DefaultPointer}}); err != nil {
+	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: caddy.Container, Owner: liveOwner, Pointer: router.DefaultPointer}}); err != nil {
 		t.Fatalf("ClaimHosts(%s) = %v", caddy.Container, err)
 	}
 	return vm, p

@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
@@ -81,7 +82,7 @@ func (l *lazyLedger) SchemaVersion(ctx context.Context) (int, error) {
 	return resolved.SchemaVersion(ctx)
 }
 
-func (l *lazyLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+func (l *lazyLedger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
 	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return err
@@ -89,7 +90,7 @@ func (l *lazyLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord
 	return resolved.PutStaged(ctx, record)
 }
 
-func (l *lazyLedger) History(ctx context.Context, pointer string) ([]edge.HistoryEntry, error) {
+func (l *lazyLedger) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
 	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -97,10 +98,10 @@ func (l *lazyLedger) History(ctx context.Context, pointer string) ([]edge.Histor
 	return resolved.History(ctx, pointer)
 }
 
-func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (edge.PruneResult, error) {
+func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
 	resolved, err := l.resolve(ctx)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	return resolved.Prune(ctx, keepN, pointer)
 }
@@ -153,7 +154,7 @@ func (s *stack) apiFor(ctx context.Context, c Clients, pointer string) (apiSpec,
 }
 
 func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string) (string, bool, error) {
-	if pointerOr(pointer) == edge.DefaultPointer {
+	if pointerOr(pointer) == router.DefaultPointer {
 		if id := s.own.API; id != "" {
 			return id, true, nil
 		}
@@ -161,7 +162,7 @@ func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string)
 	return findAPI(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return err
@@ -218,17 +219,17 @@ func (s *stack) restage(ctx context.Context, c Clients, pointer, id string) erro
 	return moveStage(ctx, c, id, active.PromotionID, patch)
 }
 
-func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (edge.Promotion, bool, error) {
+func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (router.Promotion, bool, error) {
 	history, err := s.openLedger(c).History(ctx, pointer)
 	if err != nil {
-		return edge.Promotion{}, false, err
+		return router.Promotion{}, false, err
 	}
 	for _, entry := range history {
 		if entry.Active {
 			return entry.Promotion, true, nil
 		}
 	}
-	return edge.Promotion{}, false, nil
+	return router.Promotion{}, false, nil
 }
 
 func unsetPatch() []agtypes.PatchOperation {
@@ -247,7 +248,7 @@ func variablePatch(variables map[string]string) []agtypes.PatchOperation {
 	return patch
 }
 
-func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promotion) ([]agtypes.PatchOperation, error) {
+func (s *stack) stagePatch(ctx context.Context, c Clients, promotion router.Promotion) ([]agtypes.PatchOperation, error) {
 	apps := slices.Sorted(maps.Keys(promotion.Builds))
 	switch {
 	case len(apps) == 0:
@@ -282,22 +283,22 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	}), nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
-	if pointerOr(pointer) != edge.DefaultPointer {
+	if pointerOr(pointer) != router.DefaultPointer {
 		if err := s.unroutePreview(ctx, c, pointer); err != nil {
-			return edge.PruneResult{}, err
+			return router.PruneResult{}, err
 		}
 		id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.tier(), pointer))
 		if err != nil {
-			return edge.PruneResult{}, err
+			return router.PruneResult{}, err
 		}
 		if found {
 			if err := s.p.deletion().drain(ctx, c, []string{id}); err != nil {
-				return edge.PruneResult{}, err
+				return router.PruneResult{}, err
 			}
 		}
 	}
@@ -309,7 +310,7 @@ func (s *stack) previewHost(pointer string) (string, string) {
 	if base == "" || s.tier() != environment.TierPreview {
 		return "", ""
 	}
-	if pointerOr(pointer) == edge.DefaultPointer {
+	if pointerOr(pointer) == router.DefaultPointer {
 		return "", ""
 	}
 	host := edge.SharedPreview(s.slug(), base).Host(pointer, "")

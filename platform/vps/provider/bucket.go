@@ -15,13 +15,13 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -49,7 +49,7 @@ const (
 const storeHealthPath = "/health/ready"
 
 func storeRoute(ref provider.StackRef, store string) host.AppRoute {
-	pointer := edge.DefaultPointer
+	pointer := router.DefaultPointer
 	if ref.Tier == environment.TierPreview {
 		pointer = ref.Name.Env
 	}

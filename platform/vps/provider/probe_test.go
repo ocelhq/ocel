@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/router"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -232,7 +233,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 	t.Cleanup(app.Close)
 	written, err := host.WriteRoutingTable(host.RoutingTable{
 		Grace:  host.DrainWindow,
-		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: edge.DefaultPointer}},
+		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: router.DefaultPointer}},
 		Routes: []host.AppRoute{{
 			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
 			Upstream: strings.TrimPrefix(app.URL, "http://"),

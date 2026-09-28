@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -98,7 +99,7 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(ctx, edge.Promotion{
+	if err := stack.Promote(ctx, router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
@@ -453,7 +454,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		recordFront(t, w, environment.TierPreview)
 		w.front.calls = nil
 
-		if err := stack.Promote(context.Background(), edge.Promotion{
+		if err := stack.Promote(context.Background(), router.Promotion{
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
@@ -508,7 +509,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		w.store.updateErr = errors.New("the store is closed")
 
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		if err := stack.Promote(context.Background(), edge.Promotion{
+		if err := stack.Promote(context.Background(), router.Promotion{
 			PromotionID: "refused",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
@@ -599,7 +600,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.dynamo.putErr = errors.New("the table is closed")
 
-		if err := stack.Promote(context.Background(), edge.Promotion{
+		if err := stack.Promote(context.Background(), router.Promotion{
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},

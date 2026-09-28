@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -123,7 +124,7 @@ func (l *lazyLedger) SchemaVersion(ctx context.Context) (int, error) {
 	return resolved.SchemaVersion(ctx)
 }
 
-func (l *lazyLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+func (l *lazyLedger) PutStaged(ctx context.Context, record router.DeploymentRecord) error {
 	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return err
@@ -131,7 +132,7 @@ func (l *lazyLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord
 	return resolved.PutStaged(ctx, record)
 }
 
-func (l *lazyLedger) History(ctx context.Context, pointer string) ([]edge.HistoryEntry, error) {
+func (l *lazyLedger) History(ctx context.Context, pointer string) ([]router.HistoryEntry, error) {
 	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -139,10 +140,10 @@ func (l *lazyLedger) History(ctx context.Context, pointer string) ([]edge.Histor
 	return resolved.History(ctx, pointer)
 }
 
-func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (edge.PruneResult, error) {
+func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (router.PruneResult, error) {
 	resolved, err := l.resolve(ctx)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	return resolved.Prune(ctx, keepN, pointer)
 }
@@ -201,7 +202,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress progress.Progress) error {
+func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
 	c, err := s.clients(ctx)
 	if err != nil {
 		return err
@@ -215,11 +216,11 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	return nil
 }
 
-func (s *stack) publish(ctx context.Context, c Clients, promotion edge.Promotion, pointer string) error {
+func (s *stack) publish(ctx context.Context, c Clients, promotion router.Promotion, pointer string) error {
 	return s.publishOn(ctx, c, promotion, s.servedHostnames(pointer))
 }
 
-func (s *stack) publishOn(ctx context.Context, c Clients, promotion edge.Promotion, hostnames []string) error {
+func (s *stack) publishOn(ctx context.Context, c Clients, promotion router.Promotion, hostnames []string) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
@@ -249,24 +250,24 @@ func (s *stack) republish(ctx context.Context, c Clients, pointer string) error 
 	return s.publish(ctx, c, active, pointer)
 }
 
-func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (edge.Promotion, bool, error) {
+func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (router.Promotion, bool, error) {
 	history, err := s.openLedger(c).History(ctx, pointer)
 	if err != nil {
-		return edge.Promotion{}, false, err
+		return router.Promotion{}, false, err
 	}
 	for _, entry := range history {
 		if entry.Active {
 			return entry.Promotion, true, nil
 		}
 	}
-	return edge.Promotion{}, false, nil
+	return router.Promotion{}, false, nil
 }
 
 func (s *stack) servedHostnames(pointer string) []string {
 	if host := s.previewHost(pointer); host != "" {
 		return []string{host}
 	}
-	if pointerOr(pointer) != edge.DefaultPointer {
+	if pointerOr(pointer) != router.DefaultPointer {
 		return nil
 	}
 	return s.state.Bound
@@ -291,7 +292,7 @@ func (s *stack) onPreviewWildcard() bool {
 }
 
 func (s *stack) previewHost(pointer string) string {
-	if pointerOr(pointer) == edge.DefaultPointer {
+	if pointerOr(pointer) == router.DefaultPointer {
 		return ""
 	}
 	return s.previewSite().Host(pointer, "")
@@ -317,7 +318,7 @@ func (s *stack) unroutePreviews(ctx context.Context, c Clients) error {
 	return s.routes(c).apply(ctx, nil, hosts)
 }
 
-func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotion) (route, error) {
+func (s *stack) routeFor(ctx context.Context, c Clients, promotion router.Promotion) (route, error) {
 	apps := slices.Sorted(maps.Keys(promotion.Builds))
 	switch {
 	case len(apps) == 0:
@@ -365,7 +366,7 @@ func (s *stack) keyValues(c Clients) awsports.KeyValues {
 	return awsports.KeyValues{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
 }
 
-func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.Promotion, app, identity string) (awsports.ContainerFront, error) {
+func (s *stack) serveContainers(ctx context.Context, c Clients, promotion router.Promotion, app, identity string) (awsports.ContainerFront, error) {
 	front, found, err := awsports.ReadContainerFront(ctx, s.keyValues(c), s.tier())
 	if err != nil {
 		return awsports.ContainerFront{}, err
@@ -415,17 +416,17 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSe
 	return secret, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
 	c, err := s.clients(ctx)
 	if err != nil {
-		return edge.PruneResult{}, err
+		return router.PruneResult{}, err
 	}
 	if !s.provisioned() {
-		return edge.PruneResult{}, nil
+		return router.PruneResult{}, nil
 	}
 	if host := s.previewHost(pointer); host != "" {
 		if err := s.routes(c).apply(ctx, nil, []string{host}); err != nil {
-			return edge.PruneResult{}, err
+			return router.PruneResult{}, err
 		}
 	}
 	return s.openLedger(c).RemovePointer(ctx, pointer)
@@ -454,7 +455,7 @@ func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) err
 	if !s.provisioned() {
 		return nil
 	}
-	active, found, err := s.activePromotion(ctx, c, edge.DefaultPointer)
+	active, found, err := s.activePromotion(ctx, c, router.DefaultPointer)
 	if err != nil || !found {
 		return err
 	}
