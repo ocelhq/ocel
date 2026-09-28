@@ -59,7 +59,7 @@ func dirties(t *testing.T, vm machine) {
 	})
 }
 
-func sealedAt(name string) seal.AssociatedData {
+func newKeyAssociatedData(name string) seal.AssociatedData {
 	return seal.AssociatedData{
 		{Name: "project", Value: "shop"},
 		{Name: "environment", Value: "*"},
@@ -92,7 +92,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 
 	ctx := context.Background()
 	cipher := vm.deploying(t).Cipher()
-	at := sealedAt("DATABASE_URL")
+	at := newKeyAssociatedData("DATABASE_URL")
 
 	written, err := cipher.Seal(ctx, tier, at, []byte(sealed))
 	if err != nil {
@@ -110,7 +110,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Errorf("the round trip answered %q, want %q", opened, sealed)
 	}
 
-	if moved, err := cipher.Open(ctx, tier, sealedAt("API_KEY"), written); err == nil {
+	if moved, err := cipher.Open(ctx, tier, newKeyAssociatedData("API_KEY"), written); err == nil {
 		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the associated data authenticates nothing", moved)
 	}
 }

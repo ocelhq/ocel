@@ -39,7 +39,7 @@ func sealDir(t *testing.T) string {
 	return root
 }
 
-func rootedHelper(t *testing.T, root string) string {
+func writeRootedHelper(t *testing.T, root string) string {
 	t.Helper()
 	script := filepath.Join(t.TempDir(), "seal")
 	rooted := bytes.Replace(sealScript, []byte(`SEAL_ROOT = "/etc/ocel"`), []byte("SEAL_ROOT = "+strconv.Quote(root)), 1)
@@ -54,7 +54,7 @@ func rootedHelper(t *testing.T, root string) string {
 
 func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int) {
 	t.Helper()
-	cmd := exec.Command("python3", append([]string{rootedHelper(t, root), sealTier}, args...)...)
+	cmd := exec.Command("python3", append([]string{writeRootedHelper(t, root), sealTier}, args...)...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -84,7 +84,7 @@ func TestTheBoxCipherSealsAsEveryCipherMust(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, string(environment.TierPreview)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script := rootedHelper(t, root)
+	script := writeRootedHelper(t, root)
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		if out, err := exec.Command("python3", script, string(tier), "init").CombinedOutput(); err != nil {
 			t.Fatalf("init %s: %v\n%s", tier, err, out)

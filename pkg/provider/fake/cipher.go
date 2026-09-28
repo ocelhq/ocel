@@ -55,14 +55,14 @@ func (s *Cipher) Open(_ context.Context, tier environment.Tier, bound seal.Assoc
 }
 
 func (s *Cipher) gcm(tier environment.Tier) (cipher.AEAD, error) {
-	block, err := aes.NewCipher(s.key(tier))
+	block, err := aes.NewCipher(s.ensureKey(tier))
 	if err != nil {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
 }
 
-func (s *Cipher) key(tier environment.Tier) []byte {
+func (s *Cipher) ensureKey(tier environment.Tier) []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if key, ok := s.keys[tier]; ok {

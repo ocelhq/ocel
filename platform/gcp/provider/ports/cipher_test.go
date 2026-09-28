@@ -51,7 +51,7 @@ type aeadKMS struct {
 	keys map[string]cipher.AEAD
 }
 
-func (k *aeadKMS) key(name string) (cipher.AEAD, error) {
+func (k *aeadKMS) ensureKey(name string) (cipher.AEAD, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if gcm, ok := k.keys[name]; ok {
@@ -74,7 +74,7 @@ func (k *aeadKMS) key(name string) (cipher.AEAD, error) {
 }
 
 func (k *aeadKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.EncryptResponse, error) {
-	gcm, err := k.key(req.GetName())
+	gcm, err := k.ensureKey(req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (k *aeadKMS) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmspb.
 }
 
 func (k *aeadKMS) Decrypt(_ context.Context, req *kmspb.DecryptRequest) (*kmspb.DecryptResponse, error) {
-	gcm, err := k.key(req.GetName())
+	gcm, err := k.ensureKey(req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (k *aeadKMS) Decrypt(_ context.Context, req *kmspb.DecryptRequest) (*kmspb.
 	return &kmspb.DecryptResponse{Plaintext: opened}, nil
 }
 
-func serving(t *testing.T, kms kmspb.KeyManagementServiceServer) *Clients {
+func serveKMS(t *testing.T, kms kmspb.KeyManagementServiceServer) *Clients {
 	t.Helper()
 	isolated(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -115,17 +115,17 @@ func serving(t *testing.T, kms kmspb.KeyManagementServiceServer) *Clients {
 	return &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://" + listener.Addr().String()}
 }
 
-func servingKMS(t *testing.T) (*Clients, *recordingKMS) {
+func serveRecordingKMS(t *testing.T) (*Clients, *recordingKMS) {
 	t.Helper()
 	fake := &recordingKMS{}
-	return serving(t, fake), fake
+	return serveKMS(t, fake), fake
 }
 
 func TestCipherConformance(t *testing.T) {
-	conformance.RunCipher(t, Cipher{Clients: serving(t, &aeadKMS{keys: map[string]cipher.AEAD{}})})
+	conformance.RunCipher(t, Cipher{Clients: serveKMS(t, &aeadKMS{keys: map[string]cipher.AEAD{}})})
 }
 
-var sealedAt = seal.AssociatedData{
+var bound = seal.AssociatedData{
 	{Name: "project", Value: "shop"},
 	{Name: "class", Value: "production"},
 	{Name: "environment", Value: "staging"},
@@ -135,9 +135,9 @@ var sealedAt = seal.AssociatedData{
 }
 
 func TestAValueIsSealedUnderItsTierKeyAndBoundToItsAssociatedDataBytes(t *testing.T) {
-	clients, fake := servingKMS(t)
+	clients, fake := serveRecordingKMS(t)
 
-	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret")); err != nil {
+	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, bound, []byte("sk_live_secret")); err != nil {
 		t.Fatalf("Seal() = %v", err)
 	}
 	if len(fake.encrypted) != 1 {
@@ -152,9 +152,9 @@ func TestAValueIsSealedUnderItsTierKeyAndBoundToItsAssociatedDataBytes(t *testin
 }
 
 func TestAValueSealedUnderItsTierKeyAndAssociatedDataBytesOpens(t *testing.T) {
-	clients, _ := servingKMS(t)
+	clients, _ := serveRecordingKMS(t)
 
-	opened, err := (Cipher{Clients: clients}).Open(context.Background(), environment.TierProduction, sealedAt, []byte("sealed"))
+	opened, err := (Cipher{Clients: clients}).Open(context.Background(), environment.TierProduction, bound, []byte("sealed"))
 	if err != nil || string(opened) != "sk_live_secret" {
 		t.Fatalf("Open() = %q, %v, want the value sealed under %s at %q to open", opened, err, sealedKey, boundBytes)
 	}
