@@ -54,3 +54,45 @@ func keepColour(raw string) string {
 	}
 	return b.String()
 }
+
+const grayForeground = "\x1b[90m"
+
+func mutedToolText(text string) string {
+	if text == "" {
+		return text
+	}
+	var b strings.Builder
+	b.WriteString(grayForeground)
+	var state byte
+	for rest := text; rest != ""; {
+		seq, _, n, next := ansi.DecodeSequence(rest, state, nil)
+		state, rest = next, rest[n:]
+		b.WriteString(seq)
+		if selectGraphicRendition.MatchString(seq) && resetsForeground(seq) {
+			b.WriteString(grayForeground)
+		}
+	}
+	b.WriteString("\x1b[39m")
+	return b.String()
+}
+
+func resetsForeground(seq string) bool {
+	params := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(seq, "\x1b["), "\x9b"), "m")
+	if params == "" {
+		return true
+	}
+	fields := strings.Split(params, ";")
+	for i := 0; i < len(fields); i++ {
+		switch fields[i] {
+		case "", "0", "39":
+			return true
+		case "38", "48", "58":
+			if i+1 < len(fields) && fields[i+1] == "5" {
+				i += 2
+			} else if i+1 < len(fields) && fields[i+1] == "2" {
+				i += 4
+			}
+		}
+	}
+	return false
+}

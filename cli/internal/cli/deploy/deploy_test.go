@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -398,7 +400,7 @@ export default {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 
-		out := stdout.String()
+		out := ansi.Strip(stdout.String())
 		for _, want := range []string{"ocel", "test-app › production", "aws", "123456789012", "us-east-1", "edge", "abcd1234"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout missing %q:\n%s", want, out)

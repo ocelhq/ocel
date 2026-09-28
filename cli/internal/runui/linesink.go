@@ -79,6 +79,9 @@ func newLineSink(w io.Writer, present Presentation, sources lineSources) *LineSi
 	commits := &bytes.Buffer{}
 	grouped := newGroupedSink(commits, present, nil)
 	grouped.verbatimText = keepColour
+	if present.Color {
+		grouped.verbatimText = func(text string) string { return mutedToolText(keepColour(text)) }
+	}
 	stop := make(chan struct{})
 	s := &LineSink{
 		w:       w,

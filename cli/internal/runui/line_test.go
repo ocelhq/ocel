@@ -3,6 +3,8 @@ package runui
 import (
 	"testing"
 
+	"github.com/fatih/color"
+
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
@@ -111,7 +113,7 @@ func TestAMultiLineMessageIndentsItsContinuationLinesUnderThePhase(t *testing.T)
 	}
 }
 
-func TestWithColourTheLevelAndTheUnitMarkArePaintedAndTheTextIsNot(t *testing.T) {
+func TestWithColourTheLevelThePhaseTheMarkAndTheSubjectArePaintedAndTheMessageIsNot(t *testing.T) {
 	colour := Presentation{Color: true}
 	cases := []struct {
 		name string
@@ -119,34 +121,44 @@ func TestWithColourTheLevelAndTheUnitMarkArePaintedAndTheTextIsNot(t *testing.T)
 		want string
 	}{
 		{
-			name: "debug is faint",
+			name: "debug is faint gray",
 			line: line{level: progressv1.Level_LEVEL_DEBUG, phase: progressv1.Phase_PHASE_DEPLOY, message: "m"},
-			want: "\x1b[2mDEBUG\x1b[22m [deploy] m",
+			want: "\x1b[2;90mDEBUG\x1b[22;0m " + deployTag + " m",
 		},
 		{
-			name: "info is plain",
+			name: "info is gray",
 			line: line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_DEPLOY, message: "m"},
-			want: "INFO  [deploy] m",
+			want: "\x1b[90mINFO \x1b[0m " + deployTag + " m",
 		},
 		{
 			name: "a warning is bold yellow",
-			line: line{level: progressv1.Level_LEVEL_WARN, phase: progressv1.Phase_PHASE_CHECK, message: "m"},
-			want: "\x1b[33;1mWARN \x1b[0;22m [check] m",
+			line: line{level: progressv1.Level_LEVEL_WARN, phase: progressv1.Phase_PHASE_DEPLOY, message: "m"},
+			want: "\x1b[33;1mWARN \x1b[0;22m " + deployTag + " m",
 		},
 		{
 			name: "an error is bold red",
-			line: line{level: progressv1.Level_LEVEL_ERROR, phase: progressv1.Phase_PHASE_CHECK, message: "m"},
-			want: "\x1b[31;1mERROR\x1b[0;22m [check] m",
+			line: line{level: progressv1.Level_LEVEL_ERROR, phase: progressv1.Phase_PHASE_DEPLOY, message: "m"},
+			want: "\x1b[31;1mERROR\x1b[0;22m " + deployTag + " m",
 		},
 		{
-			name: "a unit that ended well has a green mark",
-			line: line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_BUILD, subject: "web", message: "m", ends: progressv1.SpanStatus_SPAN_STATUS_OK},
-			want: "INFO  [build] \x1b[32m✓\x1b[0m web: m",
+			name: "a unit that ended well has a green mark and a bold subject",
+			line: line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_DEPLOY, subject: "web", message: "m", ends: progressv1.SpanStatus_SPAN_STATUS_OK},
+			want: "\x1b[90mINFO \x1b[0m " + deployTag + " \x1b[32m✓\x1b[0m \x1b[1mweb\x1b[22m: m",
 		},
 		{
 			name: "a unit that failed has a bold red mark",
-			line: line{level: progressv1.Level_LEVEL_ERROR, phase: progressv1.Phase_PHASE_BUILD, subject: "api", message: "m", ends: progressv1.SpanStatus_SPAN_STATUS_ERROR},
-			want: "\x1b[31;1mERROR\x1b[0;22m [build] \x1b[31;1m✗\x1b[0;22m api: m",
+			line: line{level: progressv1.Level_LEVEL_ERROR, phase: progressv1.Phase_PHASE_DEPLOY, subject: "api", message: "m", ends: progressv1.SpanStatus_SPAN_STATUS_ERROR},
+			want: "\x1b[31;1mERROR\x1b[0;22m " + deployTag + " \x1b[31;1m✗\x1b[0;22m \x1b[1mapi\x1b[22m: m",
+		},
+		{
+			name: "how long it took is gray and what it did is not",
+			line: line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_DEPLOY, message: "Deployed web", timing: " in 8s (1/2)", outcome: " — 1 resource updated"},
+			want: "\x1b[90mINFO \x1b[0m " + deployTag + " Deployed web\x1b[90m in 8s (1/2)\x1b[0m — 1 resource updated",
+		},
+		{
+			name: "a quiet line is gray throughout",
+			line: line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_DEPLOY, message: "Still deploying web", quiet: true},
+			want: "\x1b[90mINFO \x1b[0m " + deployTag + " \x1b[90mStill deploying web\x1b[0m",
 		},
 	}
 	for _, c := range cases {
@@ -155,5 +167,33 @@ func TestWithColourTheLevelAndTheUnitMarkArePaintedAndTheTextIsNot(t *testing.T)
 				t.Errorf("got  %q\nwant %q", got, c.want)
 			}
 		})
+	}
+}
+
+const deployTag = "\x1b[90m[\x1b[0m\x1b[95mdeploy\x1b[0m\x1b[90m]\x1b[0m"
+
+func TestEachPhaseNameHasAColourOfItsOwnAmongThePhasesOneRunPasses(t *testing.T) {
+	runs := [][]progressv1.Phase{
+		{progressv1.Phase_PHASE_CHECK, progressv1.Phase_PHASE_BUILD, progressv1.Phase_PHASE_PLAN, progressv1.Phase_PHASE_PROVISION, progressv1.Phase_PHASE_DEPLOY, progressv1.Phase_PHASE_PROMOTE},
+		{progressv1.Phase_PHASE_CHECK, progressv1.Phase_PHASE_PLAN, progressv1.Phase_PHASE_DESTROY},
+	}
+	for _, phases := range runs {
+		seen := map[color.Attribute]progressv1.Phase{}
+		for _, phase := range phases {
+			painted, ok := phaseColors[phase]
+			if !ok {
+				t.Fatalf("%v has no colour", phase)
+			}
+			if other, dup := seen[painted]; dup {
+				t.Errorf("%v is painted the same as %v", phase, other)
+			}
+			seen[painted] = phase
+		}
+	}
+}
+
+func TestAMultiLineGrayTextIsPaintedLineByLine(t *testing.T) {
+	if got, want := muted(Presentation{Color: true}, "a\n\nb"), "\x1b[90ma\x1b[0m\n\n\x1b[90mb\x1b[0m"; got != want {
+		t.Errorf("muted() = %q, want %q so no colour leaks across a line a log viewer reads alone", got, want)
 	}
 }

@@ -733,6 +733,47 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	}
 }
 
+func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSigil(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{Color: true})
+	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
+	start := c.now()
+	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
+	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
+	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "aws:s3/bucket:Bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	deploy.Forward(providerEnded(2, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(providerEnded(1, "web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
+
+	for _, want := range []string{
+		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
+		"      \x1b[32m+\x1b[0m \x1b[90massets (aws:s3/bucket:Bucket) created\x1b[0m\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("got\n%q\nwant it to contain\n%q", out.String(), want)
+		}
+	}
+}
+
+func TestWithColourAUnitsProgressMessageIsGrayUnderItsHeader(t *testing.T) {
+	t.Parallel()
+
+	run, out, _ := groupedRun(t, Presentation{Color: true})
+	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Unit("web", "Deploying web")
+	web.Say("Uploading function web's artifact (1.2 MiB)")
+	web.Warn("the bundle is over 50 MiB")
+	web.End(nil)
+
+	for _, want := range []string{
+		"\n      \x1b[90mUploading function web's artifact (1.2 MiB)\x1b[0m\n",
+		"\n      \x1b[33;1mWARN \x1b[0;22m the bundle is over 50 MiB\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("got\n%q\nwant it to contain\n%q", out.String(), want)
+		}
+	}
+}
+
 func TestAResourceThatFailedWithoutChangingIsListedAndCountedAsFailed(t *testing.T) {
 	t.Parallel()
 
