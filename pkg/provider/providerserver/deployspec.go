@@ -23,7 +23,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 	manifest := req.GetManifest()
 	env := req.GetEnvironment()
 
-	tier, err := tierOf(env.GetTier())
+	tier, err := decodeTier(env.GetTier())
 	if err != nil {
 		return provider.DeploySpec{}, err
 	}
