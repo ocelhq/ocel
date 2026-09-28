@@ -3,6 +3,7 @@ package ports_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -120,5 +121,26 @@ func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	}
 	if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {
 		t.Errorf("Seal err = %v, want it to name `%s`", err, want)
+	}
+}
+
+func TestTheDigestKeyIsSealedUnderAnEncryptionContextNamingEveryProjectItsClassAndTheEnvSourceBinding(t *testing.T) {
+	table, _ := newSplitRecords()
+	cipher, crypto := newCipher()
+
+	if _, err := envsource.EnsureDigestKey(context.Background(), envvars.Store{Records: table, Cipher: cipher}, environment.TierProduction); err != nil {
+		t.Fatalf("EnsureDigestKey err = %v", err)
+	}
+
+	want := map[string]string{
+		"project":     "*",
+		"class":       "production",
+		"environment": "*",
+		"folder":      "/",
+		"binding":     "envsource",
+		"key":         "digestkey",
+	}
+	if len(crypto.contexts) == 0 || !maps.Equal(crypto.contexts[0], want) {
+		t.Fatalf("encryption contexts = %v, want the digest key sealed under %v: every digest key already stored is bound to it", crypto.contexts, want)
 	}
 }
