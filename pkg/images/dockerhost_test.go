@@ -45,7 +45,7 @@ func TestAWindowsPipeIsDialledOnWindowsAndRefusedWhereThereIsNoPipe(t *testing.T
 	}
 }
 
-func TestDockerHostBeatsThePlatformSocket(t *testing.T) {
+func TestADaemonNamedByDockerHostBeatsThePlatformSocket(t *testing.T) {
 	t.Setenv(images.DockerHostEnv, "tcp://10.0.0.4:2375")
 
 	d, err := images.DockerHostFromEnv()
