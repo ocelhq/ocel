@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -168,11 +169,11 @@ func TestTheStackIsSeparateFromEveryBootstrapStack(t *testing.T) {
 	t.Parallel()
 
 	named := StackName(defaultNamespace)
-	production, err := defaultNamespace.StackNameFor(bootstrap.TierProduction)
+	production, err := defaultNamespace.StackNameFor(environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := defaultNamespace.StackNameFor(bootstrap.TierPreview)
+	preview, err := defaultNamespace.StackNameFor(environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}

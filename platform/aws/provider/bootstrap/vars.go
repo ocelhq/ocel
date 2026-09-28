@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
@@ -18,7 +19,7 @@ const (
 	VarsKeyComponentTagValue = "vars-key"
 )
 
-func varsKeyResources(ns Namespace, tier string) string {
+func varsKeyResources(ns Namespace, tier environment.Tier) string {
 	return fmt.Sprintf(`  VarsKey:
     Type: AWS::KMS::Key
     Properties:
@@ -52,7 +53,7 @@ func varsKeyOutputs() string {
 `, outputVarsKeyARN)
 }
 
-func varsResources(tier string) string {
+func varsResources(tier environment.Tier) string {
 	return fmt.Sprintf(`  VarsTable:
     Type: AWS::DynamoDB::Table
     Metadata:

@@ -36,8 +36,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{TierProduction, featureTemplate(FeatureCloudflareEdge, TierProduction), edgeUserName},
-		{TierPreview, featureTemplate(FeatureCloudflareEdge, TierPreview), previewEdgeUser},
+		{string(environment.TierProduction), featureTemplate(FeatureCloudflareEdge, environment.TierProduction), edgeUserName},
+		{string(environment.TierPreview), featureTemplate(FeatureCloudflareEdge, environment.TierPreview), previewEdgeUser},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate
@@ -159,12 +159,12 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
 
-	if err := Run(ctx, apis, defaultNamespace, TierProduction, fronted, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("the bootstrap that installs the edge: %v", err)
 	}
 
 	drop := Request{Features: []string{FeatureISR}, Remove: []string{FeatureCloudflareEdge}}
-	if err := Run(ctx, apis, defaultNamespace, TierProduction, drop, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, drop, nil); err != nil {
 		t.Fatalf("dropping %s: %v", FeatureCloudflareEdge, err)
 	}
 	if front.torn != 1 {
@@ -173,11 +173,11 @@ func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	if front.bootstraps != 1 {
 		t.Errorf("the edge was bootstrapped %d times, want once: a drop re-adopting what it is about to sever leaves the two disagreeing", front.bootstraps)
 	}
-	if _, present := ssmc.params[cloudflareNames(TierProduction).deploymentsStoreParam]; present {
+	if _, present := ssmc.params[cloudflareNames(environment.TierProduction).deploymentsStoreParam]; present {
 		t.Error("the deployments store parameter outlived the drop, so the next bootstrap reads a store for an edge that is no longer installed")
 	}
 
-	if err := Run(ctx, apis, defaultNamespace, TierProduction, fronted, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, fronted, nil); err != nil {
 		t.Fatalf("a plain bootstrap straight after the drop: %v", err)
 	}
 }

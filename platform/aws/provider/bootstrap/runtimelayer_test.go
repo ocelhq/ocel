@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -39,7 +40,7 @@ func parseRuntimeLayerTemplate(t *testing.T, body string) runtimeLayerTemplateSh
 	return tmpl
 }
 
-func runtimeLayerBody(t *testing.T, tier string) string {
+func runtimeLayerBody(t *testing.T, tier environment.Tier) string {
 	t.Helper()
 	body, err := runtimeLayerTemplateAt(defaultNamespace, tier, fixtureBucket)
 	if err != nil {
@@ -50,8 +51,8 @@ func runtimeLayerBody(t *testing.T, tier string) string {
 
 func TestRuntimeLayerTemplate(t *testing.T) {
 	t.Run("one layer version per architecture, named after the payload it contains", func(t *testing.T) {
-		for _, tier := range []string{TierProduction, TierPreview} {
-			t.Run(tier, func(t *testing.T) {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+			t.Run(string(tier), func(t *testing.T) {
 				tmpl := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, tier))
 				if len(tmpl.Resources) != len(runtimeArches()) {
 					t.Fatalf("the runtime stack declares %d resources, want one layer version per architecture (%d)",
@@ -103,8 +104,8 @@ func TestRuntimeLayerTemplate(t *testing.T) {
 	})
 
 	t.Run("production and preview name different layers", func(t *testing.T) {
-		production := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, TierProduction))
-		preview := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, TierPreview))
+		production := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, environment.TierProduction))
+		preview := parseRuntimeLayerTemplate(t, runtimeLayerBody(t, environment.TierPreview))
 		for _, architecture := range runtimeArches() {
 			id := runtimeLayerResourceID(architecture)
 			if production.Resources[id].Properties.LayerName == preview.Resources[id].Properties.LayerName {
@@ -124,7 +125,7 @@ func TestRunRuntimeLayers(t *testing.T) {
 		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		body := stacks.template(runtimeStack(TierProduction))
+		body := stacks.template(runtimeStack(environment.TierProduction))
 		if body == "" {
 			t.Fatal("a first bootstrap created no runtime stack, so its releases have nothing to boot through")
 		}
@@ -168,7 +169,7 @@ func TestReadRuntimeLayers(t *testing.T) {
 	t.Run("the ARNs this build's runtime is published under are read back", func(t *testing.T) {
 		stacks := newFakeCFN()
 		stacks.seed(coreStackName, "Outputs:\n")
-		stacks.seed(runtimeStack(TierProduction), runtimeLayerBody(t, TierProduction))
+		stacks.seed(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
 
 		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
@@ -179,7 +180,7 @@ func TestReadRuntimeLayers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 			}
-			want := stacks.output(runtimeStack(TierProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
+			want := stacks.output(runtimeStack(environment.TierProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
 			if want == "" {
 				t.Fatalf("the seeded runtime stack published no %s ARN", architecture)
 			}
@@ -192,7 +193,7 @@ func TestReadRuntimeLayers(t *testing.T) {
 	t.Run("a runtime published from another build is not read as this one", func(t *testing.T) {
 		stacks := newFakeCFN()
 		stacks.seed(coreStackName, "Outputs:\n")
-		stacks.seed(runtimeStack(TierProduction), "Outputs:\n  "+
+		stacks.seed(runtimeStack(environment.TierProduction), "Outputs:\n  "+
 			runtimeLayerOutputKey(arch.X8664, strings.Repeat("a", 64))+":\n    Value: !Ref RuntimeLayerX8664\n")
 
 		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
@@ -224,7 +225,7 @@ func TestReadRuntimeLayers(t *testing.T) {
 	})
 }
 
-func runtimeLayerDigestFor(t *testing.T, tier, bucket string) string {
+func runtimeLayerDigestFor(t *testing.T, tier environment.Tier, bucket string) string {
 	t.Helper()
 	body, err := runtimeLayerTemplateAt(defaultNamespace, tier, bucket)
 	if err != nil {
@@ -254,7 +255,7 @@ func assertShipsThisBuild(t *testing.T, stacks *fakeCFN, layers map[string]strin
 		if err != nil {
 			t.Fatalf("payloads.RuntimeLayer(%s): %v", architecture, err)
 		}
-		want := stacks.output(runtimeStack(TierProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
+		want := stacks.output(runtimeStack(environment.TierProduction), runtimeLayerOutputKey(architecture, shipped.SHA256))
 		if want == "" {
 			t.Fatalf("the runtime stack publishes no %s ARN", architecture)
 		}
@@ -268,10 +269,10 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("an account bootstrapped by an older build has this build's runtime published for it", func(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), newFakeObjectStore()
-		stacks.seed(runtimeStack(TierProduction), staleRuntimeBody())
+		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, TierProduction, ensureRuntimeRequest(), &log)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
@@ -293,11 +294,11 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("an account that already has this build's runtime is written to again by nothing", func(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(TierProduction), runtimeLayerBody(t, TierProduction))
+		stacks.seed(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
 		creates, updates := stacks.creates, stacks.updates
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, TierProduction, ensureRuntimeRequest(), &log)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers: %v", err)
 		}
@@ -314,11 +315,11 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("a runtime another deploy is publishing is waited out rather than raced", func(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(TierProduction), staleRuntimeBody())
-		stacks.busyWriting(runtimeStack(TierProduction), 4, runtimeLayerBody(t, TierProduction))
+		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
+		stacks.busyWriting(runtimeStack(environment.TierProduction), 4, runtimeLayerBody(t, environment.TierProduction))
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, TierProduction, ensureRuntimeRequest(), &log)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers over a stack another deploy is writing: %v", err)
 		}
@@ -326,7 +327,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 		if stacks.updates != 0 {
 			t.Errorf("executed %d change sets against a stack another deploy was writing", stacks.updates)
 		}
-		if !log.says("INFO Stack " + runtimeStack(TierProduction) + " is") {
+		if !log.says("INFO Stack " + runtimeStack(environment.TierProduction) + " is") {
 			t.Errorf("the deploy said %v, want it to say it waited while another run wrote the runtime", log.Lines())
 		}
 	})
@@ -334,10 +335,10 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("a runtime another deploy created first is booted through rather than created twice", func(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.claimedMidCreate(runtimeStack(TierProduction), runtimeLayerBody(t, TierProduction))
+		stacks.claimedMidCreate(runtimeStack(environment.TierProduction), runtimeLayerBody(t, environment.TierProduction))
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, TierProduction, ensureRuntimeRequest(), &log)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers against a runtime another deploy created: %v", err)
 		}
@@ -347,15 +348,15 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("a runtime this build cannot publish is a warning naming its stack", func(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(TierProduction), staleRuntimeBody())
+		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
 		apis := ensuringAPIs(stacks, store)
 		apis.CFN = deniedChangeSets{stacks}
 		var log healLog
 
-		if _, err := EnsureRuntimeLayers(context.Background(), apis, defaultNamespace, TierProduction, ensureRuntimeRequest(), &log); err != nil {
+		if _, err := EnsureRuntimeLayers(context.Background(), apis, defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log); err != nil {
 			t.Fatalf("EnsureRuntimeLayers with credentials that may not write: %v", err)
 		}
-		if !log.says("WARN Could not publish this build's runtime into stack " + runtimeStack(TierProduction)) {
+		if !log.says("WARN Could not publish this build's runtime into stack " + runtimeStack(environment.TierProduction)) {
 			t.Errorf("the deploy said %v, want a warning that names the runtime stack it could not write", log.Lines())
 		}
 	})
@@ -363,11 +364,11 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 	t.Run("a runtime whose stack stays busy and behind is left for the deploy to refuse", func(t *testing.T) {
 		recordWaits(t)
 		stacks, store := newFakeCFN(), preloadedStore()
-		stacks.seed(runtimeStack(TierProduction), staleRuntimeBody())
-		stacks.busyWriting(runtimeStack(TierProduction), idleAttempts*4, staleRuntimeBody())
+		stacks.seed(runtimeStack(environment.TierProduction), staleRuntimeBody())
+		stacks.busyWriting(runtimeStack(environment.TierProduction), idleAttempts*4, staleRuntimeBody())
 		var log healLog
 
-		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, TierProduction, ensureRuntimeRequest(), &log)
+		layers, err := EnsureRuntimeLayers(context.Background(), ensuringAPIs(stacks, store), defaultNamespace, environment.TierProduction, ensureRuntimeRequest(), &log)
 		if err != nil {
 			t.Fatalf("EnsureRuntimeLayers over a stack that never goes idle: %v", err)
 		}

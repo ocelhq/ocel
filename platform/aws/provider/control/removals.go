@@ -13,7 +13,7 @@ import (
 )
 
 func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(tier))
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -21,12 +21,12 @@ func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provi
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	shared, err := bootstrap.SiblingSharesPassphrase(ctx, b.CFN, b.Namespace, string(tier))
+	shared, err := bootstrap.SiblingSharesPassphrase(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameterRemoval(ctx,
-		b.paramAPIs(), b.Namespace, string(tier), shared)
+		b.paramAPIs(), b.Namespace, tier, shared)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -61,7 +61,7 @@ func (b Bootstrap) installedEdges(ctx context.Context, tier environment.Tier, de
 		installed := slices.Contains(featureKinds, kind)
 		if !installed {
 			var err error
-			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, string(tier), kind); err != nil {
+			if installed, err = bootstrap.EdgeInstalled(ctx, b.SSM, b.Namespace, tier, kind); err != nil {
 				return nil, err
 			}
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -62,7 +63,7 @@ Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs in
 	}
 }
 
-func edgeUserResource(ns Namespace, userName, tier string, optimizer bool) string {
+func edgeUserResource(ns Namespace, userName string, tier environment.Tier, optimizer bool) string {
 	invoke := ""
 	if optimizer {
 		invoke = imageOptimizerInvokeStatement()
@@ -126,7 +127,7 @@ func edgeUserResource(ns Namespace, userName, tier string, optimizer bool) strin
 		paramRevalidateQueueARN, invoke)
 }
 
-func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, _ Request) ([]provider.Change, error) {
+func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {
 	names, err := edgeNamesFor(ns, tier, KindCloudflare)
 	if err != nil {
 		return nil, err
@@ -164,7 +165,7 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, t
 	}, nil
 }
 
-func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, tier string, _ Request) ([]provider.Change, error) {
+func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {
 	names, err := edgeNamesFor(ns, tier, KindCloudflare)
 	if err != nil {
 		return nil, err

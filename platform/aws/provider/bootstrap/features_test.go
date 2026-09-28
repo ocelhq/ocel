@@ -5,16 +5,17 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 )
 
 func TestFeatureStackName(t *testing.T) {
 	for _, tc := range []struct {
-		tier string
+		tier environment.Tier
 		want string
 	}{
-		{TierProduction, "ocel-bootstrap-isr"},
-		{TierPreview, "ocel-bootstrap-isr-preview"},
+		{environment.TierProduction, "ocel-bootstrap-isr"},
+		{environment.TierPreview, "ocel-bootstrap-isr-preview"},
 	} {
 		f, ok := featureNamed(FeatureISR)
 		if !ok {

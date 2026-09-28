@@ -85,7 +85,7 @@ func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 func (b Bootstrap) Catalogue() []provider.Feature { return bootstrap.Catalogue() }
 
 func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(tier))
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -123,7 +123,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, string(req.Tier), adoptions, b.request(req))
+	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, req.Tier, adoptions, b.request(req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -137,10 +137,10 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {
-	if prior, passed := req.VendorState.(bootstrap.Reading); passed && prior.Tier() == string(req.Tier) {
+	if prior, passed := req.VendorState.(bootstrap.Reading); passed && prior.Tier() == req.Tier {
 		return prior, nil
 	}
-	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Tier))
+	return bootstrap.Read(ctx, b.CFN, b.Namespace, req.Tier)
 }
 
 func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
@@ -272,7 +272,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
-	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Tier), b.request(req), progress)
+	err := bootstrap.Run(ctx, b.apis(), b.Namespace, req.Tier, b.request(req), progress)
 	if bootstrap.RefusedWrite(err) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
@@ -280,7 +280,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 }
 
 func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress progress.Progress) error {
-	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Tier), bootstrap.HealRequest{
+	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, req.Tier, bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
 	}, progress)
@@ -291,7 +291,7 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 }
 
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Progress) error {
-	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(tier))
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, tier)
 	if err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		SSM:     b.SSM,
 		IAM:     b.IAM,
 		Buckets: b.Buckets,
-	}, b.Namespace, string(tier), progress)
+	}, b.Namespace, tier, progress)
 }
 
 func (b Bootstrap) apis() bootstrap.APIs {

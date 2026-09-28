@@ -6,6 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -39,7 +40,7 @@ type shapedType struct {
 	properties func(map[string]any) map[string]any
 }
 
-func Shape(ns Namespace, tier string, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
+func Shape(ns Namespace, tier environment.Tier, features []string, options ...ShapeOption) ([]pricing.Shaped, error) {
 	in := featureInputs{ns: ns, tier: tier, artifactBucket: shapedArtifactBucket}
 	for _, option := range options {
 		option(&in)

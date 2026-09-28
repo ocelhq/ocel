@@ -11,8 +11,8 @@ import (
 
 type Namespace provider.Namespace
 
-func suffixed(tier, base string) string {
-	if tier == TierPreview {
+func suffixed(tier environment.Tier, base string) string {
+	if tier == environment.TierPreview {
 		return base + "-preview"
 	}
 	return base
@@ -20,24 +20,24 @@ func suffixed(tier, base string) string {
 
 func (n Namespace) CoreStackName() string { return string(n) + "-bootstrap" }
 
-func (n Namespace) StackNameFor(tier string) (string, error) {
+func (n Namespace) StackNameFor(tier environment.Tier) (string, error) {
 	switch tier {
-	case TierProduction, TierPreview:
+	case environment.TierProduction, environment.TierPreview:
 		return suffixed(tier, n.CoreStackName()), nil
 	default:
 		return "", fmt.Errorf("bootstrap: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) runtimeStackName(tier string) string {
+func (n Namespace) runtimeStackName(tier environment.Tier) string {
 	return suffixed(tier, n.CoreStackName()+"-runtime")
 }
 
-func (n Namespace) featureStackName(feature, tier string) string {
+func (n Namespace) featureStackName(feature string, tier environment.Tier) string {
 	return suffixed(tier, n.CoreStackName()+"-"+feature)
 }
 
-func (n Namespace) FeatureStackName(name, tier string) string {
+func (n Namespace) FeatureStackName(name string, tier environment.Tier) string {
 	if _, ok := featureNamed(name); !ok {
 		return name
 	}
@@ -50,44 +50,44 @@ func (n Namespace) PassphraseParamName() string { return n.paramRoot() + "/pulum
 
 func (n Namespace) stackRecordRoot() string { return n.paramRoot() + "/rootstack" }
 
-func (n Namespace) EdgeUserNameFor(tier string) (string, error) {
+func (n Namespace) EdgeUserNameFor(tier environment.Tier) (string, error) {
 	switch tier {
-	case TierProduction, TierPreview:
+	case environment.TierProduction, environment.TierPreview:
 		return suffixed(tier, string(n)+"-edge"), nil
 	default:
 		return "", fmt.Errorf("edge: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) AppBoundaryNameFor(tier string) string {
+func (n Namespace) AppBoundaryNameFor(tier environment.Tier) string {
 	return suffixed(tier, string(n)+"-app-boundary")
 }
 
-func (n Namespace) OriginSecretParamFor(tier string) (string, error) {
+func (n Namespace) OriginSecretParamFor(tier environment.Tier) (string, error) {
 	switch tier {
-	case TierProduction:
+	case environment.TierProduction:
 		return n.paramRoot() + "/origin/secret", nil
-	case TierPreview:
+	case environment.TierPreview:
 		return n.paramRoot() + "/origin/secret-preview", nil
 	default:
 		return "", fmt.Errorf("edge: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) EdgeParamPrefix(tier string, kind edge.Kind) (string, error) {
+func (n Namespace) EdgeParamPrefix(tier environment.Tier, kind edge.Kind) (string, error) {
 	if kind == "" {
 		return "", fmt.Errorf("edge: the %s bootstrap's edge parameters are namespaced by edge kind, and this run names none", tier)
 	}
 	switch tier {
-	case TierProduction, TierPreview:
+	case environment.TierProduction, environment.TierPreview:
 		return suffixed(tier, n.paramRoot()+"/edge/"+string(kind)), nil
 	default:
 		return "", fmt.Errorf("edge: unknown tier %q", tier)
 	}
 }
 
-func (n Namespace) varsKeyAliasFor(tier string) string {
-	return "alias/" + string(n) + "-vars-" + tier
+func (n Namespace) varsKeyAliasFor(tier environment.Tier) string {
+	return "alias/" + string(n) + "-vars-" + string(tier)
 }
 
 func (n Namespace) EdgeInvokeRoleName(tier environment.Tier) string {
@@ -123,19 +123,19 @@ func (n Namespace) edgeAssetAccessName(tier environment.Tier) string {
 }
 
 func (n Namespace) edgeSetName(what string, tier environment.Tier) string {
-	return suffixed(string(tier), string(n)+"-"+what)
+	return suffixed(tier, string(n)+"-"+what)
 }
 
-func (n Namespace) revalidateQueueNames(tier string) (queue, dlq string) {
+func (n Namespace) revalidateQueueNames(tier environment.Tier) (queue, dlq string) {
 	base := suffixed(tier, string(n)+"-revalidate")
 	return base + ".fifo", base + "-dlq.fifo"
 }
 
-func (n Namespace) envSourceSyncScheduleGroupName(tier string) string {
+func (n Namespace) envSourceSyncScheduleGroupName(tier environment.Tier) string {
 	return suffixed(tier, n.CoreStackName())
 }
 
-func (n Namespace) envSourceSyncScheduleName(tier string) string {
+func (n Namespace) envSourceSyncScheduleName(tier environment.Tier) string {
 	return suffixed(tier, string(n)+"-env-sync")
 }
 

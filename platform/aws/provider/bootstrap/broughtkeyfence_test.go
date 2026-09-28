@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -14,23 +15,23 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsFeatureIsRequested(t 
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore())
 
-	if err := Run(ctx, apis, defaultNamespace, TierProduction, Request{VarsKey: broughtKeyARN}, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, Request{VarsKey: broughtKeyARN}, nil); err != nil {
 		t.Fatalf("Run without the feature: %v", err)
 	}
-	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, TierProduction, ""); got != want {
+	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, environment.TierProduction, ""); got != want {
 		t.Error("a run that never asked for the vars-key feature wrote the brought key into the core boundary")
 	}
 
-	if err := Run(ctx, apis, defaultNamespace, TierProduction, Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, environment.TierProduction, Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}, nil); err != nil {
 		t.Fatalf("Run with the feature: %v", err)
 	}
-	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, TierProduction, broughtKeyARN); got != want {
+	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, environment.TierProduction, broughtKeyARN); got != want {
 		t.Error("adding the vars-key feature over a brought key left the core boundary fenced to an alias the key never has")
 	}
 	if !strings.Contains(stacks.template(coreStackName), broughtKeyARN) {
 		t.Error("the core boundary does not name the brought key")
 	}
-	read, err := Read(ctx, stacks, defaultNamespace, TierProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}

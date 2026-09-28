@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -96,17 +97,17 @@ func valuesOf(value any) []string {
 
 type varsKeyStackCase struct {
 	name string
-	tier string
+	tier environment.Tier
 	body string
 	key  string
 }
 
 func varsKeyStackCases() []varsKeyStackCase {
 	var cases []varsKeyStackCase
-	for _, tier := range []string{TierProduction, TierPreview} {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		cases = append(cases,
-			varsKeyStackCase{"made/" + tier, tier, featureTemplate(provider.FeatureVarsKey, tier), "VarsKey.Arn"},
-			varsKeyStackCase{"brought/" + tier, tier, varsKeyFeature.template(featureInputs{
+			varsKeyStackCase{"made/" + string(tier), tier, featureTemplate(provider.FeatureVarsKey, tier), "VarsKey.Arn"},
+			varsKeyStackCase{"brought/" + string(tier), tier, varsKeyFeature.template(featureInputs{
 				ns: defaultNamespace, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
 			}).body, broughtKeyARN},
 		)
@@ -133,7 +134,7 @@ func TestEveryVarsKeyStackMakesAnEnvSourceSync(t *testing.T) {
 			want := map[string]string{
 				"OCEL_VARS_TABLE": paramVarsTableName,
 				"OCEL_VARS_KEY":   tc.key,
-				"OCEL_INFRA_TIER": tc.tier,
+				"OCEL_INFRA_TIER": string(tc.tier),
 			}
 			if got := fn.Properties.Environment.Variables; !maps.Equal(got, want) {
 				t.Errorf("EnvSourceSync environment = %v, want exactly %v: where the tier's values are, never a value itself", got, want)
@@ -216,7 +217,7 @@ func TestTheEnvSourceSyncRunsEveryMinuteThroughItsOwnInvokeRole(t *testing.T) {
 func TestNoTwoVarsKeyStacksInOneAccountNameTheSameSchedule(t *testing.T) {
 	seen := map[string]string{}
 	for _, ns := range []Namespace{defaultNamespace, Namespace("j-1-deploy-next"), Namespace("j-2-deploy-next")} {
-		for _, tier := range []string{TierProduction, TierPreview} {
+		for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 			body := varsKeyFeature.template(featureInputs{
 				ns: ns, tier: tier, code: fixturePayloads(), refs: fixtureRefs(), varsKey: broughtKeyARN,
 			}).body
@@ -257,7 +258,7 @@ func TestTheBootstrapCredentialConfiguresHowTheEnvSourceSyncIsInvokedAndNoOtherF
 		"lambda:PutFunctionEventInvokeConfig", "lambda:GetFunctionEventInvokeConfig",
 		"lambda:UpdateFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig",
 	}
-	for _, tier := range []string{TierProduction, TierPreview} {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		function := "arn:aws:lambda:us-east-1:111122223333:function:" + defaultNamespace.featureStackName(provider.FeatureVarsKey, tier) + "-EnvSourceSync-A1B2C3"
 		for _, action := range actions {
 			reached := false
@@ -331,7 +332,7 @@ func TestTheBootstrapCredentialReachesTheEnvSourceSyncScheduleThroughItsGroupAnd
 		}
 		return false
 	}
-	for _, tier := range []string{TierProduction, TierPreview} {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		group := defaultNamespace.envSourceSyncScheduleGroupName(tier)
 		groupARN := "arn:aws:scheduler:us-east-1:111122223333:schedule-group/" + group
 		for _, action := range []string{

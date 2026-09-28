@@ -49,9 +49,8 @@ type cloudFrontEdgeShape struct {
 }
 
 func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
-			edgeTier := environment.Tier(tier)
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			var tmpl cloudFrontEdgeShape
 			if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudFrontEdge, tier)), &tmpl); err != nil {
 				t.Fatalf("template is not valid YAML: %v", err)
@@ -64,7 +63,7 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if routes.Type != "AWS::CloudFront::KeyValueStore" {
 				t.Errorf("EdgeRoutes Type = %q, want AWS::CloudFront::KeyValueStore", routes.Type)
 			}
-			if got, want := routes.Properties.Name, defaultNamespace.EdgeRoutesStoreName(edgeTier); got != want {
+			if got, want := routes.Properties.Name, defaultNamespace.EdgeRoutesStoreName(tier); got != want {
 				t.Errorf("key value store name = %q, want %q", got, want)
 			}
 
@@ -75,7 +74,7 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if fn.Type != "AWS::CloudFront::Function" {
 				t.Errorf("EdgeResolver Type = %q, want AWS::CloudFront::Function", fn.Type)
 			}
-			if got, want := fn.Properties.Name, defaultNamespace.EdgeResolverName(edgeTier); got != want {
+			if got, want := fn.Properties.Name, defaultNamespace.EdgeResolverName(tier); got != want {
 				t.Errorf("resolver name = %q, want %q", got, want)
 			}
 			if !fn.Properties.AutoPublish {
@@ -99,7 +98,7 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if cache.Type != "AWS::CloudFront::CachePolicy" {
 				t.Errorf("EdgeCachePolicy Type = %q, want AWS::CloudFront::CachePolicy", cache.Type)
 			}
-			if got, want := cache.Properties.CachePolicyConfig.Name, defaultNamespace.edgeCachePolicyName(edgeTier); got != want {
+			if got, want := cache.Properties.CachePolicyConfig.Name, defaultNamespace.edgeCachePolicyName(tier); got != want {
 				t.Errorf("cache policy name = %q, want %q", got, want)
 			}
 
@@ -110,7 +109,7 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if headers.Type != "AWS::CloudFront::ResponseHeadersPolicy" {
 				t.Errorf("EdgeHeadersPolicy Type = %q, want AWS::CloudFront::ResponseHeadersPolicy", headers.Type)
 			}
-			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, defaultNamespace.edgeHeadersPolicyName(edgeTier); got != want {
+			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, defaultNamespace.edgeHeadersPolicyName(tier); got != want {
 				t.Errorf("response headers policy name = %q, want %q", got, want)
 			}
 			removed := []string{}
@@ -130,7 +129,7 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if dropper.Type != "AWS::CloudFront::Function" {
 				t.Errorf("EdgeEmptyBody Type = %q, want AWS::CloudFront::Function", dropper.Type)
 			}
-			if got, want := dropper.Properties.Name, defaultNamespace.EdgeEmptyBodyName(edgeTier); got != want {
+			if got, want := dropper.Properties.Name, defaultNamespace.EdgeEmptyBodyName(tier); got != want {
 				t.Errorf("empty-body function name = %q, want %q", got, want)
 			}
 			if !dropper.Properties.AutoPublish {
@@ -153,7 +152,7 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 			if access.Type != "AWS::CloudFront::OriginAccessControl" {
 				t.Errorf("EdgeAssetAccess Type = %q, want AWS::CloudFront::OriginAccessControl", access.Type)
 			}
-			if got, want := access.Properties.OriginAccessControlConfig.Name, defaultNamespace.edgeAssetAccessName(edgeTier); got != want {
+			if got, want := access.Properties.OriginAccessControlConfig.Name, defaultNamespace.edgeAssetAccessName(tier); got != want {
 				t.Errorf("origin access control name = %q, want %q", got, want)
 			}
 			if got := access.Properties.OriginAccessControlConfig.OriginAccessControlOriginType; got != "s3" {
@@ -180,8 +179,8 @@ func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *test
 }
 
 func TestTheCoreContainsNothingACloudFrontFrontNeeds(t *testing.T) {
-	for _, tier := range []string{TierProduction, TierPreview} {
-		t.Run(tier, func(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
 			body := coreStackTemplate(defaultNamespace, tier, "")
 			for _, resource := range templateResources(body) {
 				if strings.HasPrefix(resource.kind, "AWS::CloudFront::") {

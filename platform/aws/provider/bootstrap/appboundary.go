@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
 const outputAppBoundaryARN = "AppBoundaryArn"
 
-func appBoundaryARNFor(ns Namespace, tier string) string {
+func appBoundaryARNFor(ns Namespace, tier environment.Tier) string {
 	return "arn:aws:iam::" + "${aws:PrincipalAccount}" + ":policy/" + ns.AppBoundaryNameFor(tier)
 }
 
@@ -108,7 +109,7 @@ func yamlActions(actions []string) string {
 	return out.String()
 }
 
-func appBoundaryKeyStatement(ns Namespace, tier, broughtKey string) string {
+func appBoundaryKeyStatement(ns Namespace, tier environment.Tier, broughtKey string) string {
 	if broughtKey != "" {
 		return fmt.Sprintf(`          - Effect: Allow
             Action:
@@ -124,7 +125,7 @@ func appBoundaryKeyStatement(ns Namespace, tier, broughtKey string) string {
 `, yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(tier))
 }
 
-func appBoundaryResource(ns Namespace, tier, broughtKey string) string {
+func appBoundaryResource(ns Namespace, tier environment.Tier, broughtKey string) string {
 	return fmt.Sprintf(`  AppBoundary:
     Type: AWS::IAM::ManagedPolicy
     Metadata:

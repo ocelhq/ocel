@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 
 	"testing"
@@ -15,8 +16,8 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("same bytes same digest", func(t *testing.T) {
 		t.Parallel()
 
-		body := coreStackTemplate(defaultNamespace, TierProduction, "")
-		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, TierProduction, "")) {
+		body := coreStackTemplate(defaultNamespace, environment.TierProduction, "")
+		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, "")) {
 			t.Fatal("rendering the same template twice must produce the same digest")
 		}
 	})
@@ -24,7 +25,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("different bytes different digest", func(t *testing.T) {
 		t.Parallel()
 
-		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, TierProduction, "")) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, TierPreview, "")) {
+		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierProduction, "")) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, environment.TierPreview, "")) {
 			t.Fatal("two different template bodies must not share a digest")
 		}
 	})
@@ -41,7 +42,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("parameter values are not in the body", func(t *testing.T) {
 		t.Parallel()
 
-		in := featureInputs{ns: defaultNamespace, tier: TierProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
+		in := featureInputs{ns: defaultNamespace, tier: environment.TierProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
 		other := in
 		other.refs = stackRefs{assetBucket: "bucket-two", assetBucketARN: "arn:two"}
 		if cfn.TemplateDigest(imageOptimizationTemplate(in).body) != cfn.TemplateDigest(imageOptimizationTemplate(other).body) {

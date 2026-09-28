@@ -26,7 +26,7 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, p.ns, string(environment.TierPreview), bootstrap.FeatureAPIGatewayEdge)
+	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, p.ns, environment.TierPreview, bootstrap.FeatureAPIGatewayEdge)
 	if err != nil {
 		return "", err
 	}

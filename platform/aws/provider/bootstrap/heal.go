@@ -11,6 +11,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -37,8 +38,8 @@ var healAllowed = map[string]bool{
 }
 
 func isCoreStack(ns Namespace, stackName string) bool {
-	core, _ := ns.StackNameFor(TierProduction)
-	preview, _ := ns.StackNameFor(TierPreview)
+	core, _ := ns.StackNameFor(environment.TierProduction)
+	preview, _ := ns.StackNameFor(environment.TierPreview)
 	return stackName == core || stackName == preview
 }
 
@@ -128,7 +129,7 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, ns Namespace, tier string, req HealRequest, progress progress.Progress) (bool, error) {
+func Heal(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req HealRequest, progress progress.Progress) (bool, error) {
 	target, err := specFor(ns, tier)
 	if err != nil {
 		return false, err
@@ -177,7 +178,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, progress
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, tier string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Progress) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, progress progress.Progress) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)

@@ -23,7 +23,7 @@ func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testin
 		t.Fatalf("Apply(%s) = %v", provider.FeatureVarsKey, err)
 	}
 
-	name := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, string(tier))
+	name := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, tier)
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
 		t.Fatalf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}
@@ -34,7 +34,7 @@ func TestLiveTheVarsKeyMakesAnEnvSourceSyncAndRemovingTheTierRemovesIt(t *testin
 			t.Errorf("%s has no %s, so no scheduled env source is kept current", name, want)
 		}
 	}
-	group, err := defaultNamespace.StackNameFor(string(tier))
+	group, err := defaultNamespace.StackNameFor(tier)
 	if err != nil {
 		t.Fatal(err)
 	}

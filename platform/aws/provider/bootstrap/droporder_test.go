@@ -3,13 +3,15 @@ package bootstrap
 import (
 	"context"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 	stacks, apis := installedBootstrap(t)
-	edge, dropped := edgeStack(TierProduction), optStack(TierProduction)
+	edge, dropped := edgeStack(environment.TierProduction), optStack(environment.TierProduction)
 
-	if err := Run(context.Background(), apis, defaultNamespace, TierProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil); err != nil {
+	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

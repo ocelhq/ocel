@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
@@ -15,7 +16,7 @@ func TestRunStamps(t *testing.T) {
 
 		req := everything()
 		req.Writer = "1.9.0"
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, TierProduction, req, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		for _, name := range stacks.stacks() {
@@ -44,7 +45,7 @@ func TestRunStamps(t *testing.T) {
 		frontedBy(t, &fakeEdge{})
 
 		req := Request{Writer: "dev+cafebabe"}
-		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, TierProduction, req, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, environment.TierProduction, req, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		stamp := stacks.stampOf(coreStackName)

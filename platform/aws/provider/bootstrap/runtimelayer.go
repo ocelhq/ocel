@@ -11,6 +11,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -47,7 +48,7 @@ func runtimeLayerOutputKey(architecture, digest string) string {
 	return runtimeLayerResourceID(architecture) + shortRuntimeDigest(digest) + "Arn"
 }
 
-func runtimeLayerName(ns Namespace, tier, architecture, digest string) string {
+func runtimeLayerName(ns Namespace, tier environment.Tier, architecture, digest string) string {
 	return suffixed(tier, string(ns)+"-runtime") + "-" + runtimeArchTokens[architecture] + "-" + shortRuntimeDigest(digest)
 }
 
@@ -97,7 +98,7 @@ func placeRuntimeLayers(ctx context.Context, store ObjectStore, bucket string) (
 	return placed, nil
 }
 
-func runtimeLayerTemplateAt(ns Namespace, tier, bucket string) (string, error) {
+func runtimeLayerTemplateAt(ns Namespace, tier environment.Tier, bucket string) (string, error) {
 	placed, err := runtimeLayerPlacements(bucket)
 	if err != nil {
 		return "", err
@@ -105,7 +106,7 @@ func runtimeLayerTemplateAt(ns Namespace, tier, bucket string) (string, error) {
 	return runtimeLayerTemplate(ns, tier, placed), nil
 }
 
-func runtimeLayerTemplate(ns Namespace, tier string, code map[string]payloads.Placement) string {
+func runtimeLayerTemplate(ns Namespace, tier environment.Tier, code map[string]payloads.Placement) string {
 	var resources, outputs strings.Builder
 	for _, architecture := range runtimeArches() {
 		at := code[architecture]
@@ -135,7 +136,7 @@ Resources:
 %s`, runtimeStackDescription(tier), resources.String(), outputs.String())
 }
 
-func runtimeStackDescription(tier string) string {
+func runtimeStackDescription(tier environment.Tier) string {
 	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", tier)
 }
 
@@ -160,7 +161,7 @@ type RuntimeLayerRequest struct {
 	Writer         provider.WrittenBy
 }
 
-func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier string, req RuntimeLayerRequest, runProgress progress.Progress) (map[string]string, error) {
+func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier environment.Tier, req RuntimeLayerRequest, runProgress progress.Progress) (map[string]string, error) {
 	runProgress = ensureProgress(runProgress)
 	stackName := ns.runtimeStackName(tier)
 	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, tier)
@@ -199,7 +200,7 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, tier stri
 	return latest, nil
 }
 
-func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (map[string]string, error) {
+func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (map[string]string, error) {
 	out, err := cfn.StackOutputs(ctx, api, ns.runtimeStackName(tier))
 	if err != nil {
 		return nil, err
@@ -264,7 +265,7 @@ func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) prov
 	return planDelete(ctx, stacks, group, body)
 }
 
-func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier string, progress progress.Progress) error {
+func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, progress progress.Progress) error {
 	stackName := ns.runtimeStackName(tier)
 	stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 	if err != nil || stack == nil {

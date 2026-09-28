@@ -10,6 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -37,7 +38,7 @@ type stackRefs struct {
 
 type featureInputs struct {
 	ns             Namespace
-	tier           string
+	tier           environment.Tier
 	artifactBucket string
 	code           stackPayloads
 	refs           stackRefs
@@ -52,7 +53,7 @@ type featureStack struct {
 
 type stepDeps struct {
 	ns       Namespace
-	tier     string
+	tier     environment.Tier
 	ssm      SSMAPI
 	iam      IAMAPI
 	progress progress.Progress
@@ -68,9 +69,9 @@ type feature struct {
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
 	after      func(context.Context, stepDeps) error
-	afterPlan  func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error)
+	afterPlan  func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 	drop       func(context.Context, stepDeps) error
-	dropPlan   func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error)
+	dropPlan   func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
 }
 
 func (f feature) planned(in featureInputs) featureStack {
@@ -100,7 +101,7 @@ func (f feature) edgeKind() (edge.Kind, bool) {
 	return "", false
 }
 
-func (f feature) stackName(ns Namespace, tier string) string {
+func (f feature) stackName(ns Namespace, tier environment.Tier) string {
 	return ns.featureStackName(f.name, tier)
 }
 

@@ -188,7 +188,7 @@ func (d *deployments) resolve(ctx context.Context, tier environment.Tier) (boots
 	if known && d.now().Sub(memo.at) < deploymentsTTL {
 		return memo.deployed, nil
 	}
-	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(tier))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, tier)
 	if err != nil {
 		return bootstrap.Deployed{}, err
 	}

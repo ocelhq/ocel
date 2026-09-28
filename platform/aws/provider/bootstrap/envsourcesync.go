@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -33,7 +34,7 @@ func ensureEnvSourceSyncPayload(ctx context.Context, store ObjectStore, bucket s
 	return payloads.Place(ctx, store, bucket, envSourceSyncKeyPrefix, envSourceSyncLabel, payloads.EnvSourceSync())
 }
 
-func envSourceSyncResources(ns Namespace, code payloads.Placement, tier, key string) string {
+func envSourceSyncResources(ns Namespace, code payloads.Placement, tier environment.Tier, key string) string {
 	return fmt.Sprintf(`  EnvSourceSyncRole:
     Type: AWS::IAM::Role
     Properties:

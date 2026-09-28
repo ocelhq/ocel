@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 
@@ -38,18 +39,18 @@ type TeardownAPIs struct {
 	Buckets cfn.BucketEmptierAPI
 }
 
-func SiblingTierOf(tier string) (string, error) {
+func SiblingTierOf(tier environment.Tier) (environment.Tier, error) {
 	switch tier {
-	case TierProduction:
-		return TierPreview, nil
-	case TierPreview:
-		return TierProduction, nil
+	case environment.TierProduction:
+		return environment.TierPreview, nil
+	case environment.TierPreview:
+		return environment.TierProduction, nil
 	default:
 		return "", fmt.Errorf("bootstrap: unknown tier %q", tier)
 	}
 }
 
-func TierParamNames(ns Namespace, tier string) ([]string, error) {
+func TierParamNames(ns Namespace, tier environment.Tier) ([]string, error) {
 	secret, err := ns.OriginSecretParamFor(tier)
 	if err != nil {
 		return nil, err
@@ -65,7 +66,7 @@ func TierParamNames(ns Namespace, tier string) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier string) (bool, error) {
+func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (bool, error) {
 	sibling, err := SiblingTierOf(tier)
 	if err != nil {
 		return false, err
@@ -81,7 +82,7 @@ func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespac
 	return out != nil, nil
 }
 
-func featureStackNames(ns Namespace, names []string, tier string) []string {
+func featureStackNames(ns Namespace, names []string, tier environment.Tier) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
 		out = append(out, ns.FeatureStackName(name, tier))
@@ -101,7 +102,7 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier string, names []string, progress progress.Progress) error {
+func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, tier environment.Tier, names []string, progress progress.Progress) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
@@ -123,7 +124,7 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 	return nil
 }
 
-func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier string, progress progress.Progress) error {
+func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environment.Tier, progress progress.Progress) error {
 	progress = ensureProgress(progress)
 
 	stackName, err := ns.StackNameFor(tier)
@@ -218,7 +219,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier string,
 	return nil
 }
 
-func siblingName(tier string) string {
+func siblingName(tier environment.Tier) environment.Tier {
 	sibling, err := SiblingTierOf(tier)
 	if err != nil {
 		return ""

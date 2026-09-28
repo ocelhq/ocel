@@ -16,7 +16,7 @@ import (
 )
 
 func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription) provider.BootstrapDescription {
-	coreStack, err := ns.StackNameFor(string(described.Tier))
+	coreStack, err := ns.StackNameFor(described.Tier)
 	if err != nil {
 		return described
 	}
@@ -25,7 +25,7 @@ func WithDefaultStackNames(ns Namespace, described provider.BootstrapDescription
 		if !ok {
 			return coreStack
 		}
-		return f.stackName(ns, string(described.Tier))
+		return f.stackName(ns, described.Tier)
 	})
 }
 

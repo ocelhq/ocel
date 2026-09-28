@@ -1,6 +1,7 @@
 package cloudfront
 
 import (
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
@@ -8,5 +9,5 @@ import (
 var (
 	defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
 
-	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.TierProduction)
+	coreStackName, _ = defaultNamespace.StackNameFor(environment.TierProduction)
 )

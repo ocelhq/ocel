@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 type parsedPolicy struct {
@@ -191,7 +193,7 @@ func boundaryScopes(condition map[string]any) bool {
 		}
 		arns = append(arns, arn)
 	}
-	return slices.Equal(arns, []string{appBoundaryARNFor(defaultNamespace, TierProduction), appBoundaryARNFor(defaultNamespace, TierPreview)})
+	return slices.Equal(arns, []string{appBoundaryARNFor(defaultNamespace, environment.TierProduction), appBoundaryARNFor(defaultNamespace, environment.TierPreview)})
 }
 
 func conditionScopes(actions []string, condition map[string]any) bool {

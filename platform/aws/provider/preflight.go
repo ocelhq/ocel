@@ -47,7 +47,7 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPrefl
 	if params.EdgeCredentialsErr != nil {
 		return nil
 	}
-	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Deploy.Tier)); notice != "" {
+	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), pre.Deploy.Tier); notice != "" {
 		pre.Progress.Warn(notice)
 	}
 	return nil
@@ -69,7 +69,7 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 	if err != nil {
 		return err
 	}
-	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Deploy.Tier)); notice != "" {
+	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), pre.Deploy.Tier); notice != "" {
 		pre.Progress.Warn(notice)
 	}
 	return nil
@@ -87,7 +87,7 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 	published, err := bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
 		CFN:   cloudformation.NewFromConfig(p.aws),
 		Store: s3.NewFromConfig(p.aws),
-	}, p.namespace, string(tier), bootstrap.RuntimeLayerRequest{
+	}, p.namespace, tier, bootstrap.RuntimeLayerRequest{
 		ArtifactBucket: deployed.ArtifactBucket,
 		Writer:         pre.WrittenBy,
 	}, pre.Progress)

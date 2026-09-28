@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -45,7 +46,7 @@ func ensureRevalidatorPayload(ctx context.Context, store ObjectStore, bucket str
 	return payloads.Place(ctx, store, bucket, revalidatorKeyPrefix, revalidatorLabel, payloads.Revalidator())
 }
 
-func revalidateQueueResources(ns Namespace, tier string) string {
+func revalidateQueueResources(ns Namespace, tier environment.Tier) string {
 	queue, dlq := ns.revalidateQueueNames(tier)
 	return fmt.Sprintf(`  RevalidateDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -74,7 +75,7 @@ func revalidateQueueResources(ns Namespace, tier string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(ns Namespace, tier string, code payloads.Placement) string {
+func revalidatorResources(ns Namespace, tier environment.Tier, code payloads.Placement) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
