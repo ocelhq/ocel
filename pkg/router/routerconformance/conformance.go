@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -12,6 +13,8 @@ import (
 )
 
 const App = "web"
+
+const raceChecks = 16
 
 type Fixture struct {
 	Router       router.Router
@@ -105,40 +108,16 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("two promotes racing on one pointer leave it serving the release the ledger names", func(t *testing.T) {
-		ctx := context.Background()
-		fixture := suite.New(t)
-		stack := reconciled(t, fixture)
-		flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
-		racing, err := fixture.Router.Open(stack.State())
-		if err != nil {
-			t.Fatalf("Open a second stack onto the same state: %v", err)
-		}
-
-		pointed := &standInLedger{active: "conformance-b1"}
-		later := stage("conformance-b3", record(App, "b3"))
-		later.Pointer = pointer
-		earlier := stage("conformance-b2", record(App, "b2"))
-		earlier.Pointer = pointer
-		var raced error
-		checked := false
-		earlier.StillActive = func(ctx context.Context) error {
-			if !checked {
-				checked = true
-				raced = pointed.promote(ctx, racing, later, nil)
-				return nil
+		for check := 1; check <= raceChecks; check++ {
+			reached := false
+			t.Run(fmt.Sprintf("the racing promote lands after StillActive answers call %d", check), func(t *testing.T) {
+				reached = racesAfterCheck(t, suite.New(t), pointer, record, check)
+			})
+			if !reached {
+				return
 			}
-			return pointed.stillActive(earlier.Promotion.PromotionID)(ctx)
 		}
-
-		flipped := pointed.promote(ctx, stack, earlier, earlier.StillActive)
-		if !checked {
-			t.Fatalf("Flip never asked StillActive (it returned %v), so no promote could race it", flipped)
-		}
-		builds := map[string]string{"conformance-b1": "b1", "conformance-b2": "b2", "conformance-b3": "b3"}
-		if served, named := fixture.Serving(pointer), builds[pointed.active]; served != named {
-			t.Errorf("%s serves %q while the ledger names %s (%s): a promote that checked StillActive before another promoted and flipped must not land over it (the flip it raced returned %v, its own flip %v)",
-				pointer, served, pointed.active, named, raced, flipped)
-		}
+		t.Fatalf("Flip asked StillActive more than %d times, and the suite races a promote after each one", raceChecks)
 	})
 
 	t.Run("a flip the data plane refuses is unserved and leaves the release it served", func(t *testing.T) {
@@ -250,6 +229,49 @@ func runPreviews(t *testing.T, suite Suite, record func(app, build string) route
 		}
 		removesPointer(t, stack, pointer)
 	})
+}
+
+func racesAfterCheck(t *testing.T, fixture Fixture, pointer string, record func(app, build string) router.DeploymentRecord, check int) bool {
+	t.Helper()
+	ctx := context.Background()
+	stack := reconciled(t, fixture)
+	flips(t, stack, pointer, "conformance-b1", record(App, "b1"))
+	racing, err := fixture.Router.Open(stack.State())
+	if err != nil {
+		t.Fatalf("Open a second stack onto the same state: %v", err)
+	}
+
+	ledger := &standInLedger{active: "conformance-b1"}
+	later := stage("conformance-b3", record(App, "b3"))
+	later.Pointer = pointer
+	earlier := stage("conformance-b2", record(App, "b2"))
+	earlier.Pointer = pointer
+	var raced error
+	checks := 0
+	earlier.StillActive = func(ctx context.Context) error {
+		checks++
+		if err := ledger.stillActive(earlier.Promotion.PromotionID)(ctx); err != nil {
+			return err
+		}
+		if checks == check {
+			raced = ledger.promote(ctx, racing, later, nil)
+		}
+		return nil
+	}
+
+	flipped := ledger.promote(ctx, stack, earlier, earlier.StillActive)
+	if checks < check {
+		if check == 1 {
+			t.Fatalf("Flip never asked StillActive (it returned %v), so no promote could race it", flipped)
+		}
+		t.Skipf("Flip asked StillActive %d times, so no promote races it after call %d", checks, check)
+	}
+	builds := map[string]string{"conformance-b1": "b1", "conformance-b2": "b2", "conformance-b3": "b3"}
+	if served, named := fixture.Serving(pointer), builds[ledger.active]; served != named {
+		t.Errorf("%s serves %q while the ledger names %s (%s): a promote whose StillActive answered before another promoted and flipped must not land over it (the flip it raced returned %v, its own flip %v)",
+			pointer, served, ledger.active, named, raced, flipped)
+	}
+	return true
 }
 
 func functionRecord(app, build string) router.DeploymentRecord {

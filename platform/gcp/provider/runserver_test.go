@@ -91,6 +91,10 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.patchTries++
+	if desired.Etag != "" && desired.Etag != s.service.Etag {
+		conflicted(w, "the service's etag is "+s.service.Etag+", not the "+desired.Etag+" this write was based on")
+		return
+	}
 	if s.patchConflicts > 0 {
 		s.patchConflicts--
 		conflicted(w, "the service was changed under this release")

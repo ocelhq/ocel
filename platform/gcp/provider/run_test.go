@@ -235,24 +235,27 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 	second := first
 	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, second)
+	third := first
+	third.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:three"
+	_, three := released(t, server, third)
 
 	displaced := errors.New("another promotion displaced this one")
-	asked := 0
-	stillActive := func(context.Context) error {
-		asked++
-		if asked == 1 {
-			server.mu.Lock()
-			server.patchConflicts = 1
-			server.mu.Unlock()
-			return nil
+	raced := false
+	stillActive := func(ctx context.Context) error {
+		if raced {
+			return displaced
 		}
-		return displaced
+		raced = true
+		if err := p.Pin(ctx, first.service, three, nil); err != nil {
+			t.Fatalf("the racing Pin(%s) = %v", three, err)
+		}
+		return nil
 	}
 	if err := p.Pin(context.Background(), first.service, two, stillActive); !errors.Is(err, displaced) {
-		t.Fatalf("Pin(%s) over a service that moved while its promotion was displaced = %v, want that displacement", two, err)
+		t.Fatalf("Pin(%s) raced by a pin that landed after its promotion was checked = %v, want that displacement", two, err)
 	}
-	if service := server.serving(); !servedBy(service.Traffic, one) {
-		t.Errorf("the service serves %+v, want all of it still on %s: a pin reads the service again after a conflicting write, and asks again whether its promotion is still active before it writes", service.Traffic, one)
+	if service := server.serving(); !servedBy(service.Traffic, three) {
+		t.Errorf("the service serves %+v, want all of it on %s, the pin that raced it: a pin writes on the etag it read, so a pin that landed after that read makes it read again and ask again whether its promotion is still active", service.Traffic, three)
 	}
 }
 
