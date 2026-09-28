@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
 import {
   boxLane,
+  heldProbe,
   hostnamesWithoutUrl,
   projectListing,
   recordFile,
@@ -78,6 +79,14 @@ describe("slugsOf", () => {
   it("refuses to read a box with no records tier as a box storing nothing", () => {
     expect(() => slugsOf("no-records-tier\n")).toThrow(
       /\/var\/lib\/ocel\/production\/records does not exist/,
+    );
+  });
+});
+
+describe("heldProbe", () => {
+  it("names what a path ocel should have removed still holds", () => {
+    expect(heldProbe("/var/lib/ocel")).toBe(
+      "sudo test -e '/var/lib/ocel' && echo \"/var/lib/ocel$(sudo find '/var/lib/ocel' -mindepth 1 -maxdepth 3 -printf ' %P' 2>/dev/null | head -c 400)\"",
     );
   });
 });
