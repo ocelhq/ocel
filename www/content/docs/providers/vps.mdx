@@ -32,7 +32,7 @@ Bootstrap creates the `ocel-deploy` login every later deploy acts as.
 
 ## Bootstrap
 
-`ocel bootstrap <class>` prepares the machine once per class (`production`, `preview`).
+`ocel bootstrap <tier>` prepares the machine once per tier (`production`, `preview`).
 Running it again changes only what has drifted, and `ocel destroy` removes it all.
 If something else already listens on port 80 or 443, bootstrap names it and stops before it
 changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
@@ -40,18 +40,18 @@ changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 | What | Why |
 | --- | --- |
 | `ocel-deploy` login, `/var/lib/ocel/.ssh/authorized_keys` | Every deploy logs in as this account. The keys are copied from the login you bootstrap with, or taken from `deployKey`. |
-| `/etc/ocel/<class>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
-| `/var/lib/ocel/<class>/records`, `/usr/local/lib/ocel/records` | What is deployed, per class. |
+| `/etc/ocel/<tier>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
+| `/var/lib/ocel/<tier>/records`, `/usr/local/lib/ocel/records` | What is deployed, per tier. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
 | Docker | Installed once with Docker's install script, pinned by sha256. A Docker 28.0 or later that `docker.service` already runs is used as it is. Either way, upgrading it is yours. Bootstrap refuses a Docker older than 28.0, the snap package, a rootless Docker, and a masked `docker.service`, and says what to change. Docker stays after `ocel destroy`, and so do its containers. |
-| `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and class set it. A deploy whose `proxy` option disagrees is refused. |
+| `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and tier set it. A deploy whose `proxy` option disagrees is refused. |
 | `ocel-proxy` container, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It gets a certificate for a hostname the box serves the first time a client connects to it. Left out [behind your own proxy](#behind-your-own-proxy). |
 | `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it, and tells the proxy which hostnames it may get a certificate for. Behind your own proxy it is published on `127.0.0.1:8480`. If a prune removes it while it is stopped, the next deploy recreates it, with the `ocel` network if that went too, and `ocel doctor` says when. |
 | `/var/lib/ocel/routing/table.json` | The routing table: which project claims each hostname, where each app is served from, and the certificates you pin. Deploys rewrite it and the proxy's config together. |
 | `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. A certificate for a hostname the box stopped serving stays until it has been expired for 14 days, when Caddy removes it. If Caddy still has that certificate in memory when it removes it, the next TLS connection for the hostname can get a new certificate without the switchboard's confirmation. A restart of `ocel-proxy` clears that memory. Left out behind your own proxy. |
 | `/etc/ocel/certs` | Certificates you pin yourself. The proxy serves a pinned certificate for every hostname it covers, ahead of any certificate it got itself, and gets none of its own for those hostnames. Left out behind your own proxy. `ocel destroy` removes the directory only if it is empty. |
 | `ocel-live.socket`, `ocel-live.service` | Serve each app container its secret values over a unix socket. |
-| `ocel-envsourcesync@<class>.service` | Once a minute, copies each env source a deploy registered into the class's values. It runs as root, and may write `/var/lib/ocel/<class>/records` and nothing else. |
+| `ocel-envsourcesync@<tier>.service` | Once a minute, copies each env source a deploy registered into the tier's values. It runs as root, and may write `/var/lib/ocel/<tier>/records` and nothing else. |
 | `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
 
 ## Behind your own proxy
@@ -193,7 +193,7 @@ A [transform](/docs/transforms#on-a-vps) changes what runs: the image, its argum
 memory, where the volume lives.
 
 **Backups.** The box dumps every postgres once a day and keeps the newest seven under
-`/var/lib/ocel/<class>/backups/<container>/`. Take one now, or read one back, on the box:
+`/var/lib/ocel/<tier>/backups/<container>/`. Take one now, or read one back, on the box:
 
 ```bash
 sudo /usr/local/lib/ocel/backups production dump <container> main

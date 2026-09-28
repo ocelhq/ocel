@@ -110,7 +110,7 @@ import { defineTransform } from "@ocel/transforms";
 export default defineTransform([
   { tags: { "acme:cost-center": "platform" } },
   {
-    if: ({ envClass }) => envClass === "production",
+    if: ({ envTier }) => envTier === "production",
     aws: {
       postgres: {
         cluster: { serverlessv2ScalingConfiguration: { minCapacity: 2, maxCapacity: 16 } },

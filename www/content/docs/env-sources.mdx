@@ -254,7 +254,7 @@ the two that sign in:
   you run `ocel env sync`.
 - the env source sync's service account, which reads the source once a minute between
   deploys. Its id is a hash, so find its email by its display name, which names the
-  namespace (`ocel` unless you set `OCEL_NAMESPACE`) and the class:
+  namespace (`ocel` unless you set `OCEL_NAMESPACE`) and the tier:
 
 ```bash
 gcloud iam service-accounts list --project my-project \
