@@ -14,18 +14,21 @@ usage() {
 usage: scripts/incus.sh <command> [args]
 
   fetch                  pull the VM image into the local store once
-  create <name>          create VM, inject key via cloud-init, wait for SSH,
-                         snapshot 'clean', print info lines
+  create [--from <image>] <name>
+                         create VM (from a baked image), inject key via
+                         cloud-init, wait for SSH, snapshot 'clean', print
+                         info lines
   restore <name>         restore the 'clean' snapshot, wait for SSH
   info <name>            print OCEL_INCUS_{NAME,ADDR,USER,KEY}= lines (eval-able)
   ssh <name> [cmd...]    SSH into the VM
   destroy <name>         delete the VM (incus delete -f), idempotent
-  bake <name> -- cmd...  create, run cmd on the VM over SSH, then stop it
-                         ready to be cloned
-  clone <base> <name>    copy a baked VM, start it, wait for SSH, print info
-  run [--from <base>] <name> -- cmd...
-                         create (or clone <base>), run cmd with OCEL_INCUS_*
-                         exported, destroy on exit no matter what
+  bake <image> -- cmd... create a VM, run cmd on it over SSH, publish it as
+                         the local image <image> and delete the VM
+  save <image> <dir>     export the local image <image> into <dir>
+  load <dir> <image>     import the image saved into <dir> as <image>
+  run [--from <image>] <name> -- cmd...
+                         create (from a baked image), run cmd with
+                         OCEL_INCUS_* exported, destroy on exit no matter what
 EOF
     exit 2
 }
@@ -125,13 +128,25 @@ cmd_fetch() {
     incus image copy "$IMAGE" local: --vm
 }
 
+sshd_packages() {
+    [ "$1" = "$IMAGE" ] || return 0
+    printf 'packages:\n  - openssh-server\n'
+}
+
 cmd_create() {
+    local image=$IMAGE
+    if [ "${1:-}" = "--from" ]; then
+        image=${2:-}
+        [ -n "$image" ] || usage
+        shift 2
+    fi
+    [ $# -eq 1 ] || usage
     local name=$1
     ensure_key
     trap 'discard_half_made "'"$name"'" $?' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    incus init "$IMAGE" "$name" --vm \
+    incus init "$image" "$name" --vm \
         -c limits.cpu=2 \
         -c limits.memory=2GiB \
         -d root,size=20GiB
@@ -141,8 +156,7 @@ ssh_authorized_keys:
   - $(cat "$KEY.pub")
 ssh_pwauth: false
 $(apt_mirror_config)
-packages:
-  - openssh-server
+$(sshd_packages "$image")
 runcmd:
   - [ usermod, -p, '*', $SSH_USER ]
 EOF
@@ -169,42 +183,34 @@ discard_half_made() {
 }
 
 cmd_bake() {
-    local name=$1
+    local image=$1 name=$1-bake
     shift
     [ "${1:-}" = "--" ] || usage
     shift
     [ $# -gt 0 ] || usage
-    trap 'discard_half_made "'"$name"'" $?' EXIT
+    trap 'incus delete -f "'"$name"'" 2>/dev/null || true' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
     cmd_create "$name" > /dev/null
-    trap 'discard_half_made "'"$name"'" $?' EXIT
+    trap 'incus delete -f "'"$name"'" 2>/dev/null || true' EXIT
     cmd_ssh "$name" "$@"
-    cmd_ssh "$name" 'sudo cloud-init clean --logs --configs network && sudo truncate -s 0 /etc/machine-id && sudo rm -f /var/lib/dbus/machine-id'
+    cmd_ssh "$name" 'sudo cloud-init clean --logs --configs network && sudo truncate -s 0 /etc/machine-id && sudo rm -f /var/lib/dbus/machine-id && rm -f ~/.ssh/authorized_keys'
     incus stop "$name"
-    trap - EXIT
+    incus publish "$name" --alias "$image" --compression none
 }
 
-cmd_clone() {
-    local base=$1 name=$2
-    ensure_key
-    trap 'discard_half_made "'"$name"'" $?' EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-    incus copy "$base" "$name"
-    incus start "$name"
-    wait_ssh "$name" > /dev/null
-    cloud_init_finished "$name"
-    local addr
-    addr=$(wait_ssh "$name")
-    trap - EXIT
-    print_info "$name" "$addr"
+cmd_save() {
+    local image=$1 dir=$2
+    mkdir -p "$dir"
+    incus image export "$image" "$dir/image"
 }
 
-cloud_init_finished() {
-    local name=$1 rc=0
-    incus exec "$name" -- cloud-init status --wait > /dev/null || rc=$?
-    [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || die "$name: cloud-init ended with status $rc"
+cmd_load() {
+    local dir=$1 image=$2
+    local meta root="$dir/image.root"
+    meta=$(find "$dir" -maxdepth 1 -name 'image*' ! -name image.root -print -quit)
+    [ -n "$meta" ] && [ -e "$root" ] || die "$dir holds no saved VM image"
+    incus image import "$meta" "$root" --alias "$image"
 }
 
 cmd_restore() {
@@ -241,10 +247,10 @@ cmd_destroy() {
 }
 
 cmd_run() {
-    local base=""
+    local from=()
     if [ "${1:-}" = "--from" ]; then
-        base=${2:-}
-        [ -n "$base" ] || usage
+        [ -n "${2:-}" ] || usage
+        from=(--from "$2")
         shift 2
     fi
     local name=$1
@@ -256,11 +262,7 @@ cmd_run() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     local addr
-    if [ -n "$base" ]; then
-        addr=$(cmd_clone "$base" "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
-    else
-        addr=$(cmd_create "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
-    fi
+    addr=$(cmd_create "${from[@]}" "$name" | sed -n 's/^OCEL_INCUS_ADDR=//p')
     [ -n "$addr" ] || die "$name: created without an address, so there is nothing to hand the command"
     OCEL_INCUS_NAME=$name \
         OCEL_INCUS_ADDR=$addr \
@@ -274,9 +276,10 @@ cmd=$1
 shift
 case "$cmd" in
 fetch) [ $# -eq 0 ] || usage; cmd_fetch ;;
-create) [ $# -eq 1 ] || usage; cmd_create "$@" ;;
-bake) cmd_bake "$@" ;;
-clone) [ $# -eq 2 ] || usage; cmd_clone "$@" ;;
+create) cmd_create "$@" ;;
+bake) [ $# -ge 1 ] || usage; cmd_bake "$@" ;;
+save) [ $# -eq 2 ] || usage; cmd_save "$@" ;;
+load) [ $# -eq 2 ] || usage; cmd_load "$@" ;;
 restore) cmd_restore "$@" ;;
 info) cmd_info "$@" ;;
 ssh) cmd_ssh "$@" ;;
