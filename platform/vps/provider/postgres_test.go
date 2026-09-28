@@ -413,7 +413,11 @@ func TestAPostgresPasswordIsBoundToItsProjectTierStackAndResourceUnderResources(
 	}
 	ref := provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: infra}
 
-	opened, err := live.Open(key, vps.NewPostgresSecretAssociatedData(ref, "main"), sealed)
+	bound, err := vps.NewPostgresSecretAssociatedData(ref, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := live.Open(key, bound, sealed)
 	if err != nil || string(opened) != "s3cr3t-postgres" {
 		t.Fatalf("Open() = %q, %v, want the password sealed at shop/production/prod--infra/resources/main/password/ to open: every box's Postgres password is bound to those bytes", opened, err)
 	}

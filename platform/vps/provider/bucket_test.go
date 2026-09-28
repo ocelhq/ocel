@@ -344,7 +344,15 @@ func TestTheAssociatedDataTheRuntimeOpensTheStoreSecretUnderIsTheOneTheDeploySea
 	if manifest.Store == nil {
 		t.Fatal("the app binding a bucket was handed no store")
 	}
-	if opened, want := vars.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env), vps.NewStoreSecretAssociatedData(provisioned.Ref); !slices.Equal(opened, want) {
+	opened, err := vars.NewStoreSecretAssociatedData(manifest.Slug, environment.Tier(manifest.Tier), manifest.Store.Env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := vps.NewStoreSecretAssociatedData(provisioned.Ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(opened, want) {
 		t.Errorf("the runtime would open the store's credential at %+v and the deploy sealed it at %+v:"+
 			" a resource is provisioned on its environment's infra stack and an app runs on its own, so associated data"+
 			" naming the asking stack opens nothing", opened, want)
