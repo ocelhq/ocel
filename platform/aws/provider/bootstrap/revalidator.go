@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -117,7 +118,7 @@ func revalidatorResources(ns Namespace, tier environment.Tier, code payloads.Pla
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/ocel:env-tier': '%s'
+                    'aws:ResourceTag/%s': '%s'
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
@@ -147,7 +148,7 @@ func revalidatorResources(ns Namespace, tier environment.Tier, code payloads.Pla
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), tier, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), naming.EnvTierTagKey, tier, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)

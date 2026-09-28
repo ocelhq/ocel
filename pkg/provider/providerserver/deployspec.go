@@ -201,11 +201,11 @@ func appTags(p provider.DeploySpec, entry provider.AppEntry) map[string]string {
 
 func infraTags(p provider.DeploySpec) map[string]string {
 	tags := map[string]string{
-		"ocel:managed-by": "ocel",
-		"ocel:project":    naming.Sanitize(p.Slug),
-		"ocel:env":        p.Env,
-		"ocel:env-tier":   string(p.Tier),
-		"ocel:stack":      p.Infra.String(),
+		"ocel:managed-by":    "ocel",
+		"ocel:project":       naming.Sanitize(p.Slug),
+		"ocel:env":           p.Env,
+		naming.EnvTierTagKey: string(p.Tier),
+		"ocel:stack":         p.Infra.String(),
 	}
 	return tags
 }

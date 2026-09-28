@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -109,7 +110,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
-                    'aws:ResourceTag/ocel:env-tier': '%s'
+                    'aws:ResourceTag/%s': '%s'
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref %s
@@ -123,7 +124,7 @@ func edgeUserResource(ns Namespace, userName string, tier environment.Tier, opti
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, tier, userName, ns.PolicyName("edge-cache"),
 		paramAssetBucketARN, paramAssetBucketARN,
-		paramStateTableARN, paramStateTableARN, StateTableIndexName, tier,
+		paramStateTableARN, paramStateTableARN, StateTableIndexName, naming.EnvTierTagKey, tier,
 		paramRevalidateQueueARN, invoke)
 }
 
