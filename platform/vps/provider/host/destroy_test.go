@@ -217,6 +217,28 @@ func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 	}
 }
 
+func TestTheLastDestroyTakesTheLockDeploysLoadImagesUnderBeforeTheStateRoot(t *testing.T) {
+	t.Parallel()
+
+	tier := environment.TierProduction
+	loaded := Item{Kind: KindFile, Name: imagesLock, Mode: 0o644, Owner: stateOwner}
+	box := machine(map[environment.Tier][]Item{tier: append(bootstrapped(t, tier), loaded)})
+
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), tier, nil); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+	taken := box.taking()
+	lock := slices.IndexFunc(taken, func(command string) bool { return strings.HasSuffix(command, quoted(imagesLock)) })
+	if lock < 0 {
+		t.Fatalf("Remove() left %s, which every deploy's image load creates, so %s outlives the last tier:\n%s",
+			imagesLock, stateRoot, strings.Join(taken, "\n"))
+	}
+	root := slices.IndexFunc(taken, func(command string) bool { return strings.HasPrefix(command, "rmdir "+quoted(stateRoot)+" ") })
+	if root < lock {
+		t.Errorf("Remove() tried %s at command %d, before the lock inside it at %d", stateRoot, root, lock)
+	}
+}
+
 func gone(taken []string, name string) bool {
 	for _, command := range taken {
 		if strings.HasSuffix(strings.TrimSuffix(command, " || true"), quoted(name)) {
