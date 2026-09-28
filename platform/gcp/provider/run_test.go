@@ -189,7 +189,7 @@ func released(t *testing.T, server *runServer, s serving) (string, string) {
 	return deployed.url, deployed.revision
 }
 
-func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.T) {
+func TestAReleaseReportsTheRevisionItCreatedSoAPromotionCanPinIt(t *testing.T) {
 	server := &runServer{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
@@ -199,14 +199,41 @@ func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.
 	_, two := released(t, server, second)
 
 	if one == "" || two == "" {
-		t.Fatalf("a release created revisions %q and %q, want each named: a rollback pins the revision its promotion recorded", one, two)
+		t.Fatalf("a release created revisions %q and %q, want each named: a promotion pins the revision its build recorded", one, two)
 	}
 	if one == two {
 		t.Errorf("both releases created revision %q, want a revision apiece: a rollback to the first would pin what the second serves", one)
 	}
-	service := server.serving()
-	if !servedBy(service.Traffic, two) {
-		t.Errorf("the service serves %+v, want all of it on %s, the revision the second release reported", service.Traffic, two)
+}
+
+func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	_, one := released(t, server, first)
+	if err := server.open(t).Pin(context.Background(), first.service, one); err != nil {
+		t.Fatalf("Pin(%s) = %v", one, err)
+	}
+
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, second)
+
+	if service := server.serving(); !servedBy(service.Traffic, one) {
+		t.Errorf("the service serves %+v after the second release, want all of it still on %s: only a promotion moves traffic, and the ledger has promoted nothing new", service.Traffic, one)
+	}
+}
+
+func TestAReleaseOntoAServiceThatServesItsLatestRevisionKeepsServingThatRevision(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	_, one := released(t, server, first)
+
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, second)
+
+	if service := server.serving(); !servedBy(service.Traffic, one) {
+		t.Errorf("the service serves %+v after the second release, want all of it on %s, the revision it served: a service that follows its latest revision hands traffic to whatever a release creates", service.Traffic, one)
 	}
 }
 
@@ -269,10 +296,6 @@ func TestAReleaseOntoADeployedServiceNeverHandsTrafficBackToTheLatestRevision(t 
 			t.Errorf("a patch allocated traffic by %q, want it by the name of a revision", patched.Traffic[0].Type)
 		}
 	}
-	service := server.serving()
-	if !servedBy(service.Traffic, revisionName(service.LatestReadyRevision)) {
-		t.Errorf("the service serves %+v, want all of it on the revision the second release created", service.Traffic)
-	}
 }
 
 func TestPinningTrafficLeavesWhoMayReachTheServiceAsTheReleaseSetIt(t *testing.T) {
@@ -317,9 +340,6 @@ func TestAServiceChangedUnderAReleaseIsReadAgainAndPatchedAgain(t *testing.T) {
 	released(t, server, again)
 
 	service := server.serving()
-	if !servedBy(service.Traffic, revisionName(service.LatestReadyRevision)) {
-		t.Errorf("the service serves %+v after a patch a concurrent write refused, want the release it asked for", service.Traffic)
-	}
 	if got := service.Template.Containers[0].Image; !strings.HasSuffix(got, "sha256-two") {
 		t.Errorf("the service runs %q, want the image the second release named: a 409 says the read the write was built on is stale", got)
 	}

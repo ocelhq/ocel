@@ -220,7 +220,7 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 				return err
 			}
 			desired.Etag = current.Etag
-			desired.Traffic = current.Traffic
+			desired.Traffic = heldTraffic(current)
 			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
 			})
@@ -229,12 +229,25 @@ func (p *Provider) deployService(ctx context.Context, s serving, progress progre
 	if err != nil {
 		return release{}, err
 	}
-	deployed, revision, err := p.route(ctx, services, path, s.service,
-		"pin the traffic of "+s.service+" to the revision this release created", latestReady(s.service))
+	deployed, err := p.read(ctx, services, path, s.service)
+	if err != nil {
+		return release{}, err
+	}
+	revision, err := latestReady(s.service)(deployed)
 	if err != nil {
 		return release{}, err
 	}
 	return release{url: deployed.Uri, revision: revision}, nil
+}
+
+func heldTraffic(current *run.GoogleCloudRunV2Service) []*run.GoogleCloudRunV2TrafficTarget {
+	serving := revisionName(current.LatestReadyRevision)
+	if serving == "" || len(current.Traffic) > 0 && !slices.ContainsFunc(current.Traffic, func(target *run.GoogleCloudRunV2TrafficTarget) bool {
+		return target.Type != trafficByRevision
+	}) {
+		return current.Traffic
+	}
+	return trafficTo(serving)
 }
 
 func (p *Provider) Pin(ctx context.Context, service, revision string) error {
