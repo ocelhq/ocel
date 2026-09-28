@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
@@ -176,7 +177,7 @@ func released(t *testing.T, rel Release, gate, cutover session.Result, progress 
 }
 
 func unserved(err error) bool {
-	var left Unserved
+	var left router.Unserved
 	return errors.As(err, &left)
 }
 

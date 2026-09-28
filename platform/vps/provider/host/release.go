@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -87,16 +88,10 @@ func containerOf(address string) string {
 	return name
 }
 
-type Unserved struct{ Err error }
-
-func (u Unserved) Error() string { return u.Err.Error() }
-
-func (u Unserved) Unwrap() error { return u.Err }
-
 func (h *Host) Release(ctx context.Context, rel Release, progress progress.Progress) error {
 	for _, app := range rel.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
-			return Unserved{refusal.Refuse(refusal.CodeInvalid,
+			return router.Unserved{Err: refusal.Refuse(refusal.CodeInvalid,
 				"release %s onto %s: no health check path\nSet %q in your project configuration",
 				app.App, h.named(), healthKey)}
 		}
@@ -106,7 +101,7 @@ func (h *Host) Release(ctx context.Context, rel Release, progress progress.Progr
 	}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return Unserved{err}
+		return router.Unserved{Err: err}
 	}
 
 	gates := make([]string, 0, len(rel.Apps))
@@ -648,7 +643,7 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (set by %q)\nstate: %s\nlogs (last %s lines): %s",
 			app.gate(), rel.DeployTimeout, healthKey, state, appLogTail, logs)
 	}
-	return Unserved{refusal.Refuse(refusal.CodeNotReady,
+	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
 		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel, elevation))}
 }
@@ -656,7 +651,7 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 func (h *Host) overtaken(ctx context.Context, rel Release, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	return Unserved{fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
+	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
 		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
 }
 
@@ -675,7 +670,7 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 	} else if restored {
 		rolled = written + " restored"
 	}
-	return Unserved{refusal.Refuse(code,
+	return router.Unserved{Err: refusal.Refuse(code,
 		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s%s",
 		rel.apps(), h.named(), written, why, rolled, h.discard(ctx, rel, elevation))}
 }
@@ -683,7 +678,7 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 func (h *Host) unfronted(ctx context.Context, rel Release, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	return Unserved{fmt.Errorf("release %s onto %s: %w; the previous release is still live%s",
+	return router.Unserved{Err: fmt.Errorf("release %s onto %s: %w; the previous release is still live%s",
 		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
 }
 
@@ -698,7 +693,7 @@ func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome,
 			"release %s onto %s: the flip helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left running: %v",
 			rel.apps(), h.named(), outcome, verdict, rel.names(), err)
 	}
-	return Unserved{refusal.Refuse(refusal.CodeNotReady,
+	return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady,
 		"release %s onto %s: the flip helper %s; the previous release is still live\n%s%s",
 		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel, elevation))}
 }

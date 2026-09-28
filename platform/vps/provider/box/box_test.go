@@ -394,7 +394,7 @@ func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.
 			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
 		},
 		"a release the box kept off": func(m *machine) {
-			m.refuseOn("Release", host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
+			m.refuseOn("Release", router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
 		},
 	} {
 		t.Run(what, func(t *testing.T) {
@@ -480,7 +480,7 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 	defer cancel()
 	m.releasing = func(host.Release) error {
 		cancel()
-		return host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate was interrupted; the previous release is still live")}
+		return router.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate was interrupted; the previous release is still live")}
 	}
 
 	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err == nil {
@@ -519,7 +519,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 			return nil
 		}
 		if err := rel.StillActive(context.Background()); err != nil {
-			return host.Unserved{Err: err}
+			return router.Unserved{Err: err}
 		}
 		return nil
 	}

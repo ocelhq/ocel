@@ -68,7 +68,7 @@ func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer
 		return err
 	}
 	err := s.serve(ctx, pointer, promotion, ready, progress)
-	var unserved host.Unserved
+	var unserved router.Unserved
 	if !errors.As(err, &unserved) {
 		return err
 	}
@@ -82,15 +82,15 @@ func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer
 func (s *stack) serve(ctx context.Context, pointer string, promotion router.Promotion, ready []promotable, progress progress.Progress) error {
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
-		return host.Unserved{Err: err}
+		return router.Unserved{Err: err}
 	}
 	if err := s.claim(ctx, claims); err != nil {
-		return host.Unserved{Err: err}
+		return router.Unserved{Err: err}
 	}
 	apps := make([]host.AppRelease, 0, len(ready))
 	for _, release := range ready {
 		if err := s.rerun(ctx, release, progress); err != nil {
-			return host.Unserved{Err: err}
+			return router.Unserved{Err: err}
 		}
 		apps = append(apps, host.AppRelease{
 			RouteKey:   release.key,
