@@ -2,8 +2,6 @@ package ports
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,14 +18,13 @@ import (
 )
 
 const (
-	tierCollection    = "records-"
-	segmentSeparator  = "#"
-	segmentCeiling    = "$"
-	keySeparator      = "|"
-	keyCeiling        = "}"
-	valueField        = "value"
-	revisionField     = "rev"
-	revisionTokenSize = 16
+	tierCollectionPrefix = "records-"
+	segmentSeparator     = "#"
+	segmentCeiling       = "$"
+	keySeparator         = "|"
+	keyCeiling           = "}"
+	valueField           = "value"
+	revisionField        = "rev"
 )
 
 type KeyValues struct {
@@ -42,11 +39,11 @@ func (s KeyValues) collection(in keyvalue.Partition) (*firestore.CollectionRef, 
 	if err != nil {
 		return nil, err
 	}
-	return TierKeyValues(client, in.Tier), nil
+	return OpenTierCollection(client, in.Tier), nil
 }
 
-func TierKeyValues(client *firestore.Client, tier environment.Tier) *firestore.CollectionRef {
-	return client.Collection(tierCollection + string(tier))
+func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firestore.CollectionRef {
+	return client.Collection(tierCollectionPrefix + string(tier))
 }
 
 func (s KeyValues) absent(ctx context.Context, collection *firestore.CollectionRef, key keyvalue.Key) error {
@@ -90,7 +87,7 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 	if err != nil {
 		return "", err
 	}
-	next, err := mintRevision()
+	next, err := keyvalue.NewRevision()
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +96,7 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 		return "", err
 	}
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		return writeInto(tx, collection, entry, next)
+		return compareAndSet(tx, collection, entry, next)
 	})
 	if err != nil {
 		return "", s.writeFailed(entry.Key, err)
@@ -127,7 +124,7 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 	}
 	revisions := make([]keyvalue.Revision, 2)
 	for slot := range revisions {
-		if revisions[slot], err = mintRevision(); err != nil {
+		if revisions[slot], err = keyvalue.NewRevision(); err != nil {
 			return err
 		}
 	}
@@ -138,12 +135,12 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		pair := []keyvalue.Entry{first, second}
 		for _, entry := range pair {
-			if err := readInto(tx, collection, entry); err != nil {
+			if err := refuseMovedRevision(tx, collection, entry); err != nil {
 				return err
 			}
 		}
 		for slot, entry := range pair {
-			if err := setInto(tx, collection, entry, revisions[slot]); err != nil {
+			if err := setEntry(tx, collection, entry, revisions[slot]); err != nil {
 				return err
 			}
 		}
@@ -233,7 +230,7 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 		if !keyed || path == "" {
 			continue
 		}
-		entry, err := entryOf(in.Key(split(path)...), snapshot)
+		entry, err := entryOf(in.Key(keyvalue.SplitSegments(path, segmentSeparator)...), snapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -241,14 +238,14 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 	}
 }
 
-func writeInto(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry, next keyvalue.Revision) error {
-	if err := readInto(tx, collection, entry); err != nil {
+func compareAndSet(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry, next keyvalue.Revision) error {
+	if err := refuseMovedRevision(tx, collection, entry); err != nil {
 		return err
 	}
-	return setInto(tx, collection, entry, next)
+	return setEntry(tx, collection, entry, next)
 }
 
-func readInto(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry) error {
+func refuseMovedRevision(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry) error {
 	current, exists, err := currentRevision(tx, collection.Doc(documentID(entry.Key)))
 	if err != nil {
 		return err
@@ -265,7 +262,7 @@ func readInto(tx *firestore.Transaction, collection *firestore.CollectionRef, en
 	return nil
 }
 
-func setInto(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry, next keyvalue.Revision) error {
+func setEntry(tx *firestore.Transaction, collection *firestore.CollectionRef, entry keyvalue.Entry, next keyvalue.Revision) error {
 	return tx.Set(collection.Doc(documentID(entry.Key)), map[string]any{
 		valueField:    string(entry.Value),
 		revisionField: string(next),
@@ -317,11 +314,11 @@ func revisionOf(snapshot *firestore.DocumentSnapshot) keyvalue.Revision {
 }
 
 func partitionPrefix(in keyvalue.Partition) string {
-	return join(append([]string{in.Root}, in.Path...)) + keySeparator
+	return join(in.Segments()) + keySeparator
 }
 
 func partitionCeiling(in keyvalue.Partition) string {
-	return join(append([]string{in.Root}, in.Path...)) + keyCeiling
+	return join(in.Segments()) + keyCeiling
 }
 
 func documentID(key keyvalue.Key) string {
@@ -329,46 +326,9 @@ func documentID(key keyvalue.Key) string {
 }
 
 func olderLayoutID(key keyvalue.Key) string {
-	segments := append(append([]string{key.Partition.Root}, key.Partition.Path...), key.Path...)
-	escaped := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		escaped = append(escaped, olderSegmentEscapes.Replace(segment))
-	}
-	return strings.Join(escaped, segmentSeparator)
+	return keyvalue.JoinSegments(append(key.Partition.Segments(), key.Path...), segmentSeparator, "/")
 }
-
-var olderSegmentEscapes = strings.NewReplacer("%", "%25", segmentSeparator, "%23", "/", "%2F")
 
 func join(segments []string) string {
-	escaped := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		escaped = append(escaped, escapeSegment(segment))
-	}
-	return strings.Join(escaped, segmentSeparator)
-}
-
-func split(joined string) []string {
-	segments := strings.Split(joined, segmentSeparator)
-	path := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		path = append(path, unescapeSegment(segment))
-	}
-	return path
-}
-
-var (
-	segmentEscapes   = strings.NewReplacer("%", "%25", segmentSeparator, "%23", "/", "%2F", keySeparator, "%7C")
-	segmentUnescapes = strings.NewReplacer("%25", "%", "%23", segmentSeparator, "%2F", "/", "%7C", keySeparator)
-)
-
-func escapeSegment(segment string) string { return segmentEscapes.Replace(segment) }
-
-func unescapeSegment(segment string) string { return segmentUnescapes.Replace(segment) }
-
-func mintRevision() (keyvalue.Revision, error) {
-	token := make([]byte, revisionTokenSize)
-	if _, err := rand.Read(token); err != nil {
-		return "", fmt.Errorf("mint a revision token: %w", err)
-	}
-	return keyvalue.Revision(hex.EncodeToString(token)), nil
+	return keyvalue.JoinSegments(segments, segmentSeparator, "/"+keySeparator)
 }

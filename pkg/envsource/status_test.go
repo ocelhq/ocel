@@ -23,9 +23,9 @@ type watchedKeyValues struct {
 
 	mu            sync.Mutex
 	listed        []listing
-	staleIn       string
-	failIn        string
-	failRemovesIn string
+	staleIn       keyvalue.Root
+	failIn        keyvalue.Root
+	failRemovesIn keyvalue.Root
 }
 
 func (w *watchedKeyValues) List(ctx context.Context, in keyvalue.Partition, under ...string) ([]keyvalue.Entry, error) {

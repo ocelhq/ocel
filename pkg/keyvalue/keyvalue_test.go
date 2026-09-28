@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -129,5 +130,34 @@ func TestTwoKeysThatDifferAreNeverWrittenTheSame(t *testing.T) {
 		if pair[0].String() == pair[1].String() {
 			t.Errorf("%v and %v are both written %q", pair[0].Path, pair[1].Path, pair[0].String())
 		}
+	}
+}
+
+func TestASegmentIsJoinedWholeWhateverSeparatorOrReservedCharacterItCarries(t *testing.T) {
+	t.Parallel()
+
+	segments := []string{"ghcr.io/acme/web@sha256:ab", "50%#off", "a|b"}
+	joined := keyvalue.JoinSegments(segments, "#", "/|")
+	if want := "ghcr.io%2Facme%2Fweb@sha256:ab#50%25%23off#a%7Cb"; joined != want {
+		t.Errorf("JoinSegments(%q) = %q, want %q", segments, joined, want)
+	}
+	if split := keyvalue.SplitSegments(joined, "#"); !slices.Equal(split, segments) {
+		t.Errorf("SplitSegments(%q) = %q, want the segments it was joined from, %q", joined, split, segments)
+	}
+}
+
+func TestEveryRevisionMintedIsNew(t *testing.T) {
+	t.Parallel()
+
+	first, err := keyvalue.NewRevision()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := keyvalue.NewRevision()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second || len(first) != 32 {
+		t.Errorf("NewRevision() minted %q then %q, want two different 32-character tokens", first, second)
 	}
 }
