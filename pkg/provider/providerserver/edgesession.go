@@ -113,7 +113,7 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 	if err != nil {
 		return nil, err
 	}
-	shared.stack = stack
+	shared.setEdgeStack(stack)
 	session := &edgeSession{sharedStack: shared, provider: vendor, store: store, state: state}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
@@ -125,7 +125,7 @@ func (s *edgeSession) installDNSCutover(writer edge.DNSRecords, zone string) {
 
 func (s *edgeSession) checkpoint(ctx context.Context) error {
 	s.state.Kind = s.front.Kind()
-	s.state.Edge = s.stack.State()
+	s.state.Edge = s.edgeStack().State()
 	return s.store.write(ctx, s.state)
 }
 

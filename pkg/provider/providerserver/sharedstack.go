@@ -20,16 +20,26 @@ func openSharedStack(p provider.Provider, front edge.Edge) (*sharedStack, error)
 }
 
 type sharedStack struct {
-	front  edge.Edge
-	router router.Router
-	mu     sync.Mutex
-	stack  edge.EdgeStack
+	front   edge.Edge
+	router  router.Router
+	mu      sync.Mutex
+	current edge.EdgeStack
 }
 
-func (s *sharedStack) openRouter() (router.Stack, error) {
+func (s *sharedStack) edgeStack() edge.EdgeStack {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.router.Open(router.NewStackState(s.stack.State()))
+	return s.current
+}
+
+func (s *sharedStack) setEdgeStack(stack edge.EdgeStack) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.current = stack
+}
+
+func (s *sharedStack) openRouterStack() (router.Stack, error) {
+	return s.router.Open(router.NewStackState(s.edgeStack().State()))
 }
 
 func (s *sharedStack) adopt(routed router.Stack) error {
@@ -37,14 +47,12 @@ func (s *sharedStack) adopt(routed router.Stack) error {
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.stack = reopened
+	s.setEdgeStack(reopened)
 	return nil
 }
 
 func (s *sharedStack) useLedger(use func(router.Ledger) error) error {
-	routed, err := s.openRouter()
+	routed, err := s.openRouterStack()
 	if err != nil {
 		return err
 	}
@@ -74,7 +82,7 @@ func (s *sharedStack) prune(ctx context.Context, keepN int, pointer string) (rou
 }
 
 func (s *sharedStack) flip(ctx context.Context, flip router.Flip, progress progress.Progress) error {
-	routed, err := s.openRouter()
+	routed, err := s.openRouterStack()
 	if err != nil {
 		return err
 	}
@@ -83,7 +91,7 @@ func (s *sharedStack) flip(ctx context.Context, flip router.Flip, progress progr
 }
 
 func (s *sharedStack) removePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {
-	routed, err := s.openRouter()
+	routed, err := s.openRouterStack()
 	if err != nil {
 		return router.PruneResult{}, err
 	}
@@ -99,17 +107,17 @@ func (s *sharedStack) removePointer(ctx context.Context, pointer string, progres
 }
 
 func (s *sharedStack) destroy(ctx context.Context) error {
-	routed, err := s.openRouter()
+	routed, err := s.openRouterStack()
 	if err != nil {
 		return err
 	}
 	if err := errors.Join(routed.Destroy(ctx), s.adopt(routed)); err != nil {
 		return err
 	}
-	return s.stack.Destroy(ctx)
+	return s.edgeStack().Destroy(ctx)
 }
 
 func (s *sharedStack) routerState() router.StackState {
-	state := s.stack.State()
+	state := s.edgeStack().State()
 	return router.StackState{Slug: state.Slug, Tier: state.Tier}
 }

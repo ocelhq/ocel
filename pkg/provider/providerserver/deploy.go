@@ -456,7 +456,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Progres
 	if err != nil {
 		return err
 	}
-	r.stack = stack
+	r.setEdgeStack(stack)
 	return r.checkpoint(ctx)
 }
 
@@ -632,7 +632,7 @@ func (r *deployRun) servedHostnames() [][]string {
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
 	r.state.Kind = r.front.Kind()
-	r.state.Edge = r.stack.State()
+	r.state.Edge = r.edgeStack().State()
 	r.state.Pair(r.router.Kind(), r.routerState(), r.appRouters)
 	if r.spec.Tier == environment.TierPreview {
 		r.state.Edge.GlobalPreview = r.globalPreview()
@@ -1347,14 +1347,14 @@ func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) er
 	if _, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.spec), envvars.OwnerOcel, publishing); err != nil {
 		return fmt.Errorf("publish %s's bindings: %w", r.scope.Project, err)
 	}
-	if err := r.prune(ctx, bindings); err != nil {
+	if err := r.pruneBindings(ctx, bindings); err != nil {
 		return err
 	}
 	r.publishedBindings().forget()
 	return nil
 }
 
-func (r *deployRun) prune(ctx context.Context, bindings []provider.Binding) error {
+func (r *deployRun) pruneBindings(ctx context.Context, bindings []provider.Binding) error {
 	environment := bindingEnvironment(r.spec)
 	published, err := r.values.ListBindings(ctx, r.scope, environment)
 	if err != nil {

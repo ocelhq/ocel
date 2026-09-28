@@ -124,7 +124,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 	}
 
 	progress.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.cutover.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
+	if err := d.edgeStack().BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: hostState.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
@@ -134,7 +134,7 @@ func (d *hostnames) attachHostname(ctx context.Context, target ConfiguredHost, p
 		return true, err
 	}
 
-	records, err := d.cutover.recordsFor(d.stack.State(), host)
+	records, err := d.cutover.recordsFor(d.edgeStack().State(), host)
 	if err != nil {
 		return true, err
 	}
@@ -222,7 +222,7 @@ func (d *hostnames) remove(ctx context.Context, runProgress progress.Progress) e
 	}
 	for _, host := range targets {
 		runProgress.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.cutover.kind))
-		if err := progress.Heeded(d.stack.UnbindDomain(ctx, host), runProgress); err != nil {
+		if err := progress.Heeded(d.edgeStack().UnbindDomain(ctx, host), runProgress); err != nil {
 			return err
 		}
 		hostState := d.state.Host(host)
@@ -313,7 +313,7 @@ func (d *hostnames) statusHosts() []string {
 
 func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.ProductionHostname, error) {
 	hostState := d.state.Host(host)
-	stackState := d.stack.State()
+	stackState := d.edgeStack().State()
 	bound := edge.Pointable(edge.TargetOf(d.cutover.kind, d.cutover.unbound, stackState), stackState.Bound, host)
 
 	var manual []edge.Record
