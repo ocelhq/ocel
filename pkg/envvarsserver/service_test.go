@@ -167,6 +167,27 @@ func TestAValueOverTheCapIsAnInvalidArgument(t *testing.T) {
 	}
 }
 
+func TestAValueNamingNoTierIsRefusedRatherThanWrittenToProduction(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+
+	_, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Coordinate: cell("DATABASE_URL"),
+		Value:      "postgres://unaddressed",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("SetValue() with no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+
+	got, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+	})
+	if err != nil || got.GetFound() {
+		t.Fatalf("production GetValue() found=%t, %v, want nothing written there", got.GetFound(), err)
+	}
+}
+
 func TestReferencesAnswerAcrossTheWire(t *testing.T) {
 	vars, _ := served(t)
 	ctx := context.Background()
