@@ -49,11 +49,17 @@ func TierKeyValues(client *firestore.Client, tier environment.Tier) *firestore.C
 	return client.Collection(tierCollection + string(tier))
 }
 
-func (s KeyValues) absent(ctx context.Context, collection *firestore.CollectionRef, tier environment.Tier) error {
-	documents := collection.Select().Limit(1).Documents(ctx)
+func (s KeyValues) absent(ctx context.Context, collection *firestore.CollectionRef, key keyvalue.Key) error {
+	older := olderLayoutID(key)
+	documents := collection.Select().OrderBy(firestore.DocumentID, firestore.Asc).StartAt(older).Limit(1).Documents(ctx)
 	defer documents.Stop()
-	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
-		return s.unbootstrapped(tier)
+	snapshot, err := documents.Next()
+	switch {
+	case status.Code(err) == codes.NotFound:
+		return s.unbootstrapped(key.Partition.Tier)
+	case err == nil && snapshot.Ref.ID == older:
+		return refusal.Refuse(refusal.CodeNotReady,
+			"%s is kept as the document %q, which this build did not write: an older ocel wrote it in a layout this build does not read", key, older)
 	}
 	return keyvalue.ErrNotFound
 }
@@ -68,7 +74,7 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 	}
 	snapshot, err := collection.Doc(documentID(key)).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return keyvalue.Entry{}, s.absent(ctx, collection, key.Partition.Tier)
+		return keyvalue.Entry{}, s.absent(ctx, collection, key)
 	}
 	if err != nil {
 		return keyvalue.Entry{}, fmt.Errorf("read %s: %w", key, err)
@@ -321,6 +327,17 @@ func partitionCeiling(in keyvalue.Partition) string {
 func documentID(key keyvalue.Key) string {
 	return partitionPrefix(key.Partition) + join(key.Path)
 }
+
+func olderLayoutID(key keyvalue.Key) string {
+	segments := append(append([]string{key.Partition.Root}, key.Partition.Path...), key.Path...)
+	escaped := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		escaped = append(escaped, olderSegmentEscapes.Replace(segment))
+	}
+	return strings.Join(escaped, segmentSeparator)
+}
+
+var olderSegmentEscapes = strings.NewReplacer("%", "%25", segmentSeparator, "%23", "/", "%2F")
 
 func join(segments []string) string {
 	escaped := make([]string, 0, len(segments))
