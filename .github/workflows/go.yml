@@ -229,6 +229,15 @@ jobs:
           done
           go build "${packages[@]}"
 
+      - name: The provider binary the conformance and lifecycle suites drive
+        if: matrix.group.name == 'aws' || matrix.group.name == 'gcp' || matrix.group.name == 'vps'
+        env:
+          VENDOR: ${{ matrix.group.name }}
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/provider-$VENDOR" "./platform/$VENDOR/provider/cmd/deploy"
+          echo "OCEL_${VENDOR^^}_PROVIDER_BINARY=$RUNNER_TEMP/provider-$VENDOR" >> "$GITHUB_ENV"
+
       - name: go test -race
         run: |
           set -euo pipefail
