@@ -281,7 +281,7 @@ func newCipherIgnoringKMSCalls() seal.Cipher {
 	return cipher
 }
 
-func TestAnAccountWithNoBootstrapHasNoRecords(t *testing.T) {
+func TestAnAccountWithNoBootstrapHasNoEntries(t *testing.T) {
 	t.Parallel()
 
 	store := awsports.KeyValues{Dynamo: newFakeDynamo()}
@@ -308,7 +308,7 @@ func TestAnAccountWithNoBootstrapHasNoRecords(t *testing.T) {
 	}
 }
 
-func TestATableDeletedMidTeardownHasNoRecords(t *testing.T) {
+func TestATableDeletedMidTeardownHasNoEntries(t *testing.T) {
 	t.Parallel()
 
 	dynamo := newFakeDynamo()
