@@ -76,11 +76,7 @@ func (r routerStack) RemovePointer(ctx context.Context, pointer string, _ progre
 	if !s.provisioned() {
 		return nil
 	}
-	host := s.previewHost(pointer)
-	if host == "" {
-		return nil
-	}
-	return s.routes(c).apply(ctx, nil, []string{host})
+	return s.routes(c).apply(ctx, nil, s.servedHostnames(pointer))
 }
 
 func (r routerStack) Destroy(context.Context) error { return nil }

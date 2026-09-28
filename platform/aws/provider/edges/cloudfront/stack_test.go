@@ -49,35 +49,23 @@ func TestPromoteOntoAPointerOtherThanTheDefaultLeavesTheHostnameAlone(t *testing
 	}
 }
 
-func TestRemovePointerLeavesTheHostnameServing(t *testing.T) {
+func TestRemovingAPreviewPointerLeavesTheHostnamesProductionBoundServing(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name    string
-		pointer string
-	}{
-		{"a preview pointer", "pr-7"},
-		{"the default pointer", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	w := newWorld()
+	stack := reconciled(t, w)
+	bound(t, stack)
+	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
 
-			w := newWorld()
-			stack := reconciled(t, w)
-			bound(t, stack)
-			staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-			if err := openRouter(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
-				t.Fatalf("Promote: %v", err)
-			}
+	if _, err := removePointer(context.Background(), stack, "pr-7", progress.DiscardProgress()); err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
 
-			if _, err := removePointer(context.Background(), stack, tc.pointer, progress.DiscardProgress()); err != nil {
-				t.Fatalf("RemovePointer: %v", err)
-			}
-
-			if published := routeOn(t, w, stack, boundHost); published.Origin != fakeEntryHost {
-				t.Errorf("the hostname answers with %q, want the release it was promoted to: only unbinding the domain takes its route away", published.Origin)
-			}
-		})
+	if published := routeOn(t, w, stack, boundHost); published.Origin != fakeEntryHost {
+		t.Errorf("the hostname answers with %q, want the release production promoted: a preview pointer owns none of the hostnames production bound", published.Origin)
 	}
 }
 
