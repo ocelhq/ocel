@@ -120,7 +120,7 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 	} else if err := reshapeDistribution(ctx, c, spec, dist.id); err != nil {
 		return front{}, err
 	}
-	if err := s.invalidationTargets(c).note(ctx, dist.id); err != nil {
+	if err := s.invalidationTargets(c).add(ctx, dist.id); err != nil {
 		return front{}, err
 	}
 	s.recordFront(dist)
@@ -138,7 +138,7 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 		if err != nil {
 			return front{}, err
 		}
-		if err := s.invalidationTargets(c).note(ctx, created.id); err != nil {
+		if err := s.invalidationTargets(c).add(ctx, created.id); err != nil {
 			return front{}, err
 		}
 		dist = created
@@ -400,7 +400,7 @@ func (s *stack) forgetInvalidationTarget(ctx context.Context, c Clients, distrib
 	if !s.provisioned() {
 		return nil
 	}
-	return s.invalidationTargets(c).forget(ctx, distribution)
+	return s.invalidationTargets(c).remove(ctx, distribution)
 }
 
 func (s *stack) Destroy(ctx context.Context) error {
