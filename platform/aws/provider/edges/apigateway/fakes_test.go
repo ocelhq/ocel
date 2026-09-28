@@ -23,6 +23,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 )
 
@@ -972,4 +974,13 @@ func ownState(t *testing.T, stack edge.EdgeStack) private {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
 	return own
+}
+
+func routes(shared edge.EdgeStack) routerStack { return routerStack{s: shared.(*stack)} }
+
+func removePointer(ctx context.Context, stack edge.EdgeStack, pointer string, progress progress.Progress) (router.PruneResult, error) {
+	if err := routes(stack).RemovePointer(ctx, pointer, progress); err != nil {
+		return router.PruneResult{}, err
+	}
+	return routes(stack).Ledger().RemovePointer(ctx, pointer)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
@@ -73,11 +74,14 @@ func newProvider(options Options, dial host.Dial) *Provider {
 
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
-		Vendor:            Vendor,
-		Bindings:          resources.ServedBindingTypes(p.resourceHooks()),
-		Computes:          []provider.Compute{provider.ComputeContainer},
-		Edges:             []edge.Kind{box.Kind},
-		DefaultEdge:       box.Kind,
+		Vendor:      Vendor,
+		Bindings:    resources.ServedBindingTypes(p.resourceHooks()),
+		Computes:    []provider.Compute{provider.ComputeContainer},
+		Edges:       []edge.Kind{box.Kind},
+		DefaultEdge: box.Kind,
+		Pairings: []provider.Pairing{
+			{Edge: box.Kind, Router: router.Kind(box.Kind), Computes: []provider.Compute{provider.ComputeContainer}},
+		},
 		DNSKinds:          []provider.DNSKind{dnsCloudflare},
 		RendersTransforms: true,
 	}
@@ -119,6 +123,8 @@ func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 func (p *Provider) Credentials() provider.Credentials { return credentials{p} }
 
 func (p *Provider) Edges() provider.Edges { return edges{p} }
+
+func (p *Provider) Routers() provider.Routers { return routers{p} }
 
 func (p *Provider) DNS() provider.DNS { return dns{} }
 

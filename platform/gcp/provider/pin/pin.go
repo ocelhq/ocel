@@ -17,14 +17,14 @@ type Pins interface {
 	Pin(ctx context.Context, service, revision string) error
 }
 
-func Promote(
+func Flip(
 	ctx context.Context,
 	l *ledger.Ledger,
 	pins Pins,
-	promotion router.Promotion,
-	pointer string,
+	flip router.Flip,
 	progress progress.Progress,
 ) error {
+	promotion, pointer := flip.Promotion, flip.Pointer
 	var pinning []router.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		identity := promotion.Builds[app]
@@ -48,6 +48,10 @@ func Promote(
 	if err := l.Promote(ctx, promotion, pointer, progress); err != nil {
 		return err
 	}
+	if err := flip.RefuseInactive(ctx); err != nil {
+		return unpinned(ctx, l, promotion.PromotionID, pointer, err)
+	}
+	pinned := false
 	for _, record := range pinning {
 		for _, service := range slices.Sorted(maps.Keys(record.Revisions)) {
 			revision := record.Revisions[service]
@@ -55,12 +59,20 @@ func Promote(
 				progress.Say("Pinning all of " + record.App + "'s traffic to revision " + revision + " of Cloud Run service " + service)
 			}
 			if err := pins.Pin(ctx, service, revision); err != nil {
-				if undo := l.Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
-					return errors.Join(err, fmt.Errorf("the ledger still names promotion %s, which Cloud Run never finished pinning: %w", promotion.PromotionID, undo))
+				if !pinned {
+					err = router.Unserved{Err: err}
 				}
-				return err
+				return unpinned(ctx, l, promotion.PromotionID, pointer, err)
 			}
+			pinned = true
 		}
 	}
 	return nil
+}
+
+func unpinned(ctx context.Context, l *ledger.Ledger, promotionID, pointer string, err error) error {
+	if undo := l.Unpromote(ctx, promotionID, pointer); undo != nil {
+		return errors.Join(err, fmt.Errorf("the ledger still names promotion %s, which Cloud Run never finished pinning: %w", promotionID, undo))
+	}
+	return err
 }

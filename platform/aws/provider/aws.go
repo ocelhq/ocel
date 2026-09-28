@@ -70,6 +70,7 @@ func (p *Provider) Facts() provider.Facts {
 		Computes:          []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:             edges.SupportedEdges(),
 		DefaultEdge:       edges.DefaultKind,
+		Pairings:          edges.Pairings(),
 		DNSKinds:          dns.Kinds(),
 		RendersTransforms: true,
 		StoresArtifacts:   true,
@@ -119,6 +120,8 @@ func (p *Provider) Credentials() provider.Credentials {
 }
 
 func (p *Provider) Edges() provider.Edges { return p.edges() }
+
+func (p *Provider) Routers() provider.Routers { return p.routers() }
 
 func (p *Provider) DNS() provider.DNS {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}

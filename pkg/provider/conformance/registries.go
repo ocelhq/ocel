@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
@@ -67,6 +68,85 @@ func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
 		front, err := edges.Open(unserved)
 		if err == nil {
 			t.Fatalf("Open(%q) = %v, want a refusal", unserved, front)
+		}
+		requireInvalid(t, err, "Open")
+	})
+}
+
+func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, routers provider.Routers) {
+	t.Helper()
+
+	t.Run("every supported edge pairs with a router of its own kind", func(t *testing.T) {
+		for _, kind := range facts.Edges {
+			paired := slices.ContainsFunc(facts.Pairings, func(pairing provider.Pairing) bool { return pairing.Edge == kind })
+			if !paired {
+				t.Errorf("Facts.Pairings pairs no router with the %q edge, so no app deployed through it could be flipped", kind)
+			}
+		}
+		for _, pairing := range facts.Pairings {
+			if pairing.Router != router.Kind(pairing.Edge) {
+				t.Errorf("Facts.Pairings pairs the %q edge with %q; every edge routes through a router of its own kind", pairing.Edge, pairing.Router)
+			}
+		}
+	})
+
+	t.Run("a pairing names a supported edge and the computes this provider runs, each once", func(t *testing.T) {
+		for i, pairing := range facts.Pairings {
+			if !slices.Contains(facts.Edges, pairing.Edge) {
+				t.Errorf("Facts.Pairings[%d] names the %q edge, which Facts.Edges does not offer: %v", i, pairing.Edge, facts.Edges)
+			}
+			if len(pairing.Computes) == 0 {
+				t.Errorf("Facts.Pairings[%d] pairs the %q edge for no compute", i, pairing.Edge)
+			}
+			for _, compute := range pairing.Computes {
+				if !slices.Contains(facts.Computes, compute) {
+					t.Errorf("Facts.Pairings[%d] pairs the %q edge for %q, which Facts.Computes does not run: %v", i, pairing.Edge, compute, facts.Computes)
+				}
+				paired, _ := facts.PairedRouter(pairing.Edge, compute)
+				if paired != pairing.Router {
+					t.Errorf("the %q edge pairs %q apps with both %q and %q; an app routes through one router", pairing.Edge, compute, paired, pairing.Router)
+				}
+			}
+		}
+	})
+
+	t.Run("a paired router opens under its kind and reaches every compute it is paired for", func(t *testing.T) {
+		for _, pairing := range facts.Pairings {
+			routes, err := routers.Open(pairing.Router)
+			if err != nil {
+				t.Errorf("Open(%q) = %v, want the router Facts.Pairings names", pairing.Router, err)
+				continue
+			}
+			if routes.Kind() != pairing.Router {
+				t.Errorf("Open(%q) answered a router calling itself %q", pairing.Router, routes.Kind())
+			}
+			reaches := routes.Facts()
+			for _, compute := range pairing.Computes {
+				switch {
+				case compute == provider.ComputeServerless && !reaches.ReachesFunctions:
+					t.Errorf("the %q router is paired for serverless apps and reaches no function", pairing.Router)
+				case compute == provider.ComputeContainer && !reaches.ReachesContainers:
+					t.Errorf("the %q router is paired for container apps and reaches no container", pairing.Router)
+				}
+			}
+			front, err := edges.Open(pairing.Edge)
+			if err != nil {
+				continue
+			}
+			if front.Facts().RunsCode && !reaches.SignsOriginForwards {
+				t.Errorf("the %q router signs no origin forward, and the %q edge it pairs with runs code; the code it runs reaches the origin with the credentials it was bootstrapped, so its router must sign", pairing.Router, pairing.Edge)
+			}
+			if front.Facts().RunsCode && !reaches.Dispatches {
+				t.Errorf("the %q router dispatches no path, and the %q edge it pairs with runs the code that dispatches a release's paths", pairing.Router, pairing.Edge)
+			}
+		}
+	})
+
+	t.Run("a router this provider does not have is refused as invalid", func(t *testing.T) {
+		unserved := router.Kind("no-such-router")
+		routes, err := routers.Open(unserved)
+		if err == nil {
+			t.Fatalf("Open(%q) = %v, want a refusal", unserved, routes)
 		}
 		requireInvalid(t, err, "Open")
 	})

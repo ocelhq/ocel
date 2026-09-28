@@ -9,9 +9,13 @@ import (
 )
 
 func (p *Provider) edges() edges.Registry {
-	return edges.Registry{Deps: edges.Deps{
+	return edges.Registry{Deps: p.edgeDeps()}
+}
+
+func (p *Provider) edgeDeps() edges.Deps {
+	return edges.Deps{
 		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
 		Certificates: p.options.Certificates,
 		Namespace:    p.namespace,
-	}}
+	}
 }

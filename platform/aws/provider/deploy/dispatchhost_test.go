@@ -17,6 +17,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
@@ -57,6 +59,10 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
+	routes, err := edges.Routers{}.Open(router.Kind(cfg.Edge.Kind()))
+	if err != nil {
+		t.Fatalf("Routers().Open(%q): %v", cfg.Edge.Kind(), err)
+	}
 	serving, err := providerserver.AppServingFor(providerserver.AppServingInput{
 		Root:              cfg.ArtifactRoot,
 		Project:           "shop",
@@ -65,7 +71,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 		Stack:             stack,
 		Coordinate:        coord,
 		EdgeRunsCode:      facts.RunsCode,
-		EdgeSignsForwards: facts.SignsOriginForwards,
+		EdgeSignsForwards: routes.Facts().SignsOriginForwards,
 	})
 	if err != nil {
 		t.Fatalf("ServingFactsFor: %v", err)

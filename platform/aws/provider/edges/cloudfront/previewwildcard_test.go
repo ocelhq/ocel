@@ -99,11 +99,11 @@ func promotePreview(t *testing.T, stack edge.EdgeStack, pointer string) {
 	t.Helper()
 	ctx := context.Background()
 	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-	if err := stack.Promote(ctx, router.Promotion{
+	if err := routes(stack).Flip(ctx, router.Flip{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "preview-" + pointer,
 		Ts:          1,
 		Builds:      map[string]string{"web": "d1.f1"},
-	}, pointer, progress.DiscardProgress()); err != nil {
+	}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -454,11 +454,11 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		recordFront(t, w, environment.TierPreview)
 		w.front.calls = nil
 
-		if err := stack.Promote(context.Background(), router.Promotion{
+		if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "preview-" + previewPointer,
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer, progress.DiscardProgress()); err != nil {
+		}}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(%s): %v", previewPointer, err)
 		}
 
@@ -509,14 +509,14 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		w.store.updateErr = errors.New("the store is closed")
 
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
-		if err := stack.Promote(context.Background(), router.Promotion{
+		if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "refused",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer, progress.DiscardProgress()); err == nil {
+		}}, progress.DiscardProgress()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the key value store")
 		}
-		history, err := stack.Ledger().History(context.Background(), previewPointer)
+		history, err := routes(stack).Ledger().History(context.Background(), previewPointer)
 		if err != nil {
 			t.Fatalf("History: %v", err)
 		}
@@ -530,7 +530,7 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		_, stack := previewing(t, w)
 		promotePreview(t, stack, previewPointer)
 
-		if _, err := stack.RemovePointer(context.Background(), previewPointer, progress.DiscardProgress()); err != nil {
+		if _, err := removePointer(context.Background(), stack, previewPointer, progress.DiscardProgress()); err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {
@@ -600,11 +600,11 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.dynamo.putErr = errors.New("the table is closed")
 
-		if err := stack.Promote(context.Background(), router.Promotion{
+		if err := routes(stack).Flip(context.Background(), router.Flip{Pointer: previewPointer, Promotion: router.Promotion{
 			PromotionID: "orphan",
 			Ts:          1,
 			Builds:      map[string]string{"web": "d1.f1"},
-		}, previewPointer, progress.DiscardProgress()); err == nil {
+		}}, progress.DiscardProgress()); err == nil {
 			t.Fatal("Promote err = nil, want the refusal from the deployments ledger")
 		}
 		if routes := previewRoutes(t, w); len(routes) != 0 {

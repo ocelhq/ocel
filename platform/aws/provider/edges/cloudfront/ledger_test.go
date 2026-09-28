@@ -22,10 +22,10 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	bound(t, stack)
 	first := staged(t, stack, fakeEntryURL, "assets/one")
 	second := router.DeploymentRecord{App: "web", Build: "d2.f2", Entry: "/", EntryFunction: entryFunction, FunctionURLs: map[string]string{"/": fakeEntryURL}, AssetPrefix: "assets/two"}
-	if err := stack.Ledger().PutStaged(ctx, second); err != nil {
+	if err := routes(stack).Ledger().PutStaged(ctx, second); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}
-	if err := stack.Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}, "", progress.DiscardProgress()); err != nil {
+	if err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Build}}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.dynamo.beforePut = func(key string, items map[string]map[string]ddbtypes.AttributeValue) {
@@ -34,7 +34,7 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 
-	err := stack.Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}, "", progress.DiscardProgress())
+	err := routes(stack).Flip(ctx, router.Flip{Promotion: router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Build}}}, progress.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Promote(p2) = %v, want the busy refusal a moved pointer earns", err)
@@ -42,7 +42,7 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 	if got := routeOn(t, w, stack, boundHost); got.Release != first.Build {
 		t.Errorf("%s routes to release %q, want %q: a promotion the ledger refused must not stay live", boundHost, got.Release, first.Build)
 	}
-	history, err := stack.Ledger().History(ctx, "")
+	history, err := routes(stack).Ledger().History(ctx, "")
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}

@@ -13,7 +13,6 @@ import (
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -62,8 +61,11 @@ type promoteBody struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, _ progress.Progress) error {
-	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
+func (s *stack) promote(ctx context.Context, promotion router.Promotion, pointer string) error {
+	res, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
+	if err != nil && res != nil {
+		return router.Unserved{Err: err}
+	}
 	return err
 }
 
@@ -79,7 +81,7 @@ func (s *stack) History(ctx context.Context, pointer string) ([]router.HistoryEn
 	return history, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
 	var result router.PruneResult
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
 		return router.PruneResult{}, err

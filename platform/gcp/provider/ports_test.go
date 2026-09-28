@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -60,10 +61,14 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	if !front.Facts().InvalidatesByCacheTag {
 		t.Error("Facts() says the alb edge does not invalidate by cache tag, and Cloud CDN invalidates by Cache-Tag")
 	}
-	if front.Facts().AddressesItself {
-		t.Error("Facts() says the alb edge addresses itself, and a deploy would then never be asked for the hostname it fronts")
+	routes, err := p.Routers().Open(router.Kind(alb.Kind))
+	if err != nil {
+		t.Fatalf("Routers().Open(%q) = %v", alb.Kind, err)
 	}
-	if !front.Facts().RoutesPreviewsByLabel {
+	if routes.Facts().AddressesItself {
+		t.Error("Facts() says the alb router addresses itself, and a deploy would then never be asked for the hostname it fronts")
+	}
+	if !routes.Facts().RoutesPreviewsByLabel {
 		t.Error("Facts() says the alb edge does not route previews by label, and the url mask on its preview neg hands Cloud Run " +
 			"the hostname's first label as the service name, so a deploy that is not named it answers nothing")
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
@@ -32,6 +33,7 @@ type world struct {
 	entries  map[string]map[string]bool
 	declared map[string]map[string]declaration
 	breaks   map[string]error
+	pinning  error
 }
 
 func newWorld() *world {
@@ -155,8 +157,28 @@ func (w *world) enter(certificateMap, hostname string) {
 func (w *world) Pin(_ context.Context, service, revision string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.pinning != nil {
+		return w.pinning
+	}
 	w.pinned = append(w.pinned, service+"@"+revision)
 	return nil
+}
+
+func (w *world) refusePins(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pinning = err
+}
+
+func (w *world) pinnedRevision(service string) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, pin := range slices.Backward(w.pinned) {
+		if pinned, revision, _ := strings.Cut(pin, "@"); pinned == service {
+			return revision
+		}
+	}
+	return ""
 }
 
 func (w *world) hasBackend(backend string) bool {

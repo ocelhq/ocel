@@ -32,8 +32,6 @@ func (s *stack) openLedger() *ledger.Ledger {
 	return ledger.New(s.e.keyValues, s.state.Tier, s.state.Slug)
 }
 
-func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
-
 func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Tier) }
 
 func (s *stack) routeKey(pointer, app string) host.RouteKey {
@@ -53,33 +51,8 @@ type promotable struct {
 	record router.DeploymentRecord
 }
 
-func (s *stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	ready := make([]promotable, 0, len(promotion.Builds))
-	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
-		release, serves, err := s.readyRelease(ctx, app, pointer, promotion)
-		if err != nil {
-			return err
-		}
-		if serves {
-			ready = append(ready, release)
-		}
-	}
-	if err := s.openLedger().Promote(ctx, promotion, pointer, progress); err != nil {
-		return err
-	}
-	err := s.serve(ctx, pointer, promotion, ready, progress)
-	var unserved router.Unserved
-	if !errors.As(err, &unserved) {
-		return err
-	}
-	if undo := s.openLedger().Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
-		return errors.Join(err, fmt.Errorf("the ledger still points %s at %s, which this box never served: %w",
-			named(pointer), promotion.PromotionID, undo))
-	}
-	return err
-}
-
-func (s *stack) serve(ctx context.Context, pointer string, promotion router.Promotion, ready []promotable, progress progress.Progress) error {
+func (s *stack) serve(ctx context.Context, flip router.Flip, ready []promotable, progress progress.Progress) error {
+	pointer, promotion := flip.Pointer, flip.Promotion
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
 		return router.Unserved{Err: err}
@@ -102,7 +75,14 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion router.Prom
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
-		StillActive:   func(ctx context.Context) error { return s.stillActive(ctx, pointer, promotion.PromotionID) },
+		StillActive: func(ctx context.Context) error {
+			if flip.StillActive != nil {
+				if err := flip.StillActive(ctx); err != nil {
+					return err
+				}
+			}
+			return s.stillActive(ctx, pointer, promotion.PromotionID)
+		},
 	}, progress)
 }
 
@@ -224,19 +204,6 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 		})
 	}
 	return claims, nil
-}
-
-func (s *stack) RemovePointer(ctx context.Context, pointer string, progress progress.Progress) (router.PruneResult, error) {
-	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
-		return router.PruneResult{}, err
-	}
-	if err := s.applyOrigins(ctx); err != nil {
-		progress.Warn(s.released("Preview "+pointer, err).Error())
-	}
-	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
-		return router.PruneResult{}, err
-	}
-	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

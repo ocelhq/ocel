@@ -150,7 +150,8 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}); err != nil {
 		t.Fatalf("stackrecords.Write(%s): %v", pointer, err)
 	}
-	if err := stack.Ledger().PutStaged(ctx, router.DeploymentRecord{
+	routes := routed(t, p, stack)
+	if err := routes.Ledger().PutStaged(ctx, router.DeploymentRecord{
 		App:        app,
 		Build:      build.String(),
 		Entry:      "/",
@@ -160,9 +161,9 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", pointer, err)
 	}
-	if err := stack.Promote(ctx, router.Promotion{
+	if err := routes.Flip(ctx, router.Flip{Pointer: pointer, Promotion: router.Promotion{
 		PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()},
-	}, pointer, progress.DiscardProgress()); err != nil {
+	}}, progress.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -172,9 +173,13 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 
 	ctx := context.Background()
 	spoken := &said{}
-	removed, err := stack.RemovePointer(ctx, pointer, spoken)
-	if err != nil {
+	routes := routed(t, p, stack)
+	if err := routes.RemovePointer(ctx, pointer, spoken); err != nil {
 		t.Fatalf("RemovePointer(%s) = %v", pointer, err)
+	}
+	removed, err := routes.Ledger().RemovePointer(ctx, pointer)
+	if err != nil {
+		t.Fatalf("Ledger().RemovePointer(%s) = %v", pointer, err)
 	}
 	if err := providerserver.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)

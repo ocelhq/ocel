@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const fakeStoreARN = "arn:aws:cloudfront::123456789012:key-value-store/routes"
@@ -47,7 +48,7 @@ func TestAThrottledStoreIsWaitedOutRatherThanGivenUpOn(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.throttles = 2
 
-		if err := stack.Promote(context.Background(), promotion(), "", progress.DiscardProgress()); err != nil {
+		if err := routes(stack).Flip(context.Background(), router.Flip{Promotion: promotion()}, progress.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 

@@ -57,7 +57,13 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "images", pattern: "./images/...", open: providerBuildsOn},
 		{name: "keyvalue", pattern: "./keyvalue/...", open: providerBuildsOn},
 		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
-		{name: "router", pattern: "./router/...", open: []string{"github.com/ocelhq/ocel/pkg/router"}},
+		{name: "router", pattern: "./router/...", open: []string{
+			"github.com/ocelhq/ocel/pkg/edge",
+			"github.com/ocelhq/ocel/pkg/environment",
+			"github.com/ocelhq/ocel/pkg/progress",
+			"github.com/ocelhq/ocel/pkg/refusal",
+			"github.com/ocelhq/ocel/pkg/router",
+		}},
 		{name: "seal", pattern: "./seal/...", open: []string{"github.com/ocelhq/ocel/pkg/environment", "github.com/ocelhq/ocel/pkg/seal"}},
 		{name: "stackrecords", pattern: "./stackrecords/...", open: providerBuildsOn},
 	} {

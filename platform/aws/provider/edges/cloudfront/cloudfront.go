@@ -84,6 +84,10 @@ type cloudFront struct {
 }
 
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
+	return newCloudFront(ns, open)
+}
+
+func newCloudFront(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) *cloudFront {
 	return &cloudFront{ns: ns, open: open, pacing: NewRollout()}
 }
 
@@ -116,7 +120,6 @@ func (p *cloudFront) Kind() edge.Kind { return Kind }
 func (p *cloudFront) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
-		FlipBound:             router.FlipBound{Typical: propagationBound},
 		InvalidatesByCacheTag: true,
 	}
 }

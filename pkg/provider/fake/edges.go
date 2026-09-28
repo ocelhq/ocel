@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -24,11 +23,11 @@ const (
 )
 
 type Ledger interface {
-	edge.Ledger
+	router.Ledger
+
+	EnsureSchema(ctx context.Context) error
 
 	Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error
-
-	RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error)
 
 	Destroy(ctx context.Context) error
 }
@@ -131,6 +130,8 @@ type Edge struct {
 
 	unreadable  error
 	entitlement *edge.CodeEntitlement
+	flipFailure error
+	routed      map[string]map[string]string
 }
 
 func (e *Edge) Bindings() []edge.DomainBinding {
@@ -172,7 +173,52 @@ func (e *Edge) Serving(certificate string) bool {
 }
 
 func newEdge(kind edge.Kind, store keyvalue.Store) *Edge {
-	return &Edge{kind: kind, keyValues: store, owners: map[string]string{}, serving: map[string]string{}}
+	return &Edge{
+		kind: kind, keyValues: store, owners: map[string]string{}, serving: map[string]string{},
+		routed: map[string]map[string]string{},
+	}
+}
+
+func routeKey(slug string, tier environment.Tier, pointer string) string {
+	if pointer == "" {
+		pointer = router.DefaultPointer
+	}
+	return string(tier) + "/" + slug + "/" + pointer
+}
+
+func (e *Edge) Routed(slug string, tier environment.Tier, pointer string) map[string]string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return maps.Clone(e.routed[routeKey(slug, tier, pointer)])
+}
+
+func (e *Edge) FailNextFlip(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.flipFailure = err
+}
+
+func (e *Edge) refuseFlip() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	failure := e.flipFailure
+	e.flipFailure = nil
+	if failure == nil {
+		return nil
+	}
+	return router.Unserved{Err: failure}
+}
+
+func (e *Edge) route(slug string, tier environment.Tier, pointer string, builds map[string]string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.routed[routeKey(slug, tier, pointer)] = maps.Clone(builds)
+}
+
+func (e *Edge) unroute(slug string, tier environment.Tier, pointer string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	delete(e.routed, routeKey(slug, tier, pointer))
 }
 
 func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
@@ -238,12 +284,9 @@ func (e *Edge) Facts() edge.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	facts := edge.Facts{
-		Supported:             edge.AllNeeds(),
-		FlipBound:             router.FlipBound{Typical: 30 * time.Second, Published: true},
-		RunsCode:              e.kind == KindRelay,
-		SignsOriginForwards:   true,
-		RoutesPreviewsByLabel: e.byLabel,
-		CredentialScope:       "fake-account",
+		Supported:       edge.AllNeeds(),
+		RunsCode:        e.kind == KindRelay,
+		CredentialScope: "fake-account",
 	}
 	if e.serves != nil {
 		facts.Supported = slices.Clone(*e.serves)
@@ -300,7 +343,7 @@ func (e *Edge) Stacks() []edge.StackSpec {
 	return slices.Clone(e.stacks)
 }
 
-func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	e.mu.Lock()
 	e.stacks = append(e.stacks, spec)
 	e.mu.Unlock()
@@ -308,7 +351,14 @@ func (e *Edge) Reconcile(_ context.Context, spec edge.StackSpec, prior edge.Stac
 	state := prior
 	state.Slug, state.Tier = spec.Slug, spec.Tier
 	state.Front = e.front(spec.Slug)
-	return e.open(state)
+	stack, err := e.open(state)
+	if err != nil {
+		return nil, err
+	}
+	if err := stack.ledger.EnsureSchema(ctx); err != nil {
+		return nil, err
+	}
+	return stack, nil
 }
 
 func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) { return e.open(state) }
@@ -437,16 +487,6 @@ func (s *Stack) State() edge.StackState {
 	return s.state
 }
 
-func (s *Stack) Ledger() edge.Ledger { return s.ledger }
-
-func (s *Stack) Promote(ctx context.Context, promotion router.Promotion, pointer string, progress progress.Progress) error {
-	return s.ledger.Promote(ctx, promotion, pointer, progress)
-}
-
-func (s *Stack) RemovePointer(ctx context.Context, pointer string, _ progress.Progress) (router.PruneResult, error) {
-	return s.ledger.RemovePointer(ctx, pointer)
-}
-
 func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error {
 	s.front.bound(binding)
 	s.mu.Lock()
@@ -473,10 +513,12 @@ func (s *Stack) Destroy(ctx context.Context) error {
 }
 
 var (
-	_ provider.Edges  = (*Edges)(nil)
-	_ provider.DNS    = (*DNS)(nil)
-	_ edge.Edge       = (*Edge)(nil)
-	_ edge.EdgeStack  = (*Stack)(nil)
-	_ edge.DNSRecords = (*DNSRecords)(nil)
-	_ Ledger          = (*ledger.Ledger)(nil)
+	_ provider.Edges   = (*Edges)(nil)
+	_ provider.DNS     = (*DNS)(nil)
+	_ edge.Edge        = (*Edge)(nil)
+	_ edge.EdgeStack   = (*Stack)(nil)
+	_ router.Stack     = (*RouterStack)(nil)
+	_ provider.Routers = (*Routers)(nil)
+	_ edge.DNSRecords  = (*DNSRecords)(nil)
+	_ Ledger           = (*ledger.Ledger)(nil)
 )

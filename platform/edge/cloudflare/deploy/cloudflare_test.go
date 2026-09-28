@@ -411,7 +411,7 @@ func TestHashAsset(t *testing.T) {
 func TestFlipBoundIsTheRecordCacheWindow(t *testing.T) {
 	t.Parallel()
 
-	p := &cloudflare{}
+	p := Router{p: &cloudflare{}}
 	if !p.Facts().CachesRecords {
 		t.Fatal("Facts().CachesRecords = false, but the entry worker serves a promotion from a cached record for RECORD_TTL_MS")
 	}

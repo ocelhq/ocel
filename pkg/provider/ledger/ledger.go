@@ -32,7 +32,7 @@ type Ledger struct {
 	partition keyvalue.Partition
 }
 
-var _ edge.Ledger = (*Ledger)(nil)
+var _ router.Ledger = (*Ledger)(nil)
 
 func New(store keyvalue.Store, tier environment.Tier, slug string) *Ledger {
 	return &Ledger{keyValues: store, partition: Partition(tier, slug)}

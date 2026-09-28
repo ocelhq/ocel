@@ -11,12 +11,29 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/keyvalue"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type EdgeState struct {
-	Kind  edge.Kind                `json:"kind,omitempty"`
-	Edge  edge.StackState          `json:"edge"`
-	Hosts map[string]HostnameState `json:"hosts,omitempty"`
+	Kind    edge.Kind                         `json:"kind,omitempty"`
+	Edge    edge.StackState                   `json:"edge"`
+	Routers map[router.Kind]router.StackState `json:"routers,omitempty"`
+	Apps    map[string]router.Kind            `json:"apps,omitempty"`
+	Hosts   map[string]HostnameState          `json:"hosts,omitempty"`
+}
+
+func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps map[string]router.Kind) {
+	if len(apps) == 0 {
+		return
+	}
+	if s.Routers == nil {
+		s.Routers = map[router.Kind]router.StackState{}
+	}
+	s.Routers[kind] = state
+	if s.Apps == nil {
+		s.Apps = map[string]router.Kind{}
+	}
+	maps.Copy(s.Apps, apps)
 }
 
 type HostnameState struct {

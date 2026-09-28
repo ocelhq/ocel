@@ -180,6 +180,7 @@ type deployRun struct {
 	artifacts      map[string]provider.ArtifactRef
 	functionImages map[string]string
 	needs          AppNeedVerdicts
+	appRouters     map[string]router.Kind
 	bindings       []provider.Binding
 	functions      map[string][]provider.Function
 }
@@ -220,15 +221,19 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
+	paired, err := sharedRouter(p, front)
+	if err != nil {
+		return nil, err
+	}
 	features, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	run := &deployRun{
 		edgeSession: &edgeSession{
-			provider: p,
-			front:    front,
-			store:    edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
+			sharedStack: sharedStack{front: front, router: paired},
+			provider:    p,
+			store:       edgeStateStore{keyValues: p.KeyValues(), name: stackrecords.EdgeStackKey(spec.Tier, spec.Slug)},
 		},
 		gate:           gate,
 		features:       features,
@@ -311,7 +316,15 @@ func (r *deployRun) prepare(ctx context.Context, progress progress.Progress) err
 	if err := r.checkNeeds(ctx); err != nil {
 		return err
 	}
-	return r.preflight(ctx, progress)
+	if err := r.preflight(ctx, progress); err != nil {
+		return err
+	}
+	paired, err := pairApps(r.provider.Facts(), r.front.Kind(), r.spec.Apps)
+	if err != nil {
+		return err
+	}
+	r.appRouters = paired
+	return nil
 }
 
 func (r *deployRun) ensureBootstrap(ctx context.Context, progress progress.Progress) error {
@@ -344,7 +357,7 @@ func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 				"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
 	}
 	if len(hosts) == 0 {
-		if r.front.Facts().AddressesItself {
+		if r.router.Facts().AddressesItself {
 			return nil
 		}
 		return refusal.Refuse(refusal.CodeNotReady,
@@ -596,7 +609,7 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 }
 
 func (r *deployRun) previewLabel(slot int) string {
-	if r.hostingMode() != hostingGlobalPreview || !r.front.Facts().RoutesPreviewsByLabel {
+	if r.hostingMode() != hostingGlobalPreview || !r.router.Facts().RoutesPreviewsByLabel {
 		return ""
 	}
 	return r.previewSite().Label(r.spec.Pointer, edge.AppAt(r.appNames(), slot))
@@ -624,6 +637,7 @@ func (r *deployRun) servedHostnames() [][]string {
 func (r *deployRun) checkpoint(ctx context.Context) error {
 	r.state.Kind = r.front.Kind()
 	r.state.Edge = r.stack.State()
+	r.state.Pair(r.router.Kind(), r.routerState(), r.appRouters)
 	if r.spec.Tier == environment.TierPreview {
 		r.state.Edge.GlobalPreview = r.globalPreview()
 	}
@@ -940,7 +954,7 @@ func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
 		Stack:             entry.Stack,
 		Coordinate:        appCoordinate(r.spec, entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
-		EdgeSignsForwards: r.front.Facts().SignsOriginForwards,
+		EdgeSignsForwards: r.router.Facts().SignsOriginForwards,
 	})
 }
 
@@ -1205,7 +1219,11 @@ func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.A
 			record.Env = env
 		}
 	}
-	return r.stack.Ledger().PutStaged(ctx, record)
+	ledger, err := r.ledger()
+	if err != nil {
+		return err
+	}
+	return ledger.PutStaged(ctx, record)
 }
 
 func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*router.Code, error) {
@@ -1256,7 +1274,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		r.sender.send(planEvent(r.dryRunPlanProto()))
 		return okResult(), nil
 	}
-	flip := r.front.Facts().FlipBound
+	flip := r.router.Facts().FlipBound
 	promotion := router.Promotion{
 		PromotionID: r.spec.PromotionID,
 		Ts:          time.Now().Unix(),
@@ -1266,7 +1284,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 	}
 	if err := r.tracked.unit(r.stages.Promotion, func(u *unitRun) error {
 		return u.phase(func(progress progress.Progress) error {
-			if err := r.stack.Promote(ctx, promotion, r.spec.Pointer, progress); err != nil {
+			if err := r.flip(ctx, router.Flip{Pointer: r.spec.Pointer, Promotion: promotion}, progress); err != nil {
 				return err
 			}
 			if err := r.checkpoint(ctx); err != nil {

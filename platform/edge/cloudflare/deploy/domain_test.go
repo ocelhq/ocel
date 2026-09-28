@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -230,7 +229,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	s := stackOn(m.provider(t), state)
 
 	promotion := router.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
-	if err := s.Promote(t.Context(), promotion, router.DefaultPointer, progress.DiscardProgress()); err != nil {
+	if err := s.promote(t.Context(), promotion, router.DefaultPointer); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {

@@ -27,7 +27,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const Kind edge.Kind = "cloudflare"
@@ -68,7 +67,9 @@ type cloudflare struct {
 	entryWorkers map[string][]string
 }
 
-func New(namespace string) edge.Edge {
+func New(namespace string) edge.Edge { return newCloudflare(namespace) }
+
+func newCloudflare(namespace string) *cloudflare {
 	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace}
 }
 
@@ -90,14 +91,11 @@ func (p *cloudflare) cacheStore() cacheStore {
 
 func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{
-		Supported:           edge.AllNeeds(),
-		FlipBound:           router.FlipBound{Typical: recordTTL},
-		Compatibility:       edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
-		RunsCode:            true,
-		ServesUnbound:       true,
-		SignsOriginForwards: true,
-		CachesRecords:       true,
-		CredentialScope:     os.Getenv(envAccountID),
+		Supported:       edge.AllNeeds(),
+		Compatibility:   edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
+		RunsCode:        true,
+		ServesUnbound:   true,
+		CredentialScope: os.Getenv(envAccountID),
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -796,7 +795,7 @@ func promote(t *testing.T, p *cloudflare, state edge.StackState, app, build stri
 	if err := s.PutStaged(t.Context(), router.DeploymentRecord{App: app, Build: build}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", app, err)
 	}
-	if err := s.Promote(t.Context(), router.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", progress.DiscardProgress()); err != nil {
+	if err := s.promote(t.Context(), router.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, ""); err != nil {
 		t.Fatalf("Promote(%s): %v", app, err)
 	}
 }

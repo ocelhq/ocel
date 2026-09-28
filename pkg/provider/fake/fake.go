@@ -96,6 +96,7 @@ func (p *Provider) Facts() provider.Facts {
 		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:           p.edges.kinds(),
 		DefaultEdge:     KindRelay,
+		Pairings:        p.edges.pairings(),
 		DNSKinds:        []provider.DNSKind{KindZone},
 		StoresArtifacts: true,
 	}
@@ -125,6 +126,8 @@ func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 func (p *Provider) Credentials() provider.Credentials { return p.creds }
 
 func (p *Provider) Edges() provider.Edges { return p.edges }
+
+func (p *Provider) Routers() provider.Routers { return Routers{edges: p.edges} }
 
 func (p *Provider) DNS() provider.DNS { return p.dns }
 

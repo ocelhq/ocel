@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -234,7 +233,7 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		promotion := router.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
 
-		if err := stackOn(p, state).Promote(t.Context(), promotion, "", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).promote(t.Context(), promotion, ""); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		history, err := stackOn(p, state).History(t.Context(), "")
@@ -257,7 +256,7 @@ func TestPromotionHistory(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 
 		for _, id := range []string{"p1", "p2", "p3"} {
-			if err := stackOn(p, state).Promote(t.Context(), router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, "", progress.DiscardProgress()); err != nil {
+			if err := stackOn(p, state).promote(t.Context(), router.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, ""); err != nil {
 				t.Fatalf("Promote(%s): %v", id, err)
 			}
 		}
@@ -308,7 +307,7 @@ func TestStorePointer(t *testing.T) {
 		state := testState(srv.URL, "s3cr3t")
 		ctx := t.Context()
 
-		if err := stackOn(p, state).Promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).promote(ctx, router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
 			t.Fatalf("Promote(preview): %v", err)
 		}
 		if _, err := stackOn(p, state).History(ctx, "pr-42"); err != nil {
@@ -317,7 +316,7 @@ func TestStorePointer(t *testing.T) {
 		if _, err := stackOn(p, state).Prune(ctx, 3, "pr-42"); err != nil {
 			t.Fatalf("Prune(preview): %v", err)
 		}
-		if err := stackOn(p, state).Promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).promote(ctx, router.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
 			t.Fatalf("Promote(prod): %v", err)
 		}
 		if _, err := stackOn(p, state).History(ctx, ""); err != nil {
@@ -359,7 +358,7 @@ func TestStorePointer(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		result, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42", progress.DiscardProgress())
+		result, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42")
 		if err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
@@ -499,7 +498,7 @@ func TestDestroyInstance(t *testing.T) {
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
-		if err := stackOn(p, state).Promote(t.Context(), router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "", progress.DiscardProgress()); err != nil {
+		if err := stackOn(p, state).promote(t.Context(), router.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 		if err := p.destroyInstance(t.Context(), state); err != nil {

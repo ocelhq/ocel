@@ -10,8 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/progress"
-	"github.com/ocelhq/ocel/pkg/router"
 )
 
 type Suite struct {
@@ -19,29 +17,6 @@ type Suite struct {
 	Hostname  string
 	Previews  func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec)
 	Bootstrap func(t *testing.T) (edge.Edge, environment.Tier)
-}
-
-func promote(t *testing.T, stack edge.EdgeStack, promotion router.Promotion, pointer string) {
-	t.Helper()
-
-	ctx := context.Background()
-	for app, identity := range promotion.Builds {
-		entry := "conformance-prod-" + app + "-r0a1b2c3d"
-		staged := router.DeploymentRecord{
-			App:           app,
-			Build:         identity,
-			Entry:         "/",
-			EntryFunction: entry,
-			FunctionURLs:  map[string]string{"/": "https://conformance-" + app + ".example.com/"},
-			Revisions:     map[string]string{entry: entry + "-" + identity},
-		}
-		if err := stack.Ledger().PutStaged(ctx, staged); err != nil {
-			t.Fatalf("PutStaged(%s/%s): %v", app, identity, err)
-		}
-	}
-	if err := stack.Promote(ctx, promotion, pointer, progress.DiscardProgress()); err != nil {
-		t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
-	}
 }
 
 func Run(t *testing.T, suite Suite) {
@@ -111,146 +86,6 @@ func Run(t *testing.T, suite Suite) {
 		checkRemoval(t, "SharedPreviewRemoval", shared)
 		if shared.Action != edge.PlanKeep {
 			t.Errorf("SharedPreviewRemoval action = %q, want %q: it is bootstrap-scoped", shared.Action, edge.PlanKeep)
-		}
-	})
-
-	t.Run("an edge that runs code signs its origin forwards", func(t *testing.T) {
-		e, _ := suite.New(t)
-		if facts := e.Facts(); facts.RunsCode && !facts.SignsOriginForwards {
-			t.Error("Facts().SignsOriginForwards = false on an edge that runs code; the code it runs at the edge reaches the origin with the credentials it was bootstrapped, so it must sign")
-		}
-	})
-
-	t.Run("the flip bound is one a caller can wait out", func(t *testing.T) {
-		e, _ := suite.New(t)
-		bound := e.Facts().FlipBound
-		if bound.Typical < 0 {
-			t.Errorf("Facts().FlipBound.Typical = %v, want a duration a caller can wait out", bound.Typical)
-		}
-		if bound.Typical == 0 && bound.Published {
-			t.Error("Facts().FlipBound publishes a bound it declares instant; Published is read only when Typical > 0")
-		}
-		if e.Facts().CachesRecords && bound.Typical == 0 {
-			t.Error("Facts().FlipBound.Typical = 0 on an edge whose Facts().CachesRecords is true; an edge that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that bound")
-		}
-	})
-
-	t.Run("a reconciled stack reopens onto the same ledger", func(t *testing.T) {
-		ctx := context.Background()
-		e, spec := suite.New(t)
-		stack, err := e.Reconcile(ctx, spec, edge.StackState{})
-		if err != nil {
-			t.Fatalf("Reconcile: %v", err)
-		}
-		promotion := router.Promotion{PromotionID: "conformance-reopen", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		promote(t, stack, promotion, "")
-
-		reopened, err := e.Open(stack.State())
-		if err != nil {
-			t.Fatalf("Open: %v", err)
-		}
-		history, err := reopened.Ledger().History(ctx, "")
-		if err != nil {
-			t.Fatalf("History through the reopened stack: %v", err)
-		}
-		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
-			t.Errorf("history through the reopened stack = %v, want the promotion the reconciled stack made", history)
-		}
-	})
-
-	t.Run("the ledger reports a schema version", func(t *testing.T) {
-		stack := reconciled(t, suite)
-		version, err := stack.Ledger().SchemaVersion(context.Background())
-		if err != nil {
-			t.Fatalf("SchemaVersion: %v", err)
-		}
-		if version <= 0 {
-			t.Errorf("SchemaVersion = %d, want the schema the store speaks", version)
-		}
-	})
-
-	t.Run("a promoted record shows up in history", func(t *testing.T) {
-		ctx := context.Background()
-		stack := reconciled(t, suite)
-		promotion := router.Promotion{PromotionID: "conformance-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		promote(t, stack, promotion, "")
-		history, err := stack.Ledger().History(ctx, "")
-		if err != nil {
-			t.Fatalf("History: %v", err)
-		}
-		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
-			t.Errorf("history = %v, want the promotion just made", history)
-		}
-	})
-
-	t.Run("pruning keeps the window and reports both sides", func(t *testing.T) {
-		ctx := context.Background()
-		stack := reconciled(t, suite)
-		ids := []string{"conformance-1", "conformance-2", "conformance-3"}
-		for i, id := range ids {
-			promote(t, stack, router.Promotion{PromotionID: id, Ts: int64(i), Builds: map[string]string{"web": id}}, "")
-		}
-		result, err := stack.Ledger().Prune(ctx, 1, "")
-		if err != nil {
-			t.Fatalf("Prune: %v", err)
-		}
-		if len(result.KeptPromotionIDs) < 1 {
-			t.Errorf("KeptPromotionIDs = %v, want at least the one promotion asked for", result.KeptPromotionIDs)
-		}
-		if len(result.RemovedPromotionIDs) == 0 {
-			t.Errorf("RemovedPromotionIDs = %v, want the %d promotions outside a window of one", result.RemovedPromotionIDs, len(ids)-1)
-		}
-		if inEffect := ids[len(ids)-1]; !slices.Contains(result.KeptPromotionIDs, inEffect) {
-			t.Errorf("KeptPromotionIDs = %v, want the promotion in effect (%q) among them", result.KeptPromotionIDs, inEffect)
-		}
-		for _, id := range result.KeptPromotionIDs {
-			if slices.Contains(result.RemovedPromotionIDs, id) {
-				t.Errorf("promotion %q is reported both kept and removed", id)
-			}
-		}
-		for _, id := range ids {
-			if !slices.Contains(result.KeptPromotionIDs, id) && !slices.Contains(result.RemovedPromotionIDs, id) {
-				t.Errorf("promotion %q is reported neither kept nor removed", id)
-			}
-		}
-	})
-
-	t.Run("removing a pointer takes its promotions and leaves the rest", func(t *testing.T) {
-		ctx := context.Background()
-		stack := reconciled(t, suite)
-		const pointer = "conformance-pointer"
-		promote(t, stack, router.Promotion{PromotionID: "unpointed", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
-		promote(t, stack, router.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
-
-		result, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress())
-		if err != nil {
-			t.Fatalf("RemovePointer: %v", err)
-		}
-		if !slices.Contains(result.RemovedPromotionIDs, "pointed") {
-			t.Errorf("RemovedPromotionIDs = %v, want the pointer's promotion", result.RemovedPromotionIDs)
-		}
-		if slices.Contains(result.RemovedPromotionIDs, "unpointed") {
-			t.Errorf("RemovedPromotionIDs = %v, want nothing outside the pointer", result.RemovedPromotionIDs)
-		}
-		for _, key := range result.RemovedRecordKeys {
-			if slices.Contains(result.SurvivingRecordKeys, key) {
-				t.Errorf("record key %q is reported both removed and surviving", key)
-			}
-		}
-
-		left, err := stack.Ledger().History(ctx, pointer)
-		if err != nil {
-			t.Fatalf("History(%s): %v", pointer, err)
-		}
-		if len(left) != 0 {
-			t.Errorf("history under %q = %v, want nothing after the pointer was removed", pointer, left)
-		}
-		production, err := stack.Ledger().History(ctx, "")
-		if err != nil {
-			t.Fatalf("History(production): %v", err)
-		}
-		if !slices.ContainsFunc(production, func(h router.HistoryEntry) bool { return h.PromotionID == "unpointed" }) {
-			t.Errorf("history outside the pointer = %v, want the promotion the pointer never pointed at", production)
 		}
 	})
 
@@ -336,11 +171,8 @@ func Run(t *testing.T, suite Suite) {
 	})
 
 	t.Run("state survives the seam it is persisted through", func(t *testing.T) {
-		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
 		binds(t, stack, suite.Hostname)
-		promotion := router.Promotion{PromotionID: "conformance-persisted", Ts: 1, Builds: map[string]string{"web": "b1"}}
-		promote(t, stack, promotion, "")
 
 		written := stack.State()
 		persisted := roundTrip(t, written)
@@ -353,13 +185,6 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("Open a persisted state: %v", err)
 		}
 		frontedRecords(t, e, reopened.State(), suite.Hostname)
-		history, err := reopened.Ledger().History(ctx, "")
-		if err != nil {
-			t.Fatalf("History through a persisted state: %v", err)
-		}
-		if !slices.ContainsFunc(history, func(h router.HistoryEntry) bool { return h.PromotionID == promotion.PromotionID }) {
-			t.Errorf("history through a persisted state = %v, want the promotion made before it was written", history)
-		}
 	})
 
 	t.Run("unbinding a domain twice leaves nothing bound", func(t *testing.T) {
@@ -546,12 +371,6 @@ func withoutFronts(state edge.StackState) edge.StackState {
 	return state
 }
 
-func reconciled(t *testing.T, suite Suite) edge.EdgeStack {
-	t.Helper()
-	_, stack := reconciledOn(t, suite)
-	return stack
-}
-
 func binds(t *testing.T, stack edge.EdgeStack, hostname string) {
 	t.Helper()
 
@@ -682,55 +501,6 @@ func runPreviews(t *testing.T, suite Suite) {
 			}
 			if second != first {
 				t.Errorf("front = %q on the second reconcile, want the %q the first published; a resumed `ocel domain use` must not move where DNS points", second, first)
-			}
-		})
-
-		t.Run("a preview pointer on the wildcard leaves nothing behind when it is removed", func(t *testing.T) {
-			ctx := context.Background()
-			e, spec, wildcard := suite.Previews(t)
-			if _, err := e.ReconcilePreviewWildcard(ctx, wildcard); err != nil {
-				t.Fatalf("ReconcilePreviewWildcard: %v", err)
-			}
-			stack, err := e.Reconcile(ctx, spec, edge.StackState{GlobalPreview: wildcard.BaseDomain})
-			if err != nil {
-				t.Fatalf("Reconcile: %v", err)
-			}
-			if !stack.State().ServedOnGlobalPreview(wildcard.BaseDomain) {
-				t.Fatalf("state = %v, want the stack to record the wildcard it is served on", stack.State())
-			}
-
-			const pointer = "conformance-preview"
-			promote(t, stack, router.Promotion{PromotionID: "previewed", Ts: 1, Builds: map[string]string{"web": "b1"}}, pointer)
-
-			if host := edge.SharedPreview(spec.Slug, wildcard.BaseDomain).Host(pointer, ""); host == "" {
-				t.Fatalf("a preview promoted under %q on %q is addressed by no hostname, so nothing was published for anyone to reach", pointer, wildcard.BaseDomain)
-			}
-			served, err := stack.Ledger().History(ctx, pointer)
-			if err != nil {
-				t.Fatalf("History(%s): %v", pointer, err)
-			}
-			if !slices.ContainsFunc(served, func(entry router.HistoryEntry) bool {
-				return entry.PromotionID == "previewed" && entry.Active
-			}) {
-				t.Fatalf("history under %q = %v, want the promotion this preview serves marked active; a preview that never landed makes every assertion after it vacuous", pointer, served)
-			}
-
-			pruned, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress())
-			if err != nil {
-				t.Fatalf("RemovePointer: %v", err)
-			}
-			if len(pruned.SurvivingPointerRecordKeys) != 0 {
-				t.Errorf("RemovePointer left %v under %q, and a key per preview ever served is a retention term that grows with previews-ever", pruned.SurvivingPointerRecordKeys, pointer)
-			}
-			left, err := stack.Ledger().History(ctx, pointer)
-			if err != nil {
-				t.Fatalf("History(%s): %v", pointer, err)
-			}
-			if len(left) != 0 {
-				t.Errorf("history under %q = %v, want nothing once the preview is gone", pointer, left)
-			}
-			if _, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
-				t.Fatalf("RemovePointer again: %v", err)
 			}
 		})
 

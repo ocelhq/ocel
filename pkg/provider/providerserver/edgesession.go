@@ -51,9 +51,8 @@ func (s edgeStateStore) write(ctx context.Context, state stackrecords.EdgeState)
 }
 
 type edgeSession struct {
+	sharedStack
 	provider provider.Provider
-	front    edge.Edge
-	stack    edge.EdgeStack
 	store    edgeStateStore
 	state    stackrecords.EdgeState
 	cutover  dnsCutover
@@ -106,11 +105,18 @@ func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, s
 	if err != nil {
 		return nil, err
 	}
+	paired, err := sharedRouter(vendor, front)
+	if err != nil {
+		return nil, err
+	}
 	writer, err := dnsFor(vendor, front, sel)
 	if err != nil {
 		return nil, err
 	}
-	session := &edgeSession{provider: vendor, front: front, stack: stack, store: store, state: state}
+	session := &edgeSession{
+		sharedStack: sharedStack{front: front, router: paired, stack: stack},
+		provider:    vendor, store: store, state: state,
+	}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
 }
@@ -126,7 +132,11 @@ func (s *edgeSession) checkpoint(ctx context.Context) error {
 }
 
 func (s *edgeSession) promoted(ctx context.Context) (bool, error) {
-	history, err := s.stack.Ledger().History(ctx, router.DefaultPointer)
+	ledger, err := s.ledger()
+	if err != nil {
+		return false, err
+	}
+	history, err := ledger.History(ctx, router.DefaultPointer)
 	if err != nil {
 		return false, err
 	}

@@ -96,7 +96,7 @@ func TestRemovingPreviewsOneByOneSpacesThemAgainstEachOther(t *testing.T) {
 	w.gateway.calls = nil
 
 	for _, pointer := range pointers {
-		if _, err := stack.RemovePointer(ctx, pointer, progress.DiscardProgress()); err != nil {
+		if _, err := removePointer(ctx, stack, pointer, progress.DiscardProgress()); err != nil {
 			t.Fatalf("RemovePointer(%s): %v", pointer, err)
 		}
 	}
