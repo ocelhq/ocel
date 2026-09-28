@@ -137,7 +137,7 @@ var bound = seal.AssociatedData{
 	{Name: "key", Value: "DATABASE_URL"},
 }
 
-var aCoordinate = sealFlags(bound)
+var boundFlags = sealFlags(bound)
 
 type argvTaken struct{ argv []string }
 
@@ -175,7 +175,7 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 	}
 
 	plaintext := "postgres://example"
-	sealed, code := sealHelperAt(t, root, encoded(plaintext), append([]string{"seal"}, aCoordinate...)...)
+	sealed, code := sealHelperAt(t, root, encoded(plaintext), append([]string{"seal"}, boundFlags...)...)
 	if code != 0 {
 		t.Fatalf("seal exited %d", code)
 	}
@@ -183,9 +183,9 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Fatal("the helper answered a seal containing the value it was handed")
 	}
 
-	opened, code := sealHelperAt(t, root, sealed, append([]string{"open"}, aCoordinate...)...)
+	opened, code := sealHelperAt(t, root, sealed, append([]string{"open"}, boundFlags...)...)
 	if code != 0 {
-		t.Fatalf("open at the coordinate sealed exited %d", code)
+		t.Fatalf("open under the associated data sealed exited %d", code)
 	}
 	if got := decoded(t, opened); got != plaintext {
 		t.Errorf("open answered %q, want %q", got, plaintext)
@@ -212,7 +212,7 @@ func TestTheSealHelperOpensNothingWhoseBytesMoved(t *testing.T) {
 	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
 		t.Fatalf("init exited %d", code)
 	}
-	sealed, code := sealHelperAt(t, root, encoded("postgres://example"), append([]string{"seal"}, aCoordinate...)...)
+	sealed, code := sealHelperAt(t, root, encoded("postgres://example"), append([]string{"seal"}, boundFlags...)...)
 	if code != 0 {
 		t.Fatalf("seal exited %d", code)
 	}
@@ -223,12 +223,12 @@ func TestTheSealHelperOpensNothingWhoseBytesMoved(t *testing.T) {
 	}
 	raw[len(raw)-1] ^= 0xff
 	tampered := base64.StdEncoding.EncodeToString(raw)
-	if _, code := sealHelperAt(t, root, tampered, append([]string{"open"}, aCoordinate...)...); code == 0 {
+	if _, code := sealHelperAt(t, root, tampered, append([]string{"open"}, boundFlags...)...); code == 0 {
 		t.Fatal("a sealed value whose bytes moved opened anyway")
 	}
 }
 
-func TestTheSealHelperStillOpensAValueSealedUnderTheKeyAndCoordinateItWasSealedWith(t *testing.T) {
+func TestTheSealHelperOpensAValueSealedUnderTheKeyAndAssociatedDataItWasSealedWith(t *testing.T) {
 	t.Parallel()
 
 	root := sealDir(t)
@@ -266,7 +266,7 @@ func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 		t.Fatalf("init exited %d", code)
 	}
 	plaintext := "postgres://example"
-	rendered, code := sealHelperAt(t, root, encoded(plaintext), append([]string{"seal"}, aCoordinate...)...)
+	rendered, code := sealHelperAt(t, root, encoded(plaintext), append([]string{"seal"}, boundFlags...)...)
 	if code != 0 {
 		t.Fatalf("seal exited %d", code)
 	}

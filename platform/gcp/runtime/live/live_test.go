@@ -21,15 +21,15 @@ import (
 
 type stores struct {
 	records records.Store
-	sealer  seal.Cipher
+	cipher  seal.Cipher
 }
 
 func fakeStores() stores {
-	return stores{records: fake.NewRecords(), sealer: fake.NewCipher()}
+	return stores{records: fake.NewRecords(), cipher: fake.NewCipher()}
 }
 
 func (s stores) store() envvars.Store {
-	return envvars.Store{Records: s.records, Cipher: s.sealer}
+	return envvars.Store{Records: s.records, Cipher: s.cipher}
 }
 
 func (s stores) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
@@ -94,7 +94,7 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheTierKey(t *testing.T) {
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION_SECRET", Folder: "/web"})
-	got := resolved(t, Over(manifest, fakes.records, fakes.sealer))
+	got := resolved(t, Over(manifest, fakes.records, fakes.cipher))
 
 	if got["DATABASE_URL"] != "postgres://live" || got["SESSION_SECRET"] != "s3ss10n" {
 		t.Errorf("resolved %v, want both pinned cells opened, the folder-scoped one under its folder", got)
@@ -110,7 +110,7 @@ func TestAPreviewReadsItsEnvironmentsValueOverTheTierWideOne(t *testing.T) {
 
 	manifest := manifestOf("MARK")
 	manifest.Tier, manifest.Environment = "preview", "pr-7"
-	if got := resolved(t, Over(manifest, fakes.records, fakes.sealer)); got["MARK"] != "pr-7-only" {
+	if got := resolved(t, Over(manifest, fakes.records, fakes.cipher)); got["MARK"] != "pr-7-only" {
 		t.Errorf("resolved MARK=%q, want the preview environment's own value to shadow the tier-wide one", got["MARK"])
 	}
 }
@@ -119,7 +119,7 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 	t.Parallel()
 	fakes := fakeStores()
 
-	values := Over(manifestOf("DATABASE_URL"), fakes.records, fakes.sealer)
+	values := Over(manifestOf("DATABASE_URL"), fakes.records, fakes.cipher)
 	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v, want a cell nothing is stored for to resolve to nothing rather than fail", err)
 	}
@@ -139,7 +139,7 @@ func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 
 	manifest := manifestOf()
 	manifest.Bindings = []live.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
-	got := resolved(t, Over(manifest, fakes.records, fakes.sealer))
+	got := resolved(t, Over(manifest, fakes.records, fakes.cipher))
 
 	record := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal([]byte(got["OCEL_RESOURCE_POSTGRES_main"]), record); err != nil {
@@ -179,7 +179,7 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	t.Parallel()
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
-	seeded := stores{records: ports.Records{Clients: clients}, sealer: ports.Cipher{Clients: clients}}
+	seeded := stores{records: ports.Records{Clients: clients}, cipher: ports.Cipher{Clients: clients}}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 	seeded.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 

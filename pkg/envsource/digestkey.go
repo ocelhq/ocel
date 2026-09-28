@@ -41,7 +41,7 @@ func digestKeyRecord(tier environment.Tier) records.Name {
 	return records.Name{records.RootEnvSourceDigestKey, string(tier)}
 }
 
-func digestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
+func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
 	return seal.AssociatedData{
 		{Name: "project", Value: everyProject},
 		{Name: "class", Value: string(tier)},
@@ -65,7 +65,7 @@ func EnsureDigestKey(ctx context.Context, store envvars.Store, tier environment.
 		if _, err := rand.Read(secret); err != nil {
 			return DigestKey{}, err
 		}
-		sealed, err := store.Cipher.Seal(ctx, tier, digestKeyAssociatedData(tier), secret)
+		sealed, err := store.Cipher.Seal(ctx, tier, newDigestKeyAssociatedData(tier), secret)
 		if err != nil {
 			return DigestKey{}, fmt.Errorf("seal the %s env source digest key: %w", tier, err)
 		}
@@ -94,7 +94,7 @@ func openDigestKey(ctx context.Context, cipher seal.Cipher, tier environment.Tie
 	if err := json.Unmarshal(recorded.Bytes, &kept); err != nil {
 		return DigestKey{}, fmt.Errorf("read %s: %w", recorded.Name, err)
 	}
-	secret, err := cipher.Open(ctx, tier, digestKeyAssociatedData(tier), kept.Sealed)
+	secret, err := cipher.Open(ctx, tier, newDigestKeyAssociatedData(tier), kept.Sealed)
 	if err != nil {
 		return DigestKey{}, fmt.Errorf("open the %s env source digest key: %w", tier, err)
 	}

@@ -209,12 +209,12 @@ func (s *liveStores) once(name string, mint func() (storeCredential, error)) (st
 	return credential, nil
 }
 
-func storeSecretAssociatedData(ref provider.StackRef) seal.AssociatedData {
-	return live.StoreSecretAssociatedData(ref.Project, ref.Tier, storeRef(ref).Name.String())
+func newStoreSecretAssociatedData(ref provider.StackRef) seal.AssociatedData {
+	return live.NewStoreSecretAssociatedData(ref.Project, ref.Tier, storeRef(ref).Name.String())
 }
 
 func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, name string) (storeCredential, error) {
-	bound := storeSecretAssociatedData(ref)
+	bound := newStoreSecretAssociatedData(ref)
 	sealed, err := p.host.Kept(ctx, ref.Tier, name)
 	if err != nil {
 		return storeCredential{}, err
@@ -657,7 +657,7 @@ func (p *Provider) storeRoot(ctx context.Context, ref provider.StackRef, store s
 	if len(sealed) == 0 {
 		return storeCredential{}, nil
 	}
-	opened, err := p.cipher.Open(ctx, ref.Tier, storeSecretAssociatedData(ref), sealed)
+	opened, err := p.cipher.Open(ctx, ref.Tier, newStoreSecretAssociatedData(ref), sealed)
 	if err != nil {
 		return storeCredential{}, err
 	}

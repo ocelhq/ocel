@@ -55,7 +55,7 @@ func (s Cipher) key(ctx context.Context, tier environment.Tier) (string, error) 
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	encryptionContext, err := encryptionContextOf(bound)
+	encryptionContext, err := newEncryptionContext(bound)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 }
 
 func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	encryptionContext, err := encryptionContextOf(bound)
+	encryptionContext, err := newEncryptionContext(bound)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 	return out.Plaintext, nil
 }
 
-func encryptionContextOf(bound seal.AssociatedData) (map[string]string, error) {
+func newEncryptionContext(bound seal.AssociatedData) (map[string]string, error) {
 	encryptionContext := make(map[string]string, len(bound))
 	for _, field := range bound {
 		if field.Name == "" {

@@ -188,7 +188,7 @@ func TestEachTierVersionsAValueUnderItsOwnKey(t *testing.T) {
 	}
 }
 
-func TestADigestKeySealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+func TestTheDigestKeyIsBoundToEveryProjectInItsTierAtTheEnvSourceBinding(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")

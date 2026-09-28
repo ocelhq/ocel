@@ -38,7 +38,7 @@ func newSplitRecords() (awsports.Records, *fakeDynamo) {
 
 func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 	table, ddb := newSplitRecords()
-	store := envvars.Store{Records: table, Cipher: mustCipher()}
+	store := envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}
 	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
@@ -54,7 +54,7 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 	table, ddb := newSplitRecords()
 	ctx := context.Background()
 	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
-	registration, err := envsource.Register(ctx, envvars.Store{Records: table, Cipher: mustCipher()}, environment.TierProduction, registration)
+	registration, err := envsource.Register(ctx, envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}, environment.TierProduction, registration)
 	if err != nil {
 		t.Fatalf("Register err = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 	if err != nil || len(listed) != 1 || listed[0].Project != "shop" {
 		t.Fatalf("Registrations = %+v, %v", listed, err)
 	}
-	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: mustCipher()}, Tier: environment.TierProduction}
+	sync := &envsource.Sync{Store: envvars.Store{Records: table, Cipher: newCipherIgnoringKMSCalls()}, Tier: environment.TierProduction}
 	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[envvars.Cell]envsource.Value{{Key: "K"}: {Plaintext: []byte("v")}})); err != nil {
 		t.Fatalf("CopyProjectFrom err = %v", err)
 	}
@@ -94,8 +94,8 @@ func (keylessBootstrap) Key(context.Context, environment.Tier) (string, error) {
 var sealedAt = seal.AssociatedData{{Name: "project", Value: "shop"}, {Name: "key", Value: "STRIPE_API_KEY"}}
 
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
-	sealer := awsports.Cipher{Keys: keylessBootstrap{}}
-	_, err := sealer.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
+	cipher := awsports.Cipher{Keys: keylessBootstrap{}}
+	_, err := cipher.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal when this bootstrap made no key")
 	}
@@ -109,8 +109,8 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 }
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
-	sealer := awsports.Cipher{}
-	_, err := sealer.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
+	cipher := awsports.Cipher{}
+	_, err := cipher.Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret"))
 	if err == nil {
 		t.Fatal("Seal = nil, want a refusal where nothing has a key at all")
 	}

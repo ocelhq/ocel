@@ -134,7 +134,7 @@ var sealedAt = seal.AssociatedData{
 	{Name: "key", Value: "STRIPE_API_KEY"},
 }
 
-func TestAValueIsSealedUnderItsTierKeyAndBoundToItsCoordinateBytes(t *testing.T) {
+func TestAValueIsSealedUnderItsTierKeyAndBoundToItsAssociatedDataBytes(t *testing.T) {
 	clients, fake := servingKMS(t)
 
 	if _, err := (Cipher{Clients: clients}).Seal(context.Background(), environment.TierProduction, sealedAt, []byte("sk_live_secret")); err != nil {
@@ -151,7 +151,7 @@ func TestAValueIsSealedUnderItsTierKeyAndBoundToItsCoordinateBytes(t *testing.T)
 	}
 }
 
-func TestAValueAlreadySealedUnderItsTierKeyAndCoordinateBytesStillOpens(t *testing.T) {
+func TestAValueSealedUnderItsTierKeyAndAssociatedDataBytesOpens(t *testing.T) {
 	clients, _ := servingKMS(t)
 
 	opened, err := (Cipher{Clients: clients}).Open(context.Background(), environment.TierProduction, sealedAt, []byte("sealed"))

@@ -92,9 +92,9 @@ func (m *memRecords) List(_ context.Context, under records.Name) ([]records.Reco
 	return out, nil
 }
 
-type goSealer struct{ key []byte }
+type goCipher struct{ key []byte }
 
-func (s goSealer) Seal(_ context.Context, _ environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
+func (s goCipher) Seal(_ context.Context, _ environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (s goSealer) Seal(_ context.Context, _ environment.Tier, bound seal.Associa
 	return append(nonce, gcm.Seal(nil, nonce, plaintext, bound.Bytes())...), nil
 }
 
-func (s goSealer) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+func (s goCipher) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
 	return vars.Open(s.key, bound, sealed)
 }
 
@@ -119,7 +119,7 @@ type box struct {
 	stateRoot    string
 	routingTable string
 	records      *memRecords
-	sealer       goSealer
+	cipher       goCipher
 }
 
 func aBox(t *testing.T, root string) *box {
@@ -128,7 +128,7 @@ func aBox(t *testing.T, root string) *box {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, sealer: goSealer{key: key}}
+	b := &box{tierRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, cipher: goCipher{key: key}}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.tierRoot, tier)), 0o755); err != nil {
 			t.Fatal(err)
@@ -140,7 +140,7 @@ func aBox(t *testing.T, root string) *box {
 	return b
 }
 
-func (b *box) store() envvars.Store { return envvars.Store{Records: b.records, Cipher: b.sealer} }
+func (b *box) store() envvars.Store { return envvars.Store{Records: b.records, Cipher: b.cipher} }
 
 func (b *box) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
 	t.Helper()
@@ -315,8 +315,8 @@ func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	bound := vars.StoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
-	sealed, err := b.sealer.Seal(context.Background(), environment.TierProduction, bound, []byte("s3cr3t"))
+	bound := vars.NewStoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
+	sealed, err := b.cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,8 +346,8 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	elsewhere := vars.StoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
-	sealed, err := b.sealer.Seal(context.Background(), environment.TierProduction, elsewhere, []byte("s3cr3t"))
+	elsewhere := vars.NewStoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
+	sealed, err := b.cipher.Seal(context.Background(), environment.TierProduction, elsewhere, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
 	}
