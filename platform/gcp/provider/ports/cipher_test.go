@@ -6,12 +6,15 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"net"
+	"slices"
 	"sync"
 	"testing"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -157,5 +160,27 @@ func TestAValueSealedUnderItsTierKeyAndAssociatedDataBytesOpens(t *testing.T) {
 	opened, err := (Cipher{Clients: clients}).Open(context.Background(), environment.TierProduction, bound, []byte("sealed"))
 	if err != nil || string(opened) != "sk_live_secret" {
 		t.Fatalf("Open() = %q, %v, want the value sealed under %s at %q to open", opened, err, sealedKey, boundBytes)
+	}
+}
+
+func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsBoundTo(t *testing.T) {
+	clients, kms := serveRecordingKMS(t)
+	store := envvars.Store{Records: fake.NewRecords(), Cipher: Cipher{Clients: clients}}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+
+	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_live_secret", nil); err != nil {
+		t.Fatalf("Set() = %v", err)
+	}
+	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "orders", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+		t.Fatalf("SetBinding() = %v", err)
+	}
+
+	want := []string{boundBytes, "shop/production/*/%2F/orders/PROPERTIES/"}
+	got := make([]string, 0, len(kms.encrypted))
+	for _, req := range kms.encrypted {
+		got = append(got, string(req.GetAdditionalAuthenticatedData()))
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("bound to %q, want %q: every cell and binding already stored is bound to those bytes", got, want)
 	}
 }
