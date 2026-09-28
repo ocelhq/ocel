@@ -17,10 +17,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const sealTier = "production"
@@ -670,5 +672,48 @@ func TestTheSealHelperReadsItsRootFromNoEnvironmentVariable(t *testing.T) {
 
 	if bytes.Contains(sealScript, []byte("environ")) {
 		t.Error("the seal helper reads its environment, and a root-run helper whose key path an environment variable picks is a key path the caller picks")
+	}
+}
+
+func sealingBench(helper []byte) *bench {
+	b := machine(map[environment.Tier][]Item{environment.TierProduction: {
+		{Kind: KindFile, Name: boxstore.SealHelper, Mode: 0o755, Owner: rootOwner, Content: helper},
+	}})
+	b.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted(boxstore.SealHelper)+" "+quoted(string(environment.TierProduction))) {
+			return session.Result{Code: 2, Stderr: "seal: --class is not a coordinate flag\n"}, true
+		}
+		return session.Result{}, false
+	}
+	return b
+}
+
+func TestASealTheBoxsOwnHelperCannotRunSaysToBootstrapWhenThatHelperIsNotThisBuilds(t *testing.T) {
+	t.Parallel()
+
+	b := sealingBench([]byte("#!/usr/bin/env python3\n"))
+	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Fatalf("Seal() through a helper older than this build = %v, want a not-ready refusal", err)
+	}
+	if !strings.Contains(refused.Message, provider.BootstrapCommand(environment.TierProduction)) {
+		t.Errorf("Seal() through a helper older than this build said %q, want it to name `%s`: only a bootstrap installs the helper this build speaks to",
+			refused.Message, provider.BootstrapCommand(environment.TierProduction))
+	}
+}
+
+func TestASealTheBoxsOwnHelperCannotRunIsReportedAsItsHelperSaidWhenThatHelperIsThisBuilds(t *testing.T) {
+	t.Parallel()
+
+	b := sealingBench(sealScript)
+	_, err := NewCipher(b.host()).Seal(context.Background(), environment.TierProduction, bound, []byte("v"))
+
+	if err == nil || !strings.Contains(err.Error(), "is not a coordinate flag") {
+		t.Fatalf("Seal() = %v, want the helper's own reason", err)
+	}
+	if strings.Contains(err.Error(), provider.BootstrapCommand(environment.TierProduction)) {
+		t.Errorf("Seal() through the helper this build installs said %q, and a bootstrap would reinstall the same helper", err)
 	}
 }
