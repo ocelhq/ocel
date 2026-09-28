@@ -46,14 +46,14 @@ func OpenTierCollection(client *firestore.Client, tier environment.Tier) *firest
 	return client.Collection(tierCollectionPrefix + string(tier))
 }
 
-func (s KeyValues) absent(ctx context.Context, collection *firestore.CollectionRef, key keyvalue.Key) error {
+func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firestore.CollectionRef, key keyvalue.Key) error {
 	flat := flatDocumentID(key)
 	documents := collection.Select().OrderBy(firestore.DocumentID, firestore.Asc).StartAt(flat).Limit(1).Documents(ctx)
 	defer documents.Stop()
 	snapshot, err := documents.Next()
 	switch {
 	case status.Code(err) == codes.NotFound:
-		return s.unbootstrapped(key.Partition.Tier)
+		return s.refuseUnbootstrapped(key.Partition.Tier)
 	case err == nil && snapshot.Ref.ID == flat:
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s is kept as the document %q, which this build did not write: an older ocel wrote it in a layout this build does not read", key, flat)
@@ -71,7 +71,7 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 	}
 	snapshot, err := collection.Doc(documentID(key)).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return keyvalue.Entry{}, s.absent(ctx, collection, key)
+		return keyvalue.Entry{}, s.refuseAbsentDocument(ctx, collection, key)
 	}
 	if err != nil {
 		return keyvalue.Entry{}, fmt.Errorf("read %s: %w", key, err)
@@ -99,7 +99,7 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 		return compareAndSet(tx, collection, entry, next)
 	})
 	if err != nil {
-		return "", s.writeFailed(entry.Key, err)
+		return "", s.refuseFailedWrite(entry.Key, err)
 	}
 	return next, nil
 }
@@ -147,7 +147,7 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 		return nil
 	})
 	if err != nil {
-		return s.writeFailed(first.Key, err)
+		return s.refuseFailedWrite(first.Key, err)
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 		return tx.Delete(reference)
 	})
 	if err != nil {
-		return s.writeFailed(key, err)
+		return s.refuseFailedWrite(key, err)
 	}
 	return nil
 }
@@ -218,7 +218,7 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 		}
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return nil, s.unbootstrapped(in.Tier)
+				return nil, s.refuseUnbootstrapped(in.Tier)
 			}
 			return nil, fmt.Errorf("read everything in %s: %w", in, err)
 		}
@@ -283,17 +283,17 @@ func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef
 	return revisionOf(snapshot), true, nil
 }
 
-func (s KeyValues) writeFailed(key keyvalue.Key, err error) error {
+func (s KeyValues) refuseFailedWrite(key keyvalue.Key, err error) error {
 	if errors.Is(err, keyvalue.ErrStale) || errors.Is(err, keyvalue.ErrNotFound) {
 		return err
 	}
 	if status.Code(err) == codes.NotFound {
-		return s.unbootstrapped(key.Partition.Tier)
+		return s.refuseUnbootstrapped(key.Partition.Tier)
 	}
 	return fmt.Errorf("write %s: %w", key, err)
 }
 
-func (s KeyValues) unbootstrapped(tier environment.Tier) error {
+func (s KeyValues) refuseUnbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to store an entry.\nRun `%s` to create it, then try again",
 		s.Clients.Database(), provider.BootstrapCommand(tier))

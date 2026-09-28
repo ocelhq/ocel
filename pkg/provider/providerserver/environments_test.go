@@ -441,7 +441,7 @@ func TestAStackRecordThatWillNotBeForgottenStillHasItsArtifactsReclaimed(t *test
 	if !ok {
 		t.Fatalf("this test drives the record store's removal refusal and the provider has a %T", vendor.KeyValues())
 	}
-	store.RefuseRemoval(stackrecords.StackKey(environment.TierPreview, "shop", stack),
+	store.SetRemovalError(stackrecords.StackKey(environment.TierPreview, "shop", stack),
 		errors.New("the record store answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {

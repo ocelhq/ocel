@@ -44,7 +44,7 @@ func NewKeyValues(over KeyValueTransport) *KeyValues { return &KeyValues{over: o
 
 var errUnprovisioned = errors.New("this host keeps no store for the tier")
 
-func unbootstrapped(tier environment.Tier) error {
+func refuseUnbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this host has no ocel bootstrap\nRun `%s`",
 		provider.BootstrapCommand(tier))
@@ -84,7 +84,7 @@ func (s *KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.R
 		return "", err
 	}
 	tier := entry.Key.Partition.Tier
-	rendered, err := s.run(ctx, tier, unbootstrapped(tier), bytes.NewReader(line), "write", path, string(entry.Revision))
+	rendered, err := s.run(ctx, tier, refuseUnbootstrapped(tier), bytes.NewReader(line), "write", path, string(entry.Revision))
 	if err != nil {
 		return "", err
 	}
@@ -107,7 +107,7 @@ func (s *KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry)
 			first.Key, second.Key)
 	}
 	fed := io.MultiReader(bytes.NewReader(firstLine), bytes.NewReader(secondLine))
-	rendered, err := s.run(ctx, tier, unbootstrapped(tier), fed, "pair", one, string(first.Revision), two, string(second.Revision))
+	rendered, err := s.run(ctx, tier, refuseUnbootstrapped(tier), fed, "pair", one, string(first.Revision), two, string(second.Revision))
 	if err != nil {
 		return err
 	}

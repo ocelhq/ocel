@@ -28,7 +28,7 @@ func encodeKey(key keyvalue.Key) string {
 	return string(encoded)
 }
 
-func (s *KeyValues) RefuseRemoval(key keyvalue.Key, err error) {
+func (s *KeyValues) SetRemovalError(key keyvalue.Key, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.refusals[encodeKey(key)] = err
@@ -53,7 +53,7 @@ func (s *KeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Rev
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.checkRevision(entry); err != nil {
+	if err := s.refuseMovedRevision(entry); err != nil {
 		return "", err
 	}
 	return s.store(entry), nil
@@ -68,7 +68,7 @@ func (s *KeyValues) WritePair(_ context.Context, first, second keyvalue.Entry) e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, entry := range []keyvalue.Entry{first, second} {
-		if err := s.checkRevision(entry); err != nil {
+		if err := s.refuseMovedRevision(entry); err != nil {
 			return err
 		}
 	}
@@ -84,7 +84,7 @@ func refuseUnwritable(entry keyvalue.Entry) error {
 	return keyvalue.RefuseNonJSON(entry)
 }
 
-func (s *KeyValues) checkRevision(entry keyvalue.Entry) error {
+func (s *KeyValues) refuseMovedRevision(entry keyvalue.Entry) error {
 	prior, exists := s.rows[encodeKey(entry.Key)]
 	if exists != (entry.Revision != "") || (exists && prior.Revision != entry.Revision) {
 		return keyvalue.ErrStale

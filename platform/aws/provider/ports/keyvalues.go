@@ -67,12 +67,12 @@ func PartitionKey(in keyvalue.Partition) string {
 
 func sortKey(path []string) string { return join(path) + segmentSeparator }
 
-func unbootstrapped(tier environment.Tier) error {
+func refuseUnbootstrapped(tier environment.Tier) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this account has no Ocel bootstrap, so there is nowhere to keep an entry.\nRun `%s` to create it, then try again", provider.BootstrapCommand(tier))
 }
 
-func tableGone(err error) bool {
+func isTableMissing(err error) bool {
 	var missing *ddbtypes.ResourceNotFoundException
 	return errors.As(err, &missing)
 }
@@ -94,7 +94,7 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
-		if tableGone(err) {
+		if isTableMissing(err) {
 			return keyvalue.Entry{}, keyvalue.ErrNotFound
 		}
 		return keyvalue.Entry{}, fmt.Errorf("read %s: %w", key, err)
@@ -115,7 +115,7 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 		return "", err
 	}
 	if table == "" {
-		return "", unbootstrapped(entry.Key.Partition.Tier)
+		return "", refuseUnbootstrapped(entry.Key.Partition.Tier)
 	}
 
 	if _, err := s.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
@@ -147,7 +147,7 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 			return err
 		}
 		if table == "" {
-			return unbootstrapped(entry.Key.Partition.Tier)
+			return refuseUnbootstrapped(entry.Key.Partition.Tier)
 		}
 		tables = append(tables, table)
 		writes = append(writes, ddbtypes.TransactWriteItem{Put: &ddbtypes.Put{
@@ -165,7 +165,7 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 
 	if _, err := s.Dynamo.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes}); err != nil {
 		var cancelled *ddbtypes.TransactionCanceledException
-		if errors.As(err, &cancelled) && conditionFailed(cancelled) {
+		if errors.As(err, &cancelled) && isConditionFailed(cancelled) {
 			return keyvalue.ErrStale
 		}
 		return fmt.Errorf("write %s beside %s: %w", first.Key, second.Key, err)
@@ -173,7 +173,7 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 	return nil
 }
 
-func conditionFailed(cancelled *ddbtypes.TransactionCanceledException) bool {
+func isConditionFailed(cancelled *ddbtypes.TransactionCanceledException) bool {
 	for _, reason := range cancelled.CancellationReasons {
 		if aws.ToString(reason.Code) == conditionalCheckFailed {
 			return true
@@ -243,7 +243,7 @@ func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyval
 	if err == nil {
 		return nil
 	}
-	if tableGone(err) {
+	if isTableMissing(err) {
 		return keyvalue.ErrNotFound
 	}
 	var failed *ddbtypes.ConditionalCheckFailedException
@@ -289,7 +289,7 @@ func (s KeyValues) List(ctx context.Context, in keyvalue.Partition, under ...str
 			ExclusiveStartKey:         start,
 		})
 		if err != nil {
-			if tableGone(err) {
+			if isTableMissing(err) {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("read everything in %s: %w", in, err)
