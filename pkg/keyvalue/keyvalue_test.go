@@ -59,15 +59,15 @@ func TestAValueThatIsNotJSONIsRefused(t *testing.T) {
 	t.Parallel()
 
 	for _, value := range []string{"2", `{"a":1}`, `"text"`, "[]"} {
-		if err := keyvalue.RefuseNonJSON(keyvalue.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)}); err != nil {
-			t.Errorf("RefuseNonJSON(%q) = %v, want it accepted", value, err)
+		if err := keyvalue.RefuseUnwritable(keyvalue.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)}); err != nil {
+			t.Errorf("RefuseUnwritable(%q) = %v, want it accepted", value, err)
 		}
 	}
 	for _, value := range []string{"", "one", "{", "sk_live_secret"} {
 		var refused refusal.Refusal
-		err := keyvalue.RefuseNonJSON(keyvalue.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)})
+		err := keyvalue.RefuseUnwritable(keyvalue.Entry{Key: values.Key("cells"), Value: json.RawMessage(value)})
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-			t.Errorf("RefuseNonJSON(%q) = %v, want an %s refusal", value, err, refusal.CodeInvalid)
+			t.Errorf("RefuseUnwritable(%q) = %v, want an %s refusal", value, err, refusal.CodeInvalid)
 		}
 	}
 }

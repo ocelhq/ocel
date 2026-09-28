@@ -48,7 +48,7 @@ func (s *KeyValues) Read(_ context.Context, key keyvalue.Key) (keyvalue.Entry, e
 }
 
 func (s *KeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if err := refuseUnwritable(entry); err != nil {
+	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
 	s.mu.Lock()
@@ -61,7 +61,7 @@ func (s *KeyValues) Write(_ context.Context, entry keyvalue.Entry) (keyvalue.Rev
 
 func (s *KeyValues) WritePair(_ context.Context, first, second keyvalue.Entry) error {
 	for _, entry := range []keyvalue.Entry{first, second} {
-		if err := refuseUnwritable(entry); err != nil {
+		if err := keyvalue.RefuseUnwritable(entry); err != nil {
 			return err
 		}
 	}
@@ -75,13 +75,6 @@ func (s *KeyValues) WritePair(_ context.Context, first, second keyvalue.Entry) e
 	s.store(first)
 	s.store(second)
 	return nil
-}
-
-func refuseUnwritable(entry keyvalue.Entry) error {
-	if err := keyvalue.RefuseMalformedKey(entry.Key); err != nil {
-		return err
-	}
-	return keyvalue.RefuseNonJSON(entry)
 }
 
 func (s *KeyValues) refuseMovedRevision(entry keyvalue.Entry) error {

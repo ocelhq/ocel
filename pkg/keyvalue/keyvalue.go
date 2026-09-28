@@ -171,7 +171,14 @@ func RefuseMalformedKey(k Key) error {
 	return nil
 }
 
-func RefuseNonJSON(entry Entry) error {
+func RefuseUnwritable(entry Entry) error {
+	if err := RefuseMalformedKey(entry.Key); err != nil {
+		return err
+	}
+	return refuseNonJSON(entry)
+}
+
+func refuseNonJSON(entry Entry) error {
 	if !json.Valid(entry.Value) {
 		return refusal.Refuse(refusal.CodeInvalid, "%s is not written as JSON, and every entry is kept as JSON text", entry.Key)
 	}

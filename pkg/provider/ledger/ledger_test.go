@@ -38,7 +38,7 @@ func (s *store) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revis
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := keyvalue.RefuseNonJSON(entry); err != nil {
+	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
 	if s.racing != nil {

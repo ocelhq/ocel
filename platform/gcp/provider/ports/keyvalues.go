@@ -80,7 +80,7 @@ func (s KeyValues) Read(ctx context.Context, key keyvalue.Key) (keyvalue.Entry, 
 }
 
 func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Revision, error) {
-	if err := refuseUnwritable(entry); err != nil {
+	if err := keyvalue.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
 	collection, err := s.collection(entry.Key.Partition)
@@ -106,7 +106,7 @@ func (s KeyValues) Write(ctx context.Context, entry keyvalue.Entry) (keyvalue.Re
 
 func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) error {
 	for _, entry := range []keyvalue.Entry{first, second} {
-		if err := refuseUnwritable(entry); err != nil {
+		if err := keyvalue.RefuseUnwritable(entry); err != nil {
 			return err
 		}
 	}
@@ -150,13 +150,6 @@ func (s KeyValues) WritePair(ctx context.Context, first, second keyvalue.Entry) 
 		return s.refuseFailedWrite(first.Key, err)
 	}
 	return nil
-}
-
-func refuseUnwritable(entry keyvalue.Entry) error {
-	if err := keyvalue.RefuseMalformedKey(entry.Key); err != nil {
-		return err
-	}
-	return keyvalue.RefuseNonJSON(entry)
 }
 
 func (s KeyValues) Remove(ctx context.Context, key keyvalue.Key, expected keyvalue.Revision) error {
