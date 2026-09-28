@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 const EnvVar = "OCEL_LIVE_MANIFEST"
@@ -55,14 +55,22 @@ type Manifest struct {
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
 
-func (m Manifest) StoreCoordinate() records.SealScope {
-	return records.SealScope{
-		Project: m.Slug,
-		Tier:    environment.Tier(m.Tier),
-		Env:     m.Store.Env,
-		Folder:  StoreSecretFolder,
-		Binding: StoreSecretBinding,
-		Name:    StoreSecretName,
+func (m Manifest) StoreSecretAssociatedData() seal.AssociatedData {
+	return StoreSecretAssociatedData(m.Slug, environment.Tier(m.Tier), m.Store.Env)
+}
+
+func StoreSecretAssociatedData(project string, tier environment.Tier, env string) seal.AssociatedData {
+	return SecretAssociatedData(project, tier, env, StoreSecretFolder, StoreSecretBinding, StoreSecretName)
+}
+
+func SecretAssociatedData(project string, tier environment.Tier, env, folder, binding, name string) seal.AssociatedData {
+	return seal.AssociatedData{
+		{Name: "project", Value: project},
+		{Name: "tier", Value: string(tier)},
+		{Name: "env", Value: env},
+		{Name: "folder", Value: folder},
+		{Name: "binding", Value: binding},
+		{Name: "name", Value: name},
 	}
 }
 

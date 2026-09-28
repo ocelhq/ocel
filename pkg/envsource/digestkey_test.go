@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -184,5 +185,28 @@ func TestEachTierVersionsAValueUnderItsOwnKey(t *testing.T) {
 	}
 	if versions[environment.TierProduction] == versions[environment.TierPreview] {
 		t.Fatalf("production and preview versioned one value as %q alike, want each tier keyed apart", versions[environment.TierPreview])
+	}
+}
+
+func TestADigestKeySealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	key, err := base64.StdEncoding.DecodeString("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := envvars.Store{
+		Records: fake.NewRecords(),
+		Cipher:  fake.NewCipherWithKeys(map[environment.Tier][]byte{environment.TierProduction: key}),
+	}
+	if _, err := store.Records.Write(ctx, records.Record{
+		Name:  records.Name{records.RootEnvSourceDigestKey, string(environment.TierProduction)},
+		Bytes: []byte(`{"sealed":"9F/RJPgNa4porS/1Q8ItSL/KGK95oGpw8VmDf5tE0cWEbE3WkZMbSiX44Znd7nOg83GJcnPO7ZR86eqg"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := envsource.EnsureDigestKey(ctx, store, environment.TierProduction); err != nil {
+		t.Fatalf("EnsureDigestKey() = %v, want the key sealed at */production/*/%%2F/envsource/digestkey/ to open: every value an env source copied is versioned under it", err)
 	}
 }

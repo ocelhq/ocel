@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 func fixture() (envvars.Store, envvars.Scope) {
@@ -515,7 +516,7 @@ func TestTheTierWideEnvironmentIsReserved(t *testing.T) {
 
 type counted struct {
 	records.Store
-	records.Cipher
+	seal.Cipher
 	mu     sync.Mutex
 	reads  int
 	lists  int
@@ -538,11 +539,11 @@ func (c *counted) List(ctx context.Context, under records.Name) ([]records.Recor
 	return c.Store.List(ctx, under)
 }
 
-func (c *counted) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
+func (c *counted) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
 	c.mu.Lock()
 	c.opened++
 	c.mu.Unlock()
-	return c.Cipher.Open(ctx, at, sealed)
+	return c.Cipher.Open(ctx, tier, bound, sealed)
 }
 
 func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {

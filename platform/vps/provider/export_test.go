@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -13,7 +14,11 @@ var ProviderOver = newProvider
 
 var MintStoreSecret = mintStoreSecret
 
-func StoreCoordinate(ref provider.StackRef) records.SealScope { return storeCoordinate(ref) }
+func StoreSecretAssociatedData(ref provider.StackRef) seal.AssociatedData {
+	return storeSecretAssociatedData(ref)
+}
+
+var PostgresSecretAssociatedData = postgresSecretAssociatedData
 
 func StoreName(ref provider.StackRef) string { return storeName(ref) }
 

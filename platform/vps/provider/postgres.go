@@ -11,9 +11,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -106,25 +107,22 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 	}, nil
 }
 
-func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
-	return p.recordedSecret(ctx, in, name, postgresSecretFolder, postgresSecretName, mintPostgresSecret)
+func postgresSecretAssociatedData(ref provider.StackRef, resource string) seal.AssociatedData {
+	return live.SecretAssociatedData(ref.Project, ref.Tier, ref.Name.String(), postgresSecretFolder, resource, postgresSecretName)
 }
 
-func (p *Provider) recordedSecret(ctx context.Context, in resources.ProvisionRequest, name, folder, item string, mint func() (string, error)) (string, error) {
-	at := records.SealScope{
-		Project: in.Ref.Project, Tier: in.Ref.Tier, Env: in.Ref.Name.String(),
-		Folder: folder, Binding: in.Resource.Name, Name: item,
-	}
+func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
+	bound := postgresSecretAssociatedData(in.Ref, in.Resource.Name)
 	sealed, err := p.host.Kept(ctx, in.Ref.Tier, name)
 	if err != nil {
 		return "", err
 	}
 	if len(sealed) == 0 {
-		minted, err := mint()
+		minted, err := mintPostgresSecret()
 		if err != nil {
 			return "", err
 		}
-		candidate, err := p.cipher.Seal(ctx, at, []byte(minted))
+		candidate, err := p.cipher.Seal(ctx, in.Ref.Tier, bound, []byte(minted))
 		if err != nil {
 			return "", err
 		}
@@ -132,7 +130,7 @@ func (p *Provider) recordedSecret(ctx context.Context, in resources.ProvisionReq
 			return "", err
 		}
 	}
-	opened, err := p.cipher.Open(ctx, at, sealed)
+	opened, err := p.cipher.Open(ctx, in.Ref.Tier, bound, sealed)
 	if err != nil {
 		return "", err
 	}

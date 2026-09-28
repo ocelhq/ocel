@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"maps"
 	"strings"
@@ -15,11 +16,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
-const keyARN = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars"
+const (
+	keyARN        = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars"
+	previewKeyARN = "arn:aws:kms:us-east-1:123456789012:key/ocel-vars-preview"
+)
 
 func newRecords(t *testing.T) (awsports.Records, *fakeDynamo) {
 	t.Helper()
@@ -27,9 +32,16 @@ func newRecords(t *testing.T) (awsports.Records, *fakeDynamo) {
 	return awsports.Records{Dynamo: ddb, Tables: awsports.Table("ocel-state")}, ddb
 }
 
+type tierKeys map[environment.Tier]string
+
+func (k tierKeys) Key(_ context.Context, tier environment.Tier) (string, error) { return k[tier], nil }
+
 func newCipher() (awsports.Cipher, *fakeKMS) {
 	crypto := &fakeKMS{}
-	return awsports.Cipher{KMS: crypto, Keys: awsports.Key(keyARN)}, crypto
+	return awsports.Cipher{KMS: crypto, Keys: tierKeys{
+		environment.TierProduction: keyARN,
+		environment.TierPreview:    previewKeyARN,
+	}}, crypto
 }
 
 func TestRecordsConformance(t *testing.T) {
@@ -94,18 +106,15 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	}
 }
 
-func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
+func TestACellIsSealedUnderTheEncryptionContextItWasBoundToBeforeThePackageMoved(t *testing.T) {
+	table, _ := newRecords(t)
 	cipher, crypto := newCipher()
+	store := envvars.Store{Records: table, Cipher: cipher}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierProduction}
+	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
 
-	at := records.SealScope{
-		Project: "shop",
-		Tier:    environment.TierProduction,
-		Env:     "staging",
-		Folder:  "/web",
-		Name:    "STRIPE_API_KEY",
-	}
-	if _, err := cipher.Seal(context.Background(), at, []byte("sk_live_secret")); err != nil {
-		t.Fatalf("Seal err = %v", err)
+	if _, err := store.Set(context.Background(), scope, at, "sk_live_secret", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
 	}
 
 	want := map[string]string{
@@ -116,63 +125,86 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 		"key":         "STRIPE_API_KEY",
 	}
 	if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
-		t.Fatalf("encryption context = %v, want exactly one %v", crypto.contexts, want)
+		t.Fatalf("encryption context = %v, want exactly one %v: every value already stored is bound to it", crypto.contexts, want)
 	}
 	if len(crypto.keyIDs) != 1 || crypto.keyIDs[0] != keyARN {
 		t.Errorf("sealed under %v, want %q", crypto.keyIDs, keyARN)
 	}
 }
 
-func TestAValueAlreadySealedUnderTheStoredEncryptionContextStillOpens(t *testing.T) {
+func TestACellSealedUnderTheEncryptionContextItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+	table, _ := newRecords(t)
 	cipher, _ := newCipher()
-
-	at := records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
-	sealed := fakeCipherMarker + "class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
+	sealed := fakeCipherMarker + keyARN + "#class=production,environment=staging,folder=/web,key=STRIPE_API_KEY,project=shop|" +
 		base64.StdEncoding.EncodeToString([]byte("sk_live_secret"))
-	opened, err := cipher.Open(context.Background(), at, []byte(sealed))
-	if err != nil || string(opened) != "sk_live_secret" {
-		t.Fatalf("Open() = %q, %v, want the value KMS sealed under class=production to open: the encryption context is data every stored value is bound to", opened, err)
+	body, err := json.Marshal(map[string]any{"version": 1, "size": 14, "sealed": []byte(sealed)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := table.Write(context.Background(), records.Record{
+		Name:  records.Name{"values", "shop", "production", "cells", "%2Fweb", "STRIPE_API_KEY", "staging"},
+		Bytes: body,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := envvars.Store{Records: table, Cipher: cipher}
+	at := envvars.Coordinate{Cell: envvars.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
+
+	value, err := store.Get(context.Background(), envvars.Scope{Project: "shop", Tier: environment.TierProduction}, at, true)
+	if err != nil || value.Plaintext != "sk_live_secret" {
+		t.Fatalf("Get() = %q, %v, want the value KMS sealed under class=production to open: the encryption context is data every stored value is bound to", value.Plaintext, err)
 	}
 }
 
-func TestABindingSealsUnderItsOwnName(t *testing.T) {
+func TestABindingIsSealedUnderAnEncryptionContextThatNamesIt(t *testing.T) {
+	table, _ := newRecords(t)
+	cipher, crypto := newCipher()
+	store := envvars.Store{Records: table, Cipher: cipher}
+	scope := envvars.Scope{Project: "shop", Tier: environment.TierPreview}
+
+	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "orders", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+		t.Fatalf("SetBinding err = %v", err)
+	}
+
+	want := map[string]string{
+		"project":     "shop",
+		"class":       "preview",
+		"environment": "*",
+		"folder":      "/",
+		"binding":     "orders",
+		"key":         "PROPERTIES",
+	}
+	if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
+		t.Fatalf("encryption context = %v, want exactly one %v: every binding already stored is bound to it", crypto.contexts, want)
+	}
+}
+
+func TestAssociatedDataThatNamesOneFieldTwiceIsRefused(t *testing.T) {
+	cipher, crypto := newCipher()
+	bound := seal.AssociatedData{{Name: "key", Value: "A"}, {Name: "key", Value: "B"}}
+
+	if _, err := cipher.Seal(context.Background(), environment.TierProduction, bound, []byte("v")); err == nil {
+		t.Fatal("Seal() with key named twice succeeded, and an encryption context keeps one of the two values")
+	}
+	if len(crypto.contexts) != 0 {
+		t.Errorf("KMS was asked to encrypt under %v, want no call", crypto.contexts)
+	}
+}
+
+func TestAValueNamingNoTierIsRefusedRatherThanSealedUnderSomeKey(t *testing.T) {
 	cipher, crypto := newCipher()
 
-	at := records.SealScope{
-		Project: "shop",
-		Tier:    environment.TierPreview,
-		Env:     "*",
-		Folder:  "/",
-		Binding: "orders",
-		Name:    "PROPERTIES",
+	_, err := cipher.Seal(context.Background(), "", seal.AssociatedData{{Name: "key", Value: "K"}}, []byte("v"))
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Fatalf("Seal() under no tier = %v, want an invalid refusal: each tier is sealed under the key its own bootstrap made", err)
 	}
-	if _, err := cipher.Seal(context.Background(), at, []byte("{}")); err != nil {
-		t.Fatalf("Seal err = %v", err)
-	}
-	if crypto.contexts[0]["binding"] != "orders" {
-		t.Errorf("encryption context = %v, want it to name the binding the value belongs to", crypto.contexts[0])
+	if len(crypto.keyIDs) != 0 {
+		t.Errorf("KMS was asked to encrypt under %v, want no call", crypto.keyIDs)
 	}
 }
 
-func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
-	cipher, _ := newCipher()
-
-	for name, at := range map[string]records.SealScope{
-		"no project":     {Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "K"},
-		"no tier":        {Project: "shop", Env: "*", Folder: "/", Name: "K"},
-		"no environment": {Project: "shop", Tier: environment.TierProduction, Folder: "/", Name: "K"},
-		"no folder":      {Project: "shop", Tier: environment.TierProduction, Env: "*", Name: "K"},
-		"no key":         {Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			if _, err := cipher.Seal(context.Background(), at, []byte("v")); err == nil {
-				t.Fatal("Seal() at a coordinate missing a component succeeded, so two cells could seal alike")
-			}
-		})
-	}
-}
-
-func mustCipher() records.Cipher {
+func mustCipher() seal.Cipher {
 	cipher, _ := newCipher()
 	return cipher
 }

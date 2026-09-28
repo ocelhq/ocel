@@ -22,6 +22,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/seal"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -93,7 +94,7 @@ func (m *memRecords) List(_ context.Context, under records.Name) ([]records.Reco
 
 type goSealer struct{ key []byte }
 
-func (s goSealer) Seal(_ context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
+func (s goSealer) Seal(_ context.Context, _ environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
 		return nil, err
@@ -106,11 +107,11 @@ func (s goSealer) Seal(_ context.Context, at records.SealScope, plaintext []byte
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	return append(nonce, gcm.Seal(nil, nonce, plaintext, at.AAD())...), nil
+	return append(nonce, gcm.Seal(nil, nonce, plaintext, bound.Bytes())...), nil
 }
 
-func (s goSealer) Open(_ context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
-	return vars.Open(s.key, at, sealed)
+func (s goSealer) Open(_ context.Context, _ environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	return vars.Open(s.key, bound, sealed)
 }
 
 type box struct {
@@ -314,11 +315,8 @@ func TestTheStoreOpensNothingUnderATierWhoseKeyIsGone(t *testing.T) {
 func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	at := records.SealScope{
-		Project: "shop", Tier: environment.TierProduction, Env: "shop-prod",
-		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
-	}
-	sealed, err := b.sealer.Seal(context.Background(), at, []byte("s3cr3t"))
+	bound := vars.StoreSecretAssociatedData("shop", environment.TierProduction, "shop-prod")
+	sealed, err := b.sealer.Seal(context.Background(), environment.TierProduction, bound, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,11 +346,8 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	elsewhere := records.SealScope{
-		Project: "other", Tier: environment.TierProduction, Env: "other-prod",
-		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
-	}
-	sealed, err := b.sealer.Seal(context.Background(), elsewhere, []byte("s3cr3t"))
+	elsewhere := vars.StoreSecretAssociatedData("other", environment.TierProduction, "other-prod")
+	sealed, err := b.sealer.Seal(context.Background(), environment.TierProduction, elsewhere, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
 	}

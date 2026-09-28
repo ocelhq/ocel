@@ -9,12 +9,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 func complete() Manifest {
@@ -67,7 +69,7 @@ func TestAManifestMissingWhatScopesTheStoreIsRefused(t *testing.T) {
 	}
 }
 
-func sealFor(t *testing.T, key []byte, at records.SealScope, plaintext string) []byte {
+func sealFor(t *testing.T, key []byte, bound seal.AssociatedData, plaintext string) []byte {
 	t.Helper()
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -81,7 +83,7 @@ func sealFor(t *testing.T, key []byte, at records.SealScope, plaintext string) [
 	if _, err := rand.Read(nonce); err != nil {
 		t.Fatal(err)
 	}
-	return append(nonce, gcm.Seal(nil, nonce, []byte(plaintext), at.AAD())...)
+	return append(nonce, gcm.Seal(nil, nonce, []byte(plaintext), bound.Bytes())...)
 }
 
 func aKey(t *testing.T) []byte {
@@ -93,7 +95,14 @@ func aKey(t *testing.T) []byte {
 	return key
 }
 
-var bound = records.SealScope{Project: "shop", Tier: environment.TierProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
+var bound = seal.AssociatedData{
+	{Name: "project", Value: "shop"},
+	{Name: "class", Value: "production"},
+	{Name: "environment", Value: "*"},
+	{Name: "folder", Value: "/"},
+	{Name: "binding", Value: ""},
+	{Name: "key", Value: "DATABASE_URL"},
+}
 
 func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
 	t.Parallel()
@@ -104,8 +113,8 @@ func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
 	if err != nil || string(opened) != "postgres://example" {
 		t.Fatalf("Open() = %q, %v", opened, err)
 	}
-	elsewhere := bound
-	elsewhere.Project = "other"
+	elsewhere := slices.Clone(bound)
+	elsewhere[0].Value = "other"
 	if _, err := Open(key, elsewhere, sealed); err == nil {
 		t.Error("a value sealed for shop opened for other, so the coordinate authenticates nothing")
 	}
@@ -140,10 +149,35 @@ func TestAValueAlreadySealedOnTheBoxStillOpensUnderTheKeyAndCoordinateItWasSeale
 	if err := os.WriteFile(filepath.Join(root, "production", "seal.key"), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	at := records.SealScope{Project: "shop", Tier: "production", Env: "staging", Folder: "/web", Name: "STRIPE_API_KEY"}
-	opened, err := Cipher{Root: root}.Open(context.Background(), at, sealed)
+	at := seal.AssociatedData{
+		{Name: "project", Value: "shop"},
+		{Name: "class", Value: "production"},
+		{Name: "environment", Value: "staging"},
+		{Name: "folder", Value: "/web"},
+		{Name: "binding", Value: ""},
+		{Name: "key", Value: "STRIPE_API_KEY"},
+	}
+	opened, err := Cipher{Root: root}.Open(context.Background(), environment.TierProduction, at, sealed)
 	if err != nil || string(opened) != "sk_live_secret" {
 		t.Fatalf("Open() = %q, %v, want the value sealed at shop/production/staging/%%2Fweb//STRIPE_API_KEY/ to open: every value on a box is bound to those bytes", opened, err)
+	}
+}
+
+func TestAStoreSecretSealedUnderTheCoordinateItHadBeforeThePackageMovedStillOpens(t *testing.T) {
+	t.Parallel()
+	key, err := base64.StdEncoding.DecodeString(keySealedWith)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := base64.StdEncoding.DecodeString("1F1t2UqIf00/MBsBS1X51mG2eSXf7ufZbcsyacsKGbgLgT7aCPgaKw==")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := Manifest{Slug: "shop", Tier: "production", Store: &Store{Env: "shop-prod"}}
+
+	opened, err := Open(key, manifest.StoreSecretAssociatedData(), sealed)
+	if err != nil || string(opened) != "s3cr3t-store" {
+		t.Fatalf("Open() = %q, %v, want the store secret sealed at shop/production/shop-prod/resources/store/storekey/ to open: every box's store secret is bound to those bytes", opened, err)
 	}
 }
 
@@ -151,23 +185,21 @@ func TestTheSealerReadsTheTierKeyWhereBootstrapMintsIt(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	key := aKey(t)
-	if err := os.MkdirAll(filepath.Dir(KeyPath(root, bound.Tier)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(KeyPath(root, environment.TierProduction)), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(KeyPath(root, bound.Tier), key, 0o400); err != nil {
+	if err := os.WriteFile(KeyPath(root, environment.TierProduction), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
 	vault := Cipher{Root: root}
-	opened, err := vault.Open(context.Background(), bound, sealFor(t, key, bound, "hunter2"))
+	opened, err := vault.Open(context.Background(), environment.TierProduction, bound, sealFor(t, key, bound, "hunter2"))
 	if err != nil || string(opened) != "hunter2" {
 		t.Fatalf("Open() = %q, %v", opened, err)
 	}
-	preview := bound
-	preview.Tier = environment.TierPreview
-	if _, err := vault.Open(context.Background(), preview, sealFor(t, key, preview, "hunter2")); err == nil {
+	if _, err := vault.Open(context.Background(), environment.TierPreview, bound, sealFor(t, key, bound, "hunter2")); err == nil {
 		t.Error("a preview value opened under the production key, and each tier is sealed to its own")
 	}
-	if _, err := vault.Seal(context.Background(), bound, []byte("x")); err == nil {
+	if _, err := vault.Seal(context.Background(), environment.TierProduction, bound, []byte("x")); err == nil {
 		t.Error("the box-side sealer sealed something, and sealing is the helper's under sudo alone")
 	}
 }

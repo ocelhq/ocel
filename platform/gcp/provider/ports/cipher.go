@@ -10,23 +10,23 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 type Cipher struct {
 	Clients *Clients
 }
 
-func (s Cipher) key(at records.SealScope) (string, error) {
-	if at.Tier == "" {
+func (s Cipher) key(tier environment.Tier) (string, error) {
+	if tier == "" {
 		return "", Tierless("a value")
 	}
-	return s.Clients.KeyPath(string(at.Tier)), nil
+	return s.Clients.KeyPath(string(tier)), nil
 }
 
-func (s Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte) ([]byte, error) {
-	key, err := s.key(at)
+func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
+	key, err := s.key(tier)
 	if err != nil {
 		return nil, err
 	}
@@ -37,16 +37,16 @@ func (s Cipher) Seal(ctx context.Context, at records.SealScope, plaintext []byte
 	sealed, err := client.Encrypt(ctx, &kmspb.EncryptRequest{
 		Name:                        key,
 		Plaintext:                   plaintext,
-		AdditionalAuthenticatedData: at.AAD(),
+		AdditionalAuthenticatedData: bound.Bytes(),
 	})
 	if err != nil {
-		return nil, s.keyless(at.Tier, "encrypt value", err)
+		return nil, s.keyless(tier, "encrypt value", err)
 	}
 	return sealed.GetCiphertext(), nil
 }
 
-func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) ([]byte, error) {
-	key, err := s.key(at)
+func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
+	key, err := s.key(tier)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +57,10 @@ func (s Cipher) Open(ctx context.Context, at records.SealScope, sealed []byte) (
 	opened, err := client.Decrypt(ctx, &kmspb.DecryptRequest{
 		Name:                        key,
 		Ciphertext:                  sealed,
-		AdditionalAuthenticatedData: at.AAD(),
+		AdditionalAuthenticatedData: bound.Bytes(),
 	})
 	if err != nil {
-		return nil, s.keyless(at.Tier, "decrypt value", err)
+		return nil, s.keyless(tier, "decrypt value", err)
 	}
 	return opened.GetPlaintext(), nil
 }

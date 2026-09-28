@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 )
 
 const Vendor provider.Vendor = "fake"
@@ -119,7 +120,7 @@ func (p *Provider) Artifacts() provider.ArtifactStore { return p.artifacts }
 
 func (p *Provider) Records() records.Store { return p.records }
 
-func (p *Provider) Cipher() records.Cipher { return p.cipher }
+func (p *Provider) Cipher() seal.Cipher { return p.cipher }
 
 func (p *Provider) Credentials() provider.Credentials { return p.creds }
 

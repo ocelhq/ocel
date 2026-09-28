@@ -16,12 +16,13 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 type Backend struct {
 	Records       records.Store
-	Cipher        records.Cipher
+	Cipher        seal.Cipher
 	VerifyGrants  func(ctx context.Context, binding provider.Binding) error
 	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 }

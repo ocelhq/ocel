@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -109,7 +110,7 @@ func (p *Provider) Records() records.Store {
 	return awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
 }
 
-func (p *Provider) Cipher() records.Cipher {
+func (p *Provider) Cipher() seal.Cipher {
 	return awsports.Cipher{KMS: kms.NewFromConfig(p.aws), Keys: p}
 }
 

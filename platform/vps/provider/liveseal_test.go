@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -59,8 +59,13 @@ func dirties(t *testing.T, vm machine) {
 	})
 }
 
-func sealedAt(tier environment.Tier, name string) records.SealScope {
-	return records.SealScope{Project: "shop", Tier: tier, Env: "*", Folder: "/", Name: name}
+func sealedAt(name string) seal.AssociatedData {
+	return seal.AssociatedData{
+		{Name: "project", Value: "shop"},
+		{Name: "environment", Value: "*"},
+		{Name: "folder", Value: "/"},
+		{Name: "key", Value: name},
+	}
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
@@ -87,9 +92,9 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 
 	ctx := context.Background()
 	cipher := vm.deploying(t).Cipher()
-	at := sealedAt(tier, "DATABASE_URL")
+	at := sealedAt("DATABASE_URL")
 
-	written, err := cipher.Seal(ctx, at, []byte(sealed))
+	written, err := cipher.Seal(ctx, tier, at, []byte(sealed))
 	if err != nil {
 		t.Fatalf("%s sealed nothing through the helper it is whitelisted on: %v", deployLogin, err)
 	}
@@ -97,7 +102,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Fatal("Seal() answered a value containing the plaintext it was handed")
 	}
 
-	opened, err := cipher.Open(ctx, at, written)
+	opened, err := cipher.Open(ctx, tier, at, written)
 	if err != nil {
 		t.Fatalf("%s could not open what it sealed: %v", deployLogin, err)
 	}
@@ -105,7 +110,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Errorf("the round trip answered %q, want %q", opened, sealed)
 	}
 
-	if moved, err := cipher.Open(ctx, sealedAt(tier, "API_KEY"), written); err == nil {
+	if moved, err := cipher.Open(ctx, tier, sealedAt("API_KEY"), written); err == nil {
 		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the coordinate authenticates nothing", moved)
 	}
 }
