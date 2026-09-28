@@ -9,7 +9,7 @@ export default {
   "*.go": (files) =>
     modulesOf(files).map(
       ([module, packages]) =>
-        `sh -c 'cd ${module} && golangci-lint fmt ${packages} && golangci-lint run ${packages}'`,
+        `sh -c 'cd ${module} && golangci-lint fmt ${packages} && golangci-lint run --allow-serial-runners ${packages}'`,
     ),
 };
 

@@ -81,7 +81,7 @@ function checkGo(changed) {
     run(["go", "build", "-o", join(vettool, "redactvet"), "./scripts/redactvet"]);
     for (const dir of dirs) {
       run(["go", "mod", "tidy", "-diff"], dir);
-      run(["golangci-lint", "run", "./..."], dir);
+      run(["golangci-lint", "run", "--allow-serial-runners", "./..."], dir);
       run(["go", "vet", `-vettool=${join(vettool, "redactvet")}`, "./..."], dir);
       run(["go", "test", "-race", "./..."], dir);
     }
