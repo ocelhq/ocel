@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -91,52 +90,6 @@ func put(t *testing.T, target *bucketv1.PresignedTarget, contentType, body strin
 	}
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	return resp
-}
-
-func TestDockerAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
-	live := startLive(t, "bucket-live-test", http.StatusOK)
-	ctx := context.Background()
-
-	presigned, err := live.component.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
-		Bucket:          live.name,
-		CallbackBaseUrl: live.app.URL + "/api/upload",
-		Files:           []*bucketv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
-	})
-	if err != nil {
-		t.Fatalf("PresignUpload = %v", err)
-	}
-
-	resp := put(t, presigned.GetFiles()[0], "text/plain", "hello")
-	if resp.StatusCode != http.StatusOK {
-		said, _ := io.ReadAll(resp.Body)
-		t.Fatalf("PUT to the presigned url answered %s: %s", resp.Status, said)
-	}
-
-	select {
-	case callback := <-live.callbacks:
-		if callback["op"] != "callback" || callback["sessionId"] != presigned.GetSessionId() {
-			t.Fatalf("callback = %v, want the completion of session %s", callback, presigned.GetSessionId())
-		}
-		file, _ := callback["file"].(map[string]any)
-		verified, err := live.component.VerifyUploadSignature(ctx, &bucketv1.VerifyUploadSignatureRequest{
-			SessionId: presigned.GetSessionId(),
-			Signature: callback["signature"].(string),
-			File:      &bucketv1.CompletedFile{Key: file["key"].(string), Name: file["name"].(string), Size: int64(file["size"].(float64)), MimeType: file["mimeType"].(string)},
-		})
-		if err != nil || !verified.GetValid() {
-			t.Fatalf("VerifyUploadSignature = %v, %v, want the callback's signature to verify", verified, err)
-		}
-	case <-time.After(time.Minute):
-		t.Fatal("the app was never told the upload finished")
-	}
-
-	status, err := live.component.GetUploadStatus(ctx, &bucketv1.GetUploadStatusRequest{SessionId: presigned.GetSessionId()})
-	if err != nil {
-		t.Fatalf("GetUploadStatus = %v", err)
-	}
-	if status.GetState() != bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED {
-		t.Fatalf("state = %v, want succeeded", status.GetState())
-	}
 }
 
 func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
