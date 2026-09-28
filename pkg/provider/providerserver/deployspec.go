@@ -191,9 +191,9 @@ func appCoordinate(p provider.DeploySpec, app string, release naming.Release) na
 func appTags(p provider.DeploySpec, entry provider.AppEntry) map[string]string {
 	coordinate := appCoordinate(p, entry.App, entry.Build.Release())
 	coordinate.Kind = naming.KindFunction
-	return coordinate.Tags(naming.Facts{
+	return coordinate.Tags(naming.TagValues{
 		ManagedBy:  "ocel",
-		EnvTier:    string(p.Tier),
+		EnvTier:    p.Tier,
 		Deployment: entry.Build.DeploymentID(),
 		Promotion:  p.PromotionID,
 	})

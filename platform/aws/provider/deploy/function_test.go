@@ -200,7 +200,7 @@ func TestResourceTags(t *testing.T) {
 		t.Parallel()
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
-		all := coord.Tags(naming.Facts{Route: "/api/users"})
+		all := coord.Tags(naming.TagValues{Route: "/api/users"})
 		if got, want := all[tagComponent], "function"; got != want {
 			t.Errorf("Tags[%s] = %q, want %q", tagComponent, got, want)
 		}
